@@ -7,6 +7,7 @@ from world.consent.constants import ConsentMode
 from world.consent.models import (
     ConsentGroup,
     ConsentGroupMember,
+    SocialConsentBlacklist,
     SocialConsentCategory,
     SocialConsentCategoryRule,
     SocialConsentPreference,
@@ -69,6 +70,15 @@ class SocialConsentWhitelistFactory(DjangoModelFactory):
 
     owner_tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
     allowed_tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
+    category = factory.SubFactory(SocialConsentCategoryFactory)
+
+
+class SocialConsentBlacklistFactory(DjangoModelFactory):
+    class Meta:
+        model = SocialConsentBlacklist
+
+    owner_tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
+    blocked_tenure = factory.SubFactory(_ROSTER_TENURE_FACTORY)
     category = factory.SubFactory(SocialConsentCategoryFactory)
 
 

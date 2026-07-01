@@ -39,7 +39,7 @@ Registry exclusion note:
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from actions.constants import ActionBackend, ActionCategory, TargetKind
 from actions.errors import ActionDispatchError
@@ -1232,25 +1232,37 @@ def _tenure_persona_ids(tenure: object) -> set[int]:
         return set()
 
 
-def _decide_allowlist_block(
-    rule_mode: str | None, actor_tenure_present: bool, whitelisted: bool
+def _decide_consent_block(
+    rule_mode: str | None,
+    *,
+    actor_present: bool,
+    whitelisted: bool,
+    blacklisted: bool,
+    is_friend: bool,
 ) -> bool:
-    """Allowlist-branch consent decision, given a pref exists with the master switch on.
+    """Per-category consent decision, given a pref exists with the master switch on.
 
     Shared by the per-tenure :func:`_tenure_blocks_actor` and the batched
-    :func:`_social_consent_exclusions` so the rule/whitelist logic lives in one place.
+    :func:`_consent_excluded_persona_ids` so the mode logic lives in one place. Returns
+    ``True`` when the actor is *blocked* from targeting the owner in this category.
 
-    - No rule row (``rule_mode is None``) or ``EVERYONE`` → not blocked (default allow).
-    - ``ALLOWLIST`` with no resolvable actor tenure → blocked.
-    - ``ALLOWLIST`` with an actor tenure → blocked unless that actor is whitelisted.
+    - ``None`` / ``EVERYONE`` → never blocked (default allow).
+    - ``ALL_BUT_BLACKLIST`` → blocked only when the actor is on the blacklist; an unknown
+      actor (general-visibility probe) is allowed.
+    - ``FRIENDS_WHITELIST`` → allowed only for an OOC friend or a whitelisted actor;
+      everyone else — including an unknown actor — is blocked.
+    - ``ALLOWLIST`` → allowed only for a whitelisted actor; everyone else blocked.
     """
     from world.consent.constants import ConsentMode  # noqa: PLC0415
 
     if rule_mode is None or rule_mode == ConsentMode.EVERYONE:
         return False
-    if not actor_tenure_present:
-        return True  # allowlist mode, unknown actor → block
-    return not whitelisted
+    if rule_mode == ConsentMode.ALL_BUT_BLACKLIST:
+        return actor_present and blacklisted
+    if rule_mode == ConsentMode.FRIENDS_WHITELIST:
+        return not (actor_present and (is_friend or whitelisted))
+    # ALLOWLIST — strict default-deny; friendship alone is not enough.
+    return not (actor_present and whitelisted)
 
 
 def _tenure_blocks_actor(
@@ -1262,10 +1274,12 @@ def _tenure_blocks_actor(
     scene-wide picker sweep batches the same decision in :func:`_social_consent_exclusions`.
     """
     from world.consent.models import (  # noqa: PLC0415
+        SocialConsentBlacklist,
         SocialConsentCategoryRule,
         SocialConsentPreference,
         SocialConsentWhitelist,
     )
+    from world.scenes.friend_services import is_friend as _is_friend  # noqa: PLC0415
 
     try:
         pref = tenure.social_consent_preference  # type: ignore[union-attr]
@@ -1281,12 +1295,37 @@ def _tenure_blocks_actor(
     rule = SocialConsentCategoryRule.objects.filter(preference=pref, category=category).first()
     rule_mode = rule.mode if rule is not None else None
     if rule_mode is None or actor_tenure is None:
-        return _decide_allowlist_block(rule_mode, actor_tenure is not None, False)
+        return _decide_consent_block(
+            rule_mode,
+            actor_present=actor_tenure is not None,
+            whitelisted=False,
+            blacklisted=False,
+            is_friend=False,
+        )
 
     whitelisted = SocialConsentWhitelist.objects.filter(
         owner_tenure=tenure, allowed_tenure=actor_tenure, category=category
     ).exists()
-    return _decide_allowlist_block(rule_mode, True, whitelisted)
+    blacklisted = SocialConsentBlacklist.objects.filter(
+        owner_tenure=tenure, blocked_tenure=actor_tenure, category=category
+    ).exists()
+    friended = _is_friend(owner_tenure=tenure, friend_tenure=actor_tenure)
+    return _decide_consent_block(
+        rule_mode,
+        actor_present=True,
+        whitelisted=whitelisted,
+        blacklisted=blacklisted,
+        is_friend=friended,
+    )
+
+
+class _CategoryConsentData(NamedTuple):
+    """Batched per-category consent lookups for a participant sweep (owner-tenure id sets)."""
+
+    rule_modes: dict[int, str]
+    whitelisted_owner_ids: set[int]
+    blacklisted_owner_ids: set[int]
+    friend_owner_ids: set[int]
 
 
 def _load_category_consent_data(
@@ -1294,23 +1333,31 @@ def _load_category_consent_data(
     tenure_ids: list[int],
     category: object | None,
     actor_tenure: object | None,
-) -> tuple[dict[int, str], set[int]]:
+) -> _CategoryConsentData:
     """Batch-load the per-category consent data for a participant sweep.
 
-    Returns ``(rule_modes, whitelisted_owner_ids)`` where ``rule_modes`` maps a
-    preference id to its category rule mode and ``whitelisted_owner_ids`` is the set of
-    owner-tenure ids that have whitelisted *actor_tenure* for *category*. Both are empty
-    when *category* is ``None`` (uncategorized → master switch only). At most two queries.
+    Returns a :class:`_CategoryConsentData` whose ``rule_modes`` maps a preference id to
+    its category rule mode, and whose three owner-id sets record which owner tenures have
+    (respectively) whitelisted, blacklisted, or friended *actor_tenure*. Everything is
+    empty when *category* is ``None`` (uncategorized → master switch only). At most four
+    queries (rules, whitelist, blacklist, friendships), each independent of participant
+    count. Friendship is not category-scoped — an OOC friend passes every category.
     """
     from world.consent.models import (  # noqa: PLC0415
+        SocialConsentBlacklist,
         SocialConsentCategoryRule,
         SocialConsentWhitelist,
     )
+    from world.scenes.models import Friendship  # noqa: PLC0415
 
     rule_modes: dict[int, str] = {}
     whitelisted_owner_ids: set[int] = set()
+    blacklisted_owner_ids: set[int] = set()
+    friend_owner_ids: set[int] = set()
     if category is None:
-        return rule_modes, whitelisted_owner_ids
+        return _CategoryConsentData(
+            rule_modes, whitelisted_owner_ids, blacklisted_owner_ids, friend_owner_ids
+        )
 
     pref_ids = [pref.pk for pref in prefs_by_tenure.values()]
     if pref_ids:
@@ -1322,7 +1369,8 @@ def _load_category_consent_data(
             )
         }
     if actor_tenure is not None:
-        # One query: whitelist entries naming the actor for this category.
+        # One query each: whitelist / blacklist entries naming the actor for this category,
+        # plus friendships the owner tenures extended to the actor (category-independent).
         whitelisted_owner_ids = set(
             SocialConsentWhitelist.objects.filter(
                 owner_tenure_id__in=tenure_ids,
@@ -1330,7 +1378,22 @@ def _load_category_consent_data(
                 category=category,
             ).values_list("owner_tenure_id", flat=True)
         )
-    return rule_modes, whitelisted_owner_ids
+        blacklisted_owner_ids = set(
+            SocialConsentBlacklist.objects.filter(
+                owner_tenure_id__in=tenure_ids,
+                blocked_tenure=actor_tenure,
+                category=category,
+            ).values_list("owner_tenure_id", flat=True)
+        )
+        friend_owner_ids = set(
+            Friendship.objects.filter(
+                friender_tenure_id__in=tenure_ids,
+                friend_tenure=actor_tenure,
+            ).values_list("friender_tenure_id", flat=True)
+        )
+    return _CategoryConsentData(
+        rule_modes, whitelisted_owner_ids, blacklisted_owner_ids, friend_owner_ids
+    )
 
 
 def _consent_excluded_persona_ids(
@@ -1342,8 +1405,8 @@ def _consent_excluded_persona_ids(
     """Persona ids of *tenures* whose consent blocks the actor, decided from batched data.
 
     Mirrors the per-tenure decision in :func:`_tenure_blocks_actor` but loads the
-    preference / category-rule / whitelist data once for the whole set (one preference
-    query plus the loads in :func:`_load_category_consent_data`).
+    preference / category-rule / whitelist / blacklist / friendship data once for the
+    whole set (one preference query plus the loads in :func:`_load_category_consent_data`).
     """
     from world.consent.models import SocialConsentPreference  # noqa: PLC0415
 
@@ -1352,9 +1415,7 @@ def _consent_excluded_persona_ids(
         pref.tenure_id: pref
         for pref in SocialConsentPreference.objects.filter(tenure_id__in=tenure_ids)
     }
-    rule_modes, whitelisted_owner_ids = _load_category_consent_data(
-        prefs_by_tenure, tenure_ids, category, actor_tenure
-    )
+    data = _load_category_consent_data(prefs_by_tenure, tenure_ids, category, actor_tenure)
 
     actor_present = actor_tenure is not None
     excluded: set[int] = set()
@@ -1367,8 +1428,13 @@ def _consent_excluded_persona_ids(
             continue
         if category is None:
             continue  # uncategorized → master switch only
-        rule_mode = rule_modes.get(pref.pk)
-        if _decide_allowlist_block(rule_mode, actor_present, tenure.pk in whitelisted_owner_ids):
+        if _decide_consent_block(
+            data.rule_modes.get(pref.pk),
+            actor_present=actor_present,
+            whitelisted=tenure.pk in data.whitelisted_owner_ids,
+            blacklisted=tenure.pk in data.blacklisted_owner_ids,
+            is_friend=tenure.pk in data.friend_owner_ids,
+        ):
             excluded.update(_tenure_persona_ids(tenure))
     return excluded
 

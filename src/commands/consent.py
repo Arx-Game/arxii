@@ -196,6 +196,12 @@ class CmdRestoreSense(ConsentRequestCommand):
 
 _NO_PENDING_MSG = "You have no pending action to respond to."
 
+# Difficulty-grade switches a defender may attach on ACCEPT (`accept/hard 5`) to shift the
+# plausibility band of the action against them. The token equals the DifficultyChoice value.
+_DIFFICULTY_SWITCHES = frozenset({"trivial", "easy", "normal", "hard", "daunting", "harrowing"})
+# Switches that mean "also blacklist the actor" on DENY (`deny/blacklist`).
+_BLACKLIST_SWITCHES = frozenset({"blacklist", "block"})
+
 
 class _RespondCommand(ArxCommand):
     """Base for telnet commands that answer a pending consent request.
@@ -207,8 +213,12 @@ class _RespondCommand(ArxCommand):
     SAME service the consent viewset calls. All consent + resolution logic stays
     in the service; this is a thin shell.
 
+    A defender may attach a difficulty-grade switch on accept (``accept/hard``) to
+    shift how plausible the action is against them, or a ``deny/blacklist`` switch to
+    also bar that actor from the action's category in future (#1698).
+
     Usage:
-        <key> [request_id]
+        <key>[/<difficulty>|/blacklist] [request_id]
     """
 
     decision: ClassVar[str] = ""
@@ -220,9 +230,22 @@ class _RespondCommand(ArxCommand):
         if request is None:
             self.msg(_NO_PENDING_MSG)
             return
-        respond_to_action_request(action_request=request, decision=self.decision)
+        switches = getattr(self, "switches", None) or []  # noqa: GETATTR_LITERAL
+        difficulty = next((sw for sw in switches if sw in _DIFFICULTY_SWITCHES), None)
+        blacklist_actor = self.decision == ConsentDecision.DENY and bool(
+            _BLACKLIST_SWITCHES & set(switches)
+        )
+        respond_to_action_request(
+            action_request=request,
+            decision=self.decision,
+            difficulty=difficulty,
+            blacklist_actor=blacklist_actor,
+        )
         verb = "accept" if self.decision == ConsentDecision.ACCEPT else "deny"
-        self.msg(f"You {verb} the action against you.")
+        message = f"You {verb} the action against you."
+        if blacklist_actor:
+            message += " They can no longer target you with actions of this kind."
+        self.msg(message)
 
     def _resolve_pending_request(self) -> SceneActionRequest | None:
         """Most-recent PENDING request targeting the caller (or by id arg).

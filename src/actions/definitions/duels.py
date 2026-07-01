@@ -164,13 +164,28 @@ class ChallengeAction(Action):
                 message="You can only challenge a real character to a duel.",
             )
 
-        # --- social-consent gate ---
+        # --- social-consent gate: target opted out of social targeting ---
         if _consent_blocked(target_sheet, actor_sheet):
             return ActionResult(
                 success=False,
                 message=(
                     f"{target.db_key} has opted out of social targeting and cannot be challenged."
                 ),
+            )
+
+        # --- block gate: a block in either direction bars the challenge (#1698) ---
+        # The only PvP-consent case we enforce — you cannot start a duel with someone you
+        # have blocked, or who has blocked you. Message stays vague (never reveals the block
+        # or its direction — the anti-derivation invariant).
+        from world.scenes.block_services import sheet_blocked_for_viewer  # noqa: PLC0415
+
+        actor_account = actor.account
+        if actor_account is not None and sheet_blocked_for_viewer(
+            viewer_account=actor_account, sheet=target_sheet
+        ):
+            return ActionResult(
+                success=False,
+                message=f"You cannot challenge {target.db_key} to a duel.",
             )
 
         # --- create the PENDING challenge ---

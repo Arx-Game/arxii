@@ -886,6 +886,7 @@
   - stylepresentationendorsement_given <- magic.StylePresentationEndorsement
   - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
   - reincarnations <- magic.Reincarnation
@@ -1089,6 +1090,7 @@
   - character_selections <- progression.CharacterPathHistory
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
+  - gift_unlocks <- magic.GiftUnlock
   - ritual_grants <- magic.PathRitualGrant
   - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
@@ -1515,6 +1517,7 @@
   - action_templates <- actions.ActionTemplate
   - rules <- consent.SocialConsentCategoryRule
   - whitelist_entries <- consent.SocialConsentWhitelist
+  - blacklist_entries <- consent.SocialConsentBlacklist
 
 ### SocialConsentPreference
 **Foreign Keys:**
@@ -1533,9 +1536,17 @@
   - allowed_tenure -> roster.RosterTenure [FK]
   - category -> consent.SocialConsentCategory [FK]
 
+### SocialConsentBlacklist
+**Foreign Keys:**
+  - owner_tenure -> roster.RosterTenure [FK]
+  - blocked_tenure -> roster.RosterTenure [FK]
+  - category -> consent.SocialConsentCategory [FK]
+
 ### Service Functions
+- `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
+- `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `set_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory', mode: 'str') -> 'SocialConsentCategoryRule'`
@@ -2242,6 +2253,7 @@
   - species_grants <- species.SpeciesGiftGrant
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
@@ -2320,6 +2332,7 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
+  - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
   - variants <- magic.TechniqueVariant
   - anchored_threads <- magic.Thread
@@ -2507,6 +2520,26 @@
 ### ResonanceGainConfig
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### GiftUnlock
+**Foreign Keys:**
+  - gift -> magic.Gift [FK]
+  - paths -> classes.Path [M2M]
+**Pointed to by:**
+  - character_purchases <- magic.CharacterGiftUnlock
+
+### CharacterGiftUnlock
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - unlock -> magic.GiftUnlock [FK]
+  - teacher -> roster.RosterTenure [FK] (nullable)
+
+### TechniqueTeachingOffer
+**Foreign Keys:**
+  - teacher -> roster.RosterTenure [FK]
+  - technique -> magic.Technique [FK]
+
+### GiftAcquisitionConfig
 
 ### ResonanceGrant
 **Foreign Keys:**
@@ -2923,8 +2956,10 @@
 - `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
 - `get_character_anima_ritual(character) — The character's authored SCENE_ACTION ritual (with check_config), or None.`
 - `get_character_cast_check(character) — The CheckType a character's technique casts roll, or None for fallback.`
+- `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' — Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
-- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
+- `get_pull_cost(tier: 'int', target_kind: 'str | None') -> 'ThreadPullCost' — Resolve the pull cost row for (tier, target_kind).`
+- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
@@ -2947,7 +2982,7 @@
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' — Per-tier survivability save modifiers from thread investment (#1250).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -3978,14 +4013,20 @@
   - galleries <- roster.TenureGallery
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - gift_unlocks_taught <- magic.CharacterGiftUnlock
+  - technique_teaching_offers <- magic.TechniqueTeachingOffer
   - taught_rituals <- magic.CharacterRitualKnowledge
   - thread_weaving_unlocks_taught <- magic.CharacterThreadWeavingUnlock
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
+  - friendships_made <- scenes.Friendship
+  - friendships_received <- scenes.Friendship
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference
   - social_consent_whitelist_owned <- consent.SocialConsentWhitelist
   - social_consent_whitelist_allowed <- consent.SocialConsentWhitelist
+  - social_consent_blacklist_owned <- consent.SocialConsentBlacklist
+  - social_consent_blacklist_blocked <- consent.SocialConsentBlacklist
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
   - codexteachingoffer_visible <- codex.CodexTeachingOffer
@@ -4131,6 +4172,11 @@
   - blocked_player -> evennia_extensions.PlayerData [FK]
   - blocker_persona -> scenes.Persona [FK] (nullable)
   - blocked_persona -> scenes.Persona [FK] (nullable)
+
+### Friendship
+**Foreign Keys:**
+  - friender_tenure -> roster.RosterTenure [FK]
+  - friend_tenure -> roster.RosterTenure [FK]
 
 ### Mute
 **Foreign Keys:**

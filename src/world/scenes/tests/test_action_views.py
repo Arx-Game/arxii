@@ -981,6 +981,7 @@ class PerTargetRespondTestCase(APITestCase):
             decision=ConsentDecision.ACCEPT,
             difficulty=None,
             resist_effort="",
+            blacklist_actor=False,
         )
         # Response carries the row's id and action_request_id
         assert response.data["action_target_id"] == action_target.pk

@@ -12,6 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from world.consent.models import (
+    SocialConsentBlacklist,
     SocialConsentCategory,
     SocialConsentCategoryRule,
     SocialConsentPreference,
@@ -19,6 +20,7 @@ from world.consent.models import (
 )
 from world.consent.permissions import IsTenureOwner
 from world.consent.serializers import (
+    SocialConsentBlacklistSerializer,
     SocialConsentCategoryRuleSerializer,
     SocialConsentCategorySerializer,
     SocialConsentPreferenceDefaultSerializer,
@@ -289,6 +291,71 @@ class SocialConsentWhitelistViewSet(viewsets.ModelViewSet):
             {
                 "tenure_id": instance.owner_tenure_id,
                 "allowed_tenure_id": instance.allowed_tenure_id,
+                "category_key": instance.category.key,
+            },
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SocialConsentBlacklistViewSet(viewsets.ModelViewSet):
+    """ViewSet for consent antagonism-blacklist entries (#1698).
+
+    Blacklist entries bar specific tenures from targeting the owner when the owner's
+    category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+    player's own owner tenures. Write endpoints route through the shared REGISTRY action
+    seam. The blocked party is never told.
+    """
+
+    serializer_class = SocialConsentBlacklistSerializer
+    permission_classes = [IsTenureOwner]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["owner_tenure", "category"]
+    pagination_class = ConsentPagination
+
+    def get_queryset(self) -> QuerySet[SocialConsentBlacklist]:
+        """Scope queryset to blacklist entries owned by the requesting player's tenures."""
+        try:
+            return SocialConsentBlacklist.objects.filter(
+                owner_tenure__player_data=self.request.user.player_data,
+            ).order_by("id")
+        except AttributeError:
+            return SocialConsentBlacklist.objects.none()
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Create a blacklist entry via the add_social_consent_blacklist action."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        owner_tenure = serializer.validated_data["owner_tenure"]
+        blocked_tenure = serializer.validated_data["blocked_tenure"]
+        category = serializer.validated_data["category"]
+        actor = _get_actor(request)
+        _dispatch_consent_action(
+            actor,
+            "add_social_consent_blacklist",
+            {
+                "tenure_id": owner_tenure.pk,
+                "allowed_tenure_id": blocked_tenure.pk,
+                "category_key": category.key,
+            },
+        )
+        instance = SocialConsentBlacklist.objects.get(
+            owner_tenure=owner_tenure,
+            blocked_tenure=blocked_tenure,
+            category=category,
+        )
+        output = self.get_serializer(instance)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Remove a blacklist entry via the remove_social_consent_blacklist action."""
+        instance = self.get_object()
+        actor = _get_actor(request)
+        _dispatch_consent_action(
+            actor,
+            "remove_social_consent_blacklist",
+            {
+                "tenure_id": instance.owner_tenure_id,
+                "allowed_tenure_id": instance.blocked_tenure_id,
                 "category_key": instance.category.key,
             },
         )

@@ -45,6 +45,13 @@ class WeeklySocialEngagement(SharedMemoryModel):
         default=Decimal(0),
         help_text="Points accrued this week, pending grant.",
     )
+    engagement_events = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Count of good-sport acceptances this week — each is one attempt in the "
+            "diminishing-chance grant curve (#1698)."
+        ),
+    )
     granted = models.BooleanField(
         default=False,
         help_text="Whether this week's pending points have been granted.",
@@ -72,11 +79,13 @@ class WeeklySocialEngagement(SharedMemoryModel):
         """
         self.initiators.all().delete()
         self.pending_points = Decimal(0)
+        self.engagement_events = 0
         self.granted = False
         self.game_week = current_week
         self.save(
             update_fields=[
                 "pending_points",
+                "engagement_events",
                 "granted",
                 "game_week",
             ]

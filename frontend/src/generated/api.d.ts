@@ -3137,6 +3137,72 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/consent/blacklist/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for consent antagonism-blacklist entries (#1698).
+     *
+     *     Blacklist entries bar specific tenures from targeting the owner when the owner's
+     *     category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+     *     player's own owner tenures. Write endpoints route through the shared REGISTRY action
+     *     seam. The blocked party is never told.
+     */
+    get: operations['consent_blacklist_list'];
+    put?: never;
+    /** @description Create a blacklist entry via the add_social_consent_blacklist action. */
+    post: operations['consent_blacklist_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/consent/blacklist/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for consent antagonism-blacklist entries (#1698).
+     *
+     *     Blacklist entries bar specific tenures from targeting the owner when the owner's
+     *     category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+     *     player's own owner tenures. Write endpoints route through the shared REGISTRY action
+     *     seam. The blocked party is never told.
+     */
+    get: operations['consent_blacklist_retrieve'];
+    /**
+     * @description ViewSet for consent antagonism-blacklist entries (#1698).
+     *
+     *     Blacklist entries bar specific tenures from targeting the owner when the owner's
+     *     category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+     *     player's own owner tenures. Write endpoints route through the shared REGISTRY action
+     *     seam. The blocked party is never told.
+     */
+    put: operations['consent_blacklist_update'];
+    post?: never;
+    /** @description Remove a blacklist entry via the remove_social_consent_blacklist action. */
+    delete: operations['consent_blacklist_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for consent antagonism-blacklist entries (#1698).
+     *
+     *     Blacklist entries bar specific tenures from targeting the owner when the owner's
+     *     category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+     *     player's own owner tenures. Write endpoints route through the shared REGISTRY action
+     *     seam. The blocked party is never told.
+     */
+    patch: operations['consent_blacklist_partial_update'];
+    trace?: never;
+  };
   '/api/consent/categories/': {
     parameters: {
       query?: never;
@@ -15888,6 +15954,8 @@ export interface components {
       difficulty?: components['schemas']['DifficultyEnum'];
       /** @default  */
       resist_effort: components['schemas']['ResistEffortEnum'] | components['schemas']['BlankEnum'];
+      /** @default false */
+      blacklist_actor: boolean;
     };
     /**
      * @description Read serializer for ConsequenceOutcome.
@@ -21536,6 +21604,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SituationTemplateList'][];
     };
+    PaginatedSocialConsentBlacklistList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SocialConsentBlacklist'][];
+    };
     PaginatedSocialConsentCategoryList: {
       /** @example 123 */
       count: number;
@@ -22751,14 +22834,25 @@ export interface components {
        */
       privacy_mode?: components['schemas']['PrivacyModeEnum'];
     };
+    /** @description Serializer for consent antagonism-blacklist entries (#1698). */
+    PatchedSocialConsentBlacklistRequest: {
+      /** @description Tenure that owns the preference (does NOT want these actions). */
+      owner_tenure?: number;
+      /** @description Tenure barred from targeting owner_tenure in this category. */
+      blocked_tenure?: number;
+      /** @description Blacklist is scoped per category. */
+      category?: number;
+    };
     /** @description Serializer for per-category consent rules. */
     PatchedSocialConsentCategoryRuleRequest: {
       preference?: number;
       category?: number;
       /**
-       * @description EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+       * @description EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
        *
        *     * `everyone` - Everyone
+       *     * `all_but_blacklist` - Everyone except my blacklist
+       *     * `friends_whitelist` - Friends and my whitelist
        *     * `allowlist` - Allowlist only
        */
       mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
@@ -24960,6 +25054,28 @@ export interface components {
       /** @description Maximum specialization value in CG */
       max_specialization_value?: number;
     };
+    /** @description Serializer for consent antagonism-blacklist entries (#1698). */
+    SocialConsentBlacklist: {
+      readonly id: number;
+      /** @description Tenure that owns the preference (does NOT want these actions). */
+      owner_tenure: number;
+      /** @description Tenure barred from targeting owner_tenure in this category. */
+      blocked_tenure: number;
+      readonly blocked_tenure_name: string;
+      /** @description Blacklist is scoped per category. */
+      category: number;
+      /** Format: date-time */
+      readonly added_at: string;
+    };
+    /** @description Serializer for consent antagonism-blacklist entries (#1698). */
+    SocialConsentBlacklistRequest: {
+      /** @description Tenure that owns the preference (does NOT want these actions). */
+      owner_tenure: number;
+      /** @description Tenure barred from targeting owner_tenure in this category. */
+      blocked_tenure: number;
+      /** @description Blacklist is scoped per category. */
+      category: number;
+    };
     /** @description Read-only serializer for social consent categories. */
     SocialConsentCategory: {
       readonly id: number;
@@ -24980,27 +25096,37 @@ export interface components {
       preference: number;
       category: number;
       /**
-       * @description EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+       * @description EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
        *
        *     * `everyone` - Everyone
+       *     * `all_but_blacklist` - Everyone except my blacklist
+       *     * `friends_whitelist` - Friends and my whitelist
        *     * `allowlist` - Allowlist only
        */
       mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
     };
     /**
      * @description * `everyone` - Everyone
+     *     * `all_but_blacklist` - Everyone except my blacklist
+     *     * `friends_whitelist` - Friends and my whitelist
      *     * `allowlist` - Allowlist only
      * @enum {string}
      */
-    SocialConsentCategoryRuleModeEnum: 'everyone' | 'allowlist';
+    SocialConsentCategoryRuleModeEnum:
+      | 'everyone'
+      | 'all_but_blacklist'
+      | 'friends_whitelist'
+      | 'allowlist';
     /** @description Serializer for per-category consent rules. */
     SocialConsentCategoryRuleRequest: {
       preference: number;
       category: number;
       /**
-       * @description EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+       * @description EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
        *
        *     * `everyone` - Everyone
+       *     * `all_but_blacklist` - Everyone except my blacklist
+       *     * `friends_whitelist` - Friends and my whitelist
        *     * `allowlist` - Allowlist only
        */
       mode?: components['schemas']['SocialConsentCategoryRuleModeEnum'];
@@ -30668,6 +30794,148 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TreatmentCandidateResponse'];
+        };
+      };
+    };
+  };
+  consent_blacklist_list: {
+    parameters: {
+      query?: {
+        category?: number;
+        owner_tenure?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSocialConsentBlacklistList'];
+        };
+      };
+    };
+  };
+  consent_blacklist_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentBlacklistRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentBlacklist'];
+        };
+      };
+    };
+  };
+  consent_blacklist_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Blacklist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentBlacklist'];
+        };
+      };
+    };
+  };
+  consent_blacklist_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Blacklist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SocialConsentBlacklistRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentBlacklist'];
+        };
+      };
+    };
+  };
+  consent_blacklist_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Blacklist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  consent_blacklist_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Social Consent Blacklist Entry. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedSocialConsentBlacklistRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SocialConsentBlacklist'];
         };
       };
     };
