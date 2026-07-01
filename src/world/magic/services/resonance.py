@@ -57,6 +57,7 @@ if TYPE_CHECKING:
         StylePresentationEndorsement,
     )
     from world.magic.types import PullActionContext
+    from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
 
 
@@ -82,6 +83,7 @@ def grant_resonance(  # noqa: PLR0913
     entry_flourish: EntryFlourishRecord | None = None,
     dramatic_moment: DramaticMomentTag | None = None,
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
+    mission_deed_reward_line: MissionDeedRewardLine | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -102,6 +104,7 @@ def grant_resonance(  # noqa: PLR0913
         entry_flourish: Required for ENTRY_FLOURISH source.
         dramatic_moment: Required for DRAMATIC_MOMENT source.
         style_presentation_endorsement: Required for STYLE_PRESENTATION source.
+        mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
 
     Returns:
         The updated CharacterResonance instance.
@@ -125,6 +128,7 @@ def grant_resonance(  # noqa: PLR0913
         entry_flourish=entry_flourish,
         dramatic_moment=dramatic_moment,
         style_presentation_endorsement=style_presentation_endorsement,
+        mission_deed_reward_line=mission_deed_reward_line,
     )
 
     cr, _ = CharacterResonance.objects.get_or_create(
@@ -151,6 +155,7 @@ def grant_resonance(  # noqa: PLR0913
         source_entry_flourish=entry_flourish,
         source_dramatic_moment=dramatic_moment,
         source_style_presentation_endorsement=style_presentation_endorsement,
+        source_mission_deed_reward_line=mission_deed_reward_line,
     )
     return cr
 
@@ -167,6 +172,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     entry_flourish: EntryFlourishRecord | None = None,
     dramatic_moment: DramaticMomentTag | None = None,
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
+    mission_deed_reward_line: MissionDeedRewardLine | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -186,6 +192,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             entry_flourish=entry_flourish,
             dramatic_moment=dramatic_moment,
             style_presentation_endorsement=style_presentation_endorsement,
+            mission_deed_reward_line=mission_deed_reward_line,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -214,6 +221,10 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     GainSource.STYLE_PRESENTATION: lambda **kw: (
         kw["style_presentation_endorsement"],
         "style_presentation_endorsement",
+    ),
+    GainSource.MISSION_REWARD: lambda **kw: (
+        kw["mission_deed_reward_line"],
+        "mission_deed_reward_line",
     ),
 }
 

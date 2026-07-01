@@ -119,6 +119,14 @@ class ResonanceGrant(SharedMemoryModel):
         related_name="resonance_grants",
         help_text="Set when source=STYLE_PRESENTATION.",
     )
+    source_mission_deed_reward_line = models.ForeignKey(
+        "missions.MissionDeedRewardLine",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resonance_grants",
+        help_text="Set when source=MISSION_REWARD.",
+    )
 
     class Meta:
         indexes = [
@@ -147,6 +155,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -165,6 +174,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -183,6 +193,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -201,6 +212,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
             ),
@@ -219,6 +231,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
             ),
@@ -240,6 +253,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="SANCTUM_WEAVING"),
             ),
@@ -257,6 +271,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
             ),
@@ -276,6 +291,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="SANCTUM_DISSOLUTION_RECOVERY"),
             ),
@@ -294,6 +310,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="PROJECT_CONTRIBUTION"),
             ),
@@ -312,6 +329,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_project__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="ENTRY_FLOURISH"),
             ),
@@ -330,6 +348,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_project__isnull=True)
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="DRAMATIC_MOMENT"),
             ),
@@ -348,8 +367,28 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_project__isnull=True)
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
                 )
                 | ~Q(source="STYLE_PRESENTATION"),
+            ),
+            # MISSION_REWARD (#1737): exactly source_mission_deed_reward_line populated
+            models.CheckConstraint(
+                name="res_grant_mission_reward_shape",
+                check=(
+                    Q(source="MISSION_REWARD")
+                    & Q(source_mission_deed_reward_line__isnull=False)
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                )
+                | ~Q(source="MISSION_REWARD"),
             ),
         ]
 
