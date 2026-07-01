@@ -1167,3 +1167,53 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
             record_outcome_tier_completion(
                 progress=self.progress, beat=gm_marked_beat, outcome_tier=self.decisive
             )
+
+    def test_outlier_success_level_with_no_matching_tier_routes_to_pending_gm_review(self) -> None:
+        """success_level>=8 with no authored Consequence at that tier defers to a GM."""
+        outlier_tier = CheckOutcomeFactory(name="Outlier Unauthored RTC", success_level=9)
+
+        completion = record_outcome_tier_completion(
+            progress=self.progress, beat=self.beat, outcome_tier=outlier_tier
+        )
+
+        assert completion.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert completion.outcome_tier_id == outlier_tier.pk
+        self.beat.refresh_from_db()
+        assert self.beat.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_outlier_success_level_with_matching_tier_resolves_success_normally(self) -> None:
+        """success_level>=8 with an authored matching Consequence stays SUCCESS, pool fires."""
+        outlier_tier = CheckOutcomeFactory(name="Outlier Authored RTC", success_level=8)
+        source_type = LegendSourceTypeFactory()
+        consequence = ConsequenceFactory(outcome_tier=outlier_tier)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=15,
+            legend_source_type=source_type,
+            legend_description_template="Won an outlier crit victory.",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            success_consequences=pool,
+        )
+        progress = StoryProgressFactory(story=story, character_sheet=self.sheet)
+
+        completion = record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=outlier_tier
+        )
+
+        assert completion.outcome == BeatOutcome.SUCCESS
+        assert completion.outcome_tier_id == outlier_tier.pk
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.SUCCESS
+        assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
