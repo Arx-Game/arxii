@@ -162,6 +162,28 @@ class CmdBattleDeclareTests(TestCase):
         # Should contain an error mentioning the missing unit.
         self.assertIn("NonexistentUnit", feedback)
 
+    def test_declare_rescue_dispatches_rescue_action_kind(self) -> None:
+        ally_char = CharacterFactory(db_key="cmd_battle_rescue_ally", location=self.room)
+        ally_sheet = CharacterSheetFactory(character=ally_char)
+        ally_participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            character_sheet=ally_sheet,
+        )
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, f"declare rescue {ally_char.db_key} with Lance Thrust")
+
+        self.assertTrue(
+            BattleActionDeclaration.objects.filter(
+                battle_round=self.battle_round,
+                participant=self.participant,
+                action_kind=BattleActionKind.RESCUE,
+                technique=self.technique,
+                target_ally=ally_participant,
+            ).exists()
+        )
+
     def test_bare_battle_shows_status(self) -> None:
         cmd = CmdBattle()
         _run(cmd, self.player_char, "")

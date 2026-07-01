@@ -734,3 +734,60 @@ class EscalationTickTests(TestCase):
             participant.character_sheet.character, condition=self.content["condition"]
         ).first()
         assert instance.current_stage.stage_order == 2
+
+
+class RescueResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.content = ensure_surrounded_content()
+
+    def test_successful_rescue_clears_surrounded(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Rescue Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        victim_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=victim_sheet)
+        victim = enlist_participant(battle=battle, character_sheet=victim_sheet, side=side)
+        # Direct ConditionInstance creation, not apply_condition — apply_condition routes
+        # through _build_bulk_context's PG-only DISTINCT ON query and errors on the
+        # SQLite fast tier (same known trap as Task 7's fixture; RESCUE's own
+        # remove_condition call, exercised below, does NOT hit this path, so this test
+        # stays SQLite-safe once setup avoids apply_condition).
+        ConditionInstanceFactory(
+            target=victim_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+
+        rescuer_sheet = CharacterSheetFactory()
+        rescuer = enlist_participant(battle=battle, character_sheet=rescuer_sheet, side=side)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
+        CharacterTechniqueFactory(character=rescuer_sheet, technique=technique)
+        CharacterAnimaFactory(character=rescuer_sheet.character, current=20, maximum=30)
+
+        battle_round = begin_battle_round(battle=battle)
+        declare_battle_action(
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            technique=technique,
+            target_ally=victim,
+        )
+
+        with patch(
+            "world.battles.resolution.resolve_battle_technique",
+            return_value=_success_result(3),
+        ):
+            resolve_battle_round(battle_round=battle_round)
+
+        assert not get_active_conditions(
+            victim_sheet.character, condition=self.content["condition"]
+        ).exists()

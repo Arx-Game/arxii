@@ -6,6 +6,7 @@ Player subverbs:
     battle              — show caller's current battle status
     battle declare strike <unit> with <technique>
     battle declare support <char> with <technique>
+    battle declare rescue <ally> with <technique>
 
 GM subverbs:
     battle round        — begin the next round (DECLARING)
@@ -34,6 +35,7 @@ class CmdBattle(ArxCommand):
         battle
         battle declare strike <unit> with <technique>
         battle declare support <ally> with <technique>
+        battle declare rescue <ally> with <technique>
 
     Syntax (GM / staff):
         battle round
@@ -42,7 +44,9 @@ class CmdBattle(ArxCommand):
 
     Bare ``battle`` shows your current battle status. Supply a unit name for
     ``strike`` (matched within the active battle) or a character name for
-    ``support``, plus the technique you know to cast with ``with <technique>``.
+    ``support``/``rescue``, plus the technique you know to cast with
+    ``with <technique>``. ``rescue`` clears a Surrounded ally's peril instead
+    of awarding victory points.
     """
 
     key = "battle"
@@ -78,7 +82,7 @@ class CmdBattle(ArxCommand):
         else:
             msg = (
                 "Usage: battle [declare strike <unit>|declare support <char>"
-                "|round|resolve|conclude]"
+                "|declare rescue <ally>|round|resolve|conclude]"
             )
             raise CommandError(msg)
 
@@ -211,6 +215,7 @@ class CmdBattle(ArxCommand):
             msg = (
                 "Usage: battle declare strike <unit> with <technique>"
                 " | battle declare support <ally> with <technique>"
+                " | battle declare rescue <ally> with <technique>"
             )
             raise CommandError(msg)
 
@@ -220,6 +225,7 @@ class CmdBattle(ArxCommand):
             msg = (
                 "Usage: battle declare strike <unit> with <technique>"
                 " | battle declare support <ally> with <technique>"
+                " | battle declare rescue <ally> with <technique>"
             )
             raise CommandError(msg)
         split_at = remainder.index("with")
@@ -255,8 +261,21 @@ class CmdBattle(ArxCommand):
                 technique_id=technique.pk,
                 target_ally=ally,
             )
+        elif kind == "rescue":  # noqa: STRING_LITERAL
+            if not name:
+                msg = "Rescue which ally? (battle declare rescue <ally> with <technique>)"
+                raise CommandError(msg)
+            participant = self._resolve_participant()
+            ally = self._resolve_ally(participant, name)
+            technique = self._resolve_technique(participant, technique_name)
+            result = DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.RESCUE,
+                technique_id=technique.pk,
+                target_ally=ally,
+            )
         else:
-            msg = "Unknown declare subverb. Use 'strike' or 'support'."
+            msg = "Unknown declare subverb. Use 'strike', 'support', or 'rescue'."
             raise CommandError(msg)
 
         self._send(result)

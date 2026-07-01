@@ -295,6 +295,30 @@ def _resolve_support_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + SUPPORT_VP
 
 
+def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
+    """Apply RESCUE success: clear the target ally's Surrounded condition (#1733).
+
+    No VP awarded — rescue trades round economy for saving an ally, not battlefield
+    progress. No-op if the target ally isn't (or is no longer) Surrounded — a second
+    rescue declaration on an already-clear ally is simply wasted, not an error.
+    """
+    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions, remove_condition  # noqa: PLC0415
+
+    target = declaration.target_ally
+    if target is None:
+        return
+
+    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
+    if template is None:
+        return
+
+    character = target.character_sheet.character
+    if get_active_conditions(character, condition=template).exists():
+        remove_condition(character, template)
+
+
 def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> None:
     """Roll the surrounded_entry pool for an isolated declaration failure (#1733).
 
@@ -453,6 +477,8 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
         if sl > 0:
             if declaration.action_kind == BattleActionKind.STRIKE:
                 _resolve_strike_success(declaration, result, sl)
+            elif declaration.action_kind == BattleActionKind.RESCUE:
+                _resolve_rescue_success(declaration)
             else:
                 _resolve_support_success(declaration, result)
         else:
