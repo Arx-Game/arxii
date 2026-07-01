@@ -623,32 +623,40 @@ def _resolve_peril_via_pool(
     character_sheet: CharacterSheet,
     instance: ConditionInstance,
     pool: ConsequencePool,
+    *,
+    death_permitted: bool,
 ) -> bool:
     """Resolve an acute-peril ConditionInstance through a guarded consequence pool.
 
-    The shared death-gated core of the acute-peril dying state (#1479): used by
-    BOTH the terminal bleed-out path (``_resolve_terminal_bleed_out``, the
-    ``bleed_out_terminal`` pool) and the abandonment path (``resolve_abandonment``,
-    the source-appropriate ``select_abandonment_pool`` pool). Extracting it keeps
-    a single implementation of "roll the peril's authored resist check against a
-    death-gated candidate set, then dispatch the selected outcome" (no parallel
-    implementations).
+    The shared death-gated core of the acute-peril dying state (#1479, generalized for
+    #1733): used by the terminal bleed-out path (``_resolve_terminal_bleed_out``), the
+    abandonment path (``resolve_abandonment``), and the battle Surrounded terminal path
+    (``advance_surrounded``). Extracting it keeps a single implementation of "roll the
+    peril's authored resist check against a death-gated candidate set, then dispatch the
+    selected outcome" (no parallel implementations).
+
+    ``death_permitted`` is now supplied by the caller rather than derived internally —
+    the original gate (``death_is_permitted(source_character=instance.source_character)``)
+    assumed every peril source is an ``ObjectDB`` character, which battle Surrounded's
+    source (an abstract ``BattleUnit``) never is; a ``None`` source would silently
+    default to "not permitted" forever. Bleed-out and abandonment callers compute this
+    the same way they always did (see their bodies); Surrounded computes it via
+    ``select_surrounded_terminal_pool`` routing instead.
 
     The roll uses the instance's current-stage authored ``resist_check_type`` +
-    ``resist_difficulty`` (ADR-0019 — no hardcoded difficulty). The gate
-    (``death_is_permitted``) is applied by EXCLUDING every character-loss
-    (``die``) candidate before selection when death is not permitted, so a PC
-    source, a death_deferred victim, or an absent source can never select death
-    (ADR-0023). The selected outcome is dispatched on its ``character_loss``
-    flag — the single ``die`` row is the only character-loss candidate, so this
-    also covers the fallback outcome produced when the Failure tier is emptied
-    by the gate (it is non-loss → survive). Authored survival effects (e.g.
+    ``resist_difficulty`` (ADR-0019 — no hardcoded difficulty). The gate is applied by
+    EXCLUDING every character-loss (``die``) candidate before selection when
+    ``death_permitted`` is False, so a PC source, a death_deferred victim, or an absent
+    source can never select death (ADR-0023). The selected outcome is dispatched on its
+    ``character_loss`` flag — the single ``die`` row is the only character-loss
+    candidate, so this also covers the fallback outcome produced when the Failure tier is
+    emptied by the gate (it is non-loss → survive). Authored survival effects (e.g.
     ``captured_alive``'s CAPTURE effect) are applied by ``apply_resolution``.
 
     Returns True iff the character died this call. On BOTH death and survival the
-    instance's acute-peril condition is removed so that ``_danger_persists``
-    returns False and the DANGER round auto-ends (#1479). Any wounds remain on
-    the survivor. ``_mark_dead`` stays the single death writer.
+    instance's acute-peril condition is removed so that ``_danger_persists`` returns
+    False and the DANGER round auto-ends (#1479). Any wounds remain on the survivor.
+    ``_mark_dead`` stays the single death writer.
     """
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
@@ -657,12 +665,11 @@ def _resolve_peril_via_pool(
     )
     from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.conditions.services import remove_condition  # noqa: PLC0415
-    from world.vitals.peril_resolution import death_is_permitted  # noqa: PLC0415
 
     stage = instance.current_stage
     source_character = instance.source_character
     candidates = resolve_pool_consequences(pool)
-    if not death_is_permitted(victim_sheet=character_sheet, source_character=source_character):
+    if not death_permitted:
         candidates = [c for c in candidates if not c.character_loss]
 
     # select_consequence + apply_resolution still operate on ObjectDB; walk
@@ -710,6 +717,7 @@ def _resolve_terminal_bleed_out(
     """
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.vitals.constants import POOL_BLEED_OUT_TERMINAL  # noqa: PLC0415
+    from world.vitals.peril_resolution import death_is_permitted  # noqa: PLC0415
 
     pool = ConsequencePool.objects.filter(name=POOL_BLEED_OUT_TERMINAL).first()
     if pool is None:
@@ -717,7 +725,10 @@ def _resolve_terminal_bleed_out(
         # the dying state is the safe degradation (never kill ungated; #1479).
         return False
 
-    return _resolve_peril_via_pool(character_sheet, instance, pool)
+    death_permitted = death_is_permitted(
+        victim_sheet=character_sheet, source_character=instance.source_character
+    )
+    return _resolve_peril_via_pool(character_sheet, instance, pool, death_permitted=death_permitted)
 
 
 def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
@@ -741,6 +752,7 @@ def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.vitals.peril_resolution import (  # noqa: PLC0415
         acute_peril_instances,
+        death_is_permitted,
         select_abandonment_pool,
     )
 
@@ -765,7 +777,10 @@ def resolve_abandonment(character_sheet: CharacterSheet | None) -> bool:
         # Seeding gap — hold the victim rather than resolving ungated (#1479).
         return False
 
-    return _resolve_peril_via_pool(character_sheet, instance, pool)
+    death_permitted = death_is_permitted(
+        victim_sheet=character_sheet, source_character=instance.source_character
+    )
+    return _resolve_peril_via_pool(character_sheet, instance, pool, death_permitted=death_permitted)
 
 
 def _advance_to_next_stage(instance: ConditionInstance, stage: ConditionStage) -> None:

@@ -48,11 +48,14 @@ Core survivability pipeline:
   character died.
 
 **Acute-peril dying state (#1479) — guarded consequence pool (ADR-0049):**
-- `_resolve_peril_via_pool(sheet, instance, pool) -> bool` — shared death-gated core: resolves
-  a `ConditionInstance` through an authored `ConsequencePool`; excludes `character_loss`
-  (`die`) candidates when `death_is_permitted` returns False (ADR-0023). Clears the acute-peril
-  condition on BOTH death and survival so `_danger_persists` returns False. Returns True iff
-  character died.
+- `_resolve_peril_via_pool(sheet, instance, pool, *, death_permitted) -> bool` — shared
+  death-gated core: resolves a `ConditionInstance` through an authored `ConsequencePool`;
+  excludes `character_loss` (`die`) candidates when the caller-supplied `death_permitted` is
+  False (ADR-0023). `death_permitted` is computed by the caller (bleed-out/abandonment via
+  `death_is_permitted`; battle Surrounded via `select_surrounded_terminal_pool` routing,
+  #1733) rather than derived internally, since not every peril source is an `ObjectDB`
+  character. Clears the acute-peril condition on BOTH death and survival so
+  `_danger_persists` returns False. Returns True iff character died.
 - `_resolve_terminal_bleed_out(sheet, instance) -> bool` — routes to `_resolve_peril_via_pool`
   with the `bleed_out_terminal` pool; seeding gap holds the victim (never kills ungated).
 - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim's fate through the
