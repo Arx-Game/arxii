@@ -6,6 +6,7 @@ Tests are written BEFORE the implementation — they should FAIL first.
 """
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
@@ -144,37 +145,65 @@ class WeeklyGrantKudosTest(TestCase):
             },
         )
 
-    def _make_qualifying_ledger(self, pending: Decimal = Decimal("4.00")):
-        """Create a ledger with 2 distinct initiators and given pending_points."""
-        accrue(self.account, self.initiator_a, pending / 2)
-        accrue(self.account, self.initiator_b, pending / 2)
+    def _make_qualifying_ledger(self, events: int = 4):
+        """Create a ledger with *events* good-sport acceptances (curve attempts)."""
+        for i in range(events):
+            initiator = self.initiator_a if i % 2 == 0 else self.initiator_b
+            accrue(self.account, initiator, Decimal("1.00"))
         return WeeklySocialEngagement.objects.get(account=self.account)
 
-    def test_qualifying_ledger_grants_kudos(self):
-        """A ledger >= MIN_ENGAGEMENT_BAR initiators and pending > 0 gets granted."""
+    def test_first_point_is_guaranteed(self):
+        """Even if every roll fails, one good-sport act banks the guaranteed first point."""
+        from world.progression.services import engagement as engagement_mod
         from world.progression.services.engagement import grant_social_engagement_kudos
 
-        ledger = self._make_qualifying_ledger(Decimal("4.00"))
-        self.assertEqual(ledger.distinct_initiators, 2)
+        self._make_qualifying_ledger(events=3)
 
-        count = grant_social_engagement_kudos()
+        # random.random()*100 == 99 fails the 80/60/… rolls but not the guaranteed 100% first.
+        with patch.object(engagement_mod.random, "random", return_value=0.99):
+            count = grant_social_engagement_kudos()
 
         self.assertEqual(count, 1)
-        ledger.refresh_from_db()
-        self.assertTrue(ledger.granted)
+        points_data = KudosPointsData.objects.get(account=self.account)
+        self.assertEqual(points_data.total_earned, 1)
+
+    def test_curve_caps_at_weekly_max(self):
+        """With every roll succeeding, points bank up to the weekly cap and stop."""
+        from world.progression.services import engagement as engagement_mod
+        from world.progression.services.engagement import (
+            GOOD_SPORT_WEEKLY_CAP,
+            grant_social_engagement_kudos,
+        )
+
+        self._make_qualifying_ledger(events=50)
+
+        with patch.object(engagement_mod.random, "random", return_value=0.0):
+            grant_social_engagement_kudos()
 
         points_data = KudosPointsData.objects.get(account=self.account)
-        # round(4.00 * 1) = 4
-        self.assertEqual(points_data.total_earned, 4)
+        self.assertEqual(points_data.total_earned, GOOD_SPORT_WEEKLY_CAP)
 
-    def test_sub_bar_ledger_gets_no_grant(self):
-        """A ledger with fewer than MIN_ENGAGEMENT_BAR initiators gets no grant."""
+    def test_failed_roll_does_not_lower_chance(self):
+        """A failed roll keeps points_locked unchanged, so the next roll's chance is the same."""
+        from world.progression.services import engagement as engagement_mod
         from world.progression.services.engagement import grant_social_engagement_kudos
 
-        # Only 1 initiator — below the bar of 2
-        accrue(self.account, self.initiator_a, Decimal("5.00"))
-        ledger = WeeklySocialEngagement.objects.get(account=self.account)
-        self.assertEqual(ledger.distinct_initiators, 1)
+        self._make_qualifying_ledger(events=2)
+
+        # First attempt guaranteed (+1, points_locked→1, chance 80). Second at 0.79*100=79 < 80.
+        with patch.object(engagement_mod.random, "random", return_value=0.79):
+            grant_social_engagement_kudos()
+
+        points_data = KudosPointsData.objects.get(account=self.account)
+        self.assertEqual(points_data.total_earned, 2)
+
+    def test_zero_events_gets_no_grant(self):
+        """A ledger with no good-sport acceptances is skipped and not marked granted."""
+        from world.progression.services.engagement import grant_social_engagement_kudos
+
+        ledger = WeeklySocialEngagementFactory(account=self.account)
+        ledger.engagement_events = 0
+        ledger.save(update_fields=["engagement_events"])
 
         count = grant_social_engagement_kudos()
 
@@ -183,28 +212,11 @@ class WeeklyGrantKudosTest(TestCase):
         self.assertFalse(ledger.granted)
         self.assertFalse(KudosPointsData.objects.filter(account=self.account).exists())
 
-    def test_zero_pending_gets_no_grant(self):
-        """A ledger with pending_points == 0 even with enough initiators gets no grant."""
-        from world.progression.services.engagement import grant_social_engagement_kudos
-
-        # Manually set up a ledger with 2 initiators but 0 pending
-        accrue(self.account, self.initiator_a, Decimal("2.00"))
-        accrue(self.account, self.initiator_b, Decimal("2.00"))
-        ledger = WeeklySocialEngagement.objects.get(account=self.account)
-        ledger.pending_points = Decimal(0)
-        ledger.save(update_fields=["pending_points"])
-
-        count = grant_social_engagement_kudos()
-
-        self.assertEqual(count, 0)
-        ledger.refresh_from_db()
-        self.assertFalse(ledger.granted)
-
     def test_already_granted_ledger_skipped(self):
         """A ledger already marked granted=True is not re-granted."""
         from world.progression.services.engagement import grant_social_engagement_kudos
 
-        ledger = self._make_qualifying_ledger(Decimal("4.00"))
+        ledger = self._make_qualifying_ledger(events=4)
         ledger.granted = True
         ledger.save(update_fields=["granted"])
 
@@ -216,7 +228,7 @@ class WeeklyGrantKudosTest(TestCase):
         """weekly_rollover_task() grants eligible ledgers when called."""
         from world.game_clock.tasks import weekly_rollover_task
 
-        ledger = self._make_qualifying_ledger(Decimal("6.00"))
+        ledger = self._make_qualifying_ledger(events=6)
         self.assertFalse(ledger.granted)
 
         weekly_rollover_task()
@@ -224,6 +236,6 @@ class WeeklyGrantKudosTest(TestCase):
         WeeklySocialEngagement.flush_instance_cache()
         ledger.refresh_from_db()
         self.assertTrue(ledger.granted)
-
+        # The guaranteed first point means at least 1 kudos was earned.
         points_data = KudosPointsData.objects.get(account=self.account)
-        self.assertEqual(points_data.total_earned, 6)
+        self.assertGreaterEqual(points_data.total_earned, 1)
