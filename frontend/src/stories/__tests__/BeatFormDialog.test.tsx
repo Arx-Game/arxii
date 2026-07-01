@@ -411,31 +411,34 @@ describe('BeatFormDialog', () => {
       screen.getByText(/off = tangent: recorded for history, never gates a transition/i)
     ).toBeInTheDocument();
 
-    // Risk numeric input — default 0
-    const riskInput = screen.getByLabelText(/^risk$/i) as HTMLInputElement;
-    expect(riskInput).toBeInTheDocument();
-    expect(riskInput.value).toBe('0');
-    expect(riskInput).toHaveAttribute('type', 'number');
-    expect(riskInput).toHaveAttribute('min', '0');
-    expect(screen.getByText(/only staff may set risk above 0/i)).toBeInTheDocument();
+    // Risk select — defaults to "none" per backbone model default
+    const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
+    expect(riskSelect).toBeInTheDocument();
+    expect(riskSelect.value).toBe('none');
+    expect(within(riskSelect).getByRole('option', { name: /^none$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^low$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^moderate$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^high$/i })).toBeInTheDocument();
+    expect(within(riskSelect).getByRole('option', { name: /^extreme$/i })).toBeInTheDocument();
+    expect(screen.getByText(/only staff may set risk above none/i)).toBeInTheDocument();
   });
 
-  it('disables the risk input for non-staff users', () => {
+  it('disables the risk select for non-staff users', () => {
     accountState.is_staff = false;
     setupMocks();
     renderWithProviders(<BeatFormDialog {...defaultProps} />);
 
-    const riskInput = screen.getByLabelText(/^risk$/i) as HTMLInputElement;
-    expect(riskInput).toBeDisabled();
+    const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
+    expect(riskSelect).toBeDisabled();
   });
 
-  it('enables the risk input for staff users', () => {
+  it('enables the risk select for staff users', () => {
     accountState.is_staff = true;
     setupMocks();
     renderWithProviders(<BeatFormDialog {...defaultProps} />);
 
-    const riskInput = screen.getByLabelText(/^risk$/i) as HTMLInputElement;
-    expect(riskInput).toBeEnabled();
+    const riskSelect = screen.getByLabelText(/^risk$/i) as HTMLSelectElement;
+    expect(riskSelect).toBeEnabled();
   });
 
   it('includes kind / advances / risk in the create submit body', async () => {
@@ -465,7 +468,7 @@ describe('BeatFormDialog', () => {
         expect.objectContaining({
           kind: 'encounter',
           advances: false,
-          risk: 0,
+          risk: 'none',
         }),
         expect.any(Object)
       );
@@ -487,16 +490,14 @@ describe('BeatFormDialog', () => {
     const descInput = screen.getByLabelText(/internal description/i);
     await user.type(descInput, 'Risky beat');
 
-    const riskInput = screen.getByLabelText(/^risk$/i);
-    await user.clear(riskInput);
-    await user.type(riskInput, '3');
+    await user.selectOptions(screen.getByLabelText(/^risk$/i), 'high');
 
     await user.click(screen.getByRole('button', { name: /create beat/i }));
 
     await waitFor(() => {
       expect(createMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          risk: 3,
+          risk: 'high',
         }),
         expect.any(Object)
       );
@@ -511,7 +512,7 @@ describe('BeatFormDialog', () => {
       predicate_type: 'gm_marked' as const,
       kind: 'requirement' as const,
       advances: false,
-      risk: 5,
+      risk: 'high' as const,
       outcome: 'unsatisfied' as const,
       visibility: 'hinted' as const,
       internal_description: 'A requirement beat',
@@ -542,6 +543,6 @@ describe('BeatFormDialog', () => {
 
     expect((screen.getByLabelText(/^kind$/i) as HTMLSelectElement).value).toBe('requirement');
     expect(screen.getByLabelText(/advances the plot/i)).not.toBeChecked();
-    expect((screen.getByLabelText(/^risk$/i) as HTMLInputElement).value).toBe('5');
+    expect((screen.getByLabelText(/^risk$/i) as HTMLSelectElement).value).toBe('high');
   });
 });

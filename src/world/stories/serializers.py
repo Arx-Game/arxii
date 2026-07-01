@@ -8,6 +8,7 @@ from world.gm.constants import GMTableStatus
 from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.scenes.models import Persona
+from world.societies.constants import RenownRisk
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
@@ -1010,15 +1011,15 @@ class BeatSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(exc.message_dict) from exc
 
         request = self.context.get("request")
-        merged_risk = merged.get("risk", 0) or 0
+        merged_risk = merged.get("risk") or RenownRisk.NONE
         user = request.user if request is not None else None
         # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
         is_staff = bool(user is not None and user.is_staff)
-        if merged_risk > 0 and not is_staff:
+        if merged_risk != RenownRisk.NONE and not is_staff:
             raise serializers.ValidationError(
                 {
                     "risk": (
-                        "Only staff may author beats above risk 0. "
+                        "Only staff may author beats above risk NONE. "
                         "Higher risk tiers unlock with GM trust level."
                     )
                 }

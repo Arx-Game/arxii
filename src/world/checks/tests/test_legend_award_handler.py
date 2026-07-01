@@ -11,9 +11,12 @@ from world.checks.types import ResolutionContext
 from world.covenants.factories import make_engaged_member
 from world.mechanics.effect_handlers import apply_all_effects, apply_effect
 from world.scenes.factories import PersonaFactory
+from world.societies.constants import RenownRisk
 from world.societies.exceptions import LegendAwardParticipantMissingError
 from world.societies.factories import LegendSourceTypeFactory
 from world.societies.models import CovenantLegendCredit, LegendEntry, LegendEvent
+from world.stories.factories import BeatFactory
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _make_legend_effect(consequence, source_type, *, template=""):
@@ -222,3 +225,95 @@ class LegendAwardHandlerCovenantFanOutTests(TestCase):
         assert credit_count == 1, (
             f"Expected 1 CovenantLegendCredit for the engaged covenant, got {credit_count}"
         )
+
+
+class LegendAwardRiskTierScalingTests(TestCase):
+    """_legend_award scales base_value by Beat.risk x outcome_tier when both present."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Shared character/source_type/persona fixtures for all scaling scenarios."""
+        cls.character = ObjectDB.objects.create(db_key="RiskTierScalingChar")
+        cls.source_type = LegendSourceTypeFactory()
+        cls.persona = PersonaFactory()
+
+    def _context(self, *, beat=None, outcome_tier=None):
+        """Build a ResolutionContext with only the beat/outcome_tier fields varied."""
+        return ResolutionContext(
+            character=self.character,
+            participants=[self.persona],
+            beat=beat,
+            outcome_tier=outcome_tier,
+        )
+
+    def test_no_beat_uses_flat_legend_base_value(self) -> None:
+        """Existing behavior preserved: no beat context, no scaling."""
+        consequence = ConsequenceFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=self.source_type,
+            legend_description_template="Flat deed.",
+        )
+        apply_effect(effect, self._context())
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        assert event.base_value == 10
+
+    def test_risk_and_tier_scale_the_award(self) -> None:
+        """HIGH risk x a high-success tier scales well above the authored floor."""
+        beat = BeatFactory(risk=RenownRisk.HIGH)
+        tier = CheckOutcomeFactory(name="Overwhelming Scaling Tier", success_level=10)
+        consequence = ConsequenceFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=self.source_type,
+            legend_description_template="Scaled deed.",
+        )
+        apply_effect(effect, self._context(beat=beat, outcome_tier=tier))
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        # RISK_LEGEND_AWARDS[HIGH] = 250; tier_multiplier(10) = 1.0 + 10/5 = 3.0
+        # -> 250 * 3.0 = 750, well above the flat legend_base_value=10 floor.
+        assert event.base_value == 750
+
+    def test_risk_none_yields_zero_regardless_of_tier(self) -> None:
+        """NONE risk scales to 0, but the authored legend_base_value floor still wins."""
+        beat = BeatFactory(risk=RenownRisk.NONE)
+        tier = CheckOutcomeFactory(name="No-Risk Win Tier", success_level=10)
+        consequence = ConsequenceFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=self.source_type,
+            legend_description_template="No-risk deed.",
+        )
+        apply_effect(effect, self._context(beat=beat, outcome_tier=tier))
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        # RISK_LEGEND_AWARDS[NONE] = 0 -> scaled value is 0, but legend_base_value=10
+        # is an explicit author override/floor per Decision 4 — the max of the two wins.
+        assert event.base_value == 10
+
+    def test_scaled_value_below_authored_floor_uses_floor(self) -> None:
+        """A modest scaled value never overrides a higher authored legend_base_value."""
+        beat = BeatFactory(risk=RenownRisk.LOW)
+        tier = CheckOutcomeFactory(name="Marginal Scaling Tier", success_level=0)
+        consequence = ConsequenceFactory()
+        effect = ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=500,
+            legend_source_type=self.source_type,
+            legend_description_template="High floor deed.",
+        )
+        apply_effect(effect, self._context(beat=beat, outcome_tier=tier))
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        # RISK_LEGEND_AWARDS[LOW] = 10; tier_multiplier(0) = 1.0 (success_level<=0
+        # contributes no bonus) -> scaled = 10, below the authored floor of 500.
+        assert event.base_value == 500

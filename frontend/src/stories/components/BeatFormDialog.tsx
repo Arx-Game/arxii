@@ -42,6 +42,7 @@ import type {
   BeatCreateBody,
   BeatKind,
   BeatPredicateType,
+  BeatRisk,
   BeatVisibility,
   ReferencedMilestoneType,
 } from '../types';
@@ -95,6 +96,14 @@ const KIND_OPTIONS: { value: BeatKind; label: string }[] = [
   { value: 'encounter', label: 'Encounter' },
   { value: 'task', label: 'Task' },
   { value: 'requirement', label: 'Requirement' },
+];
+
+const RISK_OPTIONS: { value: BeatRisk; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'low', label: 'Low' },
+  { value: 'moderate', label: 'Moderate' },
+  { value: 'high', label: 'High' },
+  { value: 'extreme', label: 'Extreme' },
 ];
 
 const VISIBILITY_OPTIONS: { value: BeatVisibility; label: string }[] = [
@@ -465,7 +474,7 @@ export function BeatFormDialog({
   const [visibility, setVisibility] = useState<BeatVisibility>(beat?.visibility ?? 'hinted');
   const [kind, setKind] = useState<BeatKind>(beat?.kind ?? 'task');
   const [advances, setAdvances] = useState<boolean>(beat?.advances ?? true);
-  const [risk, setRisk] = useState<string>(beat?.risk !== undefined ? String(beat.risk) : '0');
+  const [risk, setRisk] = useState<BeatRisk>(beat?.risk ?? 'none');
   const [order, setOrder] = useState<string>(beat?.order !== undefined ? String(beat.order) : '');
   const [deadline, setDeadline] = useState(beat?.deadline ?? '');
   const [agmEligible, setAgmEligible] = useState(beat?.agm_eligible ?? false);
@@ -494,7 +503,7 @@ export function BeatFormDialog({
     setVisibility(beat?.visibility ?? 'hinted');
     setKind(beat?.kind ?? 'task');
     setAdvances(beat?.advances ?? true);
-    setRisk(beat?.risk !== undefined ? String(beat.risk) : '0');
+    setRisk(beat?.risk ?? 'none');
     setOrder(beat?.order !== undefined ? String(beat.order) : '');
     setDeadline(beat?.deadline ?? '');
     setAgmEligible(beat?.agm_eligible ?? false);
@@ -532,7 +541,7 @@ export function BeatFormDialog({
       visibility,
       kind,
       advances,
-      risk: risk !== '' ? Number(risk) : 0,
+      risk,
       order: order !== '' ? Number(order) : undefined,
       deadline: deadline ? new Date(deadline).toISOString() : undefined,
       agm_eligible: agmEligible,
@@ -740,15 +749,20 @@ export function BeatFormDialog({
             {/* Risk */}
             <div className="space-y-1.5">
               <Label htmlFor="beat-risk">Risk</Label>
-              <Input
+              <select
                 id="beat-risk"
-                type="number"
-                min={0}
                 value={risk}
-                onChange={(e) => setRisk(e.target.value)}
+                onChange={(e) => setRisk(e.target.value as BeatRisk)}
                 disabled={!canSetRisk}
-              />
-              <p className="text-xs text-muted-foreground">Only staff may set risk above 0</p>
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                {RISK_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">Only staff may set risk above None</p>
               {fieldErrors.risk && (
                 <p className="text-xs text-destructive">{fieldErrors.risk.join(' ')}</p>
               )}

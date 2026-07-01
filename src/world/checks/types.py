@@ -72,6 +72,10 @@ class ResolutionContext:
     # mission-aware effects reach run state (e.g. a rescue route freeing the
     # run's ``rescue_target``). None outside the mission-resolution path.
     mission_instance: MissionInstance | None = None
+    # The already-resolved graded outcome tier, when the consequence pool is being
+    # applied against a known tier rather than a freshly-rolled check (beat auto-wire,
+    # mission routes). None when the caller rolls its own check via select_consequence().
+    outcome_tier: CheckOutcome | None = None
 
     @property
     def location(self) -> ObjectDB:

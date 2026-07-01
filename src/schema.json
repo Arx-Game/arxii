@@ -24739,11 +24739,16 @@ components:
           type: boolean
           description: 'False = Tangent: recorded for history, never gates a transition.'
         risk:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: Plain risk number. Meaning/names assigned later with the consequence
-            work. Authoring trust-gated in the serializer.
+          allOf:
+          - $ref: '#/components/schemas/RiskEnum'
+          description: |-
+            Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
         required_level:
           type: integer
           maximum: 2147483647
@@ -24924,11 +24929,16 @@ components:
           type: boolean
           description: 'False = Tangent: recorded for history, never gates a transition.'
         risk:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: Plain risk number. Meaning/names assigned later with the consequence
-            work. Authoring trust-gated in the serializer.
+          allOf:
+          - $ref: '#/components/schemas/RiskEnum'
+          description: |-
+            Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
         required_level:
           type: integer
           maximum: 2147483647
@@ -39493,11 +39503,16 @@ components:
           type: boolean
           description: 'False = Tangent: recorded for history, never gates a transition.'
         risk:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: Plain risk number. Meaning/names assigned later with the consequence
-            work. Authoring trust-gated in the serializer.
+          allOf:
+          - $ref: '#/components/schemas/RiskEnum'
+          description: |-
+            Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
         required_level:
           type: integer
           maximum: 2147483647
@@ -42550,6 +42565,7 @@ components:
       - codex_entry_unlocked
       - story_at_milestone
       - aggregate_threshold
+      - outcome_tier
       type: string
       description: |-
         * `gm_marked` - GM-marked
@@ -42559,6 +42575,7 @@ components:
         * `codex_entry_unlocked` - Codex entry unlocked
         * `story_at_milestone` - Referenced story at milestone
         * `aggregate_threshold` - Aggregate threshold reached
+        * `outcome_tier` - Outcome tier (machine-graded)
     PrivacyEnum:
       enum:
       - public
@@ -43631,6 +43648,20 @@ components:
         * `all_equal` - All Equal
         * `by_role` - By Role
         * `by_participation` - By Participation
+    RiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     RiskLevelEnum:
       enum:
       - low

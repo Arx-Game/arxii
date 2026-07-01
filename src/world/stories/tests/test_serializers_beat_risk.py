@@ -3,6 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind, BeatPredicateType
 from world.stories.factories import ChapterFactory, EpisodeFactory, StoryFactory
 
@@ -26,23 +27,27 @@ class BeatRiskGateTests(APITestCase):
             "internal_description": "x",
         }
 
-    def test_non_staff_cannot_author_risk_above_zero(self):
+    def test_non_staff_cannot_author_risk_above_none(self):
         self.client.force_authenticate(user=self.player)
-        resp = self.client.post(reverse("beat-list"), self._payload(2), format="json")
+        resp = self.client.post(
+            reverse("beat-list"), self._payload(RenownRisk.MODERATE), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("risk", resp.data)
 
-    def test_non_staff_may_author_risk_zero(self):
+    def test_non_staff_may_author_risk_none(self):
         self.client.force_authenticate(user=self.player)
-        resp = self.client.post(reverse("beat-list"), self._payload(0), format="json")
+        resp = self.client.post(reverse("beat-list"), self._payload(RenownRisk.NONE), format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["kind"], BeatKind.SITUATION)
 
     def test_staff_may_author_any_risk(self):
         self.client.force_authenticate(user=self.staff)
-        resp = self.client.post(reverse("beat-list"), self._payload(5), format="json")
+        resp = self.client.post(
+            reverse("beat-list"), self._payload(RenownRisk.EXTREME), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(resp.data["risk"], 5)
+        self.assertEqual(resp.data["risk"], RenownRisk.EXTREME)
 
     def _create_beat(self, risk):
         """Staff-authored beat at the given risk (staff may author any risk)."""
@@ -52,19 +57,19 @@ class BeatRiskGateTests(APITestCase):
         return resp.data["id"]
 
     def test_non_staff_patch_raising_risk_is_gated(self):
-        beat_id = self._create_beat(0)
+        beat_id = self._create_beat(RenownRisk.NONE)
         self.client.force_authenticate(user=self.player)
         resp = self.client.patch(
             reverse("beat-detail", kwargs={"pk": beat_id}),
-            {"risk": 2},
+            {"risk": RenownRisk.MODERATE},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("risk", resp.data)
 
-    def test_non_staff_patch_unrelated_field_on_risk_zero_beat_ok(self):
-        # Snapshot-merge carries stored risk=0 through, so the gate does not fire.
-        beat_id = self._create_beat(0)
+    def test_non_staff_patch_unrelated_field_on_risk_none_beat_ok(self):
+        # Snapshot-merge carries stored risk=NONE through, so the gate does not fire.
+        beat_id = self._create_beat(RenownRisk.NONE)
         self.client.force_authenticate(user=self.player)
         resp = self.client.patch(
             reverse("beat-detail", kwargs={"pk": beat_id}),
@@ -75,11 +80,11 @@ class BeatRiskGateTests(APITestCase):
 
     def test_non_staff_patch_unrelated_field_on_risk_high_beat_is_gated(self):
         # Intentional behavior lock-in: a non-staff owner cannot PATCH ANY
-        # field of a staff-authored risk>0 beat — the snapshot-merge carries
-        # the stored risk=5 through, so merged["risk"]>0 and not is_staff
-        # trips the gate even though `risk` was not sent. This 400 is
+        # field of a staff-authored risk>NONE beat — the snapshot-merge carries
+        # the stored risk=EXTREME through, so merged["risk"] != NONE and not
+        # is_staff trips the gate even though `risk` was not sent. This 400 is
         # deliberate, not a bug.
-        beat_id = self._create_beat(5)
+        beat_id = self._create_beat(RenownRisk.EXTREME)
         self.client.force_authenticate(user=self.player)
         resp = self.client.patch(
             reverse("beat-detail", kwargs={"pk": beat_id}),
@@ -90,12 +95,12 @@ class BeatRiskGateTests(APITestCase):
         self.assertIn("risk", resp.data)
 
     def test_staff_patch_raising_risk_is_allowed(self):
-        beat_id = self._create_beat(0)
+        beat_id = self._create_beat(RenownRisk.NONE)
         self.client.force_authenticate(user=self.staff)
         resp = self.client.patch(
             reverse("beat-detail", kwargs={"pk": beat_id}),
-            {"risk": 4},
+            {"risk": RenownRisk.HIGH},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["risk"], 4)
+        self.assertEqual(resp.data["risk"], RenownRisk.HIGH)
