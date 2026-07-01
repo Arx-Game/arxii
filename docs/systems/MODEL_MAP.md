@@ -2244,6 +2244,7 @@
   - covenantrole_subrole <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
+  - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
 
 ### Gift
@@ -2440,6 +2441,10 @@
   - character -> character_sheets.CharacterSheet [FK]
   - affinity -> magic.Affinity [FK]
 
+### AuraAffinityThreshold
+**Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
+
 ### Cantrip
 **Foreign Keys:**
   - effect_type -> magic.EffectType [FK]
@@ -2557,6 +2562,7 @@
   - source_entry_flourish -> magic.EntryFlourishRecord [FK] (nullable)
   - source_dramatic_moment -> magic.DramaticMomentTag [FK] (nullable)
   - source_style_presentation_endorsement -> magic.StylePresentationEndorsement [FK] (nullable)
+  - source_mission_deed_reward_line -> missions.MissionDeedRewardLine [FK] (nullable)
 
 ### BeginningsRitualGrant
 **Foreign Keys:**
@@ -2965,7 +2971,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -3281,6 +3287,7 @@
 **Foreign Keys:**
   - route -> missions.MissionOptionRoute [FK] (nullable)
   - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
 
 ### MissionRenownAward
 **Foreign Keys:**
@@ -3355,6 +3362,9 @@
 **Foreign Keys:**
   - deed -> missions.MissionDeedRecord [FK]
   - recipient -> objects.ObjectDB [FK]
+  - resonance -> magic.Resonance [FK] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
 
 ### MissionRewardQueue
 **Foreign Keys:**

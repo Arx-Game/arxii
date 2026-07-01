@@ -795,6 +795,51 @@ picks a position) is deferred to a follow-up issue.
   unaffordable defense would still cancel the attack. That bug was caught and fixed
   by the reactive E2E tests (#1584 Task 16).
 
+### Resonance Gain Surfaces (Resonance Pivot Spec C)
+
+`GainSource` (`world/magic/constants.py`) discriminates which typed source FK is
+populated on a given `ResonanceGrant` row (the universal audit ledger — see "Spec C
+Resonance Gain" in `docs/systems/INDEX.md`). Current values:
+
+- `POSE_ENDORSEMENT` / `SCENE_ENTRY` — peer endorsement of a pose/scene-entry (#1138).
+- `ROOM_RESIDENCE` — room residence trickle.
+- `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`).
+- `STAFF_GRANT` — manual staff grant.
+- `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `PROJECT_CONTRIBUTION` /
+  `SANCTUM_DISSOLUTION_RECOVERY` — Sanctum/Project income and dissolution recovery (Plan 4).
+- `ENTRY_FLOURISH` — see "Entry-Flourish Declaration" above.
+- `DRAMATIC_MOMENT` — see "Dramatic Moment Tagging" above.
+- `STYLE_PRESENTATION` — style presentation endorsement (#1152).
+- `MISSION_REWARD` — mission deed rewards; see "Aura Drift (#1737)" below.
+
+### Aura Drift (#1737)
+
+`CharacterAura`'s stored celestial/primal/abyssal percentages are a write-through cache,
+recomputed by `recompute_aura(character_sheet)` (`world/magic/services/aura.py`) on
+**every** `grant_resonance()` call system-wide. The formula sums
+`CharacterResonance.lifetime_earned` grouped by `Resonance.affinity` and normalizes to
+percentages — deed history, not spendable balance, so spending resonance on pulls never
+moves aura. No-op if the character has no `CharacterAura` row (not magically active) or
+if total lifetime-earned resonance is 0 (leaves the existing stored values as-is).
+
+`AuraAffinityThreshold` (`world/magic/models/aura.py`) is a small authored catalog
+(affinity + threshold_percent + optional `discovery_achievement` FK). After each
+recompute, `fire_aura_threshold_crossings` checks whether the drift crossed any
+authored threshold and grants the linked achievement — mirroring the
+`fire_variant_discoveries` discovery pattern (direct before/after check, not a Flows
+event). Compound gates reuse the achievement's own `AchievementRequirement` rows.
+
+Missions is the first deed source to grant morally-typed resonance:
+`MissionOptionRouteReward.resonance` (author-set, required when `sink=RESONANCE`) flows
+through `MissionDeedRewardLine.resonance` to the reward cron's `_grant_resonance`, which
+calls `grant_resonance(..., source=GainSource.MISSION_REWARD)`. This closes the
+RESONANCE half of `docs/plans/2026-05-18-missions-design.md` §13.3 (LEGEND_POINTS
+remains a separate, still-open stub).
+
+Note: `get_aura_percentages()`/`CharacterAffinityTotal` (also in this file/app) are
+unrelated, unwired legacy code from before `CharacterAura`'s stored-percentage
+mechanism existed — see #1739. `recompute_aura` does not use them.
+
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 
 **Design:** `docs/architecture/resonance-environment-universal-path.md`

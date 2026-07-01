@@ -2,25 +2,23 @@
 
 Phase 5b.1 wrote :class:`MissionRewardQueue` rows for every POST_CRON
 reward line. Phase 5b.2 is the *cron* that walks those queued rows and
-grants the underlying reward downstream — except both grant entry points
-are currently stub-sealed pending payload-enrichment work:
+grants the underlying reward downstream. The RESONANCE grant is implemented
+(#1737); the LEGEND_POINTS grant remains stub-sealed:
 
   * LEGEND_POINTS — the LP grant entry point requires richer line shape
     than the queue carries today (persona walk + LegendSourceType + title).
     See DESIGN §13.3.
-  * RESONANCE — the resonance grant needs a Resonance FK and a
-    ``MISSION_REWARD`` ``GainSource`` value that does not yet exist. Same
-    DESIGN §13.3 reference.
+  * RESONANCE — implemented (#1737): resolves the recipient's CharacterSheet
+    and calls grant_resonance with source=GainSource.MISSION_REWARD.
 
-Both helpers raise :class:`NotImplementedError` with a structured DESIGN
+The LP helper raises :class:`NotImplementedError` with a structured DESIGN
 message; the batch catches the raise, populates ``failure_reason``, and
-leaves the row at ``applied=False``. Future phases that enrich the queue
-payload will replace the stub-seal body with real grant calls without
-having to change the public batch contract.
+leaves the row at ``applied=False``. The RESONANCE helper succeeds and flips
+the row to ``applied=True``.
 
 Per-row :func:`transaction.atomic` keeps a fault on row N from corrupting
-adjacent rows; idempotency is automatic in 5b.2 because no row ever flips
-to ``applied=True``.
+adjacent rows; the batch returns separate applied/failed tuples for each
+outcome.
 """
 
 from __future__ import annotations
@@ -33,16 +31,12 @@ from world.missions.models import MissionRewardQueue
 from world.missions.services.rewards import MissionRewardRoutingError
 from world.missions.types import RewardBatchResult
 
-# Per-sink stub-seal messages. Both reference DESIGN §13.3 — the missions
-# design doc section that explains why these grants need richer payloads
+# Per-sink stub-seal messages. LP references DESIGN §13.3 — the missions
+# design doc section that explains why the LP grant needs a richer payload
 # than the queue carries today.
 _LP_STUB_MSG = (
     "DESIGN §13.3 — LP grant entry point requires richer line shape: "
     "persona walk + LegendSourceType + title. Awaiting payload-enrichment phase."
-)
-_RESONANCE_STUB_MSG = (
-    "DESIGN §13.3 — Resonance grant requires Resonance FK + MISSION_REWARD "
-    "GainSource (does not exist). Awaiting payload-enrichment phase."
 )
 
 # MissionRewardQueue.failure_reason is a CharField(max_length=500); clip
@@ -64,14 +58,24 @@ def _grant_legend_points(row: MissionRewardQueue) -> None:
 
 
 def _grant_resonance(row: MissionRewardQueue) -> None:
-    """Stub-sealed resonance grant entry point.
+    """Grant the resonance a mission deed's RESONANCE-sink line promised.
 
-    The canonical resonance grant function expects a :class:`Resonance` FK
-    plus a ``GainSource`` value (and ``GainSource.MISSION_REWARD`` is not
-    in the enum yet — adding it prematurely would leak Phase-6 model
-    surface area). Stub-sealed for the same reason as LP.
+    Resolves the recipient's CharacterSheet from the line's recipient
+    ObjectDB, then calls the canonical grant_resonance() with
+    source=GainSource.MISSION_REWARD (#1737).
     """
-    raise NotImplementedError(_RESONANCE_STUB_MSG)
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    line = row.line
+    sheet = line.recipient.sheet_data
+    grant_resonance(
+        sheet,
+        line.resonance,
+        line.amount,
+        source=GainSource.MISSION_REWARD,
+        mission_deed_reward_line=line,
+    )
 
 
 def _apply_one(row: MissionRewardQueue) -> str | None:
@@ -97,7 +101,10 @@ def _apply_one(row: MissionRewardQueue) -> str | None:
             line_pk=row.line_id,
         )
 
-    # Success path (unreachable in 5b.2 — both helpers above raise).
+    # Success path. RESONANCE grants now reach here and succeed (#1737).
+    # LEGEND_POINTS still always raises via _grant_legend_points's
+    # DESIGN §13.3 stub-seal (out of scope for #1737), so this path is
+    # LP-unreachable but RESONANCE-reachable.
     row.applied = True
     row.applied_at = timezone.now()
     row.failure_reason = ""
@@ -115,24 +122,42 @@ def apply_mission_reward_batch() -> RewardBatchResult:
     """Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.
 
     Each row is processed in its own savepoint (:func:`transaction.atomic`)
-    so a fault on row N does not corrupt rows N-1 or N+1. In Phase 5b.2
-    both ``_grant_legend_points`` and ``_grant_resonance`` raise
-    :class:`NotImplementedError` with a DESIGN §13.3 message — the cron
-    catches that, records the message on the row's ``failure_reason``, and
-    leaves ``applied=False``. Idempotency falls out automatically: rerunning
-    the batch touches the same set of rows and produces the same state.
+    so a fault on row N does not corrupt rows N-1 or N+1. ``_grant_legend_points``
+    still always raises :class:`NotImplementedError` with a DESIGN §13.3
+    message — the cron catches that, records the message on the row's
+    ``failure_reason``, and leaves ``applied=False``. ``_grant_resonance`` now
+    succeeds (#1737): it calls the atomic ``grant_resonance()``, and on return
+    this function flips the row to ``applied=True``.
+
+    Idempotency now works differently per sink. LEGEND_POINTS rows never
+    flip ``applied``, so rerunning the batch simply re-selects and re-fails
+    them the same way every time. RESONANCE rows hold because (1) the
+    ``applied=False`` filter below stops re-selecting a row once it
+    succeeds, and (2) ``grant_resonance()`` is itself wrapped in
+    :func:`transaction.atomic`, so a row can never end up applied without
+    the resonance grant having actually committed (or vice versa) — a crash
+    mid-grant leaves the row unapplied and safe to retry.
 
     Returns:
         A typed :class:`RewardBatchResult` carrying the queue rows that
-        succeeded (always empty in 5b.2) and the rows that failed (every
-        unapplied row in 5b.2).
+        succeeded (RESONANCE rows that granted cleanly, #1737) and the rows
+        that failed (LEGEND_POINTS rows, plus any RESONANCE row whose grant
+        raised).
     """
-    # No select_related: the cron only reads queue-row columns (kind, sink,
-    # line_id) and writes applied/applied_at/failure_reason. The queue row
-    # mirrors kind/sink from MissionDeedRewardLine specifically so the cron
-    # can filter cheaply without joining. When real LP/Resonance helpers
-    # land, add select_related("line", "line__recipient").
-    unapplied = list(MissionRewardQueue.objects.filter(applied=False).order_by("pk"))
+    # select_related: _grant_resonance dereferences row.line.recipient.sheet_data
+    # per row (#1737), which would otherwise be two extra queries per RESONANCE
+    # row. "line" and "line__recipient" are forward FKs off MissionRewardQueue
+    # and MissionDeedRewardLine respectively, so they select_related directly.
+    # "line__recipient__sheet_data" is a *reverse* OneToOne accessor
+    # (CharacterSheet.character -> ObjectDB, related_name="sheet_data") — Django
+    # supports select_related() across reverse OneToOne the same as forward FKs
+    # (LEFT OUTER JOIN, verified via .query), so it's included too rather than
+    # left as a per-row query.
+    unapplied = list(
+        MissionRewardQueue.objects.filter(applied=False)
+        .select_related("line", "line__recipient", "line__recipient__sheet_data")
+        .order_by("pk")
+    )
 
     applied: list[MissionRewardQueue] = []
     failed: list[MissionRewardQueue] = []

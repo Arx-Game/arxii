@@ -12062,6 +12062,7 @@ paths:
           enum:
           - DRAMATIC_MOMENT
           - ENTRY_FLOURISH
+          - MISSION_REWARD
           - OUTFIT_TRICKLE
           - POSE_ENDORSEMENT
           - PROJECT_CONTRIBUTION
@@ -12087,6 +12088,7 @@ paths:
           * `ENTRY_FLOURISH` - Entry flourishing
           * `DRAMATIC_MOMENT` - Dramatic moment
           * `STYLE_PRESENTATION` - Style presentation
+          * `MISSION_REWARD` - Mission reward
       tags:
       - magic
       security:
@@ -43566,6 +43568,7 @@ components:
             * `ENTRY_FLOURISH` - Entry flourishing
             * `DRAMATIC_MOMENT` - Dramatic moment
             * `STYLE_PRESENTATION` - Style presentation
+            * `MISSION_REWARD` - Mission reward
         granted_at:
           type: string
           format: date-time
@@ -45810,6 +45813,7 @@ components:
       - ENTRY_FLOURISH
       - DRAMATIC_MOMENT
       - STYLE_PRESENTATION
+      - MISSION_REWARD
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -45824,6 +45828,7 @@ components:
         * `ENTRY_FLOURISH` - Entry flourishing
         * `DRAMATIC_MOMENT` - Dramatic moment
         * `STYLE_PRESENTATION` - Style presentation
+        * `MISSION_REWARD` - Mission reward
     Specialization:
       type: object
       description: Serializer for Specialization model.

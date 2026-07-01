@@ -192,6 +192,8 @@ class GainSource(models.TextChoices):
     DRAMATIC_MOMENT = "DRAMATIC_MOMENT", "Dramatic moment"
     # #1152 — style presentation endorsement gain
     STYLE_PRESENTATION = "STYLE_PRESENTATION", "Style presentation"
+    # #1737 — missions deed rewards
+    MISSION_REWARD = "MISSION_REWARD", "Mission reward"
 
 
 # COVENANT_ROLE anchor cap tuning (use-based; issue #517).

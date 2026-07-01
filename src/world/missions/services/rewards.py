@@ -133,6 +133,7 @@ def _line_for(
         kind=template.kind,
         sink=template.sink,
         amount=template.amount,
+        resonance=template.resonance,
         ref=template.ref,
     )
 

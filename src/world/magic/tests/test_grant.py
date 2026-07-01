@@ -47,3 +47,36 @@ class ResonanceGrantEntryFlourishTest(TestCase):
         )
         grant = ResonanceGrant.objects.get(source=GainSource.DRAMATIC_MOMENT)
         self.assertEqual(grant.source_dramatic_moment, tag)
+
+    def test_grant_resonance_mission_reward_source_requires_line(self):
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=resonance, balance=0, lifetime_earned=0
+        )
+        with self.assertRaises(ValueError):
+            grant_resonance(
+                sheet,
+                resonance,
+                10,
+                source=GainSource.MISSION_REWARD,
+            )
+
+    def test_grant_resonance_mission_reward_source_writes_typed_fk(self):
+        from world.missions.factories import MissionDeedRewardLineFactory
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=resonance, balance=0, lifetime_earned=0
+        )
+        line = MissionDeedRewardLineFactory(resonance=resonance, amount=10)
+        grant_resonance(
+            sheet,
+            resonance,
+            10,
+            source=GainSource.MISSION_REWARD,
+            mission_deed_reward_line=line,
+        )
+        grant = ResonanceGrant.objects.get(character_sheet=sheet, source=GainSource.MISSION_REWARD)
+        assert grant.source_mission_deed_reward_line_id == line.pk

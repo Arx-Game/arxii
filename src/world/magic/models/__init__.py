@@ -66,6 +66,7 @@ from world.magic.models.anima import (
     CharacterAnima,
 )
 from world.magic.models.aura import (
+    AuraAffinityThreshold,
     CharacterAffinityTotal,
     CharacterAura,
     CharacterResonance,
@@ -217,6 +218,8 @@ __all__ = [
     "AudereMajoraThreshold",
     # audere (re-exported from world.magic.audere)
     "AudereThreshold",
+    # aura affinity threshold-crossing achievements (#1737)
+    "AuraAffinityThreshold",
     # power config (#768)
     "AuraPowerConfig",
     # knowledge layer grants (Anima Ritual UI spec §Decision 6)

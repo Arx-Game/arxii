@@ -842,6 +842,14 @@ class MissionOptionRouteReward(SharedMemoryModel):
         blank=True,
         help_text="Optional reference/discriminator (e.g., a rumor key).",
     )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="mission_route_rewards",
+        help_text="Required when sink=RESONANCE: which Resonance this reward grants.",
+    )
     contract_holder_only = models.BooleanField(
         default=False,
         help_text=(
@@ -876,6 +884,12 @@ class MissionOptionRouteReward(SharedMemoryModel):
             raise ValidationError(
                 {"route": _ERR_REWARD_BOTH_PARENTS, "candidate": _ERR_REWARD_BOTH_PARENTS}
             )
+        if self.sink == DeedRewardSink.RESONANCE and self.resonance_id is None:
+            msg = "sink=RESONANCE requires resonance to be set."
+            raise ValidationError(msg)
+        if self.sink != DeedRewardSink.RESONANCE and self.resonance_id is not None:
+            msg = "resonance may only be set when sink=RESONANCE."
+            raise ValidationError(msg)
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -1502,6 +1516,14 @@ class MissionDeedRewardLine(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Numeric magnitude of the reward, when applicable.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Set when sink=RESONANCE: which Resonance this line grants.",
     )
     ref = models.CharField(
         max_length=200,
