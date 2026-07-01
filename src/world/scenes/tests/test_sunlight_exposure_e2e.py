@@ -5,12 +5,15 @@ drawback, outdoors during a daylight phase, takes radiant damage through the
 existing round-tick -> process_damage_consequences -> abandonment peril
 pipeline — exactly like poison/Bleeding-Out. AFK-safety holds: crossing the
 knockout band routes through the guarded abandonment_environmental pool, never
-a raw death. Mitigation (indoor/night/resistance) zeroes the damage.
+a raw death. Overwhelming radiant resistance (immunity-as-resistance) negates it.
 
-Tagged ``postgres``: ``apply_condition`` (via reconcile_sunlight_exposure) hits
-a PG-only ``DISTINCT ON`` that errors on the SQLite fast tier — same known
-pre-existing limitation as the plummet E2E (test_plummet_descent.py); run on
-CI's PG shard.
+The indoor/night gating cases are covered by the unit tests in
+``test_sunlight_exposure.py`` (SQLite-runnable); this file holds only the
+journey-level assertions that need the real apply_condition + DoT pipeline.
+
+Tagged ``postgres``: ``apply_condition`` (via reconcile) hits a PG-only
+``DISTINCT ON`` that errors on the SQLite fast tier — same known pre-existing
+limitation as the plummet E2E (test_plummet_descent.py); run on CI's PG shard.
 """
 
 from __future__ import annotations
@@ -44,7 +47,7 @@ class SunlightExposureE2ETests(TestCase):
             species=self.species, gift=self.gift, drawback_condition=self.template
         )
 
-        self.room = create_object("typeclasses.rooms.Room", key="SunnyField", nohome=True)
+        self.room = create_object("typeclasses.rooms.Room", key="SunnyField", nohom=True)
         # Mark the room outdoor via its RoomProfile.
         from evennia_extensions.models import RoomProfile
 
@@ -84,41 +87,6 @@ class SunlightExposureE2ETests(TestCase):
         # Health dropped by the DoT (base 5 radiant, reduced by any resistance).
         self.assertLess(self._vitals().health, health_before)
 
-    def test_indoor_does_not_apply_condition(self) -> None:
-        """An indoor room never applies Sunlight Exposure."""
-        from evennia_extensions.models import RoomProfile
-
-        RoomProfile.objects.filter(objectdb=self.room).update(is_outdoor=False)
-        from unittest.mock import patch
-
-        from world.game_clock.constants import TimePhase
-
-        with patch(
-            "world.species.services.get_ic_phase",
-            return_value=TimePhase.DAY,
-        ):
-            from world.species.services import reconcile_sunlight_exposure
-
-            reconcile_sunlight_exposure(self.vampire, self.room)
-
-        self.assertFalse(has_condition(self.vampire, self.template))
-
-    def test_night_does_not_apply_condition(self) -> None:
-        """Night phase never applies Sunlight Exposure, even outdoors."""
-        from unittest.mock import patch
-
-        from world.game_clock.constants import TimePhase
-
-        with patch(
-            "world.species.services.get_ic_phase",
-            return_value=TimePhase.NIGHT,
-        ):
-            from world.species.services import reconcile_sunlight_exposure
-
-            reconcile_sunlight_exposure(self.vampire, self.room)
-
-        self.assertFalse(has_condition(self.vampire, self.template))
-
     def test_high_resistance_zeroes_damage(self) -> None:
         """Overwhelming radiant resistance (immunity-as-resistance) negates the DoT."""
         from unittest.mock import patch
@@ -126,12 +94,11 @@ class SunlightExposureE2ETests(TestCase):
         from world.conditions.factories import (
             ConditionResistanceModifierFactory,
         )
-
-        # Apply the condition directly (bypassing reconcile's apply_condition DISTINCT ON).
-        # Then attach a large +radiant resistance modifier on the template.
         from world.conditions.services import apply_condition
         from world.game_clock.constants import TimePhase
 
+        # Apply the condition directly (bypassing reconcile's apply_condition DISTINCT ON).
+        # Then attach a large +radiant resistance modifier on the template.
         apply_condition(self.vampire, self.template)
         radiant = self.template.conditiondamageovertime_set.first().damage_type
         ConditionResistanceModifierFactory(
