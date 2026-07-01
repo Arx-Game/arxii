@@ -124,6 +124,40 @@ def _invalidate_condition_handler(target: "ObjectDB") -> None:  # noqa: OBJECTDB
 # =============================================================================
 
 
+def resolve_damage_type_resistance(
+    character: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    damage_amount: int,
+    damage_type: "DamageType | None",
+) -> int:
+    """Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).
+
+    The single source of truth for damage-type resistance across every damage seam
+    (#1588). Mirrors the netting that previously lived inlined in
+    ``combat.services.apply_damage_to_participant``. When ``damage_type`` is None
+    (untyped damage) resistance does not apply — the amount is returned unchanged.
+
+    A negative resistance total (a vulnerability, e.g. a species drawback) *increases*
+    damage above the base; a large positive total (high resistance, functioning as
+    "immunity") reduces it toward zero but overwhelming damage still exceeds it.
+
+    Args:
+        character: the ObjectDB character taking damage (must expose ``.conditions``
+            and be passable to ``gift_thread_resistance``).
+        damage_amount: the incoming damage before resistance.
+        damage_type: a ``DamageType`` instance, or None for untyped damage.
+
+    Returns:
+        The damage after subtracting total resistance, clamped to >= 0.
+    """
+    if damage_type is None:
+        return damage_amount
+    from world.magic.services import gift_thread_resistance  # noqa: PLC0415
+
+    resistance = character.conditions.resistance_modifier(damage_type)
+    resistance += gift_thread_resistance(character, damage_type)
+    return max(0, damage_amount - resistance)
+
+
 def get_active_conditions(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     *,

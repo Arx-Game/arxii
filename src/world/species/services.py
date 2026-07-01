@@ -4,11 +4,83 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.conditions.services import (
+    apply_condition,
+    has_condition,
+    remove_condition,
+)
+from world.game_clock.constants import TimePhase
+from world.game_clock.services import get_ic_phase
+from world.scenes.round_services import ensure_round_for_acute_condition
 from world.species.models import SpeciesGiftGrant
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.gifts import CharacterGift
+
+
+def reconcile_sunlight_exposure(character, room) -> None:
+    """Apply or remove the Sunlight Exposure condition based on outdoor + day-phase (#1588).
+
+    A character whose species grant wires a Sunlight-Exposure drawback takes radiant
+    DoT while outdoors during a daylight phase; indoors or at night the condition is
+    removed. When applied, ensures a danger scene round (the plummet pattern) so the
+    existing round-tick processes the DoT through the peril pipeline — AFK-safety
+    (ADR-0004/ADR-0049) holds unchanged: an unconscious victim flows into
+    ``abandonment_environmental``, never a raw death.
+
+    No-op for characters without a sheet or whose species has no sunlight drawback.
+
+    Args:
+        character: the ObjectDB character whose exposure to reconcile.
+        room: the room the character is in (may be None — treated as indoor).
+    """
+    from world.species.factories import ensure_sunlight_exposure_content  # noqa: PLC0415
+
+    template = ensure_sunlight_exposure_content()
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None or not _has_sunlight_drawback(sheet):
+        return
+    outdoor = _room_is_outdoor(room)
+    phase = get_ic_phase()
+    should_expose = outdoor and phase in {
+        TimePhase.DAY,
+        TimePhase.DAWN,
+        TimePhase.DUSK,
+    }
+    active = has_condition(character, template)
+    if should_expose and not active:
+        apply_condition(character, template)
+        ensure_round_for_acute_condition(sheet)
+    elif not should_expose and active:
+        remove_condition(character, template)
+
+
+def _has_sunlight_drawback(sheet) -> bool:
+    """Whether the sheet's species (or an ancestor) grants a Sunlight-Exposure drawback."""
+    from world.species.factories import SUNLIGHT_EXPOSURE_NAME  # noqa: PLC0415
+
+    if getattr(sheet, "species_id", None) is None:  # noqa: GETATTR_LITERAL
+        return False
+    species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
+    return SpeciesGiftGrant.objects.filter(
+        species_id__in=species_pks,
+        drawback_condition__name=SUNLIGHT_EXPOSURE_NAME,
+    ).exists()
+
+
+def _room_is_outdoor(room) -> bool:
+    """Whether the room is outdoors. Missing RoomProfile -> treated as indoor (safe default)."""
+    if room is None:
+        return False
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        return room.room_profile.is_outdoor
+    except ObjectDoesNotExist:
+        return False
+    except AttributeError:
+        return False
 
 
 def _species_and_ancestors(species):

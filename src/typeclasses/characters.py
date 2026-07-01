@@ -344,6 +344,7 @@ class Character(ObjectParent, DefaultCharacter):
                 check_room_traps_on_entry,
             )
             from world.societies.fame_reactions import maybe_emit_fame_reaction
+            from world.species.services import reconcile_sunlight_exposure
 
             run_safely(
                 "mission_trigger_on_enter",
@@ -363,6 +364,11 @@ class Character(ObjectParent, DefaultCharacter):
             run_safely(
                 "clue_trigger_on_enter",
                 lambda: maybe_grant_clue_triggers(self, self.location),
+                actor=self,
+            )
+            run_safely(
+                "sunlight_exposure_on_enter",
+                lambda: reconcile_sunlight_exposure(self, self.location),
                 actor=self,
             )
 

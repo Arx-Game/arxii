@@ -79,6 +79,15 @@ class DamageTypeFactory(DjangoModelFactory):
     color_hex = "#FF0000"
 
 
+def ensure_radiant_damage_type() -> DamageType:
+    """Idempotently get-or-create the 'Radiant' DamageType used by sunlight exposure (#1588).
+
+    Returns the same pk across calls; safe to invoke from seeds, factories, and tests.
+    """
+    dt, _created = DamageType.objects.get_or_create(name="Radiant")
+    return dt
+
+
 class ConditionTemplateFactory(DjangoModelFactory):
     """Factory for ConditionTemplate."""
 
