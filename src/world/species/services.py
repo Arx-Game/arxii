@@ -112,7 +112,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
 
     species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
     grants = SpeciesGiftGrant.objects.filter(species_id__in=species_pks).select_related(
-        "gift", "drawback_condition"
+        "gift", "drawback_condition", "benefit_condition"
     )
     minted: list[CharacterGift] = []
     for grant in grants:
@@ -129,4 +129,14 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
             ).exists()
             if not already_applied:
                 apply_condition(sheet.character, grant.drawback_condition)
+        if grant.benefit_condition_id is not None:
+            from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+            already_applied = ConditionInstance.objects.filter(
+                target=sheet.character,
+                condition=grant.benefit_condition,
+                resolved_at__isnull=True,
+            ).exists()
+            if not already_applied:
+                apply_condition(sheet.character, grant.benefit_condition)
     return minted

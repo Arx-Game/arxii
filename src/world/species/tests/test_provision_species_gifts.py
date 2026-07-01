@@ -124,6 +124,17 @@ class ProvisionSpeciesGiftsTests(TestCase):
             "No condition should be applied when grant has no drawback_condition",
         )
 
+    def test_no_condition_when_no_benefit(self):
+        """A grant without benefit_condition applies no extra ConditionInstance."""
+        from world.conditions.models import ConditionInstance
+
+        sheet = CharacterSheetFactory(species=self.parent_species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=sheet.character).exists(),
+            "No condition should be applied when grant has no benefit_condition",
+        )
+
 
 class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
     """Integration: finalize_magic_data wires provision_species_gifts (SQLite-safe)."""
@@ -237,3 +248,67 @@ class ProvisionSpeciesGiftsDrawbackTest(TestCase):
             1,
             "Guard must prevent stacks from incrementing on re-finalize",
         )
+
+
+@tag("postgres")
+class ProvisionSpeciesGiftsBenefitTest(TestCase):
+    """Benefit condition tests. PG-only: apply_condition uses DISTINCT ON via
+    _build_bulk_context. Run on CI's postgres shard. Do NOT run on SQLite fast tier.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.conditions.factories import ConditionTemplateFactory
+
+        cls.benefit = ConditionTemplateFactory(name="Test Vampiric Will")
+        cls.resonance = ResonanceFactory()
+        cls.minor_gift = GiftFactory(name="Test Vampiric Benefit Gift", kind=GiftKind.MINOR)
+        cls.minor_gift.resonances.add(cls.resonance)
+        cls.species = SpeciesFactory(name="TestVampireBenefit")
+        SpeciesGiftGrantFactory(
+            species=cls.species, gift=cls.minor_gift, benefit_condition=cls.benefit
+        )
+
+    def test_benefit_applied_when_set(self):
+        """A grant with benefit_condition applies a ConditionInstance to the character."""
+        from world.conditions.models import ConditionInstance
+
+        sheet = CharacterSheetFactory(species=self.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=sheet.character,
+                condition=self.benefit,
+            ).exists(),
+            "Benefit condition should be applied to the character when the grant has one",
+        )
+
+    def test_benefit_idempotent_for_stackable_template(self):
+        """Re-calling provision_species_gifts does not stack a stackable benefit condition."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionInstance
+
+        stackable_benefit = ConditionTemplateFactory(
+            name="Test Stackable Species Benefit",
+            is_stackable=True,
+            max_stacks=5,
+        )
+        resonance = ResonanceFactory()
+        minor_gift = GiftFactory(name="Test Gift With Stackable Benefit", kind=GiftKind.MINOR)
+        minor_gift.resonances.add(resonance)
+        species = SpeciesFactory(name="TestStackableBenefitSpecies")
+        SpeciesGiftGrantFactory(
+            species=species, gift=minor_gift, benefit_condition=stackable_benefit
+        )
+        sheet = CharacterSheetFactory(species=species)
+
+        provision_species_gifts(sheet, resonance=resonance)
+        provision_species_gifts(sheet, resonance=resonance)
+
+        instances = ConditionInstance.objects.filter(
+            target=sheet.character,
+            condition=stackable_benefit,
+            resolved_at__isnull=True,
+        )
+        self.assertEqual(instances.count(), 1, "Guard must prevent a second ConditionInstance")
