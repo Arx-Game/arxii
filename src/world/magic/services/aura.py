@@ -145,6 +145,11 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
     aura.celestial = aura.celestial.quantize(Decimal("0.01"))
     aura.primal = aura.primal.quantize(Decimal("0.01"))
     aura.abyssal = Decimal("100.00") - aura.celestial - aura.primal
+    # Clamp against the (essentially-adversarial) edge case where celestial's and
+    # primal's independent rounding errors combine to push the derived abyssal
+    # fractionally outside [0, 100] — CharacterAura's validators would otherwise
+    # raise ValidationError in full_clean() on save().
+    aura.abyssal = max(Decimal("0.00"), min(Decimal("100.00"), aura.abyssal))
     aura.save()
 
     after = AuraPercentages(
