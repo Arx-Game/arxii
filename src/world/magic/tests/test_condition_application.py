@@ -295,6 +295,83 @@ class ApplyTechniqueConditionsPostgresTest(TestCase):
         )
 
 
+@tag("postgres")
+class ApplyTechniqueConditionsResistCheckTest(TestCase):
+    """Proves the #1738 resist-check gate fires when a real technique cast applies
+    a resistible condition, through the same service boundary combat and standalone
+    casts both call (apply_technique_conditions -> bulk_apply_conditions).
+    """
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.caster_od = self.sheet.character
+        self.target_sheet = CharacterSheetFactory()
+        self.target_od = self.target_sheet.character
+        self.technique = TechniqueFactory(gift=GiftFactory())
+
+    def test_resisted_condition_does_not_apply(self) -> None:
+        """A target whose resist check succeeds does not receive the condition."""
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+
+        resist_check = CheckTypeFactory()
+        cond = ConditionTemplateFactory(
+            name="ResistibleCastCondition",
+            resist_check_type=resist_check,
+            resist_difficulty=15,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ENEMY,
+            minimum_success_level=1,
+        )
+        fake_result = SimpleNamespace(success_level=1)
+        with patch("world.conditions.services.perform_check", return_value=fake_result):
+            results = apply_technique_conditions(
+                technique=self.technique,
+                success_level=2,
+                eff_intensity=5,
+                targets_by_kind={ConditionTargetKind.ENEMY: [self.target_od]},
+                source_character=self.caster_od,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].success)
+
+    def test_unresisted_condition_applies(self) -> None:
+        """A target whose resist check fails receives the condition normally."""
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+
+        resist_check = CheckTypeFactory()
+        cond = ConditionTemplateFactory(
+            name="ResistibleCastConditionFails",
+            resist_check_type=resist_check,
+            resist_difficulty=15,
+        )
+        TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            condition=cond,
+            target_kind=ConditionTargetKind.ENEMY,
+            minimum_success_level=1,
+        )
+        fake_result = SimpleNamespace(success_level=0)
+        with patch("world.conditions.services.perform_check", return_value=fake_result):
+            results = apply_technique_conditions(
+                technique=self.technique,
+                success_level=2,
+                eff_intensity=5,
+                targets_by_kind={ConditionTargetKind.ENEMY: [self.target_od]},
+                source_character=self.caster_od,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].success)
+
+
 class RemoveTechniqueConditionsTest(TestCase):
     """Unit tests for remove_technique_conditions (dispel/cleanse, #1585).
 

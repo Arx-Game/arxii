@@ -312,3 +312,46 @@ class ProvisionSpeciesGiftsBenefitTest(TestCase):
             resolved_at__isnull=True,
         )
         self.assertEqual(instances.count(), 1, "Guard must prevent a second ConditionInstance")
+        self.assertEqual(
+            instances.first().stacks,
+            1,
+            "Guard must prevent stacks from incrementing on re-finalize",
+        )
+
+    def test_benefit_condition_check_modifier_reaches_modifier_seam(self):
+        """The species benefit condition's ConditionCheckModifier is picked up by
+        get_check_modifier for the resist check type — no mocking, proves the
+        existing modifier seam (condition_contributions) does the work for free.
+        """
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.factories import (
+            ConditionCheckModifierFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.services import get_check_modifier
+
+        resist_check = CheckTypeFactory()
+        benefit_with_modifier = ConditionTemplateFactory(name="Test Resolute Will")
+        ConditionCheckModifierFactory(
+            condition=benefit_with_modifier,
+            check_type=resist_check,
+            modifier_value=1000,
+        )
+        resonance = ResonanceFactory()
+        minor_gift = GiftFactory(name="Test Gift With Check Modifier Benefit", kind=GiftKind.MINOR)
+        minor_gift.resonances.add(resonance)
+        species = SpeciesFactory(name="TestResoluteWillSpecies")
+        SpeciesGiftGrantFactory(
+            species=species, gift=minor_gift, benefit_condition=benefit_with_modifier
+        )
+        sheet = CharacterSheetFactory(species=species)
+
+        provision_species_gifts(sheet, resonance=resonance)
+
+        result = get_check_modifier(sheet, resist_check)
+        self.assertEqual(
+            result.total_modifier,
+            1000,
+            "Species benefit condition's ConditionCheckModifier should reach "
+            "get_check_modifier for the resist check type",
+        )
