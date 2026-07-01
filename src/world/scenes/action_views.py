@@ -546,6 +546,17 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
 
         technique = get_object_or_404(Technique, pk=technique_id)
 
+        # PvP antagonism is opt-in (#1698): a hostile cast at a non-consenting PC is refused
+        # before it reaches the cast/combat layer. NPC/GM targets and benign casts pass.
+        from actions.player_interface import hostile_cast_consent_blocked  # noqa: PLC0415
+
+        caster = initiator_persona.character_sheet.character
+        if hostile_cast_consent_blocked(caster, target_persona, technique):
+            return Response(
+                {"detail": "They have not consented to being targeted with hostile actions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         use_base_form: bool = vd.get("use_base_form", False)
 
         try:
