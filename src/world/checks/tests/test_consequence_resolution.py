@@ -9,7 +9,10 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from actions.services import get_effective_consequences
 from actions.types import WeightedConsequence
 from evennia_extensions.factories import ObjectDBFactory
-from world.checks.consequence_resolution import select_consequence_from_result
+from world.checks.consequence_resolution import (
+    apply_pool_for_tier,
+    select_consequence_from_result,
+)
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import CheckResult, PendingResolution, ResolutionContext
@@ -355,3 +358,70 @@ class SelectConsequenceFromResultTests(TestCase):
         character = ObjectDBFactory(db_key="Integrator")
         result = select_consequence_from_result(character, check_result, effective)
         assert result.selected_consequence.outcome_tier == self.outcome_success
+
+
+class ApplyPoolForTierTests(TestCase):
+    """apply_pool_for_tier fires only Consequence rows matching the given tier.
+
+    Uses APPLY_CONDITION (the same proven-safe, zero-location-dependency effect
+    type SelectConsequenceTests already uses in this file) so a fired effect is
+    observable via its description, distinguishing "filtered correctly" from
+    "no-op regardless of filtering."
+    """
+
+    def test_fires_only_matching_tier_consequences(self) -> None:
+        """Only consequences matching the provided tier are applied."""
+        character = ObjectDB.objects.create(db_key="TierPoolTestChar")
+        decisive = CheckOutcomeFactory(name="Decisive Victory", success_level=6)
+        marginal = CheckOutcomeFactory(name="Marginal Victory", success_level=1)
+
+        matching = ConsequenceFactory(outcome_tier=decisive)
+        non_matching = ConsequenceFactory(outcome_tier=marginal)
+        matching_condition = ConditionTemplateFactory(name="Emboldened_tier_match")
+        non_matching_condition = ConditionTemplateFactory(name="Emboldened_tier_nomatch")
+        ConsequenceEffectFactory(
+            consequence=matching,
+            effect_type=EffectType.APPLY_CONDITION,
+            target=EffectTarget.SELF,
+            condition_template=matching_condition,
+            condition_severity=1,
+        )
+        ConsequenceEffectFactory(
+            consequence=non_matching,
+            effect_type=EffectType.APPLY_CONDITION,
+            target=EffectTarget.SELF,
+            condition_template=non_matching_condition,
+            condition_severity=1,
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=matching)
+        ConsequencePoolEntryFactory(pool=pool, consequence=non_matching)
+
+        context = ResolutionContext(character=character, outcome_tier=decisive)
+        applied = apply_pool_for_tier(pool=pool, outcome_tier=decisive, context=context)
+
+        assert len(applied) == 1
+        assert "Emboldened_tier_match" in applied[0].description
+        assert "Emboldened_tier_nomatch" not in applied[0].description
+
+    def test_fires_nothing_when_no_tier_matches(self) -> None:
+        """No consequences are applied when the pool contains no matching tier."""
+        character = ObjectDB.objects.create(db_key="TierPoolTestChar2")
+        decisive = CheckOutcomeFactory(name="Decisive Victory 2", success_level=6)
+        marginal = CheckOutcomeFactory(name="Marginal Victory 2", success_level=1)
+
+        non_matching = ConsequenceFactory(outcome_tier=marginal)
+        condition = ConditionTemplateFactory(name="Emboldened_no_match")
+        ConsequenceEffectFactory(
+            consequence=non_matching,
+            effect_type=EffectType.APPLY_CONDITION,
+            target=EffectTarget.SELF,
+            condition_template=condition,
+            condition_severity=1,
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=non_matching)
+
+        context = ResolutionContext(character=character, outcome_tier=decisive)
+        applied = apply_pool_for_tier(pool=pool, outcome_tier=decisive, context=context)
+        assert applied == []

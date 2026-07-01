@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from actions.types import WeightedConsequence
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult, ResolutionContext
+    from world.traits.models import CheckOutcome
 
 
 def select_consequence(
@@ -156,6 +157,33 @@ def apply_pool_deterministically(
     consequences = resolve_pool_consequences(pool)
     applied: list[AppliedEffect] = []
     for c in consequences:
+        applied.extend(apply_all_effects(c, context))
+    return applied
+
+
+def apply_pool_for_tier(
+    *,
+    pool: ConsequencePool,
+    outcome_tier: CheckOutcome,
+    context: ResolutionContext,
+) -> list[AppliedEffect]:
+    """Run only the Consequence rows in *pool* whose outcome_tier matches.
+
+    Unlike apply_pool_deterministically (which fires every row unconditionally),
+    this filters to Consequence.outcome_tier == outcome_tier before applying —
+    used when the graded outcome is already known (battle resolution, mission
+    route, decisive scene check) rather than rolled fresh via select_consequence().
+    No weighted selection: every matching row fires, same deterministic-authorship
+    semantics as apply_pool_deterministically, just tier-filtered first.
+
+    Returns the flattened list of applied effects for caller introspection/audit.
+    """
+    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
+
+    consequences = resolve_pool_consequences(pool)
+    matching = [c for c in consequences if c.outcome_tier_id == outcome_tier.pk]
+    applied: list[AppliedEffect] = []
+    for c in matching:
         applied.extend(apply_all_effects(c, context))
     return applied
 
