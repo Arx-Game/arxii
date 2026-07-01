@@ -6,8 +6,10 @@ DB state after each step and telnet feedback via caller.msg MagicMock.
 Journey outline:
   1. GM opens a round  (``battle round``).
   2. Two defender PCs each declare a strike against the enemy unit
-     (``battle declare strike <unit>``).
-  3. GM resolves the round (``battle resolve``) with ``perform_check`` patched:
+     (``battle declare strike <unit> with <technique>``).
+  3. GM resolves the round (``battle resolve``), which casts each declared
+     technique through the real magic envelope (``use_technique``); ``perform_check``
+     is patched so the underlying check is deterministic:
      - PC1 succeeds (``success_level=5``) → enemy unit loses 50 strength,
        defender side gains 25 VP.
      - PC2 fails (``success_level=-3``) → PC2 takes 11 damage.
@@ -24,11 +26,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from commands.battle import CmdBattle
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
-    BATTLE_CHECK_TYPE_NAME,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     BattleActionKind,
@@ -37,7 +39,7 @@ from world.battles.constants import (
 from world.battles.models import BattleActionDeclaration, BattleRound
 from world.battles.services import add_side, add_unit, create_battle, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory, TechniqueFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.factories import CharacterVitalsFactory
@@ -120,9 +122,12 @@ class BattleTelnetE2EJourneyTest(TestCase):
         # Room — all actors located here so _active_battle_in_room finds the battle.
         self.room = _make_room()
 
-        # Seed the CheckType required by resolve_battle_round → get_battle_check_type().
-        category = CheckCategoryFactory(name="BattleE2ECategory")
-        CheckTypeFactory(name=BATTLE_CHECK_TYPE_NAME, category=category)
+        # Castable technique (real action_template) shared by both PCs — required by
+        # declare_battle_action (Task 3) and cast through use_technique at resolve time
+        # (Task 6/7).
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
 
         # GM actor — staff account so _actor_may_gm_battle returns True immediately.
         self.gm_account = AccountFactory(username="e2e_gm_account", is_staff=True)
@@ -155,6 +160,12 @@ class BattleTelnetE2EJourneyTest(TestCase):
         # Two PC participants on the defender side.
         self.pc1_char, self.pc1_sheet = _make_pc("e2e_pc1", self.room)
         self.pc2_char, self.pc2_sheet = _make_pc("e2e_pc2", self.room)
+
+        # Both PCs know the shared technique and have anima to cast it.
+        CharacterTechniqueFactory(character=self.pc1_sheet, technique=self.technique)
+        CharacterTechniqueFactory(character=self.pc2_sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.pc1_char, current=20, maximum=30)
+        CharacterAnimaFactory(character=self.pc2_char, current=20, maximum=30)
 
         self.pc1_participant = enlist_participant(
             battle=self.battle,
@@ -196,11 +207,11 @@ class BattleTelnetE2EJourneyTest(TestCase):
         # ----------------------------------------------------------------
         # Step 2: Both PCs declare a strike on the enemy unit.
         # ----------------------------------------------------------------
-        _run(self.pc1_char, "declare strike Iron Vanguard")
+        _run(self.pc1_char, f"declare strike Iron Vanguard with {self.technique.name}")
         pc1_declare_msg = self.pc1_char.msg.call_args[0][0]
         self.assertIn("declare", pc1_declare_msg.lower())
 
-        _run(self.pc2_char, "declare strike Iron Vanguard")
+        _run(self.pc2_char, f"declare strike Iron Vanguard with {self.technique.name}")
 
         declarations = BattleActionDeclaration.objects.filter(battle_round=battle_round)
         self.assertEqual(declarations.count(), 2, "Both PCs should have a declaration.")

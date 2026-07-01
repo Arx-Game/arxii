@@ -1,7 +1,8 @@
 """Battle round resolution engine.
 
-Iterates all unresolved BattleActionDeclarations for a round, rolls
-``perform_check`` once per declaration, then routes the result:
+Iterates all unresolved BattleActionDeclarations for a round, casts each
+declaration's technique once via ``resolve_battle_technique``, then routes
+the result:
 
 - ``success_level > 0`` → STRIKE: attrite the target unit + award VP to the
   participant's side; SUPPORT: award SUPPORT_VP.
@@ -18,9 +19,8 @@ the real magic envelope (``use_technique``). Routing through ``use_technique``
 player's actual technique (``technique.action_template.check_type``),
 anima/Soulfray/mishap apply normally, and Audere/Audere Majora escalation
 fires automatically (it's wired inside ``use_technique`` itself, Step 8c — no
-separate call site is needed here). These are not yet wired into
-``resolve_battle_round`` — that's a follow-up task; ``resolve_battle_round``
-still uses the generic ``get_battle_check_type()`` check below.
+separate call site is needed here). ``resolve_battle_round`` calls
+``resolve_battle_technique`` per declaration.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ from django.utils import timezone
 
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
-    BATTLE_CHECK_TYPE_NAME,
     ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.battles.models import BattleActionDeclaration
-    from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
@@ -135,17 +133,6 @@ class BattleRoundResult:
     casualties: list[int] = field(default_factory=list)
 
 
-def get_battle_check_type() -> CheckType:
-    """Return the ``CheckType`` used for all battle action checks.
-
-    Raises:
-        CheckType.DoesNotExist: If the "Battle Action" check type is not seeded.
-    """
-    from world.checks.models import CheckType  # noqa: PLC0415
-
-    return CheckType.objects.get(name=BATTLE_CHECK_TYPE_NAME)
-
-
 def _resolve_strike_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
@@ -224,9 +211,10 @@ def _resolve_failure(
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
 
-    For each unresolved declaration, calls ``perform_check`` against the
-    character's ObjectDB and routes success / failure to the appropriate
-    sub-handlers.  Sets ``battle_round.status = COMPLETED`` at the end.
+    For each unresolved declaration, casts its declared technique through
+    ``resolve_battle_technique`` (the real magic envelope) and routes
+    success / failure to the appropriate sub-handlers. Sets
+    ``battle_round.status = COMPLETED`` at the end.
 
     Args:
         battle_round: The ``BattleRound`` in DECLARING or RESOLVING status.
@@ -234,7 +222,6 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     Returns:
         A ``BattleRoundResult`` summarising what happened this round.
     """
-    check_type = get_battle_check_type()
     result = BattleRoundResult()
 
     declarations = list(
@@ -242,13 +229,13 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "participant__character_sheet",
             "participant__side",
             "target_unit",
+            "technique__action_template",
         )
     )
 
     for declaration in declarations:
-        actor_objectdb = declaration.participant.character_sheet.character
-        check_result = perform_check(actor_objectdb, check_type)
-        sl = check_result.success_level
+        check_result = resolve_battle_technique(declaration=declaration)
+        sl = check_result.success_level if check_result is not None else 0
 
         if sl > 0:
             if declaration.action_kind == BattleActionKind.STRIKE:

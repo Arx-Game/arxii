@@ -556,6 +556,7 @@
 **Foreign Keys:**
   - battle_round -> battles.BattleRound [FK]
   - participant -> battles.BattleParticipant [FK]
+  - technique -> magic.Technique [FK]
   - target_unit -> battles.BattleUnit [FK] (nullable)
   - target_ally -> battles.BattleParticipant [FK] (nullable)
 
@@ -567,7 +568,7 @@
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 
@@ -883,6 +884,7 @@
   - stylepresentationendorsement_given <- magic.StylePresentationEndorsement
   - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
   - reincarnations <- magic.Reincarnation
@@ -1086,6 +1088,7 @@
   - character_selections <- progression.CharacterPathHistory
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
+  - gift_unlocks <- magic.GiftUnlock
   - ritual_grants <- magic.PathRitualGrant
   - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
@@ -2235,6 +2238,7 @@
   - species_grants <- species.SpeciesGiftGrant
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
@@ -2313,12 +2317,14 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
+  - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
   - variants <- magic.TechniqueVariant
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
   - conditions_caused <- conditions.ConditionInstance
+  - battle_declarations <- battles.BattleActionDeclaration
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
@@ -2500,6 +2506,26 @@
 ### ResonanceGainConfig
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### GiftUnlock
+**Foreign Keys:**
+  - gift -> magic.Gift [FK]
+  - paths -> classes.Path [M2M]
+**Pointed to by:**
+  - character_purchases <- magic.CharacterGiftUnlock
+
+### CharacterGiftUnlock
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - unlock -> magic.GiftUnlock [FK]
+  - teacher -> roster.RosterTenure [FK] (nullable)
+
+### TechniqueTeachingOffer
+**Foreign Keys:**
+  - teacher -> roster.RosterTenure [FK]
+  - technique -> magic.Technique [FK]
+
+### GiftAcquisitionConfig
 
 ### ResonanceGrant
 **Foreign Keys:**
@@ -2890,8 +2916,10 @@
 - `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
 - `get_character_anima_ritual(character) — The character's authored SCENE_ACTION ritual (with check_config), or None.`
 - `get_character_cast_check(character) — The CheckType a character's technique casts roll, or None for fallback.`
+- `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' — Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
-- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
+- `get_pull_cost(tier: 'int', target_kind: 'str | None') -> 'ThreadPullCost' — Resolve the pull cost row for (tier, target_kind).`
+- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
@@ -2914,7 +2942,7 @@
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' — Per-tier survivability save modifiers from thread investment (#1250).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -3945,6 +3973,8 @@
   - galleries <- roster.TenureGallery
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - gift_unlocks_taught <- magic.CharacterGiftUnlock
+  - technique_teaching_offers <- magic.TechniqueTeachingOffer
   - taught_rituals <- magic.CharacterRitualKnowledge
   - thread_weaving_unlocks_taught <- magic.CharacterThreadWeavingUnlock
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer

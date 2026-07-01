@@ -131,10 +131,15 @@ class ResolveBattleRoundActionTests(BattleActionTestBase):
 
     def setUp(self) -> None:
         super().setUp()
-        from world.checks.factories import CheckTypeFactory
+        from actions.factories import ActionTemplateFactory
+        from world.magic.factories import CharacterAnimaFactory
 
-        # Seed a CheckType named "Battle Action" (required by get_battle_check_type()).
-        CheckTypeFactory(name="Battle Action")
+        # Override the bare technique from BattleActionTestBase with a castable one.
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.player_sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.player_sheet.character, current=20, maximum=30)
 
         # Enlist the player on the defender side.
         self.participant = BattleParticipantFactory(
@@ -154,6 +159,7 @@ class ResolveBattleRoundActionTests(BattleActionTestBase):
         self.declaration = BattleActionDeclarationFactory(
             battle_round=self.battle_round,
             participant=self.participant,
+            technique=self.technique,
             action_kind=BattleActionKind.STRIKE,
             target_unit=self.unit,
             resolved=False,

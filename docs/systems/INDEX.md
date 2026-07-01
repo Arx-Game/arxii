@@ -1722,40 +1722,50 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   attrited by STRIKE successes), `BattleRound` (subclasses `AbstractRound`; partial unique
   constraint: one active round per battle), `BattleParticipant` (`character_sheet` FK,
   `side`, `place`, `status`; unique `(battle, character_sheet)`),
-  `BattleActionDeclaration` (`action_kind` STRIKE/SUPPORT, `target_unit`, `target_ally`,
-  `resolved`, `success_level`; unique `(battle_round, participant)`)
+  `BattleActionDeclaration` (`technique` FK required, `action_kind` STRIKE/SUPPORT,
+  `target_unit`, `target_ally`, `resolved`, `success_level`;
+  unique `(battle_round, participant)`)
 - **Key Services (`world.battles.services`):**
   - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
-    `declare_battle_action` (update_or_create; raises `RoundNotOpenError`)
+    `declare_battle_action` (requires `technique`; update_or_create; raises
+    `RoundNotOpenError` / `CharacterDoesNotKnowTechniqueError` / `TechniqueNotBattleReadyError`)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
     `conclude_battle` (sets outcome + ends scene; **no `complete_story` call** — #1716),
     `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
-  `BattleRoundResult` — rolls `perform_check` per declaration; STRIKE success attrites unit
-  + awards VP; failure debits PC health + `process_damage_consequences`. Returns
+  `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
+  (routes through the real `use_technique` magic envelope, not a generic shared check);
+  STRIKE success attrites unit + awards VP; failure debits PC health +
+  `process_damage_consequences`. Returns
   `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+  `BattleTechniqueResolver` is the `resolve_fn` passed to `use_technique`.
 - **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
   wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`
   finds the character's ACTIVE participant in an active-scene battle.
 - **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
-  `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`)
-- **Telnet:** `battle [declare strike <unit>|declare support <ally>|round|resolve|conclude]`
+  `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`, requires
+  `technique_id`)
+- **Telnet:** `battle [declare strike <unit> with <technique>|declare support <ally> with
+  <technique>|round|resolve|conclude]`
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
   `BattleActionKind`, `BattleOutcome`
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
-  `RoundNotOpenError`, `NotAParticipantError`
+  `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
+  `TechniqueNotBattleReadyError`
 - **#1716 dependency:** `Battle.campaign_story` FK stores the parent Story; outcome →
   campaign-stakes propagation + win-gated Legend is explicitly deferred to #1716.
 - **Deferred follow-ups:** peril/rescue (#1710), AFK knobs (#1711), battle writeup page
-  (#1712), Audere weighting (#1713), rich type-matchups (#1714), naval/aerial/siege (#1715),
-  campaign propagation (#1716).
+  (#1712), rich type-matchups (#1714), naval/aerial/siege (#1715), campaign propagation
+  (#1716).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
   E2E journey `src/integration_tests/pipeline/test_battle_telnet_e2e.py`
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant FK), vitals
-  (damage consequences), checks (`perform_check` with "Battle Action" CheckType), combat
-  (`BattlePlace.combat_encounter` bridge; shared `RoundStatus` / `AbstractRound`),
-  stories (`campaign_story` FK → #1716), actions (REGISTRY + `get_active_round_context` seam)
+  (damage consequences), magic (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
+  → `use_technique`), checks (`perform_check` sourced from the cast technique's
+  `action_template.check_type`, via `use_technique`), combat (`BattlePlace.combat_encounter`
+  bridge; shared `RoundStatus` / `AbstractRound`), stories (`campaign_story` FK → #1716),
+  actions (REGISTRY + `get_active_round_context` seam)
 - **Source:** `src/world/battles/`
 - **Details:** [battles.md](battles.md)
 
