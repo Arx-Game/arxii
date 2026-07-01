@@ -71,15 +71,18 @@ class BattleRoundContext(RoundContext):
     ) -> None:
         """Record a battle action declaration via the ``declare_battle_action`` service.
 
-        Passes ``action_kind``, ``target_unit``, and ``target_ally`` through from
-        *kwargs* with sensible defaults. Raises ``RoundNotOpenError`` (a
-        ``BattleError``) when the battle has no DECLARING round.
+        Passes ``action_kind``, ``technique``, ``target_unit``, and ``target_ally``
+        through from *kwargs* with sensible defaults. Raises ``RoundNotOpenError`` (a
+        ``BattleError``) when the battle has no DECLARING round, or
+        ``CharacterDoesNotKnowTechniqueError``/``TechniqueNotBattleReadyError`` per
+        ``declare_battle_action``'s validation.
         """
         from world.battles.services import declare_battle_action  # noqa: PLC0415
 
         declare_battle_action(
             participant=self._participant,
             action_kind=kwargs.get("action_kind", BattleActionKind.STRIKE),
+            technique=kwargs["technique"],
             target_unit=kwargs.get("target_unit"),
             target_ally=kwargs.get("target_ally"),
         )
