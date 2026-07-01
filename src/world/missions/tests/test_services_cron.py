@@ -26,6 +26,7 @@ from dataclasses import FrozenInstanceError
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
     MissionDeedRecordFactory,
@@ -94,36 +95,6 @@ class ApplyMissionRewardBatchLegendPointsStubSealTests(TestCase):
         before = MissionRewardQueue.objects.count()
         apply_mission_reward_batch()
         self.assertEqual(MissionRewardQueue.objects.count(), before)
-
-
-class ApplyMissionRewardBatchResonanceStubSealTests(TestCase):
-    """Resonance queue rows stub-seal with the same pattern as LP."""
-
-    def setUp(self) -> None:
-        self.actor = CharacterFactory(db_key="ResonanceBatchActor")
-        self.deed = MissionDeedRecordFactory(actor=self.actor)
-        self.line = MissionDeedRewardLineFactory(
-            deed=self.deed,
-            kind=DeedRewardKind.POST_CRON,
-            sink=DeedRewardSink.RESONANCE,
-            amount=8,
-        )
-        self.row = MissionRewardQueueFactory(line=self.line)
-
-    def test_resonance_row_remains_unapplied(self) -> None:
-        result = apply_mission_reward_batch()
-        self.assertEqual(result.applied, ())
-        self.assertEqual(len(result.failed), 1)
-        self.row.refresh_from_db()
-        self.assertFalse(self.row.applied)
-        self.assertIsNone(self.row.applied_at)
-
-    def test_resonance_failure_reason_mentions_design_and_resonance(self) -> None:
-        apply_mission_reward_batch()
-        self.row.refresh_from_db()
-        self.assertIn("DESIGN", self.row.failure_reason)
-        self.assertIn("13.3", self.row.failure_reason)
-        self.assertIn("Resonance", self.row.failure_reason)
 
 
 class ApplyMissionRewardBatchMixedQueueTests(TestCase):
@@ -282,6 +253,40 @@ class ApplyMissionRewardBatchPerRowAtomicityTests(TestCase):
         self.assertIn("DESIGN", self.row_a.failure_reason)
         self.assertIn("DESIGN", self.row_c.failure_reason)
         self.assertIn(boom_msg, self.row_b.failure_reason)
+
+
+class ApplyMissionRewardBatchResonanceGrantTests(TestCase):
+    """Resonance grant applies successfully and updates CharacterResonance."""
+
+    def test_grant_resonance_applies_and_flips_queue_row(self) -> None:
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import CharacterResonance
+
+        sheet = CharacterSheetFactory(character__db_key="ResonanceGrantActor")
+        actor = sheet.character
+        deed = MissionDeedRecordFactory(actor=actor)
+        resonance = ResonanceFactory()
+        line = MissionDeedRewardLineFactory(
+            deed=deed,
+            recipient=actor,
+            kind=DeedRewardKind.POST_CRON,
+            sink=DeedRewardSink.RESONANCE,
+            resonance=resonance,
+            amount=25,
+        )
+        row = MissionRewardQueueFactory(line=line)
+
+        result = apply_mission_reward_batch()
+
+        row.refresh_from_db()
+        self.assertTrue(row.applied)
+        self.assertEqual(row.failure_reason, "")
+        cr = CharacterResonance.objects.get(
+            character_sheet=line.recipient.sheet_data, resonance=resonance
+        )
+        self.assertEqual(cr.balance, 25)
+        self.assertEqual(cr.lifetime_earned, 25)
+        self.assertIn(row, result.applied)
 
 
 class ApplyMissionRewardBatchResultShapeTests(TestCase):

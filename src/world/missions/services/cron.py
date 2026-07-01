@@ -2,25 +2,23 @@
 
 Phase 5b.1 wrote :class:`MissionRewardQueue` rows for every POST_CRON
 reward line. Phase 5b.2 is the *cron* that walks those queued rows and
-grants the underlying reward downstream — except both grant entry points
-are currently stub-sealed pending payload-enrichment work:
+grants the underlying reward downstream. The RESONANCE grant is implemented
+(#1737); the LEGEND_POINTS grant remains stub-sealed:
 
   * LEGEND_POINTS — the LP grant entry point requires richer line shape
     than the queue carries today (persona walk + LegendSourceType + title).
     See DESIGN §13.3.
-  * RESONANCE — the resonance grant needs a Resonance FK and a
-    ``MISSION_REWARD`` ``GainSource`` value that does not yet exist. Same
-    DESIGN §13.3 reference.
+  * RESONANCE — implemented (#1737): resolves the recipient's CharacterSheet
+    and calls grant_resonance with source=GainSource.MISSION_REWARD.
 
-Both helpers raise :class:`NotImplementedError` with a structured DESIGN
+The LP helper raises :class:`NotImplementedError` with a structured DESIGN
 message; the batch catches the raise, populates ``failure_reason``, and
-leaves the row at ``applied=False``. Future phases that enrich the queue
-payload will replace the stub-seal body with real grant calls without
-having to change the public batch contract.
+leaves the row at ``applied=False``. The RESONANCE helper succeeds and flips
+the row to ``applied=True``.
 
 Per-row :func:`transaction.atomic` keeps a fault on row N from corrupting
-adjacent rows; idempotency is automatic in 5b.2 because no row ever flips
-to ``applied=True``.
+adjacent rows; the batch returns separate applied/failed tuples for each
+outcome.
 """
 
 from __future__ import annotations
@@ -33,16 +31,12 @@ from world.missions.models import MissionRewardQueue
 from world.missions.services.rewards import MissionRewardRoutingError
 from world.missions.types import RewardBatchResult
 
-# Per-sink stub-seal messages. Both reference DESIGN §13.3 — the missions
-# design doc section that explains why these grants need richer payloads
+# Per-sink stub-seal messages. LP references DESIGN §13.3 — the missions
+# design doc section that explains why the LP grant needs a richer payload
 # than the queue carries today.
 _LP_STUB_MSG = (
     "DESIGN §13.3 — LP grant entry point requires richer line shape: "
     "persona walk + LegendSourceType + title. Awaiting payload-enrichment phase."
-)
-_RESONANCE_STUB_MSG = (
-    "DESIGN §13.3 — Resonance grant requires Resonance FK + MISSION_REWARD "
-    "GainSource (does not exist). Awaiting payload-enrichment phase."
 )
 
 # MissionRewardQueue.failure_reason is a CharField(max_length=500); clip
@@ -64,14 +58,24 @@ def _grant_legend_points(row: MissionRewardQueue) -> None:
 
 
 def _grant_resonance(row: MissionRewardQueue) -> None:
-    """Stub-sealed resonance grant entry point.
+    """Grant the resonance a mission deed's RESONANCE-sink line promised.
 
-    The canonical resonance grant function expects a :class:`Resonance` FK
-    plus a ``GainSource`` value (and ``GainSource.MISSION_REWARD`` is not
-    in the enum yet — adding it prematurely would leak Phase-6 model
-    surface area). Stub-sealed for the same reason as LP.
+    Resolves the recipient's CharacterSheet from the line's recipient
+    ObjectDB, then calls the canonical grant_resonance() with
+    source=GainSource.MISSION_REWARD (#1737).
     """
-    raise NotImplementedError(_RESONANCE_STUB_MSG)
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    line = row.line
+    sheet = line.recipient.sheet_data
+    grant_resonance(
+        sheet,
+        line.resonance,
+        line.amount,
+        source=GainSource.MISSION_REWARD,
+        mission_deed_reward_line=line,
+    )
 
 
 def _apply_one(row: MissionRewardQueue) -> str | None:
