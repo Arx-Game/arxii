@@ -111,6 +111,24 @@ class PlaceRemoveFunctionaryTests(django.test.TestCase):
         self.assertFalse(remove_functionary(role=self.role, room=self.room))
 
 
+class RoomLookFunctionaryTests(django.test.TestCase):
+    def test_room_appearance_lists_functionaries(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        from evennia_extensions.factories import ObjectDBFactory
+
+        profile = RoomProfileFactory()
+        room = ObjectDB.objects.get(pk=profile.objectdb.pk)  # typed Room instance
+        FunctionaryFactory(
+            role=NPCRoleFactory(name="Barkeep"), room=profile, name_override="Old Marta"
+        )
+        looker = ObjectDB.objects.get(
+            pk=ObjectDBFactory(db_typeclass_path="typeclasses.characters.Character").pk
+        )
+        text = room.return_appearance(looker=looker, mode="look")
+        self.assertIn("Old Marta", text)
+
+
 class FunctionaryLocationTests(django.test.TestCase):
     def test_resolves_via_room_objectdb(self) -> None:
         profile = RoomProfileFactory()

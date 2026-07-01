@@ -71,6 +71,7 @@ from commands.events import CmdEvent
 from commands.fashion import CmdJudgePresentation
 from commands.fatigue import CmdRest
 from commands.form import CmdForm
+from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
 from commands.gm_tables import CmdGMTable
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
@@ -259,6 +260,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdDeed,
             # #1493 — NPC-service hire/commission interaction loop.
             CmdHire,
+            # #1766 — list/place/remove room Functionaries (place/remove staff-only).
+            CmdFunctionary,
             # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
             CmdEncounter,
             CmdStory,

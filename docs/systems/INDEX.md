@@ -1085,7 +1085,9 @@ register as additional kinds.
 - **NPC ontology (ADR-0070):** **Functionary** (class-1, abstracted, room-anchored via its own FK) /
   **Standing NPC** (class-2, named Persona + object) / **Story NPC** (class-3/4, object + sheet, piloted).
   Presence: `functionaries_in_room` / `functionary_in_location` (`world.npc_services.functionaries`);
-  `hire <name>` prefers a co-located Functionary, falling back to a global role lookup.
+  `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
+  them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
+  `look` (`Room.return_appearance`).
 - **Constants:** `OfferKind` (PERMIT; future MISSION/LOAN/TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL)
 - **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
   `world.npc_services.effects` — keyed on `OfferKind`. Plan 2 ships a PERMIT stub;
