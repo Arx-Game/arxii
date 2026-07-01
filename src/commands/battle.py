@@ -4,8 +4,8 @@ One ``battle`` command routes a leading subverb to the battle lifecycle actions.
 
 Player subverbs:
     battle              — show caller's current battle status
-    battle declare strike <unit>
-    battle declare support <char>
+    battle declare strike <unit> with <technique>
+    battle declare support <char> with <technique>
 
 GM subverbs:
     battle round        — begin the next round (DECLARING)
@@ -32,8 +32,8 @@ class CmdBattle(ArxCommand):
 
     Syntax (player):
         battle
-        battle declare strike <unit>
-        battle declare support <ally>
+        battle declare strike <unit> with <technique>
+        battle declare support <ally> with <technique>
 
     Syntax (GM / staff):
         battle round
@@ -42,7 +42,7 @@ class CmdBattle(ArxCommand):
 
     Bare ``battle`` shows your current battle status. Supply a unit name for
     ``strike`` (matched within the active battle) or a character name for
-    ``support``.
+    ``support``, plus the technique you know to cast with ``with <technique>``.
     """
 
     key = "battle"
@@ -143,6 +143,23 @@ class CmdBattle(ArxCommand):
             raise CommandError(msg)
         return ally
 
+    def _resolve_technique(self, participant: BattleParticipant, name: str) -> object:
+        """Resolve a known Technique by name for the participant's character."""
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        link = (
+            CharacterTechnique.objects.filter(
+                character=participant.character_sheet,
+                technique__name__iexact=name,
+            )
+            .select_related("technique")
+            .first()
+        )
+        if link is None:
+            msg = f"You don't know a technique named '{name}'."
+            raise CommandError(msg)
+        return link.technique
+
     def _send(self, result: ActionResult) -> None:
         if result.message:
             self.msg(result.message)
@@ -191,32 +208,51 @@ class CmdBattle(ArxCommand):
         from world.battles.constants import BattleActionKind  # noqa: PLC0415
 
         if not rest:
-            msg = "Usage: battle declare strike <unit> | battle declare support <ally>"
+            msg = (
+                "Usage: battle declare strike <unit> with <technique>"
+                " | battle declare support <ally> with <technique>"
+            )
             raise CommandError(msg)
 
         kind = rest[0].lower()
-        name = " ".join(rest[1:]).strip()
+        remainder = rest[1:]
+        if "with" not in remainder:  # noqa: STRING_LITERAL
+            msg = (
+                "Usage: battle declare strike <unit> with <technique>"
+                " | battle declare support <ally> with <technique>"
+            )
+            raise CommandError(msg)
+        split_at = remainder.index("with")
+        name = " ".join(remainder[:split_at]).strip()
+        technique_name = " ".join(remainder[split_at + 1 :]).strip()
 
         if kind == "strike":  # noqa: STRING_LITERAL
             if not name:
-                msg = "Declare strike against which unit? (battle declare strike <unit>)"
+                msg = (
+                    "Declare strike against which unit?"
+                    " (battle declare strike <unit> with <technique>)"
+                )
                 raise CommandError(msg)
             participant = self._resolve_participant()
             unit = self._resolve_unit(participant, name)
+            technique = self._resolve_technique(participant, technique_name)
             result = DeclareBattleActionAction().run(
                 self.caller,
                 action_kind=BattleActionKind.STRIKE,
+                technique_id=technique.pk,
                 target_unit=unit,
             )
         elif kind == "support":  # noqa: STRING_LITERAL
             if not name:
-                msg = "Support which ally? (battle declare support <ally>)"
+                msg = "Support which ally? (battle declare support <ally> with <technique>)"
                 raise CommandError(msg)
             participant = self._resolve_participant()
             ally = self._resolve_ally(participant, name)
+            technique = self._resolve_technique(participant, technique_name)
             result = DeclareBattleActionAction().run(
                 self.caller,
                 action_kind=BattleActionKind.SUPPORT,
+                technique_id=technique.pk,
                 target_ally=ally,
             )
         else:

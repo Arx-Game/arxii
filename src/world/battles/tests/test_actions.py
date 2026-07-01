@@ -17,6 +17,7 @@ from actions.definitions.battles import (
     DeclareBattleActionAction,
     ResolveBattleRoundAction,
 )
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.battles.constants import BattleActionKind, BattleOutcome
 from world.battles.factories import (
@@ -30,6 +31,7 @@ from world.battles.factories import (
 from world.battles.models import BattleActionDeclaration
 from world.battles.services import conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 
@@ -87,6 +89,9 @@ class BattleActionTestBase(TestCase):
 
         # One unit on the attacker side (used as a strike target).
         self.unit = BattleUnitFactory(battle=self.battle, side=self.attacker_side)
+
+        # A technique the player knows, castable (has an action_template).
+        self.technique = TechniqueFactory(action_template=None)
 
 
 class BeginBattleRoundActionTests(BattleActionTestBase):
@@ -253,13 +258,17 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
 
     def setUp(self) -> None:
         super().setUp()
-        # Enlist player on the defender side.
         self.participant = BattleParticipantFactory(
             battle=self.battle,
             side=self.defender_side,
             character_sheet=self.player_sheet,
         )
-        # Open a DECLARING round.
+        # Override the base technique with one that has a real action_template —
+        # declare_battle_action (Task 3) requires action_template_id presence even
+        # at declare time (TechniqueNotBattleReadyError), so the base class's bare
+        # technique (action_template=None) would fail every success-path test here.
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.player_sheet, technique=self.technique)
         self.battle_round = BattleRoundFactory(
             battle=self.battle,
             round_number=1,
@@ -270,6 +279,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         result = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.STRIKE,
+            technique_id=self.technique.pk,
             target_unit=self.unit,
         )
         self.assertTrue(result.success, result.message)
@@ -278,6 +288,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
                 battle_round=self.battle_round,
                 participant=self.participant,
                 action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
                 target_unit=self.unit,
             ).exists()
         )
@@ -293,6 +304,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         result = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.SUPPORT,
+            technique_id=self.technique.pk,
             target_ally=ally_participant,
         )
         self.assertTrue(result.success, result.message)
@@ -301,6 +313,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
                 battle_round=self.battle_round,
                 participant=self.participant,
                 action_kind=BattleActionKind.SUPPORT,
+                technique=self.technique,
                 target_ally=ally_participant,
             ).exists()
         )
@@ -311,6 +324,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         result = DeclareBattleActionAction().run(
             outsider,
             action_kind=BattleActionKind.STRIKE,
+            technique_id=self.technique.pk,
             target_unit=self.unit,
         )
         self.assertFalse(result.success)
@@ -323,6 +337,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         result = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.STRIKE,
+            technique_id=self.technique.pk,
             target_unit=self.unit,
         )
         self.assertFalse(result.success)
@@ -332,6 +347,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         result1 = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.STRIKE,
+            technique_id=self.technique.pk,
             target_unit=self.unit,
         )
         self.assertTrue(result1.success, result1.message)
@@ -346,6 +362,7 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         result2 = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.SUPPORT,
+            technique_id=self.technique.pk,
             target_ally=ally_participant,
         )
         self.assertTrue(result2.success, result2.message)
@@ -358,3 +375,13 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
             battle_round=self.battle_round, participant=self.participant
         )
         self.assertEqual(decl.action_kind, BattleActionKind.SUPPORT)
+
+    def test_unknown_technique_id_fails(self) -> None:
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.STRIKE,
+            technique_id=999999,
+            target_unit=self.unit,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("technique", result.message.lower())
