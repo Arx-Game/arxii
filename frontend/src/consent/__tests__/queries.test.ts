@@ -16,6 +16,9 @@ import {
   fetchWhitelist,
   addWhitelist,
   removeWhitelist,
+  fetchBlacklist,
+  addBlacklist,
+  removeBlacklist,
 } from '../api';
 
 function mockOkResponse(data: unknown) {
@@ -252,6 +255,73 @@ describe('consent/api', () => {
       vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
 
       await expect(removeWhitelist(1)).rejects.toThrow('Failed to remove whitelist entry');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Blacklist (#1698)
+  // -------------------------------------------------------------------------
+
+  describe('fetchBlacklist', () => {
+    it('calls /api/consent/blacklist/ with owner_tenure and category filters', async () => {
+      const data = { count: 0, results: [] };
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
+
+      const result = await fetchBlacklist(42, 3);
+
+      expect(apiFetch).toHaveBeenCalledWith('/api/consent/blacklist/?owner_tenure=42&category=3');
+      expect(result).toEqual(data);
+    });
+
+    it('throws on error response', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
+
+      await expect(fetchBlacklist(42, 3)).rejects.toThrow('Failed to load consent blacklist');
+    });
+  });
+
+  describe('addBlacklist', () => {
+    it('sends POST to /api/consent/blacklist/', async () => {
+      const data = {
+        id: 1,
+        owner_tenure: 42,
+        blocked_tenure: 7,
+        category: 3,
+        added_at: '2026-01-01T00:00:00Z',
+      };
+      vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
+
+      const result = await addBlacklist({ owner_tenure: 42, blocked_tenure: 7, category: 3 });
+
+      expect(apiFetch).toHaveBeenCalledWith('/api/consent/blacklist/', {
+        method: 'POST',
+        body: JSON.stringify({ owner_tenure: 42, blocked_tenure: 7, category: 3 }),
+      });
+      expect(result).toEqual(data);
+    });
+
+    it('throws on error response', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
+
+      await expect(
+        addBlacklist({ owner_tenure: 42, blocked_tenure: 7, category: 3 })
+      ).rejects.toThrow('Failed to add blacklist entry');
+    });
+  });
+
+  describe('removeBlacklist', () => {
+    it('sends DELETE to /api/consent/blacklist/{id}/', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockEmptyOk());
+
+      await removeBlacklist(1);
+
+      expect(apiFetch).toHaveBeenCalledWith('/api/consent/blacklist/1/', { method: 'DELETE' });
+    });
+
+    it('throws on error response', async () => {
+      vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse());
+
+      await expect(removeBlacklist(1)).rejects.toThrow('Failed to remove blacklist entry');
     });
   });
 });

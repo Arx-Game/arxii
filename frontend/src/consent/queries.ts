@@ -10,14 +10,19 @@ import {
   fetchWhitelist,
   addWhitelist,
   removeWhitelist,
+  fetchBlacklist,
+  addBlacklist,
+  removeBlacklist,
 } from './api';
 import type {
   SocialConsentPreferenceRequest,
   SocialConsentCategoryRuleRequest,
   SocialConsentWhitelistRequest,
+  SocialConsentBlacklistRequest,
   PaginatedSocialConsentCategoryList,
   PaginatedSocialConsentCategoryRuleList,
   PaginatedSocialConsentWhitelistList,
+  PaginatedSocialConsentBlacklistList,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +35,8 @@ export const consentKeys = {
   categoryRules: (preferenceId: number) => ['consent', 'category-rules', preferenceId] as const,
   whitelist: (tenureId: number, categoryId: number) =>
     ['consent', 'whitelist', tenureId, categoryId] as const,
+  blacklist: (tenureId: number, categoryId: number) =>
+    ['consent', 'blacklist', tenureId, categoryId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -157,6 +164,51 @@ export function useRemoveWhitelist() {
     onSuccess: ({ ownerTenureId, categoryId }) => {
       queryClient.invalidateQueries({
         queryKey: consentKeys.whitelist(ownerTenureId, categoryId),
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Blacklist (#1698)
+// ---------------------------------------------------------------------------
+
+export function useBlacklist(tenureId: number | undefined, categoryId: number | undefined) {
+  return useQuery<PaginatedSocialConsentBlacklistList>({
+    queryKey: consentKeys.blacklist(tenureId!, categoryId!),
+    queryFn: () => fetchBlacklist(tenureId!, categoryId!),
+    enabled: !!tenureId && !!categoryId,
+    throwOnError: true,
+  });
+}
+
+export function useAddBlacklist() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SocialConsentBlacklistRequest) => addBlacklist(body),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: consentKeys.blacklist(data.owner_tenure, data.category),
+      });
+    },
+  });
+}
+
+export function useRemoveBlacklist() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ownerTenureId,
+      categoryId,
+    }: {
+      id: number;
+      ownerTenureId: number;
+      categoryId: number;
+    }) => removeBlacklist(id).then(() => ({ ownerTenureId, categoryId })),
+    onSuccess: ({ ownerTenureId, categoryId }) => {
+      queryClient.invalidateQueries({
+        queryKey: consentKeys.blacklist(ownerTenureId, categoryId),
       });
     },
   });

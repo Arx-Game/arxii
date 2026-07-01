@@ -44,6 +44,7 @@ interface ConsentCardProps {
   resistEffort: string;
   onResistChange: (v: string) => void;
   onDeny: () => void;
+  onDenyBlock: () => void;
   onAccept: (difficulty: string) => void;
   isPending: boolean;
 }
@@ -57,6 +58,7 @@ function ConsentCard({
   resistEffort,
   onResistChange,
   onDeny,
+  onDenyBlock,
   onAccept,
   isPending,
 }: ConsentCardProps) {
@@ -100,6 +102,16 @@ function ConsentCard({
         <Button size="sm" variant="outline" onClick={onDeny} disabled={isPending}>
           <X className="mr-1 h-3.5 w-3.5" />
           Deny
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onDenyBlock}
+          disabled={isPending}
+          title="Deny and bar this person from this kind of action toward you"
+        >
+          <ShieldAlert className="mr-1 h-3.5 w-3.5" />
+          Deny &amp; block
         </Button>
         <Button
           size="sm"
@@ -149,12 +161,15 @@ export function ConsentPrompt({ sceneId }: Props) {
       accept,
       difficulty,
       resist_effort,
+      blacklist_actor,
     }: {
       requestId: number;
       accept: boolean;
       difficulty?: string;
       resist_effort?: string;
-    }) => respondToRequest(sceneId, requestId, { accept, difficulty, resist_effort }),
+      blacklist_actor?: boolean;
+    }) =>
+      respondToRequest(sceneId, requestId, { accept, difficulty, resist_effort, blacklist_actor }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-requests', sceneId] });
       queryClient.invalidateQueries({ queryKey: ['scene-messages', sceneId] });
@@ -174,17 +189,20 @@ export function ConsentPrompt({ sceneId }: Props) {
       accept,
       difficulty,
       resist_effort,
+      blacklist_actor,
     }: {
       requestId: number;
       targetPersonaId: number;
       accept: boolean;
       difficulty?: string;
       resist_effort?: string;
+      blacklist_actor?: boolean;
     }) =>
       respondToRequest(sceneId, requestId, {
         accept,
         difficulty,
         resist_effort,
+        blacklist_actor,
         target_persona_id: targetPersonaId,
       }),
     onSuccess: () => {
@@ -215,6 +233,9 @@ export function ConsentPrompt({ sceneId }: Props) {
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() => respond.mutate({ requestId: req.id, accept: false })}
+            onDenyBlock={() =>
+              respond.mutate({ requestId: req.id, accept: false, blacklist_actor: true })
+            }
             onAccept={(difficulty) =>
               respond.mutate({
                 requestId: req.id,
@@ -246,6 +267,14 @@ export function ConsentPrompt({ sceneId }: Props) {
                 requestId: t.action_request_id,
                 targetPersonaId: t.target_persona_id,
                 accept: false,
+              })
+            }
+            onDenyBlock={() =>
+              respondTarget.mutate({
+                requestId: t.action_request_id,
+                targetPersonaId: t.target_persona_id,
+                accept: false,
+                blacklist_actor: true,
               })
             }
             onAccept={(difficulty) =>
