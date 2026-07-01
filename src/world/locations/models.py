@@ -42,6 +42,7 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
     KEY_TYPE_DISCRIMINATOR_MAP = {
         KeyType.STAT: "stat_key",
         KeyType.RESONANCE: "resonance",
+        KeyType.DAMAGE_TYPE: "damage_type",
     }
 
     parent_type = models.CharField(
@@ -64,10 +65,10 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
         related_name="stat_overrides",
     )
     key_type = models.CharField(
-        max_length=10,
+        max_length=11,
         choices=KeyType.choices,
         default=KeyType.STAT,
-        help_text="Selects which key field (stat_key or resonance) is active.",
+        help_text="Selects which key field (stat_key, resonance, or damage_type) is active.",
     )
     stat_key = models.CharField(
         max_length=50,
@@ -78,6 +79,13 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
     )
     resonance = models.ForeignKey(
         "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cascade_overrides",
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -116,6 +124,20 @@ class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
                 fields=["room_profile", "resonance"],
                 condition=models.Q(room_profile__isnull=False) & models.Q(resonance__isnull=False),
                 name="unique_override_per_room_resonance",
+            ),
+            # damage-type-axis uniqueness: one damage-type-keyed override per
+            # (area, damage_type) or (room_profile, damage_type).
+            models.UniqueConstraint(
+                fields=["area", "damage_type"],
+                condition=models.Q(area__isnull=False) & models.Q(damage_type__isnull=False),
+                name="unique_override_per_area_damage_type",
+            ),
+            models.UniqueConstraint(
+                fields=["room_profile", "damage_type"],
+                condition=(
+                    models.Q(room_profile__isnull=False) & models.Q(damage_type__isnull=False)
+                ),
+                name="unique_override_per_room_damage_type",
             ),
         ]
 
@@ -163,6 +185,7 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
     KEY_TYPE_DISCRIMINATOR_MAP = {
         KeyType.STAT: "stat_key",
         KeyType.RESONANCE: "resonance",
+        KeyType.DAMAGE_TYPE: "damage_type",
     }
 
     parent_type = models.CharField(
@@ -185,10 +208,10 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
         related_name="stat_modifiers",
     )
     key_type = models.CharField(
-        max_length=10,
+        max_length=11,
         choices=KeyType.choices,
         default=KeyType.STAT,
-        help_text="Selects which key field (stat_key or resonance) is active.",
+        help_text="Selects which key field (stat_key, resonance, or damage_type) is active.",
     )
     stat_key = models.CharField(
         max_length=50,
@@ -199,6 +222,13 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
     )
     resonance = models.ForeignKey(
         "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cascade_modifiers",
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -241,6 +271,8 @@ class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
             models.Index(fields=["room_profile", "stat_key"]),
             models.Index(fields=["area", "resonance"]),
             models.Index(fields=["room_profile", "resonance"]),
+            models.Index(fields=["area", "damage_type"]),
+            models.Index(fields=["room_profile", "damage_type"]),
         ]
 
     def clean(self) -> None:

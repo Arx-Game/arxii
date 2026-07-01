@@ -1,1 +1,1 @@
-0006_alter_locationvaluemodifier_stat_key_and_more
+0007_locationvaluemodifier_damage_type_and_more

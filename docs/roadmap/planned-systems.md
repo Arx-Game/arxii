@@ -20,8 +20,13 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 ## Cross-cutting primitives (build once, reused widely)
 
 - **Damage/condition immunity & vulnerability framework** — "people who can't drown," vampires harmed
-  by sunlight, fire-immune species, etc. A single immunity/vulnerability layer over conditions+vitals,
-  reused by the aquatic, species, and combat systems below. `intent`.
+  by sunlight, fire-immune species, etc. `partial` — **#1740/#1588** built the core unified seam
+  (`resolve_damage_type_resistance`; combat/traps/DoT-tick net condition + gift-thread resistance
+  against a `damage_type`, immunity = high resistance not boolean, ADR-0066) plus the first live
+  trigger (Sunlight Exposure). Aquatic ("can't drown") and other species-specific triggers beyond
+  sunlight are still unbuilt. The companion mitigation layer (an ally or a location granting cover
+  against a hazard) shipped as **#1744** (ADR-0069): Succor maneuver + location `DAMAGE_TYPE`
+  cascade axis.
 - **Perception-override / altered-reality scene mode** — "who perceives what is real." Reused by
   dreamstates, illusions, and disguise/guise. A scene variety over the `SceneRound` seam. `intent`.
 

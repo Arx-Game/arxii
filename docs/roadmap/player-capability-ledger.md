@@ -56,7 +56,7 @@ in-fiction trigger is plausible.
 | Species **abilities/traits** beyond stats | ✅ PROVEN (infrastructure) | **ADR-0050** + **#1580**: `SpeciesGiftGrant` + `provision_species_gifts` + GIFT anchor cap (`path_stage × 10`) + RESISTANCE pull-effect; E2E `test_species_gift_e2e.py`. Pending: seed real species Minor Gift data. | now |
 | **khati / vampire / lycan**, lineage / bloodline | 🟡 SUBSTRATE | **ADR-0050** + **#1580** (plumbing built — `SpeciesGiftGrant` + `provision_species_gifts`); no species → Minor Gift data rows seeded yet | now |
 | Species / lineage / distinction **grants a gift** | ✅ PROVEN | **ADR-0050** + **#1580**: `SpeciesGiftGrant` through-model + `provision_species_gifts` mints `CharacterGift` + latent GIFT thread; E2E `test_species_gift_e2e.py` | now |
-| Species **vulnerabilities** (vampire↔sunlight) + immunity framework | 🟡 SUBSTRATE | **#1580**: minimum substrate built — `EffectKind.RESISTANCE` + `ConditionResistanceModifier` net at `apply_damage_to_participant` (ADR-0062); broad framework + environmental triggers → **#1588** | MVP |
+| Species **vulnerabilities** (vampire↔sunlight) + immunity framework | ✅ PROVEN | **#1740/#1588**: `resolve_damage_type_resistance` unified seam (combat/traps/DoT tick net condition + gift-thread resistance against a damage_type; immunity = high resistance, not boolean, ADR-0066) + Sunlight Exposure radiant DoT via the peril pipeline. Cover/shelter mitigation layer (ally + location) → **#1744** (ADR-0069) | MVP |
 | Resonance as an identity axis that *differs* your magic | ❌ → DESIGNED | **ADR-0052/0055** (gift affinity + technique form from resonance) | MVP |
 
 ---

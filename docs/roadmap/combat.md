@@ -18,6 +18,8 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 
 - Damage technique cast at an NPC drops its health (telnet → resolve_round).
 - DEFEND halves / INTERPOSE zeroes incoming damage.
+- SUCCOR shelters a named ally from a round-ticked environmental hazard, in both combat and
+  non-combat scene rounds (#1744, ADR-0069) — the environmental-DoT sibling of INTERPOSE.
 - Escalation → Audere offer → accept → real power change.
 - Multi-PC group combos (effect-type × resonance).
 

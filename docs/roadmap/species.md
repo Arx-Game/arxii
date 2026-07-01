@@ -38,9 +38,14 @@ Acquisition rides the XP-unlock contract (ADR-0053). See the gift/resonance econ
 - **Species abilities beyond stat-bonuses** — [BUILT & WIRED] for the infrastructure (#1580);
   pending species data (no species → Minor Gift rows seeded yet; see ADR-0050).
 - **Species vulnerabilities** (e.g. vampire ↔ sunlight) + broad immunity/vulnerability framework —
-  minimum substrate built (#1580): `EffectKind.RESISTANCE` + `ConditionResistanceModifier` net
-  at `apply_damage_to_participant`. Broad framework + environmental triggers (sunlight as a
-  world-driven damage event) → **#1588** (ADR-0062).
+  [BUILT & WIRED] (#1740/#1588): `resolve_damage_type_resistance` is the single unified seam —
+  combat, traps, and DoT round-tick all net condition-resistance + gift-thread resistance against a
+  `damage_type`; immunity is high resistance, not a boolean (ADR-0066, extends ADR-0062). Sunlight
+  Exposure is the first live environmental vulnerability: `reconcile_sunlight_exposure` applies a
+  radiant DoT outdoors during day via the existing peril pipeline (E2E:
+  `test_sunlight_exposure_e2e.py`). Pending: seed hazards beyond sunlight. **Cover against a hazard**
+  (an ally sheltering a target, or a room granting shelter) is the companion mitigation layer →
+  **#1744** (ADR-0069): Succor maneuver + the location `DAMAGE_TYPE` cascade axis.
 - **Racial languages** — `Language` model + a `grants_species_languages` flag exist, but nothing grants
   or stores them (no `CharacterLanguage`). 🟡 SUBSTRATE.
 

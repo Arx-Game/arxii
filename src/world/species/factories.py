@@ -87,13 +87,24 @@ def ensure_sunlight_exposure_content() -> "ConditionTemplate":
 
     The template carries a ``ConditionDamageOverTime`` (radiant) so the existing
     ``_process_round_tick`` machinery applies sunlight damage through the peril
-    pipeline exactly like poison/Burning — no new tick machinery. Exposure gating
+    pipeline exactly like poison — no new tick machinery. Exposure gating
     (outdoor + day-phase) and round-ensurance are applied by
     ``reconcile_sunlight_exposure`` in ``world.species.services``.
+
+    ``tick_timing=END_OF_ROUND`` (#1744): matches poison's established convention
+    (``world.conditions.services.ensure_poison_content``) rather than the model
+    field's ``START_OF_ROUND`` default. START-timing DoTs tick during combat's
+    DECLARING phase (``begin_declaration_phase``) and are never reached at all by
+    non-combat ``resolve_scene_round`` (which only ever ticks ``timing="end"``);
+    Succor's cover window is also RESOLVING-gated
+    (``CombatRoundContext.get_cover_for`` / ``SceneRoundContext.get_cover_for``),
+    so only an END-timing DoT can be protected by Succor or ticked through the
+    real non-combat scene-round path.
 
     Returns:
         The (get-or-created) Sunlight Exposure ConditionTemplate.
     """
+    from world.conditions.constants import DamageTickTiming
     from world.conditions.factories import ensure_radiant_damage_type
     from world.conditions.models import (
         ConditionCategory,
@@ -119,6 +130,9 @@ def ensure_sunlight_exposure_content() -> "ConditionTemplate":
         condition=template,
         stage=None,
         damage_type=radiant,
-        defaults={"base_damage": SUNLIGHT_EXPOSURE_DAMAGE},
+        defaults={
+            "base_damage": SUNLIGHT_EXPOSURE_DAMAGE,
+            "tick_timing": DamageTickTiming.END_OF_ROUND,
+        },
     )
     return template

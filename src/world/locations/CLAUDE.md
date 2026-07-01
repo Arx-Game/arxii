@@ -1,15 +1,25 @@
 # Locations - Ambient Value Cascade
 
 Authored substrate for room/area values that cascade through the area
-hierarchy. Carries two axis types in one cascade:
+hierarchy. Carries three axis types in one cascade:
 
 - **Stat axis** — ambient stats (crime, order, lighting, …) keyed on a
   `StatKey` TextChoices enum.
 - **Resonance axis** — magical resonance magnitudes per room, keyed on a
   FK to `magic.Resonance`. Replaces the former `RoomAuraProfile` /
   `RoomResonance` tag system from Spec C.
+- **Damage-type axis (#1744)** — hazard shelter per room, keyed on a FK to
+  `conditions.DamageType`. Lets a room/area grant "cover" against a specific
+  environmental hazard (e.g. sunlight/radiant). Generic across any hazard the
+  `conditions` catalog defines; adding a new one needs zero new discriminator
+  code, only new rows. `hazard_is_covered` is the read-side "does this room
+  shelter me" gate; wiring specific hazard callers to it is a later slice.
 
-A single read service (`effective_value`) resolves either axis.
+A single read service (`effective_value`) resolves all three axes — stat,
+resonance, and damage-type. `hazard_is_covered(room, damage_type, *,
+threshold=1)` wraps the damage-type axis as a hard boolean gate ("does the
+hazard reach this place at all"), not an arithmetic resistance — that stays
+`ConditionResistanceModifier` (per ADR-0066, ADR-0069).
 
 **Climate → comfort (#1514, #1522).** The stat axis hosts environmental **exposure** axes
 (`StatKey.COLD`, `HEAT`, `WET`, `WIND`, `DRY`; listed in `EXPOSURE_STAT_KEYS`). Each is a
@@ -93,8 +103,9 @@ Both models inherit from `core.mixins.DiscriminatorMixin` and
 discriminators:
 
 - `parent_type` (AREA or ROOM) — selects `area` vs `room_profile` FK.
-- `key_type` (STAT or RESONANCE) — selects `stat_key` (CharField from
-  `StatKey`) vs `resonance` (FK to `magic.Resonance`).
+- `key_type` (STAT, RESONANCE, or DAMAGE_TYPE) — selects `stat_key`
+  (CharField from `StatKey`) vs `resonance` (FK to `magic.Resonance`) vs
+  `damage_type` (FK to `conditions.DamageType`).
 
 Exactly one of each discriminator pair is populated per row, enforced by
 `clean()` which calls `DiscriminatorMixin._validate_discriminator` once
@@ -137,9 +148,10 @@ ancestor set.
 Polymorphic single-axis read:
 
 ```python
-from world.locations.services import effective_value
+from world.locations.services import effective_value, hazard_is_covered
 from world.locations.constants import StatKey
 from world.magic.models import Resonance
+from world.conditions.models import DamageType
 
 # Stat axis
 crime_here = effective_value(room, stat_key=StatKey.CRIME)
@@ -147,9 +159,14 @@ crime_here = effective_value(room, stat_key=StatKey.CRIME)
 # Resonance axis (e.g. cathedral celestial intensity)
 copperi = Resonance.objects.get(name="Copperi")
 celestial_here = effective_value(room, resonance=copperi)
+
+# Damage-type axis (#1744) — hazard shelter, e.g. "is this room covered from sunlight"
+radiant = DamageType.objects.get(name="Radiant")
+sunlit_here = effective_value(room, damage_type=radiant)
+covered_from_sun = hazard_is_covered(room, radiant)
 ```
 
-Exactly one of `stat_key` or `resonance` must be provided.
+Exactly one of `stat_key`, `resonance`, or `damage_type` must be provided.
 
 For per-room "is this room tagged with resonance X" gates (e.g. residence
 trickle), prefer a direct query on `LocationValueModifier` rows rather

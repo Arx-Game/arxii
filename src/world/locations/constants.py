@@ -27,6 +27,9 @@ class KeyType(models.TextChoices):
 
     STAT → ``stat_key`` (CharField, StatKey enum).
     RESONANCE → ``resonance`` (FK to ``magic.Resonance``).
+    DAMAGE_TYPE → ``damage_type`` (FK to ``conditions.DamageType``) — a hazard a place can
+    grant shelter against (#1744). Generic across sunlight/poison gas/embers/etc.; adding a
+    new environmental hazard needs zero new discriminator code, only new rows.
 
     Exactly one is populated per row; the model's ``clean()`` validates
     via DiscriminatorMixin._validate_discriminator.
@@ -34,6 +37,7 @@ class KeyType(models.TextChoices):
 
     STAT = "stat", "Stat"
     RESONANCE = "resonance", "Resonance"
+    DAMAGE_TYPE = "damage_type", "Damage Type"
 
 
 # Default magnitude used by tag_room_resonance and any other "tag the room
