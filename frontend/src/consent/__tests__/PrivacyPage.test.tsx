@@ -46,6 +46,9 @@ vi.mock('../queries', () => ({
   useWhitelist: vi.fn(),
   useAddWhitelist: vi.fn(),
   useRemoveWhitelist: vi.fn(),
+  useBlacklist: vi.fn(),
+  useAddBlacklist: vi.fn(),
+  useRemoveBlacklist: vi.fn(),
 }));
 
 // Mock MyTenureSelect so we can control character selection
@@ -182,12 +185,39 @@ function setupDefaultMocks() {
     isPending: false,
   } as unknown as ReturnType<typeof queries.useRemoveWhitelist>);
 
+  const addBlacklistMutate = vi.fn();
+  const removeBlacklistMutate = vi.fn();
+
+  vi.mocked(queries.useBlacklist).mockReturnValue({
+    data: { count: 0, results: [] },
+    isLoading: false,
+  } as unknown as ReturnType<typeof queries.useBlacklist>);
+
+  vi.mocked(queries.useAddBlacklist).mockReturnValue({
+    mutate: addBlacklistMutate,
+    isPending: false,
+  } as unknown as ReturnType<typeof queries.useAddBlacklist>);
+
+  vi.mocked(queries.useRemoveBlacklist).mockReturnValue({
+    mutate: removeBlacklistMutate,
+    isPending: false,
+  } as unknown as ReturnType<typeof queries.useRemoveBlacklist>);
+
   vi.mocked(mailQueries.useTenureSearch).mockReturnValue({
     data: { count: 0, results: [] },
     isLoading: false,
   } as unknown as ReturnType<typeof mailQueries.useTenureSearch>);
 
-  return { upsertMutate, deleteMutate, addMutate, removeMutate, updateMutate, createMutateAsync };
+  return {
+    upsertMutate,
+    deleteMutate,
+    addMutate,
+    removeMutate,
+    updateMutate,
+    createMutateAsync,
+    addBlacklistMutate,
+    removeBlacklistMutate,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +279,59 @@ describe('PrivacyPage', () => {
       category: mockCategories[0].id,
       mode: 'allowlist',
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // #1698 — new modes upsert with their value
+  // -------------------------------------------------------------------------
+
+  it('calls upsertCategoryRule when switching to all_but_blacklist mode', async () => {
+    const { upsertMutate } = setupDefaultMocks();
+    renderWithProviders(<PrivacyPage />);
+
+    fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
+    await waitFor(() => screen.getByText('Romantic'));
+
+    const selects = screen.getAllByTestId('mock-select');
+    fireEvent.change(selects[0], { target: { value: 'all_but_blacklist' } });
+
+    expect(upsertMutate).toHaveBeenCalledWith({
+      preference: mockPreferenceWithId.id,
+      category: mockCategories[0].id,
+      mode: 'all_but_blacklist',
+    });
+  });
+
+  it('calls useAddBlacklist when barring a character under all_but_blacklist mode', async () => {
+    const { addBlacklistMutate } = setupDefaultMocks();
+
+    // Pre-set the Romantic category rule to "all_but_blacklist" so BlacklistManager is visible.
+    vi.mocked(queries.useCategoryRules).mockReturnValue({
+      data: {
+        count: 1,
+        results: [{ id: 99, preference: 5, category: 10, mode: 'all_but_blacklist' }],
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof queries.useCategoryRules>);
+
+    vi.mocked(mailQueries.useTenureSearch).mockReturnValue({
+      data: { count: 1, results: [{ id: 7, display_name: 'Zara' }] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof mailQueries.useTenureSearch>);
+
+    renderWithProviders(<PrivacyPage />);
+
+    fireEvent.change(screen.getByLabelText('Character'), { target: { value: '1' } });
+
+    await waitFor(() => screen.getByPlaceholderText('Search character to bar...'));
+
+    const zaraButton = await screen.findByRole('button', { name: 'Zara' });
+    await userEvent.click(zaraButton);
+
+    expect(addBlacklistMutate).toHaveBeenCalledWith(
+      { owner_tenure: 1, blocked_tenure: 7, category: 10 },
+      expect.any(Object)
+    );
   });
 
   // -------------------------------------------------------------------------

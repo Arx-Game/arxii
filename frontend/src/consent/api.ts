@@ -7,11 +7,14 @@ import type {
   SocialConsentCategoryRuleRequest,
   SocialConsentWhitelist,
   SocialConsentWhitelistRequest,
+  SocialConsentBlacklist,
+  SocialConsentBlacklistRequest,
 } from './types';
 
 type PaginatedCategories = components['schemas']['PaginatedSocialConsentCategoryList'];
 type PaginatedCategoryRules = components['schemas']['PaginatedSocialConsentCategoryRuleList'];
 type PaginatedWhitelist = components['schemas']['PaginatedSocialConsentWhitelistList'];
+type PaginatedBlacklist = components['schemas']['PaginatedSocialConsentBlacklistList'];
 
 // ---------------------------------------------------------------------------
 // Categories (read-only)
@@ -132,5 +135,44 @@ export async function removeWhitelist(id: number): Promise<void> {
   const res = await apiFetch(`/api/consent/whitelist/${id}/`, { method: 'DELETE' });
   if (!res.ok) {
     throw new Error('Failed to remove whitelist entry');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Blacklist (#1698 — antagonism blacklist, consulted under ALL_BUT_BLACKLIST)
+// ---------------------------------------------------------------------------
+
+export async function fetchBlacklist(
+  tenureId: number,
+  categoryId: number
+): Promise<PaginatedBlacklist> {
+  const params = new URLSearchParams({
+    owner_tenure: String(tenureId),
+    category: String(categoryId),
+  });
+  const res = await apiFetch(`/api/consent/blacklist/?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error('Failed to load consent blacklist');
+  }
+  return res.json();
+}
+
+export async function addBlacklist(
+  body: SocialConsentBlacklistRequest
+): Promise<SocialConsentBlacklist> {
+  const res = await apiFetch('/api/consent/blacklist/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to add blacklist entry');
+  }
+  return res.json();
+}
+
+export async function removeBlacklist(id: number): Promise<void> {
+  const res = await apiFetch(`/api/consent/blacklist/${id}/`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error('Failed to remove blacklist entry');
   }
 }

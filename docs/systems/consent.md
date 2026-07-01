@@ -204,19 +204,23 @@ the resulting state.
 ## Frontend
 
 The `frontend/src/consent/` module provides a **Privacy** tab at `/profile/privacy`
-with three sections:
+(`CategoryConsentRow` + `WhitelistManager`/`BlacklistManager`):
 
 1. **Global switch** — master `allow_social_actions` toggle.
-2. **Per-category rules** — one row per `SocialConsentCategory` with a mode selector
-   (EVERYONE / ALLOWLIST); collapses when the global switch is off.
-3. **Whitelist** — add/remove allowed tenures per category; visible only when at
-   least one category is in ALLOWLIST mode.
+2. **Per-category rules** — one row per `SocialConsentCategory` with a mode selector spanning
+   all four `ConsentMode`s (Everyone / Everyone except blacklist / Friends + whitelist /
+   Allowlist only); collapses when the global switch is off.
+3. **Whitelist** — add/remove allowed tenures per category; shown under `ALLOWLIST` **and**
+   `FRIENDS_WHITELIST` (friends auto-pass, the whitelist is the extra-allow list).
+4. **Blacklist** (#1698) — `BlacklistManager` (mirrors `WhitelistManager`, keyed on
+   `blocked_tenure`); shown under `ALL_BUT_BLACKLIST`.
 
-> **[BUILT, NOT WIRED — web follow-up]** The #1698 modes (`ALL_BUT_BLACKLIST`,
-> `FRIENDS_WHITELIST`) and the blacklist manager are fully built on the backend, web API,
-> and telnet, but the React Privacy tab's mode selector still offers only EVERYONE/ALLOWLIST
-> and has no blacklist section or graded deny-and-blacklist button. Surfacing them on the
-> web-first UI is a tracked follow-up.
+Query layer: `consent/api.ts` + `consent/queries.ts` carry the `fetch/add/removeBlacklist`
+trio and `useBlacklist` / `useAddBlacklist` / `useRemoveBlacklist` (mirroring the whitelist
+hooks). The **deny-and-blacklist** affordance lives on the scene consent prompt
+(`scenes/components/ConsentPrompt.tsx` — a "Deny & block" button that sends
+`blacklist_actor: true` through `respondToRequest`); the accept-side difficulty-grade picker
+(`PLAUSIBILITY_BANDS`) predates #1698.
 
 ---
 
