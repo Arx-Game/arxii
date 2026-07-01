@@ -8,12 +8,14 @@ from rest_framework.test import APIClient
 
 from world.consent.constants import ConsentMode
 from world.consent.factories import (
+    SocialConsentBlacklistFactory,
     SocialConsentCategoryFactory,
     SocialConsentCategoryRuleFactory,
     SocialConsentPreferenceFactory,
     SocialConsentWhitelistFactory,
 )
 from world.consent.models import (
+    SocialConsentBlacklist,
     SocialConsentCategoryRule,
     SocialConsentPreference,
     SocialConsentWhitelist,
@@ -516,6 +518,93 @@ class SocialConsentWhitelistViewSetTests(TestCase):
             {
                 "owner_tenure": self.tenure_b.id,
                 "allowed_tenure": self.tenure_other.id,
+                "category": self.category.id,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+class SocialConsentBlacklistViewSetTests(TestCase):
+    """Tests for /api/consent/blacklist/ (#1698)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.player_a = PlayerDataFactory()
+        cls.player_b = PlayerDataFactory()
+        cls.tenure_a = RosterTenureFactory(player_data=cls.player_a)
+        cls.tenure_b = RosterTenureFactory(player_data=cls.player_b)
+        cls.tenure_other = RosterTenureFactory(player_data=PlayerDataFactory())
+        cls.category = SocialConsentCategoryFactory(key="blacklist-test-cat")
+        cls.entry_a = SocialConsentBlacklistFactory(
+            owner_tenure=cls.tenure_a,
+            blocked_tenure=cls.tenure_other,
+            category=cls.category,
+        )
+        cls.entry_b = SocialConsentBlacklistFactory(
+            owner_tenure=cls.tenure_b,
+            blocked_tenure=cls.tenure_other,
+            category=cls.category,
+        )
+        cls.character_a = cls.tenure_a.roster_entry.character_sheet.character
+        cls.character_a.account = cls.player_a.account
+
+    def setUp(self):
+        self.client = APIClient()
+        _force_api_user(self.client, self.player_a, self.character_a)
+
+    def test_list_returns_only_own_entries(self):
+        response = self.client.get("/api/consent/blacklist/")
+        assert response.status_code == status.HTTP_200_OK
+        ids = [e["id"] for e in response.data["results"]]
+        assert self.entry_a.id in ids
+        assert self.entry_b.id not in ids
+
+    def test_cross_player_delete_returns_404(self):
+        response = self.client.delete(f"/api/consent/blacklist/{self.entry_b.id}/")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_add_blacklist_entry(self):
+        new_category = SocialConsentCategoryFactory(key="bl-add-test")
+        another_tenure = RosterTenureFactory(player_data=PlayerDataFactory())
+        response = self.client.post(
+            "/api/consent/blacklist/",
+            {
+                "owner_tenure": self.tenure_a.id,
+                "blocked_tenure": another_tenure.id,
+                "category": new_category.id,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert set(response.data.keys()) == {
+            "id",
+            "owner_tenure",
+            "blocked_tenure",
+            "blocked_tenure_name",
+            "category",
+            "added_at",
+        }
+        assert SocialConsentBlacklist.objects.filter(
+            owner_tenure=self.tenure_a, blocked_tenure=another_tenure, category=new_category
+        ).exists()
+
+    def test_delete_own_blacklist_entry(self):
+        entry_to_delete = SocialConsentBlacklistFactory(
+            owner_tenure=self.tenure_a,
+            blocked_tenure=self.tenure_other,
+            category=SocialConsentCategoryFactory(key="bl-delete-test"),
+        )
+        response = self.client.delete(f"/api/consent/blacklist/{entry_to_delete.id}/")
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not SocialConsentBlacklist.objects.filter(id=entry_to_delete.id).exists()
+
+    def test_add_entry_for_other_player_owner_tenure_rejected(self):
+        response = self.client.post(
+            "/api/consent/blacklist/",
+            {
+                "owner_tenure": self.tenure_b.id,
+                "blocked_tenure": self.tenure_other.id,
                 "category": self.category.id,
             },
             format="json",

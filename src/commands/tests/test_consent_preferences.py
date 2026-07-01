@@ -19,10 +19,12 @@ from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.consent.constants import ConsentMode
 from world.consent.factories import (
+    SocialConsentBlacklistFactory,
     SocialConsentCategoryFactory,
     SocialConsentWhitelistFactory,
 )
 from world.consent.models import (
+    SocialConsentBlacklist,
     SocialConsentCategoryRule,
     SocialConsentPreference,
     SocialConsentWhitelist,
@@ -150,6 +152,61 @@ class CmdConsentTests(TestCase):
         self.assertIsNotNone(entry)
         cmd.caller.msg.assert_called_once()
         self.assertIn("Romantic", cmd.caller.msg.call_args[0][0])
+
+    def test_category_sets_blacklist_mode(self) -> None:
+        """The 'blacklist' token maps to ALL_BUT_BLACKLIST; 'friends' to FRIENDS_WHITELIST."""
+        self._run("category romantic=blacklist")
+        rule = SocialConsentCategoryRule.objects.get(preference__tenure=self.caller_tenure)
+        self.assertEqual(rule.mode, ConsentMode.ALL_BUT_BLACKLIST)
+
+        self._run("category romantic=friends")
+        rule.refresh_from_db()
+        self.assertEqual(rule.mode, ConsentMode.FRIENDS_WHITELIST)
+
+    def test_blacklist_add_by_name(self) -> None:
+        cmd = self._run(f"blacklist add {self.target_char.key} to romantic")
+
+        entry = SocialConsentBlacklist.objects.get(
+            owner_tenure=self.caller_tenure,
+            blocked_tenure=self.target_tenure,
+            category=self.category,
+        )
+        self.assertIsNotNone(entry)
+        cmd.caller.msg.assert_called_once()
+        self.assertIn("Romantic", cmd.caller.msg.call_args[0][0])
+
+    def test_blacklist_remove_by_name(self) -> None:
+        SocialConsentBlacklistFactory(
+            owner_tenure=self.caller_tenure,
+            blocked_tenure=self.target_tenure,
+            category=self.category,
+        )
+
+        cmd = self._run(f"blacklist remove {self.target_char.key} from romantic")
+
+        self.assertFalse(
+            SocialConsentBlacklist.objects.filter(
+                owner_tenure=self.caller_tenure,
+                blocked_tenure=self.target_tenure,
+                category=self.category,
+            ).exists()
+        )
+        cmd.caller.msg.assert_called_once()
+        self.assertIn("removed", cmd.caller.msg.call_args[0][0])
+
+    def test_blacklist_list_shows_entries(self) -> None:
+        SocialConsentBlacklistFactory(
+            owner_tenure=self.caller_tenure,
+            blocked_tenure=self.target_tenure,
+            category=self.category,
+        )
+
+        cmd = self._run("blacklist list")
+
+        cmd.caller.msg.assert_called_once()
+        text = cmd.caller.msg.call_args[0][0]
+        self.assertIn("Blacklist entries", text)
+        self.assertIn(str(self.target_tenure), text)
 
     def test_whitelist_remove_by_name(self) -> None:
         SocialConsentWhitelistFactory(

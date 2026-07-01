@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from world.consent.models import (
+    SocialConsentBlacklist,
     SocialConsentCategory,
     SocialConsentCategoryRule,
     SocialConsentPreference,
@@ -110,6 +111,43 @@ class SocialConsentWhitelistSerializer(serializers.ModelSerializer):
                         {
                             "owner_tenure": (
                                 "You may only manage whitelist entries for your own tenures."
+                            )
+                        }
+                    )
+        return attrs
+
+
+class SocialConsentBlacklistSerializer(serializers.ModelSerializer):
+    """Serializer for consent antagonism-blacklist entries (#1698)."""
+
+    blocked_tenure_name = serializers.CharField(
+        source="blocked_tenure.display_name", read_only=True
+    )
+
+    class Meta:
+        model = SocialConsentBlacklist
+        fields = (
+            "id",
+            "owner_tenure",
+            "blocked_tenure",
+            "blocked_tenure_name",
+            "category",
+            "added_at",
+        )
+        read_only_fields = ("id", "blocked_tenure_name", "added_at")
+
+    def validate(self, attrs: dict) -> dict:
+        """Ensure the owner_tenure belongs to the requesting player."""
+        request = self.context.get("request")
+        if request is not None and hasattr(request.user, "player_data"):
+            owner_tenure = attrs.get("owner_tenure")
+            if owner_tenure is not None:
+                player_data = request.user.player_data
+                if owner_tenure.player_data_id != player_data.pk:
+                    raise serializers.ValidationError(
+                        {
+                            "owner_tenure": (
+                                "You may only manage blacklist entries for your own tenures."
                             )
                         }
                     )

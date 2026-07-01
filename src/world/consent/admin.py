@@ -5,6 +5,7 @@ from django.contrib import admin
 from world.consent.models import (
     ConsentGroup,
     ConsentGroupMember,
+    SocialConsentBlacklist,
     SocialConsentCategory,
     SocialConsentCategoryRule,
     SocialConsentPreference,
@@ -76,3 +77,16 @@ class SocialConsentWhitelistAdmin(admin.ModelAdmin):
         "allowed_tenure__roster_entry__character__db_key",
     ]
     raw_id_fields = ["owner_tenure", "allowed_tenure", "category"]
+
+
+@admin.register(SocialConsentBlacklist)
+class SocialConsentBlacklistAdmin(admin.ModelAdmin):
+    """Admin interface for SocialConsentBlacklist (#1698)."""
+
+    list_display = ["owner_tenure", "blocked_tenure", "category", "added_at"]
+    list_filter = ["category"]
+    search_fields = [
+        "owner_tenure__roster_entry__character__db_key",
+        "blocked_tenure__roster_entry__character__db_key",
+    ]
+    raw_id_fields = ["owner_tenure", "blocked_tenure", "category"]

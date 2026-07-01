@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 
 from world.consent.constants import ConsentMode
 from world.consent.models import (
+    SocialConsentBlacklist,
     SocialConsentCategory,
     SocialConsentCategoryRule,
     SocialConsentPreference,
@@ -28,7 +29,7 @@ def set_social_consent_category_rule(
     category: SocialConsentCategory,
     mode: str,
 ) -> SocialConsentCategoryRule:
-    if mode not in {ConsentMode.EVERYONE, ConsentMode.ALLOWLIST}:
+    if mode not in ConsentMode.values:
         msg = f"Invalid consent mode '{mode}'."
         raise ValueError(msg)
     rule, _ = SocialConsentCategoryRule.objects.update_or_create(
@@ -83,6 +84,46 @@ def remove_social_consent_whitelist(
     return deleted > 0
 
 
+@transaction.atomic
+def add_social_consent_blacklist(
+    owner_tenure: RosterTenure,
+    blocked_tenure: RosterTenure,
+    category: SocialConsentCategory,
+) -> SocialConsentBlacklist:
+    """Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).
+
+    The "I'd rather not be antagonized by this specific person" surface — consulted only
+    when the owner's category rule is ALL_BUT_BLACKLIST. Weaker than a scenes.Block; the
+    blocked party is never told.
+    """
+    try:
+        entry, _ = SocialConsentBlacklist.objects.get_or_create(
+            owner_tenure=owner_tenure,
+            blocked_tenure=blocked_tenure,
+            category=category,
+        )
+        return entry
+    except IntegrityError:
+        return SocialConsentBlacklist.objects.get(
+            owner_tenure=owner_tenure,
+            blocked_tenure=blocked_tenure,
+            category=category,
+        )
+
+
+def remove_social_consent_blacklist(
+    owner_tenure: RosterTenure,
+    blocked_tenure: RosterTenure,
+    category: SocialConsentCategory,
+) -> bool:
+    deleted, _ = SocialConsentBlacklist.objects.filter(
+        owner_tenure=owner_tenure,
+        blocked_tenure=blocked_tenure,
+        category=category,
+    ).delete()
+    return deleted > 0
+
+
 def get_social_consent_summary(tenure: RosterTenure) -> dict:
     preference = SocialConsentPreference.objects.filter(tenure=tenure).first()
     rules = SocialConsentCategoryRule.objects.filter(
@@ -91,8 +132,12 @@ def get_social_consent_summary(tenure: RosterTenure) -> dict:
     whitelist = SocialConsentWhitelist.objects.filter(
         owner_tenure=tenure,
     ).select_related("allowed_tenure", "category")
+    blacklist = SocialConsentBlacklist.objects.filter(
+        owner_tenure=tenure,
+    ).select_related("blocked_tenure", "category")
     return {
         "preference": preference,
         "rules": list(rules),
         "whitelist": list(whitelist),
+        "blacklist": list(blacklist),
     }
