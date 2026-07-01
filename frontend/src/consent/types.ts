@@ -11,9 +11,13 @@ export type SocialConsentCategoryRuleModeEnum =
   components['schemas']['SocialConsentCategoryRuleModeEnum'];
 export type SocialConsentWhitelist = components['schemas']['SocialConsentWhitelist'];
 export type SocialConsentWhitelistRequest = components['schemas']['SocialConsentWhitelistRequest'];
+export type SocialConsentBlacklist = components['schemas']['SocialConsentBlacklist'];
+export type SocialConsentBlacklistRequest = components['schemas']['SocialConsentBlacklistRequest'];
 export type PaginatedSocialConsentCategoryList =
   components['schemas']['PaginatedSocialConsentCategoryList'];
 export type PaginatedSocialConsentCategoryRuleList =
   components['schemas']['PaginatedSocialConsentCategoryRuleList'];
 export type PaginatedSocialConsentWhitelistList =
   components['schemas']['PaginatedSocialConsentWhitelistList'];
+export type PaginatedSocialConsentBlacklistList =
+  components['schemas']['PaginatedSocialConsentBlacklistList'];

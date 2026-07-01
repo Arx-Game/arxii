@@ -1,7 +1,7 @@
 """Combat maneuver telnet command — the ``combat <subverb>`` namespace (#1453, #1452).
 
 A single command routes the non-cast/non-clash combat verbs (flee, cover,
-interpose, join, leave, ready, combo, revert, yield) through the shared
+interpose, succor, join, leave, ready, combo, revert, yield) through the shared
 ``dispatch_player_action`` seam — the same path the web uses. The verbs live
 under the ``combat`` namespace rather than as bare top-level keys because broad
 one-word keys (``join``/``leave``/``ready``/``cover``/``revert``) collide with
@@ -28,6 +28,7 @@ _SUBVERBS: dict[str, str] = {
     "flee": "combat_flee",
     "cover": "combat_cover",
     "interpose": "combat_interpose",
+    "succor": "combat_succor",
     "join": "combat_join",
     "leave": "combat_leave",
     "ready": "combat_ready",
@@ -37,7 +38,7 @@ _SUBVERBS: dict[str, str] = {
 }
 
 # subverbs that take a single name argument.
-_ALLY_SUBVERBS = {"cover", "interpose"}
+_ALLY_SUBVERBS = {"cover", "interpose", "succor"}
 
 
 class CmdCombat(_CombatCommandMixin, DispatchCommand):
@@ -48,6 +49,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat flee                 — declare a desperate flee this round
         combat cover <ally>         — cover an ally's escape
         combat interpose [ally]     — guard an ally (or any ally) from harm
+        combat succor <ally>        — shelter an ally from environmental hazards
         combat join                 — join the fight in your room
         combat leave                — leave an open encounter between rounds
         combat ready                — toggle your declared action as ready
@@ -90,6 +92,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         if self._subverb == "interpose":  # noqa: STRING_LITERAL
             ally = self._resolve_ally_pk(self._rest) if self._rest else None
             return {"ally_participant_id": ally}
+        if self._subverb == "succor":  # noqa: STRING_LITERAL
+            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
         if self._subverb == "combo":  # noqa: STRING_LITERAL
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         return {}
@@ -217,7 +221,7 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally], join, leave, ready, "
+            "flee, cover <ally>, interpose [ally], succor <ally>, join, leave, ready, "
             "combo <name>, revert, yield"
         ]
         participant = self._combat_participant_or_none()

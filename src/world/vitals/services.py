@@ -1119,24 +1119,38 @@ def _apply_round_tick_damage(
 
     Mirrors mechanics._deal_damage: decrement health, then run the survivability
     pipeline (acute tier — may wound/knockout/kill, which is correct for in-round
-    poison). No-op for targets without vitals.
+    poison). No-op for targets without vitals. Consults the target's active
+    Succor cover (#1744) before any further damage reduction is applied.
     """
     if not result.damage_dealt:
         return
     try:
-        vitals = target.sheet_data.vitals
+        sheet = target.sheet_data
+        vitals = sheet.vitals
     except (AttributeError, ObjectDoesNotExist):
         return
+    from actions.round_context import get_active_round_context  # noqa: PLC0415
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
     from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
+    round_ctx = get_active_round_context(sheet)
 
     for damage_type, amount in result.damage_dealt:
         if amount <= 0:
             continue
+        # Succor cover (#1744) — an ally's active shelter this round. Applied first,
+        # mirroring how INTERPOSE mitigates pre_payload.amount before any further
+        # reduction in the combat-attack path.
+        covered_amount = amount
+        if round_ctx is not None:
+            multiplier = round_ctx.get_cover_for(sheet, damage_type)
+            covered_amount = int(amount * multiplier)
+            if covered_amount <= 0:
+                continue
         effective = (
-            apply_damage_reduction_from_threads(target, amount)
+            apply_damage_reduction_from_threads(target, covered_amount)
             if hasattr(target, "threads")
-            else amount
+            else covered_amount
         )
         # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
         # Closes the asymmetry where DoT damage (poison, burning) ignored resistance.

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from world.conditions.services import has_condition
 from world.game_clock.constants import TimePhase
 from world.species.factories import ensure_sunlight_exposure_content
 from world.species.services import reconcile_sunlight_exposure
@@ -119,8 +120,64 @@ class ReconcileSunlightExposureTest(TestCase):
                 "world.species.services._has_sunlight_drawback",
                 return_value=True,
             ),
+            # Shelter (#1744) is a separate axis covered by its own real-fixture test class
+            # below; these mocked rooms have no real RoomProfile/AreaClosure to resolve it against.
+            patch(
+                "world.species.services._room_shelters_radiant",
+                return_value=False,
+            ),
         ]
         for p in patches:
             p.start()
         self.addCleanup(lambda: [p.stop() for p in patches])
         return char, room
+
+
+class ReconcileSunlightExposureLocationShelterTest(TestCase):
+    """Location-shelter (#1744): a shaded outdoor room suppresses Sunlight Exposure.
+
+    Uses real fixtures (not mocks) because the shelter gate reads a real
+    ``LocationValueOverride`` row through ``world.locations.services.hazard_is_covered``.
+    Stays on the SQLite fast tier: ``should_expose`` resolves False here, so
+    ``apply_condition``/``remove_condition`` (the PG-only ``DISTINCT ON`` path) never fire.
+    """
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import GiftFactory
+        from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
+
+        self.template = ensure_sunlight_exposure_content()
+
+        species = SpeciesFactory(name="Vampire")
+        gift = GiftFactory()
+        SpeciesGiftGrantFactory(species=species, gift=gift, drawback_condition=self.template)
+
+        self.room_profile = RoomProfileFactory(is_outdoor=True)
+        self.outdoor_room = self.room_profile.objectdb
+
+        sheet = CharacterSheetFactory(species=species)
+        self.vampire_character = sheet.character
+        self.vampire_character.db_location = self.outdoor_room
+        self.vampire_character.save(update_fields=["db_location"])
+
+    def test_shaded_outdoor_room_suppresses_sunlight_exposure(self):
+        from world.conditions.factories import ensure_radiant_damage_type
+        from world.locations.constants import KeyType
+        from world.locations.models import LocationValueOverride
+
+        radiant = ensure_radiant_damage_type()
+        LocationValueOverride.objects.create(
+            parent_type="room",
+            room_profile=self.outdoor_room.room_profile,
+            key_type=KeyType.DAMAGE_TYPE,
+            damage_type=radiant,
+            value=1,
+        )
+        with patch(
+            "world.species.services.get_ic_phase",
+            return_value=TimePhase.DAY,
+        ):
+            reconcile_sunlight_exposure(self.vampire_character, self.outdoor_room)
+        self.assertFalse(has_condition(self.vampire_character, self.template))

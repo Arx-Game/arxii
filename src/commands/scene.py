@@ -1,9 +1,10 @@
 """Telnet command for scene administration.
 
-Thin telnet face of three scene-lifecycle Actions:
+Thin telnet face of scene-lifecycle Actions:
     ``scene start [name]``               — StartSceneAction
     ``scene finish``                     — FinishSceneAction
     ``scene round <mode> [knobs]``       — SetRoundModeAction
+    ``scene succor <ally>``              — SuccorSceneAction (#1744)
     ``scene`` / ``scene status``         — one-line status read-out (no action)
     ``scene <unknown>``                  — usage message
 
@@ -28,6 +29,7 @@ _USAGE = (
     "  scene start [name]                — start a scene here\n"
     "  scene finish                      — finish the active scene\n"
     "  scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]\n"
+    "  scene succor <ally>               — shelter an ally from a hazard this round\n"
     "  scene / scene status              — show active scene + round status"
 )
 
@@ -66,6 +68,9 @@ class CmdScene(ArxCommand):
         ``scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]``
         Example: ``scene round strict quorum=70 cap=2 lock=on``
 
+    **Shelter an ally:**
+        ``scene succor <ally>`` — shelter an ally from an environmental hazard this round.
+
     **Show scene status:**
         ``scene`` or ``scene status``
     """
@@ -88,6 +93,8 @@ class CmdScene(ArxCommand):
             self._handle_finish()
         elif first == "round":  # noqa: STRING_LITERAL
             self._handle_round(rest)
+        elif first == "succor":  # noqa: STRING_LITERAL
+            self._handle_succor(rest)
         else:
             self.msg(_USAGE)
 
@@ -125,6 +132,18 @@ class CmdScene(ArxCommand):
             self.msg("Quorum and cap must be numbers.")
             return
         result = SetRoundModeAction().run(actor=self.caller, **kwargs)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_succor(self, rest: str) -> None:
+        """Dispatch SuccorSceneAction, forwarding the named ally."""
+        from actions.definitions.rounds import SuccorSceneAction  # noqa: PLC0415
+
+        ally_name = rest.strip()
+        if not ally_name:
+            self.msg("Usage: scene succor <ally>.")
+            return
+        result = SuccorSceneAction().run(actor=self.caller, ally_name=ally_name)
         if result.message:
             self.msg(result.message)
 

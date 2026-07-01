@@ -170,17 +170,18 @@ actions, backends, and service functions.
     consumed by `_resolve_clashes` in the round post-pass). `strain=<n>` commits
     extra anima beyond the technique's base cost (default 0). Pull params are parsed by
     the shared `_CombatCommandMixin` pull parser (same semantics as `cast`).
-- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452) — the shared-verb
+- **`combat_maneuvers.py`**: `CmdCombat` (`combat`, #1453/#1452, Succor #1744) — the shared-verb
   namespace. One command routes a leading subverb (`combat flee` / `cover <ally>` /
-  `interpose [ally]` / `join` / `leave` / `ready` / `combo <name>` / `revert` / `yield`)
-  to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` — the same
+  `interpose [ally]` / `succor <ally>` / `join` / `leave` / `ready` / `combo <name>` / `revert` /
+  `yield`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` — the same
   seam the web `CombatEncounterViewSet` uses. Bare `combat` prints a status hub — anima +
   soulfray stage (+ fury/Berserk when in an active round) alongside the declared action —
   mirroring the resource/risk visibility the web combat panel will show (#1543). Verbs are
   namespaced — not bare top-level keys — to avoid exit/channel/alias collisions (mirrors
   `CmdRitual`'s `ritual <subverb>` routing). Each verb wraps an existing
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
-  the existing `YieldAction`.
+  the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
+  environmental hazards this round (resolved at round-tick DoT application, not declaration).
 - **`duels.py`**: `CmdDuel` (`duel`, #1492) — the PC-vs-PC duel-lifecycle namespace. One command
   routes a leading subverb (`duel challenge <name>` / `accept [id]` / `decline [id]` /
   `withdraw [id]` / `risk`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` —

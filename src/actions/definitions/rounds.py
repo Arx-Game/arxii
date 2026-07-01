@@ -438,3 +438,58 @@ class ForceResolveRoundAction(Action):
 
         resolve_scene_round(rnd)
         return ActionResult(success=True, message="You force the round to resolve.")
+
+
+@dataclass
+class SuccorSceneAction(Action):
+    """Shelter a specific ally from environmental hazards in a non-combat scene round.
+
+    The scene-round sibling of world.actions.definitions.combat_maneuvers.SuccorAction —
+    wraps declare_succor_scene the same way that wraps declare_succor (#1744).
+    """
+
+    key: str = "scene_succor"
+    name: str = "Succor"
+    icon: str = "umbrella"
+    category: str = "scene"
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(  # noqa: PLR0911 — distinct guard returns, each a specific failure message
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        ally_name: str | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.round_services import declare_succor_scene  # noqa: PLC0415
+
+        room = actor.db_location
+        if room is None:
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
+        scene_round = _active_round_for_room(room)
+        if scene_round is None:
+            return ActionResult(success=False, message=NO_ACTIVE_ROUND_MESSAGE)
+        sheet = _sheet(actor)
+        if sheet is None:
+            return ActionResult(success=False, message=NO_CHARACTER_SHEET_MESSAGE)
+        participant = SceneRoundParticipant.objects.filter(
+            scene_round=scene_round,
+            character_sheet=sheet,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        ).first()
+        if participant is None:
+            return ActionResult(success=False, message="You are not an active participant here.")
+        if not ally_name:
+            return ActionResult(success=False, message="Succor requires an ally to shelter.")
+        ally = SceneRoundParticipant.objects.filter(
+            scene_round=scene_round,
+            status=SceneRoundParticipantStatus.ACTIVE,
+            character_sheet__character__db_key__iexact=ally_name,
+        ).first()
+        if ally is None:
+            return ActionResult(success=False, message=f"No active ally named '{ally_name}' here.")
+        try:
+            declare_succor_scene(participant, ally)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You move to shelter your ally.")

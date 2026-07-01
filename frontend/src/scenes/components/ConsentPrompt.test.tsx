@@ -152,6 +152,24 @@ describe('ConsentPrompt', () => {
     });
   });
 
+  it('clicking "Deny & block" calls respondToRequest with blacklist_actor: true (#1698)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
+    vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });
+    const user = userEvent.setup();
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    const denyBlock = await screen.findByRole('button', { name: /deny & block/i });
+    await user.click(denyBlock);
+
+    await waitFor(() => {
+      expect(respondToRequest).toHaveBeenCalledWith('42', 7, {
+        accept: false,
+        blacklist_actor: true,
+      });
+    });
+  });
+
   it('clicking Accept (neutral) calls respondToRequest with difficulty: normal', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({ results: [MOCK_REQUEST] });
     vi.mocked(respondToRequest).mockResolvedValue({ status: 'resolved' });

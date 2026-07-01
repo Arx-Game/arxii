@@ -142,6 +142,8 @@
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
   - consequence_effects <- checks.ConsequenceEffect
+  - cascade_overrides <- locations.LocationValueOverride
+  - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
   - threat_pool_entries <- combat.ThreatPoolEntry
   - combat_pull_resistances <- combat.CombatPullResolvedEffect
@@ -150,6 +152,7 @@
 **Foreign Keys:**
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
+  - resist_check_type -> checks.CheckType [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -157,6 +160,7 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - species_gift_drawbacks <- species.SpeciesGiftGrant
+  - species_gift_benefits <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
@@ -1009,6 +1013,7 @@
   - scene_check_modifiers <- scenes.SceneCheckModifier
   - professions <- currency.Profession
   - cures_conditions <- conditions.ConditionTemplate
+  - resists_condition_applications <- conditions.ConditionTemplate
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - treatmenttemplate_set <- conditions.TreatmentTemplate
@@ -1302,6 +1307,8 @@
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
   - consequence_effects <- checks.ConsequenceEffect
+  - cascade_overrides <- locations.LocationValueOverride
+  - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
   - threat_pool_entries <- combat.ThreatPoolEntry
   - combat_pull_resistances <- combat.CombatPullResolvedEffect
@@ -1310,6 +1317,7 @@
 **Foreign Keys:**
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
+  - resist_check_type -> checks.CheckType [FK] (nullable)
   - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
   - corruption_resonance -> magic.Resonance [FK] (nullable)
   - properties -> mechanics.Property [M2M]
@@ -1317,6 +1325,7 @@
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - species_gift_drawbacks <- species.SpeciesGiftGrant
+  - species_gift_benefits <- species.SpeciesGiftGrant
   - techniques_applying <- magic.Technique
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
@@ -2103,12 +2112,14 @@
   - area -> areas.Area [FK] (nullable)
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - damage_type -> conditions.DamageType [FK] (nullable)
 
 ### LocationValueModifier
 **Foreign Keys:**
   - area -> areas.Area [FK] (nullable)
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - damage_type -> conditions.DamageType [FK] (nullable)
 
 ### LocationOwnership
 **Foreign Keys:**
@@ -2137,12 +2148,13 @@
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' — Bulk-resolve stats for many rooms in one pass.`
-- `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None) -> 'int' — Cascade-resolve a single axis value (stat or resonance) for a room.`
+- `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' — Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' — Bulk-resolve cascade values across many rooms for one axis.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' — End a tenancy by setting ``ends_at``.`
 - `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
 - `grant_tenancy(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Create a new LocationTenancy row.`
+- `hazard_is_covered(room: 'DefaultObject', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' — Whether *room* grants shelter against *damage_type* (#1744).`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
@@ -3392,7 +3404,7 @@
 - `emit_terminal_rewards(instance: 'MissionInstance', route: 'MissionOptionRoute', deed: 'MissionDeedRecord') -> 'list[MissionDeedRewardLine]' — Emit one :class:`MissionDeedRewardLine` per (template × recipient).`
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' — Record entry into ``node`` and advance the run's position.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' — Return one :class:`JournalEntry` per mission this character is in.`
-- `on_mission_complete_for_beat(instance: 'MissionInstance') -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger (5b.3 stub-record).`
+- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None) -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' — Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' — Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
@@ -4292,6 +4304,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
 **Pointed to by:**
   - action_declarations <- scenes.SceneActionDeclaration
+  - succor_declarations <- scenes.SceneActionDeclaration
 
 ### SceneActionDeclaration
 **Foreign Keys:**
@@ -4300,6 +4313,7 @@
   - challenge_instance -> mechanics.ChallengeInstance [FK] (nullable)
   - challenge_approach -> mechanics.ChallengeApproach [FK] (nullable)
   - target_persona -> scenes.Persona [FK] (nullable)
+  - succor_target -> scenes.SceneRoundParticipant [FK] (nullable)
 
 ### SceneActionRequest
 **Foreign Keys:**
@@ -4984,6 +4998,7 @@
   - consequences <- checks.Consequence
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
+  - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
 
 ### ResultChart
 **Pointed to by:**

@@ -1,12 +1,9 @@
-"""Phase 5b.3 — terminal-path integration tests for the Mission→Beat seam.
+"""Terminal-path integration tests for the Mission→Beat seam.
 
 When ``_finish_terminal`` fires (the single chokepoint for SOLO and JOINT
 terminal completion), ``on_mission_complete_for_beat`` runs. With
-``source_beat`` set we expect exactly one trigger record per termination;
-with ``source_beat=None`` we expect none.
-
-These tests exercise the wiring, not the engine — there is no Beat-flip
-to assert in 5b.3.
+``source_beat`` set we expect exactly one trigger record per termination
+and a ``BeatCompletion``; with ``source_beat=None`` we expect none.
 """
 
 from unittest.mock import patch
@@ -33,8 +30,9 @@ from world.missions.factories import (
 )
 from world.missions.models import MissionGroupBallot, MissionInstance, MissionNode, MissionOption
 from world.missions.services import beat as beat_service, resolve_group_node, resolve_option
-from world.stories.factories import BeatFactory
-from world.stories.models import Beat
+from world.stories.constants import BeatOutcome, BeatPredicateType
+from world.stories.factories import BeatFactory, StoryProgressFactory
+from world.stories.models import Beat, BeatCompletion
 from world.traits.factories import CheckOutcomeFactory
 
 _PERFORM_CHECK = "world.missions.services.resolution.perform_check"
@@ -93,6 +91,12 @@ class SoloTerminalBeatSeamTests(TestCase):
 
     def test_solo_terminal_of_beat_bound_records_one_trigger(self) -> None:
         beat = BeatFactory()
+        # The beat needs an active StoryProgress for its story to complete.
+        story = beat.episode.chapter.story
+        sheet = self.character.sheet_data
+        story.character_sheet = sheet
+        story.save()
+        StoryProgressFactory(story=story, character_sheet=sheet)
         instance, entry, actor, option = self._make_terminal_run(source_beat=beat)
 
         # BRANCH option with no branch_target / null-tier route → terminal.
@@ -102,6 +106,10 @@ class SoloTerminalBeatSeamTests(TestCase):
         self.assertEqual(len(triggers), 1)
         self.assertEqual(triggers[0].instance_pk, instance.pk)
         self.assertEqual(triggers[0].beat_pk, beat.pk)
+        # BRANCH terminal → GM_MARKED beat resolved as SUCCESS.
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertTrue(BeatCompletion.objects.filter(beat=beat).exists())
 
     def test_solo_terminal_of_free_instance_records_no_trigger(self) -> None:
         instance, entry, actor, option = self._make_terminal_run(source_beat=None)
@@ -168,7 +176,13 @@ class JointTerminalBeatSeamTests(TestCase):
         return instance, node, picks
 
     def test_joint_terminal_of_beat_bound_records_one_trigger(self) -> None:
-        beat = BeatFactory()
+        # OUTCOME_TIER beat: the JOINT CHECK terminal has a graded outcome_tier.
+        beat = BeatFactory(predicate_type=BeatPredicateType.OUTCOME_TIER)
+        story = beat.episode.chapter.story
+        sheet = self.char_h.sheet_data
+        story.character_sheet = sheet
+        story.save()
+        StoryProgressFactory(story=story, character_sheet=sheet)
         instance, node, picks = self._setup_joint_run(source_beat=beat)
 
         # Every per-attempt perform_check returns success → JointCombine.ANY
@@ -187,3 +201,8 @@ class JointTerminalBeatSeamTests(TestCase):
         self.assertEqual(len(triggers), 1)
         self.assertEqual(triggers[0].instance_pk, instance.pk)
         self.assertEqual(triggers[0].beat_pk, beat.pk)
+        # Graded tier (success_level=3) → OUTCOME_TIER beat resolved as SUCCESS.
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        completion = BeatCompletion.objects.get(beat=beat)
+        self.assertEqual(completion.outcome_tier, self.success)

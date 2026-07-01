@@ -147,6 +147,11 @@ export async function respondToRequest(
      * persona id so the backend can record per-target acceptance.
      */
     target_persona_id?: number;
+    /**
+     * On deny, also add the initiator to this defender's antagonism blacklist for
+     * the action's category (#1698). No-op on accept / when the action has no category.
+     */
+    blacklist_actor?: boolean;
   }
 ): Promise<ActionRequestResponse> {
   // Backend ConsentResponseSerializer expects: { decision: "accept" | "deny" }
@@ -161,6 +166,9 @@ export async function respondToRequest(
   }
   if (body.resist_effort !== undefined) {
     requestBody.resist_effort = body.resist_effort;
+  }
+  if (body.blacklist_actor) {
+    requestBody.blacklist_actor = true;
   }
   const res = await apiFetch(`/api/action-requests/${requestId}/respond/`, {
     method: 'POST',

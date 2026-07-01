@@ -90,6 +90,23 @@ class RoundContext(ABC):
         round when quorum is met. Combat and other contexts leave this as a no-op.
         """
 
+    def get_cover_for(self, target: CharacterSheet, damage_type: Any) -> float:
+        """Return the tick-amount multiplier covering *target* against *damage_type* this round.
+
+        ``1.0`` = no active Succor cover (default). ``0.5`` = partial (Succor softened but
+        didn't stop the hazard). ``0.0`` = clean block. Grading happens entirely inside each
+        concrete implementation — callers (``_apply_round_tick_damage``) only ever see a
+        plain float, never a combat/scene-specific challenge-resolution type, so
+        ``world.conditions``/``world.vitals`` never depend on combat- or scene-specific
+        grading logic (#1744).
+
+        Default no-op (mirrors ``record_immediate_action``'s precedent): a round family that
+        doesn't implement Succor (e.g. ``BattleRoundContext``) simply grants no cover, exactly
+        as if no Succor declaration existed — no cover is a safe, always-correct default.
+        Overridden by ``CombatRoundContext`` and ``SceneRoundContext``.
+        """
+        return 1.0
+
 
 def get_active_round_context(character: CharacterSheet) -> RoundContext | None:
     """Return the active ``RoundContext`` for *character*, or ``None``.

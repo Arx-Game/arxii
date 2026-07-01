@@ -20,14 +20,15 @@ if TYPE_CHECKING:
 
 
 def reconcile_sunlight_exposure(character, room) -> None:
-    """Apply or remove the Sunlight Exposure condition based on outdoor + day-phase (#1588).
+    """Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter
+    (#1588, #1744).
 
     A character whose species grant wires a Sunlight-Exposure drawback takes radiant
-    DoT while outdoors during a daylight phase; indoors or at night the condition is
-    removed. When applied, ensures a danger scene round (the plummet pattern) so the
-    existing round-tick processes the DoT through the peril pipeline — AFK-safety
-    (ADR-0004/ADR-0049) holds unchanged: an unconscious victim flows into
-    ``abandonment_environmental``, never a raw death.
+    DoT while outdoors during a daylight phase; indoors, sheltered (location-shelter
+    cascade covers radiant), or at night the condition is removed. When applied, ensures
+    a danger scene round (the plummet pattern) so the existing round-tick processes the
+    DoT through the peril pipeline — AFK-safety (ADR-0004/ADR-0049) holds unchanged: an
+    unconscious victim flows into ``abandonment_environmental``, never a raw death.
 
     No-op for characters without a sheet or whose species has no sunlight drawback.
 
@@ -41,7 +42,7 @@ def reconcile_sunlight_exposure(character, room) -> None:
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is None or not _has_sunlight_drawback(sheet):
         return
-    outdoor = _room_is_outdoor(room)
+    outdoor = _room_is_outdoor(room) and not _room_shelters_radiant(room)
     phase = get_ic_phase()
     should_expose = outdoor and phase in {
         TimePhase.DAY,
@@ -54,6 +55,16 @@ def reconcile_sunlight_exposure(character, room) -> None:
         ensure_round_for_acute_condition(sheet)
     elif not should_expose and active:
         remove_condition(character, template)
+
+
+def _room_shelters_radiant(room) -> bool:
+    """Whether *room* grants location-shelter against radiant damage (#1744)."""
+    if room is None:
+        return False
+    from world.conditions.factories import ensure_radiant_damage_type  # noqa: PLC0415
+    from world.locations.services import hazard_is_covered  # noqa: PLC0415
+
+    return hazard_is_covered(room, ensure_radiant_damage_type())
 
 
 def _has_sunlight_drawback(sheet) -> bool:
@@ -95,6 +106,20 @@ def _species_and_ancestors(species):
     return chain
 
 
+def _apply_permanent_condition_once(character, condition) -> None:
+    """Apply *condition* to *character* once, idempotently (drawback/benefit conditions)."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    already_applied = ConditionInstance.objects.filter(
+        target=character,
+        condition=condition,
+        resolved_at__isnull=True,
+    ).exists()
+    if not already_applied:
+        apply_condition(character, condition)
+
+
 def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[CharacterGift]:
     """Mint the species' Minor Gift(s) + latent GIFT thread + any drawback. Idempotent.
 
@@ -104,7 +129,6 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
     Called from finalize_magic_data after the Major-gift cantrip block so the species
     gift thread anchors to the same resonance as the player's Major-gift thread.
     """
-    from world.conditions.services import apply_condition  # noqa: PLC0415
     from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
 
     if sheet.species_id is None:
@@ -112,7 +136,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
 
     species_pks = [s.pk for s in _species_and_ancestors(sheet.species)]
     grants = SpeciesGiftGrant.objects.filter(species_id__in=species_pks).select_related(
-        "gift", "drawback_condition"
+        "gift", "drawback_condition", "benefit_condition"
     )
     minted: list[CharacterGift] = []
     for grant in grants:
@@ -120,13 +144,7 @@ def provision_species_gifts(sheet: CharacterSheet, *, resonance=None) -> list[Ch
         cg, _ = grant_gift_to_character(sheet, grant.gift, resonance=res)
         minted.append(cg)
         if grant.drawback_condition_id is not None:
-            from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-            already_applied = ConditionInstance.objects.filter(
-                target=sheet.character,
-                condition=grant.drawback_condition,
-                resolved_at__isnull=True,
-            ).exists()
-            if not already_applied:
-                apply_condition(sheet.character, grant.drawback_condition)
+            _apply_permanent_condition_once(sheet.character, grant.drawback_condition)
+        if grant.benefit_condition_id is not None:
+            _apply_permanent_condition_once(sheet.character, grant.benefit_condition)
     return minted

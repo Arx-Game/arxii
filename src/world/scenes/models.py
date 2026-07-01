@@ -1390,6 +1390,19 @@ class SceneActionDeclaration(SharedMemoryModel):
         blank=True,
         related_name="targeted_scene_declarations",
     )
+    succor_target = models.ForeignKey(
+        "scenes.SceneRoundParticipant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="succor_declarations",
+        help_text="The participant this declaration shelters, when maneuver is Succor (#1744).",
+    )
+    succor_resolution = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Cached graded outcome of this round's Succor resolution (#1744).",
+    )
     is_immediate = models.BooleanField(
         default=False,
         help_text=(

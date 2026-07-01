@@ -86,6 +86,7 @@ class CombatManeuver(models.TextChoices):
     COVER = "cover", "Cover"
     YIELD = "yield", "Yield"
     INTERPOSE = "interpose", "Interpose"
+    SUCCOR = "succor", "Succor"
 
 
 class DuelChallengeStatus(models.TextChoices):
@@ -249,6 +250,16 @@ FLEE_PARTIAL_SUCCESS_LEVEL: int = -1
 # interpose declarations cost nothing. Scaled by the action's effort_level
 # multiplier inside apply_fatigue (same formula as other combat actions).
 INTERPOSE_BASE_FATIGUE_COST: int = 3
+
+# ---------------------------------------------------------------------------
+# Succor (#1744)
+# ---------------------------------------------------------------------------
+
+# Base fatigue cost charged to the succorer ONLY the first time Succor resolves
+# this round (fatigue is charged once per round, not once per hazard row — a
+# Succor declaration protects the target against every round-ticked hazard that
+# round, per the approved spec's Decision 8). Mirrors INTERPOSE_BASE_FATIGUE_COST.
+SUCCOR_BASE_FATIGUE_COST: int = 3
 
 # ---------------------------------------------------------------------------
 # Clash enums

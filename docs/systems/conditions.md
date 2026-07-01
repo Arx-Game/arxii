@@ -56,7 +56,7 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings, combat settings (`affects_turn_order`, `draws_aggro`), display settings |
+| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty`), apply-time resist-check (`resist_check_type`/`resist_difficulty`, #1738), combat settings (`affects_turn_order`, `draws_aggro`), display settings |
 | `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty`, `severity_multiplier` |
 
 **Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
@@ -157,6 +157,19 @@ result = apply_condition(
 )
 # result.success, result.instance, result.was_prevented, result.removed_conditions
 ```
+
+### Resisting Application (#1738)
+
+When `condition.resist_check_type` is set, `apply_condition`/`bulk_apply_conditions`
+roll the *target's* check against `resist_difficulty` before creating the instance.
+Success (SL > 0) means the target resisted — no instance is created, and the result
+carries `message="resisted"`. `resist_check_type=None` (the default) means
+unconditional application. Resistance strength comes from the existing check-modifier
+seam: a permanent condition (e.g. a species benefit condition, see
+`SpeciesGiftGrant.benefit_condition` in the species system doc) carrying a
+`ConditionCheckModifier` for the resist check type raises the target's roll —
+"math, not a boolean," per ADR-0066's tenet extended to the condition-application
+axis.
 
 ### Querying Modifiers
 

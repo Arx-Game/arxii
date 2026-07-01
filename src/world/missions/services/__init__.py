@@ -24,12 +24,11 @@ Public surface:
     walks ``applied=False`` :class:`MissionRewardQueue` rows. Both
     LP/Resonance grant helpers are stub-sealed in 5b.2 pending
     payload-enrichment work (DESIGN §13.3).
-  * :func:`on_mission_complete_for_beat` (Phase 5b.3) — Mission→Beat seam
-    called at terminal. 5b.3 lands the cross-app data shape (Beat.required_mission
-    and MissionInstance.source_beat FKs) and a stub-record service that
-    notes the trigger without flipping any Beat; the engine that actually
-    advances/resolves the Beat is deferred (see module docstring for the
-    three deferred product-level questions).
+  * :func:`on_mission_complete_for_beat` (Phase 5b.3 / #1747) — Mission→Beat
+    seam called at terminal. Completes the linked ``Beat`` via
+    ``record_outcome_tier_completion`` (graded tier) or
+    ``record_gm_marked_outcome(SUCCESS)`` (BRANCH terminal). Free-run
+    instances (``source_beat=None``) are a no-op.
 """
 
 from world.missions.services.beat import on_mission_complete_for_beat

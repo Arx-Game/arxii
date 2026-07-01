@@ -492,6 +492,41 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Source:** `src/world/areas/`
 - **Details:** [areas.md](areas.md)
 
+### Locations (Ambient Value Cascade)
+Authored substrate for room/area values that cascade through the `Area`/`AreaClosure` hierarchy:
+ambient stats (crime, order, lighting, climate-driven exposure), magical resonance magnitudes, and
+(#1744) per-hazard damage-type shelter — plus deed/tenancy ownership tracking.
+
+- **Models:** `LocationValueOverride` (absolute claim, most-specific wins), `LocationValueModifier`
+  (additive, `change_per_day` decay/growth), `LocationOwnership` (deed/title, cascades
+  most-specific-wins), `LocationTenancy` (granted use right, ALL applicable rows collected, not
+  most-specific-wins)
+- **Enums:** `StatKey` (CRIME/ORDER/LIGHTING/NOISE/AMENITY/COLD/HEAT/WET/WIND/DRY/…),
+  `LocationParentType` (AREA/ROOM), `key_type` discriminator (STAT/RESONANCE/DAMAGE_TYPE — selects
+  `stat_key` CharField vs `resonance` FK (`magic.Resonance`) vs `damage_type` FK
+  (`conditions.DamageType`)), `HolderType` (PERSONA/ORGANIZATION)
+- **Damage-type axis (#1744):** hazard shelter per room, generic across any `conditions.DamageType`
+  row — adding a new hazard needs zero new discriminator code, only new `LocationValueModifier`/
+  `LocationValueOverride` rows. `hazard_is_covered(room, damage_type, *, threshold=1)` is the
+  read-side hard boolean gate ("does the hazard reach this place at all"), distinct from
+  `ConditionResistanceModifier` arithmetic ("how much damage gets through") — see ADR-0069.
+- **Key Functions:** `effective_value(room, stat_key=… | resonance=… | damage_type=…)` (single-axis
+  polymorphic read), `effective_values_for_rooms()` (bulk), `hazard_is_covered()`,
+  `felt_exposure()`/`room_discomfort()`/`comfort_points()`/`comfort_level()` (climate → comfort
+  cascade, #1514/#1522), `character_comfort_summary()`/`comfort_mitigation()` (per-character
+  readout), `effective_owner()`/`current_tenants()`/`ownership_for()`/`is_owner()`/`tenancies_for()`/
+  `is_tenant()` (ownership/tenancy lookups)
+- **API:** `GET /api/locations/comfort/?character_id=<id>` (`ComfortViewSet`) — personal comfort
+  readout, tenure-gated
+- **Frontend:** `ComfortWidget` (`frontend/src/comfort/`) — silent unless something is biting
+- **Integrates with:** areas (`AreaClosure` cascade walk), magic (resonance axis feeds Sanctum
+  income, `world/magic/CLAUDE.md`), conditions (`DamageType` FK for the hazard-shelter axis),
+  weather (`Climate` folds into exposure axes, `world/weather/CLAUDE.md`), items
+  (`GarmentMitigation` feeds per-character comfort mitigation), mechanics (`CharacterModifier`
+  comfort-mitigation targets)
+- **Source:** `src/world/locations/`
+- **Details:** `src/world/locations/CLAUDE.md`
+
 ### Positioning (#530 + #1017 + #1018)
 Room-anchored spatial graph: named position nodes, traversable edges, per-object
 occupancy, capability-gated movement, GM terrain blueprints, non-combat scene
@@ -847,7 +882,8 @@ action consent flow, and a three-mode non-combat round framework.
   `SceneActionDeclaration`
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
   deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
-  `max_actions_per_round`), `SceneRoundParticipant`
+  `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
+  cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -888,6 +924,22 @@ action consent flow, and a three-mode non-combat round framework.
       `resolve_abandonment`; wired into `typeclasses.rooms.Room.at_object_leave`. `departing` is
       excluded from the rescuer check so the mover is not counted as a remaining rescuer.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
+  - **Scene-round Succor (#1744) — the non-combat sibling of combat's Succor maneuver:**
+    - `declare_succor_scene(participant, ally)` (`round_services.py`) — writes/updates a deferred
+      `SceneActionDeclaration.succor_target` for the current round; always names a specific ally
+      (mirrors `world.combat.services.declare_succor`).
+    - `ensure_succor_challenges_for_round(scene_round)` (`succor_content.py`) — round-resolution
+      pre-pass: binds a Succor `ChallengeInstance` to each protected ally declared this round.
+      Called from `resolve_scene_round` right before `_resolve_scene_declarations`. No prior
+      scene-round "bind a reactive challenge" plumbing existed — this is the scene-round
+      equivalent of combat's `_ensure_succor_challenges`, keyed off
+      `SceneActionDeclaration.succor_target` instead of `CombatRoundAction`.
+    - `SceneRoundContext.get_cover_for(target, damage_type)` (`round_context.py`) — resolves and
+      caches this round's Succor cover multiplier on `SceneActionDeclaration.succor_resolution`,
+      mirroring `CombatRoundContext.get_cover_for`'s caching contract.
+    - `SuccorSceneAction` (`actions/definitions/rounds.py`, key `"scene_succor"`) — the REGISTRY
+      dispatch surface wrapping `declare_succor_scene`; shared by telnet `scene succor <ally>`
+      (`CmdScene`) and the web dispatcher.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
@@ -1645,7 +1697,7 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE; plus the
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
@@ -1702,6 +1754,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows for armed INTERPOSE actions each round
+  - `declare_succor(participant, ally)` — arm a SUCCOR `CombatRoundAction` sheltering a
+    specific ally from a round-ticked environmental hazard (#1744); unlike Interpose, Succor
+    always names a specific ally (no "any ally" path)
+  - `dispatch_succor(succorer, protected, approach)` — thin wrapper over
+    `dispatch_capability_reaction`; calls `apply_succor_outcome` to derive the tick-amount
+    multiplier
+  - `_ensure_succor_challenges(encounter, pc_actions)` — idempotently mints
+    `ChallengeInstance` rows bound to each protected ally for armed SUCCOR actions each round
+- **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
+  `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
+  rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
+  into `world.combat` for a domain-agnostic concept). `apply_succor_outcome` maps a graded
+  Succor resolution to a float multiplier (clean block → 0.0, partial → 0.5, fail → 1.0);
+  consumed by round-tick hazard damage instead of mutating a payload in place (Interpose's
+  shape). Both `world.combat.services.dispatch_succor` and
+  `world.scenes.round_context.SceneRoundContext.get_cover_for` import from here.
   - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
     `TriggerHandler.refresh()` on each active participant so passive-installed reactive
     triggers (e.g. Shielded) fire in the same round
@@ -1713,11 +1781,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
     (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
     consequence
+  - `ensure_succor_content()` (`src/world/combat/succor_content.py`) — idempotent seed for
+    the SUCCOR `ChallengeTemplate`, reusing the same four capability-gated `Application` rows
+    Interpose seeds + a dedicated exploration `CheckType` + SUCCESS-tier DESTROY consequence
   - `ensure_defend_content()` (`src/world/combat/defend_content.py`) — idempotent seed for
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
-- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE), `RoundStatus` (shared with
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
@@ -1793,7 +1864,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   an enemy-vs-pvp pool (`select_surrounded_terminal_pool`, ADR-0023-safe); a new
   `BattleActionKind.RESCUE` clears an ally's Surrounded condition
   (`_resolve_rescue_success`), declared via `battle declare rescue <ally> with
-  <technique>`. See ADR-0069 for the AFK-safety exception.
+  <technique>`. See ADR-0070 for the AFK-safety exception.
 - **Deferred follow-ups:** battle writeup page (#1735), rich type-matchups (#1711),
   command hierarchy / naval / aerial / siege (#1710, #1713, #1714), campaign propagation
   (#1716).

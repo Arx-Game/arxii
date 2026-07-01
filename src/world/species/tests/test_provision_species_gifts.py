@@ -124,6 +124,17 @@ class ProvisionSpeciesGiftsTests(TestCase):
             "No condition should be applied when grant has no drawback_condition",
         )
 
+    def test_no_condition_when_no_benefit(self):
+        """A grant without benefit_condition applies no extra ConditionInstance."""
+        from world.conditions.models import ConditionInstance
+
+        sheet = CharacterSheetFactory(species=self.parent_species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+        self.assertFalse(
+            ConditionInstance.objects.filter(target=sheet.character).exists(),
+            "No condition should be applied when grant has no benefit_condition",
+        )
+
 
 class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
     """Integration: finalize_magic_data wires provision_species_gifts (SQLite-safe)."""
@@ -236,4 +247,111 @@ class ProvisionSpeciesGiftsDrawbackTest(TestCase):
             instances.first().stacks,
             1,
             "Guard must prevent stacks from incrementing on re-finalize",
+        )
+
+
+@tag("postgres")
+class ProvisionSpeciesGiftsBenefitTest(TestCase):
+    """Benefit condition tests. PG-only: apply_condition uses DISTINCT ON via
+    _build_bulk_context. Run on CI's postgres shard. Do NOT run on SQLite fast tier.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.conditions.factories import ConditionTemplateFactory
+
+        cls.benefit = ConditionTemplateFactory(name="Test Vampiric Will")
+        cls.resonance = ResonanceFactory()
+        cls.minor_gift = GiftFactory(name="Test Vampiric Benefit Gift", kind=GiftKind.MINOR)
+        cls.minor_gift.resonances.add(cls.resonance)
+        cls.species = SpeciesFactory(name="TestVampireBenefit")
+        SpeciesGiftGrantFactory(
+            species=cls.species, gift=cls.minor_gift, benefit_condition=cls.benefit
+        )
+
+    def test_benefit_applied_when_set(self):
+        """A grant with benefit_condition applies a ConditionInstance to the character."""
+        from world.conditions.models import ConditionInstance
+
+        sheet = CharacterSheetFactory(species=self.species)
+        provision_species_gifts(sheet, resonance=self.resonance)
+
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=sheet.character,
+                condition=self.benefit,
+            ).exists(),
+            "Benefit condition should be applied to the character when the grant has one",
+        )
+
+    def test_benefit_idempotent_for_stackable_template(self):
+        """Re-calling provision_species_gifts does not stack a stackable benefit condition."""
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionInstance
+
+        stackable_benefit = ConditionTemplateFactory(
+            name="Test Stackable Species Benefit",
+            is_stackable=True,
+            max_stacks=5,
+        )
+        resonance = ResonanceFactory()
+        minor_gift = GiftFactory(name="Test Gift With Stackable Benefit", kind=GiftKind.MINOR)
+        minor_gift.resonances.add(resonance)
+        species = SpeciesFactory(name="TestStackableBenefitSpecies")
+        SpeciesGiftGrantFactory(
+            species=species, gift=minor_gift, benefit_condition=stackable_benefit
+        )
+        sheet = CharacterSheetFactory(species=species)
+
+        provision_species_gifts(sheet, resonance=resonance)
+        provision_species_gifts(sheet, resonance=resonance)
+
+        instances = ConditionInstance.objects.filter(
+            target=sheet.character,
+            condition=stackable_benefit,
+            resolved_at__isnull=True,
+        )
+        self.assertEqual(instances.count(), 1, "Guard must prevent a second ConditionInstance")
+        self.assertEqual(
+            instances.first().stacks,
+            1,
+            "Guard must prevent stacks from incrementing on re-finalize",
+        )
+
+    def test_benefit_condition_check_modifier_reaches_modifier_seam(self):
+        """The species benefit condition's ConditionCheckModifier is picked up by
+        get_check_modifier for the resist check type — no mocking, proves the
+        existing modifier seam (condition_contributions) does the work for free.
+        """
+        from world.checks.factories import CheckTypeFactory
+        from world.conditions.factories import (
+            ConditionCheckModifierFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.services import get_check_modifier
+
+        resist_check = CheckTypeFactory()
+        benefit_with_modifier = ConditionTemplateFactory(name="Test Resolute Will")
+        ConditionCheckModifierFactory(
+            condition=benefit_with_modifier,
+            check_type=resist_check,
+            modifier_value=1000,
+        )
+        resonance = ResonanceFactory()
+        minor_gift = GiftFactory(name="Test Gift With Check Modifier Benefit", kind=GiftKind.MINOR)
+        minor_gift.resonances.add(resonance)
+        species = SpeciesFactory(name="TestResoluteWillSpecies")
+        SpeciesGiftGrantFactory(
+            species=species, gift=minor_gift, benefit_condition=benefit_with_modifier
+        )
+        sheet = CharacterSheetFactory(species=species)
+
+        provision_species_gifts(sheet, resonance=resonance)
+
+        result = get_check_modifier(sheet, resist_check)
+        self.assertEqual(
+            result.total_modifier,
+            1000,
+            "Species benefit condition's ConditionCheckModifier should reach "
+            "get_check_modifier for the resist check type",
         )

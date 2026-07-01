@@ -526,6 +526,24 @@ class TestRecordDeclarationChallengeStaleRef(django.test.TestCase):
         self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
 
 
+class TestGetCoverForDefault(django.test.TestCase):
+    """RoundContext.get_cover_for's base default returns 1.0 (no cover).
+
+    BattleRoundContext does not override get_cover_for — confirms the base
+    class's default keeps it instantiable and returns "no cover" (1.0),
+    mirroring record_immediate_action's existing precedent.
+    """
+
+    def test_base_default_returns_no_cover(self) -> None:
+        from world.battles.factories import BattleParticipantFactory
+        from world.battles.round_context import BattleRoundContext
+
+        participant = BattleParticipantFactory()
+        ctx = BattleRoundContext(participant)
+        result = ctx.get_cover_for(participant.character_sheet, damage_type=None)
+        self.assertEqual(result, 1.0)
+
+
 class TestRecordDeclarationChallengeApproachStaleRef(django.test.TestCase):
     """CHALLENGE record_declaration with a deleted ChallengeApproach pk → UNKNOWN_ACTION_REF.
 

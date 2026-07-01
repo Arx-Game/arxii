@@ -407,6 +407,77 @@ class CombatRoundContext(RoundContext):
             },
         )
 
+    def get_cover_for(self, target: CharacterSheet, damage_type: Any) -> float:  # noqa: ARG002
+        """Resolve (and cache) this round's Succor cover for *target* (#1744).
+
+        Looks up the ``CombatRoundAction`` declaring ``SUCCOR`` for *target* this
+        round. Resolves the succorer's capability challenge via ``dispatch_succor``
+        on first call and caches the graded multiplier on
+        ``CombatRoundAction.succor_resolution`` — subsequent calls for additional
+        hazard rows the same round return the cached value without re-rolling or
+        re-charging fatigue, per the approved spec's Decision 8.
+
+        Returns ``1.0`` (no cover) whenever the encounter is not RESOLVING, the
+        target has no ACTIVE participant, or no armed SUCCOR declaration names
+        them this round.
+        """
+        from world.combat.constants import (  # noqa: PLC0415
+            SUCCOR_BASE_FATIGUE_COST,
+            ActionCategory,
+            CombatManeuver,
+        )
+        from world.combat.services import dispatch_succor  # noqa: PLC0415
+        from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+        if self._encounter.status != RoundStatus.RESOLVING:
+            return 1.0
+
+        target_participant = CombatParticipant.objects.filter(
+            character_sheet=target,
+            encounter=self._encounter,
+            status=ParticipantStatus.ACTIVE,
+        ).first()
+        if target_participant is None:
+            return 1.0
+
+        action = (
+            CombatRoundAction.objects.filter(
+                participant__encounter=self._encounter,
+                round_number=self._encounter.round_number,
+                maneuver=CombatManeuver.SUCCOR,
+                focused_ally_target=target_participant,
+                participant__status=ParticipantStatus.ACTIVE,
+            )
+            .select_related("participant__character_sheet__character")
+            .first()
+        )
+        if action is None:
+            return 1.0
+
+        if action.succor_resolution is not None:
+            return action.succor_resolution
+
+        succorer = action.participant.character_sheet.character
+        protected = target_participant.character_sheet.character
+        multiplier = dispatch_succor(succorer, protected, approach=None)
+
+        action.succor_resolution = multiplier
+        action.save(update_fields=["succor_resolution"])
+
+        if multiplier < 1.0:
+            # Only charge fatigue when Succor actually produced some cover (clean
+            # block or partial) — mirrors _try_interpose's "charge fatigue to the
+            # interposer ONLY on fire" contract. The 1.0 sentinel means no active
+            # challenge/approach was found, i.e. Succor accomplished nothing.
+            fatigue_category = action.focused_category or ActionCategory.PHYSICAL
+            apply_fatigue(
+                action.participant.character_sheet,
+                fatigue_category,
+                SUCCOR_BASE_FATIGUE_COST,
+                action.effort_level,
+            )
+        return multiplier
+
 
 def resolve_combat_round_context(character: CharacterSheet) -> CombatRoundContext | None:
     """Find the character's current active ``CombatParticipant`` and return a context.

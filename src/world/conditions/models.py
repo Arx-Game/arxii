@@ -274,6 +274,19 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         default=10,
         help_text="Base difficulty to cure via check",
     )
+    resist_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resists_condition_applications",
+        help_text="Check type the target rolls to resist this condition being "
+        "applied, if any. Null = unconditional application.",
+    )
+    resist_difficulty = models.PositiveIntegerField(
+        default=10,
+        help_text="Base difficulty for the target's resist check.",
+    )
 
     # === Combat Relevance ===
     affects_turn_order = models.BooleanField(
