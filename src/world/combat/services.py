@@ -2781,21 +2781,17 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # Inlined here rather than a flow subscriber because the flow/event
     # system dispatches on FlowDefinition rows, not Python callables
     # (see Phase 13 Open Item 3). Reads handler caches; near-zero cost.
-    from world.magic.services import (  # noqa: PLC0415
-        apply_damage_reduction_from_threads,
-        gift_thread_resistance,
-    )
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
 
     effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
 
-    if damage_type is not None:
-        # Damage-type-specific resistance: the species drawback's negative
-        # ConditionResistanceModifier (vulnerability) and the species-gift thread's
-        # positive RESISTANCE pull-effect are summed into one clamped subtraction so
-        # they net correctly (#1580).
-        resistance = character.conditions.resistance_modifier(damage_type)
-        resistance += gift_thread_resistance(character, damage_type)
-        effective_damage = max(0, effective_damage - resistance)
+    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+    # The species drawback's negative ConditionResistanceModifier (vulnerability) and
+    # the species-gift thread's positive RESISTANCE pull-effect net here. None
+    # damage_type is a no-op. Mirrors the three non-combat damage seams that now call
+    # the same function.
+    effective_damage = resolve_damage_type_resistance(character, effective_damage, damage_type)
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
     # armor is their only soak source, and absorbing pieces take durability wear.
