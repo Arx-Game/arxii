@@ -2,11 +2,27 @@
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from evennia.utils.test_resources import EvenniaTestCase
 
-from world.combat.beat_wiring import classify_battle_outcome
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.beat_wiring import (
+    classify_battle_outcome,
+    install_encounter_beat_trigger,
+    wire_encounter_beat_triggers,
+)
 from world.combat.constants import EncounterOutcome, RiskLevel
 from world.combat.factories import CombatEncounterFactory
 from world.combat.models import EncounterOutcomeMapping
+from world.combat.services import complete_encounter
+from world.stories.constants import BeatOutcome, BeatPredicateType, StoryScope
+from world.stories.factories import (
+    BeatFactory,
+    ChapterFactory,
+    EpisodeFactory,
+    EpisodeSceneFactory,
+    StoryFactory,
+    StoryProgressFactory,
+)
 from world.traits.models import CheckOutcome
 
 
@@ -86,3 +102,71 @@ class ClassifyBattleOutcomeTests(TestCase):
         encounter = CombatEncounterFactory(outcome="")
         with self.assertRaises(ValueError):
             classify_battle_outcome(encounter)
+
+
+class EncounterCompletedBeatWiringTests(EvenniaTestCase):
+    """Integration: ENCOUNTER_COMPLETED resolves a linked OUTCOME_TIER beat."""
+
+    def setUp(self) -> None:
+        wire_encounter_beat_triggers()  # seed TriggerDefinition + FlowDefinition
+
+    def test_victory_resolves_linked_beat(self) -> None:
+        """A victorious encounter with a linked OUTCOME_TIER beat completes it."""
+        tier = CheckOutcome.objects.create(name="Victory Wire", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=tier,
+        )
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_fled_resolves_to_pending_gm_review(self) -> None:
+        """A fled encounter resolves the linked beat to PENDING_GM_REVIEW."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.FLED)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
+
+    def test_no_linked_beat_noops(self) -> None:
+        """An encounter whose scene has no OUTCOME_TIER beat completes without error."""
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+        )
+        install_encounter_beat_trigger(encounter)
+        # No EpisodeScene linking this scene to any beat — must not raise.
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
