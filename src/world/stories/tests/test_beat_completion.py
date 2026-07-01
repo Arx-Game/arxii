@@ -164,10 +164,12 @@ class BeatCompletionOutcomeTierTests(EvenniaTestCase):
     """BeatCompletion.outcome_tier is an optional FK to CheckOutcome."""
 
     def test_outcome_tier_defaults_to_none(self) -> None:
+        """BeatCompletion.outcome_tier defaults to None when unset."""
         completion = BeatCompletionFactory()
         assert completion.outcome_tier is None
 
     def test_outcome_tier_can_be_set(self) -> None:
+        """BeatCompletion.outcome_tier can be set and persists across refresh_from_db."""
         tier = CheckOutcomeFactory(name="Decisive Victory", success_level=6)
         completion = BeatCompletionFactory(outcome_tier=tier)
         completion.refresh_from_db()
