@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from world.magic.models import CharacterAura, CharacterResonance
+from world.magic.models import AuraAffinityThreshold, CharacterAura, CharacterResonance
 from world.magic.types import AffinityType, AuraDrift, AuraPercentages
 from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 
@@ -135,7 +135,9 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
 
     grand_total = sum(totals.values())
     if grand_total == 0:
-        return AuraDrift(before=before, after=before)
+        drift = AuraDrift(before=before, after=before)
+        fire_aura_threshold_crossings(character_sheet, drift)
+        return drift
 
     aura.celestial = Decimal(totals["celestial"]) / Decimal(grand_total) * 100
     aura.primal = Decimal(totals["primal"]) / Decimal(grand_total) * 100
@@ -172,4 +174,68 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
         primal=float(aura.primal),
         abyssal=float(aura.abyssal),
     )
-    return AuraDrift(before=before, after=after)
+    drift = AuraDrift(before=before, after=after)
+    fire_aura_threshold_crossings(character_sheet, drift)
+    return drift
+
+
+def _achievement_gate_passes(achievement, character_sheet: CharacterSheet) -> bool:
+    """True if every AchievementRequirement on `achievement` is met by `character_sheet`.
+
+    No requirements at all => passes (this mirrors an authored achievement with
+    zero stat gates, i.e. the crossing itself is the only condition).
+    """
+    from world.achievements.models import AchievementRequirement  # noqa: PLC0415
+    from world.achievements.services import get_stat  # noqa: PLC0415
+
+    reqs = list(AchievementRequirement.objects.filter(achievement=achievement))
+    return all(req.is_met(get_stat(character_sheet, req.stat)) for req in reqs)
+
+
+def fire_aura_threshold_crossings(character_sheet: CharacterSheet, drift: AuraDrift) -> None:
+    """Grant achievements for any AuraAffinityThreshold crossed by this drift.
+
+    For each affinity, checks whether `drift.after`'s percentage for that
+    affinity crossed any authored threshold_percent in (before, after].
+    Idempotent (skips already-earned achievements, mirroring
+    world.covenants.discovery._fire_one). Compound gates (an achievement's own
+    AchievementRequirement rows) are checked via the character's own stat
+    values before granting.
+
+    Called from recompute_aura() itself (so any caller — grant_resonance() or a
+    direct test/service call — gets the crossing check without remembering to
+    wire it separately).
+    """
+    from world.achievements.models import CharacterAchievement  # noqa: PLC0415
+    from world.achievements.services import grant_achievement  # noqa: PLC0415
+
+    per_affinity_after = {
+        AffinityType.CELESTIAL: drift.after.celestial,
+        AffinityType.PRIMAL: drift.after.primal,
+        AffinityType.ABYSSAL: drift.after.abyssal,
+    }
+    per_affinity_before = {
+        AffinityType.CELESTIAL: drift.before.celestial,
+        AffinityType.PRIMAL: drift.before.primal,
+        AffinityType.ABYSSAL: drift.before.abyssal,
+    }
+
+    for affinity, after_value in per_affinity_after.items():
+        before_value = per_affinity_before[affinity]
+        if after_value <= before_value:
+            continue
+        thresholds = AuraAffinityThreshold.objects.filter(
+            affinity=affinity,
+            threshold_percent__gt=before_value,
+            threshold_percent__lte=after_value,
+            discovery_achievement__isnull=False,
+        ).select_related("discovery_achievement")
+        for threshold in thresholds:
+            achievement = threshold.discovery_achievement
+            if CharacterAchievement.objects.filter(
+                character_sheet=character_sheet, achievement=achievement
+            ).exists():
+                continue
+            if not _achievement_gate_passes(achievement, character_sheet):
+                continue
+            grant_achievement(achievement, [character_sheet])

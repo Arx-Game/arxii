@@ -158,9 +158,18 @@ def grant_resonance(  # noqa: PLR0913
         source_mission_deed_reward_line=mission_deed_reward_line,
     )
 
-    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+    from world.magic.services.aura import (  # noqa: PLC0415
+        fire_aura_threshold_crossings,
+        recompute_aura,
+    )
 
-    recompute_aura(character_sheet)
+    # recompute_aura() already fires threshold crossings internally for any
+    # caller (see world.magic.services.aura); this explicit call is a cheap,
+    # idempotent safety net keeping the grant_resonance() call site self-
+    # documenting about the achievement hook it triggers (#1737).
+    drift = recompute_aura(character_sheet)
+    if drift is not None:
+        fire_aura_threshold_crossings(character_sheet, drift)
 
     return cr
 

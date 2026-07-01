@@ -187,3 +187,35 @@ class CharacterAffinityTotal(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character}: {self.affinity.name} = {self.total}"
+
+
+class AuraAffinityThreshold(SharedMemoryModel):
+    """Authored affinity-percentage threshold that grants an achievement on crossing.
+
+    Checked by fire_aura_threshold_crossings after every recompute_aura() call
+    (#1737). Mirrors the fire_variant_discoveries pattern (direct before/after
+    check, not a Flows event) — see world/covenants/discovery.py.
+    """
+
+    affinity = models.CharField(max_length=16, choices=AffinityType.choices)
+    threshold_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text="Percentage (0-100) this affinity must cross to fire.",
+    )
+    discovery_achievement = models.ForeignKey(
+        "achievements.Achievement",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="aura_affinity_thresholds",
+    )
+
+    class Meta:
+        unique_together = (("affinity", "threshold_percent"),)
+        verbose_name = "Aura Affinity Threshold"
+        verbose_name_plural = "Aura Affinity Thresholds"
+
+    def __str__(self) -> str:
+        return f"{self.affinity} >= {self.threshold_percent}%"

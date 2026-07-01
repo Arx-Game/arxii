@@ -118,3 +118,71 @@ class RecomputeAuraTests(TestCase):
                 for value in (aura.celestial, aura.primal, aura.abyssal):
                     assert Decimal("0.00") <= value <= Decimal("100.00")
                 assert aura.celestial + aura.primal + aura.abyssal == Decimal("100.00")
+
+
+class FireAuraThresholdCrossingsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        CharacterAuraFactory(character=cls.sheet.character)
+        cls.abyssal = AffinityFactory(name="Abyssal")
+        cls.abyssal_resonance = ResonanceFactory(affinity=cls.abyssal)
+
+    def test_crossing_a_threshold_grants_the_achievement(self):
+        from world.achievements.factories import AchievementFactory
+        from world.achievements.models import CharacterAchievement
+        from world.magic.models import AuraAffinityThreshold
+        from world.magic.services.aura import recompute_aura
+        from world.magic.types import AffinityType
+
+        achievement = AchievementFactory(is_active=True)
+        AuraAffinityThreshold.objects.create(
+            affinity=AffinityType.ABYSSAL,
+            threshold_percent=Decimal("50.00"),
+            discovery_achievement=achievement,
+        )
+        CharacterResonance.objects.create(
+            character_sheet=self.sheet,
+            resonance=self.abyssal_resonance,
+            balance=100,
+            lifetime_earned=100,
+        )
+        recompute_aura(self.sheet)  # this call itself fires the crossing check
+        assert CharacterAchievement.objects.filter(
+            character_sheet=self.sheet, achievement=achievement
+        ).exists()
+
+    def test_compound_gate_blocks_grant_when_stat_requirement_unmet(self):
+        from world.achievements.constants import ComparisonType
+        from world.achievements.factories import (
+            AchievementFactory,
+            AchievementRequirementFactory,
+            StatDefinitionFactory,
+        )
+        from world.achievements.models import CharacterAchievement
+        from world.magic.models import AuraAffinityThreshold
+        from world.magic.services.aura import recompute_aura
+        from world.magic.types import AffinityType
+
+        allure = StatDefinitionFactory()
+        achievement = AchievementFactory(is_active=True)
+        AchievementRequirementFactory(
+            achievement=achievement, stat=allure, threshold=50, comparison=ComparisonType.GTE
+        )
+        AuraAffinityThreshold.objects.create(
+            affinity=AffinityType.ABYSSAL,
+            threshold_percent=Decimal("50.00"),
+            discovery_achievement=achievement,
+        )
+        CharacterResonance.objects.create(
+            character_sheet=self.sheet,
+            resonance=self.abyssal_resonance,
+            balance=100,
+            lifetime_earned=100,
+        )
+        # No StatTracker row for `allure` on self.sheet — get_stat() returns 0,
+        # which fails the >=50 requirement.
+        recompute_aura(self.sheet)
+        assert not CharacterAchievement.objects.filter(
+            character_sheet=self.sheet, achievement=achievement
+        ).exists()
