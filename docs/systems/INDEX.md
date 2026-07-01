@@ -113,6 +113,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `endorsable_resonances`, `pose_endorsers`/`my_pose_endorsement`,
     `entry_endorsers`/`entry_endorsed_by_me` on every `GET /api/interactions/?scene=<id>`
     row. Frontend: `EndorsementControl` in `PoseUnit` (`frontend/src/scenes/components/`).
+  - **Aura drift (#1737):** `CharacterAura`'s stored percentages recompute from
+    `CharacterResonance.lifetime_earned` on every `grant_resonance()` call, firing
+    achievements on authored `AuraAffinityThreshold` crossings; see magic.md
+    §"Aura Drift (#1737)" for the full mechanism, including the new
+    `GainSource.MISSION_REWARD` deed source.
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS

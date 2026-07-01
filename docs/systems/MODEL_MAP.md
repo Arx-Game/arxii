@@ -886,6 +886,7 @@
   - stylepresentationendorsement_given <- magic.StylePresentationEndorsement
   - stylepresentationendorsement_received <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
+  - gift_unlocks <- magic.CharacterGiftUnlock
   - resonance_grants <- magic.ResonanceGrant
   - motif <- magic.Motif
   - reincarnations <- magic.Reincarnation
@@ -1089,6 +1090,7 @@
   - character_selections <- progression.CharacterPathHistory
   - audere_majora_crossings <- magic.AudereMajoraCrossing
   - allowed_styles <- magic.TechniqueStyle
+  - gift_unlocks <- magic.GiftUnlock
   - ritual_grants <- magic.PathRitualGrant
   - gift_grants <- magic.PathGiftGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
@@ -2232,6 +2234,7 @@
   - covenantrole_subrole <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
+  - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
 
 ### Gift
@@ -2242,6 +2245,7 @@
   - species_grants <- species.SpeciesGiftGrant
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
+  - gift_unlocks <- magic.GiftUnlock
   - path_grants <- magic.PathGiftGrant
   - reincarnation <- magic.Reincarnation
   - technique_drafts <- magic.TechniqueDraft
@@ -2320,6 +2324,7 @@
   - damage_profiles <- magic.TechniqueDamageProfile
   - pendingalteration_set <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
+  - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
   - variants <- magic.TechniqueVariant
   - anchored_threads <- magic.Thread
@@ -2425,6 +2430,10 @@
   - character -> character_sheets.CharacterSheet [FK]
   - affinity -> magic.Affinity [FK]
 
+### AuraAffinityThreshold
+**Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
+
 ### Cantrip
 **Foreign Keys:**
   - effect_type -> magic.EffectType [FK]
@@ -2508,6 +2517,26 @@
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
 
+### GiftUnlock
+**Foreign Keys:**
+  - gift -> magic.Gift [FK]
+  - paths -> classes.Path [M2M]
+**Pointed to by:**
+  - character_purchases <- magic.CharacterGiftUnlock
+
+### CharacterGiftUnlock
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - unlock -> magic.GiftUnlock [FK]
+  - teacher -> roster.RosterTenure [FK] (nullable)
+
+### TechniqueTeachingOffer
+**Foreign Keys:**
+  - teacher -> roster.RosterTenure [FK]
+  - technique -> magic.Technique [FK]
+
+### GiftAcquisitionConfig
+
 ### ResonanceGrant
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -2522,6 +2551,7 @@
   - source_entry_flourish -> magic.EntryFlourishRecord [FK] (nullable)
   - source_dramatic_moment -> magic.DramaticMomentTag [FK] (nullable)
   - source_style_presentation_endorsement -> magic.StylePresentationEndorsement [FK] (nullable)
+  - source_mission_deed_reward_line -> missions.MissionDeedRewardLine [FK] (nullable)
 
 ### BeginningsRitualGrant
 **Foreign Keys:**
@@ -2923,12 +2953,14 @@
 - `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
 - `get_character_anima_ritual(character) — The character's authored SCENE_ACTION ritual (with check_config), or None.`
 - `get_character_cast_check(character) — The CheckType a character's technique casts roll, or None for fallback.`
+- `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' — Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
-- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
+- `get_pull_cost(tier: 'int', target_kind: 'str | None') -> 'ThreadPullCost' — Resolve the pull cost row for (tier, target_kind).`
+- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
@@ -2947,7 +2979,7 @@
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' — Per-tier survivability save modifiers from thread investment (#1250).`
 - `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
 - `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None, strain_commitment: 'int' = 0, applicable_threads: 'Sequence[ApplicableThread] | None' = None, cast_pull: 'CastPullDeclaration | None' = None, power_intensity_bonus: 'int' = 0, lethal: 'bool' = True, control_penalty: 'int' = 0, apply_variant: 'bool' = True) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
 - `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
 - `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
@@ -3244,6 +3276,7 @@
 **Foreign Keys:**
   - route -> missions.MissionOptionRoute [FK] (nullable)
   - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
 
 ### MissionRenownAward
 **Foreign Keys:**
@@ -3318,6 +3351,9 @@
 **Foreign Keys:**
   - deed -> missions.MissionDeedRecord [FK]
   - recipient -> objects.ObjectDB [FK]
+  - resonance -> magic.Resonance [FK] (nullable)
+**Pointed to by:**
+  - resonance_grants <- magic.ResonanceGrant
 
 ### MissionRewardQueue
 **Foreign Keys:**
@@ -3978,9 +4014,13 @@
   - galleries <- roster.TenureGallery
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - gift_unlocks_taught <- magic.CharacterGiftUnlock
+  - technique_teaching_offers <- magic.TechniqueTeachingOffer
   - taught_rituals <- magic.CharacterRitualKnowledge
   - thread_weaving_unlocks_taught <- magic.CharacterThreadWeavingUnlock
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
+  - friendships_made <- scenes.Friendship
+  - friendships_received <- scenes.Friendship
   - consent_groups <- consent.ConsentGroup
   - consent_memberships <- consent.ConsentGroupMember
   - social_consent_preference <- consent.SocialConsentPreference
@@ -4131,6 +4171,11 @@
   - blocked_player -> evennia_extensions.PlayerData [FK]
   - blocker_persona -> scenes.Persona [FK] (nullable)
   - blocked_persona -> scenes.Persona [FK] (nullable)
+
+### Friendship
+**Foreign Keys:**
+  - friender_tenure -> roster.RosterTenure [FK]
+  - friend_tenure -> roster.RosterTenure [FK]
 
 ### Mute
 **Foreign Keys:**

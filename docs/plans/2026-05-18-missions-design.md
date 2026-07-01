@@ -283,7 +283,15 @@ just "taken option's effects = its route consequence + allowed riders."
      states between sessions / bite-sized" principle; needs a careful ruling.
    - **Reward application + rumor/news propagation** — the post-cron batch,
      and the audience model for who hears (org/society/gossip-skill
-     predicate-scoped).
+     predicate-scoped). **RESONANCE sink resolved by #1737** (real
+     `_grant_resonance()`, `GainSource.MISSION_REWARD`); LEGEND_POINTS and the
+     rumor/news audience model remain open. **Separately, #1753 found a bigger,
+     more fundamental gap:** `apply_deed_rewards` — the function that actually
+     routes emitted reward lines into the payout queue — has zero production
+     callers anywhere in the missions engine (only test suites call it). This
+     affects every reward sink, not just RESONANCE, and means #1737's plumbing
+     is correct but does not yet pay out in live gameplay until #1753 wires the
+     emission→apply routing seam to the real resolution engine.
    - **Grid routing & instancing** — spawn/teardown of instanced temp rooms
      (target's home/office), admission = the instance participant set, vs.
      the emergent-not-pre-abstracted tenet.
