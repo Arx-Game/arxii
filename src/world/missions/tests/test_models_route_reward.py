@@ -12,6 +12,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.checks.factories import CheckTypeFactory
+from world.magic.factories import ResonanceFactory
 from world.missions.constants import (
     DeedRewardKind,
     DeedRewardSink,
@@ -184,3 +185,47 @@ class MissionDeedRewardLineRecipientTests(TestCase):
         )
         line.refresh_from_db()
         self.assertEqual(line.recipient, helper)
+
+
+class MissionOptionRouteRewardResonanceTests(TestCase):
+    """Tests for the #1737 resonance FK on MissionOptionRouteReward."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.route = MissionOptionRouteFactory()
+        cls.resonance = ResonanceFactory()
+
+    def test_resonance_sink_requires_resonance_fk(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.POST_CRON,
+            sink=DeedRewardSink.RESONANCE,
+            amount=15,
+            resonance=None,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_resonance_sink_with_resonance_fk_is_valid(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.POST_CRON,
+            sink=DeedRewardSink.RESONANCE,
+            amount=15,
+            resonance=self.resonance,
+        )
+        reward.clean()  # must not raise
+
+    def test_non_resonance_sink_forbids_resonance_fk(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+            resonance=self.resonance,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
