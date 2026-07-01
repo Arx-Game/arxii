@@ -3382,7 +3382,7 @@
 - `emit_terminal_rewards(instance: 'MissionInstance', route: 'MissionOptionRoute', deed: 'MissionDeedRecord') -> 'list[MissionDeedRewardLine]' — Emit one :class:`MissionDeedRewardLine` per (template × recipient).`
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' — Record entry into ``node`` and advance the run's position.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' — Return one :class:`JournalEntry` per mission this character is in.`
-- `on_mission_complete_for_beat(instance: 'MissionInstance') -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger (5b.3 stub-record).`
+- `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None) -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' — Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' — Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
