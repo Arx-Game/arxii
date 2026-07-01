@@ -422,6 +422,28 @@ def _check_prevention_from_context(
     return None
 
 
+def _check_application_resist(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    template: ConditionTemplate,
+) -> bool:
+    """Return True if *target* resists having *template* applied.
+
+    Rolls the target's own resist_check_type against resist_difficulty.
+    success_level > 0 means the target's roll beat the difficulty — resisted.
+    resist_check_type=None (the default) means unconditional application;
+    this always returns False in that case, matching every existing
+    ConditionTemplate's current behavior unchanged.
+    """
+    if template.resist_check_type is None:
+        return False
+    result = perform_check(
+        character=target,
+        check_type=template.resist_check_type,
+        target_difficulty=template.resist_difficulty,
+    )
+    return int(result.success_level) > 0
+
+
 def _process_interactions_from_context(
     target_id: int,
     incoming_condition: ConditionTemplate,
@@ -666,6 +688,15 @@ def apply_condition(  # noqa: PLR0913
                 applied_conditions=[],
             )
 
+    if _check_application_resist(target, condition):
+        return ApplyConditionResult(
+            success=False,
+            instance=None,
+            message="resisted",
+            removed_conditions=[],
+            applied_conditions=[],
+        )
+
     ctx = _build_bulk_context([target], [condition])
     params = _ApplyConditionParams(
         target=target,
@@ -736,7 +767,10 @@ def bulk_apply_conditions(
     shared across the batch — a single cast is the source of all entries.
 
     Fetches all needed data (active instances, interactions, stages) in ~5
-    queries regardless of how many (target, condition) pairs are passed.
+    queries regardless of how many (target, condition) pairs are passed, PLUS
+    one perform_check call (and its own query cost) per item whose template
+    sets resist_check_type (#1738) — mirrors the same caveat already accepted
+    for _attempt_removal's bulk removal loop.
     Each application still respects prevention, interaction, and stacking rules.
     """
     if not applications:
@@ -774,6 +808,18 @@ def bulk_apply_conditions(
                     )
                 )
                 continue
+
+        if _check_application_resist(app.target, app.template):
+            results.append(
+                ApplyConditionResult(
+                    success=False,
+                    instance=None,
+                    message="resisted",
+                    removed_conditions=[],
+                    applied_conditions=[],
+                )
+            )
+            continue
 
         params = _ApplyConditionParams(
             target=app.target,
