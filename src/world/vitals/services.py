@@ -1069,6 +1069,7 @@ def _apply_round_tick_damage(
         vitals = target.sheet_data.vitals
     except (AttributeError, ObjectDoesNotExist):
         return
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
     from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
 
     for damage_type, amount in result.damage_dealt:
@@ -1079,6 +1080,9 @@ def _apply_round_tick_damage(
             if hasattr(target, "threads")
             else amount
         )
+        # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+        # Closes the asymmetry where DoT damage (poison, burning) ignored resistance.
+        effective = resolve_damage_type_resistance(target, effective, damage_type)
         if effective <= 0:
             continue
         vitals.health -= effective
