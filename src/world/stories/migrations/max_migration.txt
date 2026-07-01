@@ -1,1 +1,1 @@
-0004_beatcompletion_outcome_tier
+0005_alter_beat_predicate_type

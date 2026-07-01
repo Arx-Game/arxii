@@ -59,6 +59,7 @@ class BeatPredicateType(models.TextChoices):
     CODEX_ENTRY_UNLOCKED = "codex_entry_unlocked", "Codex entry unlocked"
     STORY_AT_MILESTONE = "story_at_milestone", "Referenced story at milestone"
     AGGREGATE_THRESHOLD = "aggregate_threshold", "Aggregate threshold reached"
+    OUTCOME_TIER = "outcome_tier", "Outcome tier (machine-graded)"
 
 
 class StoryMilestoneType(models.TextChoices):
