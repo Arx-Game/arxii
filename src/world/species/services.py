@@ -20,14 +20,15 @@ if TYPE_CHECKING:
 
 
 def reconcile_sunlight_exposure(character, room) -> None:
-    """Apply or remove the Sunlight Exposure condition based on outdoor + day-phase (#1588).
+    """Apply or remove the Sunlight Exposure condition based on outdoor + day-phase + shelter
+    (#1588, #1744).
 
     A character whose species grant wires a Sunlight-Exposure drawback takes radiant
-    DoT while outdoors during a daylight phase; indoors or at night the condition is
-    removed. When applied, ensures a danger scene round (the plummet pattern) so the
-    existing round-tick processes the DoT through the peril pipeline — AFK-safety
-    (ADR-0004/ADR-0049) holds unchanged: an unconscious victim flows into
-    ``abandonment_environmental``, never a raw death.
+    DoT while outdoors during a daylight phase; indoors, sheltered (location-shelter
+    cascade covers radiant), or at night the condition is removed. When applied, ensures
+    a danger scene round (the plummet pattern) so the existing round-tick processes the
+    DoT through the peril pipeline — AFK-safety (ADR-0004/ADR-0049) holds unchanged: an
+    unconscious victim flows into ``abandonment_environmental``, never a raw death.
 
     No-op for characters without a sheet or whose species has no sunlight drawback.
 
@@ -41,7 +42,7 @@ def reconcile_sunlight_exposure(character, room) -> None:
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is None or not _has_sunlight_drawback(sheet):
         return
-    outdoor = _room_is_outdoor(room)
+    outdoor = _room_is_outdoor(room) and not _room_shelters_radiant(room)
     phase = get_ic_phase()
     should_expose = outdoor and phase in {
         TimePhase.DAY,
@@ -54,6 +55,16 @@ def reconcile_sunlight_exposure(character, room) -> None:
         ensure_round_for_acute_condition(sheet)
     elif not should_expose and active:
         remove_condition(character, template)
+
+
+def _room_shelters_radiant(room) -> bool:
+    """Whether *room* grants location-shelter against radiant damage (#1744)."""
+    if room is None:
+        return False
+    from world.conditions.factories import ensure_radiant_damage_type  # noqa: PLC0415
+    from world.locations.services import hazard_is_covered  # noqa: PLC0415
+
+    return hazard_is_covered(room, ensure_radiant_damage_type())
 
 
 def _has_sunlight_drawback(sheet) -> bool:
