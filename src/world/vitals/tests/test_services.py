@@ -6,12 +6,13 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
-from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory, ClassStageHealthRateFactory
 from world.classes.models import PathStage
 from world.conditions.factories import (
     BleedingOutConditionFactory,
+    ConditionInstanceFactory,
     ConditionStageFactory,
     DamageTypeFactory,
     UnconsciousConditionFactory,
@@ -521,3 +522,43 @@ class RecomputeMaxHealthTest(TestCase):
         recompute_max_health(self.sheet, thread_addend=0)
         self.vitals.refresh_from_db()
         self.assertEqual(self.vitals.health, 40)
+
+
+class AdvanceStagedPerilTests(TestCase):
+    """Regression pin for the ``_advance_staged_peril_condition`` extraction (#1733 Task 3).
+
+    Proves the shared staged-resist-check loop extracted out of ``advance_bleed_out``
+    changes no bleed-out behavior — same fixture shape ``advance_surrounded`` will reuse
+    once Task 5 lands ``resolve_surrounded_terminal``.
+
+    Builds the ConditionInstance directly (``current_stage`` assigned explicitly) rather
+    than via ``apply_condition``, which routes through ``_build_bulk_context``'s PG-only
+    ``DISTINCT ON`` query path and errors on the SQLite fast tier (see
+    world/vitals/tests/test_bleed_out.py's module docstring for the same constraint).
+    """
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=self.sheet)
+
+    def test_advance_bleed_out_advances_stage_on_failed_resist(self) -> None:
+        """A failed resist at a non-terminal stage advances current_stage, doesn't kill."""
+        from world.vitals.services import advance_bleed_out
+
+        check_type = CheckTypeFactory()
+        template = BleedingOutConditionFactory()
+        stage1 = ConditionStageFactory(
+            condition=template, stage_order=1, resist_check_type=check_type
+        )
+        ConditionStageFactory(condition=template, stage_order=2, resist_check_type=check_type)
+        ConditionInstanceFactory(
+            target=self.sheet.character, condition=template, current_stage=stage1
+        )
+        failure_outcome = CheckOutcomeFactory(name="Failure 1733 pin", success_level=-1)
+
+        with force_check_outcome(failure_outcome):
+            died = advance_bleed_out(self.sheet)
+
+        self.assertFalse(died)
+        instance = self.sheet.character.condition_instances.get(condition=template)
+        self.assertEqual(instance.current_stage.stage_order, 2)

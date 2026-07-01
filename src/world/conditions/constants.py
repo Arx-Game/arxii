@@ -81,6 +81,7 @@ TARGET_EFFECT_ALTERATION: str = "alteration"
 # ConditionTemplate rows; services use them to locate active instances.
 UNCONSCIOUS_CONDITION_NAME: str = "Unconscious"
 BLEED_OUT_CONDITION_NAME: str = "Bleeding Out"
+SURROUNDED_CONDITION_NAME: str = "Surrounded"  # #1733 battle acute peril, staged
 FORCE_FIELD_CONDITION_NAME: str = "Aegis Field"  # absorb_pool reactive handler (#1584)
 REFLECT_CONDITION_NAME: str = "Mirror Ward"  # reflect_damage reactive handler (#1584)
 BLINK_CONDITION_NAME: str = "Phase Step"  # blink_dodge reactive handler (#1584)
