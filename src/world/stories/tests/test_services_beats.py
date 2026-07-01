@@ -16,8 +16,9 @@ from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFact
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.gm.factories import GMTableFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
+from world.societies.constants import RenownRisk
 from world.societies.factories import LegendSourceTypeFactory
-from world.societies.models import LegendEntry
+from world.societies.models import LegendEntry, LegendEvent
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
@@ -1217,3 +1218,47 @@ class RecordOutcomeTierCompletionTests(EvenniaTestCase):
         beat.refresh_from_db()
         assert beat.outcome == BeatOutcome.SUCCESS
         assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_high_risk_tier_scales_legend_award_past_the_floor(self) -> None:
+        """A HIGH-risk beat scales the Legend award above legend_base_value end-to-end.
+
+        RISK_LEGEND_AWARDS[HIGH]=250, tier_multiplier(success_level=6)=1.0+6/5=2.2,
+        so 250 * 2.2 = 550 — well above the authored legend_base_value=10 floor.
+        Proves record_outcome_tier_completion threads beat.risk and
+        outcome_tier.success_level through to _legend_award's scaling formula
+        rather than always falling back to the flat floor.
+        """
+        source_type = LegendSourceTypeFactory()
+        consequence = ConsequenceFactory(outcome_tier=self.decisive)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=source_type,
+            legend_description_template="Won a high-risk gambit.",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            risk=RenownRisk.HIGH,
+            success_consequences=pool,
+        )
+        progress = StoryProgressFactory(story=story, character_sheet=self.sheet)
+
+        completion = record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=self.decisive
+        )
+
+        assert completion.outcome == BeatOutcome.SUCCESS
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.SUCCESS
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        assert event.base_value == 550

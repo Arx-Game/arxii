@@ -12,7 +12,7 @@ named here to prevent future conflation:
 - `combat.RiskLevel` (`world/combat/constants.py`) gates cast-pull *acknowledgement*
   UI (does the player need to confirm before casting) — nothing to do with stakes or
   reward.
-- `StakesLevel` (`world/combat/models.py`) gates GM *access scope* (who may run a
+- `StakesLevel` (`world/combat/constants.py`) gates GM *access scope* (who may run a
   LOCAL vs. WORLD-scale scene) — nothing to do with risk/reward by outcome.
 
 We considered a new dedicated "stakes wager" model instead of reusing `Beat.risk`,
