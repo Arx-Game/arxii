@@ -5041,26 +5041,6 @@ def _ensure_reactive_challenges(
     _ensure_succor_challenges(encounter, pc_actions)
 
 
-def apply_succor_outcome(result: ChallengeResolutionResult) -> float:
-    """Map a graded Succor resolution to a tick-amount multiplier (#1744).
-
-    Mirrors apply_interpose_outcome's clean/partial/fail shape, but returns a
-    float multiplier (consumed by RoundContext.get_cover_for) instead of mutating
-    a payload in place — Succor's caller (_apply_round_tick_damage) has no
-    payload object to mutate, only a plain amount.
-    """
-    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
-
-    check_result = result.check_result
-    success_level = check_result.success_level if check_result is not None else 0
-    is_clean_block = result.resolution_type == ResolutionType.DESTROY or success_level > 0
-    if is_clean_block:
-        return 0.0
-    if success_level == 0:
-        return 0.5
-    return 1.0
-
-
 def dispatch_succor(
     succorer: ObjectDB,  # noqa: OBJECTDB_PARAM
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -5074,6 +5054,7 @@ def dispatch_succor(
     """
     from world.combat.succor_content import SUCCOR_CHALLENGE_NAME  # noqa: PLC0415
     from world.mechanics.reactions import dispatch_capability_reaction  # noqa: PLC0415
+    from world.mechanics.succor_shared import apply_succor_outcome  # noqa: PLC0415
 
     outcome = {"multiplier": 1.0}
 

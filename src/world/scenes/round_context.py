@@ -19,6 +19,7 @@ from world.scenes.models import SceneActionDeclaration, SceneRoundParticipant
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.mechanics.types import ChallengeResolutionResult
     from world.scenes.models import SceneRound
 
 
@@ -144,6 +145,57 @@ class SceneRoundContext(RoundContext):
             return
         record_pose_order_action(self._scene_round, participant, target_persona)
         advance_pose_order_round_if_quorum(self._scene_round)
+
+    def get_cover_for(self, target: CharacterSheet, damage_type: Any) -> float:  # noqa: ARG002
+        """Resolve (and cache) this round's Succor cover for *target* (#1744).
+
+        Mirrors CombatRoundContext.get_cover_for's caching contract.
+        """
+        from world.mechanics.reactions import dispatch_capability_reaction  # noqa: PLC0415
+        from world.mechanics.succor_shared import (  # noqa: PLC0415
+            SUCCOR_CHALLENGE_NAME,
+            apply_succor_outcome,
+        )
+
+        target_participant = SceneRoundParticipant.objects.filter(
+            scene_round=self._scene_round,
+            character_sheet=target,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        ).first()
+        if target_participant is None:
+            return 1.0
+
+        declaration = SceneActionDeclaration.objects.filter(
+            scene_round=self._scene_round,
+            round_number=self._scene_round.round_number,
+            succor_target=target_participant,
+        ).first()
+        if declaration is None:
+            return 1.0
+
+        if declaration.succor_resolution is not None:
+            return declaration.succor_resolution
+
+        succorer = declaration.participant.character_sheet.character
+        protected = target_participant.character_sheet.character
+
+        outcome = {"multiplier": 1.0}
+
+        def _capture(result: ChallengeResolutionResult) -> None:
+            outcome["multiplier"] = apply_succor_outcome(result)
+
+        result = dispatch_capability_reaction(
+            succorer,
+            protected,
+            challenge_name=SUCCOR_CHALLENGE_NAME,
+            approach=None,
+            error_msg=f"No succor approach available to {succorer!r} for {protected!r}.",
+            outcome_fn=_capture,
+        )
+        multiplier = outcome["multiplier"] if result is not None else 1.0
+        declaration.succor_resolution = multiplier
+        declaration.save(update_fields=["succor_resolution"])
+        return multiplier
 
 
 def resolve_scene_round_context(character: CharacterSheet) -> SceneRoundContext | None:

@@ -67,6 +67,21 @@ the unified Persona identity system, and non-combat scene rounds.
   - `record_immediate_action(actor, action_ref, target_persona)`: No-op for OPEN/STRICT; for POSE_ORDER
     writes a ledger row via `record_pose_order_action` and calls
     `advance_pose_order_round_if_quorum`.
+  - `get_cover_for(target, damage_type) -> float` (#1744): the scene-round sibling of
+    `CombatRoundContext.get_cover_for` — resolves (and caches on
+    `SceneActionDeclaration.succor_resolution`) this round's Succor cover multiplier for
+    `target`. Returns `1.0` (no cover) when `target` has no ACTIVE participant or no
+    `SceneActionDeclaration.succor_target` names them this round. Mirrors the combat side's
+    caching contract but has no fatigue-charge step (scene rounds have no combat fatigue seam).
+
+### `succor_content.py` (scenes)
+Scene-round Succor challenge-binding (#1744) — the scene-round equivalent of combat's
+`_ensure_succor_challenges`, keyed off `SceneActionDeclaration.succor_target` instead of
+`CombatRoundAction`. No prior scene-round "bind a reactive challenge" plumbing existed before this.
+- `ensure_succor_challenges_for_round(scene_round)`: binds a Succor `ChallengeInstance` to each
+  protected ally declared this round; called from `resolve_scene_round` right before
+  `_resolve_scene_declarations`, so the challenge exists in time for `get_available_actions` to
+  surface it when the declared Succor action itself resolves in initiative order.
 
 ### `round_services.py`
 Key service functions for scene round lifecycle:
@@ -78,7 +93,8 @@ Key service functions for scene round lifecycle:
   actors ≥ `ceil(advance_quorum_pct / 100 × active_participant_count)`. Round stays DECLARING.
 - `start_scene_round`, `advance_scene_round`, `end_scene_round`: Lifecycle transitions
   (BETWEEN_ROUNDS → DECLARING → RESOLVING → BETWEEN_ROUNDS → COMPLETED).
-- `resolve_scene_round(scene_round)`: Unconditional resolver — runs declared CHALLENGE actions in
+- `resolve_scene_round(scene_round)`: Unconditional resolver — binds this round's Succor challenges
+  (`ensure_succor_challenges_for_round`, #1744), runs declared CHALLENGE actions in
   initiative order, fires the end-round tick (which advances acute conditions — DoTs, bleed-out, plummet),
   then either advances to the next round or **auto-ends** (a `start_reason==DANGER` round COMPLETES once
   `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition). **AFK
@@ -114,6 +130,11 @@ Key service functions for scene round lifecycle:
   `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller
   guarantees the character is not in active combat. (Renamed from `auto_start_or_extend_danger_round`.)
 - `maybe_resolve_scene_round(scene_round)`: Resolves only when quorum-gated completion is met.
+- `declare_succor_scene(participant, ally) -> SceneActionDeclaration` (#1744): the scene-round
+  sibling of `world.combat.services.declare_succor` — always names a specific ally (no "any
+  ally" path, same rationale). Writable during an open STRICT declaration window; upserts the
+  round's deferred `SceneActionDeclaration` for `participant`, setting `succor_target=ally` and
+  resetting `succor_resolution` to `None`.
 - `scene_round_is_complete(scene_round) -> bool`: True when enough present ACTIVE participants who *can
   act* have a deferred (`is_immediate=False`) declaration for the current round — the threshold is
   `ceil(advance_quorum_pct / 100 × present_active_count)` (the same field POSE_ORDER uses; at 100 it

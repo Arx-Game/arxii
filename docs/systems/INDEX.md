@@ -847,7 +847,8 @@ action consent flow, and a three-mode non-combat round framework.
   `SceneActionDeclaration`
   (per-round ledger; `is_immediate=True` for OPEN/POSE_ORDER actions, `is_immediate=False` for STRICT
   deferred declarations; carries `target_persona` FK; multiple rows per participant per round up to
-  `max_actions_per_round`), `SceneRoundParticipant`
+  `max_actions_per_round`; `succor_target` FK (`SceneRoundParticipant`) + `succor_resolution` (float,
+  cached graded outcome) for the scene-round Succor sibling, #1744), `SceneRoundParticipant`
 - **Abstract base:** `DefenderConsentFields` (`action_models.py`) — shared by `SceneActionRequest` and `SceneActionTarget`; carries `difficulty_choice` (DifficultyChoice plausibility band, authored by the defender), `resolved_difficulty`, `resist_effort_level` (EffortLevel, optional active resistance).
 - **Effort/difficulty split:** The initiator declares `effort_level` (EffortLevel) at dispatch; the defender authors per-target `difficulty_choice` at consent. The resolver adds `EFFORT_CHECK_MODIFIER[effort_level]` to the check pool and charges the initiator social fatigue. The defender's plausibility base + optional `compute_resist_increment()` produce the numeric `difficulty_override`; active resistance charges the defender `RESIST_FATIGUE_BASE` social fatigue.
 - **Social action consent:** `SceneActionRequest` owns the full lifecycle (dispatch → consent → resolution) for the primary target; `SceneActionTarget` rows carry additional targets, each with independent consent and result. Resolvers fire once per accepted target (primary via `respond_to_action_request`, additional via `respond_to_action_target`).
@@ -888,6 +889,22 @@ action consent flow, and a three-mode non-combat round framework.
       `resolve_abandonment`; wired into `typeclasses.rooms.Room.at_object_leave`. `departing` is
       excluded from the rescuer check so the mover is not counted as a remaining rescuer.
     - `maybe_resolve_scene_round(scene_round)` — resolves iff `scene_round_is_complete` is True.
+  - **Scene-round Succor (#1744) — the non-combat sibling of combat's Succor maneuver:**
+    - `declare_succor_scene(participant, ally)` (`round_services.py`) — writes/updates a deferred
+      `SceneActionDeclaration.succor_target` for the current round; always names a specific ally
+      (mirrors `world.combat.services.declare_succor`).
+    - `ensure_succor_challenges_for_round(scene_round)` (`succor_content.py`) — round-resolution
+      pre-pass: binds a Succor `ChallengeInstance` to each protected ally declared this round.
+      Called from `resolve_scene_round` right before `_resolve_scene_declarations`. No prior
+      scene-round "bind a reactive challenge" plumbing existed — this is the scene-round
+      equivalent of combat's `_ensure_succor_challenges`, keyed off
+      `SceneActionDeclaration.succor_target` instead of `CombatRoundAction`.
+    - `SceneRoundContext.get_cover_for(target, damage_type)` (`round_context.py`) — resolves and
+      caches this round's Succor cover multiplier on `SceneActionDeclaration.succor_resolution`,
+      mirroring `CombatRoundContext.get_cover_for`'s caching contract.
+    - `SuccorSceneAction` (`actions/definitions/rounds.py`, key `"scene_succor"`) — the REGISTRY
+      dispatch surface wrapping `declare_succor_scene`; shared by telnet `scene succor <ally>`
+      (`CmdScene`) and the web dispatcher.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
@@ -1708,11 +1725,16 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `dispatch_succor(succorer, protected, approach)` — thin wrapper over
     `dispatch_capability_reaction`; calls `apply_succor_outcome` to derive the tick-amount
     multiplier
-  - `apply_succor_outcome(result)` — maps a graded Succor resolution to a float multiplier
-    (clean block → 0.0, partial → 0.5, fail → 1.0); consumed by round-tick hazard damage
-    instead of mutating a payload in place (Interpose's shape)
   - `_ensure_succor_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows bound to each protected ally for armed SUCCOR actions each round
+- **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
+  `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
+  rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
+  into `world.combat` for a domain-agnostic concept). `apply_succor_outcome` maps a graded
+  Succor resolution to a float multiplier (clean block → 0.0, partial → 0.5, fail → 1.0);
+  consumed by round-tick hazard damage instead of mutating a payload in place (Interpose's
+  shape). Both `world.combat.services.dispatch_succor` and
+  `world.scenes.round_context.SceneRoundContext.get_cover_for` import from here.
   - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
     `TriggerHandler.refresh()` on each active participant so passive-installed reactive
     triggers (e.g. Shielded) fire in the same round

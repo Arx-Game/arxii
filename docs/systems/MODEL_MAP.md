@@ -2143,12 +2143,13 @@
 - `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_owners_for_rooms(rooms: 'Iterable[DefaultObject]') -> 'dict[int, LocationOwnership | None]' — Bulk-resolve owners for many rooms in one pass.`
 - `effective_stats_for_rooms(rooms: 'Iterable[DefaultObject]', stat_keys: 'Iterable[StatKey]') -> 'dict[int, dict[StatKey, int]]' — Bulk-resolve stats for many rooms in one pass.`
-- `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None) -> 'int' — Cascade-resolve a single axis value (stat or resonance) for a room.`
+- `effective_value(room: 'DefaultObject', *, stat_key: 'StatKey | None' = None, resonance: 'Resonance | None' = None, damage_type: 'DamageType | None' = None) -> 'int' — Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.`
 - `effective_values_for_rooms(rooms: 'Iterable[DefaultObject]', *, stat_keys: 'Iterable[StatKey] | None' = None, resonances: 'Iterable[Resonance] | None' = None) -> 'dict[int, dict[StatKey | Resonance, int]]' — Bulk-resolve cascade values across many rooms for one axis.`
 - `end_tenancy(tenancy: 'LocationTenancy', *, ended_at: 'datetime | None' = None) -> 'LocationTenancy' — End a tenancy by setting ``ends_at``.`
 - `felt_exposure(room: 'DefaultObject', *, stat_key: 'StatKey') -> 'int' — A room's *felt* exposure on one axis, after enclosure sheltering (#1514, #1522).`
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
 - `grant_tenancy(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Create a new LocationTenancy row.`
+- `hazard_is_covered(room: 'DefaultObject', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' — Whether *room* grants shelter against *damage_type* (#1744).`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
@@ -4298,6 +4299,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK]
 **Pointed to by:**
   - action_declarations <- scenes.SceneActionDeclaration
+  - succor_declarations <- scenes.SceneActionDeclaration
 
 ### SceneActionDeclaration
 **Foreign Keys:**
@@ -4306,6 +4308,7 @@
   - challenge_instance -> mechanics.ChallengeInstance [FK] (nullable)
   - challenge_approach -> mechanics.ChallengeApproach [FK] (nullable)
   - target_persona -> scenes.Persona [FK] (nullable)
+  - succor_target -> scenes.SceneRoundParticipant [FK] (nullable)
 
 ### SceneActionRequest
 **Foreign Keys:**

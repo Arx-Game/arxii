@@ -18,7 +18,7 @@ from world.scenes.constants import (
     SceneRoundParticipantStatus,
     SceneRoundStartReason,
 )
-from world.scenes.models import SceneRound, SceneRoundParticipant
+from world.scenes.models import SceneActionDeclaration, SceneRound, SceneRoundParticipant
 from world.vitals.services import tick_round_for_targets
 
 if TYPE_CHECKING:
@@ -29,6 +29,45 @@ if TYPE_CHECKING:
     from world.mechanics.types import ChallengeResolutionResult
 
 logger = logging.getLogger(__name__)
+
+
+def declare_succor_scene(
+    participant: SceneRoundParticipant,
+    ally: SceneRoundParticipant,
+) -> SceneActionDeclaration:
+    """Declare Succor for a scene round — the non-combat sibling of declare_succor (#1744).
+
+    Always names a specific ally (see world.combat.services.declare_succor's
+    docstring for why). Writable during an open STRICT declaration window only.
+    """
+    if participant.scene_round_id != ally.scene_round_id:
+        msg = "Succor target must be in the same scene round."
+        raise ValueError(msg)
+    if ally.pk == participant.pk:
+        msg = "Cannot succor yourself."
+        raise ValueError(msg)
+    if participant.status != SceneRoundParticipantStatus.ACTIVE:
+        msg = "Cannot succor: you are not an active participant in this round."
+        raise ValueError(msg)
+    if ally.status != SceneRoundParticipantStatus.ACTIVE:
+        msg = "Succor target must be an active participant in this round."
+        raise ValueError(msg)
+
+    scene_round = participant.scene_round
+    declaration, _ = SceneActionDeclaration.objects.update_or_create(
+        scene_round=scene_round,
+        round_number=scene_round.round_number,
+        participant=participant,
+        is_immediate=False,
+        defaults={
+            "succor_target": ally,
+            "succor_resolution": None,
+            "is_pass": False,
+            "challenge_instance": None,
+            "challenge_approach": None,
+        },
+    )
+    return declaration
 
 
 class RoundModeError(ValueError):
@@ -539,6 +578,9 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     # hold/abandonment). Gravity does not pause for an idle round.
     plummeting_ids = _plummeting_character_ids(rnd)
 
+    from world.scenes.succor_content import ensure_succor_challenges_for_round  # noqa: PLC0415
+
+    ensure_succor_challenges_for_round(rnd)
     _resolve_scene_declarations(rnd)
 
     targets = []

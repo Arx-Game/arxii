@@ -31,9 +31,9 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
 )
+from world.mechanics.succor_shared import SUCCOR_CHALLENGE_NAME
 from world.traits.models import CheckOutcome
 
-SUCCOR_CHALLENGE_NAME: str = "Succor"
 SUCCORABLE_PROPERTY_NAME: str = "succorable"
 
 _SUCCOR_SEVERITY: int = 3
