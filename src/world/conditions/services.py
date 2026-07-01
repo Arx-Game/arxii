@@ -767,7 +767,10 @@ def bulk_apply_conditions(
     shared across the batch — a single cast is the source of all entries.
 
     Fetches all needed data (active instances, interactions, stages) in ~5
-    queries regardless of how many (target, condition) pairs are passed.
+    queries regardless of how many (target, condition) pairs are passed, PLUS
+    one perform_check call (and its own query cost) per item whose template
+    sets resist_check_type (#1738) — mirrors the same caveat already accepted
+    for _attempt_removal's bulk removal loop.
     Each application still respects prevention, interaction, and stacking rules.
     """
     if not applications:
