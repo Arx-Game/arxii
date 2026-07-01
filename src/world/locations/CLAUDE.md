@@ -1,15 +1,21 @@
 # Locations - Ambient Value Cascade
 
 Authored substrate for room/area values that cascade through the area
-hierarchy. Carries two axis types in one cascade:
+hierarchy. Carries three axis types in one cascade:
 
 - **Stat axis** — ambient stats (crime, order, lighting, …) keyed on a
   `StatKey` TextChoices enum.
 - **Resonance axis** — magical resonance magnitudes per room, keyed on a
   FK to `magic.Resonance`. Replaces the former `RoomAuraProfile` /
   `RoomResonance` tag system from Spec C.
+- **Damage-type axis (#1744)** — hazard shelter per room, keyed on a FK to
+  `conditions.DamageType`. Lets a room/area grant "cover" against a specific
+  environmental hazard (e.g. sunlight/radiant). Generic across any hazard the
+  `conditions` catalog defines; adding a new one needs zero new discriminator
+  code, only new rows. The read-side "does this room shelter me" service and
+  its callers are a later slice — this app only carries the substrate.
 
-A single read service (`effective_value`) resolves either axis.
+A single read service (`effective_value`) resolves any of the three axes.
 
 **Climate → comfort (#1514, #1522).** The stat axis hosts environmental **exposure** axes
 (`StatKey.COLD`, `HEAT`, `WET`, `WIND`, `DRY`; listed in `EXPOSURE_STAT_KEYS`). Each is a
@@ -93,8 +99,9 @@ Both models inherit from `core.mixins.DiscriminatorMixin` and
 discriminators:
 
 - `parent_type` (AREA or ROOM) — selects `area` vs `room_profile` FK.
-- `key_type` (STAT or RESONANCE) — selects `stat_key` (CharField from
-  `StatKey`) vs `resonance` (FK to `magic.Resonance`).
+- `key_type` (STAT, RESONANCE, or DAMAGE_TYPE) — selects `stat_key`
+  (CharField from `StatKey`) vs `resonance` (FK to `magic.Resonance`) vs
+  `damage_type` (FK to `conditions.DamageType`).
 
 Exactly one of each discriminator pair is populated per row, enforced by
 `clean()` which calls `DiscriminatorMixin._validate_discriminator` once
