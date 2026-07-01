@@ -10,6 +10,7 @@ from django.utils import timezone
 from evennia_extensions.constants import RoomEnclosure
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
+from world.conditions.models import DamageType
 from world.locations.constants import (
     AP_REGEN_MULTIPLIER_PCT,
     COMFORT_LEVEL_FLOORS,
@@ -221,13 +222,14 @@ def effective_value(
     *,
     stat_key: StatKey | None = None,
     resonance: Resonance | None = None,
+    damage_type: DamageType | None = None,
 ) -> int:
-    """Cascade-resolve a single axis value (stat or resonance) for a room.
+    """Cascade-resolve a single axis value (stat, resonance, or damage-type shelter) for a room.
 
-    Exactly one of ``stat_key`` or ``resonance`` must be provided.
+    Exactly one of ``stat_key``, ``resonance``, or ``damage_type`` must be provided.
 
-    Stats are clamped to STAT_CLAMPS and start from STAT_DEFAULTS.
-    Resonance values are not clamped and default to 0.
+    Stats are clamped to STAT_CLAMPS and start from STAT_DEFAULTS. Resonance and
+    damage-type values are not clamped and default to 0.
 
     Algorithm (2 queries per call: closure walk + override or modifier
     fetch; modifier ``current_value()`` is in-memory math):
@@ -240,16 +242,20 @@ def effective_value(
       4. Otherwise sum every ``LocationValueModifier.current_value`` for
          the same scope and axis, add the axis default, clamp for stats.
     """
-    if (stat_key is None) == (resonance is None):
-        msg = "Provide exactly one of stat_key or resonance."
+    provided = [stat_key is not None, resonance is not None, damage_type is not None]
+    if sum(provided) != 1:
+        msg = "Provide exactly one of stat_key, resonance, or damage_type."
         raise ValueError(msg)
 
     if stat_key is not None:
         default = STAT_DEFAULTS.get(stat_key, 0)
         axis_filter = models.Q(key_type=KeyType.STAT, stat_key=stat_key)
-    else:
+    elif resonance is not None:
         default = 0
         axis_filter = models.Q(key_type=KeyType.RESONANCE, resonance=resonance)
+    else:
+        default = 0
+        axis_filter = models.Q(key_type=KeyType.DAMAGE_TYPE, damage_type=damage_type)
 
     def _maybe_clamp(value: int) -> int:
         return _clamp(value, stat_key) if stat_key is not None else value
@@ -262,6 +268,18 @@ def effective_value(
     if override_val is not None:
         return _maybe_clamp(override_val)
     return _maybe_clamp(default + modifier_sum)
+
+
+def hazard_is_covered(room: DefaultObject, damage_type: DamageType, *, threshold: int = 1) -> bool:
+    """Whether *room* grants shelter against *damage_type* (#1744).
+
+    A hard gate, not an arithmetic resistance — this answers "does the hazard reach this
+    place at all," the same kind of fact ``RoomProfile.is_outdoor`` already answers, not
+    "how much damage gets through" (that stays ``ConditionResistanceModifier`` arithmetic,
+    per ADR-0066). ``threshold`` lets a future caller require a stronger shelter claim than
+    the default "any positive value covers"; v1 callers use the default.
+    """
+    return effective_value(room, damage_type=damage_type) >= threshold
 
 
 def room_enclosure(room: DefaultObject) -> RoomEnclosure:
