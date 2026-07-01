@@ -441,6 +441,11 @@ Peril / rescue and the AFK knob are no longer deferred — see
 - `src/world/vitals/tests/test_services.py::AdvanceStagedPerilTests` — regression pin for
   the `_advance_staged_peril_condition` extraction shared by `advance_bleed_out` and
   `advance_surrounded` (#1733 Task 3)
+- `src/integration_tests/pipeline/test_battle_peril_rescue_e2e.py`
+  (`BattlePerilRescueE2EJourneyTest`, #1733) — two telnet journeys: isolated STRIKE
+  failure → Surrounded entry → AFK-driven escalation (`afk_peril_override`) → successful
+  RESCUE clears it (`@tag("postgres")`); and terminal-stage resolution routing to the
+  death-permitting enemy pool vs. the death-free PvP pool (ADR-0023)
 
 ## Integrates With
 
