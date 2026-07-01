@@ -382,7 +382,7 @@ export interface BeatCreateBody {
   order?: number;
   kind?: BeatKind;
   advances?: boolean;
-  risk?: number;
+  risk?: BeatRisk;
   agm_eligible?: boolean;
   deadline?: string | null;
 
