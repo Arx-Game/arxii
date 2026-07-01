@@ -229,7 +229,8 @@ def declare_battle_action(
         technique: The ``Technique`` being cast. Must be known by the participant's
             character and have an ``action_template`` (castable).
         target_unit: The ``BattleUnit`` being struck (STRIKE only).
-        target_ally: The ``BattleParticipant`` being supported (SUPPORT only).
+        target_ally: The ``BattleParticipant`` being supported (SUPPORT) or rescued
+            (RESCUE).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.

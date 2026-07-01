@@ -1495,6 +1495,7 @@
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process start-of-round effects for all conditions on a target.`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] — Remove all conditions in a category from a target.`
+- `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None') -> int — Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool — Temporarily suppress a condition's effects.`
 - `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool — Remove suppression from a condition.`
 
@@ -1895,6 +1896,7 @@
   - interactions -> items.InteractionType [M2M]
 **Pointed to by:**
   - ritual_requirements <- magic.RitualComponentRequirement
+  - technique_grants <- magic.TechniqueGrant
   - clue_triggers <- clues.ItemClueTrigger
   - slots <- items.TemplateSlot
   - instances <- items.ItemInstance
@@ -2337,6 +2339,7 @@
   - teaching_offers <- magic.TechniqueTeachingOffer
   - granted_by_path_gifts <- magic.PathGiftGrant
   - variants <- magic.TechniqueVariant
+  - grants <- magic.TechniqueGrant
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
@@ -2701,6 +2704,7 @@
   - requirements <- magic.RitualComponentRequirement
   - pending_effects <- magic.PendingRitualEffect
   - ritualsession_set <- magic.RitualSession
+  - technique_grants <- magic.TechniqueGrant
   - capstone_events <- relationships.RelationshipCapstone
   - covenant_rite <- covenants.CovenantRite
   - installs_room_features <- room_features.RoomFeatureKindInstallRitual
@@ -2885,6 +2889,12 @@
 **Foreign Keys:**
   - condition -> conditions.ConditionTemplate [FK]
   - draft -> magic.TechniqueDraft [FK]
+
+### TechniqueGrant
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
+  - item_template -> items.ItemTemplate [FK] (nullable)
+  - ritual -> magic.Ritual [FK] (nullable)
 
 ### ThreadPullCost
 
@@ -4859,6 +4869,7 @@
   - character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_table -> gm.GMTable [FK] (nullable)
   - roster_entry -> roster.RosterEntry [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - era -> stories.Era [FK] (nullable)
 **Pointed to by:**
   - narrative_messages <- narrative.NarrativeMessage
@@ -4967,6 +4978,7 @@
   - resultchartoutcome_set <- traits.ResultChartOutcome
   - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - beat_completions <- stories.BeatCompletion
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence

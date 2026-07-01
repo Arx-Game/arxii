@@ -38,6 +38,7 @@ All models use `SharedMemoryModel` from `evennia.utils.idmapper.models`.
 | `round_limit` | PositiveSmallIntegerField | Default 10; auto-concludes at expiry |
 | `outcome` | CharField | `BattleOutcome` choice; default UNRESOLVED |
 | `concluded_at` | DateTimeField (null) | Timestamp when concluded |
+| `afk_peril_override` | BooleanField | Default False; when True, Surrounded peril escalates every round regardless of declaration (#1733, see ADR-0069) |
 | `created_at` | DateTimeField (auto) | |
 
 **Properties:**
@@ -122,9 +123,9 @@ A participant's declared action for one round.
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
 | `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
-| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT |
+| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
-| `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target |
+| `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target, or the Surrounded ally being rescued (RESCUE, #1733) |
 | `resolved` | BooleanField | False until the GM resolves the round |
 | `success_level` | SmallIntegerField | Check success level; >0 = success, ≤0 = failure |
 
@@ -176,9 +177,12 @@ Iterates all unresolved `BattleActionDeclaration` rows for the round and for eac
      upgrades unit status to ROUTED or DESTROYED at thresholds;
      adds `success_level × STRIKE_VP_PER_LEVEL` to the participant's side.
    - SUPPORT: adds `SUPPORT_VP` (3) to the participant's side.
+   - RESCUE: clears the target ally's Surrounded condition (#1733, no VP awarded — see
+     [Peril / Rescue](#peril--rescue-1733) below).
 3. **On `success_level ≤ 0`:** debits PC health by `BASE_FAILURE_DAMAGE + abs(success_level)`;
    calls `process_damage_consequences(character_sheet, damage_dealt, damage_type=None, source_character=None)`
-   (non-progressive; SQLite-safe).
+   (non-progressive; SQLite-safe); rolls the Surrounded entry pool if the participant is
+   isolated (#1733, see below).
 4. Marks each declaration `resolved=True`, stores `success_level`.
 5. Sets `battle_round.status = COMPLETED`.
 
@@ -187,6 +191,102 @@ Returns a `BattleRoundResult` dataclass:
 - `units_destroyed: list[int]` — destroyed unit pks
 - `units_routed: list[int]` — routed unit pks
 - `casualties: list[int]` — participant pks who took damage
+
+## Peril / Rescue (#1733)
+
+Isolated participants can be cut off and swarmed — a staged "Surrounded" acute-peril
+condition, generalizing the same guarded-consequence-pool machinery Bleeding-Out uses
+(#1479 / ADR-0049), specialized for battles. See ADR-0069 for the AFK-safety exception
+this introduces.
+
+### The "Surrounded" condition (`world/vitals/factories.py::ensure_surrounded_content`)
+
+Idempotently seeds a `ConditionTemplate` named `SURROUNDED_CONDITION_NAME` ("Surrounded",
+`world/conditions/constants.py`) with `has_progression=True` and 3 `ConditionStage` rows,
+each resisted with the existing Endurance `CheckType` (the same survivability semantic
+Bleeding-Out already uses):
+
+| Stage order | Name | `resist_difficulty` |
+|---|---|---|
+| 1 | Encircled | 15 |
+| 2 | Overwhelmed | 25 |
+| 3 | Being Cut Down | 35 |
+
+It also seeds 3 `ConsequencePool` rows (natural keys in `world/vitals/constants.py`):
+
+| Pool name | Used by | Outcomes |
+|---|---|---|
+| `POOL_SURROUNDED_ENTRY` (`surrounded_entry`) | Entry roll | success/partial → `no_effect`; failure → `surrounded` |
+| `POOL_SURROUNDED_TERMINAL_ENEMY` (`surrounded_terminal_enemy`) | Terminal stage, non-PC isolating side | success → `recover`; partial → `stay_incapacitated`; failure → `die` (`character_loss=True`) |
+| `POOL_SURROUNDED_TERMINAL_PVP` (`surrounded_terminal_pvp`) | Terminal stage, PC isolating side | success → `recover`; partial → `stay_incapacitated`; **no `die` row at all** (ADR-0023 — structurally non-lethal, not filtered-at-resolution) |
+
+### Entry roll (`world/battles/resolution.py::_maybe_apply_surrounded`)
+
+Called from `_resolve_failure` on every check failure. Only proceeds when
+`_is_isolated(participant)` is True — no other ACTIVE `BattleParticipant` on the same
+side shares the participant's `place` (a participant with `place=None` is never
+isolated — front-agnostic, not alone at a front). Isolation and mobility are objective,
+code-computed signals fed as `extra_modifiers` into the roll — the pool's authored rows
+decide the actual odds, never a hardcoded gate:
+
+- `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — always applied when isolated.
+- `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — added when
+  `_has_unimpaired_mobility(character_sheet)` is True (resolved via
+  `get_effective_capability_value` against `FoundationalCapability.MOVEMENT`, the same
+  way `can_act` resolves AWARENESS — not the room-based positioning-graph fields, which
+  don't apply to location-less battles).
+
+The roll is dispatched through `select_consequence` against the entry stage's
+`resist_check_type` / `resist_difficulty` with those `extra_modifiers`; if the selected
+consequence's label is `"surrounded"`, `apply_condition(target=character,
+condition=template)` applies the condition — the `has_progression=True` template
+auto-initializes `current_stage` to stage 1.
+
+### Per-round escalation tick (`world/battles/resolution.py::_advance_surrounded_participants`, `world/vitals/services.py::advance_surrounded`)
+
+`resolve_battle_round` calls `_advance_surrounded_participants(battle_round.battle,
+declared_participant_ids)` once per round, after routing all declarations and before
+marking the round `COMPLETED`. For each ACTIVE `BattleParticipant` in the battle: the
+peril only advances if the participant declared this round, **or**
+`battle.afk_peril_override` is True — otherwise it holds unchanged (mirrors the intent
+of the room-based `#1480`/ADR-0047 own-peril skip without depending on `SceneRound`).
+
+`advance_surrounded(character_sheet, *, battle)` is a thin wrapper around the shared
+`_advance_staged_peril_condition` helper (also used by `advance_bleed_out`): each
+non-terminal stage rolls its authored resist check, advancing to the next stage on
+failure; the terminal stage (stage 3, "Being Cut Down") hands off to
+`resolve_surrounded_terminal`.
+
+### Terminal routing (`world/battles/resolution.py::select_surrounded_terminal_pool`, `resolve_surrounded_terminal`)
+
+`select_surrounded_terminal_pool(*, battle, participant)` routes to
+`surrounded_terminal_pvp` when an ACTIVE opposing `BattleParticipant` with a real PC
+character (`character_sheet__character__db_account__isnull=False`) is present at the
+same `place` (ADR-0023 — PvP stays non-lethal), else to `surrounded_terminal_enemy`
+(the isolating pressure is normally an abstract, non-PC `BattleUnit`, so death is
+reachable). `resolve_surrounded_terminal` finds the character's `BattleParticipant`,
+routes the pool, computes `death_permitted = not has_death_deferred(character)`, and
+dispatches through the shared `_resolve_peril_via_pool` core (`world/vitals/services.py`
+— the same death-gated resolution used by Bleeding-Out and abandonment). On death, the
+participant's `status` is set to `INCAPACITATED`.
+
+### Rescue (`BattleActionKind.RESCUE`, `world/battles/resolution.py::_resolve_rescue_success`)
+
+`RESCUE` is a third `BattleActionKind`, declared the same way as SUPPORT — via
+`declare_battle_action(action_kind=RESCUE, target_ally=<participant>, technique=...)`,
+reusing the `target_ally` FK (see the docstring note in `services.py`). On
+`success_level > 0`, `resolve_battle_round` calls `_resolve_rescue_success` instead of
+the STRIKE/SUPPORT handlers: it clears the target ally's active Surrounded condition via
+`remove_condition`, if any. No VP is awarded — rescue trades round economy for saving an
+ally, not battlefield progress. No-op (not an error) if the target ally isn't currently
+Surrounded. Telnet: `battle declare rescue <ally> with <technique>` (`CmdBattle`,
+`src/commands/battle.py`).
+
+### `Battle.afk_peril_override`
+
+`BooleanField`, default `False`. When `True`, a Surrounded participant's peril escalates
+every round the GM resolves regardless of whether they declared — a narrow, explicit
+exception to ADR-0004 scoped to peril only (see **ADR-0069**).
 
 ## Services (`src/world/battles/services.py`)
 
@@ -215,7 +315,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a STRIKE or SUPPORT declaration (with `technique_id`) for the current round |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a STRIKE, SUPPORT, or RESCUE declaration (with `technique_id`) for the current round |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -232,6 +332,7 @@ Key: `battle`. Registered in the default cmdset. No business logic in the comman
 | `battle` | Show caller's active battle status (battle name, side VP, front, current round) |
 | `battle declare strike <unit> with <technique>` | Declare STRIKE against a named ACTIVE unit, casting a known technique |
 | `battle declare support <ally> with <technique>` | Declare SUPPORT for an allied participant, casting a known technique |
+| `battle declare rescue <ally> with <technique>` | Declare RESCUE for a Surrounded ally, casting a known technique (#1733) |
 | `battle round` | GM: begin the next round |
 | `battle resolve` | GM: resolve the current round |
 | `battle conclude` | GM: force-conclude the battle |
@@ -249,7 +350,7 @@ bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 | `BattleSideRole` | TextChoices | ATTACKER / DEFENDER |
 | `BattleUnitStatus` | TextChoices | ACTIVE / ROUTED / DESTROYED |
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
-| `BattleActionKind` | TextChoices | STRIKE / SUPPORT |
+| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
 
 **Tuning constants:**
@@ -261,6 +362,8 @@ bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 - `BASE_FAILURE_DAMAGE = 8`
 - `DECISIVE_MARGIN = 50`
 - `ROUTED_STRENGTH_THRESHOLD = 30`
+- `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — entry-roll signal (#1733), isolated at a place
+- `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — entry-roll signal (#1733), unimpaired MOVEMENT capability
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -301,12 +404,13 @@ exactly as they would for any other cast. The generic `"Battle Action"` `CheckTy
 
 | What | Issue |
 |---|---|
-| Peril / rescue state machine (PC incapacitation flow in battles) | #1710 |
-| AFK / timer knobs (auto-advance on inactivity) | #1711 |
-| Battle writeup / React page | #1712 |
-| Rich unit type-matchups (cavalry vs. infantry modifiers) | #1714 |
-| Command hierarchy, naval / aerial / siege variants | #1715 |
+| Battle writeup / React page | #1735 |
+| Rich unit type-matchups (cavalry vs. infantry modifiers) | #1711 |
+| Command hierarchy, naval / aerial / siege variants | #1710, #1713, #1714 |
 | Campaign propagation: battle outcome → Story + win-gated Legend | **#1716** |
+
+Peril / rescue and the AFK knob are no longer deferred — see
+[Peril / Rescue (#1733)](#peril--rescue-1733) below.
 
 ## Test Coverage
 
@@ -321,22 +425,42 @@ exactly as they would for any other cast. The generic `"Battle Action"` `CheckTy
 - `src/world/battles/tests/test_conclusion.py` — `check_victory` grading and
   `conclude_battle` (confirms `complete_story` is NOT called)
 - `src/world/battles/tests/test_actions.py` — each action's `run()` path; GM-gate rejection
-- `src/world/battles/tests/test_command.py` — telnet `battle declare strike <unit>` path
+- `src/world/battles/tests/test_command.py` — telnet `battle declare strike <unit>` path,
+  including `test_declare_rescue_dispatches_rescue_action_kind` (#1733)
 - `src/integration_tests/pipeline/test_battle_telnet_e2e.py` — full GM-stages → PCs
   declare → GM resolves (check mocked) → unit attrition + PC damage → VP over threshold →
   GM concludes → `battle.is_concluded` and scene ended
+- `src/world/battles/tests/test_resolution.py` (#1733) —
+  `IsolationAndMobilityTests` (`_is_isolated` / `_has_unimpaired_mobility`),
+  `SelectSurroundedTerminalPoolTests` (enemy vs. pvp routing),
+  `EntryRollTests` (isolated failure applies Surrounded via the entry pool,
+  `@tag("postgres")`), `EscalationTickTests` (declared-this-round vs.
+  `afk_peril_override` gating), `RescueResolutionTests` (RESCUE clears Surrounded)
+- `src/world/vitals/tests/test_peril_pools.py::EnsureSurroundedContentTests` (#1733) —
+  idempotent seeding of the condition + its 3 stages + 3 pools
+- `src/world/vitals/tests/test_services.py::AdvanceStagedPerilTests` — regression pin for
+  the `_advance_staged_peril_condition` extraction shared by `advance_bleed_out` and
+  `advance_surrounded` (#1733 Task 3)
 
 ## Integrates With
 
 - **Scenes** — `Battle` extends `scenes.Scene`; scene GM-check gates GM actions;
   `is_active` / `date_finished` written by `conclude_battle`
 - **Character Sheets** — `BattleParticipant.character_sheet` FK
-- **Vitals** — `process_damage_consequences` on check failure
+- **Vitals** — `process_damage_consequences` on check failure; the shared
+  `_resolve_peril_via_pool` core (`world.vitals.services`) resolves the Surrounded
+  terminal stage the same way it resolves Bleeding-Out and abandonment (#1733)
+- **Conditions** — the "Surrounded" staged `ConditionTemplate` + its 3 `ConditionStage`
+  rows, seeded by `world.vitals.factories.ensure_surrounded_content`; applied/removed via
+  `apply_condition` / `remove_condition` (#1733)
 - **Magic** — `BattleActionDeclaration.technique` FK; `resolve_battle_technique` routes
   each declaration's cast through `world.magic.services.use_technique` (anima cost,
   Soulfray, Audere / Audere Majora escalation all apply)
 - **Checks** — `perform_check`, sourced from the cast technique's
-  `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`
+  `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`;
+  the Surrounded entry roll and per-round resist checks are dispatched through
+  `world.checks.consequence_resolution.select_consequence` against authored
+  `ConsequencePool` rows (#1733)
 - **Combat** — `BattlePlace.combat_encounter` bridge seam (for discrete tactical fights
   at a front); `RoundStatus` and `AbstractRound` shared from `world.scenes`
 - **Stories** — `Battle.campaign_story` FK (propagation deferred to #1716)
