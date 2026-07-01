@@ -722,8 +722,9 @@ so web and telnet converge on the same write path.
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
   `scenes.Friendship`) / `ALLOWLIST`
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()`,
-  `_decide_consent_block()`, `_social_consent_exclusions()`, `hostile_cast_consent_blocked()`
-  (#1698 PvP opt-out; all in `actions/player_interface.py`)
+  `_decide_consent_block()`, `_social_consent_exclusions()` (`actions/player_interface.py`).
+  PvP opt-out is the duel-start gate only (#1698): `ChallengeAction` refuses opted-out
+  (`_consent_blocked`) + blocked (`block_services.sheet_blocked_for_viewer`) challengers
 - **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
   `make_default_categories()` (`world/consent/factories.py`)
 - **Key Services:** `set_social_consent_preference()`,

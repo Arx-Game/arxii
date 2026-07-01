@@ -275,14 +275,15 @@ Three behaviours built on the four-mode consent core:
   ACCEPT (`respond_*(difficulty=…)`) is surfaced on telnet via `accept/<difficulty>` switches
   (`trivial|easy|normal|hard|daunting|harrowing`) to parity the web.
 
-- **PvP hostile-cast opt-out.** `hostile_cast_consent_blocked(actor, target_persona,
-  technique)` (`actions/player_interface.py`) refuses a hostile technique cast at another
-  player's character unless the target's consent admits the actor — reusing the same
-  predicates scoped to the `hostile` category (master-switch fallback). NPC/GM targets (no
-  active tenure) and benign techniques pass. Wired into the two player-initiated entry points
-  (`CastTechniqueAction.execute` and the web `SceneActionRequestViewSet.cast`, 403) BEFORE
-  they reach `request_technique_cast` — it does not touch the cast/combat internals, so deeper
-  combat entry paths (join_encounter, NPC-seeded encounters) are out of scope.
+- **PvP opt-out = duel-start gate.** PvP initiation is structurally limited (a PC side vs an
+  NPC side, no casual two-sided PC fights), so the *only* PvP-consent case enforced is the
+  duel challenge: you cannot start a duel with someone who has opted out or blocked you.
+  `ChallengeAction` (`actions/definitions/duels.py`) already refused opted-out targets via
+  `_consent_blocked` (master switch → `_tenure_blocks_actor(..., category=None)`); #1698 adds
+  the `scenes.Block` check (`block_services.sheet_blocked_for_viewer`, either direction) so a
+  block also bars the challenge. The refusal message is vague (never reveals the block or its
+  direction — the anti-derivation invariant). There is deliberately no general hostile-cast
+  consent gate.
 
 - **Good-sport kudos curve.** `grant_social_engagement_kudos`
   (`world/progression/services/engagement.py`) converts the week's good-sport acceptances
