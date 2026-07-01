@@ -113,8 +113,14 @@ def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckRe
         technique=technique,
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
+        # lethal defaults True (unlike combat's lethal=encounter.is_lethal) — battles
+        # have no non-lethal encounter concept; this only bounds the CASTER's own
+        # anima-overburn/Soulfray severity, not PvP damage (ADR-0023 is unaffected).
     )
     if not result.confirmed or result.resolution_result is None:
+        # PRE_CAST cancellation (rare, e.g. a reactive scar) — no anima was spent,
+        # but the caller still counts this as a failure (success_level 0) for
+        # simplicity; the round-scale batch resolve has no cheaper alternative.
         return None
     return result.resolution_result.check_result
 
