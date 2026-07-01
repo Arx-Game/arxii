@@ -1272,6 +1272,60 @@ def declare_interpose(
     return action
 
 
+def declare_succor(
+    participant: CombatParticipant,
+    ally: CombatParticipant,
+) -> CombatRoundAction:
+    """Declare a sheltering maneuver for a specific ally — passives-only, auto-ready.
+
+    Unlike Interpose (which can guard "any ally" against whichever attack lands),
+    Succor always names a specific ally: environmental shelter is "I'm sheltering
+    THIS person," not "I'll block whichever hazard lands on someone." Resolution
+    happens later, at round-tick DoT application (#1744).
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot succor: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot succor: participant is no longer active in this encounter."
+        raise ValueError(msg)
+    if is_dead(participant.character_sheet):
+        msg = "Cannot succor: character is dead."
+        raise ValueError(msg)
+    if ally.pk == participant.pk:
+        msg = "Cannot succor yourself."
+        raise ValueError(msg)
+    if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+        msg = "Succor target must be an active participant in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.SUCCOR,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+            "succor_resolution": None,
+        },
+    )
+    return action
+
+
 def _resolve_opponent_stat_fields(  # noqa: PLR0913
     block: object | None,
     *,
@@ -4932,6 +4986,115 @@ def dispatch_interpose(
     )
 
 
+def _ensure_succor_challenges(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Round pre-pass: bind a Succor ChallengeInstance to each protected ally.
+
+    Mirrors _ensure_interpose_challenges but Succor always names a specific ally
+    (no "any ally" path — see declare_succor's docstring).
+    """
+    from world.mechanics.models import ChallengeInstance, ChallengeTemplate  # noqa: PLC0415
+
+    succor_actions = [
+        action
+        for action in pc_actions.values()
+        if action.maneuver == CombatManeuver.SUCCOR and action.is_ready
+    ]
+    if not succor_actions:
+        return
+
+    from world.combat.succor_content import SUCCOR_CHALLENGE_NAME  # noqa: PLC0415
+
+    try:
+        template = ChallengeTemplate.objects.get(name=SUCCOR_CHALLENGE_NAME)
+    except ChallengeTemplate.DoesNotExist:
+        logger.warning(
+            "Succor ChallengeTemplate not seeded; skipping challenge binding for encounter %s.",
+            encounter.pk,
+        )
+        return
+
+    room = encounter.room
+    for action in succor_actions:
+        ally_char = action.focused_ally_target.character_sheet.character
+        ChallengeInstance.objects.get_or_create(
+            template=template,
+            target_object=ally_char,
+            is_active=True,
+            defaults={"location": room, "is_revealed": True},
+        )
+
+
+def _ensure_reactive_challenges(
+    encounter: CombatEncounter,
+    pc_actions: dict[int, CombatRoundAction],
+) -> None:
+    """Round pre-pass: bind both Interpose and Succor challenge instances.
+
+    A single call site for ``resolve_round`` (#1273, #1744) — keeps the two
+    independent reactive-challenge binders (blow vs. hazard) from adding a
+    second statement to an already-large function.
+    """
+    _ensure_interpose_challenges(encounter, pc_actions)
+    _ensure_succor_challenges(encounter, pc_actions)
+
+
+def apply_succor_outcome(result: ChallengeResolutionResult) -> float:
+    """Map a graded Succor resolution to a tick-amount multiplier (#1744).
+
+    Mirrors apply_interpose_outcome's clean/partial/fail shape, but returns a
+    float multiplier (consumed by RoundContext.get_cover_for) instead of mutating
+    a payload in place — Succor's caller (_apply_round_tick_damage) has no
+    payload object to mutate, only a plain amount.
+    """
+    from world.mechanics.constants import ResolutionType  # noqa: PLC0415
+
+    check_result = result.check_result
+    success_level = check_result.success_level if check_result is not None else 0
+    is_clean_block = result.resolution_type == ResolutionType.DESTROY or success_level > 0
+    if is_clean_block:
+        return 0.0
+    if success_level == 0:
+        return 0.5
+    return 1.0
+
+
+def dispatch_succor(
+    succorer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    approach: str | None,
+) -> float:
+    """Resolve *succorer*'s Succor attempt against *protected* and return the multiplier.
+
+    Thin wrapper over dispatch_capability_reaction, mirroring dispatch_interpose.
+    Returns 1.0 (no cover) when no active Succor challenge is bound to *protected*.
+    """
+    from world.combat.succor_content import SUCCOR_CHALLENGE_NAME  # noqa: PLC0415
+    from world.mechanics.reactions import dispatch_capability_reaction  # noqa: PLC0415
+
+    outcome = {"multiplier": 1.0}
+
+    def _capture(result: ChallengeResolutionResult) -> None:
+        outcome["multiplier"] = apply_succor_outcome(result)
+
+    result = dispatch_capability_reaction(
+        succorer,
+        protected,
+        challenge_name=SUCCOR_CHALLENGE_NAME,
+        approach=approach,
+        error_msg=(
+            f"No succor approach is available to {succorer!r} for protected target {protected!r}."
+        ),
+        outcome_fn=_capture,
+    )
+    if result is None:
+        return 1.0
+    return outcome["multiplier"]
+
+
 def _get_anima(character: ObjectDB) -> CharacterAnima | None:  # noqa: OBJECTDB_PARAM
     """Return the CharacterAnima row for *character*, or None if absent.
 
@@ -5143,7 +5306,7 @@ def resolve_round(
     resolution_order = get_resolution_order(encounter)
     _resolve_passive_actions(encounter, pc_actions)
     _refresh_participant_trigger_handlers(encounter)
-    _ensure_interpose_challenges(encounter, pc_actions)
+    _ensure_reactive_challenges(encounter, pc_actions)
     result.action_outcomes = _resolve_actions(
         resolution_order,
         pc_actions,

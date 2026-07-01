@@ -37,9 +37,11 @@ They do not use the command system, dispatchers, or handlers.
   `CmdRitual` and the web `RitualPerformView`, #1331;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;
-  `combat_maneuvers.py` (#1453/#1452) — the non-cast/non-clash combat verbs as REGISTRY
-  actions: `FleeAction`/`CoverAction`/`InterposeAction`/`ReadyAction`/`UpgradeComboAction`/
-  `RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction` (keys prefixed `combat_`).
+  `combat_maneuvers.py` (#1453/#1452, Succor #1744) — the non-cast/non-clash combat verbs as
+  REGISTRY actions: `FleeAction`/`CoverAction`/`InterposeAction`/`SuccorAction`/`ReadyAction`/
+  `UpgradeComboAction`/`RevertComboAction`/`JoinEncounterAction`/`LeaveEncounterAction` (keys
+  prefixed `combat_`). `SuccorAction` (key `combat_succor`) wraps `declare_succor` — always
+  names a specific ally (no "any ally" path, unlike Interpose).
   Each `execute()` resolves the actor's active `CombatParticipant`/encounter and calls the
   existing combat service; shared by telnet `CmdCombat` (`combat <subverb>`) and the web
   `CombatEncounterViewSet`. `yield` is not here — `YieldAction` (`duels.py`) is reused. The one

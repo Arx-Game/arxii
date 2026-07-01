@@ -820,6 +820,14 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
             "(flee/cover/yield/interpose); null = normal action."
         ),
     )
+    succor_resolution = models.FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Cached graded outcome (0.0/0.5/1.0) of this round's Succor resolution, set on "
+            "first dispatch and reused for every subsequent hazard row the same round (#1744)."
+        ),
+    )
 
     physical_passive = models.ForeignKey(
         TECHNIQUE_MODEL,

@@ -1,8 +1,8 @@
 """Combat maneuver actions on the shared dispatch seam (#1453, #1452).
 
 Each verb a player can take in a fight that is not a technique cast or a clash
-commit — flee, cover, interpose, ready, join/leave the encounter, and the combo
-upgrade/revert — is a real ``Action`` here. Telnet (``CmdCombat``) and the web
+commit — flee, cover, interpose, succor, ready, join/leave the encounter, and the
+combo upgrade/revert — is a real ``Action`` here. Telnet (``CmdCombat``) and the web
 ``CombatEncounterViewSet`` both reach them through ``dispatch_player_action``;
 each ``execute()`` resolves the actor's combat state and calls the existing
 service. No new game logic lives here.
@@ -187,6 +187,42 @@ class InterposeAction(Action):
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You stand ready to interpose.")
+
+
+@dataclass
+class SuccorAction(Action):
+    """Shelter a specific ally from environmental hazards (wraps ``declare_succor``)."""
+
+    key: str = "combat_succor"
+    name: str = "Succor"
+    icon: str = "umbrella"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        ally_participant_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_succor  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        if ally_participant_id is None:
+            return ActionResult(success=False, message="Succor requires an ally to shelter.")
+        ally = _resolve_ally(participant, ally_participant_id)
+        if ally is None:
+            return ActionResult(success=False, message="No such ally in this encounter.")
+        try:
+            declare_succor(participant, ally)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You move to shelter your ally.")
 
 
 @dataclass

@@ -203,6 +203,7 @@ class ActionRegistryTests(TestCase):
             "combat_flee",
             "combat_cover",
             "combat_interpose",
+            "combat_succor",
             "combat_ready",
             "combat_combo",
             "combat_revert",

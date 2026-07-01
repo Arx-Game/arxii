@@ -19,6 +19,7 @@ from actions.definitions.combat_maneuvers import (
     LeaveEncounterAction,
     ReadyAction,
     RevertComboAction,
+    SuccorAction,
     UpgradeComboAction,
 )
 from actions.definitions.communication import (
@@ -262,6 +263,7 @@ _ALL_ACTIONS: list[Action] = [
     FleeAction(),
     CoverAction(),
     InterposeAction(),
+    SuccorAction(),
     ReadyAction(),
     UpgradeComboAction(),
     RevertComboAction(),
