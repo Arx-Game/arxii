@@ -717,22 +717,30 @@ so web and telnet converge on the same write path.
 - **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
   `SocialConsentCategory` (NaturalKey on `key`), `SocialConsentPreference` (OneToOne on tenure),
   `SocialConsentCategoryRule` (preference + category + ConsentMode), `SocialConsentWhitelist`
-  (owner_tenure / allowed_tenure / category)
+  (owner_tenure / allowed_tenure / category), `SocialConsentBlacklist` (#1698 —
+  owner_tenure / blocked_tenure / category; consulted under `ALL_BUT_BLACKLIST`)
+- **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
+  `scenes.Friendship`) / `ALLOWLIST`
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()`,
-  `_social_consent_exclusions()` (both in `actions/player_interface.py`)
+  `_decide_consent_block()`, `_social_consent_exclusions()`, `hostile_cast_consent_blocked()`
+  (#1698 PvP opt-out; all in `actions/player_interface.py`)
 - **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
   `make_default_categories()` (`world/consent/factories.py`)
 - **Key Services:** `set_social_consent_preference()`,
   `set_social_consent_category_rule()`, `remove_social_consent_category_rule()`,
   `add_social_consent_whitelist()`, `remove_social_consent_whitelist()`,
+  `add_social_consent_blacklist()`, `remove_social_consent_blacklist()` (#1698),
   `get_social_consent_summary()` (`world/consent/services.py`)
 - **Action Keys:** `set_social_consent_preference`, `set_social_consent_category_rule`,
-  `add_social_consent_whitelist`, `remove_social_consent_whitelist`
+  `add_social_consent_whitelist`, `remove_social_consent_whitelist`,
+  `add_social_consent_blacklist`, `remove_social_consent_blacklist` (#1698)
   (`actions/definitions/consent_preferences.py`)
 - **Telnet:** `consent` namespace (`commands/consent_preferences.py`) — `consent on|off`,
-  `consent category <key>=<mode>`, `consent whitelist add|remove|list`
-- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist;
-  writes dispatch through the consent Actions via `dispatch_player_action()`
+  `consent category <key>=<mode>`, `consent whitelist add|remove|list`,
+  `consent blacklist add|remove|list` (#1698); plus `accept/<difficulty>` + `deny/blacklist`
+  on the consent-response commands (`commands/consent.py`)
+- **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist,
+  blacklist (#1698); writes dispatch through the consent Actions via `dispatch_player_action()`
 - **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row = allow-all
 - **Integrates with:** actions (`ActionTemplate.consent_category` FK), roster (RosterTenure),
   codex (visibility), seed loader (`arx seed dev`)
