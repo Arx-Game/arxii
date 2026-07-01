@@ -93,6 +93,14 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
                 "world.checks.consequence_resolution.perform_check",
                 return_value=MagicMock(outcome=failure_outcome, success_level=-1),
             ),
+            # The PC declared this round, so _advance_surrounded_participants ticks
+            # their brand-new stage-1 instance in this SAME resolve call (declaring
+            # gates the tick regardless of afk_peril_override — see
+            # _advance_surrounded_participants). Without this patch that resist
+            # check would hit the real, unmocked dice roll and could nondeterministically
+            # advance past stage 1 before this assertion runs. A non-negative
+            # success_level keeps the stage held at 1 (advance only fires on failure).
+            patch("world.vitals.services.perform_check", return_value=_stub_check(1)),
         ):
             _run(self.gm_char, "resolve")
 
