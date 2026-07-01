@@ -19,6 +19,12 @@ class BattleModelTests(TestCase):
         self.assertEqual(self.battle.scene.name, "Siege of Test Keep")
         self.assertFalse(self.battle.is_concluded)
 
+    def test_battle_afk_peril_override_defaults_false(self) -> None:
+        from world.battles.factories import BattleFactory
+
+        battle = BattleFactory()
+        assert battle.afk_peril_override is False
+
     def test_sides_and_units(self) -> None:
         defender = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
         place = BattlePlaceFactory(battle=self.battle, name="The Main Gates")

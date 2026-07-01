@@ -62,6 +62,14 @@ class Battle(SharedMemoryModel):
         default=BattleOutcome.UNRESOLVED,
     )
     concluded_at = models.DateTimeField(null=True, blank=True)
+    afk_peril_override = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, a Surrounded participant's peril escalates every round the GM "
+            "resolves regardless of whether they declared this round (narrow, explicit "
+            "ADR-0004 exception scoped to peril only — see ADR-0069)."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
