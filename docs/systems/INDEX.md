@@ -1645,7 +1645,7 @@ Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resol
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
 - **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
-  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE; plus the
+  `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
@@ -1702,6 +1702,17 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     FAILURE is a no-op
   - `_ensure_interpose_challenges(encounter, pc_actions)` — idempotently mints
     `ChallengeInstance` rows for armed INTERPOSE actions each round
+  - `declare_succor(participant, ally)` — arm a SUCCOR `CombatRoundAction` sheltering a
+    specific ally from a round-ticked environmental hazard (#1744); unlike Interpose, Succor
+    always names a specific ally (no "any ally" path)
+  - `dispatch_succor(succorer, protected, approach)` — thin wrapper over
+    `dispatch_capability_reaction`; calls `apply_succor_outcome` to derive the tick-amount
+    multiplier
+  - `apply_succor_outcome(result)` — maps a graded Succor resolution to a float multiplier
+    (clean block → 0.0, partial → 0.5, fail → 1.0); consumed by round-tick hazard damage
+    instead of mutating a payload in place (Interpose's shape)
+  - `_ensure_succor_challenges(encounter, pc_actions)` — idempotently mints
+    `ChallengeInstance` rows bound to each protected ally for armed SUCCOR actions each round
   - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
     `TriggerHandler.refresh()` on each active participant so passive-installed reactive
     triggers (e.g. Shielded) fire in the same round
@@ -1713,11 +1724,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     seed for the INTERPOSE `ChallengeTemplate` + four capability-gated `Application` rows
     (telekinesis, shield, barrier, pull_aside) + Reflexes `CheckType` + SUCCESS-tier DESTROY
     consequence
+  - `ensure_succor_content()` (`src/world/combat/succor_content.py`) — idempotent seed for
+    the SUCCOR `ChallengeTemplate`, reusing the same four capability-gated `Application` rows
+    Interpose seeds + a dedicated exploration `CheckType` + SUCCESS-tier DESTROY consequence
   - `ensure_defend_content()` (`src/world/combat/defend_content.py`) — idempotent seed for
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
-- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE), `RoundStatus` (shared with
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove

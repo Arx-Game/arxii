@@ -13,7 +13,7 @@ An NPC entity in a `CombatEncounter`, defined by its `OpponentTier`, health/soak
 _Avoid_: enemy, monster, mob, NPC participant
 
 **Maneuver**:
-A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
+A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
 _Avoid_: special move, stance, command
 
 **Yield**:
@@ -23,6 +23,10 @@ _Avoid_: surrender, forfeit, submit, defeat
 **Interpose**:
 The maneuver by which a PC stands ready to step in front of an attack aimed at an ally and intercept it (a clean block). It costs fatigue only on the round it actually fires; an armed-but-never-triggered interpose costs nothing.
 _Avoid_: block, guard, intercept, bodyguard
+
+**Succor**:
+The maneuver by which a PC shelters a specific ally from a round-ticked environmental hazard (sunlight, poison gas) this round — the environmental-DoT sibling of Interpose (which blocks an incoming attack, not a lingering hazard). Always names a specific ally; there is no "any ally" path like Interpose has, since environmental shelter is "I'm sheltering THIS person," not "I'll block whichever hazard lands on someone." Resolves through the same graded capability-check spine as Interpose.
+_Avoid_: shelter (as the maneuver name), cover, shield, protect
 
 **Clash**:
 The reserved combat primitive for a multi-round contest in which two sides pour magical energy into overpowering each other (the "beam-struggle" trope) — the clash of wills. Modelled by `Clash` with a flavor discriminator (CLASH / LOCK / WARD / BREAK). The word "clash" is reserved for this feature and must not name any other concept.
