@@ -4972,6 +4972,7 @@
   - consequences <- checks.Consequence
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
+  - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
 
 ### ResultChart
 **Pointed to by:**

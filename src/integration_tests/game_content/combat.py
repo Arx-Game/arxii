@@ -87,3 +87,17 @@ def seed_flee_check() -> FleeSeedResult:
         modifier_target=modifier_target,
         config=config,
     )
+
+
+def seed_encounter_beat_wiring() -> None:
+    """Seed the ENCOUNTER_COMPLETED → beat TriggerDefinition (#1746).
+
+    Creates (get_or_create) the ``encounter_completed_beat_wiring`` FlowDefinition
+    (one CALL_SERVICE_FUNCTION step → encounter_completed_beat_handler) and its
+    TriggerDefinition. Idempotent — re-runs are no-ops and staff edits to existing
+    rows are preserved. The per-room Trigger is installed lazily at encounter
+    completion by ``install_encounter_beat_trigger``.
+    """
+    from world.combat.beat_wiring import wire_encounter_beat_triggers  # noqa: PLC0415
+
+    wire_encounter_beat_triggers()
