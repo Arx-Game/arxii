@@ -1828,9 +1828,10 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   attrited by STRIKE successes), `BattleRound` (subclasses `AbstractRound`; partial unique
   constraint: one active round per battle), `BattleParticipant` (`character_sheet` FK,
   `side`, `place`, `status`; unique `(battle, character_sheet)`),
-  `BattleActionDeclaration` (`technique` FK required, `action_kind` STRIKE/SUPPORT,
+  `BattleActionDeclaration` (`technique` FK required, `action_kind` STRIKE/SUPPORT/RESCUE,
   `target_unit`, `target_ally`, `resolved`, `success_level`;
-  unique `(battle_round, participant)`)
+  unique `(battle_round, participant)`); `Battle.afk_peril_override` (BooleanField,
+  default False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
 - **Key Services (`world.battles.services`):**
   - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
@@ -1861,15 +1862,29 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `TechniqueNotBattleReadyError`
 - **#1716 dependency:** `Battle.campaign_story` FK stores the parent Story; outcome →
   campaign-stakes propagation + win-gated Legend is explicitly deferred to #1716.
-- **Deferred follow-ups:** peril/rescue (#1710), AFK knobs (#1711), battle writeup page
-  (#1712), rich type-matchups (#1714), naval/aerial/siege (#1715), campaign propagation
+- **Peril / Rescue (#1733):** isolated participants can be Surrounded — a staged,
+  3-stage acute-peril `ConditionTemplate` (seeded by
+  `world.vitals.factories.ensure_surrounded_content`) resolved through the same
+  guarded-consequence-pool core (`_resolve_peril_via_pool`) Bleeding-Out uses. Entry
+  roll on isolated declaration failure (`_maybe_apply_surrounded`); per-round escalation
+  tick gated on declaring-this-round or `Battle.afk_peril_override`
+  (`_advance_surrounded_participants` / `advance_surrounded`); terminal stage routes to
+  an enemy-vs-pvp pool (`select_surrounded_terminal_pool`, ADR-0023-safe); a new
+  `BattleActionKind.RESCUE` clears an ally's Surrounded condition
+  (`_resolve_rescue_success`), declared via `battle declare rescue <ally> with
+  <technique>`. See ADR-0070 for the AFK-safety exception.
+- **Deferred follow-ups:** battle writeup page (#1735), rich type-matchups (#1711),
+  command hierarchy / naval / aerial / siege (#1710, #1713, #1714), campaign propagation
   (#1716).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
   E2E journey `src/integration_tests/pipeline/test_battle_telnet_e2e.py`
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant FK), vitals
-  (damage consequences), magic (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
+  (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
+  conditions (the "Surrounded" staged `ConditionTemplate`, #1733), magic
+  (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
   → `use_technique`), checks (`perform_check` sourced from the cast technique's
-  `action_template.check_type`, via `use_technique`), combat (`BattlePlace.combat_encounter`
+  `action_template.check_type`, via `use_technique`; `select_consequence` for the
+  Surrounded entry roll and resist checks, #1733), combat (`BattlePlace.combat_encounter`
   bridge; shared `RoundStatus` / `AbstractRound`), stories (`campaign_story` FK → #1716),
   actions (REGISTRY + `get_active_round_context` seam)
 - **Source:** `src/world/battles/`
@@ -1891,9 +1906,13 @@ combat, poison, spells, exhaustion, and any damage source.
     knockout check → death check → permanent wound check; each tier rolls the configured pool.
   - `advance_bleed_out(sheet) -> bool` — per-round progression; terminal stage routes to
     `_resolve_terminal_bleed_out` (guarded pool, not unconditional death; ADR-0049).
-  - `_resolve_peril_via_pool(sheet, instance, pool) -> bool` — shared death-gated core for ALL
-    acute-peril resolution: excludes `character_loss` candidates when `death_is_permitted` returns
-    False; clears the condition on both death and survival; single `_mark_dead` writer.
+  - `_resolve_peril_via_pool(sheet, instance, pool, *, death_permitted) -> bool` — shared
+    death-gated core for ALL acute-peril resolution: excludes `character_loss` candidates when
+    the caller-supplied `death_permitted` is False; clears the condition on both death and
+    survival; single `_mark_dead` writer. `death_permitted` is supplied by the caller
+    (bleed-out/abandonment via `death_is_permitted`; battle Surrounded via
+    `select_surrounded_terminal_pool` routing, #1733) rather than derived internally, since not
+    every peril source is an `ObjectDB` character.
   - `resolve_abandonment(sheet) -> bool` — resolves an abandoned victim through the source-
     appropriate pool; no-op when rescued (no acute-peril instance); seeding gap holds, never kills.
 - **Key Services (`world/vitals/peril_resolution.py`, #1479):**

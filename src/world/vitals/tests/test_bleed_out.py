@@ -301,3 +301,24 @@ class AdvanceBleedOutTerminalPoolTests(TestCase):
                 target=sheet.character, condition=self.bleed_out
             ).exists(),
         )
+
+
+class ResolvePerilViaPoolSignatureTests(TestCase):
+    """Signature-level regression pin for the #1733 Task 2 death-gate refactor.
+
+    A bare module-level ``def test_...():`` function is NOT discovered by this
+    repo's unittest-based ``arx test`` runner (confirmed: existing bare functions
+    in other test modules are silently never executed) — wrapped in a TestCase so
+    it actually runs.
+    """
+
+    def test_resolve_peril_via_pool_takes_explicit_death_permitted(self) -> None:
+        """death_permitted is now a required kwarg, not derived internally from
+        death_is_permitted(source_character=instance.source_character)."""
+        import inspect
+
+        from world.vitals.services import _resolve_peril_via_pool
+
+        params = inspect.signature(_resolve_peril_via_pool).parameters
+        self.assertIn("death_permitted", params)
+        self.assertEqual(params["death_permitted"].kind, inspect.Parameter.KEYWORD_ONLY)

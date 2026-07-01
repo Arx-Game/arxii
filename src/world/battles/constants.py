@@ -23,6 +23,7 @@ class BattleParticipantStatus(models.TextChoices):
 class BattleActionKind(models.TextChoices):
     STRIKE = "strike", "Strike a unit"
     SUPPORT = "support", "Support an ally"
+    RESCUE = "rescue", "Rescue a surrounded ally"
 
 
 class BattleOutcome(models.TextChoices):
@@ -41,3 +42,9 @@ SUPPORT_VP = 3
 BASE_FAILURE_DAMAGE = 8
 DECISIVE_MARGIN = 50
 ROUTED_STRENGTH_THRESHOLD = 30
+
+# Surrounded entry-roll signal weights (#1733). Fed as perform_check extra_modifiers
+# for the entry roll (Task 6) — authored content (the surrounded_entry pool's rows)
+# decides the actual odds; these are inputs to that roll, not a code-level gate.
+SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15  # isolated: no ally at your BattlePlace
+SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40  # active, unimpaired MOVEMENT capability

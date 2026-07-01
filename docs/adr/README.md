@@ -110,6 +110,7 @@ treat those names as hints to confirm, not gospel.
 - [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
 - [0061 — Access-change fires one shared surface; discoverability is a shared abstract base](0061-access-change-fires-one-surface-discoverable-is-shared-base.md)
 - [0069 — Succor is a RoundContext capability; location shelter is a hard gate, not arithmetic resistance](0069-succor-roundcontext-capability.md)
+- [0070 — Battle Surrounded peril may override AFK-safety, narrowly and explicitly](0070-battle-peril-may-override-afk-safety-narrowly.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

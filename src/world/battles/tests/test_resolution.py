@@ -7,9 +7,9 @@ All tests run on the SQLite fast tier (no progressive conditions).
 from __future__ import annotations
 
 import types
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
@@ -29,7 +29,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.scenes.constants import RoundStatus
-from world.vitals.factories import CharacterVitalsFactory
+from world.vitals.factories import CharacterVitalsFactory, ensure_surrounded_content
 
 
 def _success_result(level: int = 5) -> types.SimpleNamespace:
@@ -474,3 +474,320 @@ class BattleRoundAudereWiringTests(TestCase):
         called_character, called_intensity = mock_audere.call_args[0]
         self.assertEqual(called_character, self.sheet.character)
         self.assertEqual(called_intensity, self.technique.intensity)
+
+
+class IsolationAndMobilityTests(TestCase):
+    def test_is_isolated_true_with_no_ally_at_place(self) -> None:
+        from world.battles.resolution import _is_isolated
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Isolation Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        sheet = CharacterSheetFactory()
+        participant = enlist_participant(
+            battle=battle, character_sheet=sheet, side=side, place=place
+        )
+        assert _is_isolated(participant) is True
+
+    def test_is_isolated_false_with_ally_at_same_place(self) -> None:
+        from world.battles.resolution import _is_isolated
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Isolation Test 2")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        p1 = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=side, place=place
+        )
+        enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=side, place=place
+        )
+        assert _is_isolated(p1) is False
+
+
+class SelectSurroundedTerminalPoolTests(TestCase):
+    def test_routes_to_enemy_pool_when_no_pc_opposes_at_place(self) -> None:
+        from world.battles.resolution import select_surrounded_terminal_pool
+        from world.battles.services import add_place, create_battle
+        from world.vitals.factories import ensure_surrounded_content
+
+        content = ensure_surrounded_content()
+        battle = create_battle(name="Routing Test")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        participant = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=attacker, place=place
+        )
+        pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+        assert pool == content["pools"]["surrounded_terminal_enemy"]
+
+    def test_routes_to_pvp_pool_when_opposing_pc_present_at_place(self) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.battles.resolution import select_surrounded_terminal_pool
+        from world.battles.services import add_place, create_battle
+        from world.vitals.factories import ensure_surrounded_content
+
+        content = ensure_surrounded_content()
+        battle = create_battle(name="Routing Test 2")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+        place = add_place(battle=battle, name="The Gates")
+        participant = enlist_participant(
+            battle=battle, character_sheet=CharacterSheetFactory(), side=attacker, place=place
+        )
+        # A bare CharacterSheetFactory() character has db_account=None (NPC by
+        # convention — see world/vitals/peril_resolution.py:is_pc_source); attach a
+        # real account so this participant is classified as an opposing PC.
+        pc_character = CharacterFactory()
+        pc_character.db_account = AccountFactory()
+        pc_character.save()
+        enlist_participant(
+            battle=battle,
+            character_sheet=CharacterSheetFactory(character=pc_character),
+            side=defender,
+            place=place,
+        )
+        pool = select_surrounded_terminal_pool(battle=battle, participant=participant)
+        assert pool == content["pools"]["surrounded_terminal_pvp"]
+
+
+class EntryRollTests(TestCase):
+    def setUp(self) -> None:
+        self.content = ensure_surrounded_content()
+
+    @tag("postgres")
+    def test_isolated_failure_can_apply_surrounded(self) -> None:
+        """With the check patched to force the Failure tier, an isolated STRIKE
+        failure applies Surrounded via the entry pool's 'surrounded' row.
+
+        PG-only (@tag("postgres")): this test exercises the real production
+        _maybe_apply_surrounded -> apply_condition path, which routes through
+        _build_bulk_context's PG-only DISTINCT ON query and errors on the SQLite
+        fast tier (same known trap Task 3's regression test and Task 7's
+        EscalationTickTests fixture route around — here the call is inside the
+        code under test, so it can't be avoided). Verify via
+        `just test-parity world.battles` or CI's Postgres shard, not
+        `just test-fast`.
+        """
+        from world.battles.constants import BattleActionKind, BattleSideRole
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_place,
+            add_side,
+            add_unit,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.conditions.services import get_active_conditions
+
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=30)
+
+        battle = create_battle(name="Entry Roll Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        unit = add_unit(battle=battle, side=side, name="Foes", unit_type="infantry")
+        participant = enlist_participant(
+            battle=battle, character_sheet=sheet, side=side, place=place
+        )
+        battle_round = begin_battle_round(battle=battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=technique,
+            target_unit=unit,
+        )
+
+        # Two DISTINCT perform_check call sites are involved and must be patched
+        # separately: (1) resolve_battle_technique's own STRIKE check (patched directly
+        # by replacing resolve_battle_technique itself, same as the existing
+        # test_resolution.py convention); (2) the entry roll's check, which runs through
+        # select_consequence -> world.checks.consequence_resolution.perform_check (a
+        # DIFFERENT imported name than world.battles.resolution.perform_check — patching
+        # the wrong one silently no-ops the entry roll). Force the entry roll's outcome
+        # tier to Failure so it lands in the pool's "surrounded" row.
+        from world.traits.models import CheckOutcome
+
+        failure_outcome = CheckOutcome.objects.get(name="Failure")
+        entry_check_result = MagicMock(outcome=failure_outcome, success_level=-1)
+
+        with (
+            patch(
+                "world.battles.resolution.resolve_battle_technique",
+                return_value=_failure_result(-10),
+            ),
+            patch(
+                "world.checks.consequence_resolution.perform_check",
+                return_value=entry_check_result,
+            ),
+        ):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance is not None
+        assert instance.current_stage.stage_order == 1
+
+
+class EscalationTickTests(TestCase):
+    def setUp(self) -> None:
+        self.content = ensure_surrounded_content()
+
+    def _surrounded_participant(self, battle, side):
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet)
+        participant = enlist_participant(battle=battle, character_sheet=sheet, side=side)
+        # Build the ConditionInstance directly rather than via apply_condition, which
+        # routes through _build_bulk_context's PG-only DISTINCT ON query and errors on
+        # the SQLite fast tier (known trap — see world/vitals/tests/test_bleed_out.py's
+        # module docstring and Task 3's AdvanceStagedPerilTests, which hit this first).
+        from world.conditions.factories import ConditionInstanceFactory
+
+        ConditionInstanceFactory(
+            target=sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        return participant
+
+    def test_surrounded_participant_who_declared_escalates(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+        )
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Escalation Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = self._surrounded_participant(battle, side)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
+        CharacterTechniqueFactory(character=participant.character_sheet, technique=technique)
+        CharacterAnimaFactory(
+            character=participant.character_sheet.character, current=20, maximum=30
+        )
+        battle_round = begin_battle_round(battle=battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=technique,
+        )
+
+        with (
+            patch(
+                "world.battles.resolution.resolve_battle_technique",
+                return_value=_success_result(3),
+            ),
+            patch("world.vitals.services.perform_check", return_value=_failure_result(-1)),
+        ):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            participant.character_sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance.current_stage.stage_order == 2  # advanced from 1
+
+    def test_surrounded_participant_who_did_not_declare_holds_when_knob_off(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import add_side, begin_battle_round, create_battle
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Escalation Hold Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = self._surrounded_participant(battle, side)
+        battle_round = begin_battle_round(battle=battle)
+        # No declaration this round; battle.afk_peril_override defaults False.
+
+        with patch("world.vitals.services.perform_check", return_value=_failure_result(-1)):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            participant.character_sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance.current_stage.stage_order == 1  # held, did not advance
+
+    def test_surrounded_participant_who_did_not_declare_escalates_when_knob_on(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import add_side, begin_battle_round, create_battle
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Escalation Override Test")
+        battle.afk_peril_override = True
+        battle.save(update_fields=["afk_peril_override"])
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = self._surrounded_participant(battle, side)
+        battle_round = begin_battle_round(battle=battle)
+
+        with patch("world.vitals.services.perform_check", return_value=_failure_result(-1)):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            participant.character_sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance.current_stage.stage_order == 2
+
+
+class RescueResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.content = ensure_surrounded_content()
+
+    def test_successful_rescue_clears_surrounded(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Rescue Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        victim_sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=victim_sheet)
+        victim = enlist_participant(battle=battle, character_sheet=victim_sheet, side=side)
+        # Direct ConditionInstance creation, not apply_condition — apply_condition routes
+        # through _build_bulk_context's PG-only DISTINCT ON query and errors on the
+        # SQLite fast tier (same known trap as Task 7's fixture; RESCUE's own
+        # remove_condition call, exercised below, does NOT hit this path, so this test
+        # stays SQLite-safe once setup avoids apply_condition).
+        ConditionInstanceFactory(
+            target=victim_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+
+        rescuer_sheet = CharacterSheetFactory()
+        rescuer = enlist_participant(battle=battle, character_sheet=rescuer_sheet, side=side)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
+        CharacterTechniqueFactory(character=rescuer_sheet, technique=technique)
+        CharacterAnimaFactory(character=rescuer_sheet.character, current=20, maximum=30)
+
+        battle_round = begin_battle_round(battle=battle)
+        declare_battle_action(
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            technique=technique,
+            target_ally=victim,
+        )
+
+        with patch(
+            "world.battles.resolution.resolve_battle_technique",
+            return_value=_success_result(3),
+        ):
+            resolve_battle_round(battle_round=battle_round)
+
+        assert not get_active_conditions(
+            victim_sheet.character, condition=self.content["condition"]
+        ).exists()
