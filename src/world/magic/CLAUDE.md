@@ -232,6 +232,27 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 (`technique dispel add|remove`), and frontend (`RemovedConditionsEditor` in
 `TechniqueBuilderForm`). See ADR-0064 for why dispel is a payload row, not an `EffectKind`.
 
+### Technique Acquisition (non-teaching) (#1732)
+
+- `TechniqueGrant` — Authored sidecar (`models/technique_grant.py`) linking a
+  `Technique` to an `ItemTemplate` (on-use delivery) or `Ritual` (SERVICE delivery).
+  Exactly one vehicle enforced by `clean()` + partial UniqueConstraints.
+- `learn_technique(learner, technique, *, source, ap_cost=0, xp_cost=0)` — shared
+  commit seam in `services/technique_acquisition.py`. Runs gift-owned → path gate →
+  cap → AP spend → mint → announce. Called by `UseItemAction` (item path) and
+  `learn_technique_from_ritual` (ritual SERVICE path). `accept_technique_offer`
+  delegates its mint step here.
+- `can_learn_technique(learner, technique)` — shared path-style gate in
+  `services/gift_acquisition.py`. Checks `technique.style.allowed_paths` against
+  `current_path_for_character(learner.character)`.
+- `GiftAcquisitionConfig.major_gift_ap_multiplier` — staff-tunable AP multiplier
+  for MAJOR-gift techniques on the `has_gift` branch of `accept_technique_offer`.
+- `AccessChangeSource.TECHNIQUE_GRANT` — provenance value for non-teaching
+  technique acquisition.
+- Ritual SERVICE dispatch (`_dispatch_service` in `actions/definitions/ritual.py`)
+  now forwards `ritual=ritual` to the service function, so technique-granting
+  rituals can resolve their `TechniqueGrant` row.
+
 ### Cantrips (Character Creation)
 - `Cantrip` - Staff-curated technique templates for CG magic stage selection
 - A cantrip IS a baby technique — at CG finalization it creates a real Technique
