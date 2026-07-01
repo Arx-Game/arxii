@@ -37,7 +37,10 @@ class TechniqueGrant(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="technique_grants",
-        help_text="Ritual that grants this technique on performance. Mutually exclusive with item_template.",
+        help_text=(
+            "Ritual that grants this technique on performance. "
+            "Mutually exclusive with item_template."
+        ),
     )
     acquisition_ap_cost = models.PositiveIntegerField(
         default=0,
@@ -81,9 +84,9 @@ class TechniqueGrant(SharedMemoryModel):
 
     def clean(self) -> None:
         """Enforce exactly one of item_template / ritual is set."""
+        both_msg = "A TechniqueGrant must have exactly one of item_template or ritual, not both."
+        neither_msg = "A TechniqueGrant must have either an item_template or a ritual."
         if self.item_template_id and self.ritual_id:
-            raise ValidationError(
-                "A TechniqueGrant must have exactly one of item_template or ritual, not both."
-            )
+            raise ValidationError(both_msg)
         if not self.item_template_id and not self.ritual_id:
-            raise ValidationError("A TechniqueGrant must have either an item_template or a ritual.")
+            raise ValidationError(neither_msg)

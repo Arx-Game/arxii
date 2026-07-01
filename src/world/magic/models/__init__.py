@@ -347,12 +347,12 @@ __all__ = [
     "TechniqueDraftCapabilityGrant",
     "TechniqueDraftDamageProfile",
     "TechniqueDraftRemovedCondition",
+    "TechniqueGrant",
     "TechniqueOutcomeModifier",
     "TechniqueRemovedCondition",
     "TechniqueStyle",
     "TechniqueStyleManager",
     "TechniqueTeachingOffer",
-    "TechniqueGrant",
     "TechniqueTierBudget",
     # gift-technique specialization variants (#1578)
     "TechniqueVariant",
