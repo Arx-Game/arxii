@@ -18,25 +18,44 @@ _MSG_USAGE = (
     "Usage:\n"
     "  consent                          - show your consent settings\n"
     "  consent on|off                   - allow or block all social actions\n"
-    "  consent category <key>=<mode>    - set a category to everyone|allowlist|whitelist|default\n"
-    "  consent whitelist add <name> to <category>\n"
+    "  consent category <key>=<mode>    - mode: everyone|whitelist|blacklist|friends|default\n"
+    "  consent whitelist add <name> to <category>       (people you always allow)\n"
     "  consent whitelist remove <name> from <category>\n"
-    "  consent whitelist list [category]"
+    "  consent whitelist list [category]\n"
+    "  consent blacklist add <name> to <category>       (people barred under 'blacklist' mode)\n"
+    "  consent blacklist remove <name> from <category>\n"
+    "  consent blacklist list [category]"
 )
 
-# Subverb -> registry action key. The "whitelist" subverb is resolved in func()
-# once the second token (add/remove) is known; "list" is handled locally.
+# Subverb -> registry action key. The "whitelist"/"blacklist" subverbs are resolved in
+# func() once the second token (add/remove) is known; "list" is handled locally.
 _SUBVERBS: dict[str, str] = {
     "on": "set_social_consent_preference",
     "off": "set_social_consent_preference",
     "category": "set_social_consent_category_rule",
 }
 
+# Player-facing mode tokens -> internal ConsentMode value. "blacklist" is the friendly
+# name for ALL_BUT_BLACKLIST (allow everyone except the blacklist); "friends" for
+# FRIENDS_WHITELIST; "whitelist" for the strict ALLOWLIST.
 _PLAYER_FACING_MODE_MAP = {
     "everyone": "everyone",
     "allowlist": "allowlist",
     "whitelist": "allowlist",
+    "all-but-blacklist": "all_but_blacklist",
+    "all_but_blacklist": "all_but_blacklist",
+    "blacklist": "all_but_blacklist",
+    "friends": "friends_whitelist",
+    "friends-whitelist": "friends_whitelist",
+    "friends_whitelist": "friends_whitelist",
     "default": "default",
+}
+
+# Internal ConsentMode value -> player-facing token shown in the summary.
+_MODE_DISPLAY_MAP = {
+    "allowlist": "whitelist",
+    "all_but_blacklist": "blacklist",
+    "friends_whitelist": "friends",
 }
 
 
@@ -74,8 +93,8 @@ class CmdConsent(DispatchCommand):
             if self._subverb == "category" and "=" not in self._rest:  # noqa: STRING_LITERAL
                 self.msg(_MSG_USAGE)
                 return
-        elif self._subverb == "whitelist":  # noqa: STRING_LITERAL
-            if not self._handle_whitelist():
+        elif self._subverb in ("whitelist", "blacklist"):  # noqa: STRING_LITERAL
+            if not self._handle_list_op(self._subverb):
                 return
         else:
             self.msg(_MSG_USAGE)
@@ -105,9 +124,11 @@ class CmdConsent(DispatchCommand):
         if self._registry_key in (
             "add_social_consent_whitelist",  # noqa: STRING_LITERAL
             "remove_social_consent_whitelist",  # noqa: STRING_LITERAL
+            "add_social_consent_blacklist",  # noqa: STRING_LITERAL
+            "remove_social_consent_blacklist",  # noqa: STRING_LITERAL
         ):
-            connector = "to" if self._registry_key == "add_social_consent_whitelist" else "from"  # noqa: STRING_LITERAL
-            name, category_key = self._parse_whitelist_name_and_category(connector)
+            connector = "to" if self._registry_key.startswith("add_") else "from"  # noqa: STRING_LITERAL
+            name, category_key = self._parse_list_name_and_category(connector)
             target_tenure = self._resolve_target_tenure(name)
             return {
                 "tenure_id": tenure.pk,
@@ -121,8 +142,8 @@ class CmdConsent(DispatchCommand):
     # Parsing helpers
     # -----------------------------------------------------------------------
 
-    def _handle_whitelist(self) -> bool:
-        """Parse ``consent whitelist <op> ...``.
+    def _handle_list_op(self, list_name: str) -> bool:
+        """Parse ``consent whitelist|blacklist <op> ...`` (*list_name* is which list).
 
         Returns True when the command should continue to dispatch (add/remove).
         Returns False when the command has already produced output (list / error).
@@ -140,23 +161,22 @@ class CmdConsent(DispatchCommand):
             return False
 
         if op in ("add", "remove"):  # noqa: STRING_LITERAL
-            self._registry_key = (
-                "add_social_consent_whitelist" if op == "add" else "remove_social_consent_whitelist"  # noqa: STRING_LITERAL
-            )
+            self._registry_key = f"{op}_social_consent_{list_name}"
             self._rest = rest
             return True
 
         self.msg(_MSG_USAGE)
         return False
 
-    def _parse_whitelist_name_and_category(self, connector: str) -> tuple[str, str]:
+    def _parse_list_name_and_category(self, connector: str) -> tuple[str, str]:
         """Parse ``<name> <connector> <category>`` from ``self._rest``.
 
         Raises CommandError with usage guidance on malformed input.
         """
         args = self._rest.strip()
-        op = "add" if self._registry_key == "add_social_consent_whitelist" else "remove"  # noqa: STRING_LITERAL
-        usage = f"Usage: consent whitelist {op} <name> {connector} <category>."
+        op = "add" if self._registry_key.startswith("add_") else "remove"  # noqa: STRING_LITERAL
+        list_name = "blacklist" if "blacklist" in self._registry_key else "whitelist"  # noqa: STRING_LITERAL
+        usage = f"Usage: consent {list_name} {op} <name> {connector} <category>."
         if not args:
             raise CommandError(usage)
         match = re.match(
@@ -223,18 +243,41 @@ class CmdConsent(DispatchCommand):
         if rules:
             lines.append("  |wCategory rules:|n")
             for rule in rules:
-                display_mode = "whitelist" if rule.mode == "allowlist" else rule.mode  # noqa: STRING_LITERAL
+                display_mode = _MODE_DISPLAY_MAP.get(rule.mode, rule.mode)
                 lines.append(f"    {rule.category.name}: {display_mode}")
         else:
             lines.append("  No per-category rules set (all categories use the global preference).")
 
-        self._append_whitelist_summary(lines, summary["whitelist"], category_key)
+        self._append_list_summary(
+            lines,
+            summary["whitelist"],
+            category_key,
+            label="Whitelist",
+            tenure_attr="allowed_tenure",
+        )
+        self._append_list_summary(
+            lines,
+            summary["blacklist"],
+            category_key,
+            label="Blacklist",
+            tenure_attr="blocked_tenure",
+        )
         self.msg("\n".join(lines))
 
-    def _append_whitelist_summary(
-        self, lines: list[str], whitelist: Any, category_key: str | None
+    def _append_list_summary(
+        self,
+        lines: list[str],
+        entries: Any,
+        category_key: str | None,
+        *,
+        label: str,
+        tenure_attr: str,
     ) -> None:
-        """Append the whitelist section (optionally scoped to one category) to *lines*."""
+        """Append a whitelist/blacklist section (optionally scoped to one category).
+
+        *label* is the section heading ("Whitelist"/"Blacklist"); *tenure_attr* names the
+        entry field holding the other tenure ("allowed_tenure"/"blocked_tenure").
+        """
         from world.consent.models import SocialConsentCategory  # noqa: PLC0415
 
         if category_key:
@@ -243,16 +286,16 @@ class CmdConsent(DispatchCommand):
             except SocialConsentCategory.DoesNotExist:
                 lines.append(f"  No category named '{category_key}'.")
                 return
-            filtered = [entry for entry in whitelist if entry.category_id == category.pk]
+            filtered = [entry for entry in entries if entry.category_id == category.pk]
             if filtered:
-                lines.append(f"  |wWhitelist for {category.name}:|n")
-                lines.extend(f"    {entry.allowed_tenure}" for entry in filtered)
+                lines.append(f"  |w{label} for {category.name}:|n")
+                lines.extend(f"    {getattr(entry, tenure_attr)}" for entry in filtered)
             else:
-                lines.append(f"  No whitelist entries for {category.name}.")
-        elif whitelist:
-            lines.append("  |wWhitelist entries:|n")
+                lines.append(f"  No {label.lower()} entries for {category.name}.")
+        elif entries:
+            lines.append(f"  |w{label} entries:|n")
             lines.extend(
-                f"    {entry.allowed_tenure} - {entry.category.name}" for entry in whitelist
+                f"    {getattr(entry, tenure_attr)} - {entry.category.name}" for entry in entries
             )
         else:
-            lines.append("  No whitelist entries.")
+            lines.append(f"  No {label.lower()} entries.")

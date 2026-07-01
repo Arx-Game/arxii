@@ -559,6 +559,7 @@
 **Foreign Keys:**
   - battle_round -> battles.BattleRound [FK]
   - participant -> battles.BattleParticipant [FK]
+  - technique -> magic.Technique [FK]
   - target_unit -> battles.BattleUnit [FK] (nullable)
   - target_ally -> battles.BattleParticipant [FK] (nullable)
 
@@ -570,7 +571,7 @@
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 
@@ -1517,6 +1518,7 @@
   - action_templates <- actions.ActionTemplate
   - rules <- consent.SocialConsentCategoryRule
   - whitelist_entries <- consent.SocialConsentWhitelist
+  - blacklist_entries <- consent.SocialConsentBlacklist
 
 ### SocialConsentPreference
 **Foreign Keys:**
@@ -1535,9 +1537,17 @@
   - allowed_tenure -> roster.RosterTenure [FK]
   - category -> consent.SocialConsentCategory [FK]
 
+### SocialConsentBlacklist
+**Foreign Keys:**
+  - owner_tenure -> roster.RosterTenure [FK]
+  - blocked_tenure -> roster.RosterTenure [FK]
+  - category -> consent.SocialConsentCategory [FK]
+
 ### Service Functions
+- `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
+- `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `set_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory', mode: 'str') -> 'SocialConsentCategoryRule'`
@@ -2331,6 +2341,7 @@
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
   - conditions_caused <- conditions.ConditionInstance
+  - battle_declarations <- battles.BattleActionDeclaration
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
@@ -4026,6 +4037,8 @@
   - social_consent_preference <- consent.SocialConsentPreference
   - social_consent_whitelist_owned <- consent.SocialConsentWhitelist
   - social_consent_whitelist_allowed <- consent.SocialConsentWhitelist
+  - social_consent_blacklist_owned <- consent.SocialConsentBlacklist
+  - social_consent_blacklist_blocked <- consent.SocialConsentBlacklist
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
   - codexteachingoffer_visible <- codex.CodexTeachingOffer

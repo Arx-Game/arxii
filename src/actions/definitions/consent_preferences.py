@@ -23,18 +23,25 @@ _MSG_OWNER_INACTIVE = "Your character is not currently active."
 _MSG_ALLOWED_INACTIVE = "That character is not currently active."
 _MSG_ADD_NOT_FOUND = "That character cannot be whitelisted."
 _MSG_REMOVE_NOT_FOUND = "That character is not on the list."
+_MSG_BLACKLIST_ADD_NOT_FOUND = "That character cannot be blacklisted."
+_MSG_BLACKLIST_REMOVE_NOT_FOUND = "That character is not on the blacklist."
 
 _MODE_DEFAULT = "default"
-_PLAYER_FACING_ALLOWLIST = "whitelist"
+
+# Player-facing tokens for the internal ConsentMode values (accepted on input and shown
+# on output). EVERYONE is the default and shown verbatim.
+_MODE_DISPLAY: dict[str, str] = {
+    "allowlist": "whitelist",
+    "all_but_blacklist": "all-but-blacklist",
+    "friends_whitelist": "friends",
+}
 
 
 def _display_mode(mode: str | None) -> str | None:
     """Map internal consent-mode values to player-facing vocabulary."""
-    from world.consent.constants import ConsentMode  # noqa: PLC0415
-
-    if mode == ConsentMode.ALLOWLIST:
-        return _PLAYER_FACING_ALLOWLIST
-    return mode
+    if mode is None:
+        return None
+    return _MODE_DISPLAY.get(mode, mode)
 
 
 def _resolve_owner_tenure(actor: ObjectDB, tenure_id: int | None):
@@ -67,24 +74,24 @@ def _resolve_category(key: str | None):
         return None, _MSG_NO_CATEGORY.format(key)
 
 
-def _resolve_whitelist_targets(
+def _resolve_consent_targets(
     actor: ObjectDB,
     kwargs: dict[str, Any],
     *,
     require_allowed_active: bool,
     not_found_message: str,
 ):
-    """Resolve the owner tenure, category, and allowed tenure for a whitelist op.
+    """Resolve the owner tenure, category, and other tenure for a whitelist/blacklist op.
 
-    Shared by add/remove whitelist actions. Returns ``(targets, error)``:
-    on success ``targets`` is ``(tenure, category, allowed_tenure)`` and
-    ``error`` is ``None``; on failure ``targets`` is ``None`` and ``error``
-    is a failing ``ActionResult`` the caller returns verbatim.
-    ``require_allowed_active`` is False on the remove path so a now-inactive
-    character can still be taken off the list. ``not_found_message`` is the
-    message returned when no allowed tenure matches the supplied id (the two
-    paths use distinct wording — add: "cannot be whitelisted", remove: "not
-    on the list").
+    Shared by the add/remove whitelist AND blacklist actions (the resolution is
+    identical — only the message wording differs). The other tenure is read from the
+    ``allowed_tenure_id`` kwarg regardless of list. Returns ``(targets, error)``: on
+    success ``targets`` is ``(tenure, category, other_tenure)`` and ``error`` is
+    ``None``; on failure ``targets`` is ``None`` and ``error`` is a failing
+    ``ActionResult`` the caller returns verbatim. ``require_allowed_active`` is False on
+    the remove path so a now-inactive character can still be taken off the list.
+    ``not_found_message`` is returned when no tenure matches the supplied id (each path
+    supplies its own wording).
     """
     tenure, err = _resolve_owner_tenure(actor, kwargs.get("tenure_id"))
     if tenure is None:
@@ -208,7 +215,7 @@ class AddSocialConsentWhitelistAction(Action):
             set_social_consent_preference,
         )
 
-        targets, error = _resolve_whitelist_targets(
+        targets, error = _resolve_consent_targets(
             actor,
             kwargs,
             require_allowed_active=True,
@@ -245,7 +252,7 @@ class RemoveSocialConsentWhitelistAction(Action):
     ) -> ActionResult:
         from world.consent.services import remove_social_consent_whitelist  # noqa: PLC0415
 
-        targets, error = _resolve_whitelist_targets(
+        targets, error = _resolve_consent_targets(
             actor,
             kwargs,
             require_allowed_active=False,
@@ -260,4 +267,80 @@ class RemoveSocialConsentWhitelistAction(Action):
         return ActionResult(
             success=True,
             message=f"{allowed_tenure} removed from {category.name} whitelist.",
+        )
+
+
+@dataclass
+class AddSocialConsentBlacklistAction(Action):
+    """Bar a character from antagonizing the owner in a category (#1698)."""
+
+    key: str = "add_social_consent_blacklist"
+    name: str = "Add Consent Blacklist Entry"
+    icon: str = "shield"
+    category: str = "consent"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.consent.services import (  # noqa: PLC0415
+            add_social_consent_blacklist,
+            set_social_consent_preference,
+        )
+
+        targets, error = _resolve_consent_targets(
+            actor,
+            kwargs,
+            require_allowed_active=False,
+            not_found_message=_MSG_BLACKLIST_ADD_NOT_FOUND,
+        )
+        if error is not None:
+            return error
+        tenure, category, blocked_tenure = targets
+        preference = getattr(tenure, "social_consent_preference", None)  # noqa: GETATTR_LITERAL
+        if preference is None:
+            set_social_consent_preference(tenure, True)
+        add_social_consent_blacklist(tenure, blocked_tenure, category)
+        return ActionResult(
+            success=True,
+            message=f"{blocked_tenure} may no longer target you with {category.name} actions.",
+        )
+
+
+@dataclass
+class RemoveSocialConsentBlacklistAction(Action):
+    """Remove a character from a category antagonism blacklist (#1698)."""
+
+    key: str = "remove_social_consent_blacklist"
+    name: str = "Remove Consent Blacklist Entry"
+    icon: str = "shield"
+    category: str = "consent"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.consent.services import remove_social_consent_blacklist  # noqa: PLC0415
+
+        targets, error = _resolve_consent_targets(
+            actor,
+            kwargs,
+            require_allowed_active=False,
+            not_found_message=_MSG_BLACKLIST_REMOVE_NOT_FOUND,
+        )
+        if error is not None:
+            return error
+        tenure, category, blocked_tenure = targets
+        removed = remove_social_consent_blacklist(tenure, blocked_tenure, category)
+        if not removed:
+            return ActionResult(success=False, message=_MSG_BLACKLIST_REMOVE_NOT_FOUND)
+        return ActionResult(
+            success=True,
+            message=f"{blocked_tenure} removed from {category.name} blacklist.",
         )

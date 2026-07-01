@@ -549,3 +549,73 @@ class UseItemActionTests(TestCase):
             result = UseItemAction().run(actor, item=item_obj, target=near)
         assert result.success is True
         assert mock_use.call_args.kwargs["target"] == near
+
+
+class UseItemTechniqueGrantTests(TestCase):
+    """Tests that UseItemAction learns a technique via a TechniqueGrant (#1732)."""
+
+    def setUp(self):
+        from world.action_points.models import ActionPointPool
+        from world.magic.constants import GiftKind, TargetKind
+        from world.magic.factories import (
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueFactory,
+        )
+        from world.magic.models import CharacterGift, Thread
+
+        self.sheet = CharacterSheetFactory()
+        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        self.resonance = ResonanceFactory()
+        self.gift.resonances.add(self.resonance)
+        CharacterGift.objects.create(character=self.sheet, gift=self.gift)
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=0,
+        )
+        self.technique = TechniqueFactory(gift=self.gift)
+        # Item template with an on-use pool (required by ItemUsablePrerequisite).
+        from actions.factories import ConsequencePoolFactory
+
+        pool = ConsequencePoolFactory()
+        self.template = ItemTemplateFactory(
+            is_consumable=True,
+            max_charges=1,
+            on_use_pool=pool,
+            on_use_check_type=None,
+        )
+        from world.magic.models import TechniqueGrant
+
+        self.grant = TechniqueGrant.objects.create(
+            technique=self.technique,
+            item_template=self.template,
+            verb="study",
+        )
+        self.actor = self.sheet.character
+        self.item_obj = ObjectDBFactory(db_key="Grimoire", location=self.actor)
+        ItemInstanceFactory(template=self.template, game_object=self.item_obj, charges=1)
+        self.ap_pool = ActionPointPool.get_or_create_for_character(self.actor)
+        self.ap_pool.current = 200
+        self.ap_pool.save()
+
+    def test_use_item_with_grant_mints_technique(self):
+        """Using an item with a TechniqueGrant learns the technique."""
+        from world.items.types import UseItemResult
+        from world.magic.models import CharacterTechnique
+
+        fake_result = UseItemResult(
+            applied_effects=[],
+            charges_remaining=0,
+            destroyed=True,
+            soft_deleted=False,
+            check_result=None,
+        )
+        with patch("actions.definitions.items.use_item", return_value=fake_result):
+            result = UseItemAction().run(self.actor, item=self.item_obj)
+        assert result.success
+        assert CharacterTechnique.objects.filter(
+            character=self.sheet, technique=self.technique
+        ).exists()

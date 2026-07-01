@@ -4382,6 +4382,177 @@ paths:
               schema:
                 $ref: '#/components/schemas/TreatmentCandidateResponse'
           description: ''
+  /api/consent/blacklist/:
+    get:
+      operationId: consent_blacklist_list
+      description: |-
+        ViewSet for consent antagonism-blacklist entries (#1698).
+
+        Blacklist entries bar specific tenures from targeting the owner when the owner's
+        category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+        player's own owner tenures. Write endpoints route through the shared REGISTRY action
+        seam. The blocked party is never told.
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: integer
+      - in: query
+        name: owner_tenure
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSocialConsentBlacklistList'
+          description: ''
+    post:
+      operationId: consent_blacklist_create
+      description: Create a blacklist entry via the add_social_consent_blacklist action.
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentBlacklistRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentBlacklist'
+          description: ''
+  /api/consent/blacklist/{id}/:
+    get:
+      operationId: consent_blacklist_retrieve
+      description: |-
+        ViewSet for consent antagonism-blacklist entries (#1698).
+
+        Blacklist entries bar specific tenures from targeting the owner when the owner's
+        category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+        player's own owner tenures. Write endpoints route through the shared REGISTRY action
+        seam. The blocked party is never told.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Blacklist
+          Entry.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentBlacklist'
+          description: ''
+    put:
+      operationId: consent_blacklist_update
+      description: |-
+        ViewSet for consent antagonism-blacklist entries (#1698).
+
+        Blacklist entries bar specific tenures from targeting the owner when the owner's
+        category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+        player's own owner tenures. Write endpoints route through the shared REGISTRY action
+        seam. The blocked party is never told.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Blacklist
+          Entry.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialConsentBlacklistRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentBlacklist'
+          description: ''
+    patch:
+      operationId: consent_blacklist_partial_update
+      description: |-
+        ViewSet for consent antagonism-blacklist entries (#1698).
+
+        Blacklist entries bar specific tenures from targeting the owner when the owner's
+        category rule is ALL_BUT_BLACKLIST mode. Results are scoped to the requesting
+        player's own owner tenures. Write endpoints route through the shared REGISTRY action
+        seam. The blocked party is never told.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Blacklist
+          Entry.
+        required: true
+      tags:
+      - consent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSocialConsentBlacklistRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialConsentBlacklist'
+          description: ''
+    delete:
+      operationId: consent_blacklist_destroy
+      description: Remove a blacklist entry via the remove_social_consent_blacklist
+        action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Social Consent Blacklist
+          Entry.
+        required: true
+      tags:
+      - consent
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/consent/categories/:
     get:
       operationId: consent_categories_list
@@ -24570,11 +24741,16 @@ components:
           type: boolean
           description: 'False = Tangent: recorded for history, never gates a transition.'
         risk:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: Plain risk number. Meaning/names assigned later with the consequence
-            work. Authoring trust-gated in the serializer.
+          allOf:
+          - $ref: '#/components/schemas/RiskEnum'
+          description: |-
+            Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
         required_level:
           type: integer
           maximum: 2147483647
@@ -24755,11 +24931,16 @@ components:
           type: boolean
           description: 'False = Tangent: recorded for history, never gates a transition.'
         risk:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: Plain risk number. Meaning/names assigned later with the consequence
-            work. Authoring trust-gated in the serializer.
+          allOf:
+          - $ref: '#/components/schemas/RiskEnum'
+          description: |-
+            Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
         required_level:
           type: integer
           maximum: 2147483647
@@ -27618,6 +27799,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/ResistEffortEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        blacklist_actor:
+          type: boolean
+          default: false
       required:
       - decision
     ConsequenceOutcome:
@@ -38569,6 +38753,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SituationTemplateList'
+    PaginatedSocialConsentBlacklistList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialConsentBlacklist'
     PaginatedSocialConsentCategoryList:
       type: object
       required:
@@ -39298,11 +39505,16 @@ components:
           type: boolean
           description: 'False = Tangent: recorded for history, never gates a transition.'
         risk:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: Plain risk number. Meaning/names assigned later with the consequence
-            work. Authoring trust-gated in the serializer.
+          allOf:
+          - $ref: '#/components/schemas/RiskEnum'
+          description: |-
+            Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
         required_level:
           type: integer
           maximum: 2147483647
@@ -40577,6 +40789,19 @@ components:
             * `public` - Public
             * `private` - Private
             * `ephemeral` - Ephemeral
+    PatchedSocialConsentBlacklistRequest:
+      type: object
+      description: Serializer for consent antagonism-blacklist entries (#1698).
+      properties:
+        owner_tenure:
+          type: integer
+          description: Tenure that owns the preference (does NOT want these actions).
+        blocked_tenure:
+          type: integer
+          description: Tenure barred from targeting owner_tenure in this category.
+        category:
+          type: integer
+          description: Blacklist is scoped per category.
     PatchedSocialConsentCategoryRuleRequest:
       type: object
       description: Serializer for per-category consent rules.
@@ -40589,9 +40814,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
           description: |-
-            EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+            EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
             * `everyone` - Everyone
+            * `all_but_blacklist` - Everyone except my blacklist
+            * `friends_whitelist` - Friends and my whitelist
             * `allowlist` - Allowlist only
     PatchedSocialConsentPreferenceRequest:
       type: object
@@ -42340,6 +42567,7 @@ components:
       - codex_entry_unlocked
       - story_at_milestone
       - aggregate_threshold
+      - outcome_tier
       type: string
       description: |-
         * `gm_marked` - GM-marked
@@ -42349,6 +42577,7 @@ components:
         * `codex_entry_unlocked` - Codex entry unlocked
         * `story_at_milestone` - Referenced story at milestone
         * `aggregate_threshold` - Aggregate threshold reached
+        * `outcome_tier` - Outcome tier (machine-graded)
     PrivacyEnum:
       enum:
       - public
@@ -43422,6 +43651,20 @@ components:
         * `all_equal` - All Equal
         * `by_role` - By Role
         * `by_participation` - By Participation
+    RiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     RiskLevelEnum:
       enum:
       - low
@@ -45214,6 +45457,53 @@ components:
       required:
       - id
       - total_points
+    SocialConsentBlacklist:
+      type: object
+      description: Serializer for consent antagonism-blacklist entries (#1698).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        owner_tenure:
+          type: integer
+          description: Tenure that owns the preference (does NOT want these actions).
+        blocked_tenure:
+          type: integer
+          description: Tenure barred from targeting owner_tenure in this category.
+        blocked_tenure_name:
+          type: string
+          readOnly: true
+        category:
+          type: integer
+          description: Blacklist is scoped per category.
+        added_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - added_at
+      - blocked_tenure
+      - blocked_tenure_name
+      - category
+      - id
+      - owner_tenure
+    SocialConsentBlacklistRequest:
+      type: object
+      description: Serializer for consent antagonism-blacklist entries (#1698).
+      properties:
+        owner_tenure:
+          type: integer
+          description: Tenure that owns the preference (does NOT want these actions).
+        blocked_tenure:
+          type: integer
+          description: Tenure barred from targeting owner_tenure in this category.
+        category:
+          type: integer
+          description: Blacklist is scoped per category.
+      required:
+      - blocked_tenure
+      - category
+      - owner_tenure
     SocialConsentCategory:
       type: object
       description: Read-only serializer for social consent categories.
@@ -45266,9 +45556,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
           description: |-
-            EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+            EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
             * `everyone` - Everyone
+            * `all_but_blacklist` - Everyone except my blacklist
+            * `friends_whitelist` - Friends and my whitelist
             * `allowlist` - Allowlist only
       required:
       - category
@@ -45277,10 +45569,14 @@ components:
     SocialConsentCategoryRuleModeEnum:
       enum:
       - everyone
+      - all_but_blacklist
+      - friends_whitelist
       - allowlist
       type: string
       description: |-
         * `everyone` - Everyone
+        * `all_but_blacklist` - Everyone except my blacklist
+        * `friends_whitelist` - Friends and my whitelist
         * `allowlist` - Allowlist only
     SocialConsentCategoryRuleRequest:
       type: object
@@ -45294,9 +45590,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/SocialConsentCategoryRuleModeEnum'
           description: |-
-            EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).
+            EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or ALLOWLIST (only whitelisted actors).
 
             * `everyone` - Everyone
+            * `all_but_blacklist` - Everyone except my blacklist
+            * `friends_whitelist` - Friends and my whitelist
             * `allowlist` - Allowlist only
       required:
       - category

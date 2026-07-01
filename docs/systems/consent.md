@@ -17,9 +17,12 @@ consent preferences gating which social actions a character may receive (#1141).
 # CHARACTERS - Only specified tenures
 # GROUPS     - Only members of specified consent groups
 
-# ConsentMode (TextChoices) — in world.consent.constants:
-# EVERYONE   - Any actor may use this category against the owner (default)
-# ALLOWLIST  - Only tenures on the SocialConsentWhitelist may use this category
+# ConsentMode (TextChoices) — in world.consent.constants (#1698):
+# EVERYONE          - Any actor may use this category against the owner (default)
+# ALL_BUT_BLACKLIST - Anyone EXCEPT tenures on the SocialConsentBlacklist for this category
+# FRIENDS_WHITELIST - Only OOC friends (scenes.Friendship) + tenures on the whitelist
+# ALLOWLIST         - Only tenures on the SocialConsentWhitelist (strict; friendship alone
+#                     is not enough)
 ```
 
 ---
@@ -41,6 +44,12 @@ consent preferences gating which social actions a character may receive (#1141).
 | `SocialConsentPreference` | Per-tenure opt-out for social action targeting (OneToOne on tenure) | `tenure` (RosterTenure FK), `allow_social_actions` (bool, default True) |
 | `SocialConsentCategoryRule` | Per-category targeting mode on a preference | `preference` FK, `category` FK, `mode` (ConsentMode) |
 | `SocialConsentWhitelist` | Explicit allow entry: allowed_tenure may target owner with social actions | `owner_tenure` FK, `allowed_tenure` FK, `category` FK, `added_at` |
+| `SocialConsentBlacklist` (#1698) | Explicit antagonism bar: blocked_tenure may NOT target owner in this category (consulted under `ALL_BUT_BLACKLIST`). Weaker than a `scenes.Block`; the blocked party is never told. | `owner_tenure` FK, `blocked_tenure` FK, `category` FK, `added_at` |
+
+**Friends (`FRIENDS_WHITELIST`):** the friend check reads `scenes.Friendship`
+(`friend_services.is_friend`) — an OOC designation, category-independent, so an OOC friend
+passes every category. The owner having friended the actor (`friender_tenure=owner`) admits
+them; the reverse direction does not.
 
 **ActionTemplate link:** `ActionTemplate.consent_category` (nullable FK → `SocialConsentCategory`,
 `on_delete=SET_NULL`) tags each social template with its category. Uncategorized templates
@@ -107,9 +116,10 @@ visible = my_instance.is_visible_to(viewer_tenure)
 The picker sweep `_social_consent_exclusions` **batches** its preference / category-rule /
 whitelist lookups across the whole participant set — a bounded number of queries per sweep,
 independent of scene size (one tenure load, one preference load, and when a `category` is
-set one category-rule load plus, when the actor has a tenure, one whitelist load). It shares
-the per-tenure decision with `_tenure_blocks_actor` via `_decide_allowlist_block`; keep new
-work on this path off any per-participant query loop (#1248). A query-count regression test
+set one category-rule load plus, when the actor has a tenure, one whitelist/blacklist/friendship
+load each). It shares the per-tenure decision with `_tenure_blocks_actor` via
+`_decide_consent_block` (spans all four modes; #1698); keep new work on this path off any
+per-participant query loop (#1248). A query-count regression test
 (`actions/tests/test_social_consent_enforcement.py::SocialConsentExclusionsQueryBudgetTest`)
 pins that the sweep stays constant in participant count.
 
@@ -137,9 +147,11 @@ and any future caller execute the same validation and service logic.
 | Action key | Wrapped service function | Purpose |
 |------------|--------------------------|---------|
 | `set_social_consent_preference` | `set_social_consent_preference()` | Toggle the master `allow_social_actions` switch for a tenure. |
-| `set_social_consent_category_rule` | `set_social_consent_category_rule()` / `remove_social_consent_category_rule()` | Set a category to `EVERYONE` or `ALLOWLIST`; `default` clears the rule. |
+| `set_social_consent_category_rule` | `set_social_consent_category_rule()` / `remove_social_consent_category_rule()` | Set a category to any `ConsentMode`; `default` clears the rule. |
 | `add_social_consent_whitelist` | `add_social_consent_whitelist()` | Allow a specific tenure to target the owner in a restricted category. |
 | `remove_social_consent_whitelist` | `remove_social_consent_whitelist()` | Remove a tenure from a category whitelist. |
+| `add_social_consent_blacklist` (#1698) | `add_social_consent_blacklist()` | Bar a tenure from antagonizing the owner in a category (`ALL_BUT_BLACKLIST`). |
+| `remove_social_consent_blacklist` (#1698) | `remove_social_consent_blacklist()` | Remove a tenure from a category antagonism blacklist. |
 
 ### Service functions (`src/world/consent/services.py`)
 
@@ -150,13 +162,15 @@ from world.consent.services import (
     remove_social_consent_category_rule,
     add_social_consent_whitelist,
     remove_social_consent_whitelist,
+    add_social_consent_blacklist,      # (#1698)
+    remove_social_consent_blacklist,   # (#1698)
     get_social_consent_summary,
 )
 ```
 
-`get_social_consent_summary()` is read-only; it supports the bare `consent` and
-`consent whitelist list` summaries by returning the preference, category rules, and whitelist
-entries for a tenure.
+`get_social_consent_summary()` is read-only; it supports the bare `consent`, `consent
+whitelist list`, and `consent blacklist list` summaries by returning the preference, category
+rules, and whitelist **and blacklist** entries for a tenure.
 
 ---
 
@@ -176,6 +190,9 @@ entries for a tenure.
 | `GET /api/consent/whitelist/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Scoped to owner_tenure's player |
 | `POST /api/consent/whitelist/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Add whitelist entry |
 | `DELETE /api/consent/whitelist/<id>/` | `SocialConsentWhitelistViewSet` | IsTenureOwner | Remove whitelist entry |
+| `GET /api/consent/blacklist/` | `SocialConsentBlacklistViewSet` (#1698) | IsTenureOwner | Scoped to owner_tenure's player |
+| `POST /api/consent/blacklist/` | `SocialConsentBlacklistViewSet` | IsTenureOwner | Add antagonism-blacklist entry (`blocked_tenure`) |
+| `DELETE /api/consent/blacklist/<id>/` | `SocialConsentBlacklistViewSet` | IsTenureOwner | Remove antagonism-blacklist entry |
 
 Permission class `IsTenureOwner` (`world/consent/permissions.py`) ensures a player can
 only read/write consent rows for tenures they own. Write endpoints (POST/PATCH/DELETE) route
@@ -195,6 +212,12 @@ with three sections:
 3. **Whitelist** — add/remove allowed tenures per category; visible only when at
    least one category is in ALLOWLIST mode.
 
+> **[BUILT, NOT WIRED — web follow-up]** The #1698 modes (`ALL_BUT_BLACKLIST`,
+> `FRIENDS_WHITELIST`) and the blacklist manager are fully built on the backend, web API,
+> and telnet, but the React Privacy tab's mode selector still offers only EVERYONE/ALLOWLIST
+> and has no blacklist section or graded deny-and-blacklist button. Surfacing them on the
+> web-first UI is a tracked follow-up.
+
 ---
 
 ## Telnet (`consent`)
@@ -208,10 +231,9 @@ REGISTRY action through `dispatch_player_action()` — the same seam the web use
 | `consent` | — | Show the caller's social-consent summary. |
 | `consent on` | `set_social_consent_preference` | Allow all social actions. |
 | `consent off` | `set_social_consent_preference` | Block all social actions. |
-| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `allowlist`, or `default` (clear the rule). |
-| `consent whitelist add <name> to <category>` | `add_social_consent_whitelist` | `<name>` is resolved in the caller's location. |
-| `consent whitelist remove <name> from <category>` | `remove_social_consent_whitelist` | `<name>` is resolved in the caller's location. |
-| `consent whitelist list [category]` | — | List whitelist entries, optionally filtered to one category. |
+| `consent category <key>=<mode>` | `set_social_consent_category_rule` | `mode` is `everyone`, `whitelist`, `blacklist` (= ALL_BUT_BLACKLIST), `friends` (= FRIENDS_WHITELIST), or `default` (clear the rule). |
+| `consent whitelist add\|remove\|list …` | `add`/`remove_social_consent_whitelist` | People you always allow. |
+| `consent blacklist add\|remove\|list …` (#1698) | `add`/`remove_social_consent_blacklist` | People barred under `blacklist` mode. |
 
 ---
 
@@ -228,6 +250,7 @@ from world.consent.factories import (
     SocialConsentPreferenceFactory,
     SocialConsentCategoryRuleFactory,
     SocialConsentWhitelistFactory,
+    SocialConsentBlacklistFactory,  # (#1698)
 )
 
 # Seed all four default categories (idempotent):
@@ -237,6 +260,37 @@ categories = make_default_categories()  # {"romantic": ..., "hostile": ..., ...}
 The production seed path is `world.seeds.consent.seed_social_consent_categories()`,
 registered as the `"consent"` cluster in `world/seeds/clusters.py` and run by
 `arx seed dev`.
+
+---
+
+## Consent Overhaul (#1698)
+
+Three behaviours built on the four-mode consent core:
+
+- **Graded DENY→blacklist.** `respond_to_action_request` / `respond_to_action_target`
+  (`world/scenes/action_services.py`) take `blacklist_actor: bool`; on DENY they add the
+  initiator to the denier's antagonism blacklist for the action's category (no-op when the
+  action has no category or a tenure can't be resolved). Web: `ConsentResponseSerializer.
+  blacklist_actor`; telnet: `deny/blacklist`. The difficulty grade a defender may attach on
+  ACCEPT (`respond_*(difficulty=…)`) is surfaced on telnet via `accept/<difficulty>` switches
+  (`trivial|easy|normal|hard|daunting|harrowing`) to parity the web.
+
+- **PvP opt-out = duel-start gate.** PvP initiation is structurally limited (a PC side vs an
+  NPC side, no casual two-sided PC fights), so the *only* PvP-consent case enforced is the
+  duel challenge: you cannot start a duel with someone who has opted out or blocked you.
+  `ChallengeAction` (`actions/definitions/duels.py`) already refused opted-out targets via
+  `_consent_blocked` (master switch → `_tenure_blocks_actor(..., category=None)`); #1698 adds
+  the `scenes.Block` check (`block_services.sheet_blocked_for_viewer`, either direction) so a
+  block also bars the challenge. The refusal message is vague (never reveals the block or its
+  direction — the anti-derivation invariant). There is deliberately no general hostile-cast
+  consent gate.
+
+- **Good-sport kudos curve.** `grant_social_engagement_kudos`
+  (`world/progression/services/engagement.py`) converts the week's good-sport acceptances
+  (`WeeklySocialEngagement.engagement_events`) into kudos on a diminishing-chance curve: the
+  first point of the week is guaranteed, each further point rolls at 80/60/40/20/10%-floor
+  indexed by points already banked, capped at 10/week (across all antagonists, not per pair),
+  silent.
 
 ---
 
@@ -261,5 +315,7 @@ registered as the `"consent"` cluster in `world/seeds/clusters.py` and run by
   editing.
 - `SocialConsentWhitelistAdmin` — whitelist entries; `raw_id_fields` for both tenures and
   category.
+- `SocialConsentBlacklistAdmin` (#1698) — antagonism-blacklist entries; `raw_id_fields` for
+  both tenures and category. Staff triage surface.
 - `ConsentGroupAdmin` — group management with inline member editing, shows member count.
   Search by group name or owner's character name.

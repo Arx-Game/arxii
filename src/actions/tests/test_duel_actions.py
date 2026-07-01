@@ -26,9 +26,11 @@ Scenarios covered (Task 12 — yield):
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import django.test
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import DuelChallengeStatus
 from world.combat.duels import create_pvp_duel
@@ -144,6 +146,44 @@ class ChallengeActionConsentBlockedTests(django.test.TestCase):
             ).exists(),
             "No DuelChallenge should be created when consent is blocked",
         )
+
+
+class ChallengeActionBlockedTests(django.test.TestCase):
+    """challenge at a target with a scenes.Block between them → refused (#1698).
+
+    The only PvP-consent case enforced on the duel start. Block resolution
+    (`sheet_blocked_for_viewer`) has its own tests, so it's patched here to isolate the gate.
+    """
+
+    def setUp(self) -> None:
+        self.room = _make_room("BlockArena")
+        self.actor, self.actor_sheet = _make_pc("BlockChallenger", self.room)
+        self.target, self.target_sheet = _make_pc("BlockedByTarget", self.room)
+        # The gate reads actor.account (skipped when None), so give the challenger one.
+        self.actor.db_account = AccountFactory()
+
+    @patch("world.scenes.block_services.sheet_blocked_for_viewer", return_value=True)
+    def test_challenge_refused_when_block_exists(self, mock_blocked: object) -> None:
+        from actions.registry import get_action
+
+        result = get_action("challenge").run(self.actor, target=self.target)
+
+        self.assertFalse(result.success, msg="A block between the two must refuse the challenge")
+        self.assertFalse(
+            DuelChallenge.objects.filter(
+                challenger_sheet=self.actor_sheet,
+                challenged_sheet=self.target_sheet,
+            ).exists(),
+            "No DuelChallenge should be created when a block exists",
+        )
+
+    @patch("world.scenes.block_services.sheet_blocked_for_viewer", return_value=False)
+    def test_challenge_allowed_when_no_block(self, mock_blocked: object) -> None:
+        from actions.registry import get_action
+
+        result = get_action("challenge").run(self.actor, target=self.target)
+
+        self.assertTrue(result.success, msg="No block → the challenge proceeds")
 
 
 class ChallengeActionSelfChallengeTests(django.test.TestCase):

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 import logging
+import random
 
 from django.db import transaction
 from evennia.accounts.models import AccountDB
@@ -17,32 +18,55 @@ from world.progression.models.engagement import (
 
 logger = logging.getLogger("world.progression.engagement")
 
-# Tunable constants for the weekly good-sport kudos grant.
-# MIN_ENGAGEMENT_BAR: minimum distinct initiators required to qualify.
-# Filters single-yes token-farming (one account alone cannot self-grant).
-MIN_ENGAGEMENT_BAR: int = 2
+# Good-sport weekly grant curve (#1698). Being a good sport about antagonism earns kudos
+# with deliberately ambiguous, diminishing odds so nobody can count exactly how close they
+# are to the weekly cap. The FIRST point of the week is guaranteed (100%); each further
+# point is rolled at a lower chance, indexed by how many are already locked in this week —
+# a FAILED roll does NOT lower the chance (only a banked point does). One roll per
+# good-sport acceptance (``engagement_events``); the whole thing is silent.
+GOOD_SPORT_CHANCE_BY_POINTS_LOCKED: tuple[int, ...] = (100, 80, 60, 40, 20)
+# Chance (percent) for every attempt once >= len(curve) points are already locked in.
+GOOD_SPORT_FLOOR_CHANCE: int = 10
+# Maximum good-sport points a single account can bank in one week (across ALL antagonists —
+# the counter is not per initiator→defender pair).
+GOOD_SPORT_WEEKLY_CAP: int = 10
 
-# WEEKLY_KUDOS_SCALE: multiplier applied to pending_points before rounding.
-# Adjust to tune weekly kudos yield without touching the accrual weights.
-WEEKLY_KUDOS_SCALE: Decimal = Decimal(1)
+
+def _good_sport_chance(points_locked: int) -> int:
+    """Percent chance the NEXT good-sport point lands, given points already banked this week."""
+    if points_locked < len(GOOD_SPORT_CHANCE_BY_POINTS_LOCKED):
+        return GOOD_SPORT_CHANCE_BY_POINTS_LOCKED[points_locked]
+    return GOOD_SPORT_FLOOR_CHANCE
+
+
+def _roll_good_sport_points(engagement_events: int) -> int:
+    """Roll the diminishing-chance curve once per good-sport act; return points earned.
+
+    The first attempt is guaranteed (100%), so any good sport with at least one accepted
+    act this week banks at least one point. Capped at ``GOOD_SPORT_WEEKLY_CAP``.
+    """
+    points = 0
+    for _ in range(engagement_events):
+        if points >= GOOD_SPORT_WEEKLY_CAP:
+            break
+        if random.random() * 100 < _good_sport_chance(points):  # noqa: S311
+            points += 1
+    return points
 
 
 def grant_social_engagement_kudos() -> int:
-    """Grant Kudos from accrued weekly social-engagement credit.
+    """Grant good-sport Kudos from the week's accrued social engagement (#1698).
 
-    For each ungranted ``WeeklySocialEngagement`` ledger:
-
-    - Skips ledgers below ``MIN_ENGAGEMENT_BAR`` distinct initiators
-      (prevents single-account token-farming).
-    - Computes ``amount = int(round(pending_points * WEEKLY_KUDOS_SCALE))``.
-    - If amount > 0: awards kudos and marks the ledger ``granted=True``.
-    - If amount == 0 or below the bar: leaves ``granted=False`` (no grant).
-
-    Errors on individual ledgers are caught and logged so one bad row
-    does not abort the batch.
+    For each ungranted ``WeeklySocialEngagement`` ledger, roll the diminishing-chance
+    curve once per ``engagement_events`` (:func:`_roll_good_sport_points`): the first point
+    of the week is guaranteed, each further point is rolled at a lower, ambiguous chance,
+    and the weekly total is capped at ``GOOD_SPORT_WEEKLY_CAP``. Ledgers are marked
+    ``granted`` regardless of the rolled amount (the week is resolved either way); kudos are
+    only awarded when the roll yields > 0. Silent — the player is never told the odds or the
+    running total. Errors on one ledger are logged, not fatal to the batch.
 
     Returns:
-        The count of ledgers that were successfully granted.
+        The count of ledgers that were successfully granted kudos (amount > 0).
     """
     from world.progression.models import KudosSourceCategory
     from world.progression.services.kudos import award_kudos
@@ -62,24 +86,23 @@ def grant_social_engagement_kudos() -> int:
     granted_count = 0
 
     for ledger in ungranted:
-        if ledger.distinct_initiators < MIN_ENGAGEMENT_BAR:
+        if ledger.engagement_events <= 0:
             continue
 
-        amount = round(ledger.pending_points * WEEKLY_KUDOS_SCALE)
-        if amount <= 0:
-            continue
-
+        amount = _roll_good_sport_points(ledger.engagement_events)
         try:
             with transaction.atomic():
-                award_kudos(
-                    ledger.account,
-                    amount,
-                    social_category,
-                    "Weekly good-sport kudos",
-                )
+                if amount > 0:
+                    award_kudos(
+                        ledger.account,
+                        amount,
+                        social_category,
+                        "Weekly good-sport kudos",
+                    )
                 ledger.granted = True
                 ledger.save(update_fields=["granted"])
-            granted_count += 1
+            if amount > 0:
+                granted_count += 1
         except Exception:
             logger.exception(
                 "grant_social_engagement_kudos: failed to grant ledger pk=%d (account=%s)",
@@ -128,6 +151,8 @@ def accrue(
             ledger.reset_week(current_week)
 
         ledger.pending_points += points
+        # Each accrual is one good-sport act = one attempt in the weekly grant curve (#1698).
+        ledger.engagement_events += 1
 
         # Record distinct initiator — get_or_create deduplicates; count derived from child rows.
         WeeklyEngagementInitiator.objects.get_or_create(
@@ -135,6 +160,6 @@ def accrue(
             initiator_account=initiator_account,
         )
 
-        ledger.save(update_fields=["pending_points"])
+        ledger.save(update_fields=["pending_points", "engagement_events"])
 
     return ledger

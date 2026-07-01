@@ -10,7 +10,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("achievements", "0004_rewarddefinition_modifier_target_and_more"),
-        ("magic", "0070_remove_resonancegrant_res_grant_residence_shape_and_more"),
+        ("magic", "0072_remove_resonancegrant_res_grant_residence_shape_and_more"),
     ]
 
     operations = [

@@ -241,11 +241,15 @@ def _deal_damage(
             skip_reason="Target has no CharacterVitals",
         )
 
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
     from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
 
     damage_amount = effect.damage_amount
     if hasattr(target, "threads"):
         damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
+    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+    # Closes the asymmetry where traps ignored a character's damage-type resistance.
+    damage_amount = resolve_damage_type_resistance(target, damage_amount, effect.damage_type)
     if damage_amount <= 0:
         return AppliedEffect(
             effect_type=EffectType.DEAL_DAMAGE,
@@ -335,6 +339,17 @@ def _grant_codex(
     )
 
 
+def _tier_multiplier(success_level: int) -> float:
+    """Clamped multiplier from a CheckOutcome's success_level.
+
+    1.0 baseline (no bonus for non-positive tiers); +0.2 per point of positive
+    success_level, so a max +10 tier is worth 3.0x. Deliberately simple and
+    reused nowhere else — tune this curve during implementation review against
+    real CheckOutcome rows if the numbers don't feel right in play.
+    """
+    return 1.0 + max(0, success_level) / 5
+
+
 def _legend_award(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -345,16 +360,32 @@ def _legend_award(
     ``create_legend_event``, which also fans out covenant credits via
     ``credit_engaged_covenants`` (Task 4).
 
+    Magnitude: when both ``context.beat`` and ``context.outcome_tier`` are
+    present (the graded beat-completion path), the award scales by risk x
+    performance: ``RISK_LEGEND_AWARDS[beat.risk] * tier_multiplier(outcome_tier
+    .success_level)``, floored by ``effect.legend_base_value`` (an author's
+    explicit override never gets scaled down — see Decision 4, #1716). When
+    either is absent (a hand-fired GM deed outside the beat pipeline, or any
+    pre-existing caller), the award is the flat ``effect.legend_base_value``,
+    unchanged from prior behavior.
+
     Description fallback chain:
       1. ``effect.legend_description_template`` (if non-blank)
       2. ``context.beat.player_resolution_text`` (if beat present and non-blank)
       3. ``"Legendary deed"`` (generic fallback)
     """
+    from world.societies.constants import RISK_LEGEND_AWARDS  # noqa: PLC0415
     from world.societies.exceptions import LegendAwardParticipantMissingError  # noqa: PLC0415
     from world.societies.services import create_legend_event  # noqa: PLC0415
 
     if not context.participants:
         raise LegendAwardParticipantMissingError
+
+    base_value = effect.legend_base_value
+    if context.beat is not None and context.outcome_tier is not None:
+        risk_award = RISK_LEGEND_AWARDS[context.beat.risk]
+        multiplier = _tier_multiplier(context.outcome_tier.success_level)
+        base_value = max(base_value, round(risk_award * multiplier))
 
     fallback_text = (
         context.beat.player_resolution_text
@@ -368,7 +399,7 @@ def _legend_award(
     event, entries = create_legend_event(
         title,
         effect.legend_source_type,
-        effect.legend_base_value,
+        base_value,
         list(context.participants),
         description=description,
         scene=context.scene,
@@ -376,7 +407,7 @@ def _legend_award(
     )
     return AppliedEffect(
         effect_type=EffectType.LEGEND_AWARD,
-        description=(f"Awarded {effect.legend_base_value} legend to {len(entries)} participant(s)"),
+        description=(f"Awarded {base_value} legend to {len(entries)} participant(s)"),
         applied=True,
         created_instance=event,
     )

@@ -225,6 +225,8 @@ class ActionRegistryTests(TestCase):
             "set_social_consent_category_rule",
             "add_social_consent_whitelist",
             "remove_social_consent_whitelist",
+            "add_social_consent_blacklist",
+            "remove_social_consent_blacklist",
             "resolve_alteration",
             "rest",
             "spread_tale",

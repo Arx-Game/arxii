@@ -11,10 +11,12 @@ infrastructure (GM, participation, privacy) applies without duplication.
 
 A `Battle` auto-creates a backing `Scene` on first save (`Battle.save()` wraps the
 creation in `transaction.atomic()`; never use `bulk_create`). The GM runs the battle
-through the scene; players enlist and declare actions each round. The resolution engine
-rolls `perform_check` per declaration and routes failures through `process_damage_consequences`
-(the same path as tactical combat). Victory points accumulate on each `BattleSide` until
-one side meets its threshold or the round limit expires.
+through the scene; players enlist and declare actions each round, each declaration naming
+a `Technique` the character actually knows. The resolution engine casts that technique
+through the real magic envelope (`use_technique`, via `resolve_battle_technique`) and
+routes failures through `process_damage_consequences` (the same path as tactical combat).
+Victory points accumulate on each `BattleSide` until one side meets its threshold or the
+round limit expires.
 
 `BattleRoundContext` plugs into the shared `get_active_round_context` seam, so a player
 in an active battle gets a `BattleRoundContext` when the dispatcher looks for their round
@@ -119,6 +121,7 @@ A participant's declared action for one round.
 |---|---|---|
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
+| `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
 | `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target |
@@ -146,11 +149,28 @@ character's ACTIVE `BattleParticipant` whose `battle.scene.is_active=True`, orde
 | `is_repeat_blocked(actor, action_ref, target_persona)` | True when declaration window is not open |
 | `record_declaration(character, player_action, kwargs)` | Writes a `BattleActionDeclaration` via `update_or_create` |
 
+### `resolve_battle_technique` + `BattleTechniqueResolver` (`src/world/battles/resolution.py`)
+
+`resolve_battle_technique(*, declaration) -> CheckResult | None` casts `declaration.technique`
+through the real magic envelope (`world.magic.services.use_technique`) rather than a generic
+shared check. Routing through `use_technique` means the check is sourced from the caster's
+actual technique (`technique.action_template.check_type`), anima cost / Soulfray accumulation
+apply normally, and the Audere / Audere Majora escalation hook fires automatically (it's
+wired inside `use_technique` itself — no separate battle-side call site is needed).
+`confirm_soulfray_risk=True` because a batch round-resolve cannot pause mid-batch for one
+participant's consent prompt. Returns `None` (treated as `success_level=0`, a failure) if the
+cast is interrupted before resolution (e.g. a reactive PRE_CAST cancellation).
+
+`BattleTechniqueResolver` is the `resolve_fn` dataclass passed to `use_technique`; its
+`__call__` rolls the declared technique's own check via `perform_check` — battle applies no
+damage-profile/condition logic of its own, that stays in `resolve_battle_round`'s
+STRIKE/SUPPORT/failure routing below.
+
 ### `resolve_battle_round` (`src/world/battles/resolution.py`)
 
 Iterates all unresolved `BattleActionDeclaration` rows for the round and for each:
 
-1. Calls `perform_check(actor_objectdb, check_type)` using the "Battle Action" `CheckType`.
+1. Calls `resolve_battle_technique(declaration=declaration)` to cast the declared technique.
 2. **On `success_level > 0`:**
    - STRIKE: decrements `target_unit.strength` by `success_level × STRIKE_ATTRITION_PER_LEVEL`;
      upgrades unit status to ROUTED or DESTROYED at thresholds;
@@ -168,9 +188,6 @@ Returns a `BattleRoundResult` dataclass:
 - `units_routed: list[int]` — routed unit pks
 - `casualties: list[int]` — participant pks who took damage
 
-`get_battle_check_type() -> CheckType` retrieves the seeded "Battle Action" `CheckType` by
-name; it must be seeded before any battle can resolve.
-
 ## Services (`src/world/battles/services.py`)
 
 All public functions are the only permitted entry points for battle state mutations.
@@ -184,7 +201,7 @@ Multi-write operations use `@transaction.atomic`.
 | `add_unit` | `(*, battle, side, name, unit_type, strength=100, place=None) -> BattleUnit` | Adds an abstract unit |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |
 | `begin_battle_round` | `(*, battle) -> BattleRound` | Closes prior round (→ COMPLETED) and opens a new DECLARING round. Raises `BattleConcludedError` if already concluded. |
-| `declare_battle_action` | `(*, participant, action_kind, target_unit=None, target_ally=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. Raises `RoundNotOpenError` if no DECLARING round. |
+| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
 | `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`). **Does NOT call `complete_story`** — campaign propagation is deferred to #1716. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
@@ -198,7 +215,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a STRIKE or SUPPORT declaration for the current round |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a STRIKE or SUPPORT declaration (with `technique_id`) for the current round |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -213,15 +230,17 @@ Key: `battle`. Registered in the default cmdset. No business logic in the comman
 | Subverb | Effect |
 |---|---|
 | `battle` | Show caller's active battle status (battle name, side VP, front, current round) |
-| `battle declare strike <unit>` | Declare STRIKE against a named ACTIVE unit |
-| `battle declare support <ally>` | Declare SUPPORT for an allied participant by character name |
+| `battle declare strike <unit> with <technique>` | Declare STRIKE against a named ACTIVE unit, casting a known technique |
+| `battle declare support <ally> with <technique>` | Declare SUPPORT for an allied participant, casting a known technique |
 | `battle round` | GM: begin the next round |
 | `battle resolve` | GM: resolve the current round |
 | `battle conclude` | GM: force-conclude the battle |
 
 Unit names are resolved case-insensitively within the caller's active battle. Ally names
-are resolved by `character.db_key` case-insensitively. `CommandError` is raised for bad
-usage; `_send(result)` routes the `ActionResult.message` back to the caller.
+are resolved by `character.db_key` case-insensitively. Technique names are resolved
+case-insensitively against the caller's known `CharacterTechnique` rows
+(`_resolve_technique`); an unknown name raises `CommandError`. `CommandError` is raised for
+bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 
 ## Enums / Constants (`src/world/battles/constants.py`)
 
@@ -242,7 +261,6 @@ usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 - `BASE_FAILURE_DAMAGE = 8`
 - `DECISIVE_MARGIN = 50`
 - `ROUTED_STRENGTH_THRESHOLD = 30`
-- `BATTLE_CHECK_TYPE_NAME = "Battle Action"`
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -250,6 +268,8 @@ usage; `_send(result)` routes the `ActionResult.message` back to the caller.
   - `BattleConcludedError` — operation on already-concluded battle
   - `RoundNotOpenError` — declaration outside a DECLARING round
   - `NotAParticipantError` — character not enlisted in the battle
+  - `CharacterDoesNotKnowTechniqueError` — participant declared a technique they don't know
+  - `TechniqueNotBattleReadyError` — declared technique has no `action_template` (not castable)
 
 ## Legend / Outcome Model and the #1716 Dependency
 
@@ -268,6 +288,15 @@ awards) is tracked in **#1716** and is the explicit next step after this spine.
 rule; `BattleRoundContext` seam; telnet `CmdBattle`; E2E journey test
 (`integration_tests/pipeline/test_battle_telnet_e2e.py`).
 
+**Built as a follow-up spine (real-technique-cast dispatch, #1734):** `technique` is now a
+required FK on `BattleActionDeclaration`; `declare_battle_action` validates the participant
+knows the technique and that it's castable (`action_template` set);
+`resolve_battle_round` casts each declaration's technique through the real magic envelope
+(`resolve_battle_technique` → `use_technique`) instead of a generic shared `CheckType` —
+anima cost, Soulfray accumulation, and the Audere / Audere Majora escalation hook all apply
+exactly as they would for any other cast. The generic `"Battle Action"` `CheckType` /
+`BATTLE_CHECK_TYPE_NAME` / `get_battle_check_type()` seam has been removed entirely.
+
 **Deferred to follow-up issues:**
 
 | What | Issue |
@@ -275,7 +304,6 @@ rule; `BattleRoundContext` seam; telnet `CmdBattle`; E2E journey test
 | Peril / rescue state machine (PC incapacitation flow in battles) | #1710 |
 | AFK / timer knobs (auto-advance on inactivity) | #1711 |
 | Battle writeup / React page | #1712 |
-| Audere Majora weighting (technique cast → real `cast_technique` pipeline instead of generic check) | #1713 |
 | Rich unit type-matchups (cavalry vs. infantry modifiers) | #1714 |
 | Command hierarchy, naval / aerial / siege variants | #1715 |
 | Campaign propagation: battle outcome → Story + win-gated Legend | **#1716** |
@@ -286,8 +314,10 @@ rule; `BattleRoundContext` seam; telnet `CmdBattle`; E2E journey test
 - `src/world/battles/tests/test_models.py` — model save + side/unit relationships
 - `src/world/battles/tests/test_round_context.py` — `get_active_round_context` wiring
 - `src/world/battles/tests/test_services_setup.py` — create/enlist/begin-round lifecycle
-- `src/world/battles/tests/test_resolution.py` — STRIKE success (unit attrition + VP) and
-  failure (PC health debit); `perform_check` patched
+- `src/world/battles/tests/test_resolution.py` — `resolve_battle_technique` /
+  `BattleTechniqueResolver` unit test; STRIKE success (unit attrition + VP) and failure
+  (PC health debit) with `world.battles.resolution.perform_check` patched (the check inside
+  `use_technique`'s cast, not a bypass of it)
 - `src/world/battles/tests/test_conclusion.py` — `check_victory` grading and
   `conclude_battle` (confirms `complete_story` is NOT called)
 - `src/world/battles/tests/test_actions.py` — each action's `run()` path; GM-gate rejection
@@ -302,7 +332,11 @@ rule; `BattleRoundContext` seam; telnet `CmdBattle`; E2E journey test
   `is_active` / `date_finished` written by `conclude_battle`
 - **Character Sheets** — `BattleParticipant.character_sheet` FK
 - **Vitals** — `process_damage_consequences` on check failure
-- **Checks** — `perform_check` with "Battle Action" `CheckType`
+- **Magic** — `BattleActionDeclaration.technique` FK; `resolve_battle_technique` routes
+  each declaration's cast through `world.magic.services.use_technique` (anima cost,
+  Soulfray, Audere / Audere Majora escalation all apply)
+- **Checks** — `perform_check`, sourced from the cast technique's
+  `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`
 - **Combat** — `BattlePlace.combat_encounter` bridge seam (for discrete tactical fights
   at a front); `RoundStatus` and `AbstractRound` shared from `world.scenes`
 - **Stories** — `Battle.campaign_story` FK (propagation deferred to #1716)

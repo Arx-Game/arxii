@@ -276,7 +276,16 @@ for storied/dangerous deeds, never as a combat/XP grind. _Avoid_: XP (for Legend
 **Renown**:
 The live award mechanism (`RenownAwardConfig`, `fire_renown_award`) that fires legend/
 resonance awards for qualifying deeds; Renown is the mechanism, Legend is the metric.
-_Avoid_: blanket-avoiding "renown"; fame, reputation.
+A second, narrower Legend-award pathway exists for the stakes-consequence engine
+(#1716): `ConsequenceEffect.LEGEND_AWARD` -> `_legend_award` ->
+`create_legend_event` (`world/mechanics/effect_handlers.py`,
+`world/societies/services.py`) fires Legend only (no Fame/Prestige/reputation) from a
+Beat's consequence pool, scaled by `Beat.risk` x outcome tier. `fire_renown_award`
+stays the mechanism for GM-authored public events that also move Fame/Prestige/
+reputation; the two pathways are deliberately separate (#1716 stays Legend-only) and
+both reuse `RenownRisk`/`RISK_LEGEND_AWARDS` for the risk axis. _Avoid_:
+blanket-avoiding "renown"; fame, reputation; assuming `fire_renown_award` is the only
+Legend-award path.
 
 **XP / Kudos / Development Points**:
 Out-of-character advancement currencies for creating content and developing a character;

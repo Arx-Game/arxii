@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("evennia_extensions", "0006_roomprofile_is_social_hub"),
         ("items", "0022_garmentmitigation"),
-        ("magic", "0069_thread_signature_bonus_and_more"),
+        ("magic", "0071_technique_grant"),
         ("missions", "0019_missiondeedrewardline_resonance"),
         ("projects", "0004_alter_contributionmethod_kind_alter_project_kind"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

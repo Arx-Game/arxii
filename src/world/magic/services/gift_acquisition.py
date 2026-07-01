@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import TargetKind
+from world.magic.constants import GiftKind, TargetKind
 from world.magic.exceptions import XPInsufficient
 from world.magic.models import (
     CharacterGiftUnlock,
@@ -20,6 +20,7 @@ from world.magic.models import (
 )
 from world.magic.services.alterations import enforce_advancement_gate
 from world.progression.models import XPTransaction
+from world.progression.selectors import current_path_for_character
 from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import ProgressionReason
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         CharacterTechnique,
         Gift,
         GiftUnlock,
+        Technique,
         TechniqueTeachingOffer,
     )
 
@@ -37,6 +39,29 @@ def get_gift_acquisition_config() -> GiftAcquisitionConfig:
     """Lazily create and return the singleton GiftAcquisitionConfig (pk=1)."""
     config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
     return config
+
+
+def can_learn_technique(learner: CharacterSheet, technique: Technique) -> bool:
+    """True if the learner's current path permits this technique's style.
+
+    Checks ``technique.style.allowed_paths`` (M2M, blank = all paths)
+    against the learner's current path. A character with no path
+    history (pre-awakening / NPCs) is unrestricted.
+
+    Args:
+        learner: The character sheet wanting to learn the technique.
+        technique: The technique being learned.
+
+    Returns:
+        True if the technique's style is permitted for the learner's path.
+    """
+    path = current_path_for_character(learner.character)
+    if path is None:
+        return True
+    allowed = technique.style.cached_allowed_paths
+    if not allowed:
+        return True
+    return path in allowed
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +239,6 @@ def accept_technique_offer(
         TechniqueCapExceeded: At the cap for this gift at current thread level.
     """
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
-    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         GiftUnlockMissing,
@@ -240,6 +264,12 @@ def accept_technique_offer(
         msg = f"{sheet} already knows {technique.name}."
         raise ValueError(msg)
 
+    # 1b. Check path-style restriction (shared gate).
+    if not can_learn_technique(sheet, technique):
+        from world.magic.exceptions import TechniqueStyleForbidden  # noqa: PLC0415
+
+        raise TechniqueStyleForbidden
+
     # 2. Check if learner has the gift.
     has_gift = CharacterGift.objects.filter(character=sheet, gift=gift).exists()
 
@@ -250,6 +280,8 @@ def accept_technique_offer(
         if not CharacterGiftUnlock.objects.filter(character=sheet, unlock__gift=gift).exists():
             raise GiftUnlockMissing
         ap_cost = offer.learn_ap_cost * config.first_technique_ap_multiplier
+    elif gift.kind == GiftKind.MAJOR:
+        ap_cost = offer.learn_ap_cost * config.major_gift_ap_multiplier
     else:
         ap_cost = offer.learn_ap_cost
 
@@ -282,15 +314,17 @@ def accept_technique_offer(
     teacher_pool = ActionPointPool.get_or_create_for_character(offer.teacher.character)
     teacher_pool.consume_banked(offer.banked_ap)
 
-    # 7. Mint CharacterTechnique.
-    ct = CharacterTechnique.objects.create(character=sheet, technique=technique)
-
-    # 8. Announce.
-    announce_access_change(
-        sheet,
-        gained=[technique],
-        lost=[],
-        source=AccessChangeSource.GIFT_ACQUISITION,
+    # 7-8. Delegate mint + announce to the shared commit seam.
+    # AP is already spent above (step 6); learn_technique receives ap_cost=0.
+    # The gift-owned check in learn_technique passes because step 4 acquired
+    # the gift if needed. The gate/cap/duplicate checks re-run idempotently.
+    from world.magic.services.technique_acquisition import (  # noqa: PLC0415
+        learn_technique,
     )
 
-    return ct
+    return learn_technique(
+        sheet,
+        technique,
+        source=AccessChangeSource.GIFT_ACQUISITION,
+        ap_cost=0,
+    )

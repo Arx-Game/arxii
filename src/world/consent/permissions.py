@@ -5,6 +5,7 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 from world.consent.models import (
+    SocialConsentBlacklist,
     SocialConsentCategoryRule,
     SocialConsentPreference,
     SocialConsentWhitelist,
@@ -15,12 +16,13 @@ from world.roster.models import RosterTenure
 def _tenure_from_obj(obj: object) -> RosterTenure | None:
     """Extract the owning RosterTenure from a consent model instance.
 
-    Handles SocialConsentPreference (.tenure), SocialConsentWhitelist
-    (.owner_tenure), and SocialConsentCategoryRule (.preference.tenure).
+    Handles SocialConsentPreference (.tenure), SocialConsentWhitelist /
+    SocialConsentBlacklist (.owner_tenure), and SocialConsentCategoryRule
+    (.preference.tenure).
     """
     if isinstance(obj, SocialConsentPreference):
         return obj.tenure
-    if isinstance(obj, SocialConsentWhitelist):
+    if isinstance(obj, (SocialConsentWhitelist, SocialConsentBlacklist)):
         return obj.owner_tenure
     if isinstance(obj, SocialConsentCategoryRule):
         return obj.preference.tenure

@@ -24,6 +24,10 @@ class XPInsufficient(MagicError):
     user_message = "You do not have enough XP for this."
 
 
+class TechniqueStyleForbidden(MagicError):
+    user_message = "Your path does not permit this technique's style."
+
+
 class GiftUnlockMissing(MagicError):
     user_message = "You must unlock this gift before learning its techniques."
 

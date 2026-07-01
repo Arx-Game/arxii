@@ -5,14 +5,20 @@ from datetime import timedelta
 from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
 
+from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.gm.factories import GMTableFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
+from world.societies.constants import RenownRisk
+from world.societies.factories import LegendSourceTypeFactory
+from world.societies.models import LegendEntry, LegendEvent
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
@@ -36,8 +42,10 @@ from world.stories.services.beats import (
     expire_overdue_beats,
     record_aggregate_contribution,
     record_gm_marked_outcome,
+    record_outcome_tier_completion,
 )
 from world.stories.types import StoryStatus
+from world.traits.factories import CheckOutcomeFactory
 
 
 class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
@@ -1079,3 +1087,178 @@ class ExpireOverdueBeatsTests(EvenniaTestCase):
         expire_overdue_beats()
 
         self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
+
+
+def _make_era_for_tier_tests():
+    """Return the single active Era, creating it if absent.
+
+    Mirrors test_beat_consequences.py's ``_make_era()`` helper — kept local to
+    this test module (rather than imported cross-module) to avoid a test-to-test
+    import dependency.
+    """
+    from world.stories.models import Era
+
+    try:
+        return Era.objects.get_active()
+    except Era.DoesNotExist:
+        return EraFactory(status=EraStatus.ACTIVE)
+
+
+class RecordOutcomeTierCompletionTests(EvenniaTestCase):
+    """record_outcome_tier_completion: graded completion via a known CheckOutcome."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Build an OUTCOME_TIER beat whose success pool has a LEGEND_AWARD tied to a tier."""
+        _make_era_for_tier_tests()
+        cls.decisive = CheckOutcomeFactory(name="Decisive Victory RTC", success_level=6)
+        cls.defeat = CheckOutcomeFactory(name="Defeat RTC", success_level=-4)
+
+        source_type = LegendSourceTypeFactory()
+        consequence = ConsequenceFactory(outcome_tier=cls.decisive)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=source_type,
+            legend_description_template="Won a decisive victory.",
+        )
+        cls.pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=cls.pool, consequence=consequence)
+
+        cls.sheet = CharacterSheetFactory()
+        cls.primary_persona = cls.sheet.primary_persona
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=cls.sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        cls.beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            success_consequences=cls.pool,
+        )
+        cls.progress = StoryProgressFactory(story=story, character_sheet=cls.sheet)
+
+    def test_positive_tier_resolves_success_and_fires_legend(self) -> None:
+        """A positive success_level CheckOutcome resolves SUCCESS and fires the matching pool."""
+        completion = record_outcome_tier_completion(
+            progress=self.progress, beat=self.beat, outcome_tier=self.decisive
+        )
+        assert completion.outcome == BeatOutcome.SUCCESS
+        assert completion.outcome_tier_id == self.decisive.pk
+        self.beat.refresh_from_db()
+        assert self.beat.outcome == BeatOutcome.SUCCESS
+        assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_negative_tier_resolves_failure_no_legend(self) -> None:
+        """A non-positive success_level CheckOutcome resolves FAILURE and never touches the pool."""
+        completion = record_outcome_tier_completion(
+            progress=self.progress, beat=self.beat, outcome_tier=self.defeat
+        )
+        assert completion.outcome == BeatOutcome.FAILURE
+        assert completion.outcome_tier_id == self.defeat.pk
+        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_wrong_predicate_type_raises(self) -> None:
+        """A GM_MARKED beat is rejected — only OUTCOME_TIER beats resolve via this service."""
+        gm_marked_beat = BeatFactory(
+            episode=self.beat.episode, predicate_type=BeatPredicateType.GM_MARKED
+        )
+        with self.assertRaises(ValueError):
+            record_outcome_tier_completion(
+                progress=self.progress, beat=gm_marked_beat, outcome_tier=self.decisive
+            )
+
+    def test_outlier_success_level_with_no_matching_tier_routes_to_pending_gm_review(self) -> None:
+        """success_level>=8 with no authored Consequence at that tier defers to a GM."""
+        outlier_tier = CheckOutcomeFactory(name="Outlier Unauthored RTC", success_level=9)
+
+        completion = record_outcome_tier_completion(
+            progress=self.progress, beat=self.beat, outcome_tier=outlier_tier
+        )
+
+        assert completion.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert completion.outcome_tier_id == outlier_tier.pk
+        self.beat.refresh_from_db()
+        assert self.beat.outcome == BeatOutcome.PENDING_GM_REVIEW
+        assert not LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_outlier_success_level_with_matching_tier_resolves_success_normally(self) -> None:
+        """success_level>=8 with an authored matching Consequence stays SUCCESS, pool fires."""
+        outlier_tier = CheckOutcomeFactory(name="Outlier Authored RTC", success_level=8)
+        source_type = LegendSourceTypeFactory()
+        consequence = ConsequenceFactory(outcome_tier=outlier_tier)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=15,
+            legend_source_type=source_type,
+            legend_description_template="Won an outlier crit victory.",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            success_consequences=pool,
+        )
+        progress = StoryProgressFactory(story=story, character_sheet=self.sheet)
+
+        completion = record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=outlier_tier
+        )
+
+        assert completion.outcome == BeatOutcome.SUCCESS
+        assert completion.outcome_tier_id == outlier_tier.pk
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.SUCCESS
+        assert LegendEntry.objects.filter(persona=self.primary_persona).exists()
+
+    def test_high_risk_tier_scales_legend_award_past_the_floor(self) -> None:
+        """A HIGH-risk beat scales the Legend award above legend_base_value end-to-end.
+
+        RISK_LEGEND_AWARDS[HIGH]=250, tier_multiplier(success_level=6)=1.0+6/5=2.2,
+        so 250 * 2.2 = 550 — well above the authored legend_base_value=10 floor.
+        Proves record_outcome_tier_completion threads beat.risk and
+        outcome_tier.success_level through to _legend_award's scaling formula
+        rather than always falling back to the flat floor.
+        """
+        source_type = LegendSourceTypeFactory()
+        consequence = ConsequenceFactory(outcome_tier=self.decisive)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=source_type,
+            legend_description_template="Won a high-risk gambit.",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            risk=RenownRisk.HIGH,
+            success_consequences=pool,
+        )
+        progress = StoryProgressFactory(story=story, character_sheet=self.sheet)
+
+        completion = record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=self.decisive
+        )
+
+        assert completion.outcome == BeatOutcome.SUCCESS
+        beat.refresh_from_db()
+        assert beat.outcome == BeatOutcome.SUCCESS
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        assert event.base_value == 550

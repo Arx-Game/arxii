@@ -91,6 +91,7 @@ treat those names as hints to confirm, not gospel.
 - [0037 — Encounter difficulty scales on party size + average level only](0037-encounter-difficulty-scales-on-party-size-and-level.md)
 - [0038 — Asymmetrical PvE; NPCs have no character sheets](0038-asymmetrical-pve-npcs-have-no-sheets.md)
 - [0039 — Bulk resolution uses honest terminal states](0039-bulk-resolution-uses-honest-terminal-states.md)
+- [0066 — Legend is earned only from difficult victories](0066-legend-earned-only-from-difficult-victories.md)
 
 ### Domain architecture
 - [0040 — Incapacitation & dying decoupled from a single vitals enum](0040-incapacitation-and-dying-decoupled-from-vitals.md)
@@ -121,3 +122,7 @@ treat those names as hints to confirm, not gospel.
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)
+
+### Story & stakes
+- [0067 — Beat.risk is the stakes-wager declaration](0067-beat-risk-is-the-stakes-wager-declaration.md)
+- [0068 — Graded beat/encounter outcome reuses CheckOutcome, not a new enum](0068-graded-beat-outcome-reuses-checkoutcome.md)

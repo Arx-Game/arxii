@@ -12,6 +12,7 @@ from world.magic.models import GiftUnlock, TechniqueTeachingOffer
 from world.magic.services.gift_acquisition import (
     compute_gift_unlock_xp_cost,
     count_techniques_for_gift,
+    get_gift_acquisition_config,
     get_technique_cap_for_gift,
     spend_xp_on_gift_unlock,
 )
@@ -277,6 +278,79 @@ class AcceptTechniqueOfferTest(TestCase):
         self.learner_ap.refresh_from_db()
         # 5 AP (no multiplier, gift already owned)
         self.assertEqual(self.learner_ap.current, 200 - 5)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_major_gift_subsequent_technique_uses_multiplier(self, mock_gate):
+        """Major-gift techniques use major_gift_ap_multiplier on the has_gift branch."""
+        from world.magic.constants import GiftKind
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models import CharacterGift
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        mock_gate.return_value = None
+        major_gift = GiftFactory(kind=GiftKind.MAJOR)
+        major_gift.resonances.add(self.resonance)
+        # Give the character the major gift (simulating CG ownership)
+        CharacterGift.objects.create(character=self.sheet, gift=major_gift)
+        # Provision a GIFT thread so the technique cap is > 0
+        from world.magic.constants import TargetKind
+        from world.magic.models import Thread
+
+        Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=major_gift,
+            level=0,
+        )
+
+        config = get_gift_acquisition_config()
+        config.major_gift_ap_multiplier = 2
+        config.save()
+
+        tech = TechniqueFactory(gift=major_gift)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=tech,
+            pitch="major gift tech",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        self.learner_ap.current = 200
+        self.learner_ap.save()
+        accept_technique_offer(self.sheet, offer)
+        self.learner_ap.refresh_from_db()
+        # 5 * 2 (major_gift_ap_multiplier) = 10 AP
+        self.assertEqual(self.learner_ap.current, 200 - 10)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_path_style_forbidden_blocks_accept(self, mock_gate):
+        """accept_technique_offer raises TechniqueStyleForbidden on path mismatch."""
+        from world.classes.factories import PathFactory
+        from world.magic.exceptions import TechniqueStyleForbidden
+        from world.magic.factories import TechniqueStyleFactory
+        from world.progression.factories import CharacterPathHistoryFactory
+
+        mock_gate.return_value = None
+        allowed_path = PathFactory()
+        other_path = PathFactory()
+        CharacterPathHistoryFactory(character=self.sheet.character, path=other_path)
+        style = TechniqueStyleFactory(allowed_paths=[allowed_path])
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        forbidden_tech = TechniqueFactory(gift=self.gift, style=style)
+
+        spend_xp_on_gift_unlock(self.sheet, self.unlock)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=forbidden_tech,
+            pitch="forbidden",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        with self.assertRaises(TechniqueStyleForbidden):
+            accept_technique_offer(self.sheet, offer)
 
     @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
     def test_technique_cap_exceeded(self, mock_gate):

@@ -5,6 +5,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.societies.constants import RenownRisk
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatKind,
@@ -962,10 +963,16 @@ class Beat(SharedMemoryModel):
         default=True,
         help_text="False = Tangent: recorded for history, never gates a transition.",
     )
-    risk = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Plain risk number. Meaning/names assigned later with the "
-        "consequence work. Authoring trust-gated in the serializer.",
+    risk = models.CharField(
+        max_length=10,
+        choices=RenownRisk.choices,
+        default=RenownRisk.NONE,
+        help_text=(
+            "Stakes declaration — how life-threatening/consequential this beat is. "
+            "Drives Legend award magnitude on SUCCESS (see "
+            "world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated "
+            "in the serializer."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1221,6 +1228,19 @@ class BeatCompletion(SharedMemoryModel):
     outcome = models.CharField(
         max_length=20,
         choices=BeatOutcome.choices,
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beat_completions",
+        help_text=(
+            "Graded outcome tier for this completion, when driven by an external "
+            "resolved check (combat encounter, mission route, decisive scene check) "
+            "rather than a plain GM SUCCESS/FAILURE mark. Null for GM-marked and "
+            "aggregate-threshold completions."
+        ),
     )
     era = models.ForeignKey(
         Era,

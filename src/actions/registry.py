@@ -31,7 +31,9 @@ from actions.definitions.communication import (
 )
 from actions.definitions.conditions import treat_condition
 from actions.definitions.consent_preferences import (
+    AddSocialConsentBlacklistAction,
     AddSocialConsentWhitelistAction,
+    RemoveSocialConsentBlacklistAction,
     RemoveSocialConsentWhitelistAction,
     SetSocialConsentCategoryRuleAction,
     SetSocialConsentPreferenceAction,
@@ -226,6 +228,8 @@ _ALL_ACTIONS: list[Action] = [
     SetSocialConsentCategoryRuleAction(),
     AddSocialConsentWhitelistAction(),
     RemoveSocialConsentWhitelistAction(),
+    AddSocialConsentBlacklistAction(),
+    RemoveSocialConsentBlacklistAction(),
     SpreadTaleAction(),
     SaveDeedStoryAction(),
     PutInAction(),

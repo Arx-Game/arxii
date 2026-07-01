@@ -19,6 +19,7 @@ from evennia.objects.models import ObjectDB
 
 from world.consent.constants import ConsentMode
 from world.consent.factories import (
+    SocialConsentBlacklistFactory,
     SocialConsentCategoryFactory,
     SocialConsentCategoryRuleFactory,
     SocialConsentPreferenceFactory,
@@ -155,6 +156,79 @@ class TenureBlocksActorCategoryAOnlyTest(django.test.TestCase):
 
     def test_cat_b_no_rule_is_not_blocked(self) -> None:
         self.assertFalse(_blocks(self.tenure, self.actor_tenure, self.cat_b))
+
+
+class TenureBlocksActorAllButBlacklistTest(django.test.TestCase):
+    """rule ALL_BUT_BLACKLIST → blocked only when the actor is on this category's blacklist."""
+
+    def setUp(self) -> None:
+        self.tenure = RosterTenureFactory()
+        pref = SocialConsentPreferenceFactory(tenure=self.tenure, allow_social_actions=True)
+        self.cat = SocialConsentCategoryFactory()
+        SocialConsentCategoryRuleFactory(
+            preference=pref, category=self.cat, mode=ConsentMode.ALL_BUT_BLACKLIST
+        )
+        self.actor_tenure = RosterTenureFactory()
+
+    def test_non_blacklisted_actor_not_blocked(self) -> None:
+        self.assertFalse(_blocks(self.tenure, self.actor_tenure, self.cat))
+
+    def test_blacklisted_actor_is_blocked(self) -> None:
+        SocialConsentBlacklistFactory(
+            owner_tenure=self.tenure, blocked_tenure=self.actor_tenure, category=self.cat
+        )
+        self.assertTrue(_blocks(self.tenure, self.actor_tenure, self.cat))
+
+    def test_blacklist_is_category_scoped(self) -> None:
+        """A blacklist entry in another category does not bar this category."""
+        other_cat = SocialConsentCategoryFactory()
+        SocialConsentBlacklistFactory(
+            owner_tenure=self.tenure, blocked_tenure=self.actor_tenure, category=other_cat
+        )
+        self.assertFalse(_blocks(self.tenure, self.actor_tenure, self.cat))
+
+    def test_unknown_actor_not_blocked(self) -> None:
+        """A general-visibility probe (no actor) is allowed under all-but-blacklist."""
+        self.assertFalse(_blocks(self.tenure, None, self.cat))
+
+
+class TenureBlocksActorFriendsWhitelistTest(django.test.TestCase):
+    """rule FRIENDS_WHITELIST → allowed only for an OOC friend or a whitelisted actor."""
+
+    def setUp(self) -> None:
+        self.tenure = RosterTenureFactory()
+        pref = SocialConsentPreferenceFactory(tenure=self.tenure, allow_social_actions=True)
+        self.cat = SocialConsentCategoryFactory()
+        SocialConsentCategoryRuleFactory(
+            preference=pref, category=self.cat, mode=ConsentMode.FRIENDS_WHITELIST
+        )
+        self.actor_tenure = RosterTenureFactory()
+
+    def test_stranger_is_blocked(self) -> None:
+        self.assertTrue(_blocks(self.tenure, self.actor_tenure, self.cat))
+
+    def test_unknown_actor_is_blocked(self) -> None:
+        self.assertTrue(_blocks(self.tenure, None, self.cat))
+
+    def test_ooc_friend_is_not_blocked(self) -> None:
+        """The owner having friended the actor (friender=owner) admits them to every category."""
+        from world.scenes.friend_services import add_friend
+
+        add_friend(friender_tenure=self.tenure, friend_tenure=self.actor_tenure)
+        self.assertFalse(_blocks(self.tenure, self.actor_tenure, self.cat))
+
+    def test_whitelisted_non_friend_is_not_blocked(self) -> None:
+        SocialConsentWhitelistFactory(
+            owner_tenure=self.tenure, allowed_tenure=self.actor_tenure, category=self.cat
+        )
+        self.assertFalse(_blocks(self.tenure, self.actor_tenure, self.cat))
+
+    def test_reverse_friendship_does_not_admit(self) -> None:
+        """Actor friending the owner (not vice-versa) does NOT grant the actor access."""
+        from world.scenes.friend_services import add_friend
+
+        add_friend(friender_tenure=self.actor_tenure, friend_tenure=self.tenure)
+        self.assertTrue(_blocks(self.tenure, self.actor_tenure, self.cat))
 
 
 class SocialConsentExclusionsIntegrationTest(django.test.TestCase):

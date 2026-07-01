@@ -11,8 +11,11 @@ from actions.factories import ActionTemplateFactory
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.consent.factories import SocialConsentCategoryFactory
+from world.consent.models import SocialConsentBlacklist
 from world.progression.factories import seed_kudos_difficulty_weights
 from world.progression.models import KudosPointsData, KudosSourceCategory, WeeklySocialEngagement
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes import action_services
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
@@ -211,6 +214,59 @@ class TestRespondToActionRequest(TestCase):
                 action_request=request,
                 decision=ConsentDecision.ACCEPT,
             )
+
+
+class DenyBlacklistTests(TestCase):
+    """DENY + blacklist_actor adds the initiator to the denier's antagonism blacklist (#1698)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.initiator_tenure = cls._tenure_for(cls.initiator)
+        cls.target_tenure = cls._tenure_for(cls.target)
+        cls.category = SocialConsentCategoryFactory(key="hostile")
+
+    @staticmethod
+    def _tenure_for(persona: object) -> object:
+        entry = RosterEntryFactory(character_sheet=persona.character_sheet)
+        return RosterTenureFactory(roster_entry=entry, end_date=None)
+
+    def _request(self, *, with_category: bool = True):
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+        )
+        template = ActionTemplateFactory(consent_category=self.category if with_category else None)
+        request.action_template = template
+        request.save(update_fields=["action_template"])
+        return request
+
+    def test_deny_with_blacklist_adds_entry(self) -> None:
+        request = self._request()
+        respond_to_action_request(
+            action_request=request, decision=ConsentDecision.DENY, blacklist_actor=True
+        )
+        assert SocialConsentBlacklist.objects.filter(
+            owner_tenure=self.target_tenure,
+            blocked_tenure=self.initiator_tenure,
+            category=self.category,
+        ).exists()
+
+    def test_deny_without_flag_adds_no_entry(self) -> None:
+        request = self._request()
+        respond_to_action_request(action_request=request, decision=ConsentDecision.DENY)
+        assert not SocialConsentBlacklist.objects.exists()
+
+    def test_deny_blacklist_no_category_is_noop(self) -> None:
+        request = self._request(with_category=False)
+        respond_to_action_request(
+            action_request=request, decision=ConsentDecision.DENY, blacklist_actor=True
+        )
+        assert not SocialConsentBlacklist.objects.exists()
 
 
 class TestResolverIntegration(TestCase):

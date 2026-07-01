@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatKind,
     ProgressStatus,
@@ -32,7 +33,7 @@ class BackboneModelDefaultsTests(TestCase):
         beat = BeatFactory()
         self.assertEqual(beat.kind, BeatKind.TASK)
         self.assertTrue(beat.advances)
-        self.assertEqual(beat.risk, 0)
+        self.assertEqual(beat.risk, RenownRisk.NONE)
 
     def test_progress_status_defaults_active(self):
         progress = StoryProgressFactory()

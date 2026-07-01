@@ -226,7 +226,11 @@ class SocialConsentCategoryRule(SharedMemoryModel):
         max_length=20,
         choices=ConsentMode.choices,
         default=ConsentMode.EVERYONE,
-        help_text="EVERYONE (anyone) or ALLOWLIST (only whitelisted actors).",
+        help_text=(
+            "EVERYONE (anyone), ALL_BUT_BLACKLIST (anyone but this category's "
+            "blacklist), FRIENDS_WHITELIST (OOC friends + whitelist), or "
+            "ALLOWLIST (only whitelisted actors)."
+        ),
     )
 
     class Meta:
@@ -274,4 +278,46 @@ class SocialConsentWhitelist(SharedMemoryModel):
         return (
             f"SocialConsentWhitelist({self.owner_tenure_id} ← "
             f"{self.allowed_tenure_id} [{self.category_id}])"
+        )
+
+
+class SocialConsentBlacklist(SharedMemoryModel):
+    """Explicit antagonism blacklist: blocked_tenure may NOT target owner_tenure (#1698).
+
+    Scoped per category; consulted when the owner's SocialConsentCategoryRule for a
+    category is ALL_BUT_BLACKLIST. This is the "I'd rather not be antagonized by this
+    specific person" surface — deliberately weaker than a scenes.Block (which severs all
+    interaction): a blacklist only excludes the person from *this category's* social
+    targeting, and the blocked party is never told.
+    """
+
+    owner_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.CASCADE,
+        related_name="social_consent_blacklist_owned",
+        help_text="Tenure that owns the preference (does NOT want these actions).",
+    )
+    blocked_tenure = models.ForeignKey(
+        RosterTenure,
+        on_delete=models.CASCADE,
+        related_name="social_consent_blacklist_blocked",
+        help_text="Tenure barred from targeting owner_tenure in this category.",
+    )
+    category = models.ForeignKey(
+        SocialConsentCategory,
+        on_delete=models.CASCADE,
+        related_name="blacklist_entries",
+        help_text="Blacklist is scoped per category.",
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["owner_tenure", "blocked_tenure", "category"]
+        verbose_name = "Social Consent Blacklist Entry"
+        verbose_name_plural = "Social Consent Blacklist Entries"
+
+    def __str__(self) -> str:
+        return (
+            f"SocialConsentBlacklist({self.owner_tenure_id} ⊘ "
+            f"{self.blocked_tenure_id} [{self.category_id}])"
         )
