@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import TargetKind
+from world.magic.constants import GiftKind, TargetKind
 from world.magic.exceptions import XPInsufficient
 from world.magic.models import (
     CharacterGiftUnlock,
@@ -275,6 +275,8 @@ def accept_technique_offer(
         if not CharacterGiftUnlock.objects.filter(character=sheet, unlock__gift=gift).exists():
             raise GiftUnlockMissing
         ap_cost = offer.learn_ap_cost * config.first_technique_ap_multiplier
+    elif gift.kind == GiftKind.MAJOR:
+        ap_cost = offer.learn_ap_cost * config.major_gift_ap_multiplier
     else:
         ap_cost = offer.learn_ap_cost
 

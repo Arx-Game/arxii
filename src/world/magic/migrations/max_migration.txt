@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 0069_thread_signature_bonus_and_more
+=======
+0068_major_gift_ap_multiplier
+>>>>>>> 830e2e51 (feat(magic): add major_gift_ap_multiplier cost knob (#1732))
