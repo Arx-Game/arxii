@@ -15,7 +15,10 @@ hierarchy. Carries three axis types in one cascade:
   code, only new rows. The read-side "does this room shelter me" service and
   its callers are a later slice — this app only carries the substrate.
 
-A single read service (`effective_value`) resolves any of the three axes.
+A single read service (`effective_value`) currently resolves the stat and resonance
+axes; damage-type read-side resolution is the later slice noted above — the
+substrate (model fields, migration) exists, but `effective_value` doesn't yet
+accept a `damage_type` kwarg.
 
 **Climate → comfort (#1514, #1522).** The stat axis hosts environmental **exposure** axes
 (`StatKey.COLD`, `HEAT`, `WET`, `WIND`, `DRY`; listed in `EXPOSURE_STAT_KEYS`). Each is a
