@@ -12,21 +12,22 @@ graded Succor cover and reduces/blocks the DoT that would otherwise apply. Mirro
 pattern.
 
 NOTE — real-lifecycle gap discovered while writing this test (the scene-round
-sibling of the one documented in ``test_succor_e2e.py``): ``resolve_scene_round``
-only ever fires the shared round-tick at ``timing="end"``
+sibling of the one documented in ``test_succor_e2e.py``), since closed:
+``resolve_scene_round`` only ever fires the shared round-tick at ``timing="end"``
 (``DamageTickTiming.END_OF_ROUND``); nothing in the scene-round lifecycle ever
-calls the ``timing="start"`` tick that ``DamageTickTiming.START_OF_ROUND`` DoTs
-(Sunlight Exposure's default) need to fire at all. So Sunlight Exposure currently
-never deals damage through the real ``resolve_scene_round`` production path,
-regardless of Succor — ``test_sunlight_exposure_e2e.py`` itself only ever proves
-this DoT by calling ``tick_round_for_targets(..., timing="start")`` directly, not
-through any round-resolution driver. This test does the same (calls the tick
-function directly rather than ``resolve_scene_round``) so it actually exercises
-the DoT this fixture carries, instead of vacuously passing because no damage was
-ever computed. ``SceneRoundContext.get_cover_for`` (unlike combat's) has no round-
-status gate, so this still exercises the real Succor-cover resolution chain
-(``dispatch_capability_reaction`` -> ``apply_succor_outcome`` -> cached
-``SceneActionDeclaration.succor_resolution``) untouched.
+calls a ``timing="start"`` tick. Sunlight Exposure originally ticked at
+``DamageTickTiming.START_OF_ROUND`` (the model default), so it never dealt damage
+through the real ``resolve_scene_round`` production path regardless of Succor.
+Sunlight Exposure now ticks ``DamageTickTiming.END_OF_ROUND`` instead (matching
+poison's convention), so it's reachable through the real production path — see
+``test_sunlight_exposure_e2e.py``'s ``test_ticks_through_real_scene_round_production_path``.
+This test still calls ``tick_round_for_targets(..., timing="end")`` directly
+rather than ``resolve_scene_round`` so it isolates the DoT-application/Succor-cover
+integration from the rest of round resolution. ``SceneRoundContext.get_cover_for``
+(unlike combat's) has no round-status gate, so this still exercises the real
+Succor-cover resolution chain (``dispatch_capability_reaction`` ->
+``apply_succor_outcome`` -> cached ``SceneActionDeclaration.succor_resolution``)
+untouched.
 
 Tagged postgres: both Sunlight Exposure's ``apply_condition`` and the ally's
 telekinesis capability grant (also ``apply_condition``) hit the PG-only
@@ -178,7 +179,7 @@ class SuccorSceneE2ETests(TestCase):
         )
 
         health_before = self._vitals().health
-        tick_round_for_targets([self.vampire], timing="start")
+        tick_round_for_targets([self.vampire], timing="end")
 
         self.assertTrue(mock_check.called, "dispatch_succor must route through perform_check")
         self._vitals().refresh_from_db()

@@ -464,13 +464,18 @@ class CombatRoundContext(RoundContext):
         action.succor_resolution = multiplier
         action.save(update_fields=["succor_resolution"])
 
-        fatigue_category = action.focused_category or ActionCategory.PHYSICAL
-        apply_fatigue(
-            action.participant.character_sheet,
-            fatigue_category,
-            SUCCOR_BASE_FATIGUE_COST,
-            action.effort_level,
-        )
+        if multiplier < 1.0:
+            # Only charge fatigue when Succor actually produced some cover (clean
+            # block or partial) — mirrors _try_interpose's "charge fatigue to the
+            # interposer ONLY on fire" contract. The 1.0 sentinel means no active
+            # challenge/approach was found, i.e. Succor accomplished nothing.
+            fatigue_category = action.focused_category or ActionCategory.PHYSICAL
+            apply_fatigue(
+                action.participant.character_sheet,
+                fatigue_category,
+                SUCCOR_BASE_FATIGUE_COST,
+                action.effort_level,
+            )
         return multiplier
 
 

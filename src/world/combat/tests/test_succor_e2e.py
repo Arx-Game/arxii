@@ -11,17 +11,21 @@ reduces/blocks the DoT that would otherwise apply. Mirrors
 ``perform_check`` for a deterministic graded outcome) and
 ``test_sunlight_exposure_e2e.py``'s vampire/outdoor/noon fixture pattern.
 
-NOTE — real-lifecycle timing gap discovered while writing this test: Sunlight
-Exposure's ``ConditionDamageOverTime`` ticks at ``DamageTickTiming.START_OF_ROUND``
-(the model default), but ``CombatRoundContext.get_cover_for`` only grants cover
-while ``encounter.status == RESOLVING`` — and combat's real START tick
-(``begin_declaration_phase``) fires while status is still ``DECLARING``, before
-that round's Succor could even be declared. So in the real
-``begin_declaration_phase``/``resolve_round`` lifecycle, Succor currently can
-never cover a START-tagged hazard like Sunlight Exposure. ``setUp`` forces
-``encounter.status = RESOLVING`` before the tick to exercise the
-``get_cover_for``/``_apply_round_tick_damage`` integration itself (timing-bucket-
-agnostic by contract per Task 8's own tests), not to reproduce that chronology.
+NOTE — real-lifecycle timing gap discovered while writing this test, since closed:
+``CombatRoundContext.get_cover_for`` only grants cover while
+``encounter.status == RESOLVING``. Sunlight Exposure's ``ConditionDamageOverTime``
+originally ticked at ``DamageTickTiming.START_OF_ROUND`` (the model default), but
+combat's real START tick (``begin_declaration_phase``) fires while status is still
+``DECLARING`` — before that round's Succor could even be declared — so Succor could
+never cover a START-tagged hazard. Sunlight Exposure now ticks
+``DamageTickTiming.END_OF_ROUND`` instead (matching poison's convention), and
+``resolve_round`` sets ``encounter.status = RESOLVING`` before firing the END tick,
+so the real ``begin_declaration_phase``/``resolve_round`` lifecycle can now reach
+this DoT. This test still calls ``tick_round_for_targets(..., timing="end")``
+directly rather than running the full ``resolve_round`` machinery, and ``setUp``
+forces ``encounter.status = RESOLVING`` up front to exercise the
+``get_cover_for``/``_apply_round_tick_damage`` integration in isolation — a
+simplification, not a workaround for an unreachable path.
 
 Tagged postgres: both Sunlight Exposure's ``apply_condition`` and the ally's
 telekinesis capability grant (also ``apply_condition``) hit the PG-only
@@ -194,7 +198,7 @@ class SuccorCombatE2ETests(TestCase):
         )
 
         health_before = self.vampire_vitals.health
-        tick_round_for_targets([self.vampire], timing="start")
+        tick_round_for_targets([self.vampire], timing="end")
 
         self.assertTrue(mock_check.called, "dispatch_succor must route through perform_check")
         self.vampire_vitals.refresh_from_db()
@@ -240,7 +244,7 @@ class SuccorCombatE2ETests(TestCase):
         pool = get_or_create_fatigue_pool(self.ally_participant.character_sheet)
         fatigue_before = pool.get_current(ActionCategory.PHYSICAL)
 
-        tick_round_for_targets([self.vampire], timing="start")
+        tick_round_for_targets([self.vampire], timing="end")
         pool.refresh_from_db()
         fatigue_after_first = pool.get_current(ActionCategory.PHYSICAL)
         self.assertGreater(
@@ -251,7 +255,7 @@ class SuccorCombatE2ETests(TestCase):
 
         # A second tick this same round (simulating an additional DoT row / a
         # re-entrant call) must NOT re-charge fatigue — the resolution is cached.
-        tick_round_for_targets([self.vampire], timing="start")
+        tick_round_for_targets([self.vampire], timing="end")
         pool.refresh_from_db()
         fatigue_after_second = pool.get_current(ActionCategory.PHYSICAL)
         self.assertEqual(
