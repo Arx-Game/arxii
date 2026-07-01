@@ -13,6 +13,7 @@ from world.stories.factories import (
     EraFactory,
     StoryFactory,
 )
+from world.traits.factories import CheckOutcomeFactory
 
 
 class BeatCompletionModelTests(EvenniaTestCase):
@@ -157,3 +158,17 @@ class BeatCompletionScopeCleanTests(EvenniaTestCase):
         )
         # Should not raise.
         completion.clean()
+
+
+class BeatCompletionOutcomeTierTests(EvenniaTestCase):
+    """BeatCompletion.outcome_tier is an optional FK to CheckOutcome."""
+
+    def test_outcome_tier_defaults_to_none(self) -> None:
+        completion = BeatCompletionFactory()
+        assert completion.outcome_tier is None
+
+    def test_outcome_tier_can_be_set(self) -> None:
+        tier = CheckOutcomeFactory(name="Decisive Victory", success_level=6)
+        completion = BeatCompletionFactory(outcome_tier=tier)
+        completion.refresh_from_db()
+        assert completion.outcome_tier_id == tier.pk

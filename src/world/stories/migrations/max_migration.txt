@@ -1,1 +1,1 @@
-0003_alter_beat_risk
+0004_beatcompletion_outcome_tier

@@ -1229,6 +1229,19 @@ class BeatCompletion(SharedMemoryModel):
         max_length=20,
         choices=BeatOutcome.choices,
     )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beat_completions",
+        help_text=(
+            "Graded outcome tier for this completion, when driven by an external "
+            "resolved check (combat encounter, mission route, decisive scene check) "
+            "rather than a plain GM SUCCESS/FAILURE mark. Null for GM-marked and "
+            "aggregate-threshold completions."
+        ),
+    )
     era = models.ForeignKey(
         Era,
         null=True,
