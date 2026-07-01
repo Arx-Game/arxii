@@ -138,6 +138,42 @@ class AbandonmentPoolsTests(TestCase):
             self.assertEqual(self.pools[name].pk, pools2[name].pk)
 
 
+class EnsureSurroundedContentTests(TestCase):
+    """ensure_surrounded_content seeds the Surrounded condition + 3 pools (#1733)."""
+
+    def test_creates_condition_with_three_stages(self) -> None:
+        from world.vitals.factories import ensure_surrounded_content
+
+        result = ensure_surrounded_content()
+        assert result["condition"].name == "Surrounded"
+        assert [s.stage_order for s in result["stages"]] == [1, 2, 3]
+
+    def test_creates_three_pools(self) -> None:
+        from world.vitals.factories import ensure_surrounded_content
+
+        result = ensure_surrounded_content()
+        assert set(result["pools"]) == {
+            "surrounded_entry",
+            "surrounded_terminal_enemy",
+            "surrounded_terminal_pvp",
+        }
+
+    def test_pvp_pool_has_no_death_row(self) -> None:
+        from world.vitals.factories import ensure_surrounded_content
+
+        result = ensure_surrounded_content()
+        pvp_pool = result["pools"]["surrounded_terminal_pvp"]
+        assert not any(c.character_loss for c in pvp_pool.cached_consequences)
+
+    def test_idempotent(self) -> None:
+        from world.conditions.models import ConditionTemplate
+        from world.vitals.factories import ensure_surrounded_content
+
+        ensure_surrounded_content()
+        ensure_surrounded_content()
+        assert ConditionTemplate.objects.filter(name="Surrounded").count() == 1
+
+
 class PerPoolWeightTests(TestCase):
     """weight_override is set per-pool so the weight-sharing bug cannot recur.
 

@@ -22,6 +22,9 @@ from world.vitals.constants import (
     POOL_ABANDONMENT_ENVIRONMENTAL,
     POOL_ABANDONMENT_PVP,
     POOL_BLEED_OUT_TERMINAL,
+    POOL_SURROUNDED_ENTRY,
+    POOL_SURROUNDED_TERMINAL_ENEMY,
+    POOL_SURROUNDED_TERMINAL_PVP,
     CharacterLifeState,
 )
 from world.vitals.models import CharacterVitals
@@ -35,9 +38,13 @@ __all__ = [
     "POOL_ABANDONMENT_ENVIRONMENTAL",
     "POOL_ABANDONMENT_PVP",
     "POOL_BLEED_OUT_TERMINAL",
+    "POOL_SURROUNDED_ENTRY",
+    "POOL_SURROUNDED_TERMINAL_ENEMY",
+    "POOL_SURROUNDED_TERMINAL_PVP",
     "CharacterVitalsFactory",
     "create_abandonment_pools",
     "create_bleed_out_terminal_pool",
+    "ensure_surrounded_content",
 ]
 
 # ---------------------------------------------------------------------------
@@ -73,6 +80,20 @@ def _get_or_create_outcome(name: str, success_level: int):
     from world.traits.factories import CheckOutcomeFactory
 
     return CheckOutcomeFactory(name=name, success_level=success_level)
+
+
+def _ensure_peril_category():
+    """Return a ConditionCategory for incapacitation/peril conditions."""
+    from world.conditions.models import ConditionCategory
+
+    obj, _ = ConditionCategory.objects.get_or_create(
+        name="Incapacitation",
+        defaults={
+            "description": ("Acute peril states: incapacitation that may escalate to death."),
+            "is_negative": True,
+        },
+    )
+    return obj
 
 
 def _seed_pool_consequences(pool, consequence_specs) -> None:
@@ -275,3 +296,115 @@ def create_abandonment_pools() -> dict[str, ConsequencePool]:
     _seed_captured_alive_consequence(pools[POOL_ABANDONMENT_ENEMY])
 
     return pools
+
+
+def ensure_surrounded_content() -> dict[str, object]:
+    """Idempotently seed the "Surrounded" battle acute-peril condition + its 3 pools.
+
+    (#1733)
+
+    Reuses the existing Endurance CheckType (``_ensure_endurance_check_type``) for
+    every stage's resist check — holding against a surrounding attack wave is the
+    same survivability semantic Bleeding-Out already uses. See the module docstring
+    of ``world/battles/resolution.py`` for how the entry roll and per-round
+    escalation consume this content.
+
+    Returns a dict with keys "condition" (ConditionTemplate), "stages" (list of
+    the 3 ConditionStage rows ordered by stage_order), and "pools" (dict of the 3
+    ConsequencePool rows keyed by name).
+    """
+    from actions.models import ConsequencePool
+    from world.conditions.constants import SURROUNDED_CONDITION_NAME
+    from world.conditions.models import ConditionStage, ConditionTemplate
+    from world.vitals.services import _ensure_endurance_check_type
+
+    check_type = _ensure_endurance_check_type()
+    category = _ensure_peril_category()
+
+    condition, _ = ConditionTemplate.objects.get_or_create(
+        name=SURROUNDED_CONDITION_NAME,
+        defaults={
+            "category": category,
+            "has_progression": True,
+            "description": "Cut off from allies, facing mounting attack pressure.",
+        },
+    )
+
+    stage_specs = [
+        (1, "Encircled", 15),
+        (2, "Overwhelmed", 25),
+        (3, "Being Cut Down", 35),
+    ]
+    stages = []
+    for order, name, difficulty in stage_specs:
+        stage, _ = ConditionStage.objects.get_or_create(
+            condition=condition,
+            stage_order=order,
+            defaults={
+                "name": name,
+                "description": f"{name} — resisting being surrounded.",
+                "resist_check_type": check_type,
+                "resist_difficulty": difficulty,
+                "rounds_to_next": 1,
+            },
+        )
+        stages.append(stage)
+
+    failure = _get_or_create_outcome(_OUTCOME_FAILURE, success_level=-1)
+    partial = _get_or_create_outcome(_OUTCOME_PARTIAL, success_level=0)
+    success = _get_or_create_outcome(_OUTCOME_SUCCESS, success_level=1)
+
+    entry_pool, _ = ConsequencePool.objects.get_or_create(
+        name=POOL_SURROUNDED_ENTRY,
+        defaults={
+            "description": ("Whether an isolated declaration failure results in Surrounded.")
+        },
+    )
+    _seed_pool_consequences(
+        entry_pool,
+        [
+            (success, "no_effect", 3, False),
+            (partial, "no_effect", 3, False),
+            (failure, "surrounded", 2, False),
+        ],
+    )
+
+    enemy_pool, _ = ConsequencePool.objects.get_or_create(
+        name=POOL_SURROUNDED_TERMINAL_ENEMY,
+        defaults={"description": "Surrounded terminal resolution — non-PC isolating side."},
+    )
+    _seed_pool_consequences(
+        enemy_pool,
+        [
+            (success, "recover", 2, False),
+            (partial, "stay_incapacitated", 2, False),
+            (failure, "die", 2, True),
+        ],
+    )
+
+    pvp_pool, _ = ConsequencePool.objects.get_or_create(
+        name=POOL_SURROUNDED_TERMINAL_PVP,
+        defaults={
+            "description": (
+                "Surrounded terminal resolution — PC isolating side (ADR-0023). No"
+                " die row at all: structurally non-lethal, not filtered-at-resolution."
+            )
+        },
+    )
+    _seed_pool_consequences(
+        pvp_pool,
+        [
+            (success, "recover", 2, False),
+            (partial, "stay_incapacitated", 3, False),
+        ],
+    )
+
+    return {
+        "condition": condition,
+        "stages": stages,
+        "pools": {
+            POOL_SURROUNDED_ENTRY: entry_pool,
+            POOL_SURROUNDED_TERMINAL_ENEMY: enemy_pool,
+            POOL_SURROUNDED_TERMINAL_PVP: pvp_pool,
+        },
+    }
