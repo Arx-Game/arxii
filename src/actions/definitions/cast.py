@@ -50,7 +50,7 @@ class CastTechniqueAction(Action):
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
 
-    def execute(  # noqa: PLR0913, PLR0911
+    def execute(  # noqa: PLR0913
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -98,16 +98,6 @@ class CastTechniqueAction(Action):
                 target = Persona.objects.get(pk=target_persona_id)
             except Persona.DoesNotExist:
                 return ActionResult(success=False, message="Target persona not found.")
-
-        # PvP antagonism is opt-in (#1698): a hostile cast at a non-consenting PC is refused
-        # before it reaches the cast/combat layer. NPC/GM targets and benign casts pass.
-        from actions.player_interface import hostile_cast_consent_blocked  # noqa: PLC0415
-
-        if hostile_cast_consent_blocked(actor, target, technique):
-            return ActionResult(
-                success=False,
-                message="They have not consented to being targeted with hostile actions.",
-            )
 
         try:
             cast = request_technique_cast(

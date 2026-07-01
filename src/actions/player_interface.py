@@ -41,8 +41,6 @@ from __future__ import annotations
 import dataclasses
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from django.core.exceptions import ObjectDoesNotExist
-
 from actions.constants import ActionBackend, ActionCategory, TargetKind
 from actions.errors import ActionDispatchError
 from actions.registry import get_action
@@ -1574,54 +1572,6 @@ def _social_consent_exclusions(character: ObjectDB, category: object | None) -> 
     block_excluded = _block_excluded_persona_ids(actor_tenure, actor_persona_id, tenures)
 
     return frozenset(consent_excluded | block_excluded)
-
-
-def _sheet_active_tenure(sheet: object | None) -> object | None:
-    """Return *sheet*'s active RosterTenure, or None (broken chain / no rostered character)."""
-    if sheet is None:
-        return None
-    try:
-        entry = sheet.roster_entry  # type: ignore[union-attr]
-    except (AttributeError, ObjectDoesNotExist):
-        return None
-    return entry.current_tenure if entry is not None else None
-
-
-def _hostile_consent_category() -> object | None:
-    """The seeded 'hostile' SocialConsentCategory, or None when it isn't seeded yet."""
-    from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-
-    try:
-        return SocialConsentCategory.objects.get_by_natural_key("hostile")
-    except SocialConsentCategory.DoesNotExist:
-        return None
-
-
-def hostile_cast_consent_blocked(
-    actor: ObjectDB, target_persona: object | None, technique: object
-) -> bool:
-    """True when a hostile technique cast at a non-consenting PC must be refused (#1698).
-
-    PvP antagonism is opt-in. A hostile technique (``is_technique_hostile``) directed at
-    another player's character is refused unless that character's consent admits the actor —
-    reusing the SAME SocialConsentPreference / whitelist / blacklist / friends logic as
-    social actions, scoped to the 'hostile' category (falling back to the master switch when
-    that category isn't seeded). NPC/GM targets (no active tenure) and non-hostile techniques
-    are never blocked. This is the consent-layer opt-out that runs BEFORE the cast reaches
-    ``request_technique_cast`` — it deliberately does not touch the combat/cast internals, so
-    NPC-seeded encounters and other deep entry paths are out of scope here.
-    """
-    if target_persona is None:
-        return False
-    from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
-
-    if not is_technique_hostile(technique):
-        return False
-    target_tenure = _sheet_active_tenure(target_persona.character_sheet)
-    if target_tenure is None:
-        return False  # NPC / unrostered target → not player-vs-player
-    actor_tenure = _sheet_active_tenure(_get_character_sheet(actor))
-    return _tenure_blocks_actor(target_tenure, actor_tenure, _hostile_consent_category())
 
 
 def _target_spec_for_action(
