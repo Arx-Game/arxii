@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from world.magic.types import AffinityType, AuraPercentages
+from world.magic.models import CharacterAura, CharacterResonance
+from world.magic.types import AffinityType, AuraDrift, AuraPercentages
 from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 
 if TYPE_CHECKING:
@@ -91,3 +93,63 @@ def get_aura_percentages(character_sheet: CharacterSheet) -> AuraPercentages:
         primal=(affinity_totals[AffinityType.PRIMAL] / grand_total) * 100,
         abyssal=(affinity_totals[AffinityType.ABYSSAL] / grand_total) * 100,
     )
+
+
+def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
+    """Recompute CharacterAura's stored percentages from resonance-earning history.
+
+    Sums CharacterResonance.lifetime_earned grouped by Resonance.affinity and
+    normalizes to percentages, writing through to the stored CharacterAura row
+    (the mechanism every live read call site — power_terms, resonance_environment,
+    soul_tether — actually consumes; see #1739 for the unrelated, unwired
+    get_aura_percentages()/CharacterAffinityTotal legacy pair above, which this
+    function does not touch).
+
+    Called from grant_resonance() on every grant system-wide, so aura reflects
+    the character's whole earning history, not just one source.
+
+    Returns None (no-op) if the character has no CharacterAura row (not
+    magically active). Returns None-equivalent-but-actually-an-AuraDrift with
+    before==after if total lifetime_earned is 0 (leaves stored values as-is —
+    no divide-by-zero flip to an even split).
+    """
+    try:
+        aura = CharacterAura.objects.get(character=character_sheet.character)
+    except CharacterAura.DoesNotExist:
+        return None
+
+    before = AuraPercentages(
+        celestial=float(aura.celestial),
+        primal=float(aura.primal),
+        abyssal=float(aura.abyssal),
+    )
+
+    totals: dict[str, int] = {"celestial": 0, "primal": 0, "abyssal": 0}
+    rows = CharacterResonance.objects.filter(character_sheet=character_sheet).select_related(
+        "resonance__affinity"
+    )
+    for row in rows:
+        affinity_name = row.resonance.affinity.name.lower()
+        if affinity_name in totals:
+            totals[affinity_name] += row.lifetime_earned
+
+    grand_total = sum(totals.values())
+    if grand_total == 0:
+        return AuraDrift(before=before, after=before)
+
+    aura.celestial = Decimal(totals["celestial"]) / Decimal(grand_total) * 100
+    aura.primal = Decimal(totals["primal"]) / Decimal(grand_total) * 100
+    aura.abyssal = Decimal(totals["abyssal"]) / Decimal(grand_total) * 100
+    # Correct rounding drift so the three fields sum to exactly 100.00 (the
+    # model's clean() enforces this invariant on save()).
+    aura.celestial = aura.celestial.quantize(Decimal("0.01"))
+    aura.primal = aura.primal.quantize(Decimal("0.01"))
+    aura.abyssal = Decimal("100.00") - aura.celestial - aura.primal
+    aura.save()
+
+    after = AuraPercentages(
+        celestial=float(aura.celestial),
+        primal=float(aura.primal),
+        abyssal=float(aura.abyssal),
+    )
+    return AuraDrift(before=before, after=after)

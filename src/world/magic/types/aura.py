@@ -14,6 +14,14 @@ class AuraPercentages:
     abyssal: float
 
 
+@dataclass(frozen=True)
+class AuraDrift:
+    """Before/after aura percentages from one recompute_aura() call."""
+
+    before: AuraPercentages
+    after: AuraPercentages
+
+
 class AffinityType(models.TextChoices):
     """The three magical affinities."""
 

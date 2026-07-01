@@ -19,7 +19,7 @@ from world.magic.types.alterations import (
     PendingAlterationResult,
     PendingAlterationTierReduction,
 )
-from world.magic.types.aura import AffinityType, AuraPercentages
+from world.magic.types.aura import AffinityType, AuraDrift, AuraPercentages
 from world.magic.types.gain import (
     ResonanceDailyTickSummary,
     ResonanceWeeklySettlementSummary,
@@ -61,6 +61,7 @@ __all__ = [
     "AnimaCostResult",
     "AnimaRegenTickSummary",
     "AnimaRitualCategory",
+    "AuraDrift",
     "AuraPercentages",
     "MishapResult",
     "PendingAlterationResult",

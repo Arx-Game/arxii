@@ -157,6 +157,11 @@ def grant_resonance(  # noqa: PLR0913
         source_style_presentation_endorsement=style_presentation_endorsement,
         source_mission_deed_reward_line=mission_deed_reward_line,
     )
+
+    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+
+    recompute_aura(character_sheet)
+
     return cr
 
 
