@@ -634,3 +634,103 @@ class EntryRollTests(TestCase):
         ).first()
         assert instance is not None
         assert instance.current_stage.stage_order == 1
+
+
+class EscalationTickTests(TestCase):
+    def setUp(self) -> None:
+        self.content = ensure_surrounded_content()
+
+    def _surrounded_participant(self, battle, side):
+        sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=sheet)
+        participant = enlist_participant(battle=battle, character_sheet=sheet, side=side)
+        # Build the ConditionInstance directly rather than via apply_condition, which
+        # routes through _build_bulk_context's PG-only DISTINCT ON query and errors on
+        # the SQLite fast tier (known trap — see world/vitals/tests/test_bleed_out.py's
+        # module docstring and Task 3's AdvanceStagedPerilTests, which hit this first).
+        from world.conditions.factories import ConditionInstanceFactory
+
+        ConditionInstanceFactory(
+            target=sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        return participant
+
+    def test_surrounded_participant_who_declared_escalates(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+        )
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Escalation Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = self._surrounded_participant(battle, side)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory(), damage_profile=False)
+        CharacterTechniqueFactory(character=participant.character_sheet, technique=technique)
+        CharacterAnimaFactory(
+            character=participant.character_sheet.character, current=20, maximum=30
+        )
+        battle_round = begin_battle_round(battle=battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=technique,
+        )
+
+        with (
+            patch(
+                "world.battles.resolution.resolve_battle_technique",
+                return_value=_success_result(3),
+            ),
+            patch("world.vitals.services.perform_check", return_value=_failure_result(-1)),
+        ):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            participant.character_sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance.current_stage.stage_order == 2  # advanced from 1
+
+    def test_surrounded_participant_who_did_not_declare_holds_when_knob_off(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import add_side, begin_battle_round, create_battle
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Escalation Hold Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = self._surrounded_participant(battle, side)
+        battle_round = begin_battle_round(battle=battle)
+        # No declaration this round; battle.afk_peril_override defaults False.
+
+        with patch("world.vitals.services.perform_check", return_value=_failure_result(-1)):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            participant.character_sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance.current_stage.stage_order == 1  # held, did not advance
+
+    def test_surrounded_participant_who_did_not_declare_escalates_when_knob_on(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import add_side, begin_battle_round, create_battle
+        from world.conditions.services import get_active_conditions
+
+        battle = create_battle(name="Escalation Override Test")
+        battle.afk_peril_override = True
+        battle.save(update_fields=["afk_peril_override"])
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = self._surrounded_participant(battle, side)
+        battle_round = begin_battle_round(battle=battle)
+
+        with patch("world.vitals.services.perform_check", return_value=_failure_result(-1)):
+            resolve_battle_round(battle_round=battle_round)
+
+        instance = get_active_conditions(
+            participant.character_sheet.character, condition=self.content["condition"]
+        ).first()
+        assert instance.current_stage.stage_order == 2

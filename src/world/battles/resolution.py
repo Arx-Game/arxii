@@ -386,13 +386,47 @@ def _resolve_failure(
     result.casualties.append(declaration.participant.pk)
 
 
+def _advance_surrounded_participants(battle: Battle, declared_participant_ids: set[int]) -> None:
+    """Tick every ACTIVE Surrounded participant's peril once for this round (#1733).
+
+    A participant advances if they declared this round, OR ``battle.afk_peril_override``
+    is True (the narrow, explicit ADR-0004 exception — see ADR-0069). Otherwise their
+    peril holds unchanged this round — mirroring the intent of the room-based #1480
+    own-peril skip without depending on SceneRound (Decision 1 of the #1733 spec).
+    """
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import get_active_conditions  # noqa: PLC0415
+    from world.vitals.services import advance_surrounded  # noqa: PLC0415
+
+    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
+    if template is None:
+        return  # seeding gap — nothing to advance
+
+    participants = BattleParticipant.objects.filter(
+        battle=battle, status=BattleParticipantStatus.ACTIVE
+    ).select_related("character_sheet__character")
+
+    for participant in participants:
+        if not (battle.afk_peril_override or participant.pk in declared_participant_ids):
+            continue
+        sheet = participant.character_sheet
+        if not get_active_conditions(sheet.character, condition=template).exists():
+            continue
+        advance_surrounded(sheet, battle=battle)
+
+
 @transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
 
     For each unresolved declaration, casts its declared technique through
     ``resolve_battle_technique`` (the real magic envelope) and routes
-    success / failure to the appropriate sub-handlers. Sets
+    success / failure to the appropriate sub-handlers. Before marking the
+    round complete, ticks every ACTIVE Surrounded participant's peril once
+    via ``_advance_surrounded_participants`` (#1733) — gated by declaration
+    this round or ``battle.afk_peril_override``. Sets
     ``battle_round.status = COMPLETED`` at the end.
 
     Args:
@@ -427,6 +461,9 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
         declaration.resolved = True
         declaration.success_level = sl
         declaration.save(update_fields=["resolved", "success_level"])
+
+    declared_participant_ids = {d.participant_id for d in declarations}
+    _advance_surrounded_participants(battle_round.battle, declared_participant_ids)
 
     battle_round.status = RoundStatus.COMPLETED
     battle_round.completed_at = timezone.now()
