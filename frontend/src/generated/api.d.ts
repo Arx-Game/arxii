@@ -14523,8 +14523,16 @@ export interface components {
       kind?: components['schemas']['BeatKindEnum'];
       /** @description False = Tangent: recorded for history, never gates a transition. */
       advances?: boolean;
-      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
-      risk?: number;
+      /**
+       * @description Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      risk?: components['schemas']['RiskEnum'];
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -14623,8 +14631,16 @@ export interface components {
       kind?: components['schemas']['BeatKindEnum'];
       /** @description False = Tangent: recorded for history, never gates a transition. */
       advances?: boolean;
-      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
-      risk?: number;
+      /**
+       * @description Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      risk?: components['schemas']['RiskEnum'];
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -22006,8 +22022,16 @@ export interface components {
       kind?: components['schemas']['BeatKindEnum'];
       /** @description False = Tangent: recorded for history, never gates a transition. */
       advances?: boolean;
-      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
-      risk?: number;
+      /**
+       * @description Stakes declaration — how life-threatening/consequential this beat is. Drives Legend award magnitude on SUCCESS (see world.societies.constants.RISK_LEGEND_AWARDS). Authoring trust-gated in the serializer.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      risk?: components['schemas']['RiskEnum'];
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -23659,6 +23683,7 @@ export interface components {
      *     * `codex_entry_unlocked` - Codex entry unlocked
      *     * `story_at_milestone` - Referenced story at milestone
      *     * `aggregate_threshold` - Aggregate threshold reached
+     *     * `outcome_tier` - Outcome tier (machine-graded)
      * @enum {string}
      */
     PredicateTypeEnum:
@@ -23668,7 +23693,8 @@ export interface components {
       | 'condition_held'
       | 'codex_entry_unlocked'
       | 'story_at_milestone'
-      | 'aggregate_threshold';
+      | 'aggregate_threshold'
+      | 'outcome_tier';
     /**
      * @description * `public` - Public
      *     * `private` - Private
@@ -24136,6 +24162,15 @@ export interface components {
      * @enum {string}
      */
     RewardGroupRuleEnum: 'all_equal' | 'by_role' | 'by_participation';
+    /**
+     * @description * `none` - None
+     *     * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     * @enum {string}
+     */
+    RiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
     /**
      * @description * `low` - Low
      *     * `moderate` - Moderate
