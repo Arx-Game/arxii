@@ -47,7 +47,7 @@ class SunlightExposureE2ETests(TestCase):
             species=self.species, gift=self.gift, drawback_condition=self.template
         )
 
-        self.room = create_object("typeclasses.rooms.Room", key="SunnyField", nohom=True)
+        self.room = create_object("typeclasses.rooms.Room", key="SunnyField", nohome=True)
         # Mark the room outdoor via its RoomProfile.
         from evennia_extensions.models import RoomProfile
 
