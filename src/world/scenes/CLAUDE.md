@@ -139,6 +139,15 @@ Key service functions for scene round lifecycle:
     descriptor-never-auto-attach privacy invariant (#1109) holds structurally.
 - **`SceneSummaryRevisionViewSet`**: Summary revision management
 
+### `friend_views.py` (#1727)
+- **`FriendshipViewSet`**: the web face of the OOC friends list (`friend_services.py`) —
+  list/add/remove. `list` returns the player's friendships (made by any of their characters).
+  `create` takes **`viewer`/`friend` as `RosterEntry` pks** (web clients speak character ids, not
+  tenure ids) plus `all_characters`; the view resolves each to its `current_tenure` server-side and
+  calls `add_friend` / `add_friend_all_characters`. Tenure-scoped + alt-private, mirroring the
+  Block/Mute control API. Telnet parity is `CmdFriend`/`CmdUnfriend`/`CmdFriends`. React surface:
+  `frontend/src/friends/` (`FriendsTab` self-only tab + `FriendButton` on other sheets).
+
 ### `interaction_views.py`
 - **`InteractionViewSet`**: Interaction read + delete + mark_private
 - **`InteractionFavoriteViewSet`**: Toggle favorites — routes through

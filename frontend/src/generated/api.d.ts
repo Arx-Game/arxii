@@ -17580,7 +17580,7 @@ export interface components {
      * @enum {string}
      */
     FormTypeEnum: 'true' | 'alternate' | 'disguise';
-    /** @description A friend row — the friended character's name + the tenures. */
+    /** @description A friend row — the friended character's name + which of your characters friended. */
     Friendship: {
       readonly id: number;
       /** @description The friender's tenure (this player's run of the character that friended). */
@@ -17591,17 +17591,25 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
-    /** @description Add a friend: which of your characters friends (or all), and the friended tenure. */
+    /**
+     * @description Add a friend by character (web-friendly): the friending character + the target character.
+     *
+     *     ``viewer`` / ``friend`` are ``RosterEntry`` pks; the view resolves each to its current tenure.
+     */
     FriendshipCreate: {
-      friender_tenure: number;
-      friend_tenure: number;
+      viewer: number;
+      friend: number;
       /** @default false */
       all_characters: boolean;
     };
-    /** @description Add a friend: which of your characters friends (or all), and the friended tenure. */
+    /**
+     * @description Add a friend by character (web-friendly): the friending character + the target character.
+     *
+     *     ``viewer`` / ``friend`` are ``RosterEntry`` pks; the view resolves each to its current tenure.
+     */
     FriendshipCreateRequest: {
-      friender_tenure: number;
-      friend_tenure: number;
+      viewer: number;
+      friend: number;
       /** @default false */
       all_characters: boolean;
     };

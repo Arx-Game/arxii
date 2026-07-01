@@ -20,7 +20,10 @@ class FriendApiTests(APITestCase):
         # Add.
         res = self.client.post(
             reverse("friend-list"),
-            {"friender_tenure": self.my_tenure.pk, "friend_tenure": self.target_tenure.pk},
+            {
+                "viewer": self.my_tenure.roster_entry.pk,
+                "friend": self.target_tenure.roster_entry.pk,
+            },
             format="json",
         )
         self.assertEqual(res.status_code, 201)
@@ -39,7 +42,7 @@ class FriendApiTests(APITestCase):
         other_tenure = RosterTenureFactory()  # not owned by self.account
         res = self.client.post(
             reverse("friend-list"),
-            {"friender_tenure": other_tenure.pk, "friend_tenure": self.target_tenure.pk},
+            {"viewer": other_tenure.roster_entry.pk, "friend": self.target_tenure.roster_entry.pk},
             format="json",
         )
         self.assertEqual(res.status_code, 400)
