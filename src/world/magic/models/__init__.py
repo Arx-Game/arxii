@@ -163,6 +163,7 @@ from world.magic.models.technique_draft import (
     TechniqueDraftDamageProfile,
     TechniqueDraftRemovedCondition,
 )
+from world.magic.models.technique_grant import TechniqueGrant
 from world.magic.models.techniques import (
     CharacterTechnique,
     EffectType,
@@ -351,6 +352,7 @@ __all__ = [
     "TechniqueStyle",
     "TechniqueStyleManager",
     "TechniqueTeachingOffer",
+    "TechniqueGrant",
     "TechniqueTierBudget",
     # gift-technique specialization variants (#1578)
     "TechniqueVariant",
