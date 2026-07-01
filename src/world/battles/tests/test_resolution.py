@@ -419,3 +419,58 @@ class ResolveBattleRoundFailureTests(TestCase):
         decl.refresh_from_db()
         self.assertTrue(decl.resolved)
         self.assertEqual(decl.success_level, failure_level)
+
+
+class BattleRoundAudereWiringTests(TestCase):
+    """Proves resolve_battle_round routes through use_technique, which fires the
+    Audere Majora hook (Step 8c) automatically — no battle-specific wiring needed.
+    """
+
+    def setUp(self) -> None:
+        from world.battles.services import create_battle
+        from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory
+        from world.traits.factories import CheckSystemSetupFactory
+
+        CheckSystemSetupFactory.create()
+
+        self.battle = create_battle(name="Audere Wiring Test Battle")
+        self.side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+
+        self.sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=self.sheet, health=100, max_health=100)
+        self.participant = enlist_participant(
+            battle=self.battle, character_sheet=self.sheet, side=self.side
+        )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(),
+            damage_profile=False,
+            intensity=5,
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+        self.battle_round = begin_battle_round(battle=self.battle)
+
+    def test_resolve_battle_round_calls_audere_majora_hook(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        # maybe_create_audere_majora_offer is imported function-locally inside
+        # use_technique (world/magic/services/techniques.py:1094), not at module
+        # level — repo convention for lazy imports is to patch the ORIGIN module
+        # so the call-time `from X import Y` re-binds to the patched callable
+        # (see reference-module-import-breaks-origin-patch memory).
+        with patch("world.magic.audere_majora.maybe_create_audere_majora_offer") as mock_audere:
+            resolve_battle_round(battle_round=self.battle_round)
+
+        mock_audere.assert_called_once()
+        called_character, called_intensity = mock_audere.call_args[0]
+        self.assertEqual(called_character, self.sheet.character)
+        self.assertEqual(called_intensity, self.technique.intensity)
