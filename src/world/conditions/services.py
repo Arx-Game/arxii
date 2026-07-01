@@ -422,6 +422,28 @@ def _check_prevention_from_context(
     return None
 
 
+def _check_application_resist(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    template: ConditionTemplate,
+) -> bool:
+    """Return True if *target* resists having *template* applied.
+
+    Rolls the target's own resist_check_type against resist_difficulty.
+    success_level > 0 means the target's roll beat the difficulty — resisted.
+    resist_check_type=None (the default) means unconditional application;
+    this always returns False in that case, matching every existing
+    ConditionTemplate's current behavior unchanged.
+    """
+    if template.resist_check_type is None:
+        return False
+    result = perform_check(
+        character=target,
+        check_type=template.resist_check_type,
+        target_difficulty=template.resist_difficulty,
+    )
+    return int(result.success_level) > 0
+
+
 def _process_interactions_from_context(
     target_id: int,
     incoming_condition: ConditionTemplate,
@@ -665,6 +687,15 @@ def apply_condition(  # noqa: PLR0913
                 removed_conditions=[],
                 applied_conditions=[],
             )
+
+    if _check_application_resist(target, condition):
+        return ApplyConditionResult(
+            success=False,
+            instance=None,
+            message="resisted",
+            removed_conditions=[],
+            applied_conditions=[],
+        )
 
     ctx = _build_bulk_context([target], [condition])
     params = _ApplyConditionParams(
