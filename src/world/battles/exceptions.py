@@ -34,3 +34,20 @@ class NotAParticipantError(BattleError):
 
     def __init__(self, user_message: str = "You are not a participant in this battle.") -> None:
         super().__init__(user_message)
+
+
+class CharacterDoesNotKnowTechniqueError(BattleError):
+    """Raised when a participant declares a technique they don't know."""
+
+    def __init__(self, user_message: str = "You do not know that technique.") -> None:
+        super().__init__(user_message)
+
+
+class TechniqueNotBattleReadyError(BattleError):
+    """Raised when a declared technique has no action_template (not castable)."""
+
+    def __init__(
+        self,
+        user_message: str = "That technique cannot be used in battle (no action template).",
+    ) -> None:
+        super().__init__(user_message)

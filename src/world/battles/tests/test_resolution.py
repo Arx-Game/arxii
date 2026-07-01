@@ -11,9 +11,9 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
-    BATTLE_CHECK_TYPE_NAME,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
@@ -22,7 +22,12 @@ from world.battles.constants import (
 )
 from world.battles.services import add_side, add_unit, begin_battle_round, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.checks.types import CheckResult
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterTechniqueFactory,
+    TechniqueFactory,
+)
 from world.scenes.constants import RoundStatus
 from world.vitals.factories import CharacterVitalsFactory
 
@@ -37,9 +42,57 @@ def _failure_result(level: int = -3) -> types.SimpleNamespace:
     return types.SimpleNamespace(success_level=level)
 
 
+class BattleTechniqueResolverTests(TestCase):
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+    def test_resolve_battle_technique_returns_check_result(self) -> None:
+        from world.battles.resolution import resolve_battle_technique
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+
+        battle = create_battle(name="Resolver Unit Test Battle")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        fake_result = CheckResult(
+            check_type=self.technique.action_template.check_type,
+            outcome=None,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        with patch("world.battles.resolution.perform_check", return_value=fake_result):
+            check_result = resolve_battle_technique(declaration=declaration)
+
+        self.assertIs(check_result, fake_result)
+
+
 class DeclareBattleActionTests(TestCase):
     def setUp(self) -> None:
+        from actions.factories import ActionTemplateFactory
         from world.battles.services import create_battle
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 
         self.battle = create_battle(name="Declaration Test Battle")
         self.side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
@@ -55,6 +108,11 @@ class DeclareBattleActionTests(TestCase):
             unit_type="archers",
         )
         self.battle_round = begin_battle_round(battle=self.battle)
+        # Castable technique (action_template set) for the happy-path declarations
+        # below; test_declare_raises_when_technique_has_no_action_template covers
+        # the bare-technique (no action_template) rejection path separately.
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
 
     def test_declare_strike_action(self) -> None:
         from world.battles.services import declare_battle_action
@@ -62,11 +120,13 @@ class DeclareBattleActionTests(TestCase):
         declaration = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
 
         self.assertEqual(declaration.participant, self.participant)
         self.assertEqual(declaration.action_kind, BattleActionKind.STRIKE)
+        self.assertEqual(declaration.technique, self.technique)
         self.assertEqual(declaration.target_unit, self.unit)
         self.assertFalse(declaration.resolved)
 
@@ -79,6 +139,7 @@ class DeclareBattleActionTests(TestCase):
         declaration = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
             target_ally=ally,
         )
 
@@ -92,10 +153,12 @@ class DeclareBattleActionTests(TestCase):
         declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
         )
         declaration = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
 
@@ -115,6 +178,37 @@ class DeclareBattleActionTests(TestCase):
             declare_battle_action(
                 participant=self.participant,
                 action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+            )
+
+    def test_declare_raises_when_character_does_not_know_technique(self) -> None:
+        from world.battles.exceptions import CharacterDoesNotKnowTechniqueError
+        from world.battles.services import declare_battle_action
+        from world.magic.factories import TechniqueFactory
+
+        unknown_technique = TechniqueFactory()
+        with self.assertRaises(CharacterDoesNotKnowTechniqueError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=unknown_technique,
+                target_unit=self.unit,
+            )
+
+    def test_declare_raises_when_technique_has_no_action_template(self) -> None:
+        from world.battles.exceptions import TechniqueNotBattleReadyError
+        from world.battles.services import declare_battle_action
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        # Default TechniqueFactory leaves action_template unset (None).
+        bare_technique = TechniqueFactory()
+        CharacterTechniqueFactory(character=self.sheet, technique=bare_technique)
+        with self.assertRaises(TechniqueNotBattleReadyError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=bare_technique,
+                target_unit=self.unit,
             )
 
 
@@ -123,10 +217,7 @@ class ResolveBattleRoundSuccessTests(TestCase):
 
     def setUp(self) -> None:
         from world.battles.services import create_battle
-
-        # Seed the CheckType
-        category = CheckCategoryFactory(name="Combat")
-        CheckTypeFactory(name=BATTLE_CHECK_TYPE_NAME, category=category)
+        from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory
 
         self.battle = create_battle(name="Resolution Success Battle")
         self.attacker_side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
@@ -137,6 +228,12 @@ class ResolveBattleRoundSuccessTests(TestCase):
         self.participant = enlist_participant(
             battle=self.battle, character_sheet=self.sheet, side=self.attacker_side
         )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
 
         self.unit = add_unit(
             battle=self.battle,
@@ -155,6 +252,7 @@ class ResolveBattleRoundSuccessTests(TestCase):
         declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
 
@@ -190,6 +288,7 @@ class ResolveBattleRoundSuccessTests(TestCase):
         declare = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
         with patch("world.battles.resolution.perform_check") as mock_check:
@@ -206,9 +305,7 @@ class ResolveBattleRoundSupportTests(TestCase):
 
     def setUp(self) -> None:
         from world.battles.services import create_battle
-
-        category = CheckCategoryFactory(name="Combat")
-        CheckTypeFactory(name=BATTLE_CHECK_TYPE_NAME, category=category)
+        from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory
 
         self.battle = create_battle(name="Support Battle")
         self.side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
@@ -219,6 +316,13 @@ class ResolveBattleRoundSupportTests(TestCase):
         self.participant = enlist_participant(
             battle=self.battle, character_sheet=self.sheet, side=self.side
         )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
         self.battle_round = begin_battle_round(battle=self.battle)
 
     def test_support_success_awards_support_vp(self) -> None:
@@ -228,6 +332,7 @@ class ResolveBattleRoundSupportTests(TestCase):
         declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
         )
         with patch("world.battles.resolution.perform_check") as mock_check:
             mock_check.return_value = _success_result()
@@ -242,9 +347,7 @@ class ResolveBattleRoundFailureTests(TestCase):
 
     def setUp(self) -> None:
         from world.battles.services import create_battle
-
-        category = CheckCategoryFactory(name="Combat")
-        CheckTypeFactory(name=BATTLE_CHECK_TYPE_NAME, category=category)
+        from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory
 
         self.battle = create_battle(name="Failure Test Battle")
         self.attacker_side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
@@ -255,6 +358,12 @@ class ResolveBattleRoundFailureTests(TestCase):
         self.participant = enlist_participant(
             battle=self.battle, character_sheet=self.sheet, side=self.attacker_side
         )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
 
         self.unit = add_unit(
             battle=self.battle,
@@ -271,6 +380,7 @@ class ResolveBattleRoundFailureTests(TestCase):
         declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
 
@@ -298,6 +408,7 @@ class ResolveBattleRoundFailureTests(TestCase):
         decl = declare_battle_action(
             participant=self.participant,
             action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
             target_unit=self.unit,
         )
         failure_level = -3
@@ -310,14 +421,56 @@ class ResolveBattleRoundFailureTests(TestCase):
         self.assertEqual(decl.success_level, failure_level)
 
 
-class GetBattleCheckTypeTests(TestCase):
-    def test_get_battle_check_type_returns_correct_type(self) -> None:
-        from world.battles.resolution import get_battle_check_type
+class BattleRoundAudereWiringTests(TestCase):
+    """Proves resolve_battle_round routes through use_technique, which fires the
+    Audere Majora hook (Step 8c) automatically — no battle-specific wiring needed.
+    """
 
-        category = CheckCategoryFactory(name="Combat")
-        expected = CheckTypeFactory(name=BATTLE_CHECK_TYPE_NAME, category=category)
+    def setUp(self) -> None:
+        from world.battles.services import create_battle
+        from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory
+        from world.traits.factories import CheckSystemSetupFactory
 
-        result = get_battle_check_type()
+        CheckSystemSetupFactory.create()
 
-        self.assertEqual(result.pk, expected.pk)
-        self.assertEqual(result.name, BATTLE_CHECK_TYPE_NAME)
+        self.battle = create_battle(name="Audere Wiring Test Battle")
+        self.side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+
+        self.sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=self.sheet, health=100, max_health=100)
+        self.participant = enlist_participant(
+            battle=self.battle, character_sheet=self.sheet, side=self.side
+        )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(),
+            damage_profile=False,
+            intensity=5,
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+        self.battle_round = begin_battle_round(battle=self.battle)
+
+    def test_resolve_battle_round_calls_audere_majora_hook(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        # maybe_create_audere_majora_offer is imported function-locally inside
+        # use_technique (world/magic/services/techniques.py:1094), not at module
+        # level — repo convention for lazy imports is to patch the ORIGIN module
+        # so the call-time `from X import Y` re-binds to the patched callable
+        # (see reference-module-import-breaks-origin-patch memory).
+        with patch("world.magic.audere_majora.maybe_create_audere_majora_offer") as mock_audere:
+            resolve_battle_round(battle_round=self.battle_round)
+
+        mock_audere.assert_called_once()
+        called_character, called_intensity = mock_audere.call_args[0]
+        self.assertEqual(called_character, self.sheet.character)
+        self.assertEqual(called_intensity, self.technique.intensity)

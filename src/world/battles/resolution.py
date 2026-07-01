@@ -1,7 +1,8 @@
 """Battle round resolution engine.
 
-Iterates all unresolved BattleActionDeclarations for a round, rolls
-``perform_check`` once per declaration, then routes the result:
+Iterates all unresolved BattleActionDeclarations for a round, casts each
+declaration's technique once via ``resolve_battle_technique``, then routes
+the result:
 
 - ``success_level > 0`` → STRIKE: attrite the target unit + award VP to the
   participant's side; SUPPORT: award SUPPORT_VP.
@@ -10,6 +11,16 @@ Iterates all unresolved BattleActionDeclarations for a round, rolls
 
 The ``BattleRoundResult`` dataclass carries per-side VP totals, routed/
 destroyed unit lists, and a casualty list for the caller to display or log.
+
+This module also provides ``BattleTechniqueResolver`` and
+``resolve_battle_technique``, which cast a declaration's ``technique`` through
+the real magic envelope (``use_technique``). Routing through ``use_technique``
+(rather than a generic shared check) means the check is sourced from the
+player's actual technique (``technique.action_template.check_type``),
+anima/Soulfray/mishap apply normally, and Audere/Audere Majora escalation
+fires automatically (it's wired inside ``use_technique`` itself, Step 8c — no
+separate call site is needed here). ``resolve_battle_round`` calls
+``resolve_battle_technique`` per declaration.
 """
 
 from __future__ import annotations
@@ -22,7 +33,6 @@ from django.utils import timezone
 
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
-    BATTLE_CHECK_TYPE_NAME,
     ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
@@ -35,8 +45,84 @@ from world.checks.services import perform_check
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.battles.models import BattleActionDeclaration
-    from world.checks.models import CheckType
+    from world.checks.types import CheckResult
+    from world.magic.models import Technique
+    from world.magic.types.power_ledger import PowerLedger
+
+
+@dataclass
+class BattleTechniqueResolution:
+    """Adapts ``use_technique``'s resolve_fn contract — exposes ``.check_result``
+    for ``_resolve_check_result`` (``world/magic/services/techniques.py``)."""
+
+    check_result: CheckResult
+
+
+@dataclass
+class BattleTechniqueResolver:
+    """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
+    own check. Battle has no damage-profile/condition application of its own —
+    that stays in ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
+    """
+
+    character: ObjectDB
+    technique: Technique
+
+    def __call__(
+        self,
+        *,
+        power: int,  # noqa: ARG002 — battle doesn't scale effects off cast power
+        ledger: PowerLedger,  # noqa: ARG002 — battle doesn't use the power ledger
+        extra_modifiers: int = 0,
+    ) -> BattleTechniqueResolution:
+        check_type = self.technique.action_template.check_type
+        check_result = perform_check(self.character, check_type, extra_modifiers=extra_modifiers)
+        return BattleTechniqueResolution(check_result=check_result)
+
+
+def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckResult | None:
+    """Cast ``declaration.technique`` through the real magic envelope.
+
+    Routes through ``use_technique`` so anima cost, Soulfray accumulation, and —
+    critically — the Audere/Audere Majora escalation hook (Step 8c, fires
+    unconditionally inside ``use_technique`` for every caller) all apply exactly
+    as they would for any other cast. ``confirm_soulfray_risk=True`` because a
+    batch round resolve cannot pause mid-batch for one participant's consent
+    prompt — same reasoning ``resolve_accepted_cast`` uses for its consent-accept
+    path.
+
+    Args:
+        declaration: A ``BattleActionDeclaration`` with ``technique`` set.
+
+    Returns:
+        The resolved ``CheckResult``, or ``None`` if the cast was interrupted
+        before resolution (e.g. a reactive PRE_CAST cancellation) — the caller
+        treats ``None`` as success_level 0 (failure).
+    """
+    from world.magic.services import use_technique  # noqa: PLC0415
+
+    character = declaration.participant.character_sheet.character
+    technique = declaration.technique
+    resolver = BattleTechniqueResolver(character=character, technique=technique)
+
+    result = use_technique(
+        character=character,
+        technique=technique,
+        resolve_fn=resolver,
+        confirm_soulfray_risk=True,
+        # lethal defaults True (unlike combat's lethal=encounter.is_lethal) — battles
+        # have no non-lethal encounter concept; this only bounds the CASTER's own
+        # anima-overburn/Soulfray severity, not PvP damage (ADR-0023 is unaffected).
+    )
+    if not result.confirmed or result.resolution_result is None:
+        # PRE_CAST cancellation (rare, e.g. a reactive scar) — no anima was spent,
+        # but the caller still counts this as a failure (success_level 0) for
+        # simplicity; the round-scale batch resolve has no cheaper alternative.
+        return None
+    return result.resolution_result.check_result
 
 
 @dataclass
@@ -51,17 +137,6 @@ class BattleRoundResult:
     units_routed: list[int] = field(default_factory=list)
     # Participant pks who took damage this round.
     casualties: list[int] = field(default_factory=list)
-
-
-def get_battle_check_type() -> CheckType:
-    """Return the ``CheckType`` used for all battle action checks.
-
-    Raises:
-        CheckType.DoesNotExist: If the "Battle Action" check type is not seeded.
-    """
-    from world.checks.models import CheckType  # noqa: PLC0415
-
-    return CheckType.objects.get(name=BATTLE_CHECK_TYPE_NAME)
 
 
 def _resolve_strike_success(
@@ -142,9 +217,10 @@ def _resolve_failure(
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
 
-    For each unresolved declaration, calls ``perform_check`` against the
-    character's ObjectDB and routes success / failure to the appropriate
-    sub-handlers.  Sets ``battle_round.status = COMPLETED`` at the end.
+    For each unresolved declaration, casts its declared technique through
+    ``resolve_battle_technique`` (the real magic envelope) and routes
+    success / failure to the appropriate sub-handlers. Sets
+    ``battle_round.status = COMPLETED`` at the end.
 
     Args:
         battle_round: The ``BattleRound`` in DECLARING or RESOLVING status.
@@ -152,7 +228,6 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     Returns:
         A ``BattleRoundResult`` summarising what happened this round.
     """
-    check_type = get_battle_check_type()
     result = BattleRoundResult()
 
     declarations = list(
@@ -160,13 +235,13 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "participant__character_sheet",
             "participant__side",
             "target_unit",
+            "technique__action_template",
         )
     )
 
     for declaration in declarations:
-        actor_objectdb = declaration.participant.character_sheet.character
-        check_result = perform_check(actor_objectdb, check_type)
-        sl = check_result.success_level
+        check_result = resolve_battle_technique(declaration=declaration)
+        sl = check_result.success_level if check_result is not None else 0
 
         if sl > 0:
             if declaration.action_kind == BattleActionKind.STRIKE:

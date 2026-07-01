@@ -232,6 +232,7 @@ class DeclareBattleActionAction(Action):
         from world.battles.exceptions import BattleError  # noqa: PLC0415
         from world.battles.models import BattleParticipant  # noqa: PLC0415
         from world.battles.services import declare_battle_action  # noqa: PLC0415
+        from world.magic.models import Technique  # noqa: PLC0415
 
         # Resolve the actor's CharacterSheet via the reverse OneToOne accessor.
         try:
@@ -253,6 +254,12 @@ class DeclareBattleActionAction(Action):
         if participant is None:
             return ActionResult(success=False, message=_NOT_IN_BATTLE)
 
+        technique_id = kwargs.get("technique_id")
+        try:
+            technique = Technique.objects.get(pk=technique_id)
+        except Technique.DoesNotExist:
+            return ActionResult(success=False, message="Technique not found.")
+
         action_kind = kwargs.get("action_kind", BattleActionKind.STRIKE)
         target_unit = kwargs.get("target_unit")
         target_ally = kwargs.get("target_ally")
@@ -261,6 +268,7 @@ class DeclareBattleActionAction(Action):
             decl = declare_battle_action(
                 participant=participant,
                 action_kind=action_kind,
+                technique=technique,
                 target_unit=target_unit,
                 target_ally=target_ally,
             )
@@ -270,6 +278,6 @@ class DeclareBattleActionAction(Action):
         kind_label = dict(BattleActionKind.choices).get(action_kind, action_kind)
         return ActionResult(
             success=True,
-            message=f"You declare: {kind_label}.",
+            message=f"You declare: {kind_label} ({technique.name}).",
             data={"declaration_id": decl.pk},
         )

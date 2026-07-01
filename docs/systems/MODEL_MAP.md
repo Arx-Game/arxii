@@ -559,6 +559,7 @@
 **Foreign Keys:**
   - battle_round -> battles.BattleRound [FK]
   - participant -> battles.BattleParticipant [FK]
+  - technique -> magic.Technique [FK]
   - target_unit -> battles.BattleUnit [FK] (nullable)
   - target_ally -> battles.BattleParticipant [FK] (nullable)
 
@@ -570,7 +571,7 @@
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 
@@ -2339,6 +2340,7 @@
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
   - conditions_caused <- conditions.ConditionInstance
+  - battle_declarations <- battles.BattleActionDeclaration
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**

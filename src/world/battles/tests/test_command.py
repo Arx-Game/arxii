@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from commands.battle import CmdBattle
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.battles.constants import BattleActionKind
@@ -24,6 +25,7 @@ from world.battles.factories import (
 )
 from world.battles.models import BattleActionDeclaration
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.scenes.constants import RoundStatus
 
 
@@ -83,27 +85,32 @@ class CmdBattleDeclareTests(TestCase):
             status=RoundStatus.DECLARING,
         )
 
+        # A technique the player knows, with a real action_template (declare_battle_action
+        # requires action_template_id presence — see TechniqueNotBattleReadyError).
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), name="Lance Thrust"
+        )
+        CharacterTechniqueFactory(character=self.player_sheet, technique=self.technique)
+
     def test_declare_strike_creates_declaration(self) -> None:
         cmd = CmdBattle()
-        _run(cmd, self.player_char, "declare strike Iron Guard")
+        _run(cmd, self.player_char, "declare strike Iron Guard with Lance Thrust")
 
-        # Should have created a BattleActionDeclaration.
         self.assertTrue(
             BattleActionDeclaration.objects.filter(
                 battle_round=self.battle_round,
                 participant=self.participant,
                 action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
                 target_unit=self.unit,
             ).exists()
         )
 
-        # Caller should have received feedback.
         self.player_char.msg.assert_called()
         feedback = self.player_char.msg.call_args[0][0]
         self.assertIn("declare", feedback.lower())
 
     def test_declare_support_creates_declaration(self) -> None:
-        # Enlist an ally to support.
         ally_char = CharacterFactory(db_key="cmd_battle_ally", location=self.room)
         ally_sheet = CharacterSheetFactory(character=ally_char)
         ally_participant = BattleParticipantFactory(
@@ -113,20 +120,38 @@ class CmdBattleDeclareTests(TestCase):
         )
 
         cmd = CmdBattle()
-        _run(cmd, self.player_char, f"declare support {ally_char.db_key}")
+        _run(cmd, self.player_char, f"declare support {ally_char.db_key} with Lance Thrust")
 
         self.assertTrue(
             BattleActionDeclaration.objects.filter(
                 battle_round=self.battle_round,
                 participant=self.participant,
                 action_kind=BattleActionKind.SUPPORT,
+                technique=self.technique,
                 target_ally=ally_participant,
             ).exists()
         )
 
+    def test_declare_without_technique_sends_usage(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare strike Iron Guard")
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("with", feedback.lower())
+
+    def test_declare_unknown_technique_sends_error(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare strike Iron Guard with Nonexistent Technique")
+        self.assertFalse(
+            BattleActionDeclaration.objects.filter(battle_round=self.battle_round).exists()
+        )
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("technique", feedback.lower())
+
     def test_declare_unknown_unit_sends_error(self) -> None:
         cmd = CmdBattle()
-        _run(cmd, self.player_char, "declare strike NonexistentUnit")
+        _run(cmd, self.player_char, "declare strike NonexistentUnit with Lance Thrust")
 
         # No declaration should have been created.
         self.assertFalse(

@@ -21,7 +21,12 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
 )
-from world.battles.exceptions import BattleConcludedError, RoundNotOpenError
+from world.battles.exceptions import (
+    BattleConcludedError,
+    CharacterDoesNotKnowTechniqueError,
+    RoundNotOpenError,
+    TechniqueNotBattleReadyError,
+)
 from world.battles.models import (
     Battle,
     BattleActionDeclaration,
@@ -35,6 +40,7 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import Technique
     from world.stories.models import Story
 
 
@@ -208,6 +214,7 @@ def declare_battle_action(
     *,
     participant: BattleParticipant,
     action_kind: str,
+    technique: Technique,
     target_unit: BattleUnit | None = None,
     target_ally: BattleParticipant | None = None,
 ) -> BattleActionDeclaration:
@@ -219,24 +226,42 @@ def declare_battle_action(
     Args:
         participant: The ``BattleParticipant`` declaring the action.
         action_kind: A ``BattleActionKind`` value.
+        technique: The ``Technique`` being cast. Must be known by the participant's
+            character and have an ``action_template`` (castable).
         target_unit: The ``BattleUnit`` being struck (STRIKE only).
         target_ally: The ``BattleParticipant`` being supported (SUPPORT only).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
+        CharacterDoesNotKnowTechniqueError: If the participant's character doesn't
+            know ``technique``.
+        TechniqueNotBattleReadyError: If ``technique`` has no ``action_template``.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
     """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
     battle_round = participant.battle.current_round
     if battle_round is None or battle_round.status != RoundStatus.DECLARING:
         raise RoundNotOpenError
+
+    knows_technique = CharacterTechnique.objects.filter(
+        character_id=participant.character_sheet_id,
+        technique=technique,
+    ).exists()
+    if not knows_technique:
+        raise CharacterDoesNotKnowTechniqueError
+
+    if not technique.action_template_id:
+        raise TechniqueNotBattleReadyError
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
         participant=participant,
         defaults={
             "action_kind": action_kind,
+            "technique": technique,
             "target_unit": target_unit,
             "target_ally": target_ally,
             "resolved": False,

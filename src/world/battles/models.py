@@ -27,6 +27,7 @@ SCENE_MODEL = "scenes.Scene"
 STORY_MODEL = "stories.Story"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
+TECHNIQUE_MODEL = "magic.Technique"
 
 
 class Battle(SharedMemoryModel):
@@ -273,6 +274,12 @@ class BattleActionDeclaration(SharedMemoryModel):
         BattleParticipant,
         on_delete=models.CASCADE,
         related_name="declarations",
+    )
+    technique = models.ForeignKey(
+        TECHNIQUE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="battle_declarations",
+        help_text="The technique cast for this declaration.",
     )
     action_kind = models.CharField(
         max_length=20,

@@ -21,6 +21,7 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
 )
+from world.magic.factories import TechniqueFactory
 from world.scenes.constants import RoundStatus
 
 
@@ -91,6 +92,7 @@ class BattleActionDeclarationFactory(factory_django.DjangoModelFactory):
         BattleParticipantFactory,
         battle=factory.SelfAttribute("..battle_round.battle"),
     )
+    technique = factory.SubFactory(TechniqueFactory, action_template=None)
     action_kind = BattleActionKind.STRIKE
     resolved = False
     success_level = 0
