@@ -239,7 +239,6 @@ def accept_technique_offer(
         TechniqueCapExceeded: At the cap for this gift at current thread level.
     """
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
-    from world.achievements.discovery import announce_access_change  # noqa: PLC0415
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         GiftUnlockMissing,
@@ -315,15 +314,17 @@ def accept_technique_offer(
     teacher_pool = ActionPointPool.get_or_create_for_character(offer.teacher.character)
     teacher_pool.consume_banked(offer.banked_ap)
 
-    # 7. Mint CharacterTechnique.
-    ct = CharacterTechnique.objects.create(character=sheet, technique=technique)
-
-    # 8. Announce.
-    announce_access_change(
-        sheet,
-        gained=[technique],
-        lost=[],
-        source=AccessChangeSource.GIFT_ACQUISITION,
+    # 7-8. Delegate mint + announce to the shared commit seam.
+    # AP is already spent above (step 6); learn_technique receives ap_cost=0.
+    # The gift-owned check in learn_technique passes because step 4 acquired
+    # the gift if needed. The gate/cap/duplicate checks re-run idempotently.
+    from world.magic.services.technique_acquisition import (  # noqa: PLC0415
+        learn_technique,
     )
 
-    return ct
+    return learn_technique(
+        sheet,
+        technique,
+        source=AccessChangeSource.GIFT_ACQUISITION,
+        ap_cost=0,
+    )
