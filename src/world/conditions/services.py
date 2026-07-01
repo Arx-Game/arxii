@@ -806,6 +806,18 @@ def bulk_apply_conditions(
                 )
                 continue
 
+        if _check_application_resist(app.target, app.template):
+            results.append(
+                ApplyConditionResult(
+                    success=False,
+                    instance=None,
+                    message="resisted",
+                    removed_conditions=[],
+                    applied_conditions=[],
+                )
+            )
+            continue
+
         params = _ApplyConditionParams(
             target=app.target,
             severity=app.severity,
