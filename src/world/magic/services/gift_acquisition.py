@@ -265,6 +265,12 @@ def accept_technique_offer(
         msg = f"{sheet} already knows {technique.name}."
         raise ValueError(msg)
 
+    # 1b. Check path-style restriction (shared gate).
+    if not can_learn_technique(sheet, technique):
+        from world.magic.exceptions import TechniqueStyleForbidden  # noqa: PLC0415
+
+        raise TechniqueStyleForbidden
+
     # 2. Check if learner has the gift.
     has_gift = CharacterGift.objects.filter(character=sheet, gift=gift).exists()
 

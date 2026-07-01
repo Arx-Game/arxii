@@ -324,6 +324,35 @@ class AcceptTechniqueOfferTest(TestCase):
         self.assertEqual(self.learner_ap.current, 200 - 10)
 
     @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
+    def test_path_style_forbidden_blocks_accept(self, mock_gate):
+        """accept_technique_offer raises TechniqueStyleForbidden on path mismatch."""
+        from world.classes.factories import PathFactory
+        from world.magic.exceptions import TechniqueStyleForbidden
+        from world.magic.factories import TechniqueStyleFactory
+        from world.progression.factories import CharacterPathHistoryFactory
+
+        mock_gate.return_value = None
+        allowed_path = PathFactory()
+        other_path = PathFactory()
+        CharacterPathHistoryFactory(character=self.sheet.character, path=other_path)
+        style = TechniqueStyleFactory(allowed_paths=[allowed_path])
+        from world.magic.factories import TechniqueFactory
+        from world.magic.services.gift_acquisition import accept_technique_offer
+
+        forbidden_tech = TechniqueFactory(gift=self.gift, style=style)
+
+        spend_xp_on_gift_unlock(self.sheet, self.unlock)
+        offer = TechniqueTeachingOffer.objects.create(
+            teacher=self.teacher_tenure,
+            technique=forbidden_tech,
+            pitch="forbidden",
+            learn_ap_cost=5,
+            banked_ap=1,
+        )
+        with self.assertRaises(TechniqueStyleForbidden):
+            accept_technique_offer(self.sheet, offer)
+
+    @patch("world.magic.services.gift_acquisition.enforce_advancement_gate")
     def test_technique_cap_exceeded(self, mock_gate):
         mock_gate.return_value = None
         spend_xp_on_gift_unlock(self.sheet, self.unlock)
