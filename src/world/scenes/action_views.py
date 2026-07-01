@@ -381,6 +381,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         target_persona_id = consent_serializer.validated_data.get("target_persona_id")
         difficulty = consent_serializer.validated_data.get("difficulty")
         resist_effort = consent_serializer.validated_data.get("resist_effort", "")
+        blacklist_actor = consent_serializer.validated_data.get("blacklist_actor", False)
 
         if target_persona_id is not None:
             # Per-target consent path: look up the additional-target row directly.
@@ -401,6 +402,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                     decision=decision,
                     difficulty=difficulty,
                     resist_effort=resist_effort,
+                    blacklist_actor=blacklist_actor,
                 )
             except ValueError:
                 return Response(
@@ -440,6 +442,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 decision=decision,
                 difficulty=difficulty,
                 resist_effort=resist_effort,
+                blacklist_actor=blacklist_actor,
             )
         except ValueError as _exc:
             return Response(

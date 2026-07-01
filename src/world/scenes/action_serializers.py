@@ -404,6 +404,9 @@ class ConsentResponseSerializer(serializers.Serializer):
     resist_effort = serializers.ChoiceField(
         choices=EffortLevel.choices, required=False, allow_blank=True, default=""
     )
+    # On DENY, also add the initiator to this defender's antagonism blacklist for the
+    # action's category (#1698). Ignored on ACCEPT / when the action has no category.
+    blacklist_actor = serializers.BooleanField(required=False, default=False)
 
 
 class StepResultSerializer(serializers.Serializer):

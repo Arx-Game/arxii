@@ -6,6 +6,7 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
@@ -132,6 +133,7 @@ if TYPE_CHECKING:
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique
     from world.magic.types.pull import CastPullDeclaration
+    from world.roster.models import RosterTenure
     from world.scenes.place_models import Place
 
 
@@ -433,12 +435,51 @@ def _compute_difficulty_override_for_primary(
     return base + increment
 
 
+def _persona_current_tenure(persona: Persona | None) -> RosterTenure | None:
+    """Resolve a persona to its character's active RosterTenure, or None.
+
+    Walks ``persona → character_sheet → roster_entry → current_tenure``; any broken
+    link (or a persona with no rostered character) yields ``None``.
+    """
+    if persona is None:
+        return None
+    try:
+        entry = persona.character_sheet.roster_entry
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+    return entry.current_tenure if entry is not None else None
+
+
+def _blacklist_initiator_for_denier(
+    action_request: SceneActionRequest, denier_persona: Persona | None
+) -> None:
+    """Best-effort: add the request's initiator to *denier_persona*'s antagonism blacklist.
+
+    Invoked on the DENY-and-blacklist path (#1698) so a defender can, in one motion,
+    both refuse the action AND bar that actor from the action's category in future. No-op
+    when the action has no consent category, or when either tenure can't be resolved (the
+    blacklist is tenure-scoped). The blocked party is never told.
+    """
+    template = action_request.action_template
+    category = template.consent_category if template is not None else None
+    if category is None:
+        return
+    owner_tenure = _persona_current_tenure(denier_persona)
+    blocked_tenure = _persona_current_tenure(action_request.initiator_persona)
+    if owner_tenure is None or blocked_tenure is None:
+        return
+    from world.consent.services import add_social_consent_blacklist  # noqa: PLC0415
+
+    add_social_consent_blacklist(owner_tenure, blocked_tenure, category)
+
+
 def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
     decision: str,
     difficulty: str | None = None,
     resist_effort: str = "",
+    blacklist_actor: bool = False,
 ) -> EnhancedSceneActionResult | None:
     """Process a consent decision on an action request.
 
@@ -453,6 +494,9 @@ def respond_to_action_request(
             this target only (Task 4 — per-target plausibility).
         resist_effort: Optional EffortLevel value for the defender's active
             resistance. Stored on the request; increment applied in a later task.
+        blacklist_actor: On DENY, also add the initiator to the denier's antagonism
+            blacklist for the action's category (#1698). Ignored on ACCEPT and when the
+            action has no consent category.
 
     Returns:
         EnhancedSceneActionResult if accepted and resolved via the cast/action
@@ -471,6 +515,8 @@ def respond_to_action_request(
         action_request.status = ActionRequestStatus.DENIED
         action_request.resolved_at = timezone.now()
         action_request.save(update_fields=["status", "resolved_at"])
+        if blacklist_actor:
+            _blacklist_initiator_for_denier(action_request, action_request.target_persona)
         return None
 
     if decision == ConsentDecision.ACCEPT:
@@ -709,6 +755,7 @@ def respond_to_action_target(
     decision: str,
     difficulty: str | None = None,
     resist_effort: str = "",
+    blacklist_actor: bool = False,
 ) -> EnhancedSceneActionResult | None:
     """Consent + resolution for ONE additional target row. Never touches siblings.
 
@@ -720,6 +767,8 @@ def respond_to_action_target(
             difficulty_override for resolution (Task 4 — per-target plausibility).
         resist_effort: Optional EffortLevel value for the defender's active
             resistance. Stored on the target row; increment applied in a later task.
+        blacklist_actor: On DENY, also add the initiator to this target's antagonism
+            blacklist for the action's category (#1698). Ignored on ACCEPT.
 
     Returns:
         EnhancedSceneActionResult if accepted and resolved. None if denied, already
@@ -731,6 +780,10 @@ def respond_to_action_target(
         action_target.status = ActionRequestStatus.DENIED
         action_target.resolved_at = timezone.now()
         action_target.save(update_fields=["status", "resolved_at"])
+        if blacklist_actor:
+            _blacklist_initiator_for_denier(
+                action_target.action_request, action_target.target_persona
+            )
         return None
     if decision == ConsentDecision.ACCEPT:
         action_request = action_target.action_request

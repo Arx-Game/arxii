@@ -204,6 +204,37 @@ class RespondCommandTests(TestCase):
 
         self.assertEqual(respond.call_args.kwargs["action_request"], newest)
 
+    def _run_with_switches(self, cmd_cls: type, caller: object, switches: list[str]) -> object:
+        cmd = cmd_cls()
+        cmd.caller = caller
+        cmd.args = ""
+        cmd.switches = switches
+        cmd.raw_string = f"{cmd_cls.key}/{'/'.join(switches)}"
+        caller.msg = MagicMock()
+        cmd.func()
+        return cmd
+
+    def test_accept_difficulty_switch_forwards_grade(self) -> None:
+        """`accept/hard` forwards difficulty='hard' to the service (#1698)."""
+        self._make_pending()
+        with patch("commands.consent.respond_to_action_request") as respond:
+            self._run_with_switches(CmdAccept, self.target_char, ["hard"])
+        self.assertEqual(respond.call_args.kwargs["difficulty"], "hard")
+
+    def test_deny_blacklist_switch_forwards_flag(self) -> None:
+        """`deny/blacklist` forwards blacklist_actor=True to the service (#1698)."""
+        self._make_pending()
+        with patch("commands.consent.respond_to_action_request") as respond:
+            self._run_with_switches(CmdDeny, self.target_char, ["blacklist"])
+        self.assertTrue(respond.call_args.kwargs["blacklist_actor"])
+
+    def test_accept_does_not_blacklist(self) -> None:
+        """The blacklist switch is DENY-only — accept never sets the flag."""
+        self._make_pending()
+        with patch("commands.consent.respond_to_action_request") as respond:
+            self._run_with_switches(CmdAccept, self.target_char, ["blacklist"])
+        self.assertFalse(respond.call_args.kwargs["blacklist_actor"])
+
 
 class AllSocialCommandsRegisteredTests(TestCase):
     """Every social-action singleton maps to a ConsentRequestCommand subclass."""
