@@ -163,10 +163,8 @@ def grant_resonance(  # noqa: PLR0913
         recompute_aura,
     )
 
-    # recompute_aura() already fires threshold crossings internally for any
-    # caller (see world.magic.services.aura); this explicit call is a cheap,
-    # idempotent safety net keeping the grant_resonance() call site self-
-    # documenting about the achievement hook it triggers (#1737).
+    # Two separate steps chained here: recompute the aura, then check whether
+    # the drift crossed any authored AuraAffinityThreshold (#1737).
     drift = recompute_aura(character_sheet)
     if drift is not None:
         fire_aura_threshold_crossings(character_sheet, drift)

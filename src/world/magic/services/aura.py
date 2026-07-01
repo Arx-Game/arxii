@@ -135,9 +135,7 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
 
     grand_total = sum(totals.values())
     if grand_total == 0:
-        drift = AuraDrift(before=before, after=before)
-        fire_aura_threshold_crossings(character_sheet, drift)
-        return drift
+        return AuraDrift(before=before, after=before)
 
     aura.celestial = Decimal(totals["celestial"]) / Decimal(grand_total) * 100
     aura.primal = Decimal(totals["primal"]) / Decimal(grand_total) * 100
@@ -174,9 +172,7 @@ def recompute_aura(character_sheet: CharacterSheet) -> AuraDrift | None:
         primal=float(aura.primal),
         abyssal=float(aura.abyssal),
     )
-    drift = AuraDrift(before=before, after=after)
-    fire_aura_threshold_crossings(character_sheet, drift)
-    return drift
+    return AuraDrift(before=before, after=after)
 
 
 def _achievement_gate_passes(achievement, character_sheet: CharacterSheet) -> bool:
@@ -202,9 +198,9 @@ def fire_aura_threshold_crossings(character_sheet: CharacterSheet, drift: AuraDr
     AchievementRequirement rows) are checked via the character's own stat
     values before granting.
 
-    Called from recompute_aura() itself (so any caller — grant_resonance() or a
-    direct test/service call — gets the crossing check without remembering to
-    wire it separately).
+    Called explicitly by grant_resonance() (the AuraDrift returned by
+    recompute_aura() is passed straight through), or by test code directly with
+    a constructed/returned AuraDrift.
     """
     from world.achievements.models import CharacterAchievement  # noqa: PLC0415
     from world.achievements.services import grant_achievement  # noqa: PLC0415

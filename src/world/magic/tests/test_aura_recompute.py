@@ -132,7 +132,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
         from world.achievements.factories import AchievementFactory
         from world.achievements.models import CharacterAchievement
         from world.magic.models import AuraAffinityThreshold
-        from world.magic.services.aura import recompute_aura
+        from world.magic.services.aura import fire_aura_threshold_crossings, recompute_aura
         from world.magic.types import AffinityType
 
         achievement = AchievementFactory(is_active=True)
@@ -147,7 +147,11 @@ class FireAuraThresholdCrossingsTests(TestCase):
             balance=100,
             lifetime_earned=100,
         )
-        recompute_aura(self.sheet)  # this call itself fires the crossing check
+        # recompute_aura() only recomputes; the caller is responsible for
+        # chaining the crossing check with the returned AuraDrift (mirrors
+        # grant_resonance()'s real two-step wiring).
+        drift = recompute_aura(self.sheet)
+        fire_aura_threshold_crossings(self.sheet, drift)
         assert CharacterAchievement.objects.filter(
             character_sheet=self.sheet, achievement=achievement
         ).exists()
@@ -161,7 +165,7 @@ class FireAuraThresholdCrossingsTests(TestCase):
         )
         from world.achievements.models import CharacterAchievement
         from world.magic.models import AuraAffinityThreshold
-        from world.magic.services.aura import recompute_aura
+        from world.magic.services.aura import fire_aura_threshold_crossings, recompute_aura
         from world.magic.types import AffinityType
 
         allure = StatDefinitionFactory()
@@ -182,7 +186,8 @@ class FireAuraThresholdCrossingsTests(TestCase):
         )
         # No StatTracker row for `allure` on self.sheet — get_stat() returns 0,
         # which fails the >=50 requirement.
-        recompute_aura(self.sheet)
+        drift = recompute_aura(self.sheet)
+        fire_aura_threshold_crossings(self.sheet, drift)
         assert not CharacterAchievement.objects.filter(
             character_sheet=self.sheet, achievement=achievement
         ).exists()
