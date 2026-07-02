@@ -957,6 +957,69 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
         _called_args, called_kwargs = mock_check.call_args
         self.assertEqual(called_kwargs["extra_modifiers"], expected_total)
 
+    def test_includes_nonzero_commander_bonus_in_extra_modifiers(self) -> None:
+        """A commander assigned to a unit on the acting participant's own side/place
+        contributes a nonzero commander term into extra_modifiers (final-review
+        finding: the composition/terrain/quality/posture full-stack test above
+        always has commander=0 since no commander is ever assigned there).
+
+        Composition/terrain/quality are isolated to 0 by using a ``target_unit``
+        with no authored ``TechniqueCompositionAffinity``/``TerrainCompositionEffect``
+        rows, default TRAINED quality, and default BALANCED posture — so the
+        commander term is the only nonzero contributor and is exactly the patched
+        ``get_modifier_total`` return value.
+        """
+        from world.battles.resolution import BattleTechniqueResolver
+        from world.battles.services import (
+            add_place,
+            add_side,
+            add_unit,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+
+        battle = create_battle(name="Commander Bonus Stack Test")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+
+        place = add_place(battle=battle, name="The Field")
+        commander = CharacterSheetFactory()
+        add_unit(battle=battle, side=attacker, name="Vanguard", place=place, commander=commander)
+        target_unit = add_unit(battle=battle, side=defender, name="Line Infantry", place=place)
+
+        participant = enlist_participant(
+            battle=battle, character_sheet=self.sheet, side=attacker, place=place
+        )
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=target_unit,
+        )
+
+        resolver = BattleTechniqueResolver(
+            character=self.sheet.character, technique=self.technique, declaration=declaration
+        )
+        fake_result = _success_result()
+        # composition(0, no authored row) + terrain(0, OPEN default, no row)
+        #   + quality(TRAINED=0) + posture(BALANCED=0) + commander(8) = 8
+        expected_total = 8
+        # See CommanderBonusForSideAtPlaceTests.test_returns_max_across_commanders:
+        # get_modifier_total is imported function-local inside
+        # commander_bonus_for_side_at_place, so patch the origin, not
+        # world.battles.resolution.
+        with (
+            patch("world.mechanics.services.get_modifier_total", return_value=8),
+            patch("world.battles.resolution.perform_check", return_value=fake_result) as mock_check,
+        ):
+            resolver(power=0, ledger=None, extra_modifiers=0)
+
+        mock_check.assert_called_once()
+        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], expected_total)
+
     def test_zero_stack_for_support_declaration_with_no_target_unit(self) -> None:
         """A SUPPORT declaration has no target_unit — the stack degrades to just
         posture + commander (both 0 by default here), proving no AttributeError

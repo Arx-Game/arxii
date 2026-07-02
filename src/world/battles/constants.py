@@ -115,4 +115,4 @@ BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER: dict[str, int] = {
 # Idempotent-seed target name for the commander-bonus modifier walk (#1711).
 # category="stat" (already EQUIPMENT_RELEVANT_CATEGORIES) so covenant-role /
 # facet / mantle bonuses authored against it flow through the existing walk.
-BATTLE_COMMAND_TARGET_NAME = "Battle Command"
+BATTLE_COMMAND_TARGET_NAME = "battle_command"

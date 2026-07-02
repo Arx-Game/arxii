@@ -247,7 +247,7 @@ BALANCED posture all contribute nothing:
 | Composition affinity | `_composition_affinity_modifier(technique, unit.composition)` | `TechniqueCompositionAffinity` row keyed on `(technique, target_unit.composition)`; 0 if none |
 | Terrain effect | `_terrain_effect_modifier(unit.place, unit.composition)` | `TerrainCompositionEffect` row keyed on `(unit.place.terrain_type, unit.composition)`; 0 if the unit has no place or no row matches |
 | Unit quality | `_quality_modifier(unit.quality)` | `UNIT_QUALITY_STRIKE_MODIFIER` dict in `constants.py` — a flat ladder from MILITIA (+10, easier to hit) to ELITE (−20, harder to hit) |
-| Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"Battle Command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place; 0 if none commanded |
+| Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place; 0 if none commanded |
 | Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
 
 The first three sources only apply to STRIKE declarations (they read `declaration.target_unit`,
@@ -419,9 +419,10 @@ battle model with a `ModelAdmin`: `Battle`, `BattleSide` (list-filtered on `role
 `BattlePlace` (list-filtered on `terrain_type`), `BattleUnit` (list-filtered on
 `composition`/`quality`/`status`; `commander`/`summoned_by` as autocomplete fields),
 `BattleRound`, `BattleParticipant`, `BattleActionDeclaration`, and the two new authored
-catalogs `TechniqueCompositionAffinity` and `TerrainCompositionEffect` (both with
-`technique`/composition-facing list filters), giving staff a CRUD surface to author the
-type-matchup and terrain-effect content the modifier stack reads.
+catalogs `TechniqueCompositionAffinity` (list-filtered on `composition`; `technique` as an
+autocomplete field) and `TerrainCompositionEffect` (list-filtered on
+`terrain_type`/`composition`; no `technique` field), giving staff a CRUD surface to author
+the type-matchup and terrain-effect content the modifier stack reads.
 
 ## Enums / Constants (`src/world/battles/constants.py`)
 
@@ -452,10 +453,9 @@ type-matchup and terrain-effect content the modifier stack reads.
 - `BATTLE_POSTURE_VP_MULTIPLIER` — dict (#1711), percent VP-gain scaling per `BattlePosture`: AGGRESSIVE 1.4, BALANCED 1.0, DEFENSIVE 0.7
 - `BATTLE_POSTURE_CHECK_MODIFIER` — dict (#1711), flat STRIKE-check modifier per `BattlePosture`: AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10
 - `BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER` — dict (#1711), flat failure-damage modifier per `BattlePosture`: AGGRESSIVE +4, BALANCED 0, DEFENSIVE −4
-- `BATTLE_COMMAND_TARGET_NAME = "Battle Command"` — idempotent-seed `ModifierTarget` name (#1711)
-  for the commander-bonus walk. Note: Title Case, a known deviation from the snake_case
-  convention documented for stat-category modifier targets in `world/mechanics/CLAUDE.md`
-  (accepted, flagged for potential future cleanup — not blocking).
+- `BATTLE_COMMAND_TARGET_NAME = "battle_command"` — idempotent-seed `ModifierTarget` name (#1711)
+  for the commander-bonus walk, following the snake_case convention documented for
+  stat-category modifier targets in `world/mechanics/CLAUDE.md`.
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -528,7 +528,7 @@ effects are no longer deferred — see [Modifier Stack (#1711)](#modifier-stack-
   `AddPlaceTerrainTests` (`add_place`'s `terrain_type`/`movement_cost` kwargs, #1711),
   `SetBattleSidePostureTests`, `AssignUnitCommanderTests` (#1711)
 - `src/world/battles/tests/test_factories_seed.py` — `EnsureBattleCommandModifierTargetTests`
-  (idempotent seeding of the `"Battle Command"` `ModifierTarget`, #1711)
+  (idempotent seeding of the `"battle_command"` `ModifierTarget`, #1711)
 - `src/world/battles/tests/test_resolution.py` — `resolve_battle_technique` /
   `BattleTechniqueResolver` unit test; STRIKE success (unit attrition + VP) and failure
   (PC health debit) with `world.battles.resolution.perform_check` patched (the check inside

@@ -140,7 +140,6 @@ def commander_bonus_for_side_at_place(side: BattleSide, place: BattlePlace | Non
     Returns 0 when ``place`` is None or no ACTIVE unit on this side/place has a
     commander set.
     """
-    from world.battles.constants import BattleUnitStatus  # noqa: PLC0415
     from world.battles.factories import ensure_battle_command_modifier_target  # noqa: PLC0415
     from world.battles.models import BattleUnit  # noqa: PLC0415
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
