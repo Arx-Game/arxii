@@ -134,6 +134,7 @@ export function BuildingBuilderDialog({
               {selectedRoom ? (
                 <RoomDetailPanel
                   room={selectedRoom}
+                  characterId={characterId}
                   rooms={payload.rooms}
                   exits={payload.exits}
                   sizeTiers={tiers}

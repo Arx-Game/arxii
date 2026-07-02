@@ -6,6 +6,7 @@ import {
   fetchBuildingForRoom,
   fetchBuildingManager,
   fetchDecorationTemplates,
+  fetchRoomComfort,
   fetchRoomSizeTiers,
   searchPersonas,
 } from './api';
@@ -17,6 +18,7 @@ export const buildingKeys = {
   all: ['buildings'] as const,
   manager: (buildingId: number) => [...buildingKeys.all, 'manager', buildingId] as const,
   forRoom: (roomId: number) => [...buildingKeys.all, 'for-room', roomId] as const,
+  roomComfort: (roomId: number) => [...buildingKeys.all, 'room-comfort', roomId] as const,
   sizeTiers: () => [...buildingKeys.all, 'room-size-tiers'] as const,
   templates: (search: string) => [...buildingKeys.all, 'decoration-templates', search] as const,
   personaSearch: (term: string) => [...buildingKeys.all, 'persona-search', term] as const,
@@ -43,6 +45,18 @@ export function useBuildingForRoomQuery(
     queryFn: () => fetchBuildingForRoom(roomId!, characterId!),
     enabled: roomId != null && characterId != null,
     staleTime: 30_000,
+  });
+}
+
+export function useRoomComfortQuery(
+  roomId: number | null | undefined,
+  characterId: number | null | undefined
+) {
+  return useQuery({
+    queryKey: buildingKeys.roomComfort(roomId ?? 0),
+    queryFn: () => fetchRoomComfort(roomId!, characterId!),
+    enabled: roomId != null && characterId != null,
+    staleTime: 15_000,
   });
 }
 
@@ -92,6 +106,7 @@ export function useRoomBuilderAction(characterId: number, buildingId: number | n
       if (buildingId != null) {
         void queryClient.invalidateQueries({ queryKey: buildingKeys.manager(buildingId) });
       }
+      void queryClient.invalidateQueries({ queryKey: [...buildingKeys.all, 'room-comfort'] });
     },
     onError: (error: Error) => {
       toast.error(error.message);

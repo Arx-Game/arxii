@@ -26,10 +26,13 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import type { ManagerExit, ManagerRoom, RoomBuilderActionKey, RoomSizeTier } from '../types';
+import { ComfortSection } from './ComfortSection';
 import { TenantSection } from './TenantSection';
 
 interface RoomDetailPanelProps {
   room: ManagerRoom;
+  /** The active puppet's ObjectDB pk (comfort HUD read context). */
+  characterId: number;
   /** Every room in the building (for the link-to picker). */
   rooms: ManagerRoom[];
   /** Every exit in the building; the panel filters to this room's. */
@@ -49,6 +52,7 @@ interface RoomDetailPanelProps {
  */
 export function RoomDetailPanel({
   room,
+  characterId,
   rooms,
   exits,
   sizeTiers,
@@ -232,6 +236,8 @@ export function RoomDetailPanel({
           </Button>
         </div>
       </div>
+
+      <ComfortSection roomId={room.id} characterId={characterId} runAction={runAction} />
 
       <TenantSection room={room} runAction={runAction} />
 

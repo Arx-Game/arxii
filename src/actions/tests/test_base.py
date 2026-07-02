@@ -163,6 +163,8 @@ class ActionRegistryTests(TestCase):
             "rename_exit",
             "place_room",
             "set_building_style",
+            "place_room_fixture",
+            "remove_room_fixture",
             "assign_room_tenant",
             "end_room_tenancy",
             "set_primary_home",
