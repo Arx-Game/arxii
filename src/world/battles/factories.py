@@ -96,3 +96,33 @@ class BattleActionDeclarationFactory(factory_django.DjangoModelFactory):
     action_kind = BattleActionKind.STRIKE
     resolved = False
     success_level = 0
+
+
+def ensure_battle_command_modifier_target():
+    """Idempotently seed the "Battle Command" ModifierTarget (#1711).
+
+    category="stat" is already in EQUIPMENT_RELEVANT_CATEGORIES
+    (world/mechanics/constants.py), so authored covenant-role/facet/mantle
+    bonuses against this target flow through the existing
+    get_modifier_total/equipment_walk_total seam with no new plumbing —
+    only the target row itself is new. Mirrors world/vitals/factories.py's
+    ensure_surrounded_content idempotent-seed pattern.
+    """
+    from world.battles.constants import BATTLE_COMMAND_TARGET_NAME
+    from world.mechanics.constants import STAT_CATEGORY_NAME
+    from world.mechanics.models import ModifierCategory, ModifierTarget
+
+    stat_category, _ = ModifierCategory.objects.get_or_create(
+        name=STAT_CATEGORY_NAME,
+        defaults={"description": "Primary character statistics.", "display_order": 10},
+    )
+    target, _ = ModifierTarget.objects.get_or_create(
+        category=stat_category,
+        name=BATTLE_COMMAND_TARGET_NAME,
+        defaults={
+            "description": "Leadership bonus a commander grants to participants "
+            "fighting alongside their commanded unit (#1711).",
+            "is_active": True,
+        },
+    )
+    return target
