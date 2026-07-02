@@ -437,6 +437,24 @@ class GMPickTests(EvenniaTestCase):
         )
         self.assertEqual(outcome.resolution_id, destroyed.pk)
 
+    def test_gm_pick_rejects_unauthored_outcome_key_under_authored_column(self) -> None:
+        """A column with ONE authored outcome_key doesn't authorize picking another."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+        )
+        gm = GMProfileFactory()
+        with self.assertRaises(ValueError):
+            resolve_stake_by_gm_pick(
+                stake,
+                column=StakeResolutionColumn.LOSS,
+                outcome_key="captured",
+                gm_profile=gm,
+            )
+
 
 class ResolveStakeEndpointTests(APITestCase):
     """POST /api/stakes/{id}/resolve/ — the constrained-pick endpoint."""
@@ -472,6 +490,22 @@ class ResolveStakeEndpointTests(APITestCase):
         resp = self.client.post(
             self._url(self.stake),
             {"column": StakeResolutionColumn.LOSS},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("constrained", str(resp.data))
+
+    def test_unauthored_outcome_key_rejected_under_authored_column(self):
+        """A LOSS column authored only as "destroyed" rejects a "captured" pick."""
+        StakeResolutionFactory(
+            stake=self.stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+        )
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            self._url(self.stake),
+            {"column": StakeResolutionColumn.LOSS, "outcome_key": "captured"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
