@@ -34127,6 +34127,8 @@ components:
           type: string
         gross_amount:
           type: integer
+        uncollected_pool:
+          type: integer
         active:
           type: boolean
       required:
@@ -34135,6 +34137,7 @@ components:
       - id
       - kind
       - name
+      - uncollected_pool
     InlineActionInteraction:
       type: object
       description: Minimal serializer for an ACTION-mode Interaction embedded in an
@@ -37125,6 +37128,8 @@ components:
             * `permit` - Permit
             * `mission` - Mission
             * `loan` - Loan
+            * `collection` - Collection
+            * `improvement` - Improvement
         label:
           type: string
           description: UI display text for the menu option.
@@ -37190,11 +37195,15 @@ components:
       - permit
       - mission
       - loan
+      - collection
+      - improvement
       type: string
       description: |-
         * `permit` - Permit
         * `mission` - Mission
         * `loan` - Loan
+        * `collection` - Collection
+        * `improvement` - Improvement
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -37209,6 +37218,8 @@ components:
             * `permit` - Permit
             * `mission` - Mission
             * `loan` - Loan
+            * `collection` - Collection
+            * `improvement` - Improvement
         label:
           type: string
           minLength: 1
@@ -37752,6 +37763,8 @@ components:
         steward_role_id:
           type: integer
           nullable: true
+        uncollected_total:
+          type: integer
         income_streams:
           type: array
           items:
@@ -37784,6 +37797,7 @@ components:
       - organization_name
       - spend_rank_max
       - steward_role_id
+      - uncollected_total
     Organization:
       type: object
       properties:
@@ -42425,6 +42439,8 @@ components:
             * `permit` - Permit
             * `mission` - Mission
             * `loan` - Loan
+            * `collection` - Collection
+            * `improvement` - Improvement
         label:
           type: string
           minLength: 1

@@ -166,6 +166,30 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
       )}
 
       <SectionCard title="Income">
+        {/* #930 — income pools until an active collection dispatch banks it. The
+            steward summon offers Collect/Improve when those offers are authored. */}
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground" data-testid="uncollected-total">
+            Awaiting collection:{' '}
+            <span className="font-semibold text-foreground">
+              {formatCoppers(books.uncollected_total)}
+            </span>
+          </p>
+          {books.steward_role_id != null && books.uncollected_total > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setSummon({
+                  roleId: books.steward_role_id!,
+                  title: 'Dispatch a collection',
+                })
+              }
+            >
+              Collect
+            </Button>
+          )}
+        </div>
         {books.income_streams.length === 0 ? (
           <EmptyRows label="No income streams on the books." />
         ) : (
@@ -175,6 +199,7 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
                 <TableHead>Stream</TableHead>
                 <TableHead>Kind</TableHead>
                 <TableHead className="text-right">Gross / cycle</TableHead>
+                <TableHead className="text-right">Uncollected</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -184,6 +209,9 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
                   <TableCell className="font-medium">{stream.name}</TableCell>
                   <TableCell className="text-muted-foreground">{stream.kind}</TableCell>
                   <TableCell className="text-right">{formatCoppers(stream.gross_amount)}</TableCell>
+                  <TableCell className="text-right" data-testid="stream-pool">
+                    {formatCoppers(stream.uncollected_pool)}
+                  </TableCell>
                   <TableCell>
                     {stream.active ? (
                       <Badge variant="outline">Active</Badge>
