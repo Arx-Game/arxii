@@ -36,7 +36,7 @@ _USAGE = (
     "  room/renameexit <exit>=<new name>\n"
     "  room/home  ·  room/tenant <character>  ·  room/evict <character>\n"
     "  room/extend <units>  ·  room/decorate <template> [here]\n"
-    "  room/style <style name>"
+    "  room/style <style name>  ·  room/fixture <kind>  ·  room/removefixture <kind>"
 )
 
 _AFFIRMATIVE = frozenset({"yes", "y", "true", "on", "1", "public"})
@@ -103,6 +103,8 @@ class CmdRoom(ArxCommand):
             "extend": lambda a: self._run("start_building_extension", added_budget=a),
             "decorate": self._decorate,
             "style": lambda a: self._run("set_building_style", style=a),
+            "fixture": lambda a: self._run("place_room_fixture", kind=a),
+            "removefixture": lambda a: self._run("remove_room_fixture", kind=a),
         }
         for switch in switches:
             handler = handlers.get(switch)
