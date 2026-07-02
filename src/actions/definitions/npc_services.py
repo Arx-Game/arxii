@@ -146,25 +146,33 @@ class ResolveNPCOfferAction(Action):
                 data={"not_found": True},
             )
 
-        # #1770 PR4: the two-phase risk opt-in lives inside npc_resolve. Phase
-        # two — the player re-runs with acknowledge_risk=yes — writes the
-        # idempotent ack row before resolving; phase one falls into the typed
-        # gate error below and returns the informed-consent prompt.
-        if _truthy(kwargs.get("acknowledge_risk")):
-            acknowledge_mission_risk(offer, session.persona)
-
+        # #1770 PR4: the two-phase risk opt-in lives inside npc_resolve. The
+        # first resolve attempt mints NOTHING — the risk gate sits behind
+        # resolve_offer's session/role/eligibility validation, so reaching
+        # MissionRiskUnacknowledgedError proves the offer was currently
+        # resolvable. Only then, and only with acknowledge_risk passed, is
+        # the idempotent ack row written and the resolve retried; without
+        # the kwarg the gate error becomes the informed-consent prompt. An
+        # ineligible offer can therefore never mint an ack row.
+        acknowledge = _truthy(kwargs.get("acknowledge_risk"))
         try:
             result = resolve_offer(session, offer)
         except MissionRiskUnacknowledgedError as exc:
-            return ActionResult(
-                success=False,
-                message=_risk_prompt_message(exc),
-                data={
-                    "requires_risk_acknowledgement": True,
-                    "risk_tier": exc.risk_tier,
-                    "stake_summaries": list(exc.stake_summaries),
-                },
-            )
+            if not acknowledge:
+                return ActionResult(
+                    success=False,
+                    message=_risk_prompt_message(exc),
+                    data={
+                        "requires_risk_acknowledgement": True,
+                        "risk_tier": exc.risk_tier,
+                        "stake_summaries": list(exc.stake_summaries),
+                    },
+                )
+            acknowledge_mission_risk(offer, session.persona)
+            try:
+                result = resolve_offer(session, offer)
+            except ResolveOfferError as retry_exc:
+                return ActionResult(success=False, message=retry_exc.user_message)
         except ResolveOfferError as exc:
             return ActionResult(success=False, message=exc.user_message)
 

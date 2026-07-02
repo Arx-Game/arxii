@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from actions.definitions.npc_services import (
+    _TRUTHY_VALUES,
     end_npc_interaction,
     resolve_npc_offer,
     start_npc_interaction,
@@ -156,10 +157,14 @@ class CmdHire(ArxCommand):
         if session is None:
             self.msg("No interaction is in progress.")
             return
-        # #1770 PR4: `hire offer <id> acknowledge_risk=yes` is phase two of
-        # the risky-mission opt-in (the gate's prompt names the token).
+        # #1770 PR4: `hire offer <id> acknowledge_risk=<truthy>` is phase two
+        # of the risky-mission opt-in (the gate's prompt names the token).
+        # Accepts the same truthy set as the action (_TRUTHY_VALUES).
         first, _, rest = args.partition(" ")
-        acknowledge_risk = rest.strip().lower() in {"acknowledge_risk=yes", "acknowledge_risk=y"}
+        token = rest.strip().lower()
+        acknowledge_risk = (
+            token.startswith("acknowledge_risk=") and token.split("=", 1)[1] in _TRUTHY_VALUES
+        )
         if acknowledge_risk:
             args = first
         if not args.isdigit():

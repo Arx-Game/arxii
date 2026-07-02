@@ -152,6 +152,24 @@ class NpcResolveTwoPhaseTests(TestCase):
         self.assertTrue(result.success)
         self.assertFalse(MissionRiskAcknowledgement.objects.exists())
 
+    def test_ineligible_offer_never_mints_an_ack_row(self):
+        """#1770 PR4 review: eligibility is validated BEFORE any ack is written."""
+        character, session, offer = self._session_and_offer(risk_tier=MISSION_RISK_ACK_TIER)
+        # Make the offer ineligible for this session (rapport gate).
+        offer.rapport_requirement = 10_000
+        offer.save(update_fields=["rapport_requirement"])
+
+        result = resolve_npc_offer.run(
+            actor=character,
+            session=session,
+            offer_id=offer.pk,
+            acknowledge_risk="yes",
+        )
+
+        self.assertFalse(result.success)
+        self.assertFalse(MissionRiskAcknowledgement.objects.exists())
+        self.assertFalse(MissionInstance.objects.exists())
+
 
 class ActivateStakesForInstanceTests(TestCase):
     """Mission acceptance is the stakes commit moment (pillar 9)."""

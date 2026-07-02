@@ -89,8 +89,11 @@ function ConsentCard({
         )}
         {combatStakes && combatStakes.length > 0 && (
           <div className="mt-1 space-y-1">
-            {combatStakes.map((summary, idx) => (
-              <div key={idx} className="text-xs text-red-700 dark:text-red-300">
+            {combatStakes.map((summary) => (
+              <div
+                key={summary.stakes.map((stake) => stake.id).join('-')}
+                className="text-xs text-red-700 dark:text-red-300"
+              >
                 <p className="font-semibold">
                   Stakes on the table (effective risk {summary.effective_risk.toUpperCase()}):
                 </p>
