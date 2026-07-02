@@ -301,7 +301,7 @@ class ChallengeChampionDuelAction(Action):
     target_type: TargetType = TargetType.AREA
     costs_turn: bool = False
 
-    def execute(
+    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
@@ -336,7 +336,10 @@ class ChallengeChampionDuelAction(Action):
         opponent_kwargs = dict(kwargs.get("opponent_kwargs") or {})
         threat_pool_id = opponent_kwargs.get("threat_pool")
         if threat_pool_id is not None:
-            opponent_kwargs["threat_pool"] = ThreatPool.objects.get(pk=threat_pool_id)
+            try:
+                opponent_kwargs["threat_pool"] = ThreatPool.objects.get(pk=threat_pool_id)
+            except ThreatPool.DoesNotExist:
+                return ActionResult(success=False, message="No such threat pool.")
 
         try:
             enc = open_champion_duel(
@@ -346,6 +349,10 @@ class ChallengeChampionDuelAction(Action):
             )
         except BattleError as exc:
             return ActionResult(success=False, message=exc.user_message)
+        except (TypeError, ValueError):
+            return ActionResult(
+                success=False, message="Could not open the duel — check the opponent details."
+            )
 
         return ActionResult(
             success=True,

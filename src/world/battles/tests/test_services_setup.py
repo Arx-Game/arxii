@@ -18,6 +18,7 @@ from world.battles.constants import (
 )
 from world.battles.exceptions import (
     BattleConcludedError,
+    NoCommandHierarchyError,
     NotAChampionError,
     PlaceAlreadyDuelingError,
 )
@@ -336,6 +337,28 @@ class OpenChampionDuelTests(TestCase):
                 challenger_participant=self.participant,
                 opponent_kwargs={
                     "name": "Second Boss",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+    def test_open_champion_duel_rejects_side_with_no_covenant(self) -> None:
+        no_covenant_side = BattleSideFactory(
+            battle=self.battle, role=BattleSideRole.DEFENDER, covenant=None
+        )
+        other_sheet = CharacterSheetFactory()
+        other_participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=no_covenant_side,
+            character_sheet=other_sheet,
+            place=self.place,
+        )
+        with self.assertRaises(NoCommandHierarchyError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=other_participant,
+                opponent_kwargs={
+                    "name": "Warlord's Champion",
                     "max_health": 300,
                     "threat_pool": self.threat_pool,
                 },
