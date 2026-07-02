@@ -173,21 +173,46 @@ def reflect_damage(*, payload: Any) -> None:
 
 
 def summon_ally(*, payload: Any) -> None:
-    """Create an ALLY CombatOpponent in the caster's encounter (ACTIVE cast-time handler).
+    """Create an ALLY CombatOpponent in the caster's encounter, OR — when
+    ``payload.military`` is set — a BattleUnit in the caster's active Battle
+    (#1711, military-grade summons too potent for a skirmish).
 
     Reads from payload:
     - ``payload.caster``         – caster's character ObjectDB.
     - ``payload.threat_pool_id`` – pk of the ThreatPool to use.
-    - ``payload.bond_rounds``    – optional int; sets bond_expires_round on the summon.
+    - ``payload.bond_rounds``    – optional int; sets bond_expires_round on the
+                                   skirmish summon. Not applicable to the military
+                                   branch (battles have no per-encounter round-bond
+                                   concept).
     - ``payload.max_health``     – optional int (default 30); explicit max_health for
                                    manual mode (skips scaling formula → SQLite-safe).
+                                   In the military branch, used as the new unit's
+                                   ``strength``.
+    - ``payload.military``       – optional bool (default False, #1711). When True,
+                                   routes to the BattleUnit branch instead of the
+                                   skirmish CombatOpponent branch.
+    - ``payload.composition``    – optional str (#1711, military branch only); a
+                                   ``UnitComposition`` value. Defaults to IRREGULAR.
+    - ``payload.quality``        – optional str (#1711, military branch only); a
+                                   ``UnitQuality`` value. Defaults to TRAINED.
 
-    Resolution:
+    Skirmish resolution (military falsy/absent — unchanged from pre-#1711):
     1. Finds the caster's active CombatParticipant; returns early if not in combat.
     2. Creates an ephemeral MOOK CombatOpponent via ``add_opponent`` (reuse — ADR-0016).
     3. Sets allegiance=ALLY, summoned_by=caster sheet, bond_expires_round if provided.
     4. Defensively moves the summon to the caster's Position (no-op when not positioned).
+
+    Military resolution (payload.military is True, #1711):
+    1. Finds the caster's active BattleParticipant; returns early if none (mirrors
+       the skirmish no-op convention).
+    2. Creates a BattleUnit via ``add_unit`` on the participant's side/place, with
+       strength from ``max_health``, composition/quality from the payload (or
+       defaults), summoned_by=caster sheet.
     """
+    if getattr(payload, "military", False):  # noqa: GETATTR_LITERAL
+        _summon_military_unit(payload=payload)
+        return
+
     # Lazy imports to avoid the combat↔magic circular dependency.
     from world.combat.constants import (  # noqa: PLC0415
         CombatAllegiance,
@@ -238,6 +263,50 @@ def summon_ally(*, payload: Any) -> None:
     pos = position_of(payload.caster)
     if pos is not None:
         force_move_to_position(opp.objectdb, pos)
+
+
+def _summon_military_unit(*, payload: Any) -> None:
+    """Military-grade branch of ``summon_ally`` (#1711): create a BattleUnit in the
+    caster's active Battle instead of a CombatOpponent.
+
+    No-op (mirrors the skirmish path's convention) if the caster has no ACTIVE
+    BattleParticipant.
+    """
+    from world.battles.constants import (  # noqa: PLC0415
+        BattleParticipantStatus,
+        UnitComposition,
+        UnitQuality,
+    )
+    from world.battles.models import BattleParticipant  # noqa: PLC0415
+    from world.battles.services import add_unit  # noqa: PLC0415
+
+    participant = (
+        BattleParticipant.objects.filter(
+            character_sheet__character=payload.caster,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+        .select_related("battle", "side", "place", "character_sheet")
+        .first()
+    )
+    if participant is None:
+        return  # Caster is not an active battle participant — nothing to summon into.
+
+    caster_sheet = participant.character_sheet
+    max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
+    default_composition = UnitComposition.IRREGULAR
+    composition: str = getattr(payload, "composition", default_composition)  # noqa: GETATTR_LITERAL
+    quality: str = getattr(payload, "quality", UnitQuality.TRAINED)  # noqa: GETATTR_LITERAL
+
+    add_unit(
+        battle=participant.battle,
+        side=participant.side,
+        name=f"{caster_sheet.character.db_key}'s Summon",
+        composition=composition,
+        quality=quality,
+        strength=max_health,
+        place=participant.place,
+        summoned_by=caster_sheet,
+    )
 
 
 def move_position_on_condition(*, payload: Any, destination_position_id: int) -> None:
