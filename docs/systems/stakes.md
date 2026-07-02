@@ -144,15 +144,16 @@ depth) and skips-and-logs instead of raising. Captivity of a PC is deliberately
 
 ### `StakeRewardLine` (PR3)
 
-One authored win-reward payout on a stake's branch — the contract's reward
-side. Authored pre-scene alongside the branch it hangs off (in practice the
-WIN column). When the branch fires under a ready, effective-risk-bearing
-activation, **every** completion participant receives each line's full amount
-(ALL_EQUAL semantics, mirroring mission reward distribution).
+One authored win-reward payout on a stake's WIN branch — the contract's
+reward side. Authored pre-scene alongside the branch it hangs off; WIN-column
+resolutions only (enforced in `clean()` + serializer). When the branch fires
+under a ready, effective-risk-bearing activation, **every** completion
+participant receives each line's full amount (ALL_EQUAL semantics, mirroring
+mission reward distribution).
 
 | Field | Type | Notes |
 |---|---|---|
-| `resolution` | FK → `stories.StakeResolution` (`related_name="reward_lines"`, CASCADE) | |
+| `resolution` | FK → `stories.StakeResolution` (`related_name="reward_lines"`, CASCADE) | Must be a WIN-column resolution |
 | `sink` | CharField (`StakeRewardSink` choices) | `MONEY` / `RESONANCE` |
 | `amount` | PositiveIntegerField (`MinValueValidator(1)`) | Money-equivalent scalar paid to EACH participant; banded by `RiskCalibration.reward_floor/reward_ceiling` |
 | `resonance` | FK → `magic.Resonance` (null, SET_NULL) | Required iff `sink=RESONANCE` (enforced in `clean()` + serializer); must be null otherwise |
@@ -327,6 +328,10 @@ can't dodge the lock by re-pointing a stake onto or off of a locked beat. This i
 "lock-not-copy": the contract is edited in place before activation, then frozen;
 there is no separate versioned/snapshotted copy of the `Stake` rows themselves
 (only the activation row snapshots `declared_risk` / `declared_target_level`).
+Additionally (PR3), `StakeResolutionSerializer` and `StakeRewardLineSerializer`
+refuse any write once the beat has completed (`beat.outcome != UNSATISFIED`) —
+contract editing ends at completion, closing the pending-GM-pick window the
+open-activation lock alone would leave open.
 
 `get_open_activation(beat)` is the single query both the lock check and
 `effective_risk_for_beat` share.
@@ -426,7 +431,9 @@ missions would invert the dependency direction (ADR-0010). So stakes reuse the
 SAME SINK SERVICES the router dispatches to, called directly:
 
 - `MONEY` → `world.currency.services.deliver_mission_money(recipient_sheet,
-  amount, ref=f"stake:{pk}")` — the audited mint faucet.
+  amount, ref=f"stake:{pk}", reason_label="stake reward")` — the audited mint
+  faucet; the optional `reason_label` kwarg (default `"mission reward"`) keeps
+  the ledger honest for non-mission callers.
 - `RESONANCE` → `world.magic.services.resonance.grant_resonance(sheet,
   resonance, amount, source=GainSource.STAKE_REWARD)` — the same grant service
   the missions cron's `_grant_resonance` calls. `STAKE_REWARD` is a
@@ -438,6 +445,10 @@ No `LEGEND_POINTS` sink (Legend is automatic; the missions LP path is also
 stub-sealed), no `BEAT` (circular from inside beat resolution), no
 `RUMOR`/`CRIME_WATCH` (unbuilt, loss-flavored).
 
+Reward lines attach to **WIN-column resolutions only** (enforced in `clean()`
+and the serializer) — a "consolation" line on LOSS/WITHDRAWAL would be
+silently inert and is refused as an authoring foot-gun.
+
 **Reward banding is a readiness concern, not a hard block.**
 `validate_stakes_readiness` sums the WIN-column line amounts across the beat's
 stakes and compares against the tier's `reward_floor`/`reward_ceiling`
@@ -445,6 +456,16 @@ stakes and compares against the tier's `reward_floor`/`reward_ceiling`
 (pillar-7 auto-downgrade — the scene runs at effective NONE and pays nothing);
 the serializer never rejects an out-of-band line. `reward_ceiling == 0` means
 banding is unconfigured for that tier and both checks are skipped.
+
+**The banding bypass is closed at both ends** (PR3 review). Editing a
+contract ends when its beat completes: `StakeResolutionSerializer` and
+`StakeRewardLineSerializer` refuse any write once `beat.outcome !=
+UNSATISFIED` — the open-activation lock alone would reopen editing in the
+pending-GM-pick window (the completion tail closes the activation while
+stakes can still pend). Independently, `_apply_stake_rewards` re-runs the
+band check at pay time (`reward_band_problems_for_beat`,
+`services/stakes.py`) — an out-of-band live total skips the payout with a
+warning even if the activation's frozen `is_ready` verdict says otherwise.
 
 **The anti-farming gate (pillars 4/7/8).** `_apply_stake_rewards`
 (`services/stake_resolution.py`) fires from `_fire_branch_and_record` whenever
@@ -456,6 +477,20 @@ consequences and pools keep firing regardless — reality doesn't care; only
 the payout math does. Delivery is per line × participant (Persona →
 `CharacterSheet` bridge), matching the PR2 writer contract: skip-and-log,
 never raise.
+
+**Claim-before-pay.** `_fire_branch_and_record` creates the `StakeOutcome`
+row FIRST — winning the `unique_outcome_per_stake` constraint *is* the claim —
+and only then fires the pool, writers, and rewards. A losing concurrent
+create refetches the winner's row and returns it WITHOUT firing anything, so
+two racing resolutions can never double-pay; the enclosing transaction still
+rolls the claim and its effects back together on a genuine error.
+
+**GM picks resolve under the pended activation.** A constrained pick uses
+`_activation_for_gm_pick`: the most recent activation locked at-or-before the
+beat's most recent `BeatCompletion` (falling back to the open activation,
+then the most recent). A new activation opened after the stake pended (the
+beat re-engaged) changes neither the pended stake's payout gate nor its
+`StakeOutcome.activation` audit row.
 
 ## Three Concepts Named "Risk"/"Stakes" — Disambiguation
 
@@ -495,6 +530,7 @@ only the plain-language wager.
 | `activate_stakes_contract` | `(beat, participants) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion) |
 | `effective_risk_for_beat` | `(beat: Beat) -> str` | Read seam: open activation's effective risk, else `beat.risk` |
 | `resolve_open_activation` | `(beat: Beat) -> None` | Closes the open activation (sets `resolved_at`); called by the completion tail |
+| `reward_band_problems_for_beat` | `(beat: Beat) -> list[str]` | Re-runnable reward-band check (PR3): the readiness path *and* `_apply_stake_rewards` at pay time both use it |
 
 `StakesReadinessReport` (`world.stories.types`): `is_staked: bool`,
 `is_ready: bool`, `problems: tuple[str, ...]`.
@@ -537,10 +573,14 @@ isn't enough on POST):
 - the two-sided lock check (both old and new beat/stake on a re-point);
 - the ownership gate (`user_owns_beat_story`, staff bypass) — again both sides on
   a re-point;
+- the completed-beat refusal (PR3; `StakeResolutionSerializer` and
+  `StakeRewardLineSerializer`): no writes once `beat.outcome != UNSATISFIED`;
 - `StakeSerializer` additionally validates the beat's declared risk falls within
   `[template.min_risk, template.max_risk]` (by `risk_index`), and gates the
   template-null (custom) path to staff only, mirroring `BeatSerializer.validate`'s
-  risk staff-gate.
+  risk staff-gate;
+- `StakeRewardLineSerializer` additionally refuses non-WIN-column resolutions
+  and enforces the resonance/sink shape.
 
 ## PR4: Planned, Not Yet Built
 
