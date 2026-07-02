@@ -316,3 +316,52 @@ class BattleTelnetE2EJourneyTest(TestCase):
             gm_resolve_msg.lower(),
             "GM should see a battle-concluded message.",
         )
+
+    # -----------------------------------------------------------------------
+    # #1711 modifier-stack proof: a fresh test method so it doesn't disturb the
+    # full-lifecycle journey's VP/attrition arithmetic above.
+    # -----------------------------------------------------------------------
+
+    def test_composition_terrain_quality_modifiers_change_strike_check(self) -> None:
+        """A CAVALRY-affine technique striking an ELITE CAVALRY unit standing in
+        DIFFICULT terrain nets a combined modifier from all three #1711 sources —
+        proving the full stack wires end-to-end through the real telnet path, not
+        just resolution.py's unit tests.
+        """
+        from world.battles.constants import TerrainType, UnitComposition, UnitQuality
+        from world.battles.models import TechniqueCompositionAffinity, TerrainCompositionEffect
+        from world.battles.services import add_place
+
+        # A new place + unit on the attacker side (opposite pc1's defender side) —
+        # doesn't disturb self.enemy_unit, which the full-lifecycle test above
+        # targets with its own strength/VP arithmetic.
+        place = add_place(battle=self.battle, name="The Mire", terrain_type=TerrainType.DIFFICULT)
+        unit = add_unit(
+            battle=self.battle,
+            side=self.attacker_side,
+            name="Iron Lancers",
+            composition=UnitComposition.CAVALRY,
+            quality=UnitQuality.ELITE,
+            place=place,
+        )
+        TechniqueCompositionAffinity.objects.create(
+            technique=self.technique, composition=UnitComposition.CAVALRY, modifier=25
+        )
+        TerrainCompositionEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=15
+        )
+
+        _run(self.gm_char, "round")
+
+        with patch(
+            "world.battles.resolution.perform_check",
+            return_value=_stub_check(5),
+        ) as mock_check:
+            _run(self.pc1_char, f"declare strike {unit.name} with {self.technique.name}")
+            _run(self.gm_char, "resolve")
+
+        # composition(+25) + terrain(+15) + quality(ELITE=-20) + commander(0) + posture(0)
+        expected_stack = 25 + 15 + (-20) + 0 + 0
+        mock_check.assert_called_once()
+        called_kwargs = mock_check.call_args.kwargs
+        self.assertEqual(called_kwargs["extra_modifiers"], expected_stack)
