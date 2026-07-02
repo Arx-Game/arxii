@@ -273,3 +273,40 @@ class SceneActionTargetSerializerRiskLevelTests(CastScenarioMixin):
 
         data = SceneActionTargetSerializer(instance=row).data
         self.assertIsNone(data["combat_risk_level"])
+
+    def test_gated_additional_target_serializes_combat_stakes(self) -> None:
+        """The AOE-target leg surfaces the same stakes summary as the primary (#1770)."""
+        from world.societies.constants import RenownRisk
+        from world.stories.constants import StakeSeverity
+        from world.stories.factories import BeatFactory, EpisodeSceneFactory, StakeFactory
+
+        self._make_encounter(RiskLevel.LETHAL)
+        beat = BeatFactory(risk=RenownRisk.HIGH, target_level=4)
+        EpisodeSceneFactory(episode=beat.episode, scene=self.scene)
+        StakeFactory(
+            beat=beat,
+            severity=StakeSeverity.DIRE,
+            player_summary="The healer NPC may die.",
+        )
+        cast = self._hostile_cast()
+        row = SceneActionTargetFactory(action_request=cast.request, target_persona=PersonaFactory())
+
+        data = SceneActionTargetSerializer(instance=row).data
+        self.assertIsNotNone(data["combat_stakes"])
+        summary = data["combat_stakes"][0]
+        self.assertEqual(summary["declared_risk"], beat.risk)
+        self.assertEqual(summary["stakes"][0]["player_summary"], "The healer NPC may die.")
+
+    def test_ungated_additional_target_serializes_no_stakes(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.constants import StakeSeverity
+        from world.stories.factories import BeatFactory, EpisodeSceneFactory, StakeFactory
+
+        beat = BeatFactory(risk=RenownRisk.HIGH, target_level=4)
+        EpisodeSceneFactory(episode=beat.episode, scene=self.scene)
+        StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        cast = self._hostile_cast()
+        row = SceneActionTargetFactory(action_request=cast.request, target_persona=PersonaFactory())
+
+        data = SceneActionTargetSerializer(instance=row).data
+        self.assertIsNone(data["combat_stakes"])
