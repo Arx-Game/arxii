@@ -903,6 +903,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/buildings/manager/room/{room_id}/comfort/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+     *
+     *     Per-axis pressure/mitigation/net, the room's comfort level, its placed
+     *     fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+     *     residual; add insulation." Owner-gated: interior comfort tuning is the
+     *     builder's view.
+     */
+    get: operations['buildings_manager_room_comfort_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/buildings/room-size-tiers/': {
     parameters: {
       query?: never;
@@ -17822,6 +17846,14 @@ export interface components {
      * @enum {string}
      */
     ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION' | 'CEREMONY';
+    /** @description One axis of the owner build-HUD: pressure vs mitigation vs residual (#1514). */
+    ExposureAxis: {
+      key: string;
+      pressure: number;
+      mitigation: number;
+      net: number;
+      sheltered: boolean;
+    };
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;
@@ -18061,6 +18093,19 @@ export interface components {
       coloring: components['schemas']['ColoringEnum'];
       /** @default private */
       visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description One axis a fixture kind mitigates (negative value = mitigation). */
+    FixtureAffinity: {
+      key: string;
+      value: number;
+    };
+    /** @description A placeable fixture kind from the admin-authored catalog. */
+    FixtureKind: {
+      id: number;
+      name: string;
+      description: string;
+      amenity: number;
+      affinities: components['schemas']['FixtureAffinity'][];
     };
     /** @description Cheap RoomPanel resolver: which building, and what the viewer may do. */
     ForRoomResult: {
@@ -24125,6 +24170,11 @@ export interface components {
      * @enum {string}
      */
     PlaceStatusEnum: 'active' | 'removed' | 'hidden';
+    /** @description A comfort fixture placed in the room (removable from the HUD). */
+    PlacedFixture: {
+      id: number;
+      kind: string;
+    };
     /**
      * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
      *
@@ -25186,6 +25236,16 @@ export interface components {
       state: string;
       /** Format: date-time */
       responded_at: string | null;
+    };
+    /** @description The owner build-HUD payload for one room (#1514). */
+    RoomComfortBreakdown: {
+      enclosure: string;
+      level: number;
+      points: number;
+      amenity: number;
+      axes: components['schemas']['ExposureAxis'][];
+      fixtures: components['schemas']['PlacedFixture'][];
+      fixture_kinds: components['schemas']['FixtureKind'][];
     };
     /** @description The shared room-size unit ladder. */
     RoomSizeTier: {
@@ -29082,6 +29142,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ForRoomResult'];
+        };
+      };
+    };
+  };
+  buildings_manager_room_comfort_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomComfortBreakdown'];
         };
       };
     };

@@ -56,6 +56,8 @@ They do not use the command system, dispatchers, or handlers.
   `PlaceRoomAction` (`"place_room"`, #670 PR2 — cosmetic map-grid re-placement for canvas drag),
   `SetBuildingStyleAction` (`"set_building_style"`, #1469 — dress the building in a style; default
   tier open, throwback tier gated on codex knowledge via `can_build_style`),
+  `PlaceFixtureAction`/`RemoveFixtureAction` (`"place_room_fixture"`/`"remove_room_fixture"`,
+  #1514 close-out — comfort fixtures over `place_decoration`/`remove_decoration`),
   `AssignRoomTenantAction` (`"assign_room_tenant"`), `EndRoomTenancyAction`
   (`"end_room_tenancy"`), `SetPrimaryHomeAction` (`"set_primary_home"`,
   `IsRoomTenantPrerequisite`), `CommissionDecorationAction` (`"commission_decoration"`),

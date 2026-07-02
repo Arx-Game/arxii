@@ -1377,6 +1377,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ForRoomResult'
           description: ''
+  /api/buildings/manager/room/{room_id}/comfort/:
+    get:
+      operationId: buildings_manager_room_comfort_retrieve
+      description: |-
+        GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+
+        Per-axis pressure/mitigation/net, the room's comfort level, its placed
+        fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+        residual; add insulation." Owner-gated: interior comfort tuning is the
+        builder's view.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: room_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomComfortBreakdown'
+          description: ''
   /api/buildings/room-size-tiers/:
     get:
       operationId: buildings_room_size_tiers_list
@@ -31830,6 +31864,27 @@ components:
         * `FLOW` - Flow
         * `SCENE_ACTION` - Scene Action
         * `CEREMONY` - Ceremony
+    ExposureAxis:
+      type: object
+      description: 'One axis of the owner build-HUD: pressure vs mitigation vs residual
+        (#1514).'
+      properties:
+        key:
+          type: string
+        pressure:
+          type: integer
+        mitigation:
+          type: integer
+        net:
+          type: integer
+        sheltered:
+          type: boolean
+      required:
+      - key
+      - mitigation
+      - net
+      - pressure
+      - sheltered
     Facet:
       type: object
       description: Serializer for Facet model with hierarchy info.
@@ -32306,6 +32361,39 @@ components:
       - title
       - track_id
       - writeup
+    FixtureAffinity:
+      type: object
+      description: One axis a fixture kind mitigates (negative value = mitigation).
+      properties:
+        key:
+          type: string
+        value:
+          type: integer
+      required:
+      - key
+      - value
+    FixtureKind:
+      type: object
+      description: A placeable fixture kind from the admin-authored catalog.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        amenity:
+          type: integer
+        affinities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixtureAffinity'
+      required:
+      - affinities
+      - amenity
+      - description
+      - id
+      - name
     ForRoomResult:
       type: object
       description: 'Cheap RoomPanel resolver: which building, and what the viewer
@@ -43379,6 +43467,17 @@ components:
         * `active` - Active
         * `removed` - Removed
         * `hidden` - Hidden
+    PlacedFixture:
+      type: object
+      description: A comfort fixture placed in the room (removable from the HUD).
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+      required:
+      - id
+      - kind
     PlayerAction:
       type: object
       description: |-
@@ -45666,6 +45765,38 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    RoomComfortBreakdown:
+      type: object
+      description: The owner build-HUD payload for one room (#1514).
+      properties:
+        enclosure:
+          type: string
+        level:
+          type: integer
+        points:
+          type: integer
+        amenity:
+          type: integer
+        axes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExposureAxis'
+        fixtures:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacedFixture'
+        fixture_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixtureKind'
+      required:
+      - amenity
+      - axes
+      - enclosure
+      - fixture_kinds
+      - fixtures
+      - level
+      - points
     RoomSizeTier:
       type: object
       description: The shared room-size unit ladder.

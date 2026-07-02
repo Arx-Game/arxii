@@ -186,6 +186,23 @@ def _resolve_cascade(
     default nor any clamp is applied here — callers add their base (axis default or climate)
     and clamp, so climate can combine with local modifiers before the 0-floor.
     """
+    override_val, positive_sum, negative_sum = _cascade_parts(profile, ancestor_ids, axis_filter)
+    if override_val is not None:
+        return override_val, 0
+    return None, positive_sum - negative_sum
+
+
+def _cascade_parts(
+    profile: RoomProfile,
+    ancestor_ids: list[int],
+    axis_filter: models.Q,
+) -> tuple[int | None, int, int]:
+    """One axis's cascade, decomposed: ``(override, positive_sum, negative_sum)`` (#1514).
+
+    ``negative_sum`` is a magnitude (>= 0). The decomposition feeds the owner
+    build-HUD's pressure-vs-mitigation readout; ``_resolve_cascade`` recombines
+    the parts for the plain summed read.
+    """
     overrides = list(
         LocationValueOverride.objects.filter(axis_filter)
         .select_related("area")
@@ -194,13 +211,21 @@ def _resolve_cascade(
     if overrides:
         room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
         if room_overrides:
-            return room_overrides[0].value, 0
-        return min(overrides, key=lambda o: o.area.level).value, 0
+            return room_overrides[0].value, 0, 0
+        return min(overrides, key=lambda o: o.area.level).value, 0, 0
 
     modifiers = LocationValueModifier.objects.filter(axis_filter).filter(
         models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
     )
-    return None, sum(mod.current_value() for mod in modifiers)
+    positive_sum = 0
+    negative_sum = 0
+    for mod in modifiers:
+        current = mod.current_value()
+        if current >= 0:
+            positive_sum += current
+        else:
+            negative_sum += -current
+    return None, positive_sum, negative_sum
 
 
 def _resolve_room_climate(profile: RoomProfile | None) -> tuple[Climate | None, int]:
@@ -429,6 +454,62 @@ def comfort_summary(room: DefaultObject) -> ComfortSummary:
         felt_exposures={key: value for key, value in felt.items() if value},
         amenity=effective_value(room, stat_key=StatKey.AMENITY),
     )
+
+
+class AxisBreakdown(NamedTuple):
+    """One exposure axis decomposed for the owner build-HUD (#1514).
+
+    ``pressure`` is what pushes the axis up (climate base + positive cascade
+    contributions), ``mitigation`` what pulls it down (fixtures/style, as a
+    magnitude), ``net`` the felt value after the 0-floor and enclosure gate.
+    ``sheltered`` marks a weather axis the room's enclosure zeroes outright.
+    An authored override reports as pure pressure (it IS the value).
+    """
+
+    stat_key: StatKey
+    pressure: int
+    mitigation: int
+    net: int
+    sheltered: bool
+
+
+def room_exposure_breakdown(room: DefaultObject) -> list[AxisBreakdown]:
+    """Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).
+
+    The gap the owner reads is ``net`` (what's still biting); the mitigation
+    column shows their fixtures/style earning their keep. Matches
+    ``felt_exposure`` semantics axis-for-axis (same context, same 0-floor,
+    same enclosure gate).
+    """
+    ctx = _exposure_context(room)
+    rows: list[AxisBreakdown] = []
+    for stat_key in EXPOSURE_STAT_KEYS:
+        base = climate_exposure_base(ctx.climate, stat_key, temperature_shift=ctx.temperature_shift)
+        sheltered = stat_key in WEATHER_EXPOSURE_AXES and stat_key in ctx.sheltered_axes
+        pressure = max(0, base)
+        mitigation = max(0, -base)
+        if ctx.profile is not None:
+            override_val, positive_sum, negative_sum = _cascade_parts(
+                ctx.profile,
+                ctx.ancestor_ids,
+                models.Q(key_type=KeyType.STAT, stat_key=stat_key),
+            )
+            if override_val is not None:
+                pressure, mitigation = max(0, override_val), 0
+            else:
+                pressure += positive_sum
+                mitigation += negative_sum
+        net = _felt_exposure_for_axis(ctx, stat_key)
+        rows.append(
+            AxisBreakdown(
+                stat_key=stat_key,
+                pressure=pressure,
+                mitigation=mitigation,
+                net=net,
+                sheltered=sheltered,
+            )
+        )
+    return rows
 
 
 class _StatCascadeIndex(NamedTuple):

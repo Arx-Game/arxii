@@ -671,3 +671,77 @@ class StartExtensionAction(_RoomBuilderAction):
             success=True,
             message=f"Extension project #{project.pk} opened (+{added} units on completion).",
         )
+
+
+@dataclass
+class PlaceFixtureAction(_RoomBuilderAction):
+    """Place a comfort fixture in a room. Kwargs: ``kind``, optional ``room_id``.
+
+    Fixtures are the build-to-win mitigation tools (#1514): stackable,
+    presence-only (no toggle — a hearth is always lit), instant and free
+    (cost is the economy pass's knob).
+    """
+
+    key: str = "place_room_fixture"
+    name: str = "Place Fixture"
+    icon: str = "flame"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.buildings.models import DecorationKind  # noqa: PLC0415
+        from world.buildings.services import place_decoration  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        kind_name = (kwargs.get("kind") or "").strip()
+        kind = DecorationKind.objects.filter(name__iexact=kind_name).first() if kind_name else None
+        if kind is None:
+            options = ", ".join(DecorationKind.objects.values_list("name", flat=True))
+            return ActionResult(success=False, message=f"Pick a fixture: {options}.")
+        try:
+            profile = room.room_profile
+        except RoomProfile.DoesNotExist:
+            return ActionResult(success=False, message="This room can't hold fixtures.")
+        place_decoration(profile, kind)
+        return ActionResult(success=True, message=f"{kind.name} placed.")
+
+
+@dataclass
+class RemoveFixtureAction(_RoomBuilderAction):
+    """Remove a placed comfort fixture. Kwargs: ``kind``, optional ``room_id``."""
+
+    key: str = "remove_room_fixture"
+    name: str = "Remove Fixture"
+    icon: str = "flame-kindling"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.models import RoomDecoration  # noqa: PLC0415
+        from world.buildings.services import remove_decoration  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        kind_name = (kwargs.get("kind") or "").strip()
+        decoration = (
+            RoomDecoration.objects.filter(room_profile__objectdb=room, kind__name__iexact=kind_name)
+            .order_by("-placed_at")
+            .first()
+            if kind_name
+            else None
+        )
+        if decoration is None:
+            return ActionResult(success=False, message=f"No '{kind_name}' fixture here.")
+        name = decoration.kind.name
+        remove_decoration(decoration)
+        return ActionResult(success=True, message=f"{name} removed.")
