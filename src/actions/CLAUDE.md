@@ -54,6 +54,8 @@ They do not use the command system, dispatchers, or handlers.
   `ResizeRoomAction` (`"resize_room"`), `RemoveRoomAction` (`"remove_room"`), `LinkRoomsAction`
   (`"link_rooms"`), `UnlinkRoomsAction` (`"unlink_rooms"`), `RenameExitAction` (`"rename_exit"`),
   `PlaceRoomAction` (`"place_room"`, #670 PR2 — cosmetic map-grid re-placement for canvas drag),
+  `SetBuildingStyleAction` (`"set_building_style"`, #1469 — dress the building in a style; default
+  tier open, throwback tier gated on codex knowledge via `can_build_style`),
   `AssignRoomTenantAction` (`"assign_room_tenant"`), `EndRoomTenancyAction`
   (`"end_room_tenancy"`), `SetPrimaryHomeAction` (`"set_primary_home"`,
   `IsRoomTenantPrerequisite`), `CommissionDecorationAction` (`"commission_decoration"`),

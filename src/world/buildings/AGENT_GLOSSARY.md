@@ -37,6 +37,13 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   with NULL coords is *unplaced* (tray on the canvas, listed under the ASCII
   map). _Avoid:_ position (that's the within-room tactical positioning
   framework in `areas.positioning`), coordinates.
+- **Throwback style** — a non-default `ArchitecturalStyle` (#1469): the
+  discoverable tier (dead-civilization / far-lands). Buildable only once the
+  character KNOWS a codex entry under the style's `codex_subject`, earned via
+  the clue→RESEARCH pipeline; carries a `prestige_bonus` and `cost_multiplier`
+  (PLACEHOLDER). _Avoid:_ classical style (ambiguous), locked style.
+- **Default style** — `ArchitecturalStyle.is_default=True`: the living-realm
+  tier, buildable by anyone from the start. _Avoid:_ basic style.
 - **Primary home** — a persona's designated home room
   (`LocationTenancy.is_primary_home`, one active per persona; the Arx-1
   `addhome`). Anchors `prestige_from_dwellings` (home room polish + building

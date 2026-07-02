@@ -1309,6 +1309,17 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   drag → `place_room`, exit-pair edges), `RoomDetailPanel` (identity/size/
   exits/tenants/remove), Dig/Decoration/Extension dialogs, `BudgetMeter`;
   tenants get "Set as Home" on RoomPanel (`set_primary_home`).
+- **Architectural style tiers (#1469):** `ArchitecturalStyle.is_default` /
+  `prestige_bonus` / `cost_multiplier` (PLACEHOLDER magnitudes; cost charging
+  awaits the economy pass). Throwback (non-default) styles gate on codex
+  knowledge of `codex_subject` — `can_build_style(persona, style)`
+  (`world/buildings/services.py`); unlocked via the clue→RESEARCH pipeline
+  (ADR-0079). `SetBuildingStyleAction` (key `set_building_style`, owner-gated,
+  `room_id` anchor) is the player verb; telnet `room/style <name>`. Owned home
+  building's style adds `prestige_bonus` in
+  `recompute_persona_prestige_from_dwellings`. Seeds:
+  `ensure_architectural_styles()` (2 default + 2 discoverable PLACEHOLDER rows
+  w/ codex subjects/entries/clues).
 - **Predicate leaf:** `has_item` (persona-scoped) registered with the
   `building_permit` dispatch entry — checks if a persona holds an unconsumed
   building permit.

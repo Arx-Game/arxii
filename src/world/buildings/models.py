@@ -981,6 +981,30 @@ class ArchitecturalStyle(SharedMemoryModel):
         default=True,
         help_text="Whether this style can be selected for new builds.",
     )
+    is_default = models.BooleanField(
+        default=True,
+        help_text=(
+            "Default-available (living-realm tier). Non-default styles are the "
+            "discoverable throwback tier (#1469): buildable only once the persona's "
+            "character KNOWS an entry under codex_subject (research-unlocked)."
+        ),
+    )
+    prestige_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Base dwelling-prestige addend for a building wearing this style "
+            "(#1469 throwback tier). PLACEHOLDER magnitudes pending the tuning pass."
+        ),
+    )
+    cost_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=3,
+        default=1,
+        help_text=(
+            "Construction/renovation cost knob for this style (#1469). Data only for "
+            "now — charging awaits the economy pass (Phase E cost deduction is unwired)."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]

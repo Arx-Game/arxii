@@ -255,7 +255,8 @@ actions, backends, and service functions.
   `room/removeexit <exit>` / `room/renameexit <exit>=<name>` → the exit actions;
   `room/home` → `SetPrimaryHomeAction` (tenant-gated); `room/tenant <char>` /
   `room/evict <char>` → tenancy actions; `room/extend <units>` → `StartExtensionAction`;
-  `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/map [floor]` —
+  `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/style <name>` →
+  `SetBuildingStyleAction` (#1469, knowledge-gated throwback tier); `room/map [floor]` —
   read-only ASCII floor map (`world.buildings.map_render`). Permissions by relationship
   (owner structural / tenant redescribe+home), gated in actions + services. No business
   logic in the command.

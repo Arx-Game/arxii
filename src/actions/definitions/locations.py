@@ -437,6 +437,57 @@ class PlaceRoomAction(_RoomBuilderAction):
 
 
 @dataclass
+class SetBuildingStyleAction(_RoomBuilderAction):
+    """Dress the building in an architectural style. Kwargs: ``style``, optional ``room_id``.
+
+    Default (living-realm) styles are open; throwback styles (#1469) require
+    the codex knowledge their research projects grant (``can_build_style``).
+    """
+
+    key: str = "set_building_style"
+    name: str = "Set Building Style"
+    icon: str = "landmark"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.models import ArchitecturalStyle  # noqa: PLC0415
+        from world.buildings.room_services import building_for_room  # noqa: PLC0415
+        from world.buildings.services import (  # noqa: PLC0415
+            can_build_style,
+            set_building_style,
+        )
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        building = building_for_room(room)
+        if building is None:
+            return ActionResult(success=False, message="This room isn't part of a building.")
+        style_name = (kwargs.get("style") or "").strip()
+        if not style_name:
+            options = ", ".join(
+                ArchitecturalStyle.objects.filter(is_active=True).values_list("name", flat=True)
+            )
+            return ActionResult(success=False, message=f"Pick a style: {options}.")
+        style = ArchitecturalStyle.objects.filter(name__iexact=style_name).first()
+        if style is None:
+            return ActionResult(success=False, message=f"No style named '{style_name}'.")
+        if not can_build_style(_persona_for(actor), style):
+            return ActionResult(
+                success=False,
+                message=f"You haven't learned to build in the {style.name} style.",
+            )
+        set_building_style(building, style)
+        return ActionResult(
+            success=True, message=f"{building.area.name} is now built in the {style.name} style."
+        )
+
+
+@dataclass
 class AssignRoomTenantAction(_RoomBuilderAction):
     """Owner grants a persona tenancy of the current room. Kwarg: ``tenant_persona_id``."""
 
