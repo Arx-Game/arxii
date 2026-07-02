@@ -268,3 +268,49 @@ class CmdBattleDeclareTests(TestCase):
         )
         self.assertEqual(decl.scope, BattleActionScope.PLACE)
         self.assertEqual(decl.target_place_id, place.pk)
+
+
+class CmdBattleDuelTests(TestCase):
+    """CmdBattle `duel` subverb dispatches ChallengeChampionDuelAction."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("CmdBattleDuelRoom")
+        self.player_char = CharacterFactory(db_key="cmd_duel_player", location=self.room)
+        self.player_sheet = CharacterSheetFactory(character=self.player_char)
+
+        self.battle = BattleFactory(name="Duel Cmd Test Battle")
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+
+        self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side = BattleSideFactory(
+            battle=self.battle, role="defender", covenant=self.covenant
+        )
+        self.place = BattlePlaceFactory(battle=self.battle, name="The Main Gates")
+        self.participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            character_sheet=self.player_sheet,
+            place=self.place,
+        )
+        rank = CovenantRankFactory(covenant=self.covenant)
+        champion_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            is_champion_role=True,
+            slug="cmd-test-champion",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=champion_role,
+            covenant=self.covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+    def test_duel_subverb_challenges_champion_duel(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "duel The Main Gates vs Warlord's Champion")
+
+        self.place.refresh_from_db()
+        self.assertIsNotNone(self.place.combat_encounter_id)

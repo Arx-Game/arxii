@@ -288,3 +288,67 @@ class DeclareBattleActionAction(Action):
             message=f"You declare: {kind_label} ({technique.name}).",
             data={"declaration_id": decl.pk},
         )
+
+
+@dataclass
+class ChallengeChampionDuelAction(Action):
+    """Issue a Champion duel at a BattlePlace against a GM-authored boss (#1710)."""
+
+    key: str = "challenge_champion_duel"
+    name: str = "Challenge Champion Duel"
+    icon: str = "shield-alt"
+    category: str = "battle"
+    target_type: TargetType = TargetType.AREA
+    costs_turn: bool = False
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.battles.exceptions import BattleError  # noqa: PLC0415
+        from world.battles.models import BattleParticipant, BattlePlace  # noqa: PLC0415
+        from world.battles.services import open_champion_duel  # noqa: PLC0415
+        from world.combat.models import ThreatPool  # noqa: PLC0415
+
+        try:
+            sheet = actor.sheet_data
+        except ObjectDoesNotExist:
+            return ActionResult(success=False, message=_NO_CHARACTER_SHEET)
+
+        battle_place_id = kwargs.get("battle_place_id")
+        try:
+            battle_place = BattlePlace.objects.select_related("battle__scene").get(
+                pk=battle_place_id
+            )
+        except BattlePlace.DoesNotExist:
+            return ActionResult(success=False, message="No such battle front.")
+
+        participant = BattleParticipant.objects.filter(
+            battle=battle_place.battle, character_sheet=sheet
+        ).first()
+        if participant is None:
+            return ActionResult(success=False, message=_NOT_IN_BATTLE)
+
+        opponent_kwargs = dict(kwargs.get("opponent_kwargs") or {})
+        threat_pool_id = opponent_kwargs.get("threat_pool")
+        if threat_pool_id is not None:
+            opponent_kwargs["threat_pool"] = ThreatPool.objects.get(pk=threat_pool_id)
+
+        try:
+            enc = open_champion_duel(
+                battle_place=battle_place,
+                challenger_participant=participant,
+                opponent_kwargs=opponent_kwargs,
+            )
+        except BattleError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"You challenge the boss of {battle_place.name} to single combat!",
+            data={"encounter_id": enc.pk},
+        )

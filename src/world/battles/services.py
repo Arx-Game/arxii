@@ -28,6 +28,8 @@ from world.battles.exceptions import (
     CharacterDoesNotKnowTechniqueError,
     InsufficientCommandTierError,
     NoCommandHierarchyError,
+    NotAChampionError,
+    PlaceAlreadyDuelingError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -40,10 +42,12 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
 )
+from world.combat.constants import OpponentTier
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import CombatEncounter
     from world.covenants.models import Covenant
     from world.magic.models import Technique
     from world.stories.models import Story
@@ -437,3 +441,79 @@ def maybe_conclude_on_timer(*, battle: Battle) -> BattleOutcome | None:
 
     conclude_battle(battle=battle, outcome=outcome)
     return outcome
+
+
+# ---------------------------------------------------------------------------
+# Champion duel services (#1710)
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def open_champion_duel(
+    *,
+    battle_place: BattlePlace,
+    challenger_participant: BattleParticipant,
+    opponent_kwargs: dict,
+    tier: str = OpponentTier.BOSS,
+) -> CombatEncounter:
+    """Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).
+
+    Reuses ``create_lethal_duel`` (world.combat.duels) unmodified — a Champion
+    duel against an enemy boss is an ordinary lethal PC-vs-significant-NPC
+    duel. Installs the champion-duel-outcome Trigger on the encounter's room
+    so ``apply_champion_duel_outcome`` fires when the duel completes.
+
+    Args:
+        battle_place: The front the duel is bound to. Must have no existing
+            ``combat_encounter``.
+        challenger_participant: The Champion's ``BattleParticipant``. Must
+            hold an engaged ``is_champion_role`` ``CovenantRole`` for the
+            side's covenant.
+        opponent_kwargs: Forwarded to ``add_opponent`` via
+            ``create_lethal_duel`` (name, max_health, threat_pool, ...).
+        tier: Opponent tier; forwarded to ``create_lethal_duel`` (defaults to
+            BOSS — a Champion duel is definitionally against a significant
+            enemy, not a mook).
+
+    Raises:
+        NotAChampionError: If the challenger has no engaged Champion role for
+            the side's covenant.
+        NoCommandHierarchyError: If the challenger's side has no covenant.
+        PlaceAlreadyDuelingError: If ``battle_place.combat_encounter`` is
+            already set.
+
+    Returns:
+        The newly created ``CombatEncounter``.
+    """
+    from world.battles.duel_wiring import install_champion_duel_trigger  # noqa: PLC0415
+    from world.combat.duels import create_lethal_duel  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    if battle_place.combat_encounter_id is not None:
+        raise PlaceAlreadyDuelingError
+
+    covenant = challenger_participant.side.covenant
+    if covenant is None:
+        raise NoCommandHierarchyError
+
+    is_champion = CharacterCovenantRole.objects.filter(
+        character_sheet=challenger_participant.character_sheet,
+        covenant=covenant,
+        covenant_role__is_champion_role=True,
+        engaged=True,
+        left_at__isnull=True,
+    ).exists()
+    if not is_champion:
+        raise NotAChampionError
+
+    room = battle_place.battle.scene.location
+    enc = create_lethal_duel(
+        challenger_participant.character_sheet,
+        opponent_kwargs,
+        room,
+        tier=tier,
+    )
+    battle_place.combat_encounter = enc
+    battle_place.save(update_fields=["combat_encounter"])
+    install_champion_duel_trigger(enc)
+    return enc

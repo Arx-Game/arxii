@@ -68,3 +68,17 @@ class InsufficientCommandTierError(BattleError):
         user_message: str = "You don't hold the command authority for that scope.",
     ) -> None:
         super().__init__(user_message)
+
+
+class NotAChampionError(BattleError):
+    """Raised when a non-Champion participant attempts to open a Champion duel."""
+
+    def __init__(self, user_message: str = "You do not hold an engaged Champion role.") -> None:
+        super().__init__(user_message)
+
+
+class PlaceAlreadyDuelingError(BattleError):
+    """Raised when a BattlePlace already has a bound CombatEncounter."""
+
+    def __init__(self, user_message: str = "A duel is already underway at this front.") -> None:
+        super().__init__(user_message)

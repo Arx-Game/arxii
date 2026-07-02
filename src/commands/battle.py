@@ -9,6 +9,7 @@ Player subverbs:
     battle declare strike place <name> with <technique>
     battle declare support <char> with <technique>
     battle declare rescue <ally> with <technique>
+    battle duel <front> vs <boss name>
 
 GM subverbs:
     battle round        — begin the next round (DECLARING)
@@ -40,6 +41,7 @@ class CmdBattle(ArxCommand):
         battle declare strike place <name> with <technique>
         battle declare support <ally> with <technique>
         battle declare rescue <ally> with <technique>
+        battle duel <front> vs <boss name>
 
     Syntax (GM / staff):
         battle round
@@ -55,7 +57,9 @@ class CmdBattle(ArxCommand):
     active enemy unit) instead of a single unit — requires an engaged SUPREME
     command_tier on your own side's covenant. ``strike place <name>`` is the
     same fan-out narrowed to one front (``BattlePlace``) — requires an engaged
-    SUBORDINATE or SUPREME command_tier.
+    SUBORDINATE or SUPREME command_tier. ``duel <front> vs <boss name>`` opens
+    a lethal Champion duel bound to that front — requires an engaged Champion
+    role for your side's covenant.
     """
 
     key = "battle"
@@ -88,10 +92,12 @@ class CmdBattle(ArxCommand):
             self._resolve_round()
         elif first == "conclude":  # noqa: STRING_LITERAL
             self._conclude()
+        elif first == "duel":  # noqa: STRING_LITERAL
+            self._challenge_duel(rest)
         else:
             msg = (
                 "Usage: battle [declare strike <unit>|declare support <char>"
-                "|declare rescue <ally>|round|resolve|conclude]"
+                "|declare rescue <ally>|duel <front> vs <boss name>|round|resolve|conclude]"
             )
             raise CommandError(msg)
 
@@ -348,4 +354,32 @@ class CmdBattle(ArxCommand):
         from actions.definitions.battles import ConcludeBattleAction  # noqa: PLC0415
 
         result = ConcludeBattleAction().run(self.caller)
+        self._send(result)
+
+    def _challenge_duel(self, rest: list[str]) -> None:
+        from actions.definitions.battles import ChallengeChampionDuelAction  # noqa: PLC0415
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        if not rest:
+            msg = "Usage: battle duel <front> vs <boss name>"
+            raise CommandError(msg)
+        participant = self._resolve_participant()
+        if "vs" not in rest:  # noqa: STRING_LITERAL
+            msg = "Usage: battle duel <front> vs <boss name>"
+            raise CommandError(msg)
+        split_at = rest.index("vs")
+        place_name = " ".join(rest[:split_at]).strip()
+        boss_name = " ".join(rest[split_at + 1 :]).strip()
+        place = BattlePlace.objects.filter(
+            battle=participant.battle, name__iexact=place_name
+        ).first()
+        if place is None:
+            msg = f"No front named '{place_name}' in this battle."
+            raise CommandError(msg)
+
+        result = ChallengeChampionDuelAction().run(
+            self.caller,
+            battle_place_id=place.pk,
+            opponent_kwargs={"name": boss_name, "max_health": 300, "threat_pool": None},
+        )
         self._send(result)

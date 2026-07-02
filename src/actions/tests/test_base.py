@@ -313,6 +313,7 @@ class ActionRegistryTests(TestCase):
             "resolve_battle_round",
             "conclude_battle",
             "declare_battle_action",
+            "challenge_champion_duel",
             "signature_set",
             "signature_clear",
             "signature_list",
