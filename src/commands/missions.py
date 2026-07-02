@@ -29,10 +29,11 @@ if TYPE_CHECKING:
     from world.missions.models import MissionInstance
     from world.missions.types import BeatOption
 
-_SUBVERBS = frozenset({"list", "beat", "resolve", "abandon", "pick", "vote"})
+_SUBVERBS = frozenset({"list", "beat", "resolve", "abandon", "pick", "vote", "report"})
 _USAGE = (
     "Usage: mission | mission beat <id> | mission resolve <id> <n> | "
-    "mission abandon <id> | mission pick <id> <n> | mission vote <id> <n>"
+    "mission abandon <id> | mission pick <id> <n> | mission vote <id> <n> | "
+    "mission report <id> <style>"
 )
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
@@ -81,6 +82,8 @@ class CmdMission(ArxCommand):
             self._handle_pick(rest)
         elif subverb == "vote":  # noqa: STRING_LITERAL
             self._handle_vote(rest)
+        elif subverb == "report":  # noqa: STRING_LITERAL
+            self._handle_report(rest)
 
     # ------------------------------------------------------------------
     # Read
@@ -168,6 +171,29 @@ class CmdMission(ArxCommand):
         except BeatActionError as exc:
             raise CommandError(exc.user_message) from exc
         self.msg(f"You abandon {result.template.name} (#{result.pk}). Status: {result.status}.")
+
+    def _handle_report(self, rest: str) -> None:
+        """``mission report <id> <style>`` — report a RESOLVED run's outcome (#1753)."""
+        from world.missions.services.report import (  # noqa: PLC0415
+            MissionReportError,
+            report_mission,
+        )
+
+        instance, remainder = self._instance_or_raise(rest)
+        style = remainder.strip().lower().replace("-", "_")
+        if not style:
+            msg = "Choose how to report: humble, accurate, or embellished."
+            raise CommandError(msg)
+        try:
+            result = report_mission(instance=instance, style=style, reporter=self.caller)
+        except MissionReportError as exc:
+            raise CommandError(exc.user_message) from exc
+        line = (
+            f"You report {result.instance.template.name} (#{result.instance.pk}) — {result.style}."
+        )
+        if result.embellish_success is False:
+            line += " Your embellishment falls flat."
+        self.msg(line)
 
     # ------------------------------------------------------------------
     # Group decision

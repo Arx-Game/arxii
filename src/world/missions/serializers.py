@@ -593,6 +593,15 @@ class MissionAbandonResultSerializer(serializers.Serializer):
     status = serializers.CharField(read_only=True)
 
 
+class MissionReportResultSerializer(serializers.Serializer):
+    """Result of the #1753 report endpoint — run id/status, chosen style, embellish outcome."""
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    style = serializers.CharField(read_only=True)
+    embellish_success = serializers.BooleanField(read_only=True, allow_null=True)
+
+
 class GroupBallotStateSerializer(serializers.Serializer):
     """Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036)."""
 

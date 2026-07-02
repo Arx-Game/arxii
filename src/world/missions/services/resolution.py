@@ -481,10 +481,22 @@ def _finish_terminal(
     ``_finish_terminal`` exactly once (Phase 4 invariant), so the seam fires
     exactly once per instance termination.
     """
-    instance.status = MissionStatus.COMPLETE
-    instance.completed_at = timezone.now()
-    instance.current_node = None
-    instance.save()
+    # #1753 — a mission with an NPC to report to pauses at RESOLVED until the player
+    # reports the outcome (which delivers money + style-modulated fame/prestige). A run
+    # with no report-to (trigger/environment giver) has no one to report to, so it
+    # completes here — legend still spreads via emit_terminal_renown_awards; there is
+    # simply no monetary reward.
+    from world.missions.services.report import report_to_role_for  # noqa: PLC0415
+
+    if report_to_role_for(instance) is not None:
+        instance.status = MissionStatus.RESOLVED
+        instance.current_node = None
+        instance.save()
+    else:
+        instance.status = MissionStatus.COMPLETE
+        instance.completed_at = timezone.now()
+        instance.current_node = None
+        instance.save()
     _teardown_spawned_room(instance)
     on_mission_complete_for_beat(instance, route=route)
 

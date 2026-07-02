@@ -210,7 +210,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             msg = f"{source} source requires {name}= kwarg."
             raise ValueError(msg)
         return
-    if source == GainSource.STAFF_GRANT:
+    if source in (GainSource.STAFF_GRANT, GainSource.MISSION_REPORT):
+        # No typed source FK — the grant is attributed by discriminator only.
         return
     msg = f"Unknown GainSource: {source!r}"
     raise ValueError(msg)

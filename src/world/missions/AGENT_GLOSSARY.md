@@ -11,3 +11,11 @@ _Avoid_: mission definition, quest template.
 **Mission Deed**:
 A `MissionDeedRecord` — one recorded consequential act taken within a mission run, attributed to the acting participant's character (moral and narrative consequence follows the actor). Its structured payouts are stored as child `MissionDeedRewardLine` rows rather than a dict.
 _Avoid_: deed log, mission action, consequence record.
+
+**Mission Report**:
+The after-action step that pays out a mission (#1753). A run that has someone to report to reaches `RESOLVED` at resolution instead of `COMPLETE`, then pauses until the reporter returns to a co-located report-to **Functionary** (the `report_to_role`, #1766) and reports — at which point money is delivered and the run transitions `RESOLVED → COMPLETE`. A run with no report target completes directly at resolution (legend spreads, no coin). Lives in `world.missions.services.report`.
+_Avoid_: turn-in, hand-in, mission payout.
+
+**Report Style**:
+How the reporter frames the account when reporting (`ReportStyle`), modulating the payout — legend stays flat; only money and fame/prestige move. **Humble** (understate): +1 Bene resonance, lower fame/prestige, baseline money. **Accurate** (neutral): the promised money + fame/prestige. **Embellished** (aggrandize): a manipulation check against the giver (charm + Persuasion, +Manipulation specialization if held) — success doubles the money, raises fame/prestige, grants +1 Insidia; only offered to a reporter with Persuasion. **Mostly-accurate** (omit incriminating): dodges criminal/society consequences; inert until heat lands (#1765), so not offered yet.
+_Avoid_: spin, brag, framing.

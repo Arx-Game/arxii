@@ -24,6 +24,7 @@ those rules depend on) is Phase-6+ work — see
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -33,6 +34,8 @@ from world.missions.constants import DeedRewardKind, DeedRewardSink, RewardGroup
 from world.missions.integrations import beat_stub, crime_watch_stub, money_stub, rumor_stub
 from world.missions.models import MissionDeedRewardLine, MissionRewardQueue
 from world.missions.types import ApplyDeedRewardsResult, StubCallRecord
+
+logger = logging.getLogger("world.missions.rewards")
 
 if TYPE_CHECKING:
     from world.missions.models import (
@@ -249,6 +252,8 @@ def _distribute_reward_templates(
 
 # Sinks that go onto the deferred-payout queue.
 _QUEUE_SINKS = frozenset({DeedRewardSink.LEGEND_POINTS, DeedRewardSink.RESONANCE})
+# PROPAGATION sinks whose real routing isn't built yet (the criminal-consequence layer, #1765).
+_UNBUILT_PROPAGATION_SINKS = frozenset({DeedRewardSink.RUMOR, DeedRewardSink.CRIME_WATCH})
 
 
 def _enqueue(deed: MissionDeedRecord, line: MissionDeedRewardLine) -> MissionRewardQueue:
@@ -276,6 +281,8 @@ def _route_line(
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],
     stub_calls: list[StubCallRecord],
+    *,
+    skip_unbuilt: bool = False,
 ) -> None:
     """Dispatch one emitted line by its ``(kind, sink)`` pair.
 
@@ -284,6 +291,12 @@ def _route_line(
     stubs raise ``NotImplementedError`` (rolls back the whole apply); the
     unsupported-combo case raises :class:`MissionRewardRoutingError` (also
     rolls back). Stub-record sinks (money, beat) never raise.
+
+    When ``skip_unbuilt`` is True, the not-yet-built PROPAGATION sinks
+    (RUMOR / CRIME_WATCH — the criminal-consequence layer, #1765) are
+    logged and skipped instead of raising, so wiring the payout into
+    mission-reporting (#1753) can pay the money/beat/queue lines without a
+    criminal line crashing the whole report.
     """
     kind = line.kind
     sink = line.sink
@@ -311,29 +324,38 @@ def _route_line(
         stub_calls.append(StubCallRecord(sink=sink, line_id=line.pk))
         return
 
-    if kind == DeedRewardKind.PROPAGATION and sink == DeedRewardSink.RUMOR:
-        rumor_stub.propagate_rumor(line)
-        return  # rumor_stub always raises in 5b.1
-
-    if kind == DeedRewardKind.PROPAGATION and sink == DeedRewardSink.CRIME_WATCH:
-        crime_watch_stub.flag_crime(line)
-        return  # crime_watch_stub always raises in 5b.1
+    # The not-yet-built criminal-consequence sinks (RUMOR / CRIME_WATCH, #1765) —
+    # skipped-and-logged when a caller opts out, else the stub raises (rolls back).
+    if kind == DeedRewardKind.PROPAGATION and sink in _UNBUILT_PROPAGATION_SINKS:
+        if skip_unbuilt:
+            logger.info(
+                "apply_deed_rewards: skipping not-yet-built %s line pk=%d (#1765)", sink, line.pk
+            )
+            return
+        if sink == DeedRewardSink.RUMOR:
+            rumor_stub.propagate_rumor(line)  # always raises in 5b.1
+        else:
+            crime_watch_stub.flag_crime(line)  # always raises in 5b.1
+        return
 
     # Anything else is an author error — the (kind, sink) pair has no
     # routing target. Raise loudly so authoring tools can surface it.
     raise MissionRewardRoutingError(kind=kind, sink=sink, line_pk=line.pk)
 
 
-def apply_deed_rewards(deed: MissionDeedRecord) -> ApplyDeedRewardsResult:
+def apply_deed_rewards(
+    deed: MissionDeedRecord, *, skip_unbuilt: bool = False
+) -> ApplyDeedRewardsResult:
     """Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.
 
     Phase 5b.1's job: take the lines that
     :func:`emit_terminal_rewards` already persisted at the terminal route
     and dispatch each one to its target by ``(kind, sink)``.
 
-      * ``(IMMEDIATE, MONEY)``   → records a call on
-        :mod:`world.missions.integrations.money_stub` (no DB writes; the
-        real ledger is Phase 6+).
+      * ``(IMMEDIATE, MONEY)``   → real payout via
+        :func:`world.currency.services.deliver_mission_money` into the
+        recipient's ``CharacterPurse`` (falls back to the money_stub only for
+        a sheet-less recipient).
       * ``(POST_CRON, LEGEND_POINTS)`` / ``(POST_CRON, RESONANCE)`` →
         idempotent ``update_or_create`` of a :class:`MissionRewardQueue`
         row keyed by ``line`` (the cron in Phase 5b.2 will flip
@@ -382,7 +404,7 @@ def apply_deed_rewards(deed: MissionDeedRecord) -> ApplyDeedRewardsResult:
 
     with transaction.atomic():
         for line in lines:
-            _route_line(deed, line, enqueued, stub_calls)
+            _route_line(deed, line, enqueued, stub_calls, skip_unbuilt=skip_unbuilt)
 
     return ApplyDeedRewardsResult(
         enqueued=tuple(enqueued),

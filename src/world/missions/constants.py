@@ -105,9 +105,23 @@ class MissionStatus(models.TextChoices):
     """Lifecycle of a :class:`~world.missions.models.MissionInstance`."""
 
     ACTIVE = "active", "Active"
+    # #1753 — the run reached its terminal node but is awaiting the player's report
+    # to an NPC giver/Functionary (which delivers money + fame/prestige by style).
+    # Only NPC-giver (report-eligible) missions pass through RESOLVED; trigger-based
+    # runs with no one to report to go straight to COMPLETE.
+    RESOLVED = "resolved", "Resolved (awaiting report)"
     COMPLETE = "complete", "Complete"
     ABANDONED = "abandoned", "Abandoned"
     EXPIRED = "expired", "Expired"
+
+
+class ReportStyle(models.TextChoices):
+    """How a player reports a resolved mission's outcome to the NPC giver (#1753)."""
+
+    HUMBLE = "humble", "Humble"
+    ACCURATE = "accurate", "Accurate"
+    MOSTLY_ACCURATE = "mostly_accurate", "Mostly accurate"
+    EMBELLISHED = "embellished", "Embellished"
 
 
 class MissionVisibility(models.TextChoices):

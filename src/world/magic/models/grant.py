@@ -178,6 +178,26 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
+            # MISSION_REPORT (#1753): all typed source FKs null — attributed by
+            # discriminator only (the run is recorded on the MissionInstance).
+            models.CheckConstraint(
+                name="res_grant_mission_report_shape",
+                check=(
+                    Q(source="MISSION_REPORT")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                )
+                | ~Q(source="MISSION_REPORT"),
+            ),
             # POSE_ENDORSEMENT: exactly pose_endorsement populated, others null
             models.CheckConstraint(
                 name="res_grant_pose_endorsement_shape",

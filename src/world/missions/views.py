@@ -69,6 +69,7 @@ from world.missions.serializers import (
     MissionOptionRouteRewardSerializer,
     MissionOptionRouteSerializer,
     MissionOptionSerializer,
+    MissionReportResultSerializer,
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
     ResolvedBeatSerializer,
@@ -544,6 +545,34 @@ class MissionJournalViewSet(viewsets.ViewSet):
             raise ValidationError(exc.user_message) from exc
         return Response(
             MissionAbandonResultSerializer({"id": instance.pk, "status": instance.status}).data
+        )
+
+    @action(detail=True, methods=("POST",))
+    def report(self, request: Request, pk: str | None = None) -> Response:
+        """#1753 — report a RESOLVED run's outcome to its report-to Functionary, by style."""
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.report import (  # noqa: PLC0415
+            MissionReportError,
+            report_mission,
+        )
+
+        instance, character = self._instance_for(request, pk)
+        style = str(request.data.get("style", "")).strip().lower().replace("-", "_")
+        try:
+            result = report_mission(instance=instance, style=style, reporter=character)
+        except MissionReportError as exc:
+            # Typed, user-safe message (CodeQL); non-participant already 404'd in _instance_for.
+            raise ValidationError(exc.user_message) from exc
+        return Response(
+            MissionReportResultSerializer(
+                {
+                    "id": result.instance.pk,
+                    "status": result.instance.status,
+                    "style": result.style,
+                    "embellish_success": result.embellish_success,
+                }
+            ).data
         )
 
     @extend_schema(

@@ -216,7 +216,10 @@ actions, backends, and service functions.
   `mission beat <id>` renders the current beat's numbered options (routing single-vs-group on
   `node.conflict_mode` + participant count); `mission resolve <id> <n>` / `mission abandon <id>`
   drive the single-player path; `mission pick <id> <n>` then `mission vote <id> <n>` drive the
-  two-stage group decision. Options are chosen by the small ordinal shown in `mission beat`
+  two-stage group decision. `mission report <id> <style>` closes out a RESOLVED run at a
+  co-located report-to **Functionary** (#1766), choosing a payout *style*
+  (`humble`/`accurate`/`embellished`, #1753) — thin over `world.missions.services.report`.
+  Options are chosen by the small ordinal shown in `mission beat`
   (the presented list already fans out per `ChallengeApproach`, so the ordinal carries the
   approach — no `approach=` token). Instances are participant-scoped (a non-participant gets the
   same "not part of that mission" message whether or not the id exists). Namespaced subverbs to
