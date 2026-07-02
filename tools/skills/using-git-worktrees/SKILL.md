@@ -209,6 +209,18 @@ Ready to implement <feature-name>
 | Permission error on create | Sandbox fallback, work in place |
 | Tests fail during baseline | Report failures + ask |
 
+## Arx II-specific worktree traps
+
+Beyond the generic mistakes below, this repo has hit five concrete worktree
+failure modes: absolute Read/Edit paths silently bypassing the worktree,
+`EnterWorktree`+`pickup-issue.sh` leaving two branches, a subagent detaching
+HEAD via `git checkout <sha>`, `git worktree add -f` stealing a branch ref
+from another live worktree, and `post-merge-cleanup.sh` failing inside an
+`EnterWorktree` worktree. See
+[`references/arxii-worktree-traps.md`](references/arxii-worktree-traps.md)
+for the symptom, cause, and fix for each — load it when you recognize one of
+these symptoms, not before.
+
 ## Common Mistakes
 
 ### Fighting the harness

@@ -399,6 +399,17 @@ Review the merged work for any non-obvious takeaway worth posting on:
 
 Apply the same criteria, ordering rules, format, and Layer 3 secret-scan as Step 8's takeaway evaluation. Post unilaterally if criteria are met. Use `scripts/comment-on-issue.sh` for the post.
 
+## Known CI/merge-queue gotchas
+
+Four specific failure signatures — `watch-ci.sh` exiting 1 on a transient `gh`
+hiccup (not a CI verdict), a DIRTY/CONFLICTING PR silently stopping `ci.yml`
+from triggering while analysis-only checks stay green, `autoMergeRequest`
+staying null after `enqueue-pr.sh` (normal — check `mergeQueueEntry` instead),
+and a PR bounced from the queue on `PLR0915` even though it passed locally —
+are in
+[`references/ci-merge-queue-gotchas.md`](references/ci-merge-queue-gotchas.md).
+Load it when you hit one of these, not before.
+
 ## When to bail (stop and wait for human)
 
 - CI repeat-failure or thrash cap (see above).

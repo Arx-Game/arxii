@@ -50,6 +50,65 @@ Django-only command that doesn't fully initialize Evennia.
 - `ruff format .` — Format Python code (replaces black/isort, line length 100)
 - `pre-commit run --all-files` — Run all pre-commit hooks (uses ruff)
 
+**Always commit with hooks — never `--no-verify`.** `--no-verify` skips this
+repo's **custom linters** (`getattr-literal`, `string-literal`, `objectdb-param`,
+plus SharedMemoryModel/migration/FilterSet checks) that `ruff`/`ty` do not
+cover, so a `--no-verify` commit looks clean locally and then fails CI's
+`pre-commit` job — a wasted round trip. It also skips `ty` (the project-wide
+type checker) and `ruff-format` (a separate hook from `ruff check`), so running
+just `ty check` + `ruff check` by hand afterward is not equivalent to the real
+hook set. If a branch was ever built via `--no-verify` commits, run the full
+`uv run pre-commit run --all-files` (matches CI's `pre-commit` job) before
+push and confirm every hook passes — `uv run pre-commit run --from-ref
+origin/main --to-ref HEAD` scopes it to just the branch's changes.
+
+### CI Quality Gates (SonarCloud)
+
+This repo runs **SonarCloud Automatic Analysis** (the zero-config GitHub App —
+there is no `SonarSource/*` scanner action in `.github/`). A few
+Automatic-Analysis-specific behaviors that differ from a configured scanner:
+
+- **`sonar.issue.ignore.*` in `sonar-project.properties` is a no-op** under
+  Automatic Analysis (proven by a PR where scoping a rule off `**/models.py`
+  had zero effect). To suppress a rule/issue: deactivate it in the SonarCloud
+  UI's Quality Profile, scope it in Analysis Scope, mark it Won't-Fix, or use
+  inline `# NOSONAR` (which Automatic Analysis does honor). `sonar.exclusions`
+  (not `sonar.issue.ignore.*`) is the one properties-file setting that
+  reliably works — it's how this repo excludes test files from analysis.
+- **The Quality Gate here fails specifically on "Reliability Rating on New
+  Code ≥ A"** — Reliability = Bug-rule findings (e.g. float-equality checks
+  flagged as S1244), not code smells (cognitive complexity, S134) or `TODO`
+  markers, which annotate but don't fail the gate on their own. Read the check
+  summary's *named gate* to see which category is actually failing
+  (Reliability=Bugs, Maintainability=Code Smells, Security=Vulnerabilities).
+  Fetch precise annotations via the Checks API (`gh api
+  repos/<repo>/commits/<sha>/check-runs`, filter for a Sonar check name, follow
+  `.output.annotations_url`) — Sonar is an external status check, not a `gh
+  run` workflow, so `get-ci-failure.sh`-style tooling reports "no failing run."
+- **The separate "SonarCloud Code Analysis" PR check fails on >3% new-code
+  duplication** (`new_duplicated_lines_density`), exit 5 from `watch-ci.sh`.
+  Test files are fully excluded via `sonar.exclusions`, so a new-code
+  duplication failure is always in **source**, never tests — don't touch
+  tests to fix it. The recurring trigger is a cluster of thin, near-identical
+  wrapper functions (e.g. repetitive `Action` classes each doing
+  `try: service(...); except DomainError: return failure`); fix by
+  extracting a shared helper. Sonar's mechanical duplication check doesn't
+  grade semantic justification, so even duplication a human reviewer calls
+  "reasonable" still fails the gate.
+- **A backend-only model retype (e.g. int→enum) can trip both the duplication
+  gate indirectly and, separately, the frontend `api-types-drift`/build gates**
+  (see "Generated API Schema" in `django_notes.md`) — regenerating the
+  *generated* frontend types isn't sufficient if a **hand-written** frontend
+  type shadows the changed field; `tsc --noEmit` (project-check mode) does not
+  catch that mismatch, only `pnpm build` (`tsc -b`, the mode CI actually runs)
+  does. Always verify a frontend TS fix with the literal CI command.
+- **`gh pr checks`/`statusCheckRollup` can report a FAILING check for a commit
+  that's already fixed, immediately after pushing** — it's showing the
+  last-completed conclusion for that check *name*, not necessarily tied to
+  current HEAD, while the new run is still queued/in-progress. Cross-check
+  `gh run list --branch <branch> --json databaseId,status,headSha` for a run
+  whose `headSha` matches `git rev-parse HEAD` before trusting a poller.
+
 ## Frontend Development (in `frontend/`)
 
 - `pnpm dev` — Start Vite development server with Django API proxy
