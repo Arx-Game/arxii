@@ -35,6 +35,19 @@ not the attendees; a battle over a strategic bridge fought by a
 lower-level militia and one fought by legendary heroes should carry the same
 stakes for that bridge.
 
+**Edge case: first-caller-wins pricing.** `activate_stakes_contract` is
+idempotent while a contract is open — a second activation attempt on an
+already-open row returns the existing row unchanged and does not re-evaluate
+`scale_by_party_level`. If a GM ever deliberately linked the same beat's
+episode to both a `Battle`'s scene and a separate embedded `CombatEncounter`'s
+scene, whichever path activates the contract first locks its pricing for the
+whole engagement — if the `CombatEncounter` path (default `scale_by_party_level=
+True`) won the race, the beat would price off party level even though it's
+also fought as part of a war, contradicting this ADR's intent for that beat.
+This requires deliberate, unusual GM action (linking one beat to two
+concurrently-activatable scenes) to trigger, and is accepted as a known,
+narrow edge case rather than a bug to fix now.
+
 > Status: accepted · Source: #1785; carves out ADR-0077 (effective risk is
 > priced relative to declared target level) for war-scale Battle stakes only —
 > ADR-0077's mechanism and rationale remain unchanged and in force for every

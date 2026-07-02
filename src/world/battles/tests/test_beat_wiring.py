@@ -13,12 +13,15 @@ from world.battles.factories import BattleFactory, BattleParticipantFactory, Bat
 from world.battles.models import BattleOutcomeMapping
 from world.battles.services import begin_battle_round, conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
+from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.scenes.constants import RoundStatus
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     StakeResolutionColumn,
+    StakeSeverity,
+    StoryMaturity,
     StoryScope,
 )
 from world.stories.factories import (
@@ -28,10 +31,13 @@ from world.stories.factories import (
     EpisodeSceneFactory,
     StakeFactory,
     StakeResolutionFactory,
+    StakeRewardLineFactory,
     StoryFactory,
     StoryProgressFactory,
+    TransitionFactory,
+    seed_default_risk_calibrations,
 )
-from world.stories.models import StakeOutcome
+from world.stories.models import StakeOutcome, TransitionRequiredOutcome
 from world.traits.models import CheckOutcome
 
 
@@ -108,6 +114,55 @@ class ClassifyBattleConclusionOutcomeTests(TestCase):
 class ActivateStakesForBattleTests(EvenniaTestCase):
     """activate_stakes_for_battle: locks staked beats linked to battle.scene."""
 
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_default_risk_calibrations()
+
+    def _ready_beat(self, episode, risk=RenownRisk.HIGH, target_level=4):
+        """A beat that actually clears validate_stakes_readiness, anchored to ``episode``.
+
+        Same shape as ``world.stories.tests.test_services_stakes.ActivationTests
+        ._ready_beat``: a DIRE stake (meets HIGH's floor/ceiling) plus a
+        downstream OUTLINE beat carrying a REMOVAL stake one failure-hop away
+        (HIGH's ceiling sits below REMOVAL's severity, so jeopardy has to be
+        reached via the fuse walk), plus a WIN-column reward line inside HIGH's
+        band. Built directly on the caller's episode (not a fresh one reassigned
+        after the fact) so the failure-hop Transition stays anchored correctly.
+        """
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+            risk=risk,
+            target_level=target_level,
+        )
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StakeRewardLineFactory(resolution=win, amount=400)  # in HIGH's reward band (#1770 PR3)
+        fight_episode = EpisodeFactory(chapter=episode.chapter, maturity=StoryMaturity.OUTLINE)
+        transition = TransitionFactory(source_episode=episode, target_episode=fight_episode)
+        TransitionRequiredOutcome.objects.create(
+            transition=transition, beat=beat, required_outcome=BeatOutcome.FAILURE
+        )
+        fight_beat = BeatFactory(episode=fight_episode, risk=RenownRisk.EXTREME)
+        removal_stake = StakeFactory(beat=fight_beat, severity=StakeSeverity.REMOVAL)
+        StakeResolutionFactory(stake=removal_stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=removal_stake, column=StakeResolutionColumn.LOSS)
+        return beat
+
+    def _sheets_at_levels(self, *levels):
+        """Build CharacterSheet rows whose ``_character_level`` is exactly ``levels``."""
+        sheets = []
+        for level in levels:
+            sheet = CharacterSheetFactory()
+            char_class = CharacterClassFactory()
+            CharacterClassLevelFactory(
+                character=sheet.character, character_class=char_class, level=level
+            )
+            sheets.append(sheet)
+        return sheets
+
     def test_no_participants_noops(self) -> None:
         from world.battles.beat_wiring import activate_stakes_for_battle
 
@@ -123,37 +178,43 @@ class ActivateStakesForBattleTests(EvenniaTestCase):
         activate_stakes_for_battle(battle)  # no EpisodeScene link at all -> no-op
 
     def test_activates_with_scale_by_party_level_false(self) -> None:
+        """Real, non-mocked proof: an over-leveled party still prices at declared risk.
+
+        A HIGH-risk ready beat, enlisted party 4 levels over target_level (the
+        exact gap that would shift HIGH -> LOW under scale_by_party_level=True,
+        per compute_effective_risk / ActivationTests.test_activation_computes_
+        effective_risk_for_party). If scale_by_party_level were ever dropped
+        from activate_stakes_for_battle's call to activate_stakes_contract,
+        effective_risk would come back LOW here instead of HIGH, and this
+        test would fail — unlike the previous unready-beat version, which
+        could not distinguish True from False (#1785 final review).
+        """
         from world.battles.beat_wiring import activate_stakes_for_battle
         from world.stories.services.stakes import get_open_activation
 
-        sheet = CharacterSheetFactory()
-        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        story = StoryFactory(scope=StoryScope.CHARACTER)
         chapter = ChapterFactory(story=story)
         episode = EpisodeFactory(chapter=chapter)
-        beat = BeatFactory(
-            episode=episode,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
-            risk=RenownRisk.HIGH,
-        )
+        beat = self._ready_beat(episode)  # HIGH risk, target_level=4
+
         battle = BattleFactory()
         side = BattleSideFactory(battle=battle, role=BattleSideRole.ATTACKER)
-        BattleParticipantFactory(
-            battle=battle,
-            side=side,
-            character_sheet=sheet,
-            status=BattleParticipantStatus.ACTIVE,
-        )
+        for sheet in self._sheets_at_levels(8, 8):  # 4 over target -> -2 tiers if scaled
+            BattleParticipantFactory(
+                battle=battle,
+                side=side,
+                character_sheet=sheet,
+                status=BattleParticipantStatus.ACTIVE,
+            )
         EpisodeSceneFactory(episode=episode, scene=battle.scene)
 
         activate_stakes_for_battle(battle)
 
         activation = get_open_activation(beat)
         self.assertIsNotNone(activation)
-        # Unready (no stakes authored) -> NONE regardless of scale_by_party_level;
-        # this test only confirms the wiring calls through and creates a row.
-        # Readiness/effective-risk math itself is Task 1's responsibility, already
-        # tested there — this asserts the call happened, not the risk math.
+        self.assertTrue(activation.is_ready)
+        self.assertEqual(activation.declared_risk, RenownRisk.HIGH)
+        self.assertEqual(activation.effective_risk, RenownRisk.HIGH)  # not downgraded to LOW
 
 
 class BeginBattleRoundActivatesStakesTests(TestCase):
@@ -225,6 +286,52 @@ class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
 
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
+
+    def test_one_battle_applies_same_tier_to_every_linked_beat(self) -> None:
+        """One Battle grades as one outcome tier, applied uniformly (#1785 Decision 2).
+
+        Two distinct beats on two different episodes/stories, both linked to
+        the same battle's scene, both resolve to the SAME BeatOutcome from a
+        single conclude_battle call — per-front independent grading is #1760's
+        job, not this wiring's.
+        """
+        tier = CheckOutcome.objects.create(name="Battle Victory Uniform Tier", success_level=5)
+        BattleOutcomeMapping.objects.create(
+            outcome=BattleOutcome.ATTACKER_DECISIVE,
+            check_outcome=tier,
+        )
+        battle = BattleFactory()
+
+        sheet_a = CharacterSheetFactory()
+        story_a = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet_a)
+        chapter_a = ChapterFactory(story=story_a)
+        episode_a = EpisodeFactory(chapter=chapter_a)
+        beat_a = BeatFactory(
+            episode=episode_a,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story_a, character_sheet=sheet_a)
+        EpisodeSceneFactory(episode=episode_a, scene=battle.scene)
+
+        sheet_b = CharacterSheetFactory()
+        story_b = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet_b)
+        chapter_b = ChapterFactory(story=story_b)
+        episode_b = EpisodeFactory(chapter=chapter_b)
+        beat_b = BeatFactory(
+            episode=episode_b,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story_b, character_sheet=sheet_b)
+        EpisodeSceneFactory(episode=episode_b, scene=battle.scene)
+
+        conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
+
+        beat_a.refresh_from_db()
+        beat_b.refresh_from_db()
+        self.assertEqual(beat_a.outcome, BeatOutcome.SUCCESS)
+        self.assertEqual(beat_b.outcome, BeatOutcome.SUCCESS)
 
     def test_no_linked_beat_noops(self) -> None:
         battle = BattleFactory()
