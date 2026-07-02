@@ -76,6 +76,9 @@ def _stub_issue_permit(offer: NPCServiceOffer, persona: Persona) -> EffectResult
 
 OFFER_EFFECT_HANDLERS: dict[str, EffectHandler] = {
     OfferKind.PERMIT.value: _stub_issue_permit,
+    # LOAN (#930) is registered here rather than from an AppConfig.ready():
+    # the handler lives in this module (currency imported lazily) so there
+    # is no consuming-app ready() to defer to.
 }
 
 # Lazy snapshot of the "production baseline" handler set. Populated on the
@@ -138,3 +141,85 @@ def dispatch_offer_effect(offer: NPCServiceOffer, persona: Persona) -> EffectRes
     if handler is None:
         raise UnregisteredOfferKindError(offer.kind)
     return handler(offer, persona)
+
+
+class AmbiguousDebtorError(LookupError):
+    """The persona's org standing doesn't resolve to exactly one debtor."""
+
+    def __init__(self, count: int) -> None:
+        super().__init__(f"Loan debtor resolution matched {count} organizations")
+        self.count = count
+        self.user_message = (
+            "The representative needs to know whose books this loan lands on — "
+            "you keep the books for more than one house."
+            if count
+            else "You don't hold the spending authority to sign for a loan."
+        )
+
+
+def _resolve_loan_debtor(persona: Persona):
+    """The one organization whose treasury this persona may commit (#930).
+
+    Loans are org↔org (``DebtInstrument``); the handler contract only carries
+    the persona, so the debtor is the single org where the persona holds
+    treasury spend authority. Zero or several → ``AmbiguousDebtorError``.
+    """
+    from world.currency.services import (  # noqa: PLC0415
+        can_spend_treasury,
+        get_or_create_treasury,
+    )
+
+    orgs = [
+        membership.organization
+        for membership in persona.organization_memberships.select_related("organization")
+        if can_spend_treasury(get_or_create_treasury(membership.organization), persona)
+    ]
+    if len(orgs) != 1:
+        raise AmbiguousDebtorError(len(orgs))
+    return orgs[0]
+
+
+def grant_loan(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """LOAN effect handler (#930): extend a fiat loan on the offer's fixed terms.
+
+    Creditor = the details row's org, falling back to the role's
+    faction_affiliation. Debtor = the persona's one treasury-authority org.
+    """
+    from world.currency.services import extend_loan  # noqa: PLC0415
+
+    details = offer.loan_offer_details
+    creditor = details.creditor_organization or offer.role.faction_affiliation
+    if creditor is None:
+        return EffectResult(
+            kind=OfferKind.LOAN.value,
+            message="The representative has no house to lend from. (Authoring error.)",
+            payload={"offer_pk": offer.pk},
+        )
+    try:
+        debtor = _resolve_loan_debtor(persona)
+    except AmbiguousDebtorError as exc:
+        return EffectResult(
+            kind=OfferKind.LOAN.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk, "debtor_candidates": exc.count},
+        )
+    instrument = extend_loan(
+        creditor=creditor,
+        debtor=debtor,
+        principal=details.principal,
+        interest_bps_monthly=details.interest_bps_monthly,
+        fiat=True,
+    )
+    return EffectResult(
+        kind=OfferKind.LOAN.value,
+        object_pk=instrument.pk,
+        object_label=f"Loan of {details.principal} from {creditor.name}",
+        message=(
+            f"{creditor.name} extends {details.principal} coppers to {debtor.name} "
+            f"at {details.interest_bps_monthly} bps monthly."
+        ),
+        payload={"debt_instrument_pk": instrument.pk, "debtor_organization_pk": debtor.pk},
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.LOAN.value] = grant_loan
