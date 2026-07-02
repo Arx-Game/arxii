@@ -459,11 +459,42 @@ exactly as they would for any other cast. The generic `"Battle Action"` `CheckTy
 |---|---|
 | Battle writeup / React page | #1735 |
 | Rich unit type-matchups (cavalry vs. infantry modifiers) | #1711 |
-| Command hierarchy, naval / aerial / siege variants | #1710, #1713, #1714 |
+| Naval / aerial / siege variants | #1713, #1714 |
 | Campaign propagation: battle outcome → Story + win-gated Legend | **Shipped in #1785** — see [Stakes / Beat Wiring](#stakes--beat-wiring-1785) |
 
 Peril / rescue and the AFK knob are no longer deferred — see
 [Peril / Rescue (#1733)](#peril--rescue-1733) below.
+
+## Command Hierarchy & the Champion (#1710)
+
+`CovenantRole.command_tier` (`NONE`/`SUBORDINATE`/`SUPREME`) and `.is_champion_role`
+(bool) are settable only on `CovenantType.BATTLE` roles (`CovenantRole.clean()`).
+Exclusivity — at most one engaged Supreme Commander and one engaged Champion per
+covenant — is enforced in `CharacterCovenantRole.clean()` and
+`world.covenants.services.set_engaged_membership`, structurally identical to the
+existing character-scoped "one engaged role per covenant_type" check.
+
+`BattleSide.covenant` (nullable FK -> `covenants.Covenant`) links a side to the War
+Covenant fielding it; a side with no covenant has no command hierarchy. Command
+permission is checked directly against `CharacterCovenantRole`/`command_tier` — not
+routed through the `CapabilityType`/`ThreadPullEffect` engaged-gating mechanism (that
+exists for condition-restricted capacities, a different domain).
+
+`BattleActionDeclaration.scope` (`UNIT`/`PLACE`/`SIDE`) plus `target_place`/`target_side`
+gate army/unit-scale declarations: `world.battles.services._validate_command_scope`
+requires an engaged `SUBORDINATE`/`SUPREME` role for `PLACE`, `SUPREME` for `SIDE`, on
+the side's covenant. `world.battles.resolution._resolve_strike_success` and
+`_resolve_rescue_success` fan out across every active unit/participant at the scope
+target instead of a single one.
+
+The Champion duel reuses `world.combat.duels.create_lethal_duel` unmodified —
+`world.battles.services.open_champion_duel` validates the challenger holds an engaged
+`is_champion_role` `CovenantRole`, then binds the resulting `CombatEncounter` to the
+`BattlePlace.combat_encounter` bridge seam (the first real caller of that seam since
+#1592). Outcome feedback (rout/destroy the losing side's unit at that front, VP bonus
+to the winner) is wired via `world.battles.duel_wiring`, mirroring
+`world.combat.beat_wiring`'s `ENCOUNTER_COMPLETED` `TriggerDefinition` pattern exactly
+— no new event type.
 
 ## Test Coverage
 
@@ -503,6 +534,12 @@ Peril / rescue and the AFK knob are no longer deferred — see
   model constraints, `classify_battle_conclusion_outcome`, `activate_stakes_for_battle`
   wiring + `scale_by_party_level=False`, `conclude_battle` → beat/stake resolution
   integration
+- `src/world/battles/tests/test_resolution.py` (#1710) — SIDE-scope STRIKE fan-out
+  across all units on a side; PLACE-scope RESCUE fan-out across all participants at
+  a front
+- `src/world/battles/tests/test_duel_wiring.py` (#1710) — Champion duel outcome
+  auto-wiring: challenger victory routs the enemy unit at the bound place; a
+  non-battle-bound encounter completion no-ops cleanly
 
 ## Integrates With
 
@@ -523,8 +560,11 @@ Peril / rescue and the AFK knob are no longer deferred — see
   the Surrounded entry roll and per-round resist checks are dispatched through
   `world.checks.consequence_resolution.select_consequence` against authored
   `ConsequencePool` rows (#1733)
-- **Combat** — `BattlePlace.combat_encounter` bridge seam (for discrete tactical fights
-  at a front); `RoundStatus` and `AbstractRound` shared from `world.scenes`
+- **Combat** — `BattlePlace.combat_encounter` bridge seam, now wired for Champion duels
+  (`open_champion_duel`, #1710); `RoundStatus` and `AbstractRound` shared from
+  `world.scenes`
+- **Covenants** — `BattleSide.covenant` FK; `CovenantRole.command_tier`/
+  `.is_champion_role` gate SIDE/PLACE-scope declarations and Champion duels (#1710)
 - **Stories** — `Battle.campaign_story` FK (informational; not used for beat
   resolution); `world.battles.beat_wiring` resolves linked `Beat`s via
   `Scene → EpisodeScene → Episode` (#1785)

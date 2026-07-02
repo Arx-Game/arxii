@@ -536,6 +536,7 @@
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
+  - scoped_declarations <- battles.BattleActionDeclaration
 
 ### BattlePlace
 **Foreign Keys:**
@@ -544,6 +545,7 @@
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
+  - scoped_declarations <- battles.BattleActionDeclaration
 
 ### BattleUnit
 **Foreign Keys:**
@@ -576,6 +578,8 @@
   - technique -> magic.Technique [FK]
   - target_unit -> battles.BattleUnit [FK] (nullable)
   - target_ally -> battles.BattleParticipant [FK] (nullable)
+  - target_place -> battles.BattlePlace [FK] (nullable)
+  - target_side -> battles.BattleSide [FK] (nullable)
 
 ### Service Functions
 - `add_place(*, battle: 'Battle', name: 'str') -> 'BattlePlace' — Add a named front/zone to a battle.`
@@ -585,9 +589,10 @@
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
+- `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
 
 
 ## world.buildings

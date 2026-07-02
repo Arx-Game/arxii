@@ -12,6 +12,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md)
 - [scenes](src/world/scenes/AGENT_GLOSSARY.md)
 - [combat](src/world/combat/AGENT_GLOSSARY.md)
+- [battles](src/world/battles/AGENT_GLOSSARY.md)
 - [conditions](src/world/conditions/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md)
 - [mechanics](src/world/mechanics/AGENT_GLOSSARY.md)
