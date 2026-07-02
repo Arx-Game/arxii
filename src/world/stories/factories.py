@@ -14,6 +14,7 @@ from world.stories.constants import (
     SessionRequestStatus,
     StakeOutcomeMethod,
     StakeResolutionColumn,
+    StakeRewardSink,
     StakeSeverity,
     StakeSubjectKind,
     StoryGMOfferStatus,
@@ -40,6 +41,7 @@ from world.stories.models import (
     Stake,
     StakeOutcome,
     StakeResolution,
+    StakeRewardLine,
     StakeTemplate,
     Story,
     StoryFeedback,
@@ -616,6 +618,16 @@ class StakeResolutionFactory(factory_django.DjangoModelFactory):
     stake = factory.SubFactory(StakeFactory)
     column = StakeResolutionColumn.LOSS
     narrative_summary = "It goes badly."
+
+
+class StakeRewardLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StakeRewardLine
+
+    resolution = factory.SubFactory(StakeResolutionFactory, column=StakeResolutionColumn.WIN)
+    sink = StakeRewardSink.MONEY
+    amount = 100
+    resonance = None
 
 
 class StakeOutcomeFactory(factory_django.DjangoModelFactory):

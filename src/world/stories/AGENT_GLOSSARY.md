@@ -68,6 +68,14 @@ _Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bound
 The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED (`withdrawal=True` through `record_outcome_tier_completion`); stakes without an authored WITHDRAWAL branch pend with the beat's PENDING_GM_REVIEW for a Constrained Pick. The beat itself still awaits GM adjudication.
 _Avoid_: flee branch, retreat outcome.
 
+**Reward Line**:
+One authored win payout on a stake's branch (`StakeRewardLine`, #1770 PR3) — a `sink` (`StakeRewardSink`: MONEY or RESONANCE), an `amount` (a money-equivalent scalar paid to EACH completion participant, ALL_EQUAL), and a `resonance` FK when the sink is RESONANCE. Hangs off a WIN-column `StakeResolution` (WIN-only, enforced in clean() + serializer); paid by `_apply_stake_rewards` only under a ready, effective-risk-bearing Activation, with the Reward Band re-checked at pay time. Distinct from missions' `MissionDeedRewardLine` (deed-anchored; stakes deliberately reuse the sink *services*, not the deed router).
+_Avoid_: reward row, payout entry, deed line.
+
+**Reward Band**:
+The per-tier `RiskCalibration.reward_floor`/`reward_ceiling` window (#1770 PR3) that the summed WIN-column Reward Line amounts across a beat's stakes must fall inside for the contract to be ready (`_reward_band_problems`). Out-of-band totals mark the contract UNREADY (auto-downgrade, pillar 7) — never an authoring rejection. `reward_ceiling == 0` means banding is unconfigured for that tier and both checks are skipped.
+_Avoid_: reward cap (the band has a floor too), payout limit.
+
 **Stakes Summary**:
 The one player-visible wire shape for a beat's stakes contract (#1770 PR4) — `{declared_risk, effective_risk, is_ready, stakes: [{id, player_summary, severity, severity_label}]}`, built by `stakes_summary_for_beat` (`world.stories.serializers`) and served at `GET /api/beats/{id}/stakes-summary/` and as `combat_stakes` on the consent-prompt serializers. What is wagered is visible; branch contents (`StakeResolution`) are never part of the shape (pillar 9).
 _Avoid_: stakes preview, contract dump (a summary never includes resolutions).

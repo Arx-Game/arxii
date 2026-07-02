@@ -21,6 +21,7 @@ from world.stories.views import (
     StaffWorkloadView,
     StakeContractActivationViewSet,
     StakeResolutionViewSet,
+    StakeRewardLineViewSet,
     StakeTemplateViewSet,
     StakeViewSet,
     StoryFeedbackViewSet,
@@ -67,6 +68,8 @@ router.register(r"risk-calibrations", RiskCalibrationViewSet)
 router.register(r"stake-templates", StakeTemplateViewSet)
 router.register(r"stakes", StakeViewSet)
 router.register(r"stake-resolutions", StakeResolutionViewSet)
+# #1770 PR3: Two-sided contract — authored win-reward lines
+router.register(r"stake-reward-lines", StakeRewardLineViewSet)
 router.register(r"stake-activations", StakeContractActivationViewSet)
 
 urlpatterns = [

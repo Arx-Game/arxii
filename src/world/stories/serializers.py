@@ -15,6 +15,7 @@ from world.stories.constants import (
     BeatPredicateType,
     SessionRequestStatus,
     StakeResolutionColumn,
+    StakeRewardSink,
     StoryGMOfferStatus,
     StoryMaturity,
     StoryScope,
@@ -42,6 +43,7 @@ from world.stories.models import (
     StakeContractActivation,
     StakeOutcome,
     StakeResolution,
+    StakeRewardLine,
     StakeTemplate,
     Story,
     StoryFeedback,
@@ -2610,6 +2612,110 @@ class StakeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(msg)
 
 
+class StakeRewardLineSerializer(serializers.ModelSerializer):
+    """Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+    Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+    walk via resolution.stake.beat (create-path enforcement), the two-sided
+    open-activation lock, the completed-beat refusal, the WIN-column-only
+    rule, and the sink/resonance shape rule (resonance required iff
+    sink=RESONANCE; amount >= 1 rides the model validator).
+    Banding against the tier's reward floor/ceiling is deliberately NOT
+    rejected here — out-of-band rewards make the contract UNREADY instead
+    (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
+    """
+
+    class Meta:
+        model = StakeRewardLine
+        fields = [
+            "id",
+            "resolution",
+            "sink",
+            "amount",
+            "resonance",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Ownership gate + two-sided lock check via the (possibly re-pointed) resolution."""
+        from world.stories.permissions import user_owns_beat_story  # noqa: PLC0415
+        from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+        old_resolution = self.instance.resolution if self.instance is not None else None
+        resolution = attrs.get("resolution") or old_resolution
+        is_repoint = (
+            old_resolution is not None
+            and resolution is not None
+            and old_resolution.pk != resolution.pk
+        )
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
+        is_staff = bool(user is not None and user.is_staff)
+
+        # Ownership gate: DRF never calls has_object_permission on create, so
+        # IsStakeRewardLineBeatStoryOwnerOrStaff alone would let any
+        # authenticated user POST a reward line onto anyone's resolution.
+        # Ownership before lock — a non-owner probing a foreign resolution
+        # must get the permission error, never learn the lock state.
+        if not is_staff:
+            owners_ok = resolution is not None and user_owns_beat_story(
+                cast(Any, user), resolution.stake.beat
+            )
+            if is_repoint:
+                owners_ok = owners_ok and user_owns_beat_story(
+                    cast(Any, user), old_resolution.stake.beat
+                )
+            if not owners_ok:
+                msg = "You do not have permission to author a reward line on this resolution."
+                raise serializers.ValidationError(msg)
+
+        # Lock check: re-pointing to/from a resolution whose beat is locked is
+        # rejected either way — check both sides when re-pointing.
+        # Completed-beat check (#1770 PR3 review): once the completion tail
+        # closes the activation (with stakes possibly pending a GM pick), the
+        # open-activation lock no longer bites — without this check reward
+        # lines could be re-authored after the contract ran and pay out on
+        # the stale activation's readiness verdict.
+        resolutions_to_check = [resolution] if not is_repoint else [resolution, old_resolution]
+        for candidate in resolutions_to_check:
+            if candidate is not None and get_open_activation(candidate.stake.beat) is not None:
+                msg = "This beat's stakes contract is locked by an open activation."
+                raise serializers.ValidationError(msg)
+            if candidate is not None and candidate.stake.beat.outcome != BeatOutcome.UNSATISFIED:
+                msg = "This beat has completed; its stakes contract can no longer be edited."
+                raise serializers.ValidationError(msg)
+
+        # WIN-column only (#1770 PR3 review): a "consolation" line on a
+        # LOSS/WITHDRAWAL branch would be silently inert — refuse it.
+        if resolution is not None and resolution.column != StakeResolutionColumn.WIN:
+            raise serializers.ValidationError(
+                {"resolution": "Reward lines only attach to WIN-column resolutions."}
+            )
+
+        self._validate_sink_shape(attrs)
+
+        return attrs
+
+    def _validate_sink_shape(self, attrs: Any) -> None:
+        """Resonance required iff sink=RESONANCE (mirrors StakeRewardLine.clean)."""
+
+        def merged(field_name: str, default: Any) -> Any:
+            if field_name in attrs:
+                return attrs[field_name]
+            if self.instance is not None:
+                return getattr(self.instance, field_name)
+            return default
+
+        sink = merged("sink", default="")
+        resonance = merged("resonance", default=None)
+        if sink == StakeRewardSink.RESONANCE and resonance is None:
+            raise serializers.ValidationError({"resonance": "Required when sink is RESONANCE."})
+        if sink != StakeRewardSink.RESONANCE and resonance is not None:
+            raise serializers.ValidationError({"resonance": "Only allowed when sink is RESONANCE."})
+
+
 class StakeResolutionSerializer(serializers.ModelSerializer):
     """Full serializer for StakeResolution (#1770 pillar 1).
 
@@ -2618,7 +2724,11 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
     sheet is not player-held; item forfeiture and affection deltas must match
     the stake's subject kind. No column-ordering/escalation validation (the
     fuse walk measures reachability, not monotonicity).
+    ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+    read-only; they are written via the stake-reward-lines endpoint.
     """
+
+    reward_lines = StakeRewardLineSerializer(many=True, read_only=True)
 
     class Meta:
         model = StakeResolution
@@ -2632,6 +2742,7 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "forfeits_subject_item",
             "npc_affection_delta",
             "sets_subject_lifecycle",
+            "reward_lines",
         ]
         read_only_fields = ["id"]
 
@@ -2666,11 +2777,21 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
 
         # Lock check (#1770 PR1 review): re-pointing to/from a stake whose beat
         # is locked is rejected either way — check both sides when re-pointing.
+        # Completed-beat check (#1770 PR3 review): the open-activation lock
+        # alone leaves a hole — the completion tail closes the activation
+        # while stakes can still pend for a GM pick, which would reopen
+        # editing on a contract that already ran. Contract editing ends when
+        # the beat completes (pillar 8's spirit).
         stakes_to_check = [stake] if not is_repoint else [stake, old_stake]
         for candidate in stakes_to_check:
             if candidate is not None and get_open_activation(candidate.beat) is not None:
                 msg = "This beat's stakes contract is locked by an open activation."
                 raise serializers.ValidationError(msg)
+            if candidate is not None and candidate.beat.outcome != BeatOutcome.UNSATISFIED:
+                msg = "This beat has completed; its stakes contract can no longer be edited."
+                raise serializers.ValidationError(msg)
+
+        self._validate_writer_payloads(attrs, stake)
 
         self._validate_writer_payloads(attrs, stake)
 

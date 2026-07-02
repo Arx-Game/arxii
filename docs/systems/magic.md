@@ -811,6 +811,11 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `DRAMATIC_MOMENT` — see "Dramatic Moment Tagging" above.
 - `STYLE_PRESENTATION` — style presentation endorsement (#1152).
 - `MISSION_REWARD` — mission deed rewards; see "Aura Drift (#1737)" below.
+- `MISSION_REPORT` — mission-report style payout (#1753); discriminator-only
+  (no typed source FK, like `STAFF_GRANT`).
+- `STAKE_REWARD` — stakes-contract WIN reward line (#1770 PR3); discriminator-only,
+  provenance on the stories side (`StakeOutcome` + `StakeRewardLine`); see
+  `docs/systems/stakes.md`.
 
 ### Aura Drift (#1737)
 

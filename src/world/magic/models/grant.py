@@ -198,6 +198,27 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="MISSION_REPORT"),
             ),
+            # STAKE_REWARD (#1770 PR3): all typed source FKs null — attributed
+            # by discriminator only (provenance lives on the stories side:
+            # StakeOutcome + StakeRewardLine). Same shape as MISSION_REPORT.
+            models.CheckConstraint(
+                name="res_grant_stake_reward_shape",
+                check=(
+                    Q(source="STAKE_REWARD")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                )
+                | ~Q(source="STAKE_REWARD"),
+            ),
             # POSE_ENDORSEMENT: exactly pose_endorsement populated, others null
             models.CheckConstraint(
                 name="res_grant_pose_endorsement_shape",

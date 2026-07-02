@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -18,6 +19,7 @@ from world.stories.constants import (
     SessionRequestStatus,
     StakeOutcomeMethod,
     StakeResolutionColumn,
+    StakeRewardSink,
     StakeSeverity,
     StakeSubjectKind,
     StoryGMOfferStatus,
@@ -2156,6 +2158,58 @@ class StakeResolution(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"StakeResolution({self.stake_id}:{self.column})"
+
+
+class StakeRewardLine(SharedMemoryModel):
+    """One authored win-reward payout on a stake's WIN branch (#1770 PR3).
+
+    Authored pre-scene alongside the branch it hangs off — WIN-column
+    resolutions only, enforced in clean() + serializer (a "consolation" line
+    on LOSS/WITHDRAWAL would be silently inert; an authoring foot-gun, not a
+    feature). When the branch fires under a ready, effective-risk-bearing
+    activation, EVERY completion participant receives each line's full amount
+    (ALL_EQUAL semantics, mirroring mission reward distribution). ``amount``
+    is a money-equivalent scalar for every sink so
+    RiskCalibration.reward_floor/reward_ceiling can band the summed total per
+    beat.
+    """
+
+    resolution = models.ForeignKey(
+        "stories.StakeResolution",
+        on_delete=models.CASCADE,
+        related_name="reward_lines",
+    )
+    sink = models.CharField(max_length=12, choices=StakeRewardSink.choices)
+    amount = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Money-equivalent scalar paid to EACH participant (banded by calibration).",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Required when sink=RESONANCE; must be null otherwise.",
+    )
+
+    class Meta:
+        ordering = ["resolution", "pk"]
+
+    def clean(self) -> None:
+        """Sink/payload shape guard (mirrored in StakeRewardLineSerializer)."""
+        super().clean()
+        if self.resolution_id is not None and self.resolution.column != StakeResolutionColumn.WIN:
+            raise ValidationError(
+                {"resolution": "Reward lines only attach to WIN-column resolutions."}
+            )
+        if self.sink == StakeRewardSink.RESONANCE and self.resonance_id is None:
+            raise ValidationError({"resonance": "Required when sink is RESONANCE."})
+        if self.sink != StakeRewardSink.RESONANCE and self.resonance_id is not None:
+            raise ValidationError({"resonance": "Only allowed when sink is RESONANCE."})
+
+    def __str__(self) -> str:
+        return f"StakeRewardLine({self.resolution_id}: {self.sink} x{self.amount})"
 
 
 class StakeContractActivation(SharedMemoryModel):

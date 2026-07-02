@@ -43,6 +43,7 @@ from world.stories.filters import (
     StakeContractActivationFilter,
     StakeFilter,
     StakeResolutionFilter,
+    StakeRewardLineFilter,
     StakeTemplateFilter,
     StoryFeedbackFilter,
     StoryFilter,
@@ -71,6 +72,7 @@ from world.stories.models import (
     Stake,
     StakeContractActivation,
     StakeResolution,
+    StakeRewardLine,
     StakeTemplate,
     Story,
     StoryFeedback,
@@ -124,6 +126,7 @@ from world.stories.permissions import (
     IsStaffOrReadOnly,
     IsStakeBeatStoryOwnerOrStaff,
     IsStakeResolutionBeatStoryOwnerOrStaff,
+    IsStakeRewardLineBeatStoryOwnerOrStaff,
     IsStoryGMOfferParticipantOrStaff,
     IsStoryOwnerOrStaff,
     _user_can_read_bulletin_post,
@@ -173,6 +176,7 @@ from world.stories.serializers import (
     StakeContractActivationSerializer,
     StakeOutcomeSerializer,
     StakeResolutionSerializer,
+    StakeRewardLineSerializer,
     StakeSerializer,
     StakesSummarySerializer,
     StakeTemplateSerializer,
@@ -3046,7 +3050,12 @@ class StakeResolutionViewSet(viewsets.ModelViewSet):
     obj.stake.beat.
     """
 
-    queryset = StakeResolution.objects.select_related("stake__beat", "consequence_pool")
+    queryset = StakeResolution.objects.select_related(
+        "stake__beat",
+        "consequence_pool",
+        # DRF's nested StakeRewardLineSerializer reads the related manager, so
+        # the prefetch must populate the default cache (to_attr would be unused).
+    ).prefetch_related("reward_lines")  # noqa: PREFETCH_STRING
     serializer_class = StakeResolutionSerializer
     permission_classes = [IsStakeResolutionBeatStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -3054,6 +3063,28 @@ class StakeResolutionViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["column"]
     ordering = ["stake", "column"]
+
+
+class StakeRewardLineViewSet(viewsets.ModelViewSet):
+    """ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+    Access delegated to the parent resolution's stake's beat story ownership
+    via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+    one hop deeper. The serializer enforces the create-path ownership gate,
+    the open-activation lock, and the sink/resonance shape.
+    """
+
+    queryset = StakeRewardLine.objects.select_related(
+        "resolution__stake__beat",
+        "resonance",
+    )
+    serializer_class = StakeRewardLineSerializer
+    permission_classes = [IsStakeRewardLineBeatStoryOwnerOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StakeRewardLineFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["amount"]
+    ordering = ["resolution", "pk"]
 
 
 class StakeContractActivationViewSet(viewsets.ReadOnlyModelViewSet):

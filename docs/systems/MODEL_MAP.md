@@ -3525,6 +3525,7 @@
   - cooldowns <- npc_services.OfferCooldown
   - mission_offer_details <- npc_services.MissionOfferDetails
   - permit_offer_details <- npc_services.PermitOfferDetails
+  - loan_offer_details <- npc_services.LoanOfferDetails
 
 ### OfferCooldown
 **Foreign Keys:**
@@ -3547,6 +3548,11 @@
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - building_kind -> buildings.BuildingKind [FK] (nullable)
   - default_approved_wards -> areas.Area [M2M]
+
+### LoanOfferDetails
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [OneToOne]
+  - creditor_organization -> societies.Organization [FK] (nullable)
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
@@ -4619,6 +4625,7 @@
   - covenant <- covenants.Covenant
   - gemits <- narrative.Gemit
   - npc_roles <- npc_services.NPCRole
+  - loan_offers <- npc_services.LoanOfferDetails
 
 ### OrganizationRank
 **Foreign Keys:**
@@ -5025,6 +5032,13 @@
 **Foreign Keys:**
   - stake -> stories.Stake [FK]
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+**Pointed to by:**
+  - reward_lines <- stories.StakeRewardLine
+
+### StakeRewardLine
+**Foreign Keys:**
+  - resolution -> stories.StakeResolution [FK]
+  - resonance -> magic.Resonance [FK] (nullable)
 
 ### StakeContractActivation
 **Foreign Keys:**
