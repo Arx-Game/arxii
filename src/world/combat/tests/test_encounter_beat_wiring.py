@@ -1,7 +1,7 @@
 """Tests for the ENCOUNTER_COMPLETED → beat auto-wiring (#1746)."""
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase, tag
+from django.test import TestCase
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -12,7 +12,7 @@ from world.combat.beat_wiring import (
 )
 from world.combat.constants import EncounterOutcome, RiskLevel
 from world.combat.factories import CombatEncounterFactory
-from world.combat.models import EncounterOutcomeMapping
+from world.combat.models import CombatEncounter, EncounterOutcomeMapping
 from world.combat.services import complete_encounter
 from world.stories.constants import (
     BeatOutcome,
@@ -262,7 +262,6 @@ class CombatEncounterStoryBeatFieldTests(EvenniaTestCase):
         encounter = CombatEncounterFactory()
         self.assertIsNone(encounter.story_beat)
 
-    @tag("postgres")
     def test_story_beat_survives_beat_deletion_as_set_null(self) -> None:
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
@@ -271,5 +270,6 @@ class CombatEncounterStoryBeatFieldTests(EvenniaTestCase):
         beat = BeatFactory(episode=episode)
         encounter = CombatEncounterFactory(story_beat=beat)
         beat.delete()
+        CombatEncounter.flush_instance_cache()
         encounter.refresh_from_db()
         self.assertIsNone(encounter.story_beat)
