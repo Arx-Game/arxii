@@ -368,6 +368,7 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     stake: Stake,
     *,
     column: str,
+    outcome_key: str = "",
     gm_profile: GMProfile | None,
     gm_notes: str = "",
     participants: list[Persona] | None = None,
@@ -390,6 +391,9 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
 
     Defensive guards only (ResolveStakeInputSerializer validates for API
     callers): the stake must be unresolved and the column must be authored.
+    ``outcome_key`` narrows the pick to one specific named branch within
+    ``column`` (#1760) — blank picks the column's plain default branch,
+    matching pre-#1760 authoring.
     """
     from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
 
@@ -401,11 +405,12 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
             "ResolveStakeInputSerializer should have rejected this."
         )
         raise ValueError(msg)
-    resolution = stake.resolutions.filter(column=column).first()
+    resolution = stake.resolutions.filter(column=column, outcome_key=outcome_key).first()
     if resolution is None:
         msg = (
-            f"Stake {stake.pk} has no authored resolution for column {column!r}; "
-            "a GM pick is constrained to authored columns."
+            f"Stake {stake.pk} has no authored resolution for column {column!r} "
+            f"outcome_key {outcome_key!r}; a GM pick is constrained to authored "
+            "branches."
         )
         raise ValueError(msg)
 

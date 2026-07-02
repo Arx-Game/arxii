@@ -2397,6 +2397,7 @@ class ResolveStakeInputSerializer(serializers.Serializer):
     """
 
     column = serializers.ChoiceField(choices=StakeResolutionColumn.choices)
+    outcome_key = serializers.CharField(required=False, allow_blank=True, default="")
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
     participants = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -2430,13 +2431,15 @@ class ResolveStakeInputSerializer(serializers.Serializer):
                 {"non_field_errors": "This stake has already been resolved."}
             )
 
-        authored = set(stake.resolutions.values_list("column", flat=True))
-        if attrs["column"] not in authored:
+        authored = set(stake.resolutions.values_list("column", "outcome_key"))
+        pick = (attrs["column"], attrs.get("outcome_key", ""))
+        if pick not in authored:
+            branches = sorted(authored) or "none authored"
             raise serializers.ValidationError(
                 {
                     "column": (
-                        "A GM pick is constrained to the stake's authored resolution "
-                        f"columns ({sorted(authored) or 'none authored'}) — never free "
+                        "A GM pick is constrained to the stake's authored "
+                        f"(column, outcome_key) branches ({branches}) — never free "
                         "composition. Author the branch first."
                     )
                 }

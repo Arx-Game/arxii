@@ -411,6 +411,32 @@ class GMPickTests(EvenniaTestCase):
         self.assertEqual(other_outcome.method, StakeOutcomeMethod.MACHINE)
         self.assertEqual(other_outcome.resolution_id, other_loss.pk)
 
+    def test_gm_pick_selects_the_specific_outcome_key_branch(self) -> None:
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        destroyed = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="captured",
+        )
+        # resolve_stake_by_gm_pick is a service-level call with no beat-
+        # completion precondition (that gate lives in ResolveStakeInputSerializer,
+        # covered separately in Step 4's serializer test) — calling it directly
+        # against an UNSATISFIED beat is deliberate here.
+        gm = GMProfileFactory()
+        outcome = resolve_stake_by_gm_pick(
+            stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+            gm_profile=gm,
+        )
+        self.assertEqual(outcome.resolution_id, destroyed.pk)
+
 
 class ResolveStakeEndpointTests(APITestCase):
     """POST /api/stakes/{id}/resolve/ — the constrained-pick endpoint."""
