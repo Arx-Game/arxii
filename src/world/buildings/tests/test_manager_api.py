@@ -58,52 +58,56 @@ def _player(account):
 
 @tag("postgres")  # ownership/tenancy cascades walk the areas_areaclosure materialized view
 class ManagerApiBase(APITestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
+    # Fixtures live in setUp, NOT setUpTestData: Django deep-copies
+    # setUpTestData attributes per test, and Evennia typeclass objects (or
+    # models whose fields_cache reaches one) carry an un-deepcopyable
+    # DbHolder once their attribute handler attaches — an ordering-sensitive
+    # CI failure. Instance attributes are never deep-copied.
+    def setUp(self) -> None:
         ensure_room_size_tiers()
-        cls.modest = RoomSizeTier.objects.get(name="Modest")
-        cls.snug = RoomSizeTier.objects.get(name="Snug")
+        self.modest = RoomSizeTier.objects.get(name="Modest")
+        self.snug = RoomSizeTier.objects.get(name="Snug")
 
-        cls.owner_account = AccountFactory()
-        cls.owner_sheet = _player(cls.owner_account)
-        cls.owner_persona = cls.owner_sheet.primary_persona
+        self.owner_account = AccountFactory()
+        self.owner_sheet = _player(self.owner_account)
+        self.owner_persona = self.owner_sheet.primary_persona
 
         area = AreaFactory(level=AreaLevel.BUILDING, name="Gilded Hall")
-        cls.building = BuildingFactory(area=area, space_budget=100)
+        self.building = BuildingFactory(area=area, space_budget=100)
         LocationOwnership.objects.create(
             parent_type=LocationParentType.AREA,
             area=area,
             holder_type=HolderType.PERSONA,
-            holder_persona=cls.owner_persona,
+            holder_persona=self.owner_persona,
         )
-        cls.entry = _room_in(area, size=cls.modest, grid=(0, 0, 0), name="Entry Hall")
-        cls.building.entry_room = cls.entry.room_profile
-        cls.building.save(update_fields=["entry_room"])
-        cls.study = _room_in(area, size=cls.snug, grid=(1, 0, 0), name="Study")
-        cls.attic = _room_in(area, size=cls.snug, grid=(0, 0, 1), name="Attic")
+        self.entry = _room_in(area, size=self.modest, grid=(0, 0, 0), name="Entry Hall")
+        self.building.entry_room = self.entry.room_profile
+        self.building.save(update_fields=["entry_room"])
+        self.study = _room_in(area, size=self.snug, grid=(1, 0, 0), name="Study")
+        self.attic = _room_in(area, size=self.snug, grid=(0, 0, 1), name="Attic")
 
         # One exit pair entry <-> study.
-        cls.exit_out = ObjectDB.objects.create(
+        self.exit_out = ObjectDB.objects.create(
             db_key="east",
             db_typeclass_path="typeclasses.exits.Exit",
-            db_location=cls.entry,
-            db_destination=cls.study,
+            db_location=self.entry,
+            db_destination=self.study,
         )
-        cls.exit_back = ObjectDB.objects.create(
+        self.exit_back = ObjectDB.objects.create(
             db_key="west",
             db_typeclass_path="typeclasses.exits.Exit",
-            db_location=cls.study,
-            db_destination=cls.entry,
+            db_location=self.study,
+            db_destination=self.entry,
         )
 
         # A tenant with a primary home in the study.
-        cls.tenant_account = AccountFactory()
-        cls.tenant_sheet = _player(cls.tenant_account)
-        cls.tenant_persona = cls.tenant_sheet.primary_persona
+        self.tenant_account = AccountFactory()
+        self.tenant_sheet = _player(self.tenant_account)
+        self.tenant_persona = self.tenant_sheet.primary_persona
         assign_room_tenant(
-            persona=cls.owner_persona, room=cls.study, tenant_persona=cls.tenant_persona
+            persona=self.owner_persona, room=self.study, tenant_persona=self.tenant_persona
         )
-        set_primary_home(persona=cls.tenant_persona, room=cls.study)
+        set_primary_home(persona=self.tenant_persona, room=self.study)
 
     def _get(self, url, account, **params):
         self.client.force_authenticate(user=account)

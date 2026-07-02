@@ -50,21 +50,25 @@ def _owned_building(persona, *, budget=100):
 
 @tag("postgres")  # is_owner walks the areas_areaclosure materialized view (PG-only)
 class WebKwargsBase(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        ensure_room_size_tiers()
-        cls.snug = RoomSizeTier.objects.get(name="Snug")
-        cls.modest = RoomSizeTier.objects.get(name="Modest")
-        cls.actor = CharacterFactory()
-        CharacterSheetFactory(character=cls.actor)
-        cls.persona = cls.actor.sheet_data.primary_persona
-        cls.building = _owned_building(cls.persona)
-        cls.entry = _room_in(cls.building.area, size=cls.modest, grid=(0, 0, 0), name="Entry Hall")
-        cls.building.entry_room = cls.entry.room_profile
-        cls.building.save(update_fields=["entry_room"])
-        cls.study = _room_in(cls.building.area, size=cls.modest, grid=(1, 0, 0), name="Study")
-
+    # Fixtures live in setUp, NOT setUpTestData: Django deep-copies
+    # setUpTestData attributes per test, and Evennia typeclass objects (or
+    # models whose fields_cache reaches one) carry an un-deepcopyable
+    # DbHolder once their attribute handler attaches — an ordering-sensitive
+    # CI failure. Instance attributes are never deep-copied.
     def setUp(self) -> None:
+        ensure_room_size_tiers()
+        self.snug = RoomSizeTier.objects.get(name="Snug")
+        self.modest = RoomSizeTier.objects.get(name="Modest")
+        self.actor = CharacterFactory()
+        CharacterSheetFactory(character=self.actor)
+        self.persona = self.actor.sheet_data.primary_persona
+        self.building = _owned_building(self.persona)
+        self.entry = _room_in(
+            self.building.area, size=self.modest, grid=(0, 0, 0), name="Entry Hall"
+        )
+        self.building.entry_room = self.entry.room_profile
+        self.building.save(update_fields=["entry_room"])
+        self.study = _room_in(self.building.area, size=self.modest, grid=(1, 0, 0), name="Study")
         self.actor.db_location = self.entry
         self.actor.save(update_fields=["db_location"])
 
