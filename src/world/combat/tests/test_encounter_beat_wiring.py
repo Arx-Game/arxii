@@ -254,6 +254,80 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
         self.assertEqual(outcome.resolution_id, branch.pk)
 
+    def test_story_beat_routes_to_only_that_beat(self) -> None:
+        """Two beats share one scene; only the encounter's own story_beat resolves."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        gate_beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        civilians_beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        tier = CheckOutcome.objects.create(name="Front Victory", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=tier,
+        )
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            story_beat=gate_beat,
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        gate_beat.refresh_from_db()
+        civilians_beat.refresh_from_db()
+        self.assertEqual(gate_beat.outcome, BeatOutcome.SUCCESS)
+        self.assertEqual(civilians_beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_unset_story_beat_falls_back_to_legacy_find_all(self) -> None:
+        """story_beat=None preserves today's find-all-UNSATISFIED behavior."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat_a = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        beat_b = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        tier = CheckOutcome.objects.create(name="Legacy Victory", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=tier,
+        )
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY, risk_level=RiskLevel.MODERATE
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        beat_a.refresh_from_db()
+        beat_b.refresh_from_db()
+        self.assertEqual(beat_a.outcome, BeatOutcome.SUCCESS)
+        self.assertEqual(beat_b.outcome, BeatOutcome.SUCCESS)
+
 
 class CombatEncounterStoryBeatFieldTests(EvenniaTestCase):
     """Model-level: story_beat is a plain nullable FK, no cascade surprises."""
