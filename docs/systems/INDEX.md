@@ -730,6 +730,32 @@ blackmail loop, and the PersonaDiscovery subsumption are later slices.*
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
 - **Details:** [secrets.md](secrets.md)
+
+### Justice (#1765)
+Local law + persona pursuit heat: how actively local forces hunt a *persona* in an *area* —
+distinct from `SocietyReputation` (regard). Laws are per-area data rows resolving
+most-specific-wins up the `Area` tree; knowledge propagation is the accrual engine
+(hot where the deed is *known*, falloff emergent); jurisdiction scopes minting and
+reading to the enforcing society's dominion (ADR-0080 — sanctuary and cross-border
+immunity are the same mismatch rule). Masks (TEMPORARY personas) deliberately soak
+heat; identity-association copies it (`associate_heat` — the #1334 outing seam).
+
+- **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
+  ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
+  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society), `HeatSource`
+  (allegation provenance — false accusations are emergent, never flagged)
+- **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
+  `accrue_heat`, `accrue_for_deed_knowledge`, `heat_for`, `associate_heat`,
+  `tag_deed_crimes`, `heat_decay_tick` (daily cron)
+- **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
+  CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
+  MOSTLY_ACCURATE dodge + masked-report association chance)
+- **Surfaces (self-only):** room-desc tier line + `heat` on the room-state payload;
+  safe-now relief line on movement; `sheet/crime` + web Crime tab over
+  `GET /api/justice/heat/` (tiers only, never raw values)
+- **Source:** `src/world/justice/`
+- **Details:** [justice.md](justice.md)
+
 ### Tidings / Public-reaction feed (#1450)
 The pull/browse vector of the public-reaction "contextual center" (#1446) — recent public events
 scoped to what a viewer's persona would have heard. **Modelless and greenfield-light:** there is no

@@ -31,13 +31,15 @@ from django.db import transaction
 
 from world.currency.services import deliver_mission_money
 from world.missions.constants import DeedRewardKind, DeedRewardSink, RewardGroupRule
-from world.missions.integrations import beat_stub, crime_watch_stub, money_stub, rumor_stub
+from world.missions.integrations import beat_stub, crime_watch, money_stub, rumor_stub
 from world.missions.models import MissionDeedRewardLine, MissionRewardQueue
 from world.missions.types import ApplyDeedRewardsResult, StubCallRecord
 
 logger = logging.getLogger("world.missions.rewards")
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.missions.models import (
         MissionDeedRecord,
         MissionInstance,
@@ -252,8 +254,8 @@ def _distribute_reward_templates(
 
 # Sinks that go onto the deferred-payout queue.
 _QUEUE_SINKS = frozenset({DeedRewardSink.LEGEND_POINTS, DeedRewardSink.RESONANCE})
-# PROPAGATION sinks whose real routing isn't built yet (the criminal-consequence layer, #1765).
-_UNBUILT_PROPAGATION_SINKS = frozenset({DeedRewardSink.RUMOR, DeedRewardSink.CRIME_WATCH})
+# PROPAGATION sinks whose real routing isn't built yet (CRIME_WATCH went live with #1765).
+_UNBUILT_PROPAGATION_SINKS = frozenset({DeedRewardSink.RUMOR})
 
 
 def _enqueue(deed: MissionDeedRecord, line: MissionDeedRewardLine) -> MissionRewardQueue:
@@ -276,13 +278,34 @@ def _enqueue(deed: MissionDeedRecord, line: MissionDeedRewardLine) -> MissionRew
     return row
 
 
-def _route_line(
+def _route_crime_watch(
+    line: MissionDeedRewardLine, *, room: ObjectDB | None, skip_criminal: bool
+) -> None:
+    """The live CRIME_WATCH branch (#1765): mint at ``room`` unless dodged/context-less."""
+    if skip_criminal:
+        logger.info(
+            "apply_deed_rewards: consequence dodged — skipping CRIME_WATCH line pk=%d (#1765)",
+            line.pk,
+        )
+        return
+    if room is None:
+        logger.info(
+            "apply_deed_rewards: no room context — skipping CRIME_WATCH line pk=%d (#1765)",
+            line.pk,
+        )
+        return
+    crime_watch.flag_crime(line, room=room)
+
+
+def _route_line(  # noqa: PLR0913 — keyword-only routing context threaded from apply_deed_rewards
     deed: MissionDeedRecord,
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],
     stub_calls: list[StubCallRecord],
     *,
     skip_unbuilt: bool = False,
+    room: ObjectDB | None = None,
+    skip_criminal: bool = False,
 ) -> None:
     """Dispatch one emitted line by its ``(kind, sink)`` pair.
 
@@ -324,18 +347,22 @@ def _route_line(
         stub_calls.append(StubCallRecord(sink=sink, line_id=line.pk))
         return
 
-    # The not-yet-built criminal-consequence sinks (RUMOR / CRIME_WATCH, #1765) —
-    # skipped-and-logged when a caller opts out, else the stub raises (rolls back).
+    # CRIME_WATCH is live (#1765): mints heat + the society sting at the report
+    # location. Skipped when the reporter dodged (mostly-accurate success) or
+    # when no room context reached us (non-report callers have no "where").
+    if kind == DeedRewardKind.PROPAGATION and sink == DeedRewardSink.CRIME_WATCH:
+        _route_crime_watch(line, room=room, skip_criminal=skip_criminal)
+        return
+
+    # The not-yet-built RUMOR sink — skipped-and-logged when a caller opts
+    # out, else the stub raises (rolls back).
     if kind == DeedRewardKind.PROPAGATION and sink in _UNBUILT_PROPAGATION_SINKS:
         if skip_unbuilt:
             logger.info(
                 "apply_deed_rewards: skipping not-yet-built %s line pk=%d (#1765)", sink, line.pk
             )
             return
-        if sink == DeedRewardSink.RUMOR:
-            rumor_stub.propagate_rumor(line)  # always raises in 5b.1
-        else:
-            crime_watch_stub.flag_crime(line)  # always raises in 5b.1
+        rumor_stub.propagate_rumor(line)  # always raises in 5b.1
         return
 
     # Anything else is an author error — the (kind, sink) pair has no
@@ -344,7 +371,11 @@ def _route_line(
 
 
 def apply_deed_rewards(
-    deed: MissionDeedRecord, *, skip_unbuilt: bool = False
+    deed: MissionDeedRecord,
+    *,
+    skip_unbuilt: bool = False,
+    room: ObjectDB | None = None,
+    skip_criminal: bool = False,
 ) -> ApplyDeedRewardsResult:
     """Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.
 
@@ -360,9 +391,13 @@ def apply_deed_rewards(
         idempotent ``update_or_create`` of a :class:`MissionRewardQueue`
         row keyed by ``line`` (the cron in Phase 5b.2 will flip
         ``applied`` once payout succeeds).
-      * ``(PROPAGATION, RUMOR)`` / ``(PROPAGATION, CRIME_WATCH)`` →
-        :class:`NotImplementedError` (DESIGN §13.3; whole apply rolls
-        back).
+      * ``(PROPAGATION, CRIME_WATCH)`` → real criminal consequences via
+        :func:`world.missions.integrations.crime_watch.flag_crime` (#1765):
+        pursuit heat + the society sting at ``room``. Skipped when
+        ``skip_criminal`` (a successful mostly-accurate dodge) or when no
+        ``room`` context was supplied.
+      * ``(PROPAGATION, RUMOR)`` → :class:`NotImplementedError` (DESIGN
+        §13.3; whole apply rolls back).
       * ``(*, BEAT)`` → records a call on
         :mod:`world.missions.integrations.beat_stub`; Phase 5b.3 will
         replace the stub with real :class:`BeatCompletion` wiring.
@@ -393,8 +428,8 @@ def apply_deed_rewards(
         empty) errors list reserved for future aggregated-failure mode.
 
     Raises:
-        NotImplementedError: A PROPAGATION/RUMOR or PROPAGATION/CRIME_WATCH
-            line was present (rolls back the whole apply).
+        NotImplementedError: A PROPAGATION/RUMOR line was present (rolls
+            back the whole apply).
         MissionRewardRoutingError: An unsupported ``(kind, sink)`` combo
             was emitted (rolls back the whole apply).
     """
@@ -405,7 +440,15 @@ def apply_deed_rewards(
 
     with transaction.atomic():
         for line in lines:
-            _route_line(deed, line, enqueued, stub_calls, skip_unbuilt=skip_unbuilt)
+            _route_line(
+                deed,
+                line,
+                enqueued,
+                stub_calls,
+                skip_unbuilt=skip_unbuilt,
+                room=room,
+                skip_criminal=skip_criminal,
+            )
 
     return ApplyDeedRewardsResult(
         enqueued=tuple(enqueued),

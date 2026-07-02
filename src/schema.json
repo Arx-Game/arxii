@@ -10742,6 +10742,56 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/justice/heat/:
+    get:
+      operationId: justice_heat_list
+      description: The viewer's own pursuit picture — where they're wanted, and for
+        what.
+      parameters:
+      - in: query
+        name: area
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonaHeatList'
+          description: ''
+  /api/justice/heat/{id}/:
+    get:
+      operationId: justice_heat_retrieve
+      description: The viewer's own pursuit picture — where they're wanted, and for
+        what.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Persona heat.
+        required: true
+      tags:
+      - justice
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonaHeat'
+          description: ''
   /api/locations/comfort/:
     get:
       operationId: locations_comfort_retrieve
@@ -39926,6 +39976,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PermitOfferDetails'
+    PaginatedPersonaHeatList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonaHeat'
     PaginatedPersonaList:
       type: object
       required:
@@ -43755,6 +43828,41 @@ components:
       - name
       - roster_entry
       - thumbnail_media_url
+    PersonaHeat:
+      type: object
+      description: |-
+        One warrant row on the viewer's own crime tab — tiers only, never the raw number.
+
+        Alleged deeds render as recorded: a false accusation reads the same as a
+        true one (falsity is emergent, #1765).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        area_name:
+          type: string
+          readOnly: true
+        society_name:
+          type: string
+          readOnly: true
+        tier:
+          type: string
+          readOnly: true
+        tier_label:
+          type: string
+          readOnly: true
+        alleged_deeds:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - alleged_deeds
+      - area_name
+      - id
+      - society_name
+      - tier
+      - tier_label
     PersonaPosition:
       type: object
       description: A scene persona and the Position it currently occupies (or null).

@@ -155,3 +155,51 @@ class EmitRenownAwardsMultiAwardTests(TestCase):
         # Both awards land on the same persona.
         expected_fame = MAGNITUDE_FAME_AWARDS["moderate"] + MAGNITUDE_FAME_AWARDS["high"]
         self.assertEqual(holder_persona.fame_points, expected_fame)
+
+
+class EmitRenownCriminalTaggingTests(TestCase):
+    """#1765 — a run with CRIME_WATCH lines tags every minted legend entry."""
+
+    def test_criminal_run_tags_minted_entries(self) -> None:
+        from world.justice.factories import CrimeKindFactory
+        from world.justice.models import DeedCrimeTag
+        from world.missions.constants import DeedRewardKind, DeedRewardSink
+        from world.missions.factories import MissionDeedRewardLineFactory
+
+        instance, route, deed, holder = _make_holder_setup("criminal-tagging-tmpl")
+        theft = CrimeKindFactory(slug="theft", name="Theft")
+        MissionDeedRewardLineFactory(
+            deed=deed,
+            recipient=holder.character,
+            kind=DeedRewardKind.PROPAGATION,
+            sink=DeedRewardSink.CRIME_WATCH,
+            ref="theft",
+        )
+        MissionRenownAward.objects.create(
+            route=route,
+            magnitude=RenownMagnitude.MODERATE,
+            # Risk-bearing: only such awards mint a LegendEntry — and a crime is
+            # inherently risk-bearing, so this is the authoring shape anyway.
+            risk=RenownRisk.LOW,
+            contract_holder_only=True,
+        )
+
+        results = emit_terminal_renown_awards(instance, route, deed)
+
+        self.assertEqual(len(results), 1)
+        self.assertIsNotNone(results[0].legend_entry_id)
+        tag = DeedCrimeTag.objects.get(deed_id=results[0].legend_entry_id)
+        self.assertEqual(tag.crime_kind, theft)
+
+    def test_clean_run_tags_nothing(self) -> None:
+        from world.justice.models import DeedCrimeTag
+
+        instance, route, deed, _ = _make_holder_setup("clean-run-tmpl")
+        MissionRenownAward.objects.create(
+            route=route,
+            magnitude=RenownMagnitude.MODERATE,
+            risk=RenownRisk.NONE,
+            contract_holder_only=True,
+        )
+        emit_terminal_renown_awards(instance, route, deed)
+        self.assertEqual(DeedCrimeTag.objects.count(), 0)
