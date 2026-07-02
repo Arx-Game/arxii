@@ -118,3 +118,49 @@ class DecorationTemplateSerializer(serializers.ModelSerializer):
             "increments",
             "tier_prerequisites",
         ]
+
+
+class ExposureAxisSerializer(serializers.Serializer):
+    """One axis of the owner build-HUD: pressure vs mitigation vs residual (#1514)."""
+
+    key = serializers.CharField()
+    pressure = serializers.IntegerField()
+    mitigation = serializers.IntegerField()
+    net = serializers.IntegerField()
+    sheltered = serializers.BooleanField()
+
+
+class PlacedFixtureSerializer(serializers.Serializer):
+    """A comfort fixture placed in the room (removable from the HUD)."""
+
+    id = serializers.IntegerField()
+    kind = serializers.CharField()
+
+
+class FixtureAffinitySerializer(serializers.Serializer):
+    """One axis a fixture kind mitigates (negative value = mitigation)."""
+
+    key = serializers.CharField()
+    value = serializers.IntegerField()
+
+
+class FixtureKindSerializer(serializers.Serializer):
+    """A placeable fixture kind from the admin-authored catalog."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+    amenity = serializers.IntegerField()
+    affinities = FixtureAffinitySerializer(many=True)
+
+
+class RoomComfortBreakdownSerializer(serializers.Serializer):
+    """The owner build-HUD payload for one room (#1514)."""
+
+    enclosure = serializers.CharField()
+    level = serializers.IntegerField()
+    points = serializers.IntegerField()
+    amenity = serializers.IntegerField()
+    axes = ExposureAxisSerializer(many=True)
+    fixtures = PlacedFixtureSerializer(many=True)
+    fixture_kinds = FixtureKindSerializer(many=True)

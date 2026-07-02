@@ -733,6 +733,7 @@
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
+- `can_build_style(persona: 'Persona', style: 'ArchitecturalStyle') -> 'bool' — Whether this persona may build in this style (#1469).`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
@@ -2189,6 +2190,7 @@
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
 - `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
+- `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' — Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
 - `set_primary_home(*, persona: 'Persona', room: 'DefaultObject') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`

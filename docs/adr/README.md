@@ -135,3 +135,4 @@ treat those names as hints to confirm, not gospel.
 - [0076 — Removal-from-play is reached through the fuse walk, never granted by fiat](0076-removal-from-play-is-reached-through-the-fuse-walk.md)
 - [0077 — Effective risk is priced relative to declared target level, not the raw declared tier](0077-effective-risk-is-priced-relative-to-target-level.md)
 - [0078 — Stakes are menu-first, calibrated by band, not freehand-authored per table](0078-menu-first-stakes-with-calibration-bands.md)
+- [0079 — Style discovery rides the clue→codex→RESEARCH pipeline, not a parallel unlock model](0079-style-discovery-rides-the-clue-research-pipeline.md)
