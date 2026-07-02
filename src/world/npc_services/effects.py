@@ -164,12 +164,15 @@ def _resolve_loan_debtor(persona: Persona):
     the persona, so the debtor is the single org where the persona holds
     treasury spend authority. Zero or several → ``AmbiguousDebtorError``.
     """
-    from world.currency.services import can_spend_treasury  # noqa: PLC0415
+    from world.currency.services import (  # noqa: PLC0415
+        can_spend_treasury,
+        get_or_create_treasury,
+    )
 
     orgs = [
         membership.organization
         for membership in persona.organization_memberships.select_related("organization")
-        if can_spend_treasury(persona, membership.organization)
+        if can_spend_treasury(get_or_create_treasury(membership.organization), persona)
     ]
     if len(orgs) != 1:
         raise AmbiguousDebtorError(len(orgs))

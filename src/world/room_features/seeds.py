@@ -71,3 +71,27 @@ def ensure_plan_4_seeds() -> None:
     ``world.magic`` and are seeded by its own seed module.
     """
     ensure_sanctum_kind()
+
+
+COMMAND_CENTER_KIND_NAME = "Command Center"
+
+
+def ensure_command_center_kind() -> RoomFeatureKind:
+    """Get-or-create the Command Center ``RoomFeatureKind`` (#930).
+
+    The estate's nerve center: where the family books are kept (#675's
+    Command Center gets its content — the org-books management screen is
+    reachable here IC). PLACEHOLDER prose for the content pass.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.COMMAND_CENTER,
+        defaults={
+            "name": COMMAND_CENTER_KIND_NAME,
+            "max_level": 3,  # PLACEHOLDER ladder pending the content pass
+            "description": (
+                "PLACEHOLDER — Command Center kind: the estate's nerve center; "
+                "the household's books and summons are managed from here."
+            ),
+        },
+    )
+    return kind

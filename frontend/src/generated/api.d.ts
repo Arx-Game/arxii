@@ -16655,6 +16655,7 @@ export interface components {
     DebtRow: {
       id: number;
       creditor: string;
+      summon_role_id: number | null;
       principal: number;
       arrears: number;
       interest_bps_monthly: number;
@@ -20021,6 +20022,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20052,9 +20054,10 @@ export interface components {
     /**
      * @description * `permit` - Permit
      *     * `mission` - Mission
+     *     * `loan` - Loan
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission';
+    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20062,6 +20065,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20339,6 +20343,7 @@ export interface components {
       balance: number;
       spend_rank_max: number;
       graft_pct: number;
+      steward_role_id: number | null;
       income_streams: components['schemas']['IncomeStreamRow'][];
       debts: components['schemas']['DebtRow'][];
       obligations: components['schemas']['ObligationRow'][];
@@ -23111,6 +23116,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
