@@ -674,6 +674,17 @@ def end_interaction(session: InteractionSession) -> None:
     )
 
 
+def _offer_risk_tier(offer: NPCServiceOffer) -> int | None:
+    """The wrapped MissionTemplate's risk_tier for MISSION offers, else None (#1770 PR4)."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        details = offer.mission_offer_details
+    except ObjectDoesNotExist:
+        return None
+    return details.mission_template.risk_tier
+
+
 def serialize_npc_session_state(
     session: InteractionSession,
     *,
@@ -706,6 +717,7 @@ def serialize_npc_session_state(
                 "kind": o.kind,
                 "is_final": o.is_final,
                 "rapport_requirement": o.rapport_requirement,
+                "risk_tier": _offer_risk_tier(o),
             }
             for o in offers
         ],

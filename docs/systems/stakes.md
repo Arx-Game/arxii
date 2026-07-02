@@ -297,6 +297,80 @@ is derivable from the same `Stake.severity` field the UI reads to build that
 summary; nothing about the reachability/fuse math needs to be shown to players,
 only the plain-language wager.
 
+## Opt-in & Visibility Surfaces (#1770 PR4)
+
+Pillar 9 (what is wagered is visible; branch contents stay hidden) and pillar
+10 (boundary screening) are wired at every commit surface:
+
+### Stakes summary (the shared read shape)
+
+`stakes_summary_for_beat(beat)` (`world.stories.serializers`) builds the one
+player-visible payload — `{declared_risk, effective_risk, is_ready, stakes:
+[{id, player_summary, severity, severity_label}]}` — via
+`StakesSummarySerializer`/`StakeSummarySerializer`. `StakeResolution` branch
+contents (pools, escalations, narrative) are deliberately never fields here.
+Exposed at:
+
+- **`GET /api/beats/{id}/stakes-summary/`** (`BeatViewSet.stakes_summary`,
+  permission `CanViewBeatStakesSummary`: staff, the beat's story owner, or a
+  participant of a scene linked to the beat's episode via `EpisodeScene` —
+  pillar 9 is visibility *at opt-in*, not global enumeration; beats can be
+  SECRET and an open wager list leaks GM plans).
+- **`combat_stakes`** on `SceneActionRequestSerializer` and
+  `SceneActionTargetSerializer` (`world.scenes.action_serializers`) — non-null
+  only when the #777 risk-acknowledgement gate is active AND the scene carries
+  staked UNSATISFIED beats; the React `ConsentPrompt` renders the wagered
+  stakes + effective risk under the combat-risk warning.
+
+### Boundary seam (`world.stories.services.boundaries`)
+
+`check_stake_boundaries(stakes, character_sheets) -> StakeBoundaryReport`
+(`world.stories.types`: `allowed`, `requires_signoff`,
+`blocked_reason_private`, derived `cleared`) runs at authoring time
+(`StakeSerializer` screens existing stakes plus the candidate write) and at
+every activation/commit call site (the wiring-map rows below). Call sites
+gate on `report.cleared` — allowed AND no pending sign-off — so the #1771
+registry can start returning `requires_signoff` without any call-site change.
+Allow-all stub today; the per-player boundary registry is sibling **#1771**
+(pattern: the consent app, ADR-0024). `blocked_reason_private` is staff/audit
+only — a blocked contract surfaces exclusively as a generic "stakes could not
+be presented" failure (ADR-0033 privacy).
+
+### Activation wiring map (who calls `activate_stakes_contract`)
+
+| Commit moment | Wire point | Party |
+|---|---|---|
+| PvP duel entry | `combat.duels.create_pvp_duel` → `combat.beat_wiring.activate_stakes_for_scene` | both duelists' sheets |
+| Lethal duel entry | `combat.duels.create_lethal_duel` → same | the PC's sheet |
+| Hostile cast seed/feed | `combat.cast_seed.seed_or_feed_encounter_from_cast` → same | caster + target sheets |
+| Mission acceptance | `missions.services.offer_handler.issue_mission` → `missions.services.beat.activate_stakes_for_instance` | accepting persona's sheet (no-op until an offer path sets `source_beat`) |
+| Freeform scene | `declare_stakes` GM action (`actions/definitions/gm_stories.py`) | the scene's active participants' sheets |
+
+`staked_unsatisfied_beats_for_scene(scene)` (`combat.beat_wiring`) is the
+Scene → EpisodeScene → Episode → Beat discovery helper (any predicate type;
+risk above NONE; outcome UNSATISFIED). Activation stays idempotent while an
+activation is open, so overlapping encounters on one scene are safe.
+
+### Mission risk gate (`world.missions`)
+
+`MissionRiskAcknowledgement` (offer × persona, tier snapshot, unique pair —
+the mission sibling of `EncounterRiskAcknowledgement`) gates `issue_mission`:
+a template at/above `MISSION_RISK_ACK_TIER` (`world.missions.constants`, 3)
+raises the typed `MissionRiskUnacknowledgedError` until the persona has a row.
+The two-phase opt-in lives inside the `npc_resolve` action
+(`acknowledge_risk=yes` kwarg; telnet `hire offer <id> acknowledge_risk=yes`,
+web `POST /api/npc-services/interactions/resolve/` with
+`acknowledge_risk: true`). `InteractionOfferSerializer.risk_tier` surfaces the
+tier pre-accept.
+
+### `declare_stakes` (GM action, key `"declare_stakes"`)
+
+The opt-in moment for freeform play: resolves the beat (`beat_id` kwarg),
+gates on beat-mark permission (Lead GM / staff / approved AGM) **or** the
+scene's GM (`scene.is_gm`), screens boundaries, activates the contract for the
+scene's active participants, and emits a room-visible declaration listing each
+stake's severity label + `player_summary` and the locked effective risk.
+
 ## Services (`world.stories.services.stakes`)
 
 | Function | Signature | Purpose |
@@ -324,6 +398,7 @@ All five ViewSets live in `world.stories.views`, registered in
 | `StakeViewSet` | `/api/stakes/` | `IsStakeBeatStoryOwnerOrStaff` (delegates to `obj.beat` → episode → chapter → story ownership, same chain as `BeatViewSet`) |
 | `StakeResolutionViewSet` | `/api/stake-resolutions/` | `IsStakeResolutionBeatStoryOwnerOrStaff` (delegates via `obj.stake.beat`) |
 | `StakeContractActivationViewSet` | `/api/stake-activations/` | Read-only; `IsStakeBeatStoryOwnerOrStaff` |
+| `BeatViewSet.stakes_summary` (#1770 PR4) | `GET /api/beats/{id}/stakes-summary/` | `CanViewBeatStakesSummary` (staff / story owner / linked-scene participant); leaks only `player_summary`/severity + risk/readiness by design |
 
 `StakeSerializer` and `StakeResolutionSerializer` both enforce, in `validate()`
 (DRF never calls `has_object_permission` on create, so the permission class alone
@@ -346,7 +421,7 @@ they do not exist in code yet:
 |---|---|---|
 | Structured world-state writers for `StakeResolution` (the actual mechanism by which a WIN/LOSS *does something permanent* to the named subject) | PR2 | Pillar 12 — validated to reject direct lifecycle writes |
 | `apply_deed_rewards` WIN-column reward wiring (consuming `RiskCalibration.reward_floor`/`reward_ceiling`) | PR3 | These two fields exist on `RiskCalibration` now, unused until PR3 |
-| Opt-in player-facing surfaces (frontend: viewing/accepting a stakes contract before committing to a scene) + the scene-start activation triggers | #1770 PR4 (scene grading: #1748) | Includes wiring the currently-uncalled `activate_stakes_contract` to real scene-start seams; the boundary-registry *backing store* for `check_stake_boundaries` is sibling #1771 |
+| ~~Opt-in player-facing surfaces + the scene-start activation triggers~~ | **SHIPPED in PR4** — see [Opt-in & Visibility Surfaces](#opt-in--visibility-surfaces-1770-pr4) | The boundary-registry *backing store* for `check_stake_boundaries` remains sibling #1771 (the seam ships allow-all); scene grading remains #1748 |
 
 ## Test Coverage
 
@@ -358,6 +433,18 @@ they do not exist in code yet:
 - `src/world/stories/tests/test_serializers_stakes.py` — lock gate (both sides of
   a re-point), ownership gate, template risk-band validation, custom-stake staff
   gate
+- `src/world/stories/tests/test_stakes_optin.py` — boundary-seam stub contract +
+  authoring call site, stakes-summary endpoint (incl. the never-leak-branch
+  privacy assertion)
+- `src/world/combat/tests/test_stakes_activation.py` — activation at the three
+  combat creation seams, idempotency across encounters, boundary blocking
+- `src/world/missions/tests/test_risk_acknowledgement.py` — the
+  `MISSION_RISK_ACK_TIER` gate, two-phase `npc_resolve` opt-in, activation at
+  issue
+- `src/actions/tests/test_gm_story_actions.py` (`DeclareStakesActionTests`) —
+  the freeform-scene GM declaration
+- `src/world/scenes/tests/test_scene_action_request_serializer.py` —
+  `combat_stakes` gating on both consent-prompt serializers
 
 ## Integrates With
 

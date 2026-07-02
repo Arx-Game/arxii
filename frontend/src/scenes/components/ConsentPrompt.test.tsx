@@ -268,6 +268,54 @@ describe('ConsentPrompt', () => {
     expect(screen.getByText(/wades your character into the combat encounter/)).toBeInTheDocument();
   });
 
+  it('shows stakes summaries when combat_stakes is set (#1770)', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [
+        {
+          ...MOCK_REQUEST,
+          combat_risk_level: 'high',
+          combat_stakes: [
+            {
+              declared_risk: 'high',
+              effective_risk: 'moderate',
+              is_ready: true,
+              stakes: [
+                {
+                  id: 1,
+                  player_summary: 'The healer NPC may die.',
+                  severity: 4,
+                  severity_label: 'Dire',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Stakes on the table/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/MODERATE/)).toBeInTheDocument();
+    expect(screen.getByText(/The healer NPC may die\./)).toBeInTheDocument();
+    expect(screen.getByText(/Dire:/)).toBeInTheDocument();
+  });
+
+  it('does NOT show stakes when combat_stakes is absent', async () => {
+    vi.mocked(fetchPendingRequests).mockResolvedValue({
+      results: [{ ...MOCK_REQUEST, combat_risk_level: 'lethal' }],
+    });
+
+    render(<ConsentPrompt sceneId="42" />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText('Darth Maul')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Stakes on the table/)).not.toBeInTheDocument();
+  });
+
   it('does NOT show a risk warning when combat_risk_level is null', async () => {
     vi.mocked(fetchPendingRequests).mockResolvedValue({
       results: [{ ...MOCK_REQUEST, combat_risk_level: null }],

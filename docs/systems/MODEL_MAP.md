@@ -3422,6 +3422,11 @@
   - deed -> missions.MissionDeedRecord [FK]
   - line -> missions.MissionDeedRewardLine [FK]
 
+### MissionRiskAcknowledgement
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [FK]
+  - persona -> scenes.Persona [FK]
+
 ### Service Functions
 - `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False) -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
@@ -3514,6 +3519,7 @@
   - role -> npc_services.NPCRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 **Pointed to by:**
+  - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - cooldowns <- npc_services.OfferCooldown
   - mission_offer_details <- npc_services.MissionOfferDetails
   - permit_offer_details <- npc_services.PermitOfferDetails
@@ -4219,6 +4225,7 @@
   - invitations_sent <- events.EventInvitation
   - combat_opponents <- combat.CombatOpponent
   - gm_table_memberships <- gm.GMTableMembership
+  - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - projects_owned <- projects.Project
   - project_contributions <- projects.Contribution
   - npc_standings <- npc_services.NPCStanding

@@ -783,6 +783,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/beats/{id}/stakes-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+     *
+     *     Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+     *     be SECRET; an open wager list leaks GM plans): readable by staff, the
+     *     beat's story owner, or a participant of a scene linked to the beat's
+     *     episode. The payload leaks only player_summary/severity plus
+     *     declared/effective risk and readiness; branch contents
+     *     (StakeResolution rows) are never included.
+     */
+    get: operations['beats_stakes_summary_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/blocks/': {
     parameters: {
       query?: never;
@@ -18925,6 +18951,7 @@ export interface components {
       kind: string;
       is_final: boolean;
       rapport_requirement: number;
+      risk_tier?: number | null;
     };
     InteractionReaction: {
       readonly id: number;
@@ -18947,6 +18974,8 @@ export interface components {
     /** @description POST /api/npc-services/interactions/resolve/ body. */
     InteractionResolveRequestRequest: {
       offer_id: number;
+      /** @default false */
+      acknowledge_risk: boolean;
     };
     /** @description POST /api/npc-services/interactions/start/ body. */
     InteractionStartRequestRequest: {
@@ -25094,6 +25123,14 @@ export interface components {
       deed: number;
       text: string;
     };
+    /**
+     * @description Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+     *
+     *     With ``many=True`` DRF reuses ONE child serializer instance for every
+     *     row, so these caches make N rows cost one gating-encounter lookup per
+     *     row (shared by combat_risk_level AND combat_stakes) and one
+     *     stakes-discovery + summary pass per scene.
+     */
     SceneActionRequest: {
       readonly id: number;
       /** @description The scene where this action takes place */
@@ -25143,6 +25180,20 @@ export interface components {
       strain_commitment?: number;
       /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+       *
+       *     Non-None only when the same #777 gate that drives combat_risk_level is
+       *     active AND the scene carries staked, still-open beats — the consent
+       *     prompt is the target's commit moment, so they see what is wagered.
+       *     Same shape as the BeatViewSet stakes-summary payload (one entry per
+       *     staked beat); branch contents are never included.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -25194,6 +25245,17 @@ export interface components {
        *     its own informed-consent warning.
        */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for this target's gating encounter (#1770 pillar 9).
+       *
+       *     Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+       *     additional target of a hostile AOE cast.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       readonly pose_text: string;
       readonly strain_commitment: number;
       /** Format: date-time */
@@ -26075,6 +26137,20 @@ export interface components {
       narrative_summary?: string;
     };
     /**
+     * @description Player-visible summary of one Stake (#1770 pillar 9).
+     *
+     *     What is wagered is visible; branch contents stay hidden — resolutions
+     *     (consequence pools, escalations, narrative) are deliberately NOT fields
+     *     here and must never be added.
+     */
+    StakeSummary: {
+      readonly id: number;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      readonly player_summary: string;
+      readonly severity: components['schemas']['SeverityEnum'];
+      readonly severity_label: string;
+    };
+    /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
      *
      *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
@@ -26118,6 +26194,19 @@ export interface components {
      * @enum {string}
      */
     StakesLevelEnum: 'local' | 'regional' | 'national' | 'continental' | 'world';
+    /**
+     * @description Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+     *
+     *     Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+     *     ``effective_risk`` is the open activation's locked value when one exists,
+     *     else the declared risk.
+     */
+    StakesSummary: {
+      readonly declared_risk: string;
+      readonly effective_risk: string;
+      readonly is_ready: boolean;
+      readonly stakes: components['schemas']['StakeSummary'][];
+    };
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
       readonly id: number;
@@ -28686,6 +28775,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_stakes_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakesSummary'];
         };
       };
     };
