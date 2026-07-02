@@ -275,7 +275,14 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "objects": objects,
             "exits": exits,
             "scene": scene_data,
+            "heat": self._get_heat(caller, room),
         }
+
+    def _get_heat(self, caller: BaseState, room: BaseState) -> dict[str, str] | None:
+        """#1765 — the caller's own pursuit tier here (self-only; None when SAFE)."""
+        from world.justice.display import room_heat_payload  # noqa: PLC0415
+
+        return room_heat_payload(caller.obj, room.obj)
 
 
 def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, object]:

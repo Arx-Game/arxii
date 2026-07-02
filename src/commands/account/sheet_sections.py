@@ -304,6 +304,36 @@ def _format_titles(titles: list) -> list[str]:
     return lines
 
 
+def _render_crime_section(command: Command) -> list[str]:
+    """The crime section (#1765): where your active persona is wanted, and for what.
+
+    Mirrors the web Crime tab. Self-only by construction — it renders the *viewing*
+    character's active persona and never accepts a target argument (heat is private
+    risk information; see the #1765 leak table). Allegations show as recorded: a
+    false accusation reads the same as a true one.
+    """
+    from world.justice.constants import tier_for_value  # noqa: PLC0415
+    from world.justice.models import PersonaHeat  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    viewer = _viewer_sheet(command)
+    persona = active_persona_for_sheet(viewer)
+    if persona is None:
+        raise CommandError(_NO_IDENTITY)
+    rows = list(
+        PersonaHeat.objects.filter(persona=persona, value__gt=0).select_related("area", "society")
+    )
+    if not rows:
+        return ["No one is hunting you anywhere — as far as you know."]
+    lines = [f"|wWanted — {persona.name}:|n"]
+    for row in rows:
+        tier = tier_for_value(row.value)
+        deeds = [source.deed.title for source in row.sources.select_related("deed") if source.deed]
+        alleged = f" — for: {', '.join(sorted(set(deeds)))}" if deeds else ""
+        lines.append(f"  {row.area.name} ({row.society.name}) — {tier.label}{alleged}")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
@@ -317,6 +347,8 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "covenant": _render_covenant_section,
     "title": _render_titles_section,
     "titles": _render_titles_section,
+    "crime": _render_crime_section,
+    "crimes": _render_crime_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
@@ -327,4 +359,5 @@ SECTION_NAMES: tuple[str, ...] = (
     "standing",
     "covenant",
     "title",
+    "crime",
 )
