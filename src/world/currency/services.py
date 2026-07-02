@@ -828,17 +828,25 @@ def _weekly_business_fortunes() -> int:
 
 
 @transaction.atomic
-def deliver_mission_money(*, recipient_sheet: CharacterSheet, amount: int, ref: str) -> None:
-    """Mission money reward lands in the purse (#932 — replaces the Phase 5b stub).
+def deliver_mission_money(
+    *,
+    recipient_sheet: CharacterSheet,
+    amount: int,
+    ref: str,
+    reason_label: str = "mission reward",
+) -> None:
+    """Reward money lands in the purse (#932 — replaces the Phase 5b stub).
 
     A mint (faucet) through the audited ledger; missions are a named
-    faucet in the #923 inventory.
+    faucet in the #923 inventory. ``reason_label`` keeps the ledger honest
+    for non-mission callers (#1770 PR3 stake rewards pass "stake reward")
+    without forking a parallel delivery function.
     """
     if amount <= 0:
         return
     transfer(
         amount=amount,
-        reason=f"mission reward: {ref}"[:200],
+        reason=f"{reason_label}: {ref}"[:200],
         to_purse=get_or_create_purse(recipient_sheet),
     )
 
