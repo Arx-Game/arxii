@@ -131,6 +131,7 @@ treat those names as hints to confirm, not gospel.
 ### Story & stakes
 - [0067 — Beat.risk is the stakes-wager declaration](0067-beat-risk-is-the-stakes-wager-declaration.md)
 - [0068 — Graded beat/encounter outcome reuses CheckOutcome, not a new enum](0068-graded-beat-outcome-reuses-checkoutcome.md)
-- [0071 — Removal-from-play is reached through the fuse walk, never granted by fiat](0071-removal-from-play-is-reached-through-the-fuse-walk.md)
-- [0072 — Effective risk is priced relative to declared target level, not the raw declared tier](0072-effective-risk-is-priced-relative-to-target-level.md)
-- [0073 — Stakes are menu-first, calibrated by band, not freehand-authored per table](0073-menu-first-stakes-with-calibration-bands.md)
+- [0075 — Building size is a space budget rooms spend from, not a flat room cap](0075-building-target-size-is-a-space-budget.md)
+- [0076 — Removal-from-play is reached through the fuse walk, never granted by fiat](0076-removal-from-play-is-reached-through-the-fuse-walk.md)
+- [0077 — Effective risk is priced relative to declared target level, not the raw declared tier](0077-effective-risk-is-priced-relative-to-target-level.md)
+- [0078 — Stakes are menu-first, calibrated by band, not freehand-authored per table](0078-menu-first-stakes-with-calibration-bands.md)

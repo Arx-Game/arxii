@@ -5,7 +5,7 @@
 
 ## Built (2026-07-01, #670 PR1 — Room Builder backend)
 
-- **Space-budget model (ADR-0071):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
+- **Space-budget model (ADR-0075):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
   PLACEHOLDER) → `Building.space_budget`; rooms carry `RoomSizeTier` units
   (Micro 2 → Expanse 2500 — the shared ladder the future creature-size stat
   reads) and spend from the pool. Replaced `max_rooms`.
