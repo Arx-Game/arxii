@@ -3,10 +3,15 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-import { useBuildingManagerQuery, useRoomBuilderAction } from '../queries';
+import type { GhostCell } from '../gridMath';
+import { useBuildingManagerQuery, useRoomBuilderAction, useRoomSizeTiersQuery } from '../queries';
 import type { RoomBuilderActionKey } from '../types';
 import { BudgetMeter } from './BudgetMeter';
 import { BuilderCanvas } from './BuilderCanvas';
+import { DecorationDialog } from './DecorationDialog';
+import { DigDialog } from './DigDialog';
+import { ExtensionDialog } from './ExtensionDialog';
+import { RoomDetailPanel } from './RoomDetailPanel';
 
 interface BuildingBuilderDialogProps {
   buildingId: number;
@@ -14,6 +19,12 @@ interface BuildingBuilderDialogProps {
   characterId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface DigRequest {
+  fromRoomId: number;
+  direction?: string;
+  like?: string;
 }
 
 /**
@@ -28,26 +39,38 @@ export function BuildingBuilderDialog({
   onOpenChange,
 }: BuildingBuilderDialogProps) {
   const manager = useBuildingManagerQuery(open ? buildingId : null, characterId);
+  const sizeTiers = useRoomSizeTiersQuery(open);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [floor, setFloor] = useState(0);
+  const [digRequest, setDigRequest] = useState<DigRequest | null>(null);
+  const [decorateRoom, setDecorateRoom] = useState(false);
+  const [decorateOpen, setDecorateOpen] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false);
   const action = useRoomBuilderAction(characterId, buildingId);
 
   const payload = manager.data;
   const floors = payload?.building.floors.length ? payload.building.floors : [0];
   const selectedRoom = payload?.rooms.find((room) => room.id === selectedRoomId) ?? null;
+  const digFromRoom = payload?.rooms.find((room) => room.id === digRequest?.fromRoomId) ?? null;
+  const entryRoomId = payload?.building.entry_room_id ?? null;
+  const tiers = sizeTiers.data?.results ?? [];
 
   const runAction = (key: RoomBuilderActionKey, kwargs: Record<string, unknown>) => {
     action.mutate({ key, kwargs });
   };
 
+  const onDigAt = (ghost: GhostCell) => {
+    setDigRequest({ fromRoomId: ghost.fromRoomId, direction: ghost.direction });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[92vh] w-[96vw] max-w-none flex-col sm:max-w-[96vw]">
-        <DialogHeader className="flex-row items-center justify-between gap-4 space-y-0 pr-8">
+        <DialogHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0 pr-8">
           <DialogTitle>
             {payload ? `${payload.building.name} — ${payload.building.kind}` : 'Building manager'}
           </DialogTitle>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             {floors.length > 1 && (
               <div className="flex items-center gap-1">
                 {floors.map((level) => (
@@ -62,6 +85,25 @@ export function BuildingBuilderDialog({
                 ))}
               </div>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDecorateRoom(false);
+                setDecorateOpen(true);
+              }}
+              disabled={entryRoomId == null}
+            >
+              Decorate Building
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setExtendOpen(true)}
+              disabled={entryRoomId == null}
+            >
+              Extend Building
+            </Button>
             {payload && <BudgetMeter building={payload.building} />}
           </div>
         </DialogHeader>
@@ -83,18 +125,68 @@ export function BuildingBuilderDialog({
                 floor={floor}
                 selectedRoomId={selectedRoomId}
                 onSelectRoom={setSelectedRoomId}
+                onDigAt={onDigAt}
+                onExitClick={(edge) => setSelectedRoomId(edge.source)}
                 runAction={runAction}
               />
             </div>
             <div className="w-80 shrink-0 overflow-y-auto rounded-md border p-3">
-              {/* RoomDetailPanel mounts here for the selected room. */}
-              <div className="text-sm text-muted-foreground">
-                {selectedRoom
-                  ? `${selectedRoom.name} selected.`
-                  : 'Select a room on the map to edit it.'}
-              </div>
+              {selectedRoom ? (
+                <RoomDetailPanel
+                  room={selectedRoom}
+                  rooms={payload.rooms}
+                  exits={payload.exits}
+                  sizeTiers={tiers}
+                  isEntry={selectedRoom.id === entryRoomId}
+                  runAction={runAction}
+                  onDigFrom={() => setDigRequest({ fromRoomId: selectedRoom.id })}
+                  onDuplicate={() =>
+                    setDigRequest({ fromRoomId: selectedRoom.id, like: selectedRoom.name })
+                  }
+                  onDecorateRoom={() => {
+                    setDecorateRoom(true);
+                    setDecorateOpen(true);
+                  }}
+                />
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  Select a room on the map to edit it, click a + cell to dig, or drag rooms to
+                  rearrange the map.
+                </div>
+              )}
             </div>
           </div>
+        )}
+        {digFromRoom && (
+          <DigDialog
+            fromRoom={digFromRoom}
+            direction={digRequest?.direction}
+            like={digRequest?.like}
+            sizeTiers={tiers}
+            open={digRequest != null}
+            onOpenChange={(dialogOpen) => {
+              if (!dialogOpen) setDigRequest(null);
+            }}
+            runAction={runAction}
+          />
+        )}
+        {payload && entryRoomId != null && (
+          <>
+            <DecorationDialog
+              targetRoom={decorateRoom ? selectedRoom : null}
+              anchorRoomId={decorateRoom && selectedRoom ? selectedRoom.id : entryRoomId}
+              open={decorateOpen}
+              onOpenChange={setDecorateOpen}
+              runAction={runAction}
+            />
+            <ExtensionDialog
+              anchorRoomId={entryRoomId}
+              currentBudget={payload.building.space_budget}
+              open={extendOpen}
+              onOpenChange={setExtendOpen}
+              runAction={runAction}
+            />
+          </>
         )}
       </DialogContent>
     </Dialog>
