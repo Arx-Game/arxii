@@ -783,6 +783,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/beats/{id}/stakes-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+     *
+     *     Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+     *     be SECRET; an open wager list leaks GM plans): readable by staff, the
+     *     beat's story owner, or a participant of a scene linked to the beat's
+     *     episode. The payload leaks only player_summary/severity plus
+     *     declared/effective risk and readiness; branch contents
+     *     (StakeResolution rows) are never included.
+     */
+    get: operations['beats_stakes_summary_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/blocks/': {
     parameters: {
       query?: never;
@@ -829,6 +855,132 @@ export interface paths {
     put?: never;
     /** @description Escalate this block to all of the requesting player's characters (#1278). */
     post: operations['blocks_share_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/decoration-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The admin-authored INTERIOR_DESIGN template catalog (public read). */
+    get: operations['buildings_decoration_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/decoration-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The admin-authored INTERIOR_DESIGN template catalog (public read). */
+    get: operations['buildings_decoration_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/manager/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/buildings/manager/<building_id>/ — the full manager payload. */
+    get: operations['buildings_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/manager/for-room/{room_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/buildings/manager/for-room/<room_id>/ — ids + permission flags only. */
+    get: operations['buildings_manager_for_room_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/manager/room/{room_id}/comfort/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+     *
+     *     Per-axis pressure/mitigation/net, the room's comfort level, its placed
+     *     fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+     *     residual; add insulation." Owner-gated: interior comfort tuning is the
+     *     builder's view.
+     */
+    get: operations['buildings_manager_room_comfort_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/room-size-tiers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The shared room-size unit ladder (smallest first). */
+    get: operations['buildings_room_size_tiers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/room-size-tiers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The shared room-size unit ladder (smallest first). */
+    get: operations['buildings_room_size_tiers_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -15336,6 +15488,12 @@ export interface components {
       /** @description Whether available in character creation */
       is_cg_selectable?: boolean;
     };
+    /** @description The full owner-facing manager payload. */
+    BuildingManager: {
+      building: components['schemas']['ManagerBuilding'];
+      rooms: components['schemas']['ManagerRoom'][];
+      exits: components['schemas']['ManagerExit'][];
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -16769,6 +16927,7 @@ export interface components {
     DebtRow: {
       id: number;
       creditor: string;
+      summon_role_id: number | null;
       principal: number;
       arrears: number;
       interest_bps_monthly: number;
@@ -16790,6 +16949,18 @@ export interface components {
      * @enum {string}
      */
     DeclaredRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /** @description An INTERIOR_DESIGN ProjectTemplate row from the admin-authored catalog. */
+    DecorationTemplate: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Gold cost to commission this project (Phase E will wire deduction). */
+      base_cost?: number;
+      /** @description Coppers per real-time week to keep this project's polish active. The weekly cron sinks it from the owner's purse (#932). */
+      weekly_upkeep_cost?: number;
+      increments: components['schemas']['PolishIncrement'][];
+      tier_prerequisites: string[];
+    };
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
       readonly id: number;
@@ -17815,6 +17986,14 @@ export interface components {
      * @enum {string}
      */
     ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION' | 'CEREMONY';
+    /** @description One axis of the owner build-HUD: pressure vs mitigation vs residual (#1514). */
+    ExposureAxis: {
+      key: string;
+      pressure: number;
+      mitigation: number;
+      net: number;
+      sheltered: boolean;
+    };
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;
@@ -18054,6 +18233,26 @@ export interface components {
       coloring: components['schemas']['ColoringEnum'];
       /** @default private */
       visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description One axis a fixture kind mitigates (negative value = mitigation). */
+    FixtureAffinity: {
+      key: string;
+      value: number;
+    };
+    /** @description A placeable fixture kind from the admin-authored catalog. */
+    FixtureKind: {
+      id: number;
+      name: string;
+      description: string;
+      amenity: number;
+      affinities: components['schemas']['FixtureAffinity'][];
+    };
+    /** @description Cheap RoomPanel resolver: which building, and what the viewer may do. */
+    ForRoomResult: {
+      building_id: number | null;
+      is_owner: boolean;
+      is_tenant: boolean;
+      is_primary_home_here: boolean;
     };
     FormTrait: {
       readonly id: number;
@@ -19039,6 +19238,7 @@ export interface components {
       kind: string;
       is_final: boolean;
       rapport_requirement: number;
+      risk_tier?: number | null;
     };
     InteractionReaction: {
       readonly id: number;
@@ -19061,6 +19261,8 @@ export interface components {
     /** @description POST /api/npc-services/interactions/resolve/ body. */
     InteractionResolveRequestRequest: {
       offer_id: number;
+      /** @default false */
+      acknowledge_risk: boolean;
     };
     /** @description POST /api/npc-services/interactions/start/ body. */
     InteractionStartRequestRequest: {
@@ -19296,6 +19498,48 @@ export interface components {
       specialization_id?: number | null;
       ap_amount: number;
       mentor_persona_id?: number | null;
+    };
+    /** @description Building header: identity, style, and the space budget meter. */
+    ManagerBuilding: {
+      id: number;
+      name: string;
+      kind: string;
+      style: string | null;
+      space_budget: number;
+      space_used: number;
+      space_remaining: number;
+      entry_room_id: number | null;
+      floors: number[];
+    };
+    /** @description One directed exit between two rooms of the building. */
+    ManagerExit: {
+      id: number;
+      name: string;
+      from_room_id: number;
+      to_room_id: number;
+    };
+    /** @description One room in the manager payload (id = the room's ObjectDB pk). */
+    ManagerRoom: {
+      id: number;
+      name: string;
+      description: string;
+      is_public: boolean;
+      size_name: string | null;
+      size_units: number | null;
+      grid_x: number | null;
+      grid_y: number | null;
+      floor: number;
+      is_entry: boolean;
+      tenancies: components['schemas']['ManagerTenancy'][];
+    };
+    /** @description An active tenancy row, as the building owner sees it. */
+    ManagerTenancy: {
+      id: number;
+      tenant_persona_id: number;
+      tenant_name: string;
+      is_primary_home: boolean;
+      /** Format: date-time */
+      ends_at: string | null;
     };
     /**
      * @description * `pitch` - Pitch
@@ -20157,6 +20401,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20188,9 +20433,10 @@ export interface components {
     /**
      * @description * `permit` - Permit
      *     * `mission` - Mission
+     *     * `loan` - Loan
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission';
+    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20198,6 +20444,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20475,6 +20722,7 @@ export interface components {
       balance: number;
       spend_rank_max: number;
       graft_pct: number;
+      steward_role_id: number | null;
       income_streams: components['schemas']['IncomeStreamRow'][];
       debts: components['schemas']['DebtRow'][];
       obligations: components['schemas']['ObligationRow'][];
@@ -20910,6 +21158,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
+    };
+    PaginatedDecorationTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DecorationTemplate'][];
     };
     PaginatedDeedStoryList: {
       /** @example 123 */
@@ -21946,6 +22209,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Ritual'][];
+    };
+    PaginatedRoomSizeTierList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RoomSizeTier'][];
     };
     PaginatedRosterEntryList: {
       /** @example 123 */
@@ -23262,6 +23540,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -24140,6 +24419,11 @@ export interface components {
      * @enum {string}
      */
     PlaceStatusEnum: 'active' | 'removed' | 'hidden';
+    /** @description A comfort fixture placed in the room (removable from the HUD). */
+    PlacedFixture: {
+      id: number;
+      kind: string;
+    };
     /**
      * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
      *
@@ -24398,6 +24682,11 @@ export interface components {
        *     * `4` - Expert
        */
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
+    };
+    /** @description Per-category polish a decoration template grants on completion. */
+    PolishIncrement: {
+      category: string;
+      value: number;
     };
     /**
      * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
@@ -25205,6 +25494,22 @@ export interface components {
       /** Format: date-time */
       responded_at: string | null;
     };
+    /** @description The owner build-HUD payload for one room (#1514). */
+    RoomComfortBreakdown: {
+      enclosure: string;
+      level: number;
+      points: number;
+      amenity: number;
+      axes: components['schemas']['ExposureAxis'][];
+      fixtures: components['schemas']['PlacedFixture'][];
+      fixture_kinds: components['schemas']['FixtureKind'][];
+    };
+    /** @description The shared room-size unit ladder. */
+    RoomSizeTier: {
+      readonly id: number;
+      name: string;
+      units: number;
+    };
     /** @description Validate a roster application message. */
     RosterApplication: {
       message: string;
@@ -25322,6 +25627,14 @@ export interface components {
       deed: number;
       text: string;
     };
+    /**
+     * @description Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+     *
+     *     With ``many=True`` DRF reuses ONE child serializer instance for every
+     *     row, so these caches make N rows cost one gating-encounter lookup per
+     *     row (shared by combat_risk_level AND combat_stakes) and one
+     *     stakes-discovery + summary pass per scene.
+     */
     SceneActionRequest: {
       readonly id: number;
       /** @description The scene where this action takes place */
@@ -25371,6 +25684,20 @@ export interface components {
       strain_commitment?: number;
       /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+       *
+       *     Non-None only when the same #777 gate that drives combat_risk_level is
+       *     active AND the scene carries staked, still-open beats — the consent
+       *     prompt is the target's commit moment, so they see what is wagered.
+       *     Same shape as the BeatViewSet stakes-summary payload (one entry per
+       *     staked beat); branch contents are never included.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -25422,6 +25749,17 @@ export interface components {
        *     its own informed-consent warning.
        */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for this target's gating encounter (#1770 pillar 9).
+       *
+       *     Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+       *     additional target of a hostile AOE cast.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       readonly pose_text: string;
       readonly strain_commitment: number;
       /** Format: date-time */
@@ -26417,6 +26755,20 @@ export interface components {
      */
     StakeRewardLineSinkEnum: 'money' | 'resonance';
     /**
+     * @description Player-visible summary of one Stake (#1770 pillar 9).
+     *
+     *     What is wagered is visible; branch contents stay hidden — resolutions
+     *     (consequence pools, escalations, narrative) are deliberately NOT fields
+     *     here and must never be added.
+     */
+    StakeSummary: {
+      readonly id: number;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      readonly player_summary: string;
+      readonly severity: components['schemas']['SeverityEnum'];
+      readonly severity_label: string;
+    };
+    /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
      *
      *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
@@ -26460,6 +26812,19 @@ export interface components {
      * @enum {string}
      */
     StakesLevelEnum: 'local' | 'regional' | 'national' | 'continental' | 'world';
+    /**
+     * @description Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+     *
+     *     Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+     *     ``effective_risk`` is the open activation's locked value when one exists,
+     *     else the declared risk.
+     */
+    StakesSummary: {
+      readonly declared_risk: string;
+      readonly effective_risk: string;
+      readonly is_ready: boolean;
+      readonly stakes: components['schemas']['StakeSummary'][];
+    };
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
       readonly id: number;
@@ -29086,6 +29451,28 @@ export interface operations {
       };
     };
   };
+  beats_stakes_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakesSummary'];
+        };
+      };
+    };
+  };
   blocks_list: {
     parameters: {
       query?: {
@@ -29168,6 +29555,170 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Block'];
+        };
+      };
+    };
+  };
+  buildings_decoration_templates_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDecorationTemplateList'];
+        };
+      };
+    };
+  };
+  buildings_decoration_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this project template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DecorationTemplate'];
+        };
+      };
+    };
+  };
+  buildings_manager_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BuildingManager'];
+        };
+      };
+    };
+  };
+  buildings_manager_for_room_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ForRoomResult'];
+        };
+      };
+    };
+  };
+  buildings_manager_room_comfort_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomComfortBreakdown'];
+        };
+      };
+    };
+  };
+  buildings_room_size_tiers_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRoomSizeTierList'];
+        };
+      };
+    };
+  };
+  buildings_room_size_tiers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this room size tier. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomSizeTier'];
         };
       };
     };

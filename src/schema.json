@@ -1187,6 +1187,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beat'
           description: ''
+  /api/beats/{id}/stakes-summary/:
+    get:
+      operationId: beats_stakes_summary_retrieve
+      description: |-
+        GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+
+        Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+        be SECRET; an open wager list leaks GM plans): readable by staff, the
+        beat's story owner, or a participant of a scene linked to the beat's
+        episode. The payload leaks only player_summary/severity plus
+        declared/effective risk and readiness; branch contents
+        (StakeResolution rows) are never included.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakesSummary'
+          description: ''
   /api/blocks/:
     get:
       operationId: blocks_list
@@ -1270,6 +1300,196 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Block'
+          description: ''
+  /api/buildings/decoration-templates/:
+    get:
+      operationId: buildings_decoration_templates_list
+      description: The admin-authored INTERIOR_DESIGN template catalog (public read).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDecorationTemplateList'
+          description: ''
+  /api/buildings/decoration-templates/{id}/:
+    get:
+      operationId: buildings_decoration_templates_retrieve
+      description: The admin-authored INTERIOR_DESIGN template catalog (public read).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project template.
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecorationTemplate'
+          description: ''
+  /api/buildings/manager/{id}/:
+    get:
+      operationId: buildings_manager_retrieve
+      description: GET /api/buildings/manager/<building_id>/ — the full manager payload.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingManager'
+          description: ''
+  /api/buildings/manager/for-room/{room_id}/:
+    get:
+      operationId: buildings_manager_for_room_retrieve
+      description: GET /api/buildings/manager/for-room/<room_id>/ — ids + permission
+        flags only.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: room_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForRoomResult'
+          description: ''
+  /api/buildings/manager/room/{room_id}/comfort/:
+    get:
+      operationId: buildings_manager_room_comfort_retrieve
+      description: |-
+        GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+
+        Per-axis pressure/mitigation/net, the room's comfort level, its placed
+        fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+        residual; add insulation." Owner-gated: interior comfort tuning is the
+        builder's view.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: room_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomComfortBreakdown'
+          description: ''
+  /api/buildings/room-size-tiers/:
+    get:
+      operationId: buildings_room_size_tiers_list
+      description: The shared room-size unit ladder (smallest first).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoomSizeTierList'
+          description: ''
+  /api/buildings/room-size-tiers/{id}/:
+    get:
+      operationId: buildings_room_size_tiers_retrieve
+      description: The shared room-size unit ladder (smallest first).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this room size tier.
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomSizeTier'
           description: ''
   /api/chapters/:
     get:
@@ -26424,6 +26644,24 @@ components:
       required:
       - display_name
       - name
+    BuildingManager:
+      type: object
+      description: The full owner-facing manager payload.
+      properties:
+        building:
+          $ref: '#/components/schemas/ManagerBuilding'
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerRoom'
+        exits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerExit'
+      required:
+      - building
+      - exits
+      - rooms
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -29639,6 +29877,9 @@ components:
           type: integer
         creditor:
           type: string
+        summon_role_id:
+          type: integer
+          nullable: true
         principal:
           type: integer
         arrears:
@@ -29657,6 +29898,7 @@ components:
       - in_default
       - interest_bps_monthly
       - principal
+      - summon_role_id
     DecisionEnum:
       enum:
       - accept
@@ -29679,6 +29921,43 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    DecorationTemplate:
+      type: object
+      description: An INTERIOR_DESIGN ProjectTemplate row from the admin-authored
+        catalog.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        base_cost:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Gold cost to commission this project (Phase E will wire deduction).
+        weekly_upkeep_cost:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Coppers per real-time week to keep this project's polish active.
+            The weekly cron sinks it from the owner's purse (#932).
+        increments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolishIncrement'
+        tier_prerequisites:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - increments
+      - name
+      - tier_prerequisites
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -31851,6 +32130,27 @@ components:
         * `FLOW` - Flow
         * `SCENE_ACTION` - Scene Action
         * `CEREMONY` - Ceremony
+    ExposureAxis:
+      type: object
+      description: 'One axis of the owner build-HUD: pressure vs mitigation vs residual
+        (#1514).'
+      properties:
+        key:
+          type: string
+        pressure:
+          type: integer
+        mitigation:
+          type: integer
+        net:
+          type: integer
+        sheltered:
+          type: boolean
+      required:
+      - key
+      - mitigation
+      - net
+      - pressure
+      - sheltered
     Facet:
       type: object
       description: Serializer for Facet model with hierarchy info.
@@ -32327,6 +32627,58 @@ components:
       - title
       - track_id
       - writeup
+    FixtureAffinity:
+      type: object
+      description: One axis a fixture kind mitigates (negative value = mitigation).
+      properties:
+        key:
+          type: string
+        value:
+          type: integer
+      required:
+      - key
+      - value
+    FixtureKind:
+      type: object
+      description: A placeable fixture kind from the admin-authored catalog.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        amenity:
+          type: integer
+        affinities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixtureAffinity'
+      required:
+      - affinities
+      - amenity
+      - description
+      - id
+      - name
+    ForRoomResult:
+      type: object
+      description: 'Cheap RoomPanel resolver: which building, and what the viewer
+        may do.'
+      properties:
+        building_id:
+          type: integer
+          nullable: true
+        is_owner:
+          type: boolean
+        is_tenant:
+          type: boolean
+        is_primary_home_here:
+          type: boolean
+      required:
+      - building_id
+      - is_owner
+      - is_primary_home_here
+      - is_tenant
     FormTrait:
       type: object
       properties:
@@ -34324,6 +34676,9 @@ components:
           type: boolean
         rapport_requirement:
           type: integer
+        risk_tier:
+          type: integer
+          nullable: true
       required:
       - id
       - is_final
@@ -34387,6 +34742,9 @@ components:
         offer_id:
           type: integer
           minimum: 1
+        acknowledge_risk:
+          type: boolean
+          default: false
       required:
       - offer_id
     InteractionStartRequestRequest:
@@ -34982,6 +35340,125 @@ components:
           nullable: true
       required:
       - ap_amount
+    ManagerBuilding:
+      type: object
+      description: 'Building header: identity, style, and the space budget meter.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        kind:
+          type: string
+        style:
+          type: string
+          nullable: true
+        space_budget:
+          type: integer
+        space_used:
+          type: integer
+        space_remaining:
+          type: integer
+        entry_room_id:
+          type: integer
+          nullable: true
+        floors:
+          type: array
+          items:
+            type: integer
+      required:
+      - entry_room_id
+      - floors
+      - id
+      - kind
+      - name
+      - space_budget
+      - space_remaining
+      - space_used
+      - style
+    ManagerExit:
+      type: object
+      description: One directed exit between two rooms of the building.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        from_room_id:
+          type: integer
+        to_room_id:
+          type: integer
+      required:
+      - from_room_id
+      - id
+      - name
+      - to_room_id
+    ManagerRoom:
+      type: object
+      description: One room in the manager payload (id = the room's ObjectDB pk).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        is_public:
+          type: boolean
+        size_name:
+          type: string
+          nullable: true
+        size_units:
+          type: integer
+          nullable: true
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
+        floor:
+          type: integer
+        is_entry:
+          type: boolean
+        tenancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerTenancy'
+      required:
+      - description
+      - floor
+      - grid_x
+      - grid_y
+      - id
+      - is_entry
+      - is_public
+      - name
+      - size_name
+      - size_units
+      - tenancies
+    ManagerTenancy:
+      type: object
+      description: An active tenancy row, as the building owner sees it.
+      properties:
+        id:
+          type: integer
+        tenant_persona_id:
+          type: integer
+        tenant_name:
+          type: string
+        is_primary_home:
+          type: boolean
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - ends_at
+      - id
+      - is_primary_home
+      - tenant_name
+      - tenant_persona_id
     MaturityEnum:
       enum:
       - pitch
@@ -36597,6 +37074,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           description: UI display text for the menu option.
@@ -36661,10 +37139,12 @@ components:
       enum:
       - permit
       - mission
+      - loan
       type: string
       description: |-
         * `permit` - Permit
         * `mission` - Mission
+        * `loan` - Loan
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -36678,6 +37158,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           minLength: 1
@@ -37218,6 +37699,9 @@ components:
           type: integer
         graft_pct:
           type: integer
+        steward_role_id:
+          type: integer
+          nullable: true
         income_streams:
           type: array
           items:
@@ -37249,6 +37733,7 @@ components:
       - organization_id
       - organization_name
       - spend_rank_max
+      - steward_role_id
     Organization:
       type: object
       properties:
@@ -38025,6 +38510,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CovenantRite'
+    PaginatedDecorationTemplateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecorationTemplate'
     PaginatedDeedStoryList:
       type: object
       required:
@@ -39671,6 +40179,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ritual'
+    PaginatedRoomSizeTierList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomSizeTier'
     PaginatedRosterEntryList:
       type: object
       required:
@@ -41820,6 +42351,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           minLength: 1
@@ -43339,6 +43871,17 @@ components:
         * `active` - Active
         * `removed` - Removed
         * `hidden` - Hidden
+    PlacedFixture:
+      type: object
+      description: A comfort fixture placed in the room (removable from the HUD).
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+      required:
+      - id
+      - kind
     PlayerAction:
       type: object
       description: |-
@@ -43906,6 +44449,17 @@ components:
             * `4` - Expert
           minimum: -2147483648
           maximum: 2147483647
+    PolishIncrement:
+      type: object
+      description: Per-category polish a decoration template grants on completion.
+      properties:
+        category:
+          type: string
+        value:
+          type: integer
+      required:
+      - category
+      - value
     PoseEndorsement:
       type: object
       description: |-
@@ -45626,6 +46180,56 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    RoomComfortBreakdown:
+      type: object
+      description: The owner build-HUD payload for one room (#1514).
+      properties:
+        enclosure:
+          type: string
+        level:
+          type: integer
+        points:
+          type: integer
+        amenity:
+          type: integer
+        axes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExposureAxis'
+        fixtures:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacedFixture'
+        fixture_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixtureKind'
+      required:
+      - amenity
+      - axes
+      - enclosure
+      - fixture_kinds
+      - fixtures
+      - level
+      - points
+    RoomSizeTier:
+      type: object
+      description: The shared room-size unit ladder.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 40
+        units:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
+      - units
     RosterApplication:
       type: object
       description: Validate a roster application message.
@@ -45902,6 +46506,13 @@ components:
       - text
     SceneActionRequest:
       type: object
+      description: |-
+        Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+
+        With ``many=True`` DRF reuses ONE child serializer instance for every
+        row, so these caches make N rows cost one gating-encounter lookup per
+        row (shared by combat_risk_level AND combat_stakes) and one
+        stakes-discovery + summary pass per scene.
       properties:
         id:
           type: integer
@@ -45995,6 +46606,21 @@ components:
           description: Risk level of the encounter a PENDING hostile cast would pull
             the target into (#777).
           readOnly: true
+        combat_stakes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+          description: |-
+            Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+
+            Non-None only when the same #777 gate that drives combat_risk_level is
+            active AND the scene carries staked, still-open beats — the consent
+            prompt is the target's commit moment, so they see what is wagered.
+            Same shape as the BeatViewSet stakes-summary payload (one entry per
+            staked beat); branch contents are never included.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -46008,6 +46634,7 @@ components:
       required:
       - action_interaction
       - combat_risk_level
+      - combat_stakes
       - created_at
       - id
       - initiator_name
@@ -46131,6 +46758,18 @@ components:
             row's own target_persona so each additional target of a hostile AOE cast gets
             its own informed-consent warning.
           readOnly: true
+        combat_stakes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+          description: |-
+            Stakes summaries for this target's gating encounter (#1770 pillar 9).
+
+            Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+            additional target of a hostile AOE cast.
+          readOnly: true
         pose_text:
           type: string
           readOnly: true
@@ -46147,6 +46786,7 @@ components:
       - action_target_id
       - action_template
       - combat_risk_level
+      - combat_stakes
       - created_at
       - initiator_name
       - initiator_persona
@@ -48129,6 +48769,34 @@ components:
       description: |-
         * `money` - Money
         * `resonance` - Resonance
+    StakeSummary:
+      type: object
+      description: |-
+        Player-visible summary of one Stake (#1770 pillar 9).
+
+        What is wagered is visible; branch contents stay hidden — resolutions
+        (consequence pools, escalations, narrative) are deliberately NOT fields
+        here and must never be added.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        player_summary:
+          type: string
+          readOnly: true
+          description: 'Player-facing line shown at opt-in: what is wagered, how badly.'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        severity_label:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - player_summary
+      - severity
+      - severity_label
     StakeTemplate:
       type: object
       description: |-
@@ -48217,6 +48885,34 @@ components:
         * `national` - National
         * `continental` - Continental
         * `world` - World
+    StakesSummary:
+      type: object
+      description: |-
+        Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+
+        Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+        ``effective_risk`` is the open activation's locked value when one exists,
+        else the declared risk.
+      properties:
+        declared_risk:
+          type: string
+          readOnly: true
+        effective_risk:
+          type: string
+          readOnly: true
+        is_ready:
+          type: boolean
+          readOnly: true
+        stakes:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeSummary'
+          readOnly: true
+      required:
+      - declared_risk
+      - effective_risk
+      - is_ready
+      - stakes
     StartingArea:
       type: object
       description: Serializer for starting areas with accessibility check.
