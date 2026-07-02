@@ -142,26 +142,34 @@ class OrgEconomicsTests(TestCase):
         cls.org = OrganizationFactory()
         cls.liege = OrganizationFactory()
 
-    def test_income_leaks_graft_and_mints_net(self) -> None:
+    def test_income_accrues_to_pool_without_minting(self) -> None:
+        # #930 / ADR-0081: the weekly cycle pools; nothing reaches the treasury.
         from world.currency.models import OrgIncomeStream
-        from world.currency.services import (
-            get_or_create_economics,
-            get_or_create_treasury,
-            process_income_stream,
-        )
+        from world.currency.services import accrue_income_stream, get_or_create_treasury
 
-        economics = get_or_create_economics(self.org)
-        economics.graft_pct = 10
-        economics.save()
         stream = OrgIncomeStream.objects.create(
             organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
         )
+        accrue_income_stream(stream)
+        accrue_income_stream(stream)
 
-        declaration = process_income_stream(stream)
+        assert stream.uncollected_pool == 2000  # no cap, no leak until collection
+        treasury = get_or_create_treasury(self.org)
+        treasury.refresh_from_db()
+        assert treasury.balance == 0
+
+    def test_landing_collected_amount_mints_and_declares(self) -> None:
+        from world.currency.models import OrgIncomeStream
+        from world.currency.services import get_or_create_treasury, process_income_stream
+
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name="Land taxes", kind="domain_tax", gross_amount=1000
+        )
+        declaration = process_income_stream(stream, 900)
 
         treasury = get_or_create_treasury(self.org)
         treasury.refresh_from_db()
-        assert treasury.balance == 900  # 10% leaked
+        assert treasury.balance == 900
         assert declaration.actual_amount == 900
         assert declaration.declared_amount == 900
         assert declaration.underdeclared is False
@@ -173,9 +181,9 @@ class OrgEconomicsTests(TestCase):
         stream = OrgIncomeStream.objects.create(
             organization=self.org, name="Turf kick-up", kind="crime_kickup", gross_amount=1000
         )
-        declaration = process_income_stream(stream, declared_amount=300)
+        declaration = process_income_stream(stream, 900, declared_amount=300)
         assert declaration.underdeclared is True
-        assert declaration.actual_amount == 900  # default graft 10%
+        assert declaration.actual_amount == 900
 
     def test_obligations_compute_on_declared(self) -> None:
         from world.currency.models import OrgIncomeStream, OrgObligation
@@ -194,7 +202,7 @@ class OrgEconomicsTests(TestCase):
             name="Crown taxes",
             percent=20,
         )
-        process_income_stream(stream, declared_amount=500)
+        process_income_stream(stream, 900, declared_amount=500)
 
         transfers = settle_obligations(self.org)
 
@@ -217,7 +225,7 @@ class OrgEconomicsTests(TestCase):
             name="Crown taxes",
             percent=20,
         )
-        process_income_stream(stream)
+        process_income_stream(stream, 900)
         first = settle_obligations(self.org)
         second = settle_obligations(self.org)
         assert len(first) == 1
@@ -287,7 +295,7 @@ class OrgEconomicsTests(TestCase):
             active=False,
         )
         with self.assertRaises(DjangoValidationError):
-            process_income_stream(stream)
+            process_income_stream(stream, 100)
 
 
 class DebtTests(TestCase):
@@ -363,7 +371,7 @@ class DebtTests(TestCase):
         accrue_monthly_interest(self.debtor)
         stream = self._stream(gross=1000)
 
-        process_income_stream(stream)  # net 900 after 10% graft
+        process_income_stream(stream, 900)  # the landed collection amount
 
         debtor_treasury = get_or_create_treasury(self.debtor)
         debtor_treasury.refresh_from_db()
@@ -385,7 +393,7 @@ class DebtTests(TestCase):
         accrue_monthly_interest(self.debtor)
         stream = self._stream(gross=1000)
 
-        process_income_stream(stream)  # net 900, all withheld
+        process_income_stream(stream, 900)  # all withheld
 
         debtor_treasury = get_or_create_treasury(self.debtor)
         debtor_treasury.refresh_from_db()
@@ -408,7 +416,7 @@ class DebtTests(TestCase):
         accrue_monthly_interest(self.debtor)
         stream = self._stream(gross=1000)
 
-        process_income_stream(stream)
+        process_income_stream(stream, 900)
 
         debtor_treasury = get_or_create_treasury(self.debtor)
         debtor_treasury.refresh_from_db()
@@ -574,7 +582,7 @@ class ContractTests(TestCase):
 
         # Default activates the agreed lien: half the stream's net diverts.
         OrganizationTreasury.flush_instance_cache()
-        process_income_stream(stream)  # default graft 10% → net 900
+        process_income_stream(stream, 900)
         purse = get_or_create_purse(self.payee.character_sheet)
         purse.refresh_from_db()
         assert purse.balance == 450  # 50% of 900
@@ -597,7 +605,7 @@ class ContractTests(TestCase):
         )
         sign_contract(contract)
 
-        process_income_stream(stream)
+        process_income_stream(stream, 900)
 
         purse = get_or_create_purse(self.payee.character_sheet)
         purse.refresh_from_db()
@@ -754,11 +762,18 @@ class WeeklyEconomyTests(TestCase):
         assert counts["income"] == 1
         from world.currency.models import DebtInstrument
 
+        stream = OrgIncomeStream.objects.get(organization=org)
+        # #930 / ADR-0081: the rollover only pools — nothing lands, nothing withholds.
+        assert stream.uncollected_pool == 1000
         debt = DebtInstrument.objects.get(debtor_organization=org)
-        # weekly fraction (500 // 4 = 125) accrued, then withheld from income
-        assert debt.arrears == 0  # income (900 net) covered the 125
-        from world.currency.services import get_or_create_treasury
+        # weekly fraction (500 // 4 = 125) accrued and STAYS in arrears until a
+        # collection dispatch lands income for the withholding to ride.
+        assert debt.arrears == 125
+        from world.currency.services import get_or_create_treasury, process_income_stream
 
+        process_income_stream(stream, 900)  # a landed collection covers the arrears
+        debt.refresh_from_db()
+        assert debt.arrears == 0
         creditor_treasury = get_or_create_treasury(blighton)
         creditor_treasury.refresh_from_db()
         assert creditor_treasury.balance == 125
