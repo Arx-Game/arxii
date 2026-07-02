@@ -276,7 +276,7 @@ def hazard_is_covered(room: DefaultObject, damage_type: DamageType, *, threshold
     A hard gate, not an arithmetic resistance — this answers "does the hazard reach this
     place at all," the same kind of fact ``RoomProfile.is_outdoor`` already answers, not
     "how much damage gets through" (that stays ``ConditionResistanceModifier`` arithmetic,
-    per ADR-0066). ``threshold`` lets a future caller require a stronger shelter claim than
+    per ADR-0073). ``threshold`` lets a future caller require a stronger shelter claim than
     the default "any positive value covers"; v1 callers use the default.
     """
     return effective_value(room, damage_type=damage_type) >= threshold

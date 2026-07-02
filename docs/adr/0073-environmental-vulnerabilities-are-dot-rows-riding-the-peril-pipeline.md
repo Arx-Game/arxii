@@ -13,7 +13,7 @@ unchanged: an unconscious victim flows into `abandonment_environmental`, never a
 raw death. Immunity to a damage type is not a boolean; it is a very high
 `ConditionResistanceModifier` that overwhelming damage exceeds — so god-tier
 power pierces "immunity" by arithmetic, not a special code path. This extends
-ADR-0062 (broad framework + environmental triggers, per the roadmap's #1588
+ADR-0071 (broad framework + environmental triggers, per the roadmap's #1588
 row). We rejected a bespoke environmental-damage cron and a reactive
 `DAMAGE_PRE_APPLY` modifier: the former reintroduces AFK-kill risk, the latter
 makes sunlight combat-only and misses passive exposure. We also rejected a new

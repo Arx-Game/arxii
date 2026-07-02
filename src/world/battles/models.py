@@ -67,7 +67,7 @@ class Battle(SharedMemoryModel):
         help_text=(
             "When true, a Surrounded participant's peril escalates every round the GM "
             "resolves regardless of whether they declared this round (narrow, explicit "
-            "ADR-0004 exception scoped to peril only — see ADR-0070)."
+            "ADR-0004 exception scoped to peril only — see ADR-0074)."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)

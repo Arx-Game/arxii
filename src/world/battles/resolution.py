@@ -439,7 +439,7 @@ def _advance_surrounded_participants(
     """Tick every ACTIVE Surrounded participant's peril once for this round (#1733).
 
     A participant advances if they declared this round, OR ``battle.afk_peril_override``
-    is True (the narrow, explicit ADR-0004 exception — see ADR-0070). Otherwise their
+    is True (the narrow, explicit ADR-0004 exception — see ADR-0074). Otherwise their
     peril holds unchanged this round — mirroring the intent of the room-based #1480
     own-peril skip without depending on SceneRound (Decision 1 of the #1733 spec).
 

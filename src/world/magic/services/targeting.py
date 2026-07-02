@@ -106,7 +106,7 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
 def _signature_alters_behavior(caster, technique: Technique) -> bool:
     """Return True if the caster's active signature bonus carries a behavior-altering condition.
 
-    A character may *sign* a technique (#1582, ADR-0065) by attaching a
+    A character may *sign* a technique (#1582, ADR-0072) by attaching a
     ``SignatureMotifBonus`` to its TECHNIQUE-kind Thread. The bonus's
     ``condition_applications`` land on the resolved target at cast time exactly
     like the technique's own conditions — so a behavior-altering condition carried
@@ -132,7 +132,7 @@ def technique_alters_behavior(technique: Technique, *, caster=None) -> bool:
     When ``caster`` is supplied (the casting game Character), the caster's active
     ``SignatureMotifBonus`` conditions are folded into the check — a benign
     technique signed with a behavior-altering bonus alters behavior just as if the
-    technique itself carried that condition (#1582, ADR-0024/ADR-0065). A
+    technique itself carried that condition (#1582, ADR-0024/ADR-0072). A
     non-behavior-altering signature condition (e.g. Entangled) does not.
     """
     if technique.condition_applications.filter(condition__category__alters_behavior=True).exists():

@@ -19,7 +19,7 @@ A single read service (`effective_value`) resolves all three axes — stat,
 resonance, and damage-type. `hazard_is_covered(room, damage_type, *,
 threshold=1)` wraps the damage-type axis as a hard boolean gate ("does the
 hazard reach this place at all"), not an arithmetic resistance — that stays
-`ConditionResistanceModifier` (per ADR-0066, ADR-0069).
+`ConditionResistanceModifier` (per ADR-0073, ADR-0069).
 
 **Climate → comfort (#1514, #1522).** The stat axis hosts environmental **exposure** axes
 (`StatKey.COLD`, `HEAT`, `WET`, `WIND`, `DRY`; listed in `EXPOSURE_STAT_KEYS`). Each is a
