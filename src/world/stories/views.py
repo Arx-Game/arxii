@@ -96,6 +96,7 @@ from world.stories.permissions import (
     CanMarkBeat,
     CanParticipateInStory,
     CanReplyToBulletinPost,
+    CanResolveStake,
     CanViewBeatStakesSummary,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
@@ -165,10 +166,12 @@ from world.stories.serializers import (
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
     ResolveSessionRequestInputSerializer,
+    ResolveStakeInputSerializer,
     RiskCalibrationSerializer,
     SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
     StakeContractActivationSerializer,
+    StakeOutcomeSerializer,
     StakeResolutionSerializer,
     StakeSerializer,
     StakesSummarySerializer,
@@ -1596,6 +1599,8 @@ class TransitionViewSet(viewsets.ModelViewSet):
                 "connection_summary": "<str>",
                 "order": <int>,
                 "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+                             {"beat": <int>, "stake": <int>,
+                              "required_stake_column": "win" | "loss" | "withdrawal"},
                              ...],
                 "existing_id": <int | null>   # omit or null for create
             }
@@ -1631,7 +1636,12 @@ class TransitionViewSet(viewsets.ModelViewSet):
             "order": vd.get("order", 0),
         }
         outcome_inputs = [
-            OutcomeInput(beat_id=row["beat"].pk, required_outcome=row["required_outcome"])
+            OutcomeInput(
+                beat_id=row["beat"].pk,
+                required_outcome=row.get("required_outcome", ""),
+                stake_id=row["stake"].pk if row.get("stake") is not None else None,
+                required_stake_column=row.get("required_stake_column", ""),
+            )
             for row in vd.get("outcomes", [])
         ]
 
@@ -2964,7 +2974,9 @@ class StakeViewSet(viewsets.ModelViewSet):
         "subject_item",
         "subject_society",
         "subject_organization",
-    )
+        # DRF's nested StakeOutcomeSerializer reads the related manager, so the
+        # prefetch must populate the default cache (to_attr would be unused).
+    ).prefetch_related("outcomes")  # noqa: PREFETCH_STRING
     serializer_class = StakeSerializer
     permission_classes = [IsStakeBeatStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -2972,6 +2984,59 @@ class StakeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["severity", "created_at", "updated_at"]
     ordering = ["beat", "-severity", "pk"]
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="resolve",
+        permission_classes=[CanResolveStake],
+    )
+    def resolve(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
+
+        Lead GM, staff, or an AGM with an approved claim on the stake's beat
+        picks one of the stake's AUTHORED resolution columns; the branch fires
+        exactly like the machine path (pool + writers) and the StakeOutcome
+        audit row records method=GM_PICK with the GM and notes. Optional
+        ``participants`` / ``extra_participants`` carry the personas the
+        branch's pool and affection writer credit (MarkBeat semantics).
+        Returns 201 with the StakeOutcome.
+
+        The LEGEND_AWARD participant guards fire inside the service's pool
+        walk — pre-validating them in the serializer would duplicate
+        resolve_pool_consequences; they are surfaced as 400 here (same
+        exception-block carve-out as EpisodeViewSet.resolve).
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.societies.exceptions import (  # noqa: PLC0415
+            LegendAwardParticipantMissingError,
+            LegendAwardScopeError,
+        )
+        from world.stories.services.stake_resolution import (  # noqa: PLC0415
+            resolve_stake_by_gm_pick,
+        )
+
+        stake = self.get_object()
+        ser = ResolveStakeInputSerializer(data=request.data, context={"stake": stake})
+        ser.is_valid(raise_exception=True)
+
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
+
+        try:
+            outcome = resolve_stake_by_gm_pick(
+                stake,
+                column=ser.validated_data["column"],
+                gm_profile=gm_profile,
+                gm_notes=ser.validated_data["gm_notes"],
+                participants=ser.validated_data.get("participants") or None,
+                extra_participants=ser.validated_data.get("extra_participants") or None,
+            )
+        except (LegendAwardParticipantMissingError, LegendAwardScopeError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(StakeOutcomeSerializer(outcome).data, status=status.HTTP_201_CREATED)
 
 
 class StakeResolutionViewSet(viewsets.ModelViewSet):

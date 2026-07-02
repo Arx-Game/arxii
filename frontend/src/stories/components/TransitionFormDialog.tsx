@@ -63,6 +63,12 @@ interface RoutingRow {
   beatId: number;
   outcome: string;
   beatLabel: string;
+  /** Stake-level routing rows (#1770 PR2): set when the requirement routes on
+   * a StakeOutcome column instead of the beat outcome. Authored via the
+   * stakes editor / API; this dialog preserves them through the bulk-save
+   * round-trip but only adds beat-level rows. */
+  stakeId?: number;
+  stakeColumn?: string;
 }
 
 let rowCounter = 0;
@@ -252,8 +258,10 @@ export function TransitionFormDialog({
       const rows: RoutingRow[] = existingOutcomesQuery.data.results.map((row) => ({
         key: nextKey(),
         beatId: row.beat,
-        outcome: row.required_outcome,
+        outcome: row.required_outcome ?? '',
         beatLabel: `Beat #${row.beat}`,
+        stakeId: row.stake ?? undefined,
+        stakeColumn: row.required_stake_column ?? undefined,
       }));
       setRoutingRows(rows);
       setInitialised(true);
@@ -321,10 +329,18 @@ export function TransitionFormDialog({
         connection_type: connectionType,
         connection_summary: connectionSummary.trim(),
         order: Number(order),
-        outcomes: routingRows.map((r) => ({
-          beat: r.beatId,
-          required_outcome: r.outcome,
-        })),
+        outcomes: routingRows.map((r) =>
+          r.stakeId != null
+            ? {
+                beat: r.beatId,
+                stake: r.stakeId,
+                required_stake_column: r.stakeColumn ?? '',
+              }
+            : {
+                beat: r.beatId,
+                required_outcome: r.outcome,
+              }
+        ),
         existing_id: isEdit && transition ? transition.id : null,
       },
       {
@@ -475,7 +491,9 @@ export function TransitionFormDialog({
                       data-testid="routing-predicate-row"
                     >
                       <span>
-                        {row.beatLabel} — {row.outcome}
+                        {row.stakeId != null
+                          ? `${row.beatLabel} — stake #${row.stakeId} ${row.stakeColumn ?? ''}`
+                          : `${row.beatLabel} — ${row.outcome}`}
                       </span>
                       <Button
                         type="button"

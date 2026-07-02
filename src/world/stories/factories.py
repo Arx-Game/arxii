@@ -12,6 +12,7 @@ from world.stories.constants import (
     BeatVisibility,
     EraStatus,
     SessionRequestStatus,
+    StakeOutcomeMethod,
     StakeResolutionColumn,
     StakeSeverity,
     StakeSubjectKind,
@@ -37,6 +38,7 @@ from world.stories.models import (
     RiskCalibration,
     SessionRequest,
     Stake,
+    StakeOutcome,
     StakeResolution,
     StakeTemplate,
     Story,
@@ -614,6 +616,19 @@ class StakeResolutionFactory(factory_django.DjangoModelFactory):
     stake = factory.SubFactory(StakeFactory)
     column = StakeResolutionColumn.LOSS
     narrative_summary = "It goes badly."
+
+
+class StakeOutcomeFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StakeOutcome
+
+    stake = factory.SubFactory(StakeFactory)
+    activation = None
+    resolution = None
+    column = StakeResolutionColumn.LOSS
+    method = StakeOutcomeMethod.MACHINE
+    resolved_by = None
+    gm_notes = ""
 
 
 # Convenience functions for common test scenarios

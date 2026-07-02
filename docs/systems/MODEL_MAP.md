@@ -4917,6 +4917,7 @@
 **Foreign Keys:**
   - transition -> stories.Transition [FK]
   - beat -> stories.Beat [FK]
+  - stake -> stories.Stake [FK] (nullable)
 
 ### AggregateBeatContribution
 **Foreign Keys:**
@@ -5016,7 +5017,9 @@
   - subject_society -> societies.Society [FK] (nullable)
   - subject_organization -> societies.Organization [FK] (nullable)
 **Pointed to by:**
+  - routing_for_transitions <- stories.TransitionRequiredOutcome
   - resolutions <- stories.StakeResolution
+  - outcomes <- stories.StakeOutcome
 
 ### StakeResolution
 **Foreign Keys:**
@@ -5026,6 +5029,15 @@
 ### StakeContractActivation
 **Foreign Keys:**
   - beat -> stories.Beat [FK]
+**Pointed to by:**
+  - stake_outcomes <- stories.StakeOutcome
+
+### StakeOutcome
+**Foreign Keys:**
+  - stake -> stories.Stake [FK]
+  - activation -> stories.StakeContractActivation [FK] (nullable)
+  - resolution -> stories.StakeResolution [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 
 ## world.traits

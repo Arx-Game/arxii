@@ -309,3 +309,16 @@ class StakesReadinessReport:
     is_staked: bool
     is_ready: bool
     problems: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StakePayloadProblem:
+    """One invalid StakeResolution writer-payload combination (#1770 pillar 12).
+
+    Produced by stake_resolution_payload_problems
+    (world.stories.services.stake_resolution); consumed by both
+    StakeResolution.clean and StakeResolutionSerializer.validate.
+    """
+
+    field: str
+    message: str

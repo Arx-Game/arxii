@@ -1,1 +1,1 @@
-0007_alter_stake_subject_item_and_more
+0008_stakeoutcome_and_more
