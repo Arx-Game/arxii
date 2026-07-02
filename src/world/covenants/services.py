@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
+from world.covenants.constants import CommandTier
 from world.covenants.exceptions import (
     CannotKickEqualOrHigherRankError,
     CannotKickSelfError,
@@ -557,7 +559,42 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
 
     Iterates and calls save() (rather than bulk update) so SharedMemoryModel's
     identity-map cache stays in sync for rows already held in memory.
+
+    Raises ValidationError before engaging if the covenant already has another
+    engaged SUPREME-tier or Champion-flagged membership (covenant-scoped
+    exclusivity, mirrored in CharacterCovenantRole.clean()).
     """
+    if membership.covenant_role.command_tier == CommandTier.SUPREME:
+        other_supreme = (
+            CharacterCovenantRole.objects.filter(
+                covenant=membership.covenant,
+                covenant_role__command_tier=CommandTier.SUPREME,
+                engaged=True,
+                left_at__isnull=True,
+            )
+            .exclude(pk=membership.pk)
+            .exists()
+        )
+        if other_supreme:
+            raise ValidationError(
+                {"engaged": "Another engaged Supreme Commander already exists for this covenant."}
+            )
+    if membership.covenant_role.is_champion_role:
+        other_champion = (
+            CharacterCovenantRole.objects.filter(
+                covenant=membership.covenant,
+                covenant_role__is_champion_role=True,
+                engaged=True,
+                left_at__isnull=True,
+            )
+            .exclude(pk=membership.pk)
+            .exists()
+        )
+        if other_champion:
+            raise ValidationError(
+                {"engaged": "Another engaged Champion already exists for this covenant."}
+            )
+
     sheet = membership.character_sheet
     before = set(sheet.character.threads.passive_capability_grants())
     other_engaged = list(
