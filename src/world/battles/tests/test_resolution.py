@@ -105,7 +105,7 @@ class DeclareBattleActionTests(TestCase):
             battle=self.battle,
             side=self.unit_side,
             name="Enemy Archers",
-            unit_type="archers",
+            descriptor="archers",
         )
         self.battle_round = begin_battle_round(battle=self.battle)
         # Castable technique (action_template set) for the happy-path declarations
@@ -239,7 +239,7 @@ class ResolveBattleRoundSuccessTests(TestCase):
             battle=self.battle,
             side=self.defender_side,
             name="Skeleton Horde",
-            unit_type="undead",
+            descriptor="undead",
             strength=100,
         )
 
@@ -369,7 +369,7 @@ class ResolveBattleRoundFailureTests(TestCase):
             battle=self.battle,
             side=self.defender_side,
             name="Zombie Wall",
-            unit_type="undead",
+            descriptor="undead",
         )
         self.battle_round = begin_battle_round(battle=self.battle)
 
@@ -592,7 +592,7 @@ class EntryRollTests(TestCase):
         battle = create_battle(name="Entry Roll Test")
         side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
         place = add_place(battle=battle, name="The Gates")
-        unit = add_unit(battle=battle, side=side, name="Foes", unit_type="infantry")
+        unit = add_unit(battle=battle, side=side, name="Foes", descriptor="infantry")
         participant = enlist_participant(
             battle=battle, character_sheet=sheet, side=side, place=place
         )

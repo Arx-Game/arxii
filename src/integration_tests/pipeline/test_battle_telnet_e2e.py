@@ -153,7 +153,7 @@ class BattleTelnetE2EJourneyTest(TestCase):
             battle=self.battle,
             side=self.attacker_side,
             name="Iron Vanguard",
-            unit_type="soldiers",
+            descriptor="soldiers",
             strength=100,
         )
 
