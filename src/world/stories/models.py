@@ -2142,6 +2142,21 @@ class StakeResolution(SharedMemoryModel):
             "and only when the subject sheet is not player-held (pillar 12)."
         ),
     )
+    machine_match_lifecycle_state = models.CharField(
+        max_length=10,
+        choices=LifecycleState.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "On automatic (machine) grading, if the stake's subject_sheet's "
+            "actual lifecycle_state equals this value, THIS branch is "
+            "selected over the column's plain default (#1760 — generalizes "
+            "the old is-dead-only override to the full LifecycleState "
+            "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only "
+            "— blank means no machine-match, resolve via the plain column "
+            "default or a GM's Constrained Pick."
+        ),
+    )
 
     class Meta:
         ordering = ["stake", "column", "outcome_key"]

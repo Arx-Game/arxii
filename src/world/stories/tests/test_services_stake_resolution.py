@@ -168,14 +168,22 @@ class MachineGradingTests(EvenniaTestCase):
         self.assertFalse(StakeOutcome.objects.filter(stake=stake).exists())
 
     def test_npc_fate_dead_subject_grades_loss_even_on_beat_success(self):
-        """Pillar 11: the vitals write IS the grade for NPC_FATE stakes."""
+        """Pillar 11 (#1760: generalized to the LifecycleState ladder — the
+        old implicit is-dead override is gone; reproducing it now requires an
+        explicitly authored machine_match_lifecycle_state=DEAD branch)."""
         _sheet, beat, progress = _character_story_beat()
         npc_sheet = CharacterSheetFactory()
         CharacterVitalsFactory(character_sheet=npc_sheet, life_state=CharacterLifeState.DEAD)
+        npc_sheet.lifecycle_state = LifecycleState.DEAD
+        npc_sheet.save(update_fields=["lifecycle_state"])
         npc_stake = StakeFactory(
             beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
         )
-        npc_loss = StakeResolutionFactory(stake=npc_stake, column=StakeResolutionColumn.LOSS)
+        npc_loss = StakeResolutionFactory(
+            stake=npc_stake,
+            column=StakeResolutionColumn.LOSS,
+            machine_match_lifecycle_state=LifecycleState.DEAD,
+        )
         StakeResolutionFactory(stake=npc_stake, column=StakeResolutionColumn.WIN)
         other_stake = StakeFactory(beat=beat)
         other_win = StakeResolutionFactory(stake=other_stake, column=StakeResolutionColumn.WIN)
@@ -190,6 +198,40 @@ class MachineGradingTests(EvenniaTestCase):
         other_outcome = StakeOutcome.objects.get(stake=other_stake)
         self.assertEqual(other_outcome.column, StakeResolutionColumn.WIN)
         self.assertEqual(other_outcome.resolution_id, other_win.pk)
+
+    def test_captured_lifecycle_state_selects_matching_branch_over_default(self) -> None:
+        """A NPC_FATE stake whose subject is CAPTURED fires the branch whose
+        machine_match_lifecycle_state=CAPTURED, not the plain LOSS default."""
+        subject = CharacterSheetFactory()
+        subject.lifecycle_state = LifecycleState.CAPTURED
+        subject.save(update_fields=["lifecycle_state"])
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=subject
+        )
+        captured_branch = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="captured",
+            machine_match_lifecycle_state=LifecycleState.CAPTURED,
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="",
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.SUCCESS,
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, captured_branch.pk)
 
     def test_withdrawal_fires_authored_branch_and_pends_the_rest(self):
         _sheet, beat, progress = _character_story_beat()

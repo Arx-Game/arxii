@@ -1,1 +1,1 @@
-0010_alter_stakeresolution_options_and_more
+0011_stakeresolution_machine_match_lifecycle_state

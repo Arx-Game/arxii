@@ -203,7 +203,15 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
             column = StakeResolutionColumn.WITHDRAWAL
         else:
             column = _machine_column_for_stake(stake, outcome)
-            resolution = _branch_for_column(stake, column)
+            resolution = _branch_for_column(
+                stake, column, prefer_lifecycle_state=_subject_lifecycle_state(stake)
+            )
+            if resolution is not None:
+                # A lifecycle-state match may have selected a branch on the
+                # OTHER column (#1760 — e.g. a DEAD/CAPTURED override firing
+                # LOSS on a beat-level SUCCESS); record the branch's actual
+                # column, not the outcome-derived default.
+                column = resolution.column
         outcomes.append(
             _fire_branch_and_record(
                 stake=stake,
@@ -220,38 +228,65 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     return outcomes
 
 
-def _machine_column_for_stake(stake: Stake, outcome: BeatOutcome) -> StakeResolutionColumn:
-    """Map the beat outcome to this stake's column, with data-driven overrides.
+def _machine_column_for_stake(
+    stake: Stake,  # noqa: ARG001
+    outcome: BeatOutcome,
+) -> StakeResolutionColumn:
+    """Map the beat outcome to this stake's column (the polarity default).
 
-    Pillar 11 (machine grading where the data exists): an NPC_FATE stake whose
-    subject sheet's vitals read DEAD is a LOSS regardless of the beat's column —
-    combat already wrote the truth into CharacterVitals.
+    The specific branch within that polarity is selected separately by
+    _branch_for_column's lifecycle-state match (#1760); this function only
+    picks WIN vs LOSS. ``stake`` is unused now that the old is-dead override
+    moved into _branch_for_column, but kept in the signature — callers pass
+    it uniformly with the withdrawal/GM-pick branch lookups.
     """
-    column = (
-        StakeResolutionColumn.WIN if outcome == BeatOutcome.SUCCESS else StakeResolutionColumn.LOSS
-    )
-    if (
-        stake.subject_kind == StakeSubjectKind.NPC_FATE
-        and stake.subject_sheet_id is not None
-        and _subject_is_dead(stake.subject_sheet)
-    ):
-        return StakeResolutionColumn.LOSS
-    return column
+    if outcome == BeatOutcome.SUCCESS:
+        return StakeResolutionColumn.WIN
+    return StakeResolutionColumn.LOSS
 
 
-def _subject_is_dead(sheet: CharacterSheet) -> bool:
-    """Whether the subject's vitals mortality marker reads DEAD."""
-    from world.vitals.services import is_dead  # noqa: PLC0415
+def _subject_lifecycle_state(stake: Stake) -> str | None:
+    """The stake's NPC_FATE subject's current lifecycle_state, or None.
 
-    return is_dead(sheet)
+    None when the stake isn't NPC_FATE or has no resolvable subject sheet —
+    callers treat None as "no machine-match signal available."
+    """
+    if stake.subject_kind != StakeSubjectKind.NPC_FATE or stake.subject_sheet_id is None:
+        return None
+    return stake.subject_sheet.lifecycle_state
 
 
-def _branch_for_column(stake: Stake, column: str) -> StakeResolution | None:
-    """The stake's authored resolution for ``column``, from the prefetch when present."""
+def _branch_for_column(
+    stake: Stake, column: str, *, prefer_lifecycle_state: str | None = None
+) -> StakeResolution | None:
+    """The stake's authored resolution for `column`, from the prefetch when present.
+
+    #1760: when prefer_lifecycle_state is set, a branch whose
+    machine_match_lifecycle_state equals it wins over the column's plain
+    (outcome_key="") default — and over the outcome-derived column itself,
+    searched across ALL of the stake's authored branches (not just `column`).
+    This generalizes the old is-dead-only override (which forced LOSS
+    regardless of the beat's WIN/LOSS polarity) to the full LifecycleState
+    ladder: an authored branch's own column wins when its
+    machine_match_lifecycle_state matches the subject's actual state, same as
+    a dead NPC always graded LOSS even on a beat-level SUCCESS. Falls back to
+    the plain default within `column` when no branch matches — preserves
+    pre-#1760 single-branch-per-column content unchanged.
+    """
     resolutions = getattr(stake, "prefetched_resolutions", None)  # noqa: GETATTR_LITERAL
     if resolutions is None:
         resolutions = list(stake.resolutions.all())
-    return next((r for r in resolutions if r.column == column), None)
+    if prefer_lifecycle_state:
+        matched = next(
+            (r for r in resolutions if r.machine_match_lifecycle_state == prefer_lifecycle_state),
+            None,
+        )
+        if matched is not None:
+            return matched
+    candidates = [r for r in resolutions if r.column == column]
+    return next((r for r in candidates if r.outcome_key == ""), None) or next(
+        iter(candidates), None
+    )
 
 
 def _fire_branch_and_record(  # noqa: PLR0913
