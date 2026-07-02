@@ -2339,7 +2339,10 @@ class ResolveStakeInputSerializer(serializers.Serializer):
     def validate(self, attrs: Any) -> Any:
         stake = self.context["stake"]
 
-        if stake.outcomes.exists():
+        # Query the table directly — the view's prefetched `stake.outcomes`
+        # cache on the idmapper-shared instance can be stale within a request
+        # cycle, and this check must be point-in-time correct.
+        if StakeOutcome.objects.filter(stake=stake).exists():
             raise serializers.ValidationError(
                 {"non_field_errors": "This stake has already been resolved."}
             )

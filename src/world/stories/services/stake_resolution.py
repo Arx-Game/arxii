@@ -297,7 +297,9 @@ def resolve_stake_by_gm_pick(
     from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
     from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
-    if stake.outcomes.exists():
+    # Direct table query — never the related manager, whose prefetched cache
+    # on the idmapper-shared Stake instance can be stale.
+    if StakeOutcome.objects.filter(stake=stake).exists():
         msg = (
             f"Stake {stake.pk} already has a StakeOutcome; "
             "ResolveStakeInputSerializer should have rejected this."

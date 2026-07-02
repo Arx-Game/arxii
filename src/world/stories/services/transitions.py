@@ -119,6 +119,11 @@ def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
     Beat-level requirement: the beat's coarse outcome, unchanged.
     """
     if req.stake_id is not None:
-        latest = req.stake.outcomes.first()
+        # Direct table query (Meta.ordering = -created_at → latest first);
+        # the related manager's prefetched cache on an idmapper-shared Stake
+        # instance can be stale.
+        from world.stories.models import StakeOutcome  # noqa: PLC0415
+
+        latest = StakeOutcome.objects.filter(stake_id=req.stake_id).first()
         return latest is not None and latest.column == req.required_stake_column
     return req.beat.outcome == req.required_outcome

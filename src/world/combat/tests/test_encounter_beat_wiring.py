@@ -14,15 +14,24 @@ from world.combat.constants import EncounterOutcome, RiskLevel
 from world.combat.factories import CombatEncounterFactory
 from world.combat.models import EncounterOutcomeMapping
 from world.combat.services import complete_encounter
-from world.stories.constants import BeatOutcome, BeatPredicateType, StoryScope
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    StakeOutcomeMethod,
+    StakeResolutionColumn,
+    StoryScope,
+)
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
     EpisodeSceneFactory,
+    StakeFactory,
+    StakeResolutionFactory,
     StoryFactory,
     StoryProgressFactory,
 )
+from world.stories.models import StakeOutcome
 from world.traits.models import CheckOutcome
 
 
@@ -170,3 +179,39 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         install_encounter_beat_trigger(encounter)
         # No EpisodeScene linking this scene to any beat — must not raise.
         complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+    def test_fled_fires_withdrawal_stakes_and_pends_the_rest(self) -> None:
+        """FLED = withdrawal (#1770 PR2): a stake with an authored WITHDRAWAL
+        branch resolves immediately (method=MACHINE); a stake without one pends
+        with the beat's PENDING_GM_REVIEW for the GM's constrained pick.
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        authored = StakeFactory(beat=beat)
+        withdrawal_branch = StakeResolutionFactory(
+            stake=authored, column=StakeResolutionColumn.WITHDRAWAL
+        )
+        unauthored = StakeFactory(beat=beat)
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.FLED)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
+        outcome = StakeOutcome.objects.get(stake=authored)
+        self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
+        self.assertEqual(outcome.method, StakeOutcomeMethod.MACHINE)
+        self.assertEqual(outcome.resolution_id, withdrawal_branch.pk)
+        self.assertFalse(StakeOutcome.objects.filter(stake=unauthored).exists())

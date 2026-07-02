@@ -241,3 +241,47 @@ class UseItemTests(TestCase):
         self.assertEqual(result.charges_remaining, 5)
         inst.refresh_from_db()
         self.assertEqual(inst.charges, 5)
+
+
+class ForfeitItemInstanceTests(TestCase):
+    """forfeit_item_instance (#1770 PR2) — soft-forfeit for staked-and-lost items."""
+
+    def _instance(self):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        return ItemInstanceFactory(
+            template=ItemTemplateFactory(),
+            game_object=ObjectDBFactory(),
+        )
+
+    def test_forfeit_soft_deletes_and_writes_transferred_event(self):
+        from world.items.constants import OwnershipEventType
+        from world.items.models import ItemInstance
+        from world.items.services.usage import forfeit_item_instance
+
+        inst = self._instance()
+        result = forfeit_item_instance(item_instance=inst, note="Stake 7 lost.")
+
+        # Soft-delete only: the row survives with destroyed_at stamped.
+        self.assertTrue(ItemInstance.objects.filter(pk=inst.pk).exists())
+        self.assertIsNotNone(result.destroyed_at)
+        # The game object leaves play but is not deleted.
+        self.assertIsNone(result.game_object.location)
+        event = result.ownership_events.get(event_type=OwnershipEventType.TRANSFERRED)
+        self.assertIsNone(event.to_character_sheet)
+        self.assertIn("Stake 7", event.notes)
+
+    def test_forfeit_is_idempotent(self):
+        from world.items.constants import OwnershipEventType
+        from world.items.services.usage import forfeit_item_instance
+
+        inst = self._instance()
+        first = forfeit_item_instance(item_instance=inst)
+        second = forfeit_item_instance(item_instance=inst)
+
+        self.assertEqual(first.destroyed_at, second.destroyed_at)
+        self.assertEqual(
+            second.ownership_events.filter(event_type=OwnershipEventType.TRANSFERRED).count(),
+            1,
+        )
