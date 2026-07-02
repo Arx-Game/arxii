@@ -29577,6 +29577,9 @@ components:
           type: integer
         creditor:
           type: string
+        summon_role_id:
+          type: integer
+          nullable: true
         principal:
           type: integer
         arrears:
@@ -29595,6 +29598,7 @@ components:
       - in_default
       - interest_bps_monthly
       - principal
+      - summon_role_id
     DecisionEnum:
       enum:
       - accept
@@ -36686,6 +36690,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           description: UI display text for the menu option.
@@ -36750,10 +36755,12 @@ components:
       enum:
       - permit
       - mission
+      - loan
       type: string
       description: |-
         * `permit` - Permit
         * `mission` - Mission
+        * `loan` - Loan
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -36767,6 +36774,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           minLength: 1
@@ -37307,6 +37315,9 @@ components:
           type: integer
         graft_pct:
           type: integer
+        steward_role_id:
+          type: integer
+          nullable: true
         income_streams:
           type: array
           items:
@@ -37338,6 +37349,7 @@ components:
       - organization_id
       - organization_name
       - spend_rank_max
+      - steward_role_id
     Organization:
       type: object
       properties:
@@ -41932,6 +41944,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           minLength: 1

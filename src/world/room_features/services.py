@@ -120,3 +120,46 @@ def can_modify_room_features(persona: Persona, room: DefaultObject) -> bool:
     from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
 
     return is_owner(persona, room) or is_tenant(persona, room)
+
+
+def handle_command_center_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """COMMAND_CENTER strategy (#930): install or level the feature instance.
+
+    Unlike Sanctum (ritual-installed), a Command Center installs through the
+    plain ROOM_FEATURE_PROGRESSION project — level 1 creates the instance,
+    higher targets bump it. Its 'content' is reachability: the family books
+    surface where a Command Center stands.
+    """
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.room_features.models import (  # noqa: PLC0415
+        RoomFeatureInstance,
+        RoomFeatureProgressionDetails,
+    )
+
+    details = RoomFeatureProgressionDetails.objects.select_related(
+        "target_room_profile", "target_feature_kind"
+    ).get(project=project)
+    instance = (
+        RoomFeatureInstance.objects.filter(
+            room_profile=details.target_room_profile,
+            feature_kind=details.target_feature_kind,
+        )
+        .active()
+        .first()
+    )
+    if instance is None:
+        RoomFeatureInstance.objects.create(
+            room_profile=details.target_room_profile,
+            feature_kind=details.target_feature_kind,
+            level=max(1, target_level),
+        )
+        return
+    if target_level > instance.level:
+        instance.level = target_level
+        instance.last_upgraded_at = _tz.now()
+        instance.save(update_fields=["level", "last_upgraded_at"])
