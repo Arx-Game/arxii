@@ -142,8 +142,11 @@ depth) and skips-and-logs instead of raising. Captivity of a PC is deliberately
 ### `StakeOutcome` (PR2)
 
 The per-stake resolution audit + routing row — mirrors `EpisodeResolution` (GM
-narrative-decision audit) and `BeatCompletion` (append-only ledger). The
-**latest row per stake wins** for transition routing.
+narrative-decision audit) and `BeatCompletion` (append-only ledger).
+**Exactly one row per stake** (`unique_outcome_per_stake` constraint) — a
+stake's resolution fires once from the locked contract; the create paths catch
+a losing concurrent create and return the winner's row (PR1's activation
+pattern), with `.exists()` pre-checks as the fast path.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -154,20 +157,25 @@ narrative-decision audit) and `BeatCompletion` (append-only ledger). The
 | `method` | CharField (`StakeOutcomeMethod` choices) | `MACHINE` (completion-tail grading) or `GM_PICK` (constrained pick) |
 | `resolved_by` | FK → `gm.GMProfile` (null, SET_NULL) | The picking GM; null for MACHINE |
 | `gm_notes` | TextField (blank) | |
-| `created_at` | DateTimeField (auto_now_add) | Ordering `-created_at` |
+| `created_at` | DateTimeField (auto_now_add) | Ordering `["-created_at", "-pk"]` |
 
 ### `TransitionRequiredOutcome.stake` + `required_stake_column` (PR2)
 
 Stake-level transition routing: when `stake` is set on a
 `TransitionRequiredOutcome`, the requirement is satisfied iff the stake's
-**latest** `StakeOutcome.column` equals `required_stake_column` (instead of the
-beat's coarse outcome) — so one beat's stakes can route to different downstream
-episodes. `clean()` (mirrored in the serializer) enforces: stake set ⇒
-`required_stake_column` required and the stake belongs to the requirement's
-beat; stake null ⇒ column blank. Conditioned unique constraints keep one
-beat-level row per `(transition, beat)` and one stake-level row per
+`StakeOutcome.column` equals `required_stake_column` (instead of the beat's
+coarse outcome) — so one beat's stakes can route to different downstream
+episodes. Exactly one predicate shape per row, enforced by `clean()` (mirrored
+in `TransitionRequiredOutcomeSerializer` and the bulk-save
+`OutcomeInputSerializer`): stake set ⇒ `required_stake_column` required, the
+stake belongs to the requirement's beat, and `required_outcome` must be
+**blank** (no misleading mandatory-but-ignored value); stake null ⇒
+`required_outcome` required and column blank. Conditioned unique constraints
+keep one beat-level row per `(transition, beat)` and one stake-level row per
 `(transition, stake)`. In the fuse walk, a stake-level requirement counts as
-failure-following iff it requires `LOSS`.
+failure-following iff it requires `LOSS`. The editor bulk-save
+(`POST /api/transitions/save-with-outcomes/`) round-trips both shapes — its
+delete-and-recreate path preserves stake-level rows.
 
 ### `StakeContractActivation`
 
@@ -331,31 +339,46 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
   `apply_pool_deterministically`) with the **same guards and
   `ResolutionContext` construction as beat-level pools** (shared
   `beats._fire_pool_with_context`), then applies the writer payloads.
+  **Deliberate asymmetry:** the machine path is tier-filtered (a branch pool
+  with no consequence at the completion's tier fires nothing — the
+  `StakeOutcome` is still recorded), while the GM-pick and withdrawal paths
+  apply deterministically (there is no graded tier to filter on).
 - A missing branch still writes a `StakeOutcome` with `resolution=None` (an
   unready contract that ran anyway is auditable, not invisible).
 - Idempotent: stakes that already carry a `StakeOutcome` (e.g. an earlier GM
-  pick) are skipped.
+  pick) are skipped. Participant resolution happens inside the resolver,
+  after the no-stakes/deferred early-returns — an unstaked completion never
+  pays its cost.
 - `PENDING_GM_REVIEW` (non-withdrawal) defers all stakes — they wait for the
   GM's pick or final mark.
+- The aggregate-crossing tail (`_finalize_aggregate_crossing`) resolves stakes
+  at `WIN` and closes the open activation, same as the shared tail.
 
 **Withdrawal (combat FLED/ABANDONED):** the combat auto-wire
 (`world.combat.beat_wiring.encounter_completed_beat_handler`) passes
 `withdrawal=True` through `record_outcome_tier_completion` (legal only with
-`force_outcome=PENDING_GM_REVIEW`). Stakes **with** an authored `WITHDRAWAL`
-resolution fire it immediately (method `MACHINE`); stakes without one pend with
-the beat's `PENDING_GM_REVIEW` for the GM's constrained pick. The beat outcome
-itself stays `PENDING_GM_REVIEW` (a GM still adjudicates the beat). This
-resolves #1746's deferred withdrawal design.
+`force_outcome=PENDING_GM_REVIEW`). The withdrawal path is **structural**:
+FLED/ABANDONED take it regardless of any authored `EncounterOutcomeMapping`
+row for the pair — a mapped tier is ignored (withdrawal routes to withdrawal
+branches by spec semantics, not data convention). Stakes **with** an authored
+`WITHDRAWAL` resolution fire it immediately (method `MACHINE`); stakes without
+one pend with the beat's `PENDING_GM_REVIEW` for the GM's constrained pick.
+The beat outcome itself stays `PENDING_GM_REVIEW` (a GM still adjudicates the
+beat). This resolves #1746's deferred withdrawal design.
 
 **GM constrained pick:** `resolve_stake_by_gm_pick` /
 `POST /api/stakes/{id}/resolve/` — the GM picks **among the stake's authored
 resolution columns only** (never free composition; author the branch first).
 The branch fires exactly like the machine path (pool + writers); the
-`StakeOutcome` records `method=GM_PICK`, `resolved_by`, and `gm_notes`. One
-pick per stake (a second attempt is rejected). When a GM later finally marks a
-pending beat, the completion tail's resolver auto-resolves the *remaining*
-unresolved stakes at the marked column; picked stakes are untouched
-(idempotency).
+`StakeOutcome` records `method=GM_PICK`, `resolved_by`, and `gm_notes`.
+Optional `participants` / `extra_participants` carry the personas the branch's
+pool and affection writer credit (same semantics as the beat mark endpoint:
+GROUP scope needs an explicit list for LEGEND_AWARD pools — the guard surfaces
+as a 400, not a 500). One pick per stake (a second attempt is rejected; the
+`unique_outcome_per_stake` constraint is the backstop). When a GM later
+finally marks a pending beat, the completion tail's resolver auto-resolves the
+*remaining* unresolved stakes at the marked column; picked stakes are
+untouched (idempotency).
 
 **Escalation:** `escalates_to_risk` stays recorded on the fired resolution and
 is readable by authoring; there is no automatic scene-spawn in PR2 (the fuse
@@ -408,8 +431,8 @@ only the plain-language wager.
 
 | Function | Signature | Purpose |
 |---|---|---|
-| `resolve_stakes_for_completion` | `(*, beat, outcome, progress, scope, participants, outcome_tier=None, withdrawal=False) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches — see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
-| `resolve_stake_by_gm_pick` | `(stake, *, column, gm_profile, gm_notes="") -> StakeOutcome` | The GM constrained pick — fires the authored branch like the machine path, records `GM_PICK` |
+| `resolve_stakes_for_completion` | `(*, beat, outcome, completion, progress, scope, explicit_participants=None, outcome_tier=None, withdrawal=False) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches — see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
+| `resolve_stake_by_gm_pick` | `(stake, *, column, gm_profile, gm_notes="", participants=None, extra_participants=None) -> StakeOutcome` | The GM constrained pick — fires the authored branch like the machine path, records `GM_PICK` |
 | `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, npc_affection_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`) |
 | `sheet_is_player_held` | `(sheet: CharacterSheet) -> bool` | The pillar-12 gate: RosterEntry with a current tenure |
 

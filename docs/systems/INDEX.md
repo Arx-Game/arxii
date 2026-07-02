@@ -1029,7 +1029,7 @@ lock, read by the Legend award, and resolved per-stake at beat completion
   payloads `forfeits_subject_item` / `npc_affection_delta` /
   `sets_subject_lifecycle` — pillar-12 validated), `StakeContractActivation`
   (lock + audit row; partial-unique open-per-beat; `effective_risk`),
-  `StakeOutcome` (PR2 per-stake resolution audit/routing row; latest wins);
+  `StakeOutcome` (PR2 per-stake resolution audit/routing row; exactly one per stake);
   `Beat.target_level`; `TransitionRequiredOutcome.stake` +
   `required_stake_column` (PR2 stake-level transition routing).
 - **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind`,
