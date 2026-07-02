@@ -23331,13 +23331,13 @@ export interface components {
       template?: number | null;
       subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
-      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. */
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
-      /** @description For ITEM subjects. */
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
       subject_item?: number | null;
-      /** @description For FACTION subjects (society-level). */
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
       subject_society?: number | null;
-      /** @description For FACTION subjects (organization-level). */
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
@@ -25948,13 +25948,13 @@ export interface components {
       template?: number | null;
       subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
-      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. */
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
-      /** @description For ITEM subjects. */
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
       subject_item?: number | null;
-      /** @description For FACTION subjects (society-level). */
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
       subject_society?: number | null;
-      /** @description For FACTION subjects (organization-level). */
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;
@@ -26008,13 +26008,13 @@ export interface components {
       template?: number | null;
       subject_kind?: components['schemas']['SubjectKindEnum'];
       severity?: components['schemas']['SeverityEnum'];
-      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. */
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
       subject_sheet?: number | null;
-      /** @description For ITEM subjects. */
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
       subject_item?: number | null;
-      /** @description For FACTION subjects (society-level). */
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
       subject_society?: number | null;
-      /** @description For FACTION subjects (organization-level). */
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
       subject_organization?: number | null;
       /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
       subject_label?: string;

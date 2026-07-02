@@ -41892,20 +41892,23 @@ components:
           maximum: 32767
         subject_sheet:
           type: integer
-          description: For NPC_FATE / PERSONAL_JEOPARDY subjects.
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
           nullable: true
         subject_item:
           type: integer
           nullable: true
-          description: For ITEM subjects.
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
         subject_society:
           type: integer
           nullable: true
-          description: For FACTION subjects (society-level).
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
         subject_organization:
           type: integer
           nullable: true
-          description: For FACTION subjects (organization-level).
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -47322,20 +47325,23 @@ components:
           maximum: 32767
         subject_sheet:
           type: integer
-          description: For NPC_FATE / PERSONAL_JEOPARDY subjects.
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
           nullable: true
         subject_item:
           type: integer
           nullable: true
-          description: For ITEM subjects.
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
         subject_society:
           type: integer
           nullable: true
-          description: For FACTION subjects (society-level).
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
         subject_organization:
           type: integer
           nullable: true
-          description: For FACTION subjects (organization-level).
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
@@ -47446,20 +47452,23 @@ components:
           maximum: 32767
         subject_sheet:
           type: integer
-          description: For NPC_FATE / PERSONAL_JEOPARDY subjects.
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
           nullable: true
         subject_item:
           type: integer
           nullable: true
-          description: For ITEM subjects.
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
         subject_society:
           type: integer
           nullable: true
-          description: For FACTION subjects (society-level).
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
         subject_organization:
           type: integer
           nullable: true
-          description: For FACTION subjects (organization-level).
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
         subject_label:
           type: string
           description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
