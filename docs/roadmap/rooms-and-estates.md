@@ -1,6 +1,6 @@
 # Rooms, Buildings & Estates
 
-**Status:** in progress — Room Builder backend shipped (#670 PR1)
+**Status:** Room Builder shipped (#670 — PR1 backend + PR2 web builder)
 **Depends on:** Areas (data layer), Items (containers, ownership), Roster (character ownership)
 
 ## Built (2026-07-01, #670 PR1 — Room Builder backend)
@@ -25,8 +25,23 @@
   `/public`, `/addexit`, `/removeexit`, `/renameexit`, `/drop confirm`,
   `/map`, `/home`, `/tenant`, `/evict`, `/extend`, `/decorate`), aliases
   `build` + legacy `manageroom`.
-- **Next (PR2):** building-manager read API + the web map canvas (the
-  builder's primary surface), grown from the #1470 `RoomEditorPanel`.
+## Built (2026-07-02, #670 PR2 — building-manager API + web builder)
+
+- **Web-addressable actions:** structural builder actions take an explicit
+  `room_id` anchor (`to_room_id`/`exit_id` for links), prerequisite-gated on
+  the resolved room, so the canvas operates building-wide; new `place_room`
+  action for cosmetic map re-placement (drag).
+- **Read API** (`/api/buildings/`): owner-gated manager payload (rooms +
+  sizes + grid + tenancies, exits, budget, floors), the for-room resolver
+  RoomPanel uses (permission booleans only), room-size-tier + decoration-
+  template catalogs. Writes stay on action dispatch.
+- **Web builder** (`frontend/src/buildings/`): "Manage Building" on RoomPanel
+  opens a full-screen React Flow canvas — rooms on the grid, click a ghost
+  cell to dig (direction prefilled), drag to re-place, exit-pair edges,
+  floor switcher, budget meter — with a room detail panel (identity, size,
+  exits, tenants, duplicate-via-`like=`, remove w/ stranded-room guard
+  surfaced) and dialogs for decoration commissions + budget extensions.
+  Tenants get "Set as Home" on RoomPanel.
 
 ## Overview
 

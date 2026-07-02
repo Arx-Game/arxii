@@ -30,6 +30,13 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   one room; completion applies the template's polish increments. _Avoid:_
   decoration project (RoomDecoration is the separate instant comfort-fixture
   system).
+- **Map cell (placement)** — a room's building-local spot on the cosmetic map
+  grid (`RoomProfile.grid_x`/`grid_y`/`floor`; north = +y). Auto-assigned on
+  directional digs, moved by `place_room` (web canvas drag). Cosmetic only —
+  never gates creation or play; one cell per room regardless of size; a room
+  with NULL coords is *unplaced* (tray on the canvas, listed under the ASCII
+  map). _Avoid:_ position (that's the within-room tactical positioning
+  framework in `areas.positioning`), coordinates.
 - **Primary home** — a persona's designated home room
   (`LocationTenancy.is_primary_home`, one active per persona; the Arx-1
   `addhome`). Anchors `prestige_from_dwellings` (home room polish + building

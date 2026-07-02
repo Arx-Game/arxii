@@ -161,6 +161,7 @@ class ActionRegistryTests(TestCase):
             "link_rooms",
             "unlink_rooms",
             "rename_exit",
+            "place_room",
             "assign_room_tenant",
             "end_room_tenancy",
             "set_primary_home",

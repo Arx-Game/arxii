@@ -53,11 +53,17 @@ They do not use the command system, dispatchers, or handlers.
   `world.buildings.room_services` / `world.locations.services`): `DigRoomAction` (`"dig_room"`),
   `ResizeRoomAction` (`"resize_room"`), `RemoveRoomAction` (`"remove_room"`), `LinkRoomsAction`
   (`"link_rooms"`), `UnlinkRoomsAction` (`"unlink_rooms"`), `RenameExitAction` (`"rename_exit"`),
+  `PlaceRoomAction` (`"place_room"`, #670 PR2 — cosmetic map-grid re-placement for canvas drag),
   `AssignRoomTenantAction` (`"assign_room_tenant"`), `EndRoomTenancyAction`
   (`"end_room_tenancy"`), `SetPrimaryHomeAction` (`"set_primary_home"`,
   `IsRoomTenantPrerequisite`), `CommissionDecorationAction` (`"commission_decoration"`),
   `StartExtensionAction` (`"start_building_extension"`). Structural verbs reuse
-  `IsRoomOwnerPrerequisite`; success messages carry `Space: used/total`;
+  `IsRoomOwnerPrerequisite`; success messages carry `Space: used/total`. Web-addressable
+  anchors (#670 PR2): structural actions resolve an explicit `room_id` kwarg first
+  (`_resolve_room`; `to_room_id` on link, `exit_id` on unlink/rename scoped to the anchor
+  room) and fall back to `actor.location`; `IsRoomOwnerPrerequisite` reads `room_id` via
+  the kwargs-via-context convention and gates on the *resolved* room. `set_primary_home`
+  stays deliberately location-anchored (tenant verb);
   `personas.py` — `SetActivePersonaAction`, key `"set_active_persona"` (#1347), REGISTRY backend,
   `target_type=SELF`, kwarg `persona_id`; the single action.run() path for set-active shared by
   telnet `CmdPersona` and the web `PersonaViewSet.set_active`. Validates the persona belongs to
