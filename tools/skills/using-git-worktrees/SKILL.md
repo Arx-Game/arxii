@@ -47,14 +47,13 @@ Report with branch state:
 **If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo
 checkout.
 
-Has the user already indicated their worktree preference in your instructions?
-If not, ask for consent before creating a worktree:
-
-> "Would you like me to set up an isolated worktree? It protects your current
-> branch from changes."
-
-Honor any existing declared preference without asking. If the user declines
-consent, work in place and skip to Step 2.
+**Worktrees are mandatory in this repo, not optional.** The devcontainer
+bind-mounts the workspace over a slow 9p filesystem; only `.claude/worktrees/`
+(the `arxii-worktrees` named volume) gives `uv` a Linux-native filesystem where
+it can hardlink venvs from the colocated `UV_CACHE_DIR`. Working in the main
+checkout wastes ~10 min per `uv sync` and risks committing to `main` (which is
+merge-queue-only — see AGENTS.md). **Do not ask for consent and do not work in
+place.** Proceed directly to Step 1 to create a worktree.
 
 ## Step 1: Create Isolated Workspace
 
@@ -62,10 +61,10 @@ consent, work in place and skip to Step 2.
 
 ### 1a. Native Worktree Tools (preferred)
 
-The user has asked for an isolated workspace (Step 0 consent). Do you already
-have a way to create a worktree? It might be a tool with a name like
-`EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree`
-flag. If you do, use it and skip to Step 2.
+You are creating an isolated workspace (Step 0 determined it's mandatory). Do
+you already have a way to create a worktree? It might be a tool with a name
+like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a
+`--worktree` flag. If you do, use it and skip to Step 2.
 
 Native tools handle directory placement, branch creation, and cleanup
 automatically. Using `git worktree add` when you have a native tool creates
@@ -78,17 +77,25 @@ Only proceed to Step 1b if you have no native worktree tool available.
 **Only use this if Step 1a does not apply** — you have no native worktree tool
 available. Create a worktree manually using git.
 
-#### Already on the feature branch? Work in place.
+#### Branch already checked out? Move it into a worktree.
 
-`pickup-issue.sh` creates the feature branch and checks it out in the current
-worktree. If you are **already on the feature branch** in the main checkout,
-there is no separate `main` workspace to protect — the current checkout *is*
-the isolated workspace. Skip worktree creation and go straight to Step 2
-(Project Setup). Do NOT run `git worktree add` for a branch that is already
-checked out; git will refuse it ("already checked out").
+`pickup-issue.sh` creates the feature branch with `git branch` (it does **not**
+check it out, so `main` stays put). The branch is meant to live in a worktree
+on the named volume, not in the main checkout.
 
-Only create a new worktree if you are currently on `main` (or detached HEAD)
-and want to move the feature branch into an isolated worktree.
+- **Branch exists but is NOT checked out anywhere** (the normal case after
+  `pickup-issue.sh`): check it out into the worktree without `-b` (see Create
+  the Worktree below).
+- **You are already ON the feature branch in the main checkout** (e.g. a prior
+  session checked it out): move it into a worktree. First switch `main` back
+  to `main` so the branch is free, then create the worktree:
+  ```bash
+  git checkout main                  # free the feature branch
+  git worktree add "$LOCATION/$BRANCH" "$BRANCH"
+  cd "$LOCATION/$BRANCH"
+  ```
+  Do NOT "work in place" on the feature branch in the main checkout — that
+  leaves you on the slow 9p mount and defeats the volume.
 
 #### Directory Selection
 
@@ -234,6 +241,11 @@ Ready to implement <feature-name>
 - Create worktree without verifying it's ignored (project-local).
 - Skip baseline test verification.
 - Proceed with failing tests without asking.
+- Work in place in the main checkout when a worktree could be created. The slow
+  9p mount makes `uv sync` ~10 min vs <2 s, and `main` is merge-queue-only.
+- Check out the feature branch in the main checkout (e.g. `git checkout -b`).
+  `pickup-issue.sh` uses `git branch` so the branch is free to check out into a
+  worktree.
 
 **Always:**
 - Run Step 0 detection first.
