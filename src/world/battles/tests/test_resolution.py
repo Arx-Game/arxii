@@ -393,6 +393,29 @@ class ResolveBattleRoundSuccessTests(TestCase):
         self.assertTrue(declare.resolved)
         self.assertGreater(declare.success_level, 0)
 
+    def test_side_scope_strike_attrites_every_unit_on_target_side(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_strike_success
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        unit_a = BattleUnitFactory(battle=battle, side=side, strength=100)
+        unit_b = BattleUnitFactory(battle=battle, side=side, strength=100)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            action_kind=BattleActionKind.STRIKE,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_strike_success(declaration, result, success_level=2)
+
+        unit_a.refresh_from_db()
+        unit_b.refresh_from_db()
+        self.assertEqual(unit_a.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
+        self.assertEqual(unit_b.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
+
 
 class ResolveBattleRoundSupportTests(TestCase):
     """SUPPORT success: side VP increases by SUPPORT_VP."""
@@ -884,4 +907,51 @@ class RescueResolutionTests(TestCase):
 
         assert not get_active_conditions(
             victim_sheet.character, condition=self.content["condition"]
+        ).exists()
+
+    def test_place_scope_rescue_clears_surrounded_for_every_ally_at_place(self) -> None:
+        from world.battles.factories import (
+            BattleActionDeclarationFactory,
+            BattlePlaceFactory,
+        )
+        from world.battles.resolution import _resolve_rescue_success
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        # DEFENDER: BattleActionDeclarationFactory's default participant SubFactory creates
+        # its own default (ATTACKER) BattleSide for this battle — using DEFENDER here avoids
+        # colliding with that on BattleSide's (battle, role) uniqueness constraint.
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        ally_a = BattleParticipantFactory(battle=battle, side=side, place=place)
+        ally_b = BattleParticipantFactory(battle=battle, side=side, place=place)
+        # ConditionInstanceFactory direct creation, not apply_condition — apply_condition
+        # routes through _build_bulk_context's PG-only DISTINCT ON query for progressive
+        # conditions (Surrounded is progressive) and errors on the SQLite fast tier (same
+        # trap noted above for test_successful_rescue_clears_surrounded).
+        ConditionInstanceFactory(
+            target=ally_a.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        ConditionInstanceFactory(
+            target=ally_b.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            action_kind=BattleActionKind.RESCUE,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        _resolve_rescue_success(declaration)
+
+        assert not get_active_conditions(
+            ally_a.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+        assert not get_active_conditions(
+            ally_b.character_sheet.character, condition=self.content["condition"]
         ).exists()

@@ -262,27 +262,70 @@ class BattleRoundResult:
     casualties: list[int] = field(default_factory=list)
 
 
+def _scope_target_units(declaration: BattleActionDeclaration) -> list:
+    """Active BattleUnits affected by *declaration*, per its scope (#1710)."""
+    from world.battles.constants import BattleActionScope, BattleUnitStatus  # noqa: PLC0415
+    from world.battles.models import BattleUnit  # noqa: PLC0415
+
+    if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
+        return list(
+            BattleUnit.objects.filter(
+                side_id=declaration.target_side_id, status=BattleUnitStatus.ACTIVE
+            )
+        )
+    if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
+        return list(
+            BattleUnit.objects.filter(
+                place_id=declaration.target_place_id, status=BattleUnitStatus.ACTIVE
+            )
+        )
+    return [declaration.target_unit] if declaration.target_unit is not None else []
+
+
+def _scope_target_participants(declaration: BattleActionDeclaration) -> list:
+    """Active BattleParticipants affected by *declaration*, per its scope (#1710)."""
+    from world.battles.constants import BattleActionScope, BattleParticipantStatus  # noqa: PLC0415
+
+    if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
+        return list(
+            BattleParticipant.objects.filter(
+                side_id=declaration.target_side_id, status=BattleParticipantStatus.ACTIVE
+            )
+        )
+    if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
+        return list(
+            BattleParticipant.objects.filter(
+                place_id=declaration.target_place_id, status=BattleParticipantStatus.ACTIVE
+            )
+        )
+    return [declaration.target_ally] if declaration.target_ally is not None else []
+
+
 def _resolve_strike_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
     success_level: int,
 ) -> None:
-    """Apply STRIKE success: attrite the unit, award VP to the participant's side."""
-    unit = declaration.target_unit
-    if unit is None:
+    """Apply STRIKE success: attrite the unit(s), award VP to the participant's side.
+
+    Fans out across every active unit at the declaration's scope target
+    (SIDE/PLACE, #1710) — each unit takes the same per-level attrition; VP is
+    awarded once per declaration regardless of scope breadth.
+    """
+    units = _scope_target_units(declaration)
+    if not units:
         return
 
     attrition = success_level * STRIKE_ATTRITION_PER_LEVEL
-    unit.strength = max(0, unit.strength - attrition)
-
-    if unit.strength == 0:
-        unit.status = BattleUnitStatus.DESTROYED
-        result.units_destroyed.append(unit.pk)
-    elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
-        unit.status = BattleUnitStatus.ROUTED
-        result.units_routed.append(unit.pk)
-
-    unit.save(update_fields=["strength", "status"])
+    for unit in units:
+        unit.strength = max(0, unit.strength - attrition)
+        if unit.strength == 0:
+            unit.status = BattleUnitStatus.DESTROYED
+            result.units_destroyed.append(unit.pk)
+        elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
+            unit.status = BattleUnitStatus.ROUTED
+            result.units_routed.append(unit.pk)
+        unit.save(update_fields=["strength", "status"])
 
     side = declaration.participant.side
     vp_gain = success_level * STRIKE_VP_PER_LEVEL
@@ -304,27 +347,29 @@ def _resolve_support_success(
 
 
 def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
-    """Apply RESCUE success: clear the target ally's Surrounded condition (#1733).
+    """Apply RESCUE success: clear Surrounded from the ally/allies at scope (#1733, #1710).
 
-    No VP awarded — rescue trades round economy for saving an ally, not battlefield
-    progress. No-op if the target ally isn't (or is no longer) Surrounded — a second
-    rescue declaration on an already-clear ally is simply wasted, not an error.
+    Fans out across every active participant at the declaration's scope target
+    (SIDE/PLACE) instead of a single ally when scope != UNIT. No VP awarded —
+    rescue trades round economy for saving allies, not battlefield progress.
+    No-op for a target that isn't (or is no longer) Surrounded.
     """
     from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_active_conditions, remove_condition  # noqa: PLC0415
 
-    target = declaration.target_ally
-    if target is None:
+    targets = _scope_target_participants(declaration)
+    if not targets:
         return
 
     template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
     if template is None:
         return
 
-    character = target.character_sheet.character
-    if get_active_conditions(character, condition=template).exists():
-        remove_condition(character, template)
+    for target in targets:
+        character = target.character_sheet.character
+        if get_active_conditions(character, condition=template).exists():
+            remove_condition(character, template)
 
 
 def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
