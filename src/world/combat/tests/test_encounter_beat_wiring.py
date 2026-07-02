@@ -1,7 +1,7 @@
 """Tests for the ENCOUNTER_COMPLETED → beat auto-wiring (#1746)."""
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, tag
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -253,3 +253,23 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         outcome = StakeOutcome.objects.get(stake=stake)
         self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
         self.assertEqual(outcome.resolution_id, branch.pk)
+
+
+class CombatEncounterStoryBeatFieldTests(EvenniaTestCase):
+    """Model-level: story_beat is a plain nullable FK, no cascade surprises."""
+
+    def test_story_beat_defaults_to_none(self) -> None:
+        encounter = CombatEncounterFactory()
+        self.assertIsNone(encounter.story_beat)
+
+    @tag("postgres")
+    def test_story_beat_survives_beat_deletion_as_set_null(self) -> None:
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(episode=episode)
+        encounter = CombatEncounterFactory(story_beat=beat)
+        beat.delete()
+        encounter.refresh_from_db()
+        self.assertIsNone(encounter.story_beat)

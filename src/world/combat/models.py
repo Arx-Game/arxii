@@ -124,6 +124,20 @@ class CombatEncounter(AbstractRound):
         related_name="duels_won",
         help_text="Recorded duel victor; null while ongoing or for an abandoned/mutual stop.",
     )
+    story_beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolving_encounters",
+        help_text=(
+            "The one Beat this specific encounter resolves (#1760). When set, "
+            "the ENCOUNTER_COMPLETED beat-wiring handler resolves only this "
+            "beat with this encounter's own graded outcome — never every beat "
+            "reachable from the scene. When unset, legacy find-all-on-scene "
+            "behavior applies unchanged."
+        ),
+    )
 
     @cached_property
     def combat(self) -> "EncounterCombatHandler":
