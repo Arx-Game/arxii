@@ -87,12 +87,18 @@ def _transition_follows_failure(transition: Transition, episode_id: int) -> bool
 
     A transition with no required outcome on any of this episode's beats is
     unconditioned (follows both columns); otherwise it must require FAILURE
-    on at least one of them.
+    on at least one of them. A stake-level requirement (#1770 PR2) counts as
+    failure-following iff it requires the LOSS column.
     """
     reqs = [r for r in transition.cached_required_outcomes if r.beat.episode_id == episode_id]
     if not reqs:
         return True
-    return any(r.required_outcome == BeatOutcome.FAILURE for r in reqs)
+    return any(
+        (r.required_stake_column == StakeResolutionColumn.LOSS)
+        if r.stake_id is not None
+        else (r.required_outcome == BeatOutcome.FAILURE)
+        for r in reqs
+    )
 
 
 def _jeopardy_reachable(beat: Beat, max_hops: int) -> bool:

@@ -686,6 +686,24 @@ class CanMarkBeat(permissions.BasePermission):
         )
 
 
+class CanResolveStake(permissions.BasePermission):
+    """Who can POST /api/stakes/{id}/resolve/ (#1770 PR2 — GM constrained pick).
+
+    Same gate as CanMarkBeat (Lead GM, staff, or an AGM with an APPROVED
+    claim on the stake's beat), delegated through obj.beat.
+    """
+
+    message = "Only the Lead GM, staff, or an AGM with an approved claim may resolve this stake."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Delegate the CanMarkBeat gate through the stake's beat."""
+        return CanMarkBeat().has_object_permission(request, view, obj.beat)
+
+
 class IsClaimOwnerOrStaff(permissions.BasePermission):
     """The AGM who made the claim (for cancel) or staff."""
 

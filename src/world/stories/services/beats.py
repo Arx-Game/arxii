@@ -197,17 +197,23 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
     scope: str,
     explicit_participants: list[Persona] | None,
     outcome_tier: CheckOutcome | None = None,
+    withdrawal: bool = False,
 ) -> BeatCompletion:
     """Persist the outcome, create the BeatCompletion, and fire its consequence pool.
 
     Shared atomic-transaction tail for record_gm_marked_outcome and
     record_outcome_tier_completion: flips beat.outcome in-place, creates the
     BeatCompletion row, fires the matching consequence pool (tier-aware when
-    outcome_tier is set), and opens a SessionRequest if the episode is now
+    outcome_tier is set), resolves the beat's stakes (#1770 PR2 — per-stake
+    machine grading, or WITHDRAWAL branches when ``withdrawal`` is set), closes
+    the open stake activation, and opens a SessionRequest if the episode is now
     ready-to-run. Notifies post-commit (outside the atomic block) so a
     notify failure can't roll back the completion.
     """
     from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
+    from world.stories.services.stake_resolution import (  # noqa: PLC0415
+        resolve_stakes_for_completion,
+    )
 
     with transaction.atomic():
         beat.outcome = outcome
@@ -221,6 +227,17 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             scope=scope,
             explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
+        )
+
+        resolve_stakes_for_completion(
+            beat=beat,
+            outcome=outcome,
+            completion=completion,
+            progress=progress,
+            scope=scope,
+            explicit_participants=explicit_participants,
+            outcome_tier=outcome_tier,
+            withdrawal=withdrawal,
         )
 
         from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
@@ -247,6 +264,7 @@ def record_outcome_tier_completion(  # noqa: PLR0913
     participants: list[Persona] | None = None,
     gm_notes: str = "",
     force_outcome: BeatOutcome | None = None,
+    withdrawal: bool = False,
 ) -> BeatCompletion:
     """Record a machine-graded outcome on an OUTCOME_TIER beat.
 
@@ -277,6 +295,11 @@ def record_outcome_tier_completion(  # noqa: PLR0913
     ``participants`` — same semantics as record_gm_marked_outcome: explicit Persona
         list for GROUP-scope LEGEND_AWARD pools.
 
+    ``withdrawal`` — the party walked away from the wager (combat FLED/ABANDONED,
+        #1770 PR2). Only legal with force_outcome=PENDING_GM_REVIEW: the beat
+        still pends for GM adjudication, but stakes with an authored WITHDRAWAL
+        resolution fire it immediately; unauthored stakes pend with the beat.
+
     Defensive assertions (programmer error — callers own building the right
     outcome_tier for their domain; there is no user-facing serializer for this path
     since it's machine-driven, not authored):
@@ -288,6 +311,13 @@ def record_outcome_tier_completion(  # noqa: PLR0913
         msg = (
             f"Beat {beat.pk} is not OUTCOME_TIER (type={beat.predicate_type}); "
             "only OUTCOME_TIER beats can be resolved via record_outcome_tier_completion."
+        )
+        raise ValueError(msg)
+    if withdrawal and force_outcome != BeatOutcome.PENDING_GM_REVIEW:
+        msg = (
+            f"Beat {beat.pk}: withdrawal=True is only legal with "
+            "force_outcome=PENDING_GM_REVIEW (the beat pends; withdrawal-authored "
+            "stakes fire their WITHDRAWAL branch)."
         )
         raise ValueError(msg)
 
@@ -320,6 +350,7 @@ def record_outcome_tier_completion(  # noqa: PLR0913
             scope=scope,
             explicit_participants=participants if scope == StoryScope.GROUP else None,
             outcome_tier=None,
+            withdrawal=withdrawal,
         )
 
     if outcome_tier is None:
@@ -484,12 +515,33 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
     # Fire consequence pool for the aggregate threshold crossing. Participants are
     # auto-derived from contribution rows. For GROUP scope, group_progress may be
     # None when no active progress exists; other scopes always pass None.
+    aggregate_progress = group_progress if scope == StoryScope.GROUP else None
     _maybe_fire_pool_on_completion(
         completion=aggregate_completion,
-        progress=group_progress if scope == StoryScope.GROUP else None,
+        progress=aggregate_progress,
         scope=scope,
         explicit_participants=None,
     )
+
+    # Per-stake resolution (#1770 PR2): an aggregate crossing is a SUCCESS
+    # completion, so any stakes on the beat machine-grade at the WIN column.
+    from world.stories.services.stake_resolution import (  # noqa: PLC0415
+        resolve_stakes_for_completion,
+    )
+    from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
+
+    resolve_stakes_for_completion(
+        beat=beat,
+        outcome=BeatOutcome.SUCCESS,
+        completion=aggregate_completion,
+        progress=aggregate_progress,
+        scope=scope,
+    )
+
+    # Close the open activation like the shared completion tail does —
+    # otherwise an aggregate crossing that resolved the stakes would leave
+    # the lock open forever, permanently blocking stake edits on the beat.
+    resolve_open_activation(beat)
 
     # Narrative notification: resolve an active progress to fan out recipients per scope.
     agg_progress = get_active_progress_for_story(story)
@@ -1021,16 +1073,6 @@ def _maybe_fire_pool_on_completion(
             row in the pool fires via apply_pool_deterministically — unchanged
             behavior.
     """
-    from world.checks.consequence_resolution import (  # noqa: PLC0415
-        apply_pool_deterministically,
-        apply_pool_for_tier,
-    )
-    from world.checks.types import ResolutionContext  # noqa: PLC0415
-    from world.societies.exceptions import (  # noqa: PLC0415
-        LegendAwardParticipantMissingError,
-        LegendAwardScopeError,
-    )
-
     pool = _pool_for_outcome(completion.beat, completion.outcome)
     if pool is None:
         return
@@ -1040,6 +1082,41 @@ def _maybe_fire_pool_on_completion(
         progress=progress,
         scope=scope,
         explicit_participants=explicit_participants,
+    )
+    _fire_pool_with_context(
+        pool=pool,
+        beat=completion.beat,
+        progress=progress,
+        scope=scope,
+        participants=participants,
+        outcome_tier=outcome_tier,
+    )
+
+
+def _fire_pool_with_context(  # noqa: PLR0913
+    *,
+    pool: ConsequencePool,
+    beat: Beat,
+    progress: AnyStoryProgress | None,
+    scope: str,
+    participants: list[Persona],
+    outcome_tier: CheckOutcome | None = None,
+) -> None:
+    """Guard, contextualize, and fire one consequence pool for a beat.
+
+    The shared core of beat-completion pool firing, extracted (#1770 PR2) so
+    per-stake resolution (world.stories.services.stake_resolution) fires a
+    StakeResolution's pool with exactly the same guards, ResolutionContext
+    construction, and tier-aware application as the beat-level pools.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_pool_deterministically,
+        apply_pool_for_tier,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.societies.exceptions import (  # noqa: PLC0415
+        LegendAwardParticipantMissingError,
+        LegendAwardScopeError,
     )
 
     # Guard: GLOBAL scope cannot fire LEGEND_AWARD effects.
@@ -1075,8 +1152,8 @@ def _maybe_fire_pool_on_completion(
 
     context = ResolutionContext(
         character=character,
-        beat=completion.beat,
-        story=completion.beat.episode.chapter.story,
+        beat=beat,
+        story=beat.episode.chapter.story,
         scene=None,
         participants=participants,
         outcome_tier=outcome_tier,

@@ -5,6 +5,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.character_sheets.types import LifecycleState
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     AssistantClaimStatus,
@@ -15,6 +16,7 @@ from world.stories.constants import (
     EraStatus,
     ProgressStatus,
     SessionRequestStatus,
+    StakeOutcomeMethod,
     StakeResolutionColumn,
     StakeSeverity,
     StakeSubjectKind,
@@ -1092,7 +1094,15 @@ class EpisodeProgressionRequirement(SharedMemoryModel):
 
 
 class TransitionRequiredOutcome(SharedMemoryModel):
-    """A beat outcome that must be satisfied for this transition to be eligible."""
+    """A beat outcome that must be satisfied for this transition to be eligible.
+
+    Stake-level routing (#1770 PR2): when ``stake`` is set, the requirement is
+    satisfied by the stake's StakeOutcome having
+    ``column == required_stake_column`` instead of the beat's coarse outcome —
+    so one beat's stakes can route to different downstream episodes. A
+    stake-level row leaves ``required_outcome`` blank (exactly one of the two
+    predicates is populated; ``clean`` enforces it).
+    """
 
     transition = models.ForeignKey(
         "stories.Transition",
@@ -1107,17 +1117,67 @@ class TransitionRequiredOutcome(SharedMemoryModel):
     required_outcome = models.CharField(
         max_length=20,
         choices=BeatOutcome.choices,
+        blank=True,
+        default="",
+        help_text="Required beat outcome; blank on stake-level rows.",
+    )
+    stake = models.ForeignKey(
+        "stories.Stake",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="routing_for_transitions",
+        help_text=(
+            "When set, this requirement routes on the stake's "
+            "StakeOutcome column instead of the beat's outcome."
+        ),
+    )
+    required_stake_column = models.CharField(
+        max_length=12,
+        choices=StakeResolutionColumn.choices,
+        blank=True,
+        default="",
+        help_text="Required StakeOutcome column; only with stake set.",
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["transition", "beat"],
+                condition=models.Q(stake__isnull=True),
                 name="unique_routing_req_per_transition_beat",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["transition", "stake"],
+                condition=models.Q(stake__isnull=False),
+                name="unique_routing_req_per_transition_stake",
+            ),
         ]
 
+    def clean(self) -> None:
+        super().clean()
+        if self.stake_id is not None:
+            if not self.required_stake_column:
+                raise ValidationError({"required_stake_column": "Required when stake is set."})
+            if self.required_outcome:
+                msg = "Must be blank when stake is set (stake rows route on the stake column)."
+                raise ValidationError({"required_outcome": msg})
+            if self.stake.beat_id != self.beat_id:
+                raise ValidationError(
+                    {"stake": "The stake must belong to this requirement's beat."}
+                )
+        else:
+            if not self.required_outcome:
+                raise ValidationError({"required_outcome": "Required when stake is not set."})
+            if self.required_stake_column:
+                raise ValidationError({"required_stake_column": "Only allowed when stake is set."})
+
     def __str__(self) -> str:
+        if self.stake_id is not None:
+            return (
+                f"Transition #{self.transition_id} requires stake #{self.stake_id}"
+                f" = {self.required_stake_column}"
+            )
         return (
             f"Transition #{self.transition_id} requires beat #{self.beat_id}"
             f" = {self.required_outcome}"
@@ -2011,10 +2071,11 @@ class Stake(SharedMemoryModel):
 class StakeResolution(SharedMemoryModel):
     """Authored branch for one stake x one outcome column (#1770 pillar 1).
 
-    Pillar 12 (no-fiat removal) note: this model deliberately has NO direct
-    lifecycle/world-state payload in PR1 — a branch fires a consequence pool
-    and/or escalates risk; structured world-state writers arrive in PR2 with
-    validation that rejects direct lifecycle writes.
+    Pillar 12 (no-fiat removal): the structured world-state writers below are
+    validated so a branch can never remove a player character by fiat —
+    sets_subject_lifecycle is only legal for NPC_FATE subjects whose sheet is
+    not player-held; PC removal must route through peril (escalates_to_risk +
+    consequence pools -> process_damage_consequences).
     """
 
     stake = models.ForeignKey("stories.Stake", on_delete=models.CASCADE, related_name="resolutions")
@@ -2041,6 +2102,30 @@ class StakeResolution(SharedMemoryModel):
         blank=True,
         help_text="What happens in the story when this branch fires (GM-authored).",
     )
+    # World-state writers (#1770 PR2). Validated by StakeResolutionSerializer
+    # (pillar 12: no-fiat removal) and applied by
+    # world.stories.services.stake_resolution when the branch fires.
+    forfeits_subject_item = models.BooleanField(
+        default=False,
+        help_text="On fire, soft-forfeit the stake's subject_item (ITEM stakes only).",
+    )
+    npc_affection_delta = models.SmallIntegerField(
+        default=0,
+        help_text=(
+            "On fire, adjust NPCStanding between the stake's subject_sheet's "
+            "primary persona and each participant persona (NPC_FATE/FACTION)."
+        ),
+    )
+    sets_subject_lifecycle = models.CharField(
+        max_length=10,
+        choices=LifecycleState.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, "
+            "and only when the subject sheet is not player-held (pillar 12)."
+        ),
+    )
 
     class Meta:
         ordering = ["stake", "column"]
@@ -2049,6 +2134,25 @@ class StakeResolution(SharedMemoryModel):
                 fields=["stake", "column"], name="unique_resolution_per_stake_column"
             )
         ]
+
+    def clean(self) -> None:
+        """Pillar-12 payload validation (mirrored in StakeResolutionSerializer).
+
+        Kept at the model level too so admin-inline authoring can't sidestep
+        the no-fiat rule.
+        """
+        from world.stories.services.stake_resolution import (  # noqa: PLC0415
+            stake_resolution_payload_problems,
+        )
+
+        super().clean()
+        for problem in stake_resolution_payload_problems(
+            stake=self.stake,
+            forfeits_subject_item=self.forfeits_subject_item,
+            npc_affection_delta=self.npc_affection_delta,
+            sets_subject_lifecycle=self.sets_subject_lifecycle,
+        ):
+            raise ValidationError({problem.field: problem.message})
 
     def __str__(self) -> str:
         return f"StakeResolution({self.stake_id}:{self.column})"
@@ -2095,3 +2199,57 @@ class StakeContractActivation(SharedMemoryModel):
     def __str__(self) -> str:
         state = "open" if self.resolved_at is None else "resolved"
         return f"StakeContractActivation({self.beat_id}, {state}, {self.effective_risk})"
+
+
+class StakeOutcome(SharedMemoryModel):
+    """Per-stake resolution audit + routing row (#1770 PR2).
+
+    Mirrors EpisodeResolution (a GM narrative-decision audit) and
+    BeatCompletion (an append-only ledger): **exactly one row per resolved
+    stake** (unique constraint) — a stake's resolution fires once from the
+    locked contract, whether by machine grading or a GM's constrained pick.
+    ``resolution`` is null when no branch was authored for the chosen column
+    (audit honesty: an unready contract that ran anyway). Transition routing
+    (TransitionRequiredOutcome.required_stake_column) reads this row.
+    """
+
+    stake = models.ForeignKey(
+        "stories.Stake",
+        on_delete=models.CASCADE,
+        related_name="outcomes",
+    )
+    activation = models.ForeignKey(
+        "stories.StakeContractActivation",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stake_outcomes",
+        help_text="Which locked contract this outcome resolved under (audit).",
+    )
+    resolution = models.ForeignKey(
+        "stories.StakeResolution",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The authored branch that fired; null = no branch authored for the column.",
+    )
+    column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
+    method = models.CharField(max_length=12, choices=StakeOutcomeMethod.choices)
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stake_outcomes",
+        help_text="The GM who picked the column (GM_PICK only; null for MACHINE).",
+    )
+    gm_notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [models.UniqueConstraint(fields=["stake"], name="unique_outcome_per_stake")]
+
+    def __str__(self) -> str:
+        return f"StakeOutcome(stake={self.stake_id}, {self.column}, {self.method})"

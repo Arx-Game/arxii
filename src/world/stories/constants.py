@@ -165,6 +165,19 @@ class StakeResolutionColumn(models.TextChoices):
     WITHDRAWAL = "withdrawal", "Withdrawal"
 
 
+class StakeOutcomeMethod(models.TextChoices):
+    """How a StakeOutcome was decided (#1770 PR2).
+
+    MACHINE: graded automatically by the completion tail (beat outcome column,
+    with data-where-it-exists overrides such as NPC vitals DEAD -> LOSS).
+    GM_PICK: a GM chose among the stake's authored columns (constrained pick —
+    never free composition).
+    """
+
+    MACHINE = "machine", "Machine"
+    GM_PICK = "gm_pick", "GM pick"
+
+
 # Risk ladder for effective-risk shifts (index order matters).
 RISK_LADDER: tuple[str, ...] = (
     # RenownRisk values, weakest to strongest.

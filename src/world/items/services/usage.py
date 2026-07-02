@@ -90,6 +90,40 @@ def consume_item_charges(*, item_instance: ItemInstance, amount: int = 1) -> Ite
 
 
 @transaction.atomic
+def forfeit_item_instance(*, item_instance: ItemInstance, note: str = "") -> ItemInstance:
+    """Soft-forfeit an instance: pull it out of play as a story consequence.
+
+    Used by stake resolution (#1770 PR2 — an ITEM stake's branch fired). Always
+    a soft-delete (stamps ``destroyed_at``, relocates the game_object out of
+    play) — a forfeited item is story-significant provenance, never
+    hard-deleted. Writes a TRANSFERRED OwnershipEvent with no receiver: the
+    item changed hands away from its holder to the story (the most honest
+    existing event type; CONSUMED implies use, which this is not).
+    Idempotent: already-forfeited/destroyed instances return unchanged.
+    """
+    locked = ItemInstance.objects.select_for_update().get(pk=item_instance.pk)
+    if locked.destroyed_at is not None:
+        return locked
+    holder = locked.holder_character_sheet
+    locked.destroyed_at = timezone.now()
+    locked.save(update_fields=["destroyed_at"])
+    game_object = locked.game_object
+    if game_object is not None:
+        # Relocate-but-not-delete, mirroring the consume soft-delete branch:
+        # the row is preserved for provenance; the object leaves play.
+        game_object.location = None
+        game_object.save()
+    OwnershipEvent.objects.create(
+        item_instance=locked,
+        event_type=OwnershipEventType.TRANSFERRED,
+        from_character_sheet=holder,
+        notes=note or "Forfeited — staked and lost.",
+    )
+    _invalidate_caches(locked)
+    return locked
+
+
+@transaction.atomic
 def use_item(
     *, item_instance: ItemInstance, user: ObjectDB, target: ObjectDB | None = None
 ) -> UseItemResult:

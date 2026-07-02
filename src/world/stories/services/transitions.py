@@ -53,10 +53,11 @@ def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
             raise ProgressionRequirementNotMetError
 
     # Step 2: Evaluate each outbound transition's routing requirements.
-    # Prefetch routing requirements with beats; populate cached_required_outcomes.
+    # Prefetch routing requirements with beats (and stakes, for stake-level
+    # routing — #1770 PR2); populate cached_required_outcomes.
     routing_prefetch = Prefetch(
         "required_outcomes",
-        queryset=TransitionRequiredOutcome.objects.select_related("beat"),
+        queryset=TransitionRequiredOutcome.objects.select_related("beat", "stake"),
         to_attr="cached_required_outcomes",
     )
     transitions = list(
@@ -103,4 +104,26 @@ def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
     An empty requirement set is unconditionally satisfied (the transition has
     no routing predicate, so it fires whenever progression requirements pass).
     """
-    return all(req.beat.outcome == req.required_outcome for req in routing_reqs)
+    return all(_routing_req_met(req) for req in routing_reqs)
+
+
+def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
+    """Whether one routing requirement is currently satisfied.
+
+    Stake-level requirement (#1770 PR2): satisfied iff the stake's single
+    StakeOutcome (unique per stake) has the required column — one beat's
+    stakes can route to different downstream episodes. Routing sets are tiny
+    (a handful of rows per transition), so the outcome lookup is a deliberate
+    small query per stake-level requirement rather than an extra prefetch
+    layer.
+
+    Beat-level requirement: the beat's coarse outcome, unchanged.
+    """
+    if req.stake_id is not None:
+        # Direct table query — the related manager's prefetched cache on an
+        # idmapper-shared Stake instance can be stale.
+        from world.stories.models import StakeOutcome  # noqa: PLC0415
+
+        outcome = StakeOutcome.objects.filter(stake_id=req.stake_id).first()
+        return outcome is not None and outcome.column == req.required_stake_column
+    return req.beat.outcome == req.required_outcome

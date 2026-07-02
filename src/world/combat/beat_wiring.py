@@ -67,9 +67,15 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
     Resolves any linked OUTCOME_TIER beat on the encounter's scene's episode(s):
     classifies the outcome and completes the beat via
     record_outcome_tier_completion. No-ops cleanly when the encounter has no
-    scene, no linked beat, or no active progress. FLED/ABANDONED (or any unmapped
-    outcome×risk) resolve the beat to PENDING_GM_REVIEW — a machine-detected
-    non-success/failure terminal outcome held for a GM's adjudication.
+    scene, no linked beat, or no active progress.
+
+    FLED/ABANDONED take the withdrawal path STRUCTURALLY (#1770 PR2): the beat
+    resolves to PENDING_GM_REVIEW with ``withdrawal=True`` — withdrawal-authored
+    stakes fire their WITHDRAWAL branch, unauthored stakes pend — regardless of
+    any EncounterOutcomeMapping row a designer may have authored for the pair.
+    Withdrawal-routes-to-withdrawal-branches is spec semantics, not a data
+    convention; a mapped tier for FLED/ABANDONED is ignored. Any other unmapped
+    outcome×risk also resolves PENDING_GM_REVIEW (without the withdrawal flag).
 
     Dispatched by a system-installed Trigger (seeded via
     install_encounter_beat_trigger) bound to the seeded
@@ -77,6 +83,7 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
     """
     import logging  # noqa: PLC0415
 
+    from world.combat.constants import EncounterOutcome  # noqa: PLC0415
     from world.stories.constants import BeatOutcome, BeatPredicateType  # noqa: PLC0415
     from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
     from world.stories.services.beats import record_outcome_tier_completion  # noqa: PLC0415
@@ -103,7 +110,16 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
     if not beats:
         return
 
-    outcome_tier = classify_battle_outcome(encounter)
+    # FLED/ABANDONED = the party walked away from the wager (#1770 PR2). The
+    # withdrawal path is structural: it is taken REGARDLESS of any authored
+    # EncounterOutcomeMapping for the pair (a mapped tier is ignored) — the
+    # beat pends for GM adjudication while withdrawal-authored stakes fire
+    # their WITHDRAWAL branch immediately and unauthored stakes pend.
+    is_withdrawal = encounter.outcome in (
+        EncounterOutcome.FLED,
+        EncounterOutcome.ABANDONED,
+    )
+    outcome_tier = None if is_withdrawal else classify_battle_outcome(encounter)
 
     for beat in beats:
         progress = get_active_progress_for_story(beat.episode.chapter.story)
@@ -118,6 +134,7 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
                 progress=progress,
                 beat=beat,
                 force_outcome=BeatOutcome.PENDING_GM_REVIEW,
+                withdrawal=is_withdrawal,
             )
         else:
             record_outcome_tier_completion(

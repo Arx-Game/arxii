@@ -19,6 +19,7 @@ from django.utils import timezone
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.roster.models import RosterEntry
 
 
 # 30-day cooldown floor on OC freeze/thaw swaps.
@@ -50,6 +51,24 @@ class FreezeError(InactivityServiceError):
 
 class LifecycleStateError(InactivityServiceError):
     """Invalid lifecycle_state transition."""
+
+
+def current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
+    """The RosterEntry for this sheet, or None when one doesn't exist.
+
+    RosterEntry is OneToOne to CharacterSheet, accessible as
+    ``sheet.roster_entry`` via the reverse relation. Returns None when no
+    RosterEntry has been created (valid for test/NPC characters that haven't
+    gone through the roster workflow). The public lookup consumed by
+    stories' beat-completion attribution and the stakes pillar-12
+    player-held gate.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        return sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        return None
 
 
 def sweep_activity_states() -> dict[str, int]:
