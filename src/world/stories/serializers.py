@@ -35,7 +35,12 @@ from world.stories.models import (
     GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    RiskCalibration,
     SessionRequest,
+    Stake,
+    StakeContractActivation,
+    StakeResolution,
+    StakeTemplate,
     Story,
     StoryFeedback,
     StoryGMOffer,
@@ -922,6 +927,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "kind",
             "advances",
             "risk",
+            "target_level",
             # Predicate config fields
             "required_level",
             "required_achievement",
@@ -999,6 +1005,7 @@ class BeatSerializer(serializers.ModelSerializer):
                 "kind",
                 "advances",
                 "risk",
+                "target_level",
                 "agm_eligible",
                 "deadline",
             ]:
@@ -2144,3 +2151,197 @@ class StoryNoteSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         validated_data["author_account"] = request.user
         return cast(Any, StoryNote).objects.create(**validated_data)
+
+
+# ---------------------------------------------------------------------------
+# #1770 PR1: Stakes-contract engine serializers
+# ---------------------------------------------------------------------------
+
+
+class RiskCalibrationSerializer(serializers.ModelSerializer):
+    """Full serializer for RiskCalibration (#1770 pillar 5).
+
+    Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+    ViewSet, not here.
+    """
+
+    class Meta:
+        model = RiskCalibration
+        fields = [
+            "id",
+            "risk",
+            "severity_floor_total",
+            "severity_ceiling",
+            "max_fuse_hops",
+            "reward_floor",
+            "reward_ceiling",
+        ]
+        read_only_fields = ["id"]
+
+
+class StakeTemplateSerializer(serializers.ModelSerializer):
+    """Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+
+    Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+    ViewSet, not here.
+    """
+
+    class Meta:
+        model = StakeTemplate
+        fields = [
+            "id",
+            "name",
+            "subject_kind",
+            "severity",
+            "min_risk",
+            "max_risk",
+            "player_summary_template",
+            "description",
+            "is_active",
+        ]
+        read_only_fields = ["id"]
+
+
+class StakeSerializer(serializers.ModelSerializer):
+    """Full serializer for Stake (#1770 pillar 1).
+
+    Template-set path denormalizes subject_kind/severity from the template
+    (so a later template retune never rewrites live contracts) and validates
+    the beat's declared risk falls within the template's [min_risk, max_risk]
+    band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+    mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+    Any write (create or update) is rejected while the beat carries an open
+    StakeContractActivation — the lock (#1770 pillar 8).
+    """
+
+    class Meta:
+        model = Stake
+        fields = [
+            "id",
+            "beat",
+            "template",
+            "subject_kind",
+            "severity",
+            "subject_sheet",
+            "subject_item",
+            "subject_society",
+            "subject_organization",
+            "subject_label",
+            "player_summary",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {
+            "subject_kind": {"required": False},
+            "severity": {"required": False},
+        }
+
+    def validate(self, attrs: Any) -> Any:
+        """Lock check, template defaulting/banding, and the custom-stake staff gate."""
+        from world.stories.services.stakes import get_open_activation, risk_index  # noqa: PLC0415
+
+        existing: dict[str, Any] = {}
+        if self.instance is not None:
+            for field_name in ("beat", "template", "subject_kind", "severity"):
+                existing[field_name] = getattr(self.instance, field_name)
+        merged = {**existing, **attrs}
+
+        beat = merged.get("beat")
+        if beat is not None and get_open_activation(beat) is not None:
+            msg = "This beat's stakes contract is locked by an open activation."
+            raise serializers.ValidationError(msg)
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
+        is_staff = bool(user is not None and user.is_staff)
+        template = merged.get("template")
+
+        if template is not None:
+            if beat is not None:
+                beat_idx = risk_index(beat.risk)
+                band_lo = risk_index(template.min_risk)
+                band_hi = risk_index(template.max_risk)
+                if not band_lo <= beat_idx <= band_hi:
+                    raise serializers.ValidationError(
+                        {
+                            "template": (
+                                f"Template {template.name!r} is banded for risk "
+                                f"{template.min_risk}-{template.max_risk}; "
+                                f"this beat is declared at {beat.risk}."
+                            )
+                        }
+                    )
+            attrs.setdefault("subject_kind", template.subject_kind)
+            attrs.setdefault("severity", template.severity)
+        else:
+            if not is_staff:
+                raise serializers.ValidationError(
+                    {
+                        "template": (
+                            "Only staff may author custom stakes (template=null). "
+                            "Use a StakeTemplate instead."
+                        )
+                    }
+                )
+            if merged.get("subject_kind") is None:
+                raise serializers.ValidationError(
+                    {"subject_kind": "subject_kind is required when template is null."}
+                )
+            if merged.get("severity") is None:
+                raise serializers.ValidationError(
+                    {"severity": "severity is required when template is null."}
+                )
+
+        return attrs
+
+
+class StakeResolutionSerializer(serializers.ModelSerializer):
+    """Full serializer for StakeResolution (#1770 pillar 1).
+
+    Lock check only in PR1 — no column-ordering/escalation validation (the
+    fuse walk measures reachability, not monotonicity).
+    """
+
+    class Meta:
+        model = StakeResolution
+        fields = [
+            "id",
+            "stake",
+            "column",
+            "consequence_pool",
+            "escalates_to_risk",
+            "narrative_summary",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Reject any write while the stake's beat carries an open activation."""
+        from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+        stake = attrs.get("stake") or (self.instance.stake if self.instance is not None else None)
+        if stake is not None and get_open_activation(stake.beat) is not None:
+            msg = "This beat's stakes contract is locked by an open activation."
+            raise serializers.ValidationError(msg)
+        return attrs
+
+
+class StakeContractActivationSerializer(serializers.ModelSerializer):
+    """Read-only full serializer for StakeContractActivation (#1770 pillars 7-8)."""
+
+    class Meta:
+        model = StakeContractActivation
+        fields = [
+            "id",
+            "beat",
+            "locked_at",
+            "resolved_at",
+            "party_average_level",
+            "declared_target_level",
+            "declared_risk",
+            "effective_risk",
+            "is_ready",
+            "readiness_notes",
+        ]
+        read_only_fields = fields

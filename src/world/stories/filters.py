@@ -16,6 +16,10 @@ from world.stories.models import (
     PlayerTrust,
     PlayerTrustLevel,
     SessionRequest,
+    Stake,
+    StakeContractActivation,
+    StakeResolution,
+    StakeTemplate,
     Story,
     StoryFeedback,
     StoryGMOffer,
@@ -519,3 +523,58 @@ class StoryNoteFilter(django_filters.FilterSet):
     class Meta:
         model = StoryNote
         fields = ["story"]
+
+
+# ---------------------------------------------------------------------------
+# #1770 PR1: Stakes-contract engine filters
+# ---------------------------------------------------------------------------
+
+
+class StakeFilter(django_filters.FilterSet):
+    """Filter for Stake model — by beat, subject_kind, severity."""
+
+    beat = django_filters.NumberFilter(field_name="beat_id")
+    subject_kind = django_filters.CharFilter(field_name="subject_kind")
+    severity = django_filters.NumberFilter(field_name="severity")
+
+    class Meta:
+        model = Stake
+        fields = ["beat", "subject_kind", "severity"]
+
+
+class StakeResolutionFilter(django_filters.FilterSet):
+    """Filter for StakeResolution model — by stake and column."""
+
+    stake = django_filters.NumberFilter(field_name="stake_id")
+    column = django_filters.CharFilter(field_name="column")
+
+    class Meta:
+        model = StakeResolution
+        fields = ["stake", "column"]
+
+
+class StakeTemplateFilter(django_filters.FilterSet):
+    """Filter for StakeTemplate model — by subject_kind, is_active, severity."""
+
+    subject_kind = django_filters.CharFilter(field_name="subject_kind")
+    is_active = django_filters.BooleanFilter(field_name="is_active")
+    severity = django_filters.NumberFilter(field_name="severity")
+
+    class Meta:
+        model = StakeTemplate
+        fields = ["subject_kind", "is_active", "severity"]
+
+
+class StakeContractActivationFilter(django_filters.FilterSet):
+    """Filter for StakeContractActivation model — by beat and open/resolved state."""
+
+    beat = django_filters.NumberFilter(field_name="beat_id")
+    resolved_at_isnull = django_filters.BooleanFilter(
+        field_name="resolved_at",
+        lookup_expr="isnull",
+        label="Open activations only",
+    )
+
+    class Meta:
+        model = StakeContractActivation
+        fields = ["beat"]

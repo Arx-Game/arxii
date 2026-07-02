@@ -16,8 +16,13 @@ from world.stories.views import (
     GroupStoryProgressViewSet,
     MyActiveStoriesView,
     PlayerTrustViewSet,
+    RiskCalibrationViewSet,
     SessionRequestViewSet,
     StaffWorkloadView,
+    StakeContractActivationViewSet,
+    StakeResolutionViewSet,
+    StakeTemplateViewSet,
+    StakeViewSet,
     StoryFeedbackViewSet,
     StoryGMOfferViewSet,
     StoryNoteViewSet,
@@ -57,6 +62,12 @@ router.register(r"table-bulletin-posts", TableBulletinPostViewSet, basename="tab
 router.register(r"table-bulletin-replies", TableBulletinReplyViewSet, basename="tablebulletinreply")
 # StoryNote: append-only OOC authorial memory (list + create + retrieve)
 router.register(r"story-notes", StoryNoteViewSet, basename="storynote")
+# #1770 PR1: Stakes-contract engine
+router.register(r"risk-calibrations", RiskCalibrationViewSet)
+router.register(r"stake-templates", StakeTemplateViewSet)
+router.register(r"stakes", StakeViewSet)
+router.register(r"stake-resolutions", StakeResolutionViewSet)
+router.register(r"stake-activations", StakeContractActivationViewSet)
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).
