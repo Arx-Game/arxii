@@ -1,7 +1,12 @@
+import { useState } from 'react';
+
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-import { useBuildingManagerQuery } from '../queries';
+import { useBuildingManagerQuery, useRoomBuilderAction } from '../queries';
+import type { RoomBuilderActionKey } from '../types';
 import { BudgetMeter } from './BudgetMeter';
+import { BuilderCanvas } from './BuilderCanvas';
 
 interface BuildingBuilderDialogProps {
   buildingId: number;
@@ -23,8 +28,17 @@ export function BuildingBuilderDialog({
   onOpenChange,
 }: BuildingBuilderDialogProps) {
   const manager = useBuildingManagerQuery(open ? buildingId : null, characterId);
+  const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
+  const [floor, setFloor] = useState(0);
+  const action = useRoomBuilderAction(characterId, buildingId);
 
   const payload = manager.data;
+  const floors = payload?.building.floors.length ? payload.building.floors : [0];
+  const selectedRoom = payload?.rooms.find((room) => room.id === selectedRoomId) ?? null;
+
+  const runAction = (key: RoomBuilderActionKey, kwargs: Record<string, unknown>) => {
+    action.mutate({ key, kwargs });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -33,7 +47,23 @@ export function BuildingBuilderDialog({
           <DialogTitle>
             {payload ? `${payload.building.name} — ${payload.building.kind}` : 'Building manager'}
           </DialogTitle>
-          {payload && <BudgetMeter building={payload.building} />}
+          <div className="flex items-center gap-4">
+            {floors.length > 1 && (
+              <div className="flex items-center gap-1">
+                {floors.map((level) => (
+                  <Button
+                    key={level}
+                    size="sm"
+                    variant={level === floor ? 'default' : 'outline'}
+                    onClick={() => setFloor(level)}
+                  >
+                    Floor {level}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {payload && <BudgetMeter building={payload.building} />}
+          </div>
         </DialogHeader>
         {manager.isLoading && (
           <div className="flex flex-1 items-center justify-center text-muted-foreground">
@@ -47,16 +77,21 @@ export function BuildingBuilderDialog({
         )}
         {payload && (
           <div className="flex min-h-0 flex-1 gap-4">
-            <div className="min-w-0 flex-1 rounded-md border" data-testid="builder-canvas-slot">
-              {/* BuilderCanvas mounts here (map, ghost-cell digs, drag placement). */}
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                Map canvas
-              </div>
+            <div className="min-w-0 flex-1 rounded-md border">
+              <BuilderCanvas
+                payload={payload}
+                floor={floor}
+                selectedRoomId={selectedRoomId}
+                onSelectRoom={setSelectedRoomId}
+                runAction={runAction}
+              />
             </div>
             <div className="w-80 shrink-0 overflow-y-auto rounded-md border p-3">
               {/* RoomDetailPanel mounts here for the selected room. */}
               <div className="text-sm text-muted-foreground">
-                Select a room on the map to edit it.
+                {selectedRoom
+                  ? `${selectedRoom.name} selected.`
+                  : 'Select a room on the map to edit it.'}
               </div>
             </div>
           </div>
