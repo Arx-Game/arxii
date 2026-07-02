@@ -232,14 +232,10 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
         resolve_stakes_for_completion(
             beat=beat,
             outcome=outcome,
+            completion=completion,
             progress=progress,
             scope=scope,
-            participants=_resolve_participants_for_pool(
-                completion=completion,
-                progress=progress,
-                scope=scope,
-                explicit_participants=explicit_participants,
-            ),
+            explicit_participants=explicit_participants,
             outcome_tier=outcome_tier,
             withdrawal=withdrawal,
         )
@@ -532,19 +528,20 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
     from world.stories.services.stake_resolution import (  # noqa: PLC0415
         resolve_stakes_for_completion,
     )
+    from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
 
     resolve_stakes_for_completion(
         beat=beat,
         outcome=BeatOutcome.SUCCESS,
+        completion=aggregate_completion,
         progress=aggregate_progress,
         scope=scope,
-        participants=_resolve_participants_for_pool(
-            completion=aggregate_completion,
-            progress=aggregate_progress,
-            scope=scope,
-            explicit_participants=None,
-        ),
     )
+
+    # Close the open activation like the shared completion tail does —
+    # otherwise an aggregate crossing that resolved the stakes would leave
+    # the lock open forever, permanently blocking stake edits on the beat.
+    resolve_open_activation(beat)
 
     # Narrative notification: resolve an active progress to fan out recipients per scope.
     agg_progress = get_active_progress_for_story(story)

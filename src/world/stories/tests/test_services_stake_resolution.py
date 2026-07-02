@@ -17,7 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
-from world.gm.factories import GMProfileFactory
+from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.npc_services.models import NPCStanding
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
@@ -30,11 +30,13 @@ from world.stories.constants import (
     StakeResolutionColumn,
     StakeSubjectKind,
     StoryScope,
+    TransitionMode,
 )
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    GroupStoryProgressFactory,
     StakeFactory,
     StakeOutcomeFactory,
     StakeResolutionFactory,
@@ -216,6 +218,71 @@ class MachineGradingTests(EvenniaTestCase):
             record_outcome_tier_completion(
                 progress=progress, beat=beat, outcome_tier=self.fail_tier, withdrawal=True
             )
+
+    def test_no_matching_tier_row_fires_nothing_but_records_outcome(self):
+        """Machine grading is tier-filtered: a branch pool with no consequence
+        at the completion's tier applies nothing, but the StakeOutcome is
+        still recorded (the resolution happened; its pool had no row for
+        this tier). Deliberate asymmetry with the GM-pick/withdrawal paths,
+        which apply deterministically (no tier)."""
+        _sheet, beat, progress = _character_story_beat()
+        other_tier = CheckOutcomeFactory(name="Stake Unmatched Tier", success_level=-5)
+        consequence = ConsequenceFactory(outcome_tier=other_tier)
+        ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=LegendSourceTypeFactory(),
+            legend_description_template="Should not fire.",
+        )
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        stake = StakeFactory(beat=beat)
+        loss_branch = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, consequence_pool=pool
+        )
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
+
+        self.assertFalse(LegendEvent.objects.exists())  # tier filter kept the pool silent
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.column, StakeResolutionColumn.LOSS)
+        self.assertEqual(outcome.resolution_id, loss_branch.pk)
+
+    def test_one_outcome_per_stake_constraint(self):
+        """One-outcome-per-stake is enforced at the DB level."""
+        from django.db import IntegrityError, transaction
+
+        stake = StakeFactory()
+        StakeOutcomeFactory(stake=stake)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            StakeOutcomeFactory(stake=stake, column=StakeResolutionColumn.WIN)
+
+    def test_aggregate_crossing_resolves_stakes_and_closes_activation(self):
+        """The aggregate-crossing tail resolves stakes at WIN and closes the
+        open activation (it must not leave the contract locked forever)."""
+        from world.stories.services.beats import record_aggregate_contribution
+
+        sheet, beat, _progress = _character_story_beat(
+            predicate_type=BeatPredicateType.AGGREGATE_THRESHOLD,
+            required_points=10,
+        )
+        stake = StakeFactory(beat=beat)
+        win_branch = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        activation = activate_stakes_contract(beat, [sheet])
+        self.assertIsNone(activation.resolved_at)
+
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=10)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
+        self.assertEqual(outcome.resolution_id, win_branch.pk)
+        activation.refresh_from_db()
+        self.assertIsNotNone(activation.resolved_at)
+        self.assertIsNone(get_open_activation(beat))
 
 
 class GMPickTests(EvenniaTestCase):
@@ -537,7 +604,7 @@ class StakeRoutingTests(EvenniaTestCase):
         TransitionRequiredOutcome.objects.create(
             transition=transition,
             beat=beat,
-            required_outcome=BeatOutcome.FAILURE,
+            required_outcome="",
             stake=stake,
             required_stake_column=StakeResolutionColumn.LOSS,
         )
@@ -552,7 +619,7 @@ class StakeRoutingTests(EvenniaTestCase):
         eligible = get_eligible_transitions(progress)
         self.assertEqual([t.pk for t in eligible], [transition.pk])
 
-    def test_clean_requires_column_and_matching_beat(self):
+    def test_clean_enforces_exactly_one_predicate_shape(self):
         from django.core.exceptions import ValidationError
 
         _sheet, beat, _progress = _character_story_beat()
@@ -560,22 +627,210 @@ class StakeRoutingTests(EvenniaTestCase):
         stake = StakeFactory(beat=beat)
         transition = TransitionFactory(source_episode=beat.episode)
 
+        # Stake set but no column.
         req = TransitionRequiredOutcome(
             transition=transition,
             beat=beat,
-            required_outcome=BeatOutcome.FAILURE,
+            required_outcome="",
             stake=stake,
             required_stake_column="",
         )
         with self.assertRaises(ValidationError):
             req.clean()
 
-        req_wrong_beat = TransitionRequiredOutcome(
+        # Stake set with a (misleading, ignored) beat outcome — rejected.
+        req_both = TransitionRequiredOutcome(
             transition=transition,
-            beat=other_beat,
+            beat=beat,
             required_outcome=BeatOutcome.FAILURE,
             stake=stake,
             required_stake_column=StakeResolutionColumn.LOSS,
         )
         with self.assertRaises(ValidationError):
+            req_both.clean()
+
+        # Stake belongs to a different beat.
+        req_wrong_beat = TransitionRequiredOutcome(
+            transition=transition,
+            beat=other_beat,
+            required_outcome="",
+            stake=stake,
+            required_stake_column=StakeResolutionColumn.LOSS,
+        )
+        with self.assertRaises(ValidationError):
             req_wrong_beat.clean()
+
+        # Beat-level row with no outcome at all.
+        req_empty = TransitionRequiredOutcome(
+            transition=transition,
+            beat=beat,
+            required_outcome="",
+        )
+        with self.assertRaises(ValidationError):
+            req_empty.clean()
+
+
+def _group_story_pending_staked_beat():
+    """A GROUP-scope story with a staked OUTCOME_TIER beat pending GM review."""
+    story = StoryFactory(scope=StoryScope.GROUP)
+    chapter = ChapterFactory(story=story)
+    episode = EpisodeFactory(chapter=chapter)
+    gm_table = GMTableFactory()
+    progress = GroupStoryProgressFactory(story=story, gm_table=gm_table, current_episode=episode)
+    beat = BeatFactory(episode=episode, predicate_type=BeatPredicateType.OUTCOME_TIER)
+    stake = StakeFactory(beat=beat)
+    consequence = ConsequenceFactory()  # no tier: fires deterministically on pick
+    ConsequenceEffectFactory(
+        consequence=consequence,
+        effect_type=EffectType.LEGEND_AWARD,
+        legend_base_value=10,
+        legend_source_type=LegendSourceTypeFactory(),
+        legend_description_template="Group stake won.",
+    )
+    pool = ConsequencePoolFactory()
+    ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+    StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN, consequence_pool=pool)
+    record_outcome_tier_completion(
+        progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
+    )
+    return stake
+
+
+class GroupScopeGMPickTests(EvenniaTestCase):
+    """GROUP-scope constrained picks thread explicit participants (#1770 PR2 review)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.gm_profile = GMProfileFactory()
+
+    def test_group_pick_with_legend_pool_succeeds_with_participants(self):
+        stake = _group_story_pending_staked_beat()
+        persona = CharacterSheetFactory().primary_persona
+
+        outcome = resolve_stake_by_gm_pick(
+            stake,
+            column=StakeResolutionColumn.WIN,
+            gm_profile=self.gm_profile,
+            participants=[persona],
+        )
+
+        self.assertEqual(outcome.method, StakeOutcomeMethod.GM_PICK)
+        self.assertTrue(LegendEvent.objects.exists())
+
+    def test_group_pick_affection_delta_reaches_participants(self):
+        """The same participant list feeds the npc_affection_delta writer."""
+        stake = _group_story_pending_staked_beat()
+        npc_sheet = CharacterSheetFactory()
+        stake.subject_kind = StakeSubjectKind.NPC_FATE
+        stake.subject_sheet = npc_sheet
+        stake.save(update_fields=["subject_kind", "subject_sheet"])
+        loss = StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, npc_affection_delta=-2
+        )
+        self.assertIsNotNone(loss)
+        persona = CharacterSheetFactory().primary_persona
+
+        resolve_stake_by_gm_pick(
+            stake,
+            column=StakeResolutionColumn.LOSS,
+            gm_profile=self.gm_profile,
+            participants=[persona],
+        )
+
+        standing = NPCStanding.objects.get(persona=persona, npc_persona=npc_sheet.primary_persona)
+        self.assertEqual(standing.affection, -2)
+
+
+class GroupScopePickEndpointTests(APITestCase):
+    """Endpoint-level GROUP-scope pick: participants accepted; guard surfaces as 400."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.stake = _group_story_pending_staked_beat()
+
+    def _url(self):
+        return reverse("stake-resolve", kwargs={"pk": self.stake.pk})
+
+    def test_missing_participants_returns_400_not_500(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(self._url(), {"column": StakeResolutionColumn.WIN}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("participants", str(resp.data).lower())
+        self.assertFalse(StakeOutcome.objects.filter(stake=self.stake).exists())
+
+    def test_pick_with_participants_succeeds(self):
+        persona = CharacterSheetFactory().primary_persona
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            self._url(),
+            {"column": StakeResolutionColumn.WIN, "participants": [persona.pk]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(LegendEvent.objects.exists())
+
+
+class BulkSaveStakeRoutingTests(APITestCase):
+    """save-with-outcomes round-trips stake-level routing rows (#1770 PR2 review).
+
+    Before the fix, a stake-level TransitionRequiredOutcome authored via CRUD
+    was silently deleted by any editor bulk-save (delete-and-recreate without
+    the stake fields).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        story = StoryFactory(owners=[cls.staff])
+        chapter = ChapterFactory(story=story)
+        cls.ep1 = EpisodeFactory(chapter=chapter, order=1)
+        cls.ep2 = EpisodeFactory(chapter=chapter, order=2)
+        cls.beat = BeatFactory(episode=cls.ep1)
+        cls.stake = StakeFactory(beat=cls.beat)
+
+    def _payload(self, existing_id=None):
+        return {
+            "existing_id": existing_id,
+            "source_episode": self.ep1.pk,
+            "target_episode": self.ep2.pk,
+            "mode": TransitionMode.AUTO,
+            "outcomes": [
+                {"beat": self.beat.pk, "required_outcome": BeatOutcome.SUCCESS},
+                {
+                    "beat": self.beat.pk,
+                    "stake": self.stake.pk,
+                    "required_stake_column": StakeResolutionColumn.LOSS,
+                },
+            ],
+        }
+
+    def test_bulk_save_creates_and_preserves_stake_level_row(self):
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("transition-save-with-outcomes")
+
+        created = self.client.post(url, self._payload(), format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        transition_id = created.data["id"]
+        stake_rows = TransitionRequiredOutcome.objects.filter(
+            transition_id=transition_id, stake=self.stake
+        )
+        self.assertEqual(stake_rows.count(), 1)
+        self.assertEqual(stake_rows[0].required_stake_column, StakeResolutionColumn.LOSS)
+        self.assertEqual(stake_rows[0].required_outcome, "")
+
+        # Re-save (the delete-and-recreate path) — the stake row must survive.
+        updated = self.client.post(url, self._payload(existing_id=transition_id), format="json")
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+        stake_rows = TransitionRequiredOutcome.objects.filter(
+            transition_id=transition_id, stake=self.stake
+        )
+        self.assertEqual(stake_rows.count(), 1)
+        self.assertEqual(stake_rows[0].required_stake_column, StakeResolutionColumn.LOSS)
+
+    def test_bulk_save_rejects_stake_row_with_beat_outcome(self):
+        self.client.force_authenticate(user=self.staff)
+        payload = self._payload()
+        payload["outcomes"][1]["required_outcome"] = BeatOutcome.FAILURE
+        resp = self.client.post(reverse("transition-save-with-outcomes"), payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

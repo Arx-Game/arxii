@@ -57,7 +57,7 @@ The `StakeContractActivation` row locking a beat's stakes contract at scene star
 _Avoid_: lock (use Activation for the row; "lock" for the behavior it enforces), snapshot.
 
 **Stake Outcome**:
-The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) — which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail, or a GM's Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). The latest StakeOutcome per stake wins for transition routing. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
+The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) — which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail, or a GM's Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). Exactly one StakeOutcome per stake (unique constraint) — transition routing reads it. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
 _Avoid_: stake result, stake completion.
 
 **Constrained Pick**:

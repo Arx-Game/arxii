@@ -1097,9 +1097,11 @@ class TransitionRequiredOutcome(SharedMemoryModel):
     """A beat outcome that must be satisfied for this transition to be eligible.
 
     Stake-level routing (#1770 PR2): when ``stake`` is set, the requirement is
-    satisfied by the stake's latest StakeOutcome having
+    satisfied by the stake's StakeOutcome having
     ``column == required_stake_column`` instead of the beat's coarse outcome —
-    so one beat's stakes can route to different downstream episodes.
+    so one beat's stakes can route to different downstream episodes. A
+    stake-level row leaves ``required_outcome`` blank (exactly one of the two
+    predicates is populated; ``clean`` enforces it).
     """
 
     transition = models.ForeignKey(
@@ -1115,6 +1117,9 @@ class TransitionRequiredOutcome(SharedMemoryModel):
     required_outcome = models.CharField(
         max_length=20,
         choices=BeatOutcome.choices,
+        blank=True,
+        default="",
+        help_text="Required beat outcome; blank on stake-level rows.",
     )
     stake = models.ForeignKey(
         "stories.Stake",
@@ -1123,7 +1128,7 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="routing_for_transitions",
         help_text=(
-            "When set, this requirement routes on the stake's latest "
+            "When set, this requirement routes on the stake's "
             "StakeOutcome column instead of the beat's outcome."
         ),
     )
@@ -1154,12 +1159,18 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         if self.stake_id is not None:
             if not self.required_stake_column:
                 raise ValidationError({"required_stake_column": "Required when stake is set."})
+            if self.required_outcome:
+                msg = "Must be blank when stake is set (stake rows route on the stake column)."
+                raise ValidationError({"required_outcome": msg})
             if self.stake.beat_id != self.beat_id:
                 raise ValidationError(
                     {"stake": "The stake must belong to this requirement's beat."}
                 )
-        elif self.required_stake_column:
-            raise ValidationError({"required_stake_column": "Only allowed when stake is set."})
+        else:
+            if not self.required_outcome:
+                raise ValidationError({"required_outcome": "Required when stake is not set."})
+            if self.required_stake_column:
+                raise ValidationError({"required_stake_column": "Only allowed when stake is set."})
 
     def __str__(self) -> str:
         if self.stake_id is not None:
@@ -2194,14 +2205,12 @@ class StakeOutcome(SharedMemoryModel):
     """Per-stake resolution audit + routing row (#1770 PR2).
 
     Mirrors EpisodeResolution (a GM narrative-decision audit) and
-    BeatCompletion (an append-only ledger): one row per resolved stake,
-    recording which column fired, how it was decided (machine grading vs a
-    GM's constrained pick), and which authored branch — if any — carried the
-    consequences. ``resolution`` is null when no branch was authored for the
-    chosen column (audit honesty: an unready contract that ran anyway).
-
-    The latest row per stake wins for transition routing
-    (TransitionRequiredOutcome.required_stake_column).
+    BeatCompletion (an append-only ledger): **exactly one row per resolved
+    stake** (unique constraint) — a stake's resolution fires once from the
+    locked contract, whether by machine grading or a GM's constrained pick.
+    ``resolution`` is null when no branch was authored for the chosen column
+    (audit honesty: an unready contract that ran anyway). Transition routing
+    (TransitionRequiredOutcome.required_stake_column) reads this row.
     """
 
     stake = models.ForeignKey(
@@ -2239,8 +2248,8 @@ class StakeOutcome(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-created_at"]
-        indexes = [models.Index(fields=["stake"])]
+        ordering = ["-created_at", "-pk"]
+        constraints = [models.UniqueConstraint(fields=["stake"], name="unique_outcome_per_stake")]
 
     def __str__(self) -> str:
         return f"StakeOutcome(stake={self.stake_id}, {self.column}, {self.method})"

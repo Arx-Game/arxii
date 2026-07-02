@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
 from world.stories.constants import (
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.gm.models import GMProfile
     from world.scenes.models import Persona
-    from world.stories.models import Beat, Stake, StakeContractActivation
+    from world.stories.models import Beat, BeatCompletion, Stake, StakeContractActivation
     from world.stories.types import AnyStoryProgress
     from world.traits.models import CheckOutcome
 
@@ -49,9 +49,9 @@ def sheet_is_player_held(sheet: CharacterSheet) -> bool:
     sheet — PC removal must be mechanically mediated (peril -> vitals ->
     process_damage_consequences), never GM fiat.
     """
-    from world.stories.services.beats import _current_roster_entry  # noqa: PLC0415
+    from world.roster.services.activity import current_roster_entry  # noqa: PLC0415
 
-    entry = _current_roster_entry(sheet)
+    entry = current_roster_entry(sheet)
     return entry is not None and entry.current_tenure is not None
 
 
@@ -115,9 +115,10 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     *,
     beat: Beat,
     outcome: BeatOutcome,
+    completion: BeatCompletion,
     progress: AnyStoryProgress | None,
     scope: str,
-    participants: list[Persona],
+    explicit_participants: list[Persona] | None = None,
     outcome_tier: CheckOutcome | None = None,
     withdrawal: bool = False,
 ) -> list[StakeOutcome]:
@@ -127,6 +128,12 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     (world.stories.services.beats._create_completion_and_fire_pool), between
     the beat-level pool fire and resolve_open_activation — so the open
     activation is still readable for the audit FK.
+
+    Participant resolution (same derivation as the beat-level pool fire,
+    ``beats._resolve_participants_for_pool``) happens INSIDE this function,
+    after the early returns — an unstaked or deferred completion never pays
+    the participant-derivation queries and can never be rolled back by a
+    participant-resolution edge case.
 
     Semantics (#1770 pillars 11-12):
       - No stakes -> []. Idempotent: any stake that already has a StakeOutcome
@@ -147,6 +154,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
       - escalates_to_risk stays recorded on the fired resolution for authoring;
         no automatic scene-spawn here (the fuse walk validates reachability).
     """
+    from world.stories.services.beats import _resolve_participants_for_pool  # noqa: PLC0415
     from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
     stakes = list(
@@ -161,6 +169,12 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
         StakeOutcome.objects.filter(stake__in=stakes).values_list("stake_id", flat=True)
     )
     activation = get_open_activation(beat)
+    participants = _resolve_participants_for_pool(
+        completion=completion,
+        progress=progress,
+        scope=scope,
+        explicit_participants=explicit_participants,
+    )
 
     outcomes: list[StakeOutcome] = []
     for stake in stakes:
@@ -244,6 +258,11 @@ def _fire_branch_and_record(  # noqa: PLR0913
 
     Shared by the machine path and the GM constrained pick — the only
     differences between them are ``method``/``resolved_by``/``gm_notes``.
+
+    One-outcome-per-stake is enforced by the ``unique_outcome_per_stake``
+    constraint; the callers' ``.exists()`` pre-checks are the fast path, and a
+    losing concurrent create recovers by returning the winner's row (same
+    pattern as PR1's activation race handling).
     """
     from world.stories.services.beats import _fire_pool_with_context  # noqa: PLC0415
 
@@ -265,23 +284,32 @@ def _fire_branch_and_record(  # noqa: PLR0913
             stake.pk,
             column,
         )
-    return StakeOutcome.objects.create(
-        stake=stake,
-        activation=activation,
-        resolution=resolution,
-        column=column,
-        method=method,
-        resolved_by=resolved_by,
-        gm_notes=gm_notes,
-    )
+    try:
+        with transaction.atomic():
+            return StakeOutcome.objects.create(
+                stake=stake,
+                activation=activation,
+                resolution=resolution,
+                column=column,
+                method=method,
+                resolved_by=resolved_by,
+                gm_notes=gm_notes,
+            )
+    except IntegrityError:
+        existing = StakeOutcome.objects.filter(stake=stake).first()
+        if existing is None:
+            raise
+        return existing
 
 
-def resolve_stake_by_gm_pick(
+def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcome's surface
     stake: Stake,
     *,
     column: str,
     gm_profile: GMProfile | None,
     gm_notes: str = "",
+    participants: list[Persona] | None = None,
+    extra_participants: list[Persona] | None = None,
 ) -> StakeOutcome:
     """Resolve one stake at a GM-chosen column (#1770 PR2 — constrained pick).
 
@@ -290,6 +318,13 @@ def resolve_stake_by_gm_pick(
     and their notes. The pick is constrained: the column must be among the
     stake's authored resolutions — a GM never composes a consequence freehand
     at resolution time.
+
+    ``participants`` / ``extra_participants`` — same semantics as
+    record_gm_marked_outcome (and the machine path's participant derivation):
+    GROUP scope uses ``participants`` (required when the picked branch's pool
+    carries LEGEND_AWARD); CHARACTER scope credits the progress's primary
+    persona plus ``extra_participants``; GLOBAL takes none. The same list
+    feeds the branch's npc_affection_delta writer.
 
     Defensive guards only (ResolveStakeInputSerializer validates for API
     callers): the stake must be unresolved and the column must be authored.
@@ -316,9 +351,14 @@ def resolve_stake_by_gm_pick(
     story = stake.beat.episode.chapter.story
     scope = story.scope
     progress = get_active_progress_for_story(story)
-    participants: list[Persona] = []
-    if scope == StoryScope.CHARACTER and progress is not None:
-        participants = [progress.character_sheet.primary_persona]
+    resolved_participants: list[Persona] = []
+    if scope == StoryScope.CHARACTER:
+        if progress is not None:
+            resolved_participants = [progress.character_sheet.primary_persona]
+        if extra_participants:
+            resolved_participants.extend(extra_participants)
+    elif scope == StoryScope.GROUP and participants:
+        resolved_participants = list(participants)
 
     # The open activation is normally already closed by the completion tail;
     # fall back to the most recent activation for the audit FK.
@@ -333,7 +373,7 @@ def resolve_stake_by_gm_pick(
             activation=activation,
             progress=progress,
             scope=scope,
-            participants=participants,
+            participants=resolved_participants,
             resolved_by=gm_profile,
             gm_notes=gm_notes,
         )

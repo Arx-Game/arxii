@@ -110,20 +110,20 @@ def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
 def _routing_req_met(req: TransitionRequiredOutcome) -> bool:
     """Whether one routing requirement is currently satisfied.
 
-    Stake-level requirement (#1770 PR2): satisfied iff the stake's LATEST
-    StakeOutcome has the required column — one beat's stakes can route to
-    different downstream episodes. Routing sets are tiny (a handful of rows
-    per transition), so the latest-outcome lookup is a deliberate small query
-    per stake-level requirement rather than an extra prefetch layer.
+    Stake-level requirement (#1770 PR2): satisfied iff the stake's single
+    StakeOutcome (unique per stake) has the required column — one beat's
+    stakes can route to different downstream episodes. Routing sets are tiny
+    (a handful of rows per transition), so the outcome lookup is a deliberate
+    small query per stake-level requirement rather than an extra prefetch
+    layer.
 
     Beat-level requirement: the beat's coarse outcome, unchanged.
     """
     if req.stake_id is not None:
-        # Direct table query (Meta.ordering = -created_at → latest first);
-        # the related manager's prefetched cache on an idmapper-shared Stake
-        # instance can be stale.
+        # Direct table query — the related manager's prefetched cache on an
+        # idmapper-shared Stake instance can be stale.
         from world.stories.models import StakeOutcome  # noqa: PLC0415
 
-        latest = StakeOutcome.objects.filter(stake_id=req.stake_id).first()
-        return latest is not None and latest.column == req.required_stake_column
+        outcome = StakeOutcome.objects.filter(stake_id=req.stake_id).first()
+        return outcome is not None and outcome.column == req.required_stake_column
     return req.beat.outcome == req.required_outcome
