@@ -31,7 +31,7 @@ from world.stories.factories import (
     StoryFactory,
     StoryProgressFactory,
 )
-from world.stories.models import StakeOutcome
+from world.stories.models import BeatCompletion, StakeOutcome
 from world.traits.models import CheckOutcome
 
 
@@ -291,6 +291,38 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         civilians_beat.refresh_from_db()
         self.assertEqual(gate_beat.outcome, BeatOutcome.SUCCESS)
         self.assertEqual(civilians_beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_story_beat_set_but_already_resolved_is_a_noop(self) -> None:
+        """A routed story_beat that's already resolved (not UNSATISFIED) is untouched.
+
+        Guards the ``and encounter.story_beat.outcome == BeatOutcome.UNSATISFIED``
+        clause on the routed branch: if a future refactor dropped it, a routed
+        encounter would incorrectly stamp its outcome onto an already-resolved
+        beat instead of no-opping.
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.SUCCESS,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.VICTORY,
+            risk_level=RiskLevel.MODERATE,
+            story_beat=beat,
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
 
     def test_unset_story_beat_falls_back_to_legacy_find_all(self) -> None:
         """story_beat=None preserves today's find-all-UNSATISFIED behavior."""
