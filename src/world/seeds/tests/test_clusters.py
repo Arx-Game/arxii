@@ -19,6 +19,7 @@ class TestClusterRegistry(TestCase):
                 "combat",
                 "consent",
                 "character_creation",
+                "justice",
             },
         )
 

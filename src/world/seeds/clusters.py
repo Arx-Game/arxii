@@ -71,6 +71,12 @@ def _seed_character_creation() -> None:
     seed_character_creation_dev()
 
 
+def _seed_justice() -> None:
+    from world.seeds.justice import seed_crime_kinds  # noqa: PLC0415
+
+    seed_crime_kinds()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -98,6 +104,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Gender/TarotCard/HeightBand/Build/stats/Rosters/Path) — after magic because
     # finalize_character picks the magic-seeded cantrip + resonance. (#1333)
     "character_creation": _seed_character_creation,
+    # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
+    "justice": _seed_justice,
 }
 
 
@@ -107,6 +115,7 @@ def seeded_models() -> list[type[Model]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
@@ -121,6 +130,7 @@ def seeded_models() -> list[type[Model]]:
         StartingArea,
         Beginnings,
         Species,
+        CrimeKind,
     ]
 
 
@@ -137,6 +147,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
@@ -163,4 +174,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "combat": [],
         "consent": [SocialConsentCategory],
         "character_creation": [StartingArea, Beginnings, Species],
+        # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
+        "justice": [CrimeKind],
     }
