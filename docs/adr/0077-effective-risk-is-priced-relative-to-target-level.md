@@ -14,7 +14,8 @@ toward NONE) but consequences authored on `StakeResolution` never downgrade: the
 fuse and its failure branches fire at full authored severity regardless of party
 level, because losing is losing. This is deliberately the *only* axis effective
 risk scales on, per ADR-0037 (encounter difficulty scales on party size + average
-level only) — no thread, relationship, covenant, or fashion inputs.
+level only) — no thread, relationship, covenant, or fashion inputs. (Battle
+stakes are a narrow, explicit exception to this whole mechanism — see ADR-0080.)
 
 The rationale is anti-farming: a beat that's highly risky to a level-4 party is
 not risky at all to a level-10 party grinding it for easy Legend, so the payout
