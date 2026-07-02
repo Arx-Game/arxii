@@ -11684,6 +11684,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/risk-calibrations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
+    get: operations['risk_calibrations_list'];
+    put?: never;
+    /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
+    post: operations['risk_calibrations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/risk-calibrations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
+    get: operations['risk_calibrations_retrieve'];
+    /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
+    put: operations['risk_calibrations_update'];
+    post?: never;
+    /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
+    delete: operations['risk_calibrations_destroy'];
+    options?: never;
+    head?: never;
+    /** @description ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5). */
+    patch: operations['risk_calibrations_partial_update'];
+    trace?: never;
+  };
   '/api/roster/entries/': {
     parameters: {
       query?: never;
@@ -12974,6 +13012,220 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/stake-activations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for StakeContractActivation — the lock/audit surface
+     *     (#1770 pillars 7-8).
+     */
+    get: operations['stake_activations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stake-activations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for StakeContractActivation — the lock/audit surface
+     *     (#1770 pillars 7-8).
+     */
+    get: operations['stake_activations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stake-resolutions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StakeResolution (#1770 pillar 1).
+     *
+     *     Access delegated to the parent stake's beat story ownership via
+     *     obj.stake.beat.
+     */
+    get: operations['stake_resolutions_list'];
+    put?: never;
+    /**
+     * @description ViewSet for StakeResolution (#1770 pillar 1).
+     *
+     *     Access delegated to the parent stake's beat story ownership via
+     *     obj.stake.beat.
+     */
+    post: operations['stake_resolutions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stake-resolutions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StakeResolution (#1770 pillar 1).
+     *
+     *     Access delegated to the parent stake's beat story ownership via
+     *     obj.stake.beat.
+     */
+    get: operations['stake_resolutions_retrieve'];
+    /**
+     * @description ViewSet for StakeResolution (#1770 pillar 1).
+     *
+     *     Access delegated to the parent stake's beat story ownership via
+     *     obj.stake.beat.
+     */
+    put: operations['stake_resolutions_update'];
+    post?: never;
+    /**
+     * @description ViewSet for StakeResolution (#1770 pillar 1).
+     *
+     *     Access delegated to the parent stake's beat story ownership via
+     *     obj.stake.beat.
+     */
+    delete: operations['stake_resolutions_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for StakeResolution (#1770 pillar 1).
+     *
+     *     Access delegated to the parent stake's beat story ownership via
+     *     obj.stake.beat.
+     */
+    patch: operations['stake_resolutions_partial_update'];
+    trace?: never;
+  };
+  '/api/stake-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5). */
+    get: operations['stake_templates_list'];
+    put?: never;
+    /** @description ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5). */
+    post: operations['stake_templates_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stake-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5). */
+    get: operations['stake_templates_retrieve'];
+    /** @description ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5). */
+    put: operations['stake_templates_update'];
+    post?: never;
+    /** @description ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5). */
+    delete: operations['stake_templates_destroy'];
+    options?: never;
+    head?: never;
+    /** @description ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5). */
+    patch: operations['stake_templates_partial_update'];
+    trace?: never;
+  };
+  '/api/stakes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Stake (#1770 pillar 1).
+     *
+     *     Access delegated to beat story ownership via obj.beat, same chain as
+     *     BeatViewSet (beat -> episode -> chapter -> story).
+     */
+    get: operations['stakes_list'];
+    put?: never;
+    /**
+     * @description ViewSet for Stake (#1770 pillar 1).
+     *
+     *     Access delegated to beat story ownership via obj.beat, same chain as
+     *     BeatViewSet (beat -> episode -> chapter -> story).
+     */
+    post: operations['stakes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stakes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Stake (#1770 pillar 1).
+     *
+     *     Access delegated to beat story ownership via obj.beat, same chain as
+     *     BeatViewSet (beat -> episode -> chapter -> story).
+     */
+    get: operations['stakes_retrieve'];
+    /**
+     * @description ViewSet for Stake (#1770 pillar 1).
+     *
+     *     Access delegated to beat story ownership via obj.beat, same chain as
+     *     BeatViewSet (beat -> episode -> chapter -> story).
+     */
+    put: operations['stakes_update'];
+    post?: never;
+    /**
+     * @description ViewSet for Stake (#1770 pillar 1).
+     *
+     *     Access delegated to beat story ownership via obj.beat, same chain as
+     *     BeatViewSet (beat -> episode -> chapter -> story).
+     */
+    delete: operations['stakes_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for Stake (#1770 pillar 1).
+     *
+     *     Access delegated to beat story ownership via obj.beat, same chain as
+     *     BeatViewSet (beat -> episode -> chapter -> story).
+     */
+    patch: operations['stakes_partial_update'];
     trace?: never;
   };
   '/api/status/': {
@@ -14616,6 +14868,8 @@ export interface components {
        *     * `extreme` - Extreme
        */
       risk?: components['schemas']['RiskEnum'];
+      /** @description The character level this beat's stakes are declared against ('EXTREME at level 4'). Effective risk at activation is computed from the gap between this and the actual party's average level. Required (via readiness validation, not clean()) when risk != NONE. */
+      target_level?: number | null;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -14724,6 +14978,8 @@ export interface components {
        *     * `extreme` - Extreme
        */
       risk?: components['schemas']['RiskEnum'];
+      /** @description The character level this beat's stakes are declared against ('EXTREME at level 4'). Effective risk at activation is computed from the gap between this and the actual party's average level. Required (via readiness validation, not clean()) when risk != NONE. */
+      target_level?: number | null;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -15818,6 +16074,13 @@ export interface components {
      */
     ColoringEnum: 'positive' | 'neutral' | 'negative';
     /**
+     * @description * `win` - Win
+     *     * `loss` - Loss
+     *     * `withdrawal` - Withdrawal
+     * @enum {string}
+     */
+    ColumnEnum: 'win' | 'loss' | 'withdrawal';
+    /**
      * @description * `message` - Message
      *     * `status_change` - Status Change
      * @enum {string}
@@ -16404,6 +16667,15 @@ export interface components {
      * @enum {string}
      */
     DecisionEnum: 'accept' | 'deny';
+    /**
+     * @description * `none` - None
+     *     * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     * @enum {string}
+     */
+    DeclaredRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
       readonly id: number;
@@ -16833,6 +17105,15 @@ export interface components {
       readonly has_power_scaling: boolean;
     };
     /**
+     * @description * `none` - None
+     *     * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     * @enum {string}
+     */
+    EffectiveRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /**
      * @description * `very_low` - Very Low Effort
      *     * `low` - Low Effort
      *     * `medium` - Medium Effort
@@ -17166,6 +17447,15 @@ export interface components {
      * @enum {string}
      */
     EraStatusEnum: 'upcoming' | 'active' | 'concluded';
+    /**
+     * @description * `none` - None
+     *     * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     * @enum {string}
+     */
+    EscalatesToRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
     /** @description Serializer for creating events. Host is derived from the request. */
     EventCreate: {
       name: string;
@@ -18901,6 +19191,15 @@ export interface components {
      */
     MaturityEnum: 'pitch' | 'outline' | 'plot';
     /**
+     * @description * `none` - None
+     *     * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     * @enum {string}
+     */
+    MaxRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /**
      * @description * `photo` - Photo
      *     * `portrait` - Character Portrait
      *     * `gallery` - Gallery Image
@@ -18920,6 +19219,15 @@ export interface components {
       /** @description Display name for this persona */
       name: string;
     };
+    /**
+     * @description * `none` - None
+     *     * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     * @enum {string}
+     */
+    MinRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
       readonly id: number;
@@ -21473,6 +21781,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RelationshipCapstone'][];
     };
+    PaginatedRiskCalibrationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RiskCalibration'][];
+    };
     PaginatedRitualList: {
       /** @example 123 */
       count: number;
@@ -21757,6 +22080,66 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['SpreadableDeed'][];
+    };
+    PaginatedStakeContractActivationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StakeContractActivation'][];
+    };
+    PaginatedStakeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Stake'][];
+    };
+    PaginatedStakeResolutionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StakeResolution'][];
+    };
+    PaginatedStakeTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StakeTemplate'][];
     };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
@@ -22133,6 +22516,8 @@ export interface components {
        *     * `extreme` - Extreme
        */
       risk?: components['schemas']['RiskEnum'];
+      /** @description The character level this beat's stakes are declared against ('EXTREME at level 4'). Effective risk at activation is computed from the gap between this and the actual party's average level. Required (via readiness validation, not clean()) when risk != NONE. */
+      target_level?: number | null;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -22847,6 +23232,20 @@ export interface components {
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
     /**
+     * @description Full serializer for RiskCalibration (#1770 pillar 5).
+     *
+     *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+     *     ViewSet, not here.
+     */
+    PatchedRiskCalibrationRequest: {
+      risk?: components['schemas']['RiskEnum'];
+      severity_floor_total?: number;
+      severity_ceiling?: components['schemas']['SeverityCeilingEnum'];
+      max_fuse_hops?: number;
+      reward_floor?: number;
+      reward_ceiling?: number;
+    };
+    /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
      *
      *     Handles top-level Ritual fields (name, description, narrative_prose) and
@@ -22914,6 +23313,79 @@ export interface components {
       allowed_tenure?: number;
       /** @description Allowlist is scoped per category. */
       category?: number;
+    };
+    /**
+     * @description Full serializer for Stake (#1770 pillar 1).
+     *
+     *     Template-set path denormalizes subject_kind/severity from the template
+     *     (so a later template retune never rewrites live contracts) and validates
+     *     the beat's declared risk falls within the template's [min_risk, max_risk]
+     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+     *     Any write (create or update) is rejected while the beat carries an open
+     *     StakeContractActivation — the lock (#1770 pillar 8).
+     */
+    PatchedStakeRequest: {
+      beat?: number;
+      /** @description Null only for trust-gated custom stakes. */
+      template?: number | null;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      severity?: components['schemas']['SeverityEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
+      subject_label?: string;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      player_summary?: string;
+    };
+    /**
+     * @description Full serializer for StakeResolution (#1770 pillar 1).
+     *
+     *     Lock check only in PR1 — no column-ordering/escalation validation (the
+     *     fuse walk measures reachability, not monotonicity).
+     */
+    PatchedStakeResolutionRequest: {
+      stake?: number;
+      column?: components['schemas']['ColumnEnum'];
+      /** @description Pool to fire when this column resolves (tier-aware). */
+      consequence_pool?: number | null;
+      /**
+       * @description The risk tier the situation spawned by this branch carries — the fuse mechanic. Blank = no escalation declared.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      escalates_to_risk?:
+        | components['schemas']['EscalatesToRiskEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description What happens in the story when this branch fires (GM-authored). */
+      narrative_summary?: string;
+    };
+    /**
+     * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+     *
+     *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+     *     ViewSet, not here.
+     */
+    PatchedStakeTemplateRequest: {
+      name?: string;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      severity?: components['schemas']['SeverityEnum'];
+      min_risk?: components['schemas']['MinRiskEnum'];
+      max_risk?: components['schemas']['MaxRiskEnum'];
+      /** @description Player-facing summary shown at opt-in; GM fills the specifics. */
+      player_summary_template?: string;
+      description?: string;
+      is_active?: boolean;
     };
     /** @description Full serializer for story detail views */
     PatchedStoryDetailRequest: {
@@ -24277,6 +24749,35 @@ export interface components {
      */
     RewardGroupRuleEnum: 'all_equal' | 'by_role' | 'by_participation';
     /**
+     * @description Full serializer for RiskCalibration (#1770 pillar 5).
+     *
+     *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+     *     ViewSet, not here.
+     */
+    RiskCalibration: {
+      readonly id: number;
+      risk: components['schemas']['RiskEnum'];
+      severity_floor_total: number;
+      severity_ceiling: components['schemas']['SeverityCeilingEnum'];
+      max_fuse_hops: number;
+      reward_floor?: number;
+      reward_ceiling?: number;
+    };
+    /**
+     * @description Full serializer for RiskCalibration (#1770 pillar 5).
+     *
+     *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+     *     ViewSet, not here.
+     */
+    RiskCalibrationRequest: {
+      risk: components['schemas']['RiskEnum'];
+      severity_floor_total: number;
+      severity_ceiling: components['schemas']['SeverityCeilingEnum'];
+      max_fuse_hops: number;
+      reward_floor?: number;
+      reward_ceiling?: number;
+    };
+    /**
      * @description * `none` - None
      *     * `low` - Low
      *     * `moderate` - Moderate
@@ -24928,6 +25429,24 @@ export interface components {
       max_actions_per_round?: number;
       per_target_repeat_lock?: boolean;
     };
+    /**
+     * @description * `1` - Setback
+     *     * `2` - Costly
+     *     * `3` - Grave
+     *     * `4` - Dire
+     *     * `5` - Removal from play
+     * @enum {integer}
+     */
+    SeverityCeilingEnum: 1 | 2 | 3 | 4 | 5;
+    /**
+     * @description * `1` - Setback
+     *     * `2` - Costly
+     *     * `3` - Grave
+     *     * `4` - Dire
+     *     * `5` - Removal from play
+     * @enum {integer}
+     */
+    SeverityEnum: 1 | 2 | 3 | 4 | 5;
     /** @description POST body for the alternate-self shift endpoint. */
     ShiftFormRequestRequest: {
       alternate_self_id: number;
@@ -25412,6 +25931,185 @@ export interface components {
      */
     StageEnum: 1 | 2 | 3 | 4 | 5 | 6;
     /**
+     * @description Full serializer for Stake (#1770 pillar 1).
+     *
+     *     Template-set path denormalizes subject_kind/severity from the template
+     *     (so a later template retune never rewrites live contracts) and validates
+     *     the beat's declared risk falls within the template's [min_risk, max_risk]
+     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+     *     Any write (create or update) is rejected while the beat carries an open
+     *     StakeContractActivation — the lock (#1770 pillar 8).
+     */
+    Stake: {
+      readonly id: number;
+      beat: number;
+      /** @description Null only for trust-gated custom stakes. */
+      template?: number | null;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      severity?: components['schemas']['SeverityEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
+      subject_label?: string;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      player_summary: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /** @description Read-only full serializer for StakeContractActivation (#1770 pillars 7-8). */
+    StakeContractActivation: {
+      readonly id: number;
+      readonly beat: number;
+      /** Format: date-time */
+      readonly locked_at: string;
+      /** Format: date-time */
+      readonly resolved_at: string | null;
+      readonly party_average_level: number;
+      /** @description Beat.target_level snapshot at activation (0 = unset). */
+      readonly declared_target_level: number;
+      readonly declared_risk: components['schemas']['DeclaredRiskEnum'];
+      /**
+       * @description What Legend actually pays on — see compute_effective_risk.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      readonly effective_risk: components['schemas']['EffectiveRiskEnum'];
+      /** @description Readiness verdict at activation; False forced effective NONE. */
+      readonly is_ready: boolean;
+      readonly readiness_notes: string;
+    };
+    /**
+     * @description Full serializer for Stake (#1770 pillar 1).
+     *
+     *     Template-set path denormalizes subject_kind/severity from the template
+     *     (so a later template retune never rewrites live contracts) and validates
+     *     the beat's declared risk falls within the template's [min_risk, max_risk]
+     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+     *     Any write (create or update) is rejected while the beat carries an open
+     *     StakeContractActivation — the lock (#1770 pillar 8).
+     */
+    StakeRequest: {
+      beat: number;
+      /** @description Null only for trust-gated custom stakes. */
+      template?: number | null;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      severity?: components['schemas']['SeverityEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor). */
+      subject_label?: string;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      player_summary: string;
+    };
+    /**
+     * @description Full serializer for StakeResolution (#1770 pillar 1).
+     *
+     *     Lock check only in PR1 — no column-ordering/escalation validation (the
+     *     fuse walk measures reachability, not monotonicity).
+     */
+    StakeResolution: {
+      readonly id: number;
+      stake: number;
+      column: components['schemas']['ColumnEnum'];
+      /** @description Pool to fire when this column resolves (tier-aware). */
+      consequence_pool?: number | null;
+      /**
+       * @description The risk tier the situation spawned by this branch carries — the fuse mechanic. Blank = no escalation declared.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      escalates_to_risk?:
+        | components['schemas']['EscalatesToRiskEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description What happens in the story when this branch fires (GM-authored). */
+      narrative_summary?: string;
+    };
+    /**
+     * @description Full serializer for StakeResolution (#1770 pillar 1).
+     *
+     *     Lock check only in PR1 — no column-ordering/escalation validation (the
+     *     fuse walk measures reachability, not monotonicity).
+     */
+    StakeResolutionRequest: {
+      stake: number;
+      column: components['schemas']['ColumnEnum'];
+      /** @description Pool to fire when this column resolves (tier-aware). */
+      consequence_pool?: number | null;
+      /**
+       * @description The risk tier the situation spawned by this branch carries — the fuse mechanic. Blank = no escalation declared.
+       *
+       *     * `none` - None
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       */
+      escalates_to_risk?:
+        | components['schemas']['EscalatesToRiskEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description What happens in the story when this branch fires (GM-authored). */
+      narrative_summary?: string;
+    };
+    /**
+     * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+     *
+     *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+     *     ViewSet, not here.
+     */
+    StakeTemplate: {
+      readonly id: number;
+      name: string;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      severity: components['schemas']['SeverityEnum'];
+      min_risk?: components['schemas']['MinRiskEnum'];
+      max_risk?: components['schemas']['MaxRiskEnum'];
+      /** @description Player-facing summary shown at opt-in; GM fills the specifics. */
+      player_summary_template: string;
+      description?: string;
+      is_active?: boolean;
+    };
+    /**
+     * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+     *
+     *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+     *     ViewSet, not here.
+     */
+    StakeTemplateRequest: {
+      name: string;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      severity: components['schemas']['SeverityEnum'];
+      min_risk?: components['schemas']['MinRiskEnum'];
+      max_risk?: components['schemas']['MaxRiskEnum'];
+      /** @description Player-facing summary shown at opt-in; GM fills the specifics. */
+      player_summary_template: string;
+      description?: string;
+      is_active?: boolean;
+    };
+    /**
      * @description * `local` - Local
      *     * `regional` - Regional
      *     * `national` - National
@@ -25804,6 +26502,24 @@ export interface components {
       scene: number;
       resonance: number;
     };
+    /**
+     * @description * `personal_jeopardy` - Personal jeopardy
+     *     * `npc_fate` - NPC fate
+     *     * `location` - Location
+     *     * `faction` - Faction relationship
+     *     * `item` - Item
+     *     * `campaign_track` - Campaign track
+     *     * `custom` - Custom (trust-gated)
+     * @enum {string}
+     */
+    SubjectKindEnum:
+      | 'personal_jeopardy'
+      | 'npc_fate'
+      | 'location'
+      | 'faction'
+      | 'item'
+      | 'campaign_track'
+      | 'custom';
     /**
      * @description * `swords` - Swords
      *     * `cups` - Cups
@@ -43771,6 +44487,150 @@ export interface operations {
       };
     };
   };
+  risk_calibrations_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRiskCalibrationList'];
+        };
+      };
+    };
+  };
+  risk_calibrations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RiskCalibrationRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RiskCalibration'];
+        };
+      };
+    };
+  };
+  risk_calibrations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this risk calibration. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RiskCalibration'];
+        };
+      };
+    };
+  };
+  risk_calibrations_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this risk calibration. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RiskCalibrationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RiskCalibration'];
+        };
+      };
+    };
+  };
+  risk_calibrations_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this risk calibration. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  risk_calibrations_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this risk calibration. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedRiskCalibrationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RiskCalibration'];
+        };
+      };
+    };
+  };
   roster_entries_list: {
     parameters: {
       query?: {
@@ -45638,6 +46498,497 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  stake_activations_list: {
+    parameters: {
+      query?: {
+        beat?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description Open activations only */
+        resolved_at_isnull?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStakeContractActivationList'];
+        };
+      };
+    };
+  };
+  stake_activations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake contract activation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeContractActivation'];
+        };
+      };
+    };
+  };
+  stake_resolutions_list: {
+    parameters: {
+      query?: {
+        column?: string;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        stake?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStakeResolutionList'];
+        };
+      };
+    };
+  };
+  stake_resolutions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeResolutionRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeResolution'];
+        };
+      };
+    };
+  };
+  stake_resolutions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake resolution. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeResolution'];
+        };
+      };
+    };
+  };
+  stake_resolutions_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake resolution. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeResolutionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeResolution'];
+        };
+      };
+    };
+  };
+  stake_resolutions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake resolution. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stake_resolutions_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake resolution. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStakeResolutionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeResolution'];
+        };
+      };
+    };
+  };
+  stake_templates_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        severity?: number;
+        subject_kind?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStakeTemplateList'];
+        };
+      };
+    };
+  };
+  stake_templates_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeTemplateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeTemplate'];
+        };
+      };
+    };
+  };
+  stake_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeTemplate'];
+        };
+      };
+    };
+  };
+  stake_templates_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeTemplate'];
+        };
+      };
+    };
+  };
+  stake_templates_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stake_templates_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStakeTemplateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeTemplate'];
+        };
+      };
+    };
+  };
+  stakes_list: {
+    parameters: {
+      query?: {
+        beat?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        severity?: number;
+        subject_kind?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStakeList'];
+        };
+      };
+    };
+  };
+  stakes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Stake'];
+        };
+      };
+    };
+  };
+  stakes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Stake'];
+        };
+      };
+    };
+  };
+  stakes_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Stake'];
+        };
+      };
+    };
+  };
+  stakes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stakes_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStakeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Stake'];
+        };
       };
     };
   };

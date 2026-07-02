@@ -19559,6 +19559,158 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipTrack'
           description: ''
+  /api/risk-calibrations/:
+    get:
+      operationId: risk_calibrations_list
+      description: ViewSet for RiskCalibration — staff-tunable calibration bands (#1770
+        pillar 5).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - risk-calibrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRiskCalibrationList'
+          description: ''
+    post:
+      operationId: risk_calibrations_create
+      description: ViewSet for RiskCalibration — staff-tunable calibration bands (#1770
+        pillar 5).
+      tags:
+      - risk-calibrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskCalibrationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskCalibration'
+          description: ''
+  /api/risk-calibrations/{id}/:
+    get:
+      operationId: risk_calibrations_retrieve
+      description: ViewSet for RiskCalibration — staff-tunable calibration bands (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this risk calibration.
+        required: true
+      tags:
+      - risk-calibrations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskCalibration'
+          description: ''
+    put:
+      operationId: risk_calibrations_update
+      description: ViewSet for RiskCalibration — staff-tunable calibration bands (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this risk calibration.
+        required: true
+      tags:
+      - risk-calibrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskCalibrationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskCalibration'
+          description: ''
+    patch:
+      operationId: risk_calibrations_partial_update
+      description: ViewSet for RiskCalibration — staff-tunable calibration bands (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this risk calibration.
+        required: true
+      tags:
+      - risk-calibrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRiskCalibrationRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskCalibration'
+          description: ''
+    delete:
+      operationId: risk_calibrations_destroy
+      description: ViewSet for RiskCalibration — staff-tunable calibration bands (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this risk calibration.
+        required: true
+      tags:
+      - risk-calibrations
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/roster/entries/:
     get:
       operationId: roster_entries_list
@@ -21628,6 +21780,599 @@ paths:
       - cookieAuth: []
       responses:
         '200':
+          description: No response body
+  /api/stake-activations/:
+    get:
+      operationId: stake_activations_list
+      description: |-
+        Read-only ViewSet for StakeContractActivation — the lock/audit surface
+        (#1770 pillars 7-8).
+      parameters:
+      - in: query
+        name: beat
+        schema:
+          type: number
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: resolved_at_isnull
+        schema:
+          type: boolean
+        description: Open activations only
+      tags:
+      - stake-activations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStakeContractActivationList'
+          description: ''
+  /api/stake-activations/{id}/:
+    get:
+      operationId: stake_activations_retrieve
+      description: |-
+        Read-only ViewSet for StakeContractActivation — the lock/audit surface
+        (#1770 pillars 7-8).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake contract activation.
+        required: true
+      tags:
+      - stake-activations
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeContractActivation'
+          description: ''
+  /api/stake-resolutions/:
+    get:
+      operationId: stake_resolutions_list
+      description: |-
+        ViewSet for StakeResolution (#1770 pillar 1).
+
+        Access delegated to the parent stake's beat story ownership via
+        obj.stake.beat.
+      parameters:
+      - in: query
+        name: column
+        schema:
+          type: string
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: stake
+        schema:
+          type: number
+      tags:
+      - stake-resolutions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStakeResolutionList'
+          description: ''
+    post:
+      operationId: stake_resolutions_create
+      description: |-
+        ViewSet for StakeResolution (#1770 pillar 1).
+
+        Access delegated to the parent stake's beat story ownership via
+        obj.stake.beat.
+      tags:
+      - stake-resolutions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeResolutionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeResolution'
+          description: ''
+  /api/stake-resolutions/{id}/:
+    get:
+      operationId: stake_resolutions_retrieve
+      description: |-
+        ViewSet for StakeResolution (#1770 pillar 1).
+
+        Access delegated to the parent stake's beat story ownership via
+        obj.stake.beat.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake resolution.
+        required: true
+      tags:
+      - stake-resolutions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeResolution'
+          description: ''
+    put:
+      operationId: stake_resolutions_update
+      description: |-
+        ViewSet for StakeResolution (#1770 pillar 1).
+
+        Access delegated to the parent stake's beat story ownership via
+        obj.stake.beat.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake resolution.
+        required: true
+      tags:
+      - stake-resolutions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeResolutionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeResolution'
+          description: ''
+    patch:
+      operationId: stake_resolutions_partial_update
+      description: |-
+        ViewSet for StakeResolution (#1770 pillar 1).
+
+        Access delegated to the parent stake's beat story ownership via
+        obj.stake.beat.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake resolution.
+        required: true
+      tags:
+      - stake-resolutions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStakeResolutionRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeResolution'
+          description: ''
+    delete:
+      operationId: stake_resolutions_destroy
+      description: |-
+        ViewSet for StakeResolution (#1770 pillar 1).
+
+        Access delegated to the parent stake's beat story ownership via
+        obj.stake.beat.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake resolution.
+        required: true
+      tags:
+      - stake-resolutions
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/stake-templates/:
+    get:
+      operationId: stake_templates_list
+      description: ViewSet for StakeTemplate — the GM-facing stake catalog (#1770
+        pillar 5).
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: severity
+        schema:
+          type: integer
+      - in: query
+        name: subject_kind
+        schema:
+          type: string
+      tags:
+      - stake-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStakeTemplateList'
+          description: ''
+    post:
+      operationId: stake_templates_create
+      description: ViewSet for StakeTemplate — the GM-facing stake catalog (#1770
+        pillar 5).
+      tags:
+      - stake-templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeTemplate'
+          description: ''
+  /api/stake-templates/{id}/:
+    get:
+      operationId: stake_templates_retrieve
+      description: ViewSet for StakeTemplate — the GM-facing stake catalog (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake template.
+        required: true
+      tags:
+      - stake-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeTemplate'
+          description: ''
+    put:
+      operationId: stake_templates_update
+      description: ViewSet for StakeTemplate — the GM-facing stake catalog (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake template.
+        required: true
+      tags:
+      - stake-templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeTemplate'
+          description: ''
+    patch:
+      operationId: stake_templates_partial_update
+      description: ViewSet for StakeTemplate — the GM-facing stake catalog (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake template.
+        required: true
+      tags:
+      - stake-templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStakeTemplateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeTemplate'
+          description: ''
+    delete:
+      operationId: stake_templates_destroy
+      description: ViewSet for StakeTemplate — the GM-facing stake catalog (#1770
+        pillar 5).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake template.
+        required: true
+      tags:
+      - stake-templates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/stakes/:
+    get:
+      operationId: stakes_list
+      description: |-
+        ViewSet for Stake (#1770 pillar 1).
+
+        Access delegated to beat story ownership via obj.beat, same chain as
+        BeatViewSet (beat -> episode -> chapter -> story).
+      parameters:
+      - in: query
+        name: beat
+        schema:
+          type: number
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: severity
+        schema:
+          type: integer
+      - in: query
+        name: subject_kind
+        schema:
+          type: string
+      tags:
+      - stakes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStakeList'
+          description: ''
+    post:
+      operationId: stakes_create
+      description: |-
+        ViewSet for Stake (#1770 pillar 1).
+
+        Access delegated to beat story ownership via obj.beat, same chain as
+        BeatViewSet (beat -> episode -> chapter -> story).
+      tags:
+      - stakes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stake'
+          description: ''
+  /api/stakes/{id}/:
+    get:
+      operationId: stakes_retrieve
+      description: |-
+        ViewSet for Stake (#1770 pillar 1).
+
+        Access delegated to beat story ownership via obj.beat, same chain as
+        BeatViewSet (beat -> episode -> chapter -> story).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake.
+        required: true
+      tags:
+      - stakes
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stake'
+          description: ''
+    put:
+      operationId: stakes_update
+      description: |-
+        ViewSet for Stake (#1770 pillar 1).
+
+        Access delegated to beat story ownership via obj.beat, same chain as
+        BeatViewSet (beat -> episode -> chapter -> story).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake.
+        required: true
+      tags:
+      - stakes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stake'
+          description: ''
+    patch:
+      operationId: stakes_partial_update
+      description: |-
+        ViewSet for Stake (#1770 pillar 1).
+
+        Access delegated to beat story ownership via obj.beat, same chain as
+        BeatViewSet (beat -> episode -> chapter -> story).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake.
+        required: true
+      tags:
+      - stakes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStakeRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stake'
+          description: ''
+    delete:
+      operationId: stakes_destroy
+      description: |-
+        ViewSet for Stake (#1770 pillar 1).
+
+        Access delegated to beat story ownership via obj.beat, same chain as
+        BeatViewSet (beat -> episode -> chapter -> story).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake.
+        required: true
+      tags:
+      - stakes
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
           description: No response body
   /api/status/:
     get:
@@ -24771,6 +25516,15 @@ components:
             * `moderate` - Moderate
             * `high` - High
             * `extreme` - Extreme
+        target_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+          description: The character level this beat's stakes are declared against
+            ('EXTREME at level 4'). Effective risk at activation is computed from
+            the gap between this and the actual party's average level. Required (via
+            readiness validation, not clean()) when risk != NONE.
         required_level:
           type: integer
           maximum: 2147483647
@@ -24961,6 +25715,15 @@ components:
             * `moderate` - Moderate
             * `high` - High
             * `extreme` - Extreme
+        target_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+          description: The character level this beat's stakes are declared against
+            ('EXTREME at level 4'). Effective risk at activation is computed from
+            the gap between this and the actual party's average level. Required (via
+            readiness validation, not clean()) when risk != NONE.
         required_level:
           type: integer
           maximum: 2147483647
@@ -27380,6 +28143,16 @@ components:
         * `positive` - Positive
         * `neutral` - Neutral
         * `negative` - Negative
+    ColumnEnum:
+      enum:
+      - win
+      - loss
+      - withdrawal
+      type: string
+      description: |-
+        * `win` - Win
+        * `loss` - Loss
+        * `withdrawal` - Withdrawal
     CommentTypeEnum:
       enum:
       - message
@@ -28656,6 +29429,20 @@ components:
       description: |-
         * `accept` - Accept
         * `deny` - Deny
+    DeclaredRiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -29606,6 +30393,20 @@ components:
       - has_power_scaling
       - id
       - name
+    EffectiveRiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     EffortLevelEnum:
       enum:
       - very_low
@@ -30338,6 +31139,20 @@ components:
         * `upcoming` - Upcoming
         * `active` - Active
         * `concluded` - Concluded
+    EscalatesToRiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     EventCreate:
       type: object
       description: Serializer for creating events. Host is derived from the request.
@@ -33941,6 +34756,20 @@ components:
         * `pitch` - Pitch
         * `outline` - Outline
         * `plot` - Plot
+    MaxRiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     MediaTypeEnum:
       enum:
       - photo
@@ -33975,6 +34804,20 @@ components:
       required:
       - id
       - name
+    MinRiskEnum:
+      enum:
+      - none
+      - low
+      - moderate
+      - high
+      - extreme
+      type: string
+      description: |-
+        * `none` - None
+        * `low` - Low
+        * `moderate` - Moderate
+        * `high` - High
+        * `extreme` - Extreme
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -38522,6 +39365,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelationshipCapstone'
+    PaginatedRiskCalibrationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskCalibration'
     PaginatedRitualList:
       type: object
       required:
@@ -38959,6 +39825,98 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SpreadableDeed'
+    PaginatedStakeContractActivationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeContractActivation'
+    PaginatedStakeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stake'
+    PaginatedStakeResolutionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeResolution'
+    PaginatedStakeTemplateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeTemplate'
     PaginatedStoryFeedbackList:
       type: object
       required:
@@ -39537,6 +40495,15 @@ components:
             * `moderate` - Moderate
             * `high` - High
             * `extreme` - Extreme
+        target_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+          description: The character level this beat's stakes are declared against
+            ('EXTREME at level 4'). Effective risk at activation is computed from
+            the gap between this and the actual party's average level. Required (via
+            readiness validation, not clean()) when risk != NONE.
         required_level:
           type: integer
           maximum: 2147483647
@@ -40761,6 +41728,37 @@ components:
             * `4` - Expert
           minimum: -2147483648
           maximum: 2147483647
+    PatchedRiskCalibrationRequest:
+      type: object
+      description: |-
+        Full serializer for RiskCalibration (#1770 pillar 5).
+
+        Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+        ViewSet, not here.
+      properties:
+        risk:
+          $ref: '#/components/schemas/RiskEnum'
+        severity_floor_total:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        severity_ceiling:
+          allOf:
+          - $ref: '#/components/schemas/SeverityCeilingEnum'
+          minimum: 0
+          maximum: 32767
+        max_fuse_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reward_floor:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        reward_ceiling:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
     PatchedRitualPatchRequest:
       type: object
       description: |-
@@ -40866,6 +41864,121 @@ components:
         category:
           type: integer
           description: Allowlist is scoped per category.
+    PatchedStakeRequest:
+      type: object
+      description: |-
+        Full serializer for Stake (#1770 pillar 1).
+
+        Template-set path denormalizes subject_kind/severity from the template
+        (so a later template retune never rewrites live contracts) and validates
+        the beat's declared risk falls within the template's [min_risk, max_risk]
+        band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+        mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+        Any write (create or update) is rejected while the beat carries an open
+        StakeContractActivation — the lock (#1770 pillar 8).
+      properties:
+        beat:
+          type: integer
+        template:
+          type: integer
+          nullable: true
+          description: Null only for trust-gated custom stakes.
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          minimum: 0
+          maximum: 32767
+        subject_sheet:
+          type: integer
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
+          nullable: true
+        subject_item:
+          type: integer
+          nullable: true
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
+        subject_society:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
+        subject_organization:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
+        subject_label:
+          type: string
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
+          maxLength: 200
+        player_summary:
+          type: string
+          minLength: 1
+          description: 'Player-facing line shown at opt-in: what is wagered, how badly.'
+    PatchedStakeResolutionRequest:
+      type: object
+      description: |-
+        Full serializer for StakeResolution (#1770 pillar 1).
+
+        Lock check only in PR1 — no column-ordering/escalation validation (the
+        fuse walk measures reachability, not monotonicity).
+      properties:
+        stake:
+          type: integer
+        column:
+          $ref: '#/components/schemas/ColumnEnum'
+        consequence_pool:
+          type: integer
+          nullable: true
+          description: Pool to fire when this column resolves (tier-aware).
+        escalates_to_risk:
+          description: |-
+            The risk tier the situation spawned by this branch carries — the fuse mechanic. Blank = no escalation declared.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+          oneOf:
+          - $ref: '#/components/schemas/EscalatesToRiskEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        narrative_summary:
+          type: string
+          description: What happens in the story when this branch fires (GM-authored).
+    PatchedStakeTemplateRequest:
+      type: object
+      description: |-
+        Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+
+        Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+        ViewSet, not here.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          minimum: 0
+          maximum: 32767
+        min_risk:
+          $ref: '#/components/schemas/MinRiskEnum'
+        max_risk:
+          $ref: '#/components/schemas/MaxRiskEnum'
+        player_summary_template:
+          type: string
+          minLength: 1
+          description: Player-facing summary shown at opt-in; GM fills the specifics.
+        description:
+          type: string
+        is_active:
+          type: boolean
     PatchedStoryDetailRequest:
       type: object
       description: Full serializer for story detail views
@@ -43674,6 +44787,82 @@ components:
         * `all_equal` - All Equal
         * `by_role` - By Role
         * `by_participation` - By Participation
+    RiskCalibration:
+      type: object
+      description: |-
+        Full serializer for RiskCalibration (#1770 pillar 5).
+
+        Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+        ViewSet, not here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        risk:
+          $ref: '#/components/schemas/RiskEnum'
+        severity_floor_total:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        severity_ceiling:
+          allOf:
+          - $ref: '#/components/schemas/SeverityCeilingEnum'
+          minimum: 0
+          maximum: 32767
+        max_fuse_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reward_floor:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        reward_ceiling:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - max_fuse_hops
+      - risk
+      - severity_ceiling
+      - severity_floor_total
+    RiskCalibrationRequest:
+      type: object
+      description: |-
+        Full serializer for RiskCalibration (#1770 pillar 5).
+
+        Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+        ViewSet, not here.
+      properties:
+        risk:
+          $ref: '#/components/schemas/RiskEnum'
+        severity_floor_total:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        severity_ceiling:
+          allOf:
+          - $ref: '#/components/schemas/SeverityCeilingEnum'
+          minimum: 0
+          maximum: 32767
+        max_fuse_hops:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reward_floor:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        reward_ceiling:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - max_fuse_hops
+      - risk
+      - severity_ceiling
+      - severity_floor_total
     RiskEnum:
       enum:
       - none
@@ -45058,6 +46247,34 @@ components:
           minimum: 0
         per_target_repeat_lock:
           type: boolean
+    SeverityCeilingEnum:
+      enum:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      type: integer
+      description: |-
+        * `1` - Setback
+        * `2` - Costly
+        * `3` - Grave
+        * `4` - Dire
+        * `5` - Removal from play
+    SeverityEnum:
+      enum:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      type: integer
+      description: |-
+        * `1` - Setback
+        * `2` - Costly
+        * `3` - Grave
+        * `4` - Dire
+        * `5` - Removal from play
     ShiftFormRequestRequest:
       type: object
       description: POST body for the alternate-self shift endpoint.
@@ -46077,6 +47294,338 @@ components:
         * `4` - True
         * `5` - Grand
         * `6` - Transcendent
+    Stake:
+      type: object
+      description: |-
+        Full serializer for Stake (#1770 pillar 1).
+
+        Template-set path denormalizes subject_kind/severity from the template
+        (so a later template retune never rewrites live contracts) and validates
+        the beat's declared risk falls within the template's [min_risk, max_risk]
+        band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+        mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+        Any write (create or update) is rejected while the beat carries an open
+        StakeContractActivation — the lock (#1770 pillar 8).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        beat:
+          type: integer
+        template:
+          type: integer
+          nullable: true
+          description: Null only for trust-gated custom stakes.
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          minimum: 0
+          maximum: 32767
+        subject_sheet:
+          type: integer
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
+          nullable: true
+        subject_item:
+          type: integer
+          nullable: true
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
+        subject_society:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
+        subject_organization:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
+        subject_label:
+          type: string
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
+          maxLength: 200
+        player_summary:
+          type: string
+          description: 'Player-facing line shown at opt-in: what is wagered, how badly.'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - beat
+      - created_at
+      - id
+      - player_summary
+      - updated_at
+    StakeContractActivation:
+      type: object
+      description: Read-only full serializer for StakeContractActivation (#1770 pillars
+        7-8).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        beat:
+          type: integer
+          readOnly: true
+        locked_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        party_average_level:
+          type: integer
+          readOnly: true
+        declared_target_level:
+          type: integer
+          readOnly: true
+          description: Beat.target_level snapshot at activation (0 = unset).
+        declared_risk:
+          allOf:
+          - $ref: '#/components/schemas/DeclaredRiskEnum'
+          readOnly: true
+        effective_risk:
+          allOf:
+          - $ref: '#/components/schemas/EffectiveRiskEnum'
+          readOnly: true
+          description: |-
+            What Legend actually pays on — see compute_effective_risk.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+        is_ready:
+          type: boolean
+          readOnly: true
+          description: Readiness verdict at activation; False forced effective NONE.
+        readiness_notes:
+          type: string
+          readOnly: true
+      required:
+      - beat
+      - declared_risk
+      - declared_target_level
+      - effective_risk
+      - id
+      - is_ready
+      - locked_at
+      - party_average_level
+      - readiness_notes
+      - resolved_at
+    StakeRequest:
+      type: object
+      description: |-
+        Full serializer for Stake (#1770 pillar 1).
+
+        Template-set path denormalizes subject_kind/severity from the template
+        (so a later template retune never rewrites live contracts) and validates
+        the beat's declared risk falls within the template's [min_risk, max_risk]
+        band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+        mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+        Any write (create or update) is rejected while the beat carries an open
+        StakeContractActivation — the lock (#1770 pillar 8).
+      properties:
+        beat:
+          type: integer
+        template:
+          type: integer
+          nullable: true
+          description: Null only for trust-gated custom stakes.
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          minimum: 0
+          maximum: 32767
+        subject_sheet:
+          type: integer
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
+          nullable: true
+        subject_item:
+          type: integer
+          nullable: true
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
+        subject_society:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
+        subject_organization:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
+        subject_label:
+          type: string
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).
+          maxLength: 200
+        player_summary:
+          type: string
+          minLength: 1
+          description: 'Player-facing line shown at opt-in: what is wagered, how badly.'
+      required:
+      - beat
+      - player_summary
+    StakeResolution:
+      type: object
+      description: |-
+        Full serializer for StakeResolution (#1770 pillar 1).
+
+        Lock check only in PR1 — no column-ordering/escalation validation (the
+        fuse walk measures reachability, not monotonicity).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        stake:
+          type: integer
+        column:
+          $ref: '#/components/schemas/ColumnEnum'
+        consequence_pool:
+          type: integer
+          nullable: true
+          description: Pool to fire when this column resolves (tier-aware).
+        escalates_to_risk:
+          description: |-
+            The risk tier the situation spawned by this branch carries — the fuse mechanic. Blank = no escalation declared.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+          oneOf:
+          - $ref: '#/components/schemas/EscalatesToRiskEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        narrative_summary:
+          type: string
+          description: What happens in the story when this branch fires (GM-authored).
+      required:
+      - column
+      - id
+      - stake
+    StakeResolutionRequest:
+      type: object
+      description: |-
+        Full serializer for StakeResolution (#1770 pillar 1).
+
+        Lock check only in PR1 — no column-ordering/escalation validation (the
+        fuse walk measures reachability, not monotonicity).
+      properties:
+        stake:
+          type: integer
+        column:
+          $ref: '#/components/schemas/ColumnEnum'
+        consequence_pool:
+          type: integer
+          nullable: true
+          description: Pool to fire when this column resolves (tier-aware).
+        escalates_to_risk:
+          description: |-
+            The risk tier the situation spawned by this branch carries — the fuse mechanic. Blank = no escalation declared.
+
+            * `none` - None
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+          oneOf:
+          - $ref: '#/components/schemas/EscalatesToRiskEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        narrative_summary:
+          type: string
+          description: What happens in the story when this branch fires (GM-authored).
+      required:
+      - column
+      - stake
+    StakeTemplate:
+      type: object
+      description: |-
+        Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+
+        Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+        ViewSet, not here.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          minimum: 0
+          maximum: 32767
+        min_risk:
+          $ref: '#/components/schemas/MinRiskEnum'
+        max_risk:
+          $ref: '#/components/schemas/MaxRiskEnum'
+        player_summary_template:
+          type: string
+          description: Player-facing summary shown at opt-in; GM fills the specifics.
+        description:
+          type: string
+        is_active:
+          type: boolean
+      required:
+      - id
+      - name
+      - player_summary_template
+      - severity
+      - subject_kind
+    StakeTemplateRequest:
+      type: object
+      description: |-
+        Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+
+        Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+        ViewSet, not here.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          minimum: 0
+          maximum: 32767
+        min_risk:
+          $ref: '#/components/schemas/MinRiskEnum'
+        max_risk:
+          $ref: '#/components/schemas/MaxRiskEnum'
+        player_summary_template:
+          type: string
+          minLength: 1
+          description: Player-facing summary shown at opt-in; GM fills the specifics.
+        description:
+          type: string
+        is_active:
+          type: boolean
+      required:
+      - name
+      - player_summary_template
+      - severity
+      - subject_kind
     StakesLevelEnum:
       enum:
       - local
@@ -46867,6 +48416,24 @@ components:
       - endorsee_sheet
       - resonance
       - scene
+    SubjectKindEnum:
+      enum:
+      - personal_jeopardy
+      - npc_fate
+      - location
+      - faction
+      - item
+      - campaign_track
+      - custom
+      type: string
+      description: |-
+        * `personal_jeopardy` - Personal jeopardy
+        * `npc_fate` - NPC fate
+        * `location` - Location
+        * `faction` - Faction relationship
+        * `item` - Item
+        * `campaign_track` - Campaign track
+        * `custom` - Custom (trust-gated)
     SuitEnum:
       enum:
       - swords

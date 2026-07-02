@@ -282,7 +282,12 @@ A second, narrower Legend-award pathway exists for the stakes-consequence engine
 (#1716): `ConsequenceEffect.LEGEND_AWARD` -> `_legend_award` ->
 `create_legend_event` (`world/mechanics/effect_handlers.py`,
 `world/societies/services.py`) fires Legend only (no Fame/Prestige/reputation) from a
-Beat's consequence pool, scaled by `Beat.risk` x outcome tier. `fire_renown_award`
+Beat's consequence pool, scaled by `Beat.risk` x outcome tier — as of #1770, the
+risk term is read via `effective_risk_for_beat(beat)`, which prefers the beat's
+open stakes-contract `StakeContractActivation.effective_risk` (party-level-priced)
+over the raw declared `Beat.risk` when a contract is active; see
+`src/world/stories/AGENT_GLOSSARY.md` for the stakes-contract vocabulary
+(Stake / Severity / Fuse / Effective Risk / Activation). `fire_renown_award`
 stays the mechanism for GM-authored public events that also move Fame/Prestige/
 reputation; the two pathways are deliberately separate (#1716 stays Legend-only) and
 both reuse `RenownRisk`/`RISK_LEGEND_AWARDS` for the risk axis. _Avoid_:

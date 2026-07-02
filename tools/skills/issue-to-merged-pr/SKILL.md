@@ -116,11 +116,11 @@ Await-approval, and Implementation.
 - **Model selection.** Read the `model` and `complexity` fields from the
   emitted JSON. If `model` is non-empty, switch now — before any design,
   planning, or implementation work:
-  - `complexity:high` → `claude-opus-4-8` — run `/model claude-opus-4-8`
-  - `complexity:medium` → `claude-sonnet-4-6` — run `/model claude-sonnet-4-6`
-  - `complexity:low` → `claude-sonnet-4-6` as the session model; use
-    `opts.model: "claude-haiku-4-5-20251001"` for leaf subagents in workflow
-    scripts where appropriate.
+  - `complexity:high` → `claude-sonnet-5` — run `/model claude-sonnet-5`
+  - `complexity:medium` → `claude-sonnet-5` — run `/model claude-sonnet-5`
+  - `complexity:low` → `claude-sonnet-5` as the session model; leaf subagents
+    in workflow scripts also use `opts.model: "sonnet"` (user preference:
+    Sonnet 5 for all subagents).
   - No `complexity:*` label → no change; proceed on the current model.
   In workflow scripts (`agent()` calls), set `opts.model` consistently with
   the above mapping so subagents inherit the right tier.
@@ -269,11 +269,11 @@ that CI then rejects. Running the full pass locally avoids a wasted CI round-tri
 
 ### 6. CI watch
 
-> ⚠️ **NEVER use Opus for CI watch or any looping/polling phase.** The watch
-> loop runs up to 25 minutes at 60-second intervals — potentially 25+ model
-> calls for pure polling work. If you switched to Opus at pickup, switch back
-> to Sonnet (`/model claude-sonnet-4-6`) before running `watch-ci.sh`. Opus
-> is for design and implementation, not waiting.
+> ⚠️ **NEVER use a top-tier model for CI watch or any looping/polling phase.**
+> The watch loop runs up to 25 minutes at 60-second intervals — potentially
+> 25+ model calls for pure polling work. If the session is on a heavier model,
+> switch to Sonnet (`/model claude-sonnet-5`) before running `watch-ci.sh`.
+> Top-tier models are for design and implementation, not waiting.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
 - `OK` (exit 0): enqueue for the merge queue with `scripts/enqueue-pr.sh

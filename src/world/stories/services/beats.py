@@ -223,6 +223,10 @@ def _create_completion_and_fire_pool(  # noqa: PLR0913
             outcome_tier=outcome_tier,
         )
 
+        from world.stories.services.stakes import resolve_open_activation  # noqa: PLC0415
+
+        resolve_open_activation(beat)
+
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Idempotent — safe to call unconditionally.
         maybe_create_session_request(progress)

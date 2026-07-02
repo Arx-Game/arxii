@@ -12,6 +12,7 @@ from world.gm.models import GMProfile, GMTable
 from world.stories.constants import AssistantClaimStatus, StoryScope
 from world.stories.models import (
     AssistantGMClaim,
+    Beat,
     Episode,
     Story,
     StoryNote,
@@ -304,6 +305,28 @@ class CanParticipateInStory(permissions.BasePermission):
         return True
 
 
+def user_owns_episode_story(user: AbstractBaseUser | AnonymousUser, episode: Episode) -> bool:
+    """Whether ``user`` owns the story that ``episode`` belongs to.
+
+    Walks episode -> chapter -> story. Ownership-only predicate: no staff
+    bypass here (callers check ``is_staff`` themselves) and no authentication
+    guard beyond truthiness — this is the single source of truth shared by
+    ``IsBeatStoryOwnerOrStaff.has_object_permission`` (and transitively
+    ``IsStakeBeatStoryOwnerOrStaff`` / ``IsStakeResolutionBeatStoryOwnerOrStaff``)
+    and the Beat/Stake/StakeResolution serializers' ``validate()`` methods, so
+    create-path enforcement (where DRF never calls ``has_object_permission``)
+    can never drift from the object-permission walk (#1770 PR1 review).
+    """
+    if user is None or not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return False
+    return episode.chapter.story.owners.filter(id=user.id).exists()
+
+
+def user_owns_beat_story(user: AbstractBaseUser | AnonymousUser, beat: Beat) -> bool:
+    """Whether ``user`` owns the story that ``beat`` belongs to (beat -> episode -> ...)."""
+    return user_owns_episode_story(user, beat.episode)
+
+
 class IsBeatStoryOwnerOrStaff(permissions.BasePermission):
     """Permission class for Beat model.
 
@@ -324,13 +347,87 @@ class IsBeatStoryOwnerOrStaff(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # Delegate to story permissions via beat -> episode -> chapter -> story
-        story_permission = IsStoryOwnerOrStaff()
-        return story_permission.has_object_permission(
-            request,
-            view,
-            obj.episode.chapter.story,
-        )
+        story = obj.episode.chapter.story
+
+        # Read keeps the permissive IsStoryOwnerOrStaff._can_read_story rule
+        # (public stories, participants, invite-only trust, etc.) — unchanged
+        # from the original delegation to IsStoryOwnerOrStaff.
+        if request.method in permissions.SAFE_METHODS:
+            return IsStoryOwnerOrStaff()._can_read_story(request.user, story)  # noqa: SLF001
+
+        # Write: shared ownership predicate — also used by BeatSerializer.validate()
+        # so the create-path check can never drift from this object-level walk.
+        return user_owns_beat_story(request.user, cast(Beat, obj))
+
+
+class IsStaffOrReadOnly(permissions.BasePermission):
+    """Authenticated users may read; only staff may write (#1770 pillar 5).
+
+    Used for designer-tunable catalog rows (RiskCalibration, StakeTemplate)
+    that every authenticated player can read but only staff configure.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated-read, staff-write."""
+        if not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user.is_staff
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Same rule at the object level."""
+        if not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user.is_staff
+
+
+class IsStakeBeatStoryOwnerOrStaff(permissions.BasePermission):
+    """Permission class for Stake and StakeContractActivation models (#1770 pillar 1).
+
+    Delegates to story ownership through obj.beat -> episode -> chapter ->
+    story, same as IsBeatStoryOwnerOrStaff.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Check basic permission"""
+        return request.user.is_authenticated
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check if user has permission to access this stake / activation"""
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_staff:
+            return True
+
+        beat_permission = IsBeatStoryOwnerOrStaff()
+        return beat_permission.has_object_permission(request, view, obj.beat)
+
+
+class IsStakeResolutionBeatStoryOwnerOrStaff(permissions.BasePermission):
+    """Permission class for StakeResolution model (#1770 pillar 1).
+
+    Delegates to story ownership through obj.stake.beat -> episode -> chapter
+    -> story, same as IsBeatStoryOwnerOrStaff.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Check basic permission"""
+        return request.user.is_authenticated
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check if user has permission to access this stake resolution"""
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_staff:
+            return True
+
+        beat_permission = IsBeatStoryOwnerOrStaff()
+        return beat_permission.has_object_permission(request, view, obj.stake.beat)
 
 
 class IsGroupProgressMemberOrStaff(permissions.BasePermission):

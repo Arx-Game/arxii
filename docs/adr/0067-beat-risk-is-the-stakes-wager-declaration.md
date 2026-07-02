@@ -22,3 +22,16 @@ outcome routes through via `BeatCompletion` (#1716's anti-reinvention pass), and
 work. A separate model would have duplicated that seam for no benefit.
 
 > Status: accepted · Source: #1716
+
+## Amended (2026-07-02, #1770)
+
+`Beat.risk` remains the declared magnitude dial described above — GM-authored,
+trust-gated, unchanged in meaning. It is now additionally: (1) validated for
+readiness against the beat's stakes contract (`validate_stakes_readiness`,
+`world/stories/services/stakes.py` — is the contract complete enough to run at
+this declared tier), and (2) paid on through `StakeContractActivation.effective_risk`
+rather than the raw declared value — the contract locks and prices itself for
+the actual party at scene start (`activate_stakes_contract`), and Legend pays
+on that effective figure (`effective_risk_for_beat`), not `Beat.risk` directly.
+See ADR-0071 (chain rule), ADR-0072 (effective risk), and ADR-0073 (menu-first
+calibration).

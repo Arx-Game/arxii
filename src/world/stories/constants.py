@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+import types
+
 from django.db import models
 
 
@@ -123,3 +126,72 @@ class StoryEpisodeStatus(models.TextChoices):
     READY_TO_RESOLVE = "ready_to_resolve", "Ready to resolve (auto-advance possible)"
     READY_TO_SCHEDULE = "ready_to_schedule", "Ready to schedule GM session"
     SCHEDULED = "scheduled", "GM session scheduled"
+
+
+class StakeSeverity(models.IntegerChoices):
+    """How bad losing (or how good winning) a single stake is.
+
+    The calibration bands in RiskCalibration compare against these values:
+    total-wagered floor (sum across a beat's stakes) and single-stake ceiling.
+    REMOVAL is the character-loss band — a stake at this severity satisfies the
+    jeopardy-reachability rule (#1770 chain rule) by itself.
+    """
+
+    SETBACK = 1, "Setback"
+    COSTLY = 2, "Costly"
+    GRAVE = 3, "Grave"
+    DIRE = 4, "Dire"
+    REMOVAL = 5, "Removal from play"
+
+
+class StakeSubjectKind(models.TextChoices):
+    """What kind of thing a Stake wagers. Typed subject FKs on Stake are
+    populated per kind; CUSTOM carries only subject_label + narrative."""
+
+    PERSONAL_JEOPARDY = "personal_jeopardy", "Personal jeopardy"
+    NPC_FATE = "npc_fate", "NPC fate"
+    LOCATION = "location", "Location"
+    FACTION = "faction", "Faction relationship"
+    ITEM = "item", "Item"
+    CAMPAIGN_TRACK = "campaign_track", "Campaign track"
+    CUSTOM = "custom", "Custom (trust-gated)"
+
+
+class StakeResolutionColumn(models.TextChoices):
+    """Which outcome column of the contract a StakeResolution authors."""
+
+    WIN = "win", "Win"
+    LOSS = "loss", "Loss"
+    WITHDRAWAL = "withdrawal", "Withdrawal"
+
+
+# Risk ladder for effective-risk shifts (index order matters).
+RISK_LADDER: tuple[str, ...] = (
+    # RenownRisk values, weakest to strongest.
+    "none",
+    "low",
+    "moderate",
+    "high",
+    "extreme",
+)
+
+# Seed values for RiskCalibration rows (designer-tunable in admin afterwards).
+# max_fuse_hops implements the chain rule: how many failure-cascade hops may
+# separate this tier from a reachable removal-from-play stake. EXTREME = 0:
+# the beat itself must offer removal.
+DEFAULT_RISK_CALIBRATIONS: Mapping[str, dict[str, int]] = types.MappingProxyType(
+    {
+        "low": {"severity_floor_total": 1, "severity_ceiling": 2, "max_fuse_hops": 3},
+        "moderate": {
+            "severity_floor_total": 2,
+            "severity_ceiling": 3,
+            "max_fuse_hops": 2,
+        },
+        "high": {"severity_floor_total": 4, "severity_ceiling": 4, "max_fuse_hops": 1},
+        "extreme": {
+            "severity_floor_total": 6,
+            "severity_ceiling": 5,
+            "max_fuse_hops": 0,
+        },
+    }
+)

@@ -3,13 +3,18 @@ import factory.django as factory_django
 import factory.fuzzy
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.societies.constants import RenownRisk
 from world.stories.constants import (
+    DEFAULT_RISK_CALIBRATIONS,
     AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
     SessionRequestStatus,
+    StakeResolutionColumn,
+    StakeSeverity,
+    StakeSubjectKind,
     StoryGMOfferStatus,
     StoryScope,
     TransitionMode,
@@ -29,7 +34,11 @@ from world.stories.models import (
     GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    RiskCalibration,
     SessionRequest,
+    Stake,
+    StakeResolution,
+    StakeTemplate,
     Story,
     StoryFeedback,
     StoryGMOffer,
@@ -557,6 +566,54 @@ class TableBulletinReplyFactory(factory_django.DjangoModelFactory):
     post = factory.SubFactory(TableBulletinPostFactory)
     author_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
     body = factory.Faker("paragraph", nb_sentences=2)
+
+
+class RiskCalibrationFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = RiskCalibration
+        django_get_or_create = ("risk",)
+
+    risk = RenownRisk.HIGH
+    severity_floor_total = 4
+    severity_ceiling = StakeSeverity.DIRE
+    max_fuse_hops = 1
+
+
+def seed_default_risk_calibrations() -> None:
+    """Idempotently create the four calibration rows from DEFAULT_RISK_CALIBRATIONS."""
+    for risk, values in DEFAULT_RISK_CALIBRATIONS.items():
+        RiskCalibration.objects.get_or_create(risk=risk, defaults=values)
+
+
+class StakeTemplateFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StakeTemplate
+
+    name = factory.Sequence(lambda n: f"Stake Template {n}")
+    subject_kind = StakeSubjectKind.CUSTOM
+    severity = StakeSeverity.GRAVE
+    player_summary_template = "Something dear is wagered."
+
+
+class StakeFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Stake
+
+    beat = factory.SubFactory(BeatFactory)
+    template = None
+    subject_kind = StakeSubjectKind.CUSTOM
+    severity = StakeSeverity.GRAVE
+    subject_label = factory.Sequence(lambda n: f"Wagered thing {n}")
+    player_summary = "This is at stake."
+
+
+class StakeResolutionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StakeResolution
+
+    stake = factory.SubFactory(StakeFactory)
+    column = StakeResolutionColumn.LOSS
+    narrative_summary = "It goes badly."
 
 
 # Convenience functions for common test scenarios
