@@ -783,6 +783,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/beats/{id}/stakes-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+     *
+     *     Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+     *     be SECRET; an open wager list leaks GM plans): readable by staff, the
+     *     beat's story owner, or a participant of a scene linked to the beat's
+     *     episode. The payload leaks only player_summary/severity plus
+     *     declared/effective risk and readiness; branch contents
+     *     (StakeResolution rows) are never included.
+     */
+    get: operations['beats_stakes_summary_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/blocks/': {
     parameters: {
       query?: never;
@@ -895,6 +921,30 @@ export interface paths {
     };
     /** @description GET /api/buildings/manager/for-room/<room_id>/ — ids + permission flags only. */
     get: operations['buildings_manager_for_room_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/manager/room/{room_id}/comfort/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+     *
+     *     Per-axis pressure/mitigation/net, the room's comfort level, its placed
+     *     fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+     *     residual; add insulation." Owner-gated: interior comfort tuning is the
+     *     builder's view.
+     */
+    get: operations['buildings_manager_room_comfort_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -17856,6 +17906,14 @@ export interface components {
      * @enum {string}
      */
     ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION' | 'CEREMONY';
+    /** @description One axis of the owner build-HUD: pressure vs mitigation vs residual (#1514). */
+    ExposureAxis: {
+      key: string;
+      pressure: number;
+      mitigation: number;
+      net: number;
+      sheltered: boolean;
+    };
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;
@@ -18095,6 +18153,19 @@ export interface components {
       coloring: components['schemas']['ColoringEnum'];
       /** @default private */
       visibility: components['schemas']['VisibilityFdaEnum'];
+    };
+    /** @description One axis a fixture kind mitigates (negative value = mitigation). */
+    FixtureAffinity: {
+      key: string;
+      value: number;
+    };
+    /** @description A placeable fixture kind from the admin-authored catalog. */
+    FixtureKind: {
+      id: number;
+      name: string;
+      description: string;
+      amenity: number;
+      affinities: components['schemas']['FixtureAffinity'][];
     };
     /** @description Cheap RoomPanel resolver: which building, and what the viewer may do. */
     ForRoomResult: {
@@ -19087,6 +19158,7 @@ export interface components {
       kind: string;
       is_final: boolean;
       rapport_requirement: number;
+      risk_tier?: number | null;
     };
     InteractionReaction: {
       readonly id: number;
@@ -19109,6 +19181,8 @@ export interface components {
     /** @description POST /api/npc-services/interactions/resolve/ body. */
     InteractionResolveRequestRequest: {
       offer_id: number;
+      /** @default false */
+      acknowledge_risk: boolean;
     };
     /** @description POST /api/npc-services/interactions/start/ body. */
     InteractionStartRequestRequest: {
@@ -24212,6 +24286,11 @@ export interface components {
      * @enum {string}
      */
     PlaceStatusEnum: 'active' | 'removed' | 'hidden';
+    /** @description A comfort fixture placed in the room (removable from the HUD). */
+    PlacedFixture: {
+      id: number;
+      kind: string;
+    };
     /**
      * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
      *
@@ -25281,6 +25360,16 @@ export interface components {
       /** Format: date-time */
       responded_at: string | null;
     };
+    /** @description The owner build-HUD payload for one room (#1514). */
+    RoomComfortBreakdown: {
+      enclosure: string;
+      level: number;
+      points: number;
+      amenity: number;
+      axes: components['schemas']['ExposureAxis'][];
+      fixtures: components['schemas']['PlacedFixture'][];
+      fixture_kinds: components['schemas']['FixtureKind'][];
+    };
     /** @description The shared room-size unit ladder. */
     RoomSizeTier: {
       readonly id: number;
@@ -25404,6 +25493,14 @@ export interface components {
       deed: number;
       text: string;
     };
+    /**
+     * @description Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+     *
+     *     With ``many=True`` DRF reuses ONE child serializer instance for every
+     *     row, so these caches make N rows cost one gating-encounter lookup per
+     *     row (shared by combat_risk_level AND combat_stakes) and one
+     *     stakes-discovery + summary pass per scene.
+     */
     SceneActionRequest: {
       readonly id: number;
       /** @description The scene where this action takes place */
@@ -25453,6 +25550,20 @@ export interface components {
       strain_commitment?: number;
       /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+       *
+       *     Non-None only when the same #777 gate that drives combat_risk_level is
+       *     active AND the scene carries staked, still-open beats — the consent
+       *     prompt is the target's commit moment, so they see what is wagered.
+       *     Same shape as the BeatViewSet stakes-summary payload (one entry per
+       *     staked beat); branch contents are never included.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -25504,6 +25615,17 @@ export interface components {
        *     its own informed-consent warning.
        */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for this target's gating encounter (#1770 pillar 9).
+       *
+       *     Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+       *     additional target of a hostile AOE cast.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       readonly pose_text: string;
       readonly strain_commitment: number;
       /** Format: date-time */
@@ -26455,6 +26577,20 @@ export interface components {
         | components['schemas']['BlankEnum'];
     };
     /**
+     * @description Player-visible summary of one Stake (#1770 pillar 9).
+     *
+     *     What is wagered is visible; branch contents stay hidden — resolutions
+     *     (consequence pools, escalations, narrative) are deliberately NOT fields
+     *     here and must never be added.
+     */
+    StakeSummary: {
+      readonly id: number;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      readonly player_summary: string;
+      readonly severity: components['schemas']['SeverityEnum'];
+      readonly severity_label: string;
+    };
+    /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
      *
      *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
@@ -26498,6 +26634,19 @@ export interface components {
      * @enum {string}
      */
     StakesLevelEnum: 'local' | 'regional' | 'national' | 'continental' | 'world';
+    /**
+     * @description Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+     *
+     *     Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+     *     ``effective_risk`` is the open activation's locked value when one exists,
+     *     else the declared risk.
+     */
+    StakesSummary: {
+      readonly declared_risk: string;
+      readonly effective_risk: string;
+      readonly is_ready: boolean;
+      readonly stakes: components['schemas']['StakeSummary'][];
+    };
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
       readonly id: number;
@@ -29124,6 +29273,28 @@ export interface operations {
       };
     };
   };
+  beats_stakes_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakesSummary'];
+        };
+      };
+    };
+  };
   blocks_list: {
     parameters: {
       query?: {
@@ -29300,6 +29471,30 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ForRoomResult'];
+        };
+      };
+    };
+  };
+  buildings_manager_room_comfort_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomComfortBreakdown'];
         };
       };
     };

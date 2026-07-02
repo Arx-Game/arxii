@@ -1013,7 +1013,7 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
-### Stakes Contract Engine (#1770 PR1–2)
+### Stakes Contract Engine (#1770 PR1–2 + PR4)
 GM-authored, player-visible "what's actually at risk" contract backing a story
 `Beat`'s risk declaration — named stakes with WIN/LOSS/WITHDRAWAL branches, banded
 by designer-tunable calibration rows, priced for the actual party at scene-start
@@ -1051,6 +1051,22 @@ lock, read by the Legend award, and resolved per-stake at beat completion
   (soft-forfeit), `npc_services.adjust_npc_affection`,
   `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
   `LifecycleState.DEAD` to the roster lifecycle.
+- **Opt-in surfaces (PR4):** `check_stake_boundaries`
+  (`world.stories.services.boundaries`, allow-all stub → registry is #1771;
+  `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
+  staff-only, ADR-0033); `stakes_summary_for_beat` +
+  `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
+  never serialized); `GET /api/beats/{id}/stakes-summary/`; `combat_stakes` on
+  both consent-prompt serializers (`world.scenes.action_serializers`) rendered
+  by `ConsentPrompt`; activation wired at `create_pvp_duel`/`create_lethal_duel`/
+  `seed_or_feed_encounter_from_cast` (via `combat.beat_wiring.
+  activate_stakes_for_scene` + `staked_unsatisfied_beats_for_scene`), at
+  `issue_mission` (via `missions.services.beat.activate_stakes_for_instance`),
+  and via the `declare_stakes` GM action (freeform scenes);
+  `missions.MissionRiskAcknowledgement` + `MISSION_RISK_ACK_TIER` gate with the
+  two-phase `acknowledge_risk` opt-in inside `npc_resolve`
+  (`MissionRiskUnacknowledgedError`); `InteractionOfferSerializer.risk_tier`
+  pre-accept surfacing.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
@@ -1326,6 +1342,28 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   drag → `place_room`, exit-pair edges), `RoomDetailPanel` (identity/size/
   exits/tenants/remove), Dig/Decoration/Extension dialogs, `BudgetMeter`;
   tenants get "Set as Home" on RoomPanel (`set_primary_home`).
+- **Architectural style tiers (#1469):** `ArchitecturalStyle.is_default` /
+  `prestige_bonus` / `cost_multiplier` (PLACEHOLDER magnitudes; cost charging
+  awaits the economy pass). Throwback (non-default) styles gate on codex
+  knowledge of `codex_subject` — `can_build_style(persona, style)`
+  (`world/buildings/services.py`); unlocked via the clue→RESEARCH pipeline
+  (ADR-0079). `SetBuildingStyleAction` (key `set_building_style`, owner-gated,
+  `room_id` anchor) is the player verb; telnet `room/style <name>`. Owned home
+  building's style adds `prestige_bonus` in
+  `recompute_persona_prestige_from_dwellings`. Seeds:
+  `ensure_architectural_styles()` (2 default + 2 discoverable PLACEHOLDER rows
+  w/ codex subjects/entries/clues).
+- **Comfort fixtures + owner build-HUD (#1514 close-out):**
+  `PlaceFixtureAction`/`RemoveFixtureAction` (keys `place_room_fixture` /
+  `remove_room_fixture`, owner-gated, `room_id` anchor; telnet `room/fixture` /
+  `room/removefixture`) — the first production callers of
+  `place_decoration`/`remove_decoration`. `ensure_decoration_kinds()` seeds 3
+  PLACEHOLDER kinds. HUD read: `GET
+  /api/buildings/manager/room/<room_id>/comfort/` (owner-gated) — enclosure,
+  comfort level/points/amenity, per-axis pressure/mitigation/net
+  (`world.locations.services.room_exposure_breakdown`), placed fixtures, and
+  the kinds catalog; rendered by `ComfortSection` in the web builder's room
+  panel.
 - **Predicate leaf:** `has_item` (persona-scoped) registered with the
   `building_permit` dispatch entry — checks if a persona holds an unconsumed
   building permit.

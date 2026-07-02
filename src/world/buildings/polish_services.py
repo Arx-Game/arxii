@@ -211,6 +211,17 @@ def recompute_persona_prestige_from_dwellings(persona) -> int:
                 ).aggregate(total=Sum("value"))["total"]
                 or 0
             )
+            # Throwback-tier style bonus (#1469): the owned home building's
+            # architectural style adds base prestige (PLACEHOLDER magnitudes)
+            # under the same ownership condition as building polish.
+            total += (
+                Building.objects.filter(
+                    area_id=home.area_id,
+                    owner_persona=persona,
+                    architectural_style__isnull=False,
+                ).aggregate(total=Sum("architectural_style__prestige_bonus"))["total"]
+                or 0
+            )
     persona.prestige_from_dwellings = total
     persona.total_prestige = (
         persona.prestige_from_dwellings

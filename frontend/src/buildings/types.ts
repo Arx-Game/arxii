@@ -8,6 +8,9 @@ export type ManagerTenancy = ManagerRoom['tenancies'][number];
 export type ForRoomResult = components['schemas']['ForRoomResult'];
 export type RoomSizeTier = components['schemas']['RoomSizeTier'];
 export type DecorationTemplate = components['schemas']['DecorationTemplate'];
+export type RoomComfortBreakdown = components['schemas']['RoomComfortBreakdown'];
+export type ExposureAxis = components['schemas']['RoomComfortBreakdown']['axes'][number];
+export type FixtureKind = components['schemas']['RoomComfortBreakdown']['fixture_kinds'][number];
 export type PaginatedRoomSizeTierList = components['schemas']['PaginatedRoomSizeTierList'];
 export type PaginatedDecorationTemplateList =
   components['schemas']['PaginatedDecorationTemplateList'];
@@ -26,4 +29,7 @@ export type RoomBuilderActionKey =
   | 'end_room_tenancy'
   | 'set_primary_home'
   | 'commission_decoration'
-  | 'start_building_extension';
+  | 'start_building_extension'
+  | 'set_building_style'
+  | 'place_room_fixture'
+  | 'remove_room_fixture';

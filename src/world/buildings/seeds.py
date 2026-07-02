@@ -126,3 +126,100 @@ def ensure_plan_3_seeds() -> None:
     from evennia_extensions.seeds import ensure_room_size_tiers  # noqa: PLC0415
 
     ensure_room_size_tiers()
+
+
+def ensure_architectural_styles() -> None:
+    """Seed the style catalog's two tiers (#1469). PLACEHOLDER content throughout.
+
+    Living-realm styles are default-available; throwback styles are
+    discovery-gated — each gets a CodexSubject + entry + a CODEX-target Clue
+    so the existing clue→RESEARCH pipeline unlocks them end-to-end. Real
+    names/prose are authored privately (lore repo) and re-seeded by content
+    passes; these rows exist so the mechanism is playable.
+    """
+    from world.buildings.models import ArchitecturalStyle  # noqa: PLC0415
+    from world.clues.constants import ClueResolution, ClueTargetKind  # noqa: PLC0415
+    from world.clues.models import Clue  # noqa: PLC0415
+    from world.codex.models import CodexCategory, CodexEntry, CodexSubject  # noqa: PLC0415
+
+    for name in ("Vernacular Timberframe PLACEHOLDER", "Harborstone Classical PLACEHOLDER"):
+        ArchitecturalStyle.objects.update_or_create(
+            name=name,
+            defaults={"is_default": True, "prestige_bonus": 0, "cost_multiplier": 1},
+        )
+
+    category, _ = CodexCategory.objects.get_or_create(
+        name="Architecture",
+        defaults={"description": "PLACEHOLDER — the built world's styles and lost arts."},
+    )
+    throwbacks = (
+        ("Antique Imperial PLACEHOLDER", 50, "1.500"),
+        ("Drowned Dynasty PLACEHOLDER", 80, "2.000"),
+    )
+    for style_name, prestige_bonus, cost_multiplier in throwbacks:
+        subject, _ = CodexSubject.objects.get_or_create(
+            category=category,
+            name=style_name,
+            defaults={"description": "PLACEHOLDER — a dead civilization's architecture."},
+        )
+        entry, _ = CodexEntry.objects.get_or_create(
+            subject=subject,
+            name=f"Building in the {style_name} manner",
+            defaults={
+                "summary": "PLACEHOLDER — how to raise this style true.",
+                "lore_content": (
+                    "PLACEHOLDER — the recovered method of a vanished tradition; "
+                    "knowing it lets a builder raise the style correctly."
+                ),
+            },
+        )
+        ArchitecturalStyle.objects.update_or_create(
+            name=style_name,
+            defaults={
+                "is_default": False,
+                "prestige_bonus": prestige_bonus,
+                "cost_multiplier": cost_multiplier,
+                "codex_subject": subject,
+            },
+        )
+        Clue.objects.get_or_create(
+            name=f"Fragments of the {style_name}",
+            defaults={
+                "description": (
+                    "PLACEHOLDER — salvaged plans and weathered facades hinting at a "
+                    "buildable whole."
+                ),
+                "target_kind": ClueTargetKind.CODEX,
+                "target_codex_entry": entry,
+                "resolution_mode": ClueResolution.RESEARCH,
+            },
+        )
+
+
+def ensure_decoration_kinds() -> None:
+    """Seed comfort-fixture kinds (#1514/#1469 follow-through). PLACEHOLDER content.
+
+    The mitigation fixtures the build-to-win loop needs playable: each kind's
+    affinities are negative modifiers that eat one discomfort axis (the 0-floor
+    means they can never harm). Magnitudes are PLACEHOLDER for the tuning pass.
+    """
+    from world.buildings.models import DecorationAffinity, DecorationKind  # noqa: PLC0415
+    from world.locations.constants import StatKey  # noqa: PLC0415
+
+    kinds = (
+        ("Great Hearth PLACEHOLDER", 1, ((StatKey.COLD, -4),)),
+        ("Oiled Awning PLACEHOLDER", 0, ((StatKey.WET, -3),)),
+        ("Shade Colonnade PLACEHOLDER", 0, ((StatKey.HEAT, -3),)),
+    )
+    for name, amenity, affinities in kinds:
+        kind, _ = DecorationKind.objects.update_or_create(
+            name=name,
+            defaults={
+                "description": "PLACEHOLDER — a comfort fixture awaiting its authored prose.",
+                "amenity": amenity,
+            },
+        )
+        for stat_key, value in affinities:
+            DecorationAffinity.objects.update_or_create(
+                kind=kind, stat_key=stat_key, defaults={"value": value}
+            )

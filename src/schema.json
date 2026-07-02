@@ -1187,6 +1187,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beat'
           description: ''
+  /api/beats/{id}/stakes-summary/:
+    get:
+      operationId: beats_stakes_summary_retrieve
+      description: |-
+        GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+
+        Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+        be SECRET; an open wager list leaks GM plans): readable by staff, the
+        beat's story owner, or a participant of a scene linked to the beat's
+        episode. The payload leaks only player_summary/severity plus
+        declared/effective risk and readiness; branch contents
+        (StakeResolution rows) are never included.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakesSummary'
+          description: ''
   /api/blocks/:
     get:
       operationId: blocks_list
@@ -1376,6 +1406,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ForRoomResult'
+          description: ''
+  /api/buildings/manager/room/{room_id}/comfort/:
+    get:
+      operationId: buildings_manager_room_comfort_retrieve
+      description: |-
+        GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+
+        Per-axis pressure/mitigation/net, the room's comfort level, its placed
+        fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+        residual; add insulation." Owner-gated: interior comfort tuning is the
+        builder's view.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: room_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomComfortBreakdown'
           description: ''
   /api/buildings/room-size-tiers/:
     get:
@@ -31874,6 +31938,27 @@ components:
         * `FLOW` - Flow
         * `SCENE_ACTION` - Scene Action
         * `CEREMONY` - Ceremony
+    ExposureAxis:
+      type: object
+      description: 'One axis of the owner build-HUD: pressure vs mitigation vs residual
+        (#1514).'
+      properties:
+        key:
+          type: string
+        pressure:
+          type: integer
+        mitigation:
+          type: integer
+        net:
+          type: integer
+        sheltered:
+          type: boolean
+      required:
+      - key
+      - mitigation
+      - net
+      - pressure
+      - sheltered
     Facet:
       type: object
       description: Serializer for Facet model with hierarchy info.
@@ -32350,6 +32435,39 @@ components:
       - title
       - track_id
       - writeup
+    FixtureAffinity:
+      type: object
+      description: One axis a fixture kind mitigates (negative value = mitigation).
+      properties:
+        key:
+          type: string
+        value:
+          type: integer
+      required:
+      - key
+      - value
+    FixtureKind:
+      type: object
+      description: A placeable fixture kind from the admin-authored catalog.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        amenity:
+          type: integer
+        affinities:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixtureAffinity'
+      required:
+      - affinities
+      - amenity
+      - description
+      - id
+      - name
     ForRoomResult:
       type: object
       description: 'Cheap RoomPanel resolver: which building, and what the viewer
@@ -34366,6 +34484,9 @@ components:
           type: boolean
         rapport_requirement:
           type: integer
+        risk_tier:
+          type: integer
+          nullable: true
       required:
       - id
       - is_final
@@ -34429,6 +34550,9 @@ components:
         offer_id:
           type: integer
           minimum: 1
+        acknowledge_risk:
+          type: boolean
+          default: false
       required:
       - offer_id
     InteractionStartRequestRequest:
@@ -43486,6 +43610,17 @@ components:
         * `active` - Active
         * `removed` - Removed
         * `hidden` - Hidden
+    PlacedFixture:
+      type: object
+      description: A comfort fixture placed in the room (removable from the HUD).
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+      required:
+      - id
+      - kind
     PlayerAction:
       type: object
       description: |-
@@ -45783,6 +45918,38 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    RoomComfortBreakdown:
+      type: object
+      description: The owner build-HUD payload for one room (#1514).
+      properties:
+        enclosure:
+          type: string
+        level:
+          type: integer
+        points:
+          type: integer
+        amenity:
+          type: integer
+        axes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExposureAxis'
+        fixtures:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacedFixture'
+        fixture_kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixtureKind'
+      required:
+      - amenity
+      - axes
+      - enclosure
+      - fixture_kinds
+      - fixtures
+      - level
+      - points
     RoomSizeTier:
       type: object
       description: The shared room-size unit ladder.
@@ -46077,6 +46244,13 @@ components:
       - text
     SceneActionRequest:
       type: object
+      description: |-
+        Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+
+        With ``many=True`` DRF reuses ONE child serializer instance for every
+        row, so these caches make N rows cost one gating-encounter lookup per
+        row (shared by combat_risk_level AND combat_stakes) and one
+        stakes-discovery + summary pass per scene.
       properties:
         id:
           type: integer
@@ -46170,6 +46344,21 @@ components:
           description: Risk level of the encounter a PENDING hostile cast would pull
             the target into (#777).
           readOnly: true
+        combat_stakes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+          description: |-
+            Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+
+            Non-None only when the same #777 gate that drives combat_risk_level is
+            active AND the scene carries staked, still-open beats — the consent
+            prompt is the target's commit moment, so they see what is wagered.
+            Same shape as the BeatViewSet stakes-summary payload (one entry per
+            staked beat); branch contents are never included.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -46183,6 +46372,7 @@ components:
       required:
       - action_interaction
       - combat_risk_level
+      - combat_stakes
       - created_at
       - id
       - initiator_name
@@ -46306,6 +46496,18 @@ components:
             row's own target_persona so each additional target of a hostile AOE cast gets
             its own informed-consent warning.
           readOnly: true
+        combat_stakes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+          description: |-
+            Stakes summaries for this target's gating encounter (#1770 pillar 9).
+
+            Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+            additional target of a hostile AOE cast.
+          readOnly: true
         pose_text:
           type: string
           readOnly: true
@@ -46322,6 +46524,7 @@ components:
       - action_target_id
       - action_template
       - combat_risk_level
+      - combat_stakes
       - created_at
       - initiator_name
       - initiator_persona
@@ -48232,6 +48435,34 @@ components:
       required:
       - column
       - stake
+    StakeSummary:
+      type: object
+      description: |-
+        Player-visible summary of one Stake (#1770 pillar 9).
+
+        What is wagered is visible; branch contents stay hidden — resolutions
+        (consequence pools, escalations, narrative) are deliberately NOT fields
+        here and must never be added.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        player_summary:
+          type: string
+          readOnly: true
+          description: 'Player-facing line shown at opt-in: what is wagered, how badly.'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        severity_label:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - player_summary
+      - severity
+      - severity_label
     StakeTemplate:
       type: object
       description: |-
@@ -48320,6 +48551,34 @@ components:
         * `national` - National
         * `continental` - Continental
         * `world` - World
+    StakesSummary:
+      type: object
+      description: |-
+        Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+
+        Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+        ``effective_risk`` is the open activation's locked value when one exists,
+        else the declared risk.
+      properties:
+        declared_risk:
+          type: string
+          readOnly: true
+        effective_risk:
+          type: string
+          readOnly: true
+        is_ready:
+          type: boolean
+          readOnly: true
+        stakes:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeSummary'
+          readOnly: true
+      required:
+      - declared_risk
+      - effective_risk
+      - is_ready
+      - stakes
     StartingArea:
       type: object
       description: Serializer for starting areas with accessibility check.

@@ -67,3 +67,15 @@ _Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bound
 **Withdrawal Column**:
 The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED (`withdrawal=True` through `record_outcome_tier_completion`); stakes without an authored WITHDRAWAL branch pend with the beat's PENDING_GM_REVIEW for a Constrained Pick. The beat itself still awaits GM adjudication.
 _Avoid_: flee branch, retreat outcome.
+
+**Stakes Summary**:
+The one player-visible wire shape for a beat's stakes contract (#1770 PR4) — `{declared_risk, effective_risk, is_ready, stakes: [{id, player_summary, severity, severity_label}]}`, built by `stakes_summary_for_beat` (`world.stories.serializers`) and served at `GET /api/beats/{id}/stakes-summary/` and as `combat_stakes` on the consent-prompt serializers. What is wagered is visible; branch contents (`StakeResolution`) are never part of the shape (pillar 9).
+_Avoid_: stakes preview, contract dump (a summary never includes resolutions).
+
+**Boundary Check** (stakes):
+The screen `check_stake_boundaries(stakes, character_sheets) -> StakeBoundaryReport` (`world.stories.services.boundaries`, #1770 PR4), run at authoring time (existing stakes + the candidate write) and at every activation/commit call site; call sites gate on `report.cleared` (allowed AND no pending sign-off). Allow-all stub until the boundary registry (#1771) ships. `blocked_reason_private` is staff/audit only — a player's boundary is never surfaced to the GM or other players (ADR-0033); callers show only a generic "stakes could not be presented" failure.
+_Avoid_: consent check (that's the ADR-0024 social-consent app; a boundary is a content limit, not a per-action consent), veto.
+
+**Opt-in / Commit Step** (stakes):
+The moment a player commits to a staked scene and the contract activates (#1770 pillar 9): entering combat (duel creation, hostile-cast seed/feed — surfaced via `combat_stakes` on the consent prompt), accepting a risky mission (`MissionRiskAcknowledgement` + the `acknowledge_risk` two-phase inside `npc_resolve`), or a GM's room-visible `declare_stakes` action in freeform play. The summary shown at this step is the Stakes Summary above.
+_Avoid_: consent gate (see Boundary Check note), buy-in.
