@@ -5016,6 +5016,13 @@
 **Foreign Keys:**
   - stake -> stories.Stake [FK]
   - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+**Pointed to by:**
+  - reward_lines <- stories.StakeRewardLine
+
+### StakeRewardLine
+**Foreign Keys:**
+  - resolution -> stories.StakeResolution [FK]
+  - resonance -> magic.Resonance [FK] (nullable)
 
 ### StakeContractActivation
 **Foreign Keys:**

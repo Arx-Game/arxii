@@ -11,6 +11,10 @@ a `severity_ceiling` (no single stake can exceed what its tier licenses — no
 before a contract is considered ready. Custom (freehand) stakes remain possible
 via `StakeSubjectKind.CUSTOM` with `Stake.template = null`, but that path is
 trust/staff-gated at the serializer layer, not the unrestricted default.
+#1770 PR3 activated the same rows' `reward_floor`/`reward_ceiling` columns as
+the win-side band: the summed WIN-column `StakeRewardLine` amounts must fall
+inside the tier's reward band or the contract is unready (ceiling 0 = band
+unconfigured).
 
 The goal is that stakes feel *consistent regardless of which GM is running the
 table* — a HIGH-risk beat means roughly the same thing whether GM A or GM B

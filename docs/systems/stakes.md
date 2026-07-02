@@ -7,7 +7,8 @@ dangerous the declared risk actually is *for this party right now*.
 
 **Issue:** #1770 (PR 1 — data model, readiness/activation services, API;
 PR 2 — per-stake resolution: machine grading, GM constrained pick, world-state
-writers, stake-level transition routing). **ADR:**
+writers, stake-level transition routing; PR 3 — two-sided contract: authored
+win-reward lines, reward banding, anti-farming payout gate). **ADR:**
 [ADR-0067](../adr/0067-beat-risk-is-the-stakes-wager-declaration.md) (why `Beat.risk`
 is reused as the wager declaration rather than a new model).
 
@@ -54,17 +55,19 @@ above `NONE` (`risk` is unique).
 | `severity_floor_total` | PositiveSmallIntegerField | Minimum summed `StakeSeverity` a beat at this risk must wager — no fake stakes |
 | `severity_ceiling` | PositiveSmallIntegerField (`StakeSeverity` choices) | Caps any single stake's severity — no "everyone dies" at LOW |
 | `max_fuse_hops` | PositiveSmallIntegerField | The [chain rule](#chain-rule--fuse-length): how many failure-cascade hops may separate this tier from a reachable removal-from-play stake |
-| `reward_floor` | PositiveIntegerField (default 0) | Reserved — consumed by PR3's win-column reward |
-| `reward_ceiling` | PositiveIntegerField (default 0) | Reserved — consumed by PR3's win-column reward |
+| `reward_floor` | PositiveIntegerField (default 0) | **PR3.** Minimum summed WIN-column reward value (money-equivalent scalars) — a staked beat should pay *something* |
+| `reward_ceiling` | PositiveIntegerField (default 0) | **PR3.** Maximum summed WIN-column reward value. `0` = reward banding unconfigured for this tier (both reward checks skipped) |
 
-Seed values (`DEFAULT_RISK_CALIBRATIONS`, `world/stories/constants.py`):
+Seed values (`DEFAULT_RISK_CALIBRATIONS`, `world/stories/constants.py`; the
+reward columns are starting values, designer-tunable rows — LOW's floor stays 0
+so a zero-reward LOW contract remains ready):
 
-| Risk | `severity_floor_total` | `severity_ceiling` | `max_fuse_hops` |
-|---|---|---|---|
-| LOW | 1 | COSTLY (2) | 3 |
-| MODERATE | 2 | GRAVE (3) | 2 |
-| HIGH | 4 | DIRE (4) | 1 |
-| EXTREME | 6 | REMOVAL (5) | 0 |
+| Risk | `severity_floor_total` | `severity_ceiling` | `max_fuse_hops` | `reward_floor` | `reward_ceiling` |
+|---|---|---|---|---|---|
+| LOW | 1 | COSTLY (2) | 3 | 0 | 200 |
+| MODERATE | 2 | GRAVE (3) | 2 | 100 | 600 |
+| HIGH | 4 | DIRE (4) | 1 | 300 | 1500 |
+| EXTREME | 6 | REMOVAL (5) | 0 | 800 | 4000 |
 
 Reading the ceiling column against `max_fuse_hops` is the calibration table's real
 content: **only EXTREME may stake removal-from-play on the beat itself**
@@ -139,6 +142,21 @@ depth) and skips-and-logs instead of raising. Captivity of a PC is deliberately
 **not** a branch payload — capture arrives via terminal consequence pools
 (`EffectType.CAPTURE`), already wired.
 
+### `StakeRewardLine` (PR3)
+
+One authored win-reward payout on a stake's branch — the contract's reward
+side. Authored pre-scene alongside the branch it hangs off (in practice the
+WIN column). When the branch fires under a ready, effective-risk-bearing
+activation, **every** completion participant receives each line's full amount
+(ALL_EQUAL semantics, mirroring mission reward distribution).
+
+| Field | Type | Notes |
+|---|---|---|
+| `resolution` | FK → `stories.StakeResolution` (`related_name="reward_lines"`, CASCADE) | |
+| `sink` | CharField (`StakeRewardSink` choices) | `MONEY` / `RESONANCE` |
+| `amount` | PositiveIntegerField (`MinValueValidator(1)`) | Money-equivalent scalar paid to EACH participant; banded by `RiskCalibration.reward_floor/reward_ceiling` |
+| `resonance` | FK → `magic.Resonance` (null, SET_NULL) | Required iff `sink=RESONANCE` (enforced in `clean()` + serializer); must be null otherwise |
+
 ### `StakeOutcome` (PR2)
 
 The per-stake resolution audit + routing row — mirrors `EpisodeResolution` (GM
@@ -207,6 +225,9 @@ open activation per beat**. This is the actual lock backstop (see
 - **`StakeResolutionColumn`**: `WIN`, `LOSS`, `WITHDRAWAL`.
 - **`StakeOutcomeMethod`** (PR2): `MACHINE` (graded by the completion tail),
   `GM_PICK` (constrained pick among authored columns).
+- **`StakeRewardSink`** (PR3): `MONEY`, `RESONANCE` — only sinks with a real,
+  coherent delivery service. Legend is deliberately **not** a sink (it stays
+  automatic on top via effective risk, pillar 6).
 - **`RISK_LADDER`**: `["none", "low", "moderate", "high", "extreme"]` — index order
   matters; `services.stakes.risk_index` positions a `RenownRisk` value on it.
 - **`DEFAULT_RISK_CALIBRATIONS`**: seed values for the four non-`NONE`
@@ -310,16 +331,16 @@ there is no separate versioned/snapshotted copy of the `Stake` rows themselves
 `get_open_activation(beat)` is the single query both the lock check and
 `effective_risk_for_beat` share.
 
-**Known gap (still open after PR2):** `activate_stakes_contract` has no
+**Known gap (still open after PR3):** `activate_stakes_contract` has no
 production call site yet — it is fully built and unit-tested but nothing
 currently calls it at scene start. `resolve_open_activation` **is** wired, into
 the beat-completion tail
 (`world.stories.services.beats._create_completion_and_fire_pool`, after the
 completion's consequence pool and the per-stake resolver run). Wiring the
-actual scene-start triggers is #1770's remaining PR spine (PR3 mission issue,
-PR4 GM scene action — scene *grading* specifically rides #1748). The separate
-sibling #1771 owns only the player-boundary registry behind
-`check_stake_boundaries`, not activation wiring.
+actual scene-start triggers is #1770's remaining PR spine (PR4 GM scene
+action — scene *grading* specifically rides #1748). The separate sibling
+#1771 owns only the player-boundary registry behind `check_stake_boundaries`,
+not activation wiring.
 
 ## Resolution (PR2)
 
@@ -385,6 +406,57 @@ is readable by authoring; there is no automatic scene-spawn in PR2 (the fuse
 walk validates reachability; spawning the follow-up situation is GM/story
 work).
 
+## Two-sided Contract — Win Rewards (PR3)
+
+The contract's reward side (pillar 6): alongside each loss branch's
+consequences, the GM authors `StakeRewardLine` rows on the WIN branch — a
+declared, player-visible "here is what winning pays." Legend stays automatic
+on top (scaled by effective risk); the reward lines are the *named* payouts.
+
+**Sink menu — reuse the sink services, not the deed router.** The #1770 spec
+sketched routing win rewards through the missions deed pipeline
+(`apply_deed_rewards`); that spec text is stale on two counts. First, the
+"apply_deed_rewards is caller-less (#1753)" premise no longer holds — PR #1769
+wired it into mission reporting (`_apply_style_payout`,
+`world/missions/services/report.py`). Second, and structurally decisive: the
+deed router is hard-anchored to `MissionDeedRecord` (it reads
+`deed.reward_lines` and enqueues `MissionRewardQueue(deed=...)`), stakes have
+no deed, and missions already FKs *into* stories — stories depending back on
+missions would invert the dependency direction (ADR-0010). So stakes reuse the
+SAME SINK SERVICES the router dispatches to, called directly:
+
+- `MONEY` → `world.currency.services.deliver_mission_money(recipient_sheet,
+  amount, ref=f"stake:{pk}")` — the audited mint faucet.
+- `RESONANCE` → `world.magic.services.resonance.grant_resonance(sheet,
+  resonance, amount, source=GainSource.STAKE_REWARD)` — the same grant service
+  the missions cron's `_grant_resonance` calls. `STAKE_REWARD` is a
+  discriminator-only `GainSource` (the `MISSION_REPORT` shape: no typed source
+  FK on `ResonanceGrant`; provenance lives on the stories side in
+  `StakeOutcome` + `StakeRewardLine`).
+
+No `LEGEND_POINTS` sink (Legend is automatic; the missions LP path is also
+stub-sealed), no `BEAT` (circular from inside beat resolution), no
+`RUMOR`/`CRIME_WATCH` (unbuilt, loss-flavored).
+
+**Reward banding is a readiness concern, not a hard block.**
+`validate_stakes_readiness` sums the WIN-column line amounts across the beat's
+stakes and compares against the tier's `reward_floor`/`reward_ceiling`
+(`_reward_band_problems`). Out-of-band totals mark the contract UNREADY
+(pillar-7 auto-downgrade — the scene runs at effective NONE and pays nothing);
+the serializer never rejects an out-of-band line. `reward_ceiling == 0` means
+banding is unconfigured for that tier and both checks are skipped.
+
+**The anti-farming gate (pillars 4/7/8).** `_apply_stake_rewards`
+(`services/stake_resolution.py`) fires from `_fire_branch_and_record` whenever
+the WIN column's branch fires — machine grading and GM pick alike — but pays
+ONLY when the activation it resolved under is present, was `is_ready=True`,
+and carries `effective_risk != NONE`. No activation, an unready contract, or
+an over-leveled party skips the payout with an info log. LOSS/withdrawal
+consequences and pools keep firing regardless — reality doesn't care; only
+the payout math does. Delivery is per line × participant (Persona →
+`CharacterSheet` bridge), matching the PR2 writer contract: skip-and-log,
+never raise.
+
 ## Three Concepts Named "Risk"/"Stakes" — Disambiguation
 
 Three same-shaped-but-unrelated concepts share vocabulary; do not conflate them.
@@ -418,7 +490,7 @@ only the plain-language wager.
 |---|---|---|
 | `risk_index` | `(risk: str) -> int` | Position of a `RenownRisk` value on `RISK_LADDER` |
 | `compute_effective_risk` | `(declared_risk, target_level, party_average_level) -> str` | See [Effective Risk](#effective-risk) |
-| `validate_stakes_readiness` | `(beat: Beat) -> StakesReadinessReport` | Readiness gate: target_level declared, ≥1 stake, every stake has WIN+LOSS resolutions, severity within calibration bands, removal reachable within `max_fuse_hops`. Unstaked beats (`risk == NONE`) are trivially ready |
+| `validate_stakes_readiness` | `(beat: Beat) -> StakesReadinessReport` | Readiness gate: target_level declared, ≥1 stake, every stake has WIN+LOSS resolutions, severity within calibration bands, WIN reward total within the tier's reward band (PR3; skipped when `reward_ceiling == 0`), removal reachable within `max_fuse_hops`. Unstaked beats (`risk == NONE`) are trivially ready |
 | `get_open_activation` | `(beat: Beat) -> StakeContractActivation \| None` | The single open activation for a beat, if any |
 | `activate_stakes_contract` | `(beat, participants) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion) |
 | `effective_risk_for_beat` | `(beat: Beat) -> str` | Read seam: open activation's effective risk, else `beat.risk` |
@@ -445,7 +517,7 @@ roster).
 
 ## API
 
-All five ViewSets live in `world.stories.views`, registered in
+All six ViewSets live in `world.stories.views`, registered in
 `world.stories.urls`.
 
 | ViewSet | Base URL | Permission |
@@ -453,10 +525,12 @@ All five ViewSets live in `world.stories.views`, registered in
 | `RiskCalibrationViewSet` | `/api/risk-calibrations/` | `IsStaffOrReadOnly` — every authenticated user reads, only staff writes |
 | `StakeTemplateViewSet` | `/api/stake-templates/` | `IsStaffOrReadOnly` |
 | `StakeViewSet` | `/api/stakes/` | `IsStakeBeatStoryOwnerOrStaff` (delegates to `obj.beat` → episode → chapter → story ownership, same chain as `BeatViewSet`). PR2: nested read-only `outcomes` list; `POST /api/stakes/{id}/resolve/` (permission `CanResolveStake` — the `CanMarkBeat` gate via `stake.beat`; input `ResolveStakeInputSerializer`; returns `StakeOutcomeSerializer` at 201) |
-| `StakeResolutionViewSet` | `/api/stake-resolutions/` | `IsStakeResolutionBeatStoryOwnerOrStaff` (delegates via `obj.stake.beat`) |
+| `StakeResolutionViewSet` | `/api/stake-resolutions/` | `IsStakeResolutionBeatStoryOwnerOrStaff` (delegates via `obj.stake.beat`). PR3: nested read-only `reward_lines` list |
+| `StakeRewardLineViewSet` (PR3) | `/api/stake-reward-lines/` | `IsStakeRewardLineBeatStoryOwnerOrStaff` (delegates via `obj.resolution.stake.beat`); serializer enforces the create-path ownership walk, the open-activation lock, and resonance-required-iff-`RESONANCE` |
 | `StakeContractActivationViewSet` | `/api/stake-activations/` | Read-only; `IsStakeBeatStoryOwnerOrStaff` |
 
-`StakeSerializer` and `StakeResolutionSerializer` both enforce, in `validate()`
+`StakeSerializer`, `StakeResolutionSerializer`, and `StakeRewardLineSerializer`
+all enforce, in `validate()`
 (DRF never calls `has_object_permission` on create, so the permission class alone
 isn't enough on POST):
 
@@ -468,15 +542,19 @@ isn't enough on POST):
   template-null (custom) path to staff only, mirroring `BeatSerializer.validate`'s
   risk staff-gate.
 
-## PR3–4: Planned, Not Yet Built
+## PR4: Planned, Not Yet Built
 
-The following are explicitly out of scope for PR1–2 and marked `[ABSENT]` —
-they do not exist in code yet:
+The following is explicitly out of scope for PR1–3 and marked `[ABSENT]` —
+it does not exist in code yet:
 
 | Planned surface | Target PR | Notes |
 |---|---|---|
-| `apply_deed_rewards` WIN-column reward wiring (consuming `RiskCalibration.reward_floor`/`reward_ceiling`) | PR3 | These two fields exist on `RiskCalibration` now, unused until PR3 |
 | Opt-in player-facing surfaces (frontend: viewing/accepting a stakes contract before committing to a scene) + the scene-start activation triggers | #1770 PR4 (scene grading: #1748) | Includes wiring the currently-uncalled `activate_stakes_contract` to real scene-start seams; the boundary-registry *backing store* for `check_stake_boundaries` is sibling #1771 |
+
+(PR3's win-reward wiring shipped — see
+[Two-sided Contract](#two-sided-contract--win-rewards-pr3); it deliberately
+does NOT go through `apply_deed_rewards` despite the spec text, for the
+reasons recorded there.)
 
 ## Test Coverage
 
@@ -493,6 +571,10 @@ they do not exist in code yet:
   override, withdrawal, GM constrained pick (service + endpoint), pillar-12
   serializer guard, writers (forfeit / affection / lifecycle + player-held
   refusal), stake-level transition routing
+- `src/world/stories/tests/test_services_stake_rewards.py` (PR3) — win-reward
+  E2E (money + resonance to each participant), anti-farming gate (unready /
+  effective-NONE / no-activation pay nothing while loss pools still fire),
+  GM-pick payout with/without participants, reward-line serializer gates
 - `src/world/combat/tests/test_encounter_beat_wiring.py` (PR2) — FLED fires
   withdrawal-authored stakes, pends unauthored ones
 - `src/world/vitals/tests/test_life_state.py` (PR2) — `_mark_dead` →
@@ -515,6 +597,12 @@ they do not exist in code yet:
 - **Items / Societies (subject FKs)** — `Stake.subject_item` →
   `items.ItemInstance`; `Stake.subject_society` / `subject_organization` →
   `societies.Society` / `societies.Organization`
+- **Currency** (PR3) — `deliver_mission_money` is the MONEY sink (audited mint
+  faucet; `ref="stake:<pk>"`)
+- **Magic** (PR3) — `grant_resonance(..., source=GainSource.STAKE_REWARD)` is
+  the RESONANCE sink; `StakeRewardLine.resonance` → `magic.Resonance`;
+  discriminator-only shape constraint `res_grant_stake_reward_shape` on
+  `ResonanceGrant`
 - **Combat** — deliberately *not* integrated in PR1; see the
   [disambiguation table](#three-concepts-named-riskstakes--disambiguation) above
 
@@ -522,18 +610,21 @@ they do not exist in code yet:
 
 `src/world/stories/`
 - `models.py` (end of file) — `RiskCalibration`, `StakeTemplate`, `Stake`,
-  `StakeResolution`, `StakeContractActivation`, `StakeOutcome`;
-  `Beat.target_level`; `TransitionRequiredOutcome.stake`
+  `StakeResolution`, `StakeRewardLine`, `StakeContractActivation`,
+  `StakeOutcome`; `Beat.target_level`; `TransitionRequiredOutcome.stake`
 - `constants.py` — `StakeSeverity`, `StakeSubjectKind`, `StakeResolutionColumn`,
-  `StakeOutcomeMethod`, `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`
+  `StakeOutcomeMethod`, `StakeRewardSink`, `RISK_LADDER`,
+  `DEFAULT_RISK_CALIBRATIONS`
 - `services/stakes.py` — readiness / activation / effective-risk services
+  (incl. `_reward_band_problems`)
 - `services/stake_resolution.py` — per-stake resolution, GM pick, writers,
-  pillar-12 payload validation
+  pillar-12 payload validation, `_apply_stake_rewards` (PR3)
 - `types.py` — `StakesReadinessReport`, `StakePayloadProblem`
 - `serializers.py` — the stake serializers (search `#1770`)
 - `views.py` / `urls.py` — the ViewSets + `StakeViewSet.resolve`
 - `permissions.py` — `IsStaffOrReadOnly`, `IsStakeBeatStoryOwnerOrStaff`,
-  `IsStakeResolutionBeatStoryOwnerOrStaff`, `CanResolveStake`,
+  `IsStakeResolutionBeatStoryOwnerOrStaff`,
+  `IsStakeRewardLineBeatStoryOwnerOrStaff`, `CanResolveStake`,
   `user_owns_beat_story`
 - `factories.py` — `seed_default_risk_calibrations` + FactoryBoy factories
 
@@ -541,3 +632,7 @@ Cross-app (PR2): `world/combat/beat_wiring.py` (withdrawal wire),
 `world/items/services/usage.py::forfeit_item_instance`,
 `world/vitals/services.py::_mark_dead` (lifecycle propagation),
 `world/npc_services/services.py::adjust_npc_affection` (reused, unchanged).
+Cross-app (PR3): `world/currency/services.py::deliver_mission_money` (MONEY
+sink, reused unchanged), `world/magic/constants.py::GainSource.STAKE_REWARD` +
+`world/magic/models/grant.py::res_grant_stake_reward_shape` (RESONANCE sink
+provenance).
