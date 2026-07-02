@@ -15,7 +15,7 @@ from django.test import TestCase
 from actions.factories import ActionTemplateFactory
 from commands.battle import CmdBattle
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.battles.constants import BattleActionKind
+from world.battles.constants import BattleActionKind, BattleActionScope
 from world.battles.factories import (
     BattleFactory,
     BattleParticipantFactory,
@@ -25,6 +25,10 @@ from world.battles.factories import (
 )
 from world.battles.models import BattleActionDeclaration
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.scenes.constants import RoundStatus
 
@@ -204,3 +208,31 @@ class CmdBattleDeclareTests(TestCase):
         self.player_char.msg.assert_called()
         feedback = self.player_char.msg.call_args[0][0]
         self.assertIn("Usage", feedback)
+
+    def test_declare_strike_side_scope_dispatches_side_target(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="cmd-test-supreme",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=supreme_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare strike side with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+        self.assertEqual(decl.target_side_id, self.defender_side.pk)

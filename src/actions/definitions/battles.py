@@ -227,6 +227,7 @@ class DeclareBattleActionAction(Action):
 
         from world.battles.constants import (  # noqa: PLC0415
             BattleActionKind,
+            BattleActionScope,
             BattleParticipantStatus,
         )
         from world.battles.exceptions import BattleError  # noqa: PLC0415
@@ -263,6 +264,9 @@ class DeclareBattleActionAction(Action):
         action_kind = kwargs.get("action_kind", BattleActionKind.STRIKE)
         target_unit = kwargs.get("target_unit")
         target_ally = kwargs.get("target_ally")
+        scope = kwargs.get("scope", BattleActionScope.UNIT)
+        target_place = kwargs.get("target_place")
+        target_side = kwargs.get("target_side")
 
         try:
             decl = declare_battle_action(
@@ -271,6 +275,9 @@ class DeclareBattleActionAction(Action):
                 technique=technique,
                 target_unit=target_unit,
                 target_ally=target_ally,
+                scope=scope,
+                target_place=target_place,
+                target_side=target_side,
             )
         except BattleError as exc:
             return ActionResult(success=False, message=exc.user_message)

@@ -5,6 +5,7 @@ One ``battle`` command routes a leading subverb to the battle lifecycle actions.
 Player subverbs:
     battle              — show caller's current battle status
     battle declare strike <unit> with <technique>
+    battle declare strike side with <technique>
     battle declare support <char> with <technique>
     battle declare rescue <ally> with <technique>
 
@@ -34,6 +35,7 @@ class CmdBattle(ArxCommand):
     Syntax (player):
         battle
         battle declare strike <unit> with <technique>
+        battle declare strike side with <technique>
         battle declare support <ally> with <technique>
         battle declare rescue <ally> with <technique>
 
@@ -46,7 +48,10 @@ class CmdBattle(ArxCommand):
     ``strike`` (matched within the active battle) or a character name for
     ``support``/``rescue``, plus the technique you know to cast with
     ``with <technique>``. ``rescue`` clears a Surrounded ally's peril instead
-    of awarding victory points.
+    of awarding victory points. ``strike side`` declares an army-wide SIDE-scope
+    strike affecting your own side (command-hierarchy fan-out) instead of a
+    single unit — requires an engaged SUPREME command_tier on your side's
+    covenant.
     """
 
     key = "battle"
@@ -240,14 +245,25 @@ class CmdBattle(ArxCommand):
                 )
                 raise CommandError(msg)
             participant = self._resolve_participant()
-            unit = self._resolve_unit(participant, name)
             technique = self._resolve_technique(participant, technique_name)
-            result = DeclareBattleActionAction().run(
-                self.caller,
-                action_kind=BattleActionKind.STRIKE,
-                technique_id=technique.pk,
-                target_unit=unit,
-            )
+            if name.lower() == "side":  # noqa: STRING_LITERAL
+                from world.battles.constants import BattleActionScope  # noqa: PLC0415
+
+                result = DeclareBattleActionAction().run(
+                    self.caller,
+                    action_kind=BattleActionKind.STRIKE,
+                    technique_id=technique.pk,
+                    scope=BattleActionScope.SIDE,
+                    target_side=participant.side,
+                )
+            else:
+                unit = self._resolve_unit(participant, name)
+                result = DeclareBattleActionAction().run(
+                    self.caller,
+                    action_kind=BattleActionKind.STRIKE,
+                    technique_id=technique.pk,
+                    target_unit=unit,
+                )
         elif kind == "support":  # noqa: STRING_LITERAL
             if not name:
                 msg = "Support which ally? (battle declare support <ally> with <technique>)"

@@ -19,7 +19,7 @@ from actions.definitions.battles import (
 )
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
-from world.battles.constants import BattleActionKind, BattleOutcome
+from world.battles.constants import BattleActionKind, BattleActionScope, BattleOutcome
 from world.battles.factories import (
     BattleActionDeclarationFactory,
     BattleFactory,
@@ -31,6 +31,10 @@ from world.battles.factories import (
 from world.battles.models import BattleActionDeclaration
 from world.battles.services import conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
@@ -391,3 +395,35 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         )
         self.assertFalse(result.success)
         self.assertIn("technique", result.message.lower())
+
+    def test_declare_battle_action_passes_through_side_scope(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="action-test-supreme",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=supreme_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.STRIKE,
+            technique_id=self.technique.pk,
+            scope=BattleActionScope.SIDE,
+            target_side=self.defender_side,
+        )
+
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(pk=result.data["declaration_id"])
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+        self.assertEqual(decl.target_side_id, self.defender_side.pk)
