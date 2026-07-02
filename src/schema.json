@@ -1187,6 +1187,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beat'
           description: ''
+  /api/beats/{id}/stakes-summary/:
+    get:
+      operationId: beats_stakes_summary_retrieve
+      description: |-
+        GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+
+        Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+        be SECRET; an open wager list leaks GM plans): readable by staff, the
+        beat's story owner, or a participant of a scene linked to the beat's
+        episode. The payload leaks only player_summary/severity plus
+        declared/effective risk and readiness; branch contents
+        (StakeResolution rows) are never included.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakesSummary'
+          description: ''
   /api/blocks/:
     get:
       operationId: blocks_list
@@ -34410,6 +34440,9 @@ components:
           type: boolean
         rapport_requirement:
           type: integer
+        risk_tier:
+          type: integer
+          nullable: true
       required:
       - id
       - is_final
@@ -34473,6 +34506,9 @@ components:
         offer_id:
           type: integer
           minimum: 1
+        acknowledge_risk:
+          type: boolean
+          default: false
       required:
       - offer_id
     InteractionStartRequestRequest:
@@ -46091,6 +46127,13 @@ components:
       - text
     SceneActionRequest:
       type: object
+      description: |-
+        Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+
+        With ``many=True`` DRF reuses ONE child serializer instance for every
+        row, so these caches make N rows cost one gating-encounter lookup per
+        row (shared by combat_risk_level AND combat_stakes) and one
+        stakes-discovery + summary pass per scene.
       properties:
         id:
           type: integer
@@ -46184,6 +46227,21 @@ components:
           description: Risk level of the encounter a PENDING hostile cast would pull
             the target into (#777).
           readOnly: true
+        combat_stakes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+          description: |-
+            Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+
+            Non-None only when the same #777 gate that drives combat_risk_level is
+            active AND the scene carries staked, still-open beats — the consent
+            prompt is the target's commit moment, so they see what is wagered.
+            Same shape as the BeatViewSet stakes-summary payload (one entry per
+            staked beat); branch contents are never included.
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -46197,6 +46255,7 @@ components:
       required:
       - action_interaction
       - combat_risk_level
+      - combat_stakes
       - created_at
       - id
       - initiator_name
@@ -46320,6 +46379,18 @@ components:
             row's own target_persona so each additional target of a hostile AOE cast gets
             its own informed-consent warning.
           readOnly: true
+        combat_stakes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+          description: |-
+            Stakes summaries for this target's gating encounter (#1770 pillar 9).
+
+            Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+            additional target of a hostile AOE cast.
+          readOnly: true
         pose_text:
           type: string
           readOnly: true
@@ -46336,6 +46407,7 @@ components:
       - action_target_id
       - action_template
       - combat_risk_level
+      - combat_stakes
       - created_at
       - initiator_name
       - initiator_persona
@@ -48120,6 +48192,34 @@ components:
       required:
       - column
       - stake
+    StakeSummary:
+      type: object
+      description: |-
+        Player-visible summary of one Stake (#1770 pillar 9).
+
+        What is wagered is visible; branch contents stay hidden — resolutions
+        (consequence pools, escalations, narrative) are deliberately NOT fields
+        here and must never be added.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        player_summary:
+          type: string
+          readOnly: true
+          description: 'Player-facing line shown at opt-in: what is wagered, how badly.'
+        severity:
+          allOf:
+          - $ref: '#/components/schemas/SeverityEnum'
+          readOnly: true
+        severity_label:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - player_summary
+      - severity
+      - severity_label
     StakeTemplate:
       type: object
       description: |-
@@ -48208,6 +48308,34 @@ components:
         * `national` - National
         * `continental` - Continental
         * `world` - World
+    StakesSummary:
+      type: object
+      description: |-
+        Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+
+        Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+        ``effective_risk`` is the open activation's locked value when one exists,
+        else the declared risk.
+      properties:
+        declared_risk:
+          type: string
+          readOnly: true
+        effective_risk:
+          type: string
+          readOnly: true
+        is_ready:
+          type: boolean
+          readOnly: true
+        stakes:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeSummary'
+          readOnly: true
+      required:
+      - declared_risk
+      - effective_risk
+      - is_ready
+      - stakes
     StartingArea:
       type: object
       description: Serializer for starting areas with accessibility check.

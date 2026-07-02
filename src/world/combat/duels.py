@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.combat.beat_wiring import activate_stakes_for_scene
 from world.combat.cast_seed import _opponent_kwargs_from_sheet
 from world.combat.constants import (
     DuelChallengeStatus,
@@ -139,6 +140,10 @@ def create_pvp_duel(
     acknowledge_encounter_risk(enc, challenger_sheet)
     acknowledge_encounter_risk(enc, challenged_sheet)
 
+    # #1770 PR4: entering the duel is the stakes commit moment — lock any
+    # staked beats on the scene for this party (idempotent while open).
+    activate_stakes_for_scene(enc.scene, [challenger_sheet, challenged_sheet])
+
     return enc
 
 
@@ -203,6 +208,10 @@ def create_lethal_duel(
     kwargs = dict(opponent_kwargs)
     kwargs["tier"] = tier
     add_opponent(enc, **kwargs)
+
+    # #1770 PR4: entering the lethal duel is the stakes commit moment — lock
+    # any staked beats on the scene for this party (idempotent while open).
+    activate_stakes_for_scene(enc.scene, [pc_sheet])
 
     return enc
 

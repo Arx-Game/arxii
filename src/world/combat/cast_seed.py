@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from django.db import transaction
 
+from world.combat.beat_wiring import activate_stakes_for_scene
 from world.combat.constants import (
     RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
     EncounterType,
@@ -195,6 +196,11 @@ def seed_or_feed_encounter_from_cast(
     # join_encounter; this covers the add_participant and already-participating
     # branches (casting is voluntary entry).
     acknowledge_encounter_risk(encounter, caster_sheet)
+
+    # #1770 PR4: the hostile cast is the stakes commit moment — lock any staked
+    # beats on the scene for the two PCs entering combat (idempotent while an
+    # activation is open, so feeding an existing encounter is safe).
+    activate_stakes_for_scene(scene, [caster_sheet, target_sheet])
 
     existing_opponent = CombatOpponent.objects.filter(
         encounter=encounter,

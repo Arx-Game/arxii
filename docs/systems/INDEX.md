@@ -1013,7 +1013,7 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
-### Stakes Contract Engine (#1770 PR1)
+### Stakes Contract Engine (#1770 PR1 + PR4)
 GM-authored, player-visible "what's actually at risk" contract backing a story
 `Beat`'s risk declaration — named stakes with WIN/LOSS/WITHDRAWAL branches, banded
 by designer-tunable calibration rows, priced for the actual party at scene-start
@@ -1036,6 +1036,22 @@ lock, and read by the Legend award. ADR-0067.
   `activate_stakes_contract` (idempotent lock; unready → effective `NONE`),
   `effective_risk_for_beat` (read seam consumed by `_legend_award`),
   `resolve_open_activation` (wired into the beat-completion tail).
+- **Opt-in surfaces (PR4):** `check_stake_boundaries`
+  (`world.stories.services.boundaries`, allow-all stub → registry is #1771;
+  `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
+  staff-only, ADR-0033); `stakes_summary_for_beat` +
+  `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
+  never serialized); `GET /api/beats/{id}/stakes-summary/`; `combat_stakes` on
+  both consent-prompt serializers (`world.scenes.action_serializers`) rendered
+  by `ConsentPrompt`; activation wired at `create_pvp_duel`/`create_lethal_duel`/
+  `seed_or_feed_encounter_from_cast` (via `combat.beat_wiring.
+  activate_stakes_for_scene` + `staked_unsatisfied_beats_for_scene`), at
+  `issue_mission` (via `missions.services.beat.activate_stakes_for_instance`),
+  and via the `declare_stakes` GM action (freeform scenes);
+  `missions.MissionRiskAcknowledgement` + `MISSION_RISK_ACK_TIER` gate with the
+  two-phase `acknowledge_risk` opt-in inside `npc_resolve`
+  (`MissionRiskUnacknowledgedError`); `InteractionOfferSerializer.risk_tier`
+  pre-accept surfacing.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
