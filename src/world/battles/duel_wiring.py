@@ -51,10 +51,11 @@ def apply_champion_duel_outcome(*, payload: object) -> None:
     """Flow-callable subscriber for ENCOUNTER_COMPLETED (#1710).
 
     No-ops cleanly when the completed encounter has no bound BattlePlace (not
-    a Champion duel), or when the challenger's participant/side can't be
-    resolved. Dispatched by a system-installed Trigger (seeded via
-    ``install_champion_duel_trigger``) bound to the seeded
-    ``encounter_completed_champion_duel_outcome`` TriggerDefinition.
+    a Champion duel), or — in the defeat/non-victory branch — when no
+    BattleParticipant can be resolved at that place. Dispatched by a
+    system-installed Trigger (seeded via ``install_champion_duel_trigger``)
+    bound to the seeded ``encounter_completed_champion_duel_outcome``
+    TriggerDefinition.
     """
     from world.battles.models import BattleParticipant  # noqa: PLC0415
 
@@ -82,6 +83,9 @@ def apply_champion_duel_outcome(*, payload: object) -> None:
         return
 
     # Defeat (or fled/abandoned): find who fielded this place's units and rout them.
+    # Assumes exactly one PC BattleParticipant per duel place (Champion duels are
+    # PC-vs-NPC-boss; no co-located allied PCs today) — .first() is not otherwise
+    # ordering-safe.
     any_participant = BattleParticipant.objects.filter(
         battle=battle_place.battle, place=battle_place
     ).first()
