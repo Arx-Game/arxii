@@ -14,14 +14,16 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 
+from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
     StakeOutcomeMethod,
     StakeResolutionColumn,
+    StakeRewardSink,
     StakeSubjectKind,
     StoryScope,
 )
-from world.stories.models import StakeOutcome, StakeResolution
+from world.stories.models import StakeOutcome, StakeResolution, StakeRewardLine
 from world.stories.types import StakePayloadProblem
 
 if TYPE_CHECKING:
@@ -158,7 +160,19 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
     stakes = list(
-        beat.stakes.prefetch_related(Prefetch("resolutions", to_attr="prefetched_resolutions"))
+        beat.stakes.prefetch_related(
+            Prefetch(
+                "resolutions",
+                queryset=StakeResolution.objects.prefetch_related(
+                    Prefetch(
+                        "reward_lines",
+                        queryset=StakeRewardLine.objects.select_related("resonance"),
+                        to_attr="prefetched_reward_lines",
+                    )
+                ),
+                to_attr="prefetched_resolutions",
+            )
+        )
     )
     if not stakes:
         return []
@@ -277,6 +291,8 @@ def _fire_branch_and_record(  # noqa: PLR0913
                 outcome_tier=outcome_tier,
             )
         _apply_branch_writers(resolution, stake, participants)
+        if column == StakeResolutionColumn.WIN:
+            _apply_stake_rewards(resolution, stake, participants, activation)
     else:
         logger.warning(
             "Stake %s resolved at column %r with no authored branch "
@@ -449,6 +465,105 @@ def _write_item_forfeit(resolution: StakeResolution, stake: Stake) -> None:
     forfeit_item_instance(
         item_instance=item,
         note=f"Forfeited — stake {stake.pk} resolved at {resolution.column}.",
+    )
+
+
+def _apply_stake_rewards(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+    activation: StakeContractActivation | None,
+) -> None:
+    """Pay the WIN branch's authored reward lines (#1770 PR3, two-sided contract).
+
+    The anti-farming gate (pillars 4/7/8): rewards fire ONLY from a locked
+    activation that was ready and priced above effective NONE — no activation,
+    an unready contract, or an over-leveled party (effective NONE) skips the
+    payout entirely. Loss/withdrawal consequences are ungated (reality doesn't
+    care; only the payout math does); the GM-pick path honors the same gate
+    via the activation the pick resolves under.
+
+    Delivery is per line x participant (ALL_EQUAL, mirroring mission reward
+    distribution) through the SAME sink services the missions deed router
+    dispatches to — never the deed-anchored router itself (it reads
+    MissionDeedRecord rows, and stories must not depend on missions,
+    ADR-0010). Same contract as the other writers: skip-and-log, never raise.
+    """
+    lines = _reward_lines_for(resolution)
+    if not lines:
+        return
+    if activation is None:
+        logger.info(
+            "Stake %s WIN: skipping %d reward line(s) — no contract activation recorded.",
+            stake.pk,
+            len(lines),
+        )
+        return
+    if not activation.is_ready:
+        logger.info(
+            "Stake %s WIN: skipping %d reward line(s) — activation %s was not ready (%s).",
+            stake.pk,
+            len(lines),
+            activation.pk,
+            activation.readiness_notes,
+        )
+        return
+    if activation.effective_risk == RenownRisk.NONE:
+        logger.info(
+            "Stake %s WIN: skipping %d reward line(s) — activation %s priced at "
+            "effective NONE (over-leveled party pays nothing, pillar 4).",
+            stake.pk,
+            len(lines),
+            activation.pk,
+        )
+        return
+    if not participants:
+        logger.info(
+            "Stake %s WIN: skipping %d reward line(s) — no participants resolved "
+            "for the completion.",
+            stake.pk,
+            len(lines),
+        )
+        return
+    for line in lines:
+        for participant in participants:
+            _deliver_reward_line(line, participant, stake)
+
+
+def _reward_lines_for(resolution: StakeResolution) -> list[StakeRewardLine]:
+    """The branch's reward lines, from the nested prefetch when present."""
+    lines = getattr(resolution, "prefetched_reward_lines", None)  # noqa: GETATTR_LITERAL
+    if lines is None:
+        lines = list(resolution.reward_lines.all())
+    return lines
+
+
+def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Stake) -> None:
+    """Deliver one reward line to one participant's sheet (skip-and-log)."""
+    from world.currency.services import deliver_mission_money  # noqa: PLC0415
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    # Persona -> CharacterSheet is the _write_npc_affection bridge in reverse
+    # (Persona.character_sheet is a non-null FK).
+    sheet = participant.character_sheet
+    if line.sink == StakeRewardSink.MONEY:
+        deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=f"stake:{stake.pk}")
+        return
+    if line.sink == StakeRewardSink.RESONANCE:
+        if line.resonance is None:
+            logger.warning(
+                "StakeRewardLine %s: sink=RESONANCE but resonance is null "
+                "(deleted after authoring?); skipping.",
+                line.pk,
+            )
+            return
+        grant_resonance(sheet, line.resonance, line.amount, source=GainSource.STAKE_REWARD)
+        return
+    logger.warning(
+        "StakeRewardLine %s: unknown sink %r; skipping.",
+        line.pk,
+        line.sink,
     )
 
 

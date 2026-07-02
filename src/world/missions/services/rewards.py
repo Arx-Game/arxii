@@ -380,8 +380,9 @@ def apply_deed_rewards(
     **NOT auto-called by ``emit_terminal_rewards``.** Phase 5b.1 only
     introduces the routing seam; deciding when to apply (e.g. at engine
     terminal-deed time vs at a journal-flush boundary vs from the Phase-6
-    chain-reactor) is left to whoever calls this function. In 5b.1 the
-    only caller is the test suite.
+    chain-reactor) is left to whoever calls this function. The production
+    caller is mission reporting's ``_apply_style_payout``
+    (world.missions.services.report, #1769).
 
     Args:
         deed: The deed whose ``reward_lines`` should be routed downstream.
