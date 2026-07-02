@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from evennia.utils.test_resources import EvenniaTestCase
@@ -9,16 +11,27 @@ from evennia.utils.test_resources import EvenniaTestCase
 from world.battles.constants import BattleOutcome, BattleParticipantStatus, BattleSideRole
 from world.battles.factories import BattleFactory, BattleParticipantFactory, BattleSideFactory
 from world.battles.models import BattleOutcomeMapping
+from world.battles.services import begin_battle_round, conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
+from world.scenes.constants import RoundStatus
 from world.societies.constants import RenownRisk
-from world.stories.constants import BeatOutcome, BeatPredicateType, StoryScope
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    StakeResolutionColumn,
+    StoryScope,
+)
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
     EpisodeSceneFactory,
+    StakeFactory,
+    StakeResolutionFactory,
     StoryFactory,
+    StoryProgressFactory,
 )
+from world.stories.models import StakeOutcome
 from world.traits.models import CheckOutcome
 
 
@@ -141,3 +154,109 @@ class ActivateStakesForBattleTests(EvenniaTestCase):
         # this test only confirms the wiring calls through and creates a row.
         # Readiness/effective-risk math itself is Task 1's responsibility, already
         # tested there — this asserts the call happened, not the risk math.
+
+
+class BeginBattleRoundActivatesStakesTests(TestCase):
+    """begin_battle_round calls activate_stakes_for_battle exactly once, at round 1."""
+
+    def test_first_round_calls_activate_stakes_for_battle(self) -> None:
+        battle = BattleFactory()
+        with patch("world.battles.services.activate_stakes_for_battle") as mock_activate:
+            begin_battle_round(battle=battle)
+        mock_activate.assert_called_once_with(battle)
+
+    def test_second_round_does_not_reactivate(self) -> None:
+        battle = BattleFactory()
+        with patch("world.battles.services.activate_stakes_for_battle") as mock_activate:
+            begin_battle_round(battle=battle)  # round 1
+            first_round = battle.current_round
+            first_round.status = RoundStatus.COMPLETED
+            first_round.save()
+            begin_battle_round(battle=battle)  # round 2
+        mock_activate.assert_called_once_with(battle)
+
+    def test_first_round_with_no_participants_does_not_raise(self) -> None:
+        battle = BattleFactory()
+        begin_battle_round(battle=battle)  # real call, no mock — must not raise
+
+
+class ConcludeBattleResolvesBeatsTests(EvenniaTestCase):
+    """Integration: conclude_battle resolves any linked OUTCOME_TIER beat (#1785)."""
+
+    def test_decisive_victory_resolves_linked_beat(self) -> None:
+        tier = CheckOutcome.objects.create(name="Battle Victory Wire", success_level=5)
+        BattleOutcomeMapping.objects.create(
+            outcome=BattleOutcome.ATTACKER_DECISIVE,
+            check_outcome=tier,
+        )
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        battle = BattleFactory()
+        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+
+        conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_no_mapping_row_resolves_pending_gm_review(self) -> None:
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        battle = BattleFactory()
+        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+
+        conclude_battle(battle=battle, outcome=BattleOutcome.DEFENDER_MARGINAL)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
+
+    def test_no_linked_beat_noops(self) -> None:
+        battle = BattleFactory()
+        # No EpisodeScene linking battle.scene to any beat — must not raise.
+        conclude_battle(battle=battle, outcome=BattleOutcome.ATTACKER_MARGINAL)
+        battle.refresh_from_db()
+        self.assertTrue(battle.is_concluded)
+
+    def test_resolves_a_stake_to_win_column(self) -> None:
+        tier = CheckOutcome.objects.create(name="Battle Victory Stake Wire", success_level=5)
+        BattleOutcomeMapping.objects.create(
+            outcome=BattleOutcome.DEFENDER_DECISIVE,
+            check_outcome=tier,
+        )
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        stake = StakeFactory(beat=beat)
+        win_branch = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        battle = BattleFactory()
+        EpisodeSceneFactory(episode=episode, scene=battle.scene)
+
+        conclude_battle(battle=battle, outcome=BattleOutcome.DEFENDER_DECISIVE)
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
+        self.assertEqual(outcome.resolution_id, win_branch.pk)

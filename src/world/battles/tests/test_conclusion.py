@@ -120,6 +120,11 @@ class ConcludeBattleTests(TestCase):
             conclude_battle(battle=self.battle, outcome=BattleOutcome.DEFENDER_MARGINAL)
             mock_cs.assert_not_called()
 
+    def test_conclude_calls_resolve_battle_beats(self) -> None:
+        with patch("world.battles.services.resolve_battle_beats") as mock_resolve:
+            conclude_battle(battle=self.battle, outcome=BattleOutcome.DEFENDER_MARGINAL)
+        mock_resolve.assert_called_once_with(self.battle)
+
 
 class MaybeConcludeOnTimerTests(TestCase):
     def setUp(self) -> None:
