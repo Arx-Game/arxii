@@ -272,10 +272,10 @@ def process_income_stream(
             to_treasury=treasury,
         )
 
-    # Costs come off before the money is "yours" (#927): debt service
-    # withholds at the source, then any defaulted-contract liens (#928).
+    # Backstop only (#930): creditors normally collect at source from the
+    # pools each week; this catches arrears the pools couldn't cover, biting
+    # the landed amount before the money is "yours" (#927).
     _withhold_debt_service(stream, treasury, amount)
-    _enforce_garnishments(stream, treasury, amount)
 
     declared = amount if declared_amount is None else declared_amount
     return IncomeDeclaration.objects.create(
@@ -618,6 +618,42 @@ def _service_debts_from_pools(organization: Organization) -> int:
     return paid_total
 
 
+def _service_contract_liens_from_pools(organization: Organization) -> int:
+    """Weekly at-source lien service (#930 unification of #928's garnishment).
+
+    A defaulted notarized contract's lien (agreed at signing) takes its percent
+    of the liened stream's fresh gross straight out of the pool — the same
+    before-the-debtor-touches-it path as debt service. There is no separate
+    landing-time garnishment machinery. Capped at what the pool holds.
+    Returns coppers diverted.
+    """
+    diverted = 0
+    liens = Contract.objects.filter(
+        garnish_stream__organization=organization,
+        status=ContractStatus.DEFAULTED,
+        garnish_percent__gt=0,
+    ).select_related("garnish_stream")
+    for lien in liens:
+        stream = lien.garnish_stream
+        if not stream.active or stream.uncollected_pool <= 0:
+            continue
+        amount = min(stream.uncollected_pool, stream.gross_amount * lien.garnish_percent // 100)
+        if amount <= 0:
+            continue
+        defaulter_is_proposer = lien.proposer_organization_id == stream.organization_id
+        to_purse, to_treasury = _party_accounts(lien, proposer=not defaulter_is_proposer)
+        transfer(
+            amount=amount,
+            reason=f"lien service at source: {lien.title}",
+            to_purse=to_purse,
+            to_treasury=to_treasury,
+        )
+        stream.uncollected_pool = stream.uncollected_pool - amount
+        stream.save(update_fields=["uncollected_pool"])
+        diverted += amount
+    return diverted
+
+
 def _withhold_debt_service(
     stream: OrgIncomeStream, treasury: OrganizationTreasury, available: int
 ) -> int:
@@ -671,33 +707,6 @@ def repay_principal(debt: DebtInstrument, amount: int) -> CurrencyTransfer:
         update_fields.append("active")
     debt.save(update_fields=update_fields)
     return row
-
-
-def _enforce_garnishments(
-    stream: OrgIncomeStream, treasury: OrganizationTreasury, net: int
-) -> None:
-    """Divert liened income from a defaulted contract's stream (#928).
-
-    The lien was agreed at signing; enforcement only begins after default —
-    the system enforces agreed terms, it never initiates antagonism.
-    """
-    for lien in Contract.objects.filter(
-        garnish_stream=stream,
-        status=ContractStatus.DEFAULTED,
-        garnish_percent__gt=0,
-    ):
-        amount = net * lien.garnish_percent // 100
-        if amount == 0:
-            continue
-        defaulter_is_proposer = lien.proposer_organization_id == stream.organization_id
-        to_purse, to_treasury = _party_accounts(lien, proposer=not defaulter_is_proposer)
-        transfer(
-            amount=amount,
-            reason=f"garnishment: {lien.title}",
-            from_treasury=treasury,
-            to_purse=to_purse,
-            to_treasury=to_treasury,
-        )
 
 
 def _party_accounts(
@@ -961,18 +970,29 @@ def run_weekly_economy() -> dict[str, int]:
 
 
 def _weekly_debt_service() -> int:
-    """At-source servicing for every indebted org with pooled income (#930)."""
+    """At-source creditor servicing for every owing org with pooled income (#930).
+
+    One phase, one principle: debts AND defaulted-contract liens collect from
+    the pools before the debtor can touch a copper.
+    """
     count = 0
-    org_ids = (
+    debtor_ids = set(
         DebtInstrument.objects.filter(active=True, diverting=False, arrears__gt=0)
         .values_list("debtor_organization_id", flat=True)
         .distinct()
     )
+    debtor_ids |= set(
+        Contract.objects.filter(status=ContractStatus.DEFAULTED, garnish_percent__gt=0)
+        .values_list("garnish_stream__organization_id", flat=True)
+        .distinct()
+    )
     from world.societies.models import Organization  # noqa: PLC0415
 
-    for organization in Organization.objects.filter(pk__in=org_ids):
+    for organization in Organization.objects.filter(pk__in=debtor_ids):
         try:
-            if _service_debts_from_pools(organization) > 0:
+            serviced = _service_debts_from_pools(organization)
+            serviced += _service_contract_liens_from_pools(organization)
+            if serviced > 0:
                 count += 1
         except Exception:
             logger.exception("weekly economy: debt service failed for org %s", organization.pk)

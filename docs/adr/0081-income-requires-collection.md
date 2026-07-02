@@ -15,12 +15,15 @@ to never collect — a hoarded pool is concentrated outcome risk and a bigger
 absolute graft bite — but never a knockout for not logging in.*
 
 **The asymmetry rule (Apostate):** *automatic loss is fine; automatic gain is
-not.* Contractual debt service therefore deducts from the amassing pools every
-cycle without the debtor lifting a finger (`_service_debts_from_pools` —
-oldest debt first, capped at what the pools hold, `diverting` debts skipped so
-the embezzlement-discovery loop survives), while income itself never lands
-without the dispatch. Court garnishments stay collection-time: liens seize
-money in motion, creditors collect at source.
+not.* Every creditor claim therefore collects **at source** from the amassing
+pools each cycle, before the debtor can touch a copper: contractual debt
+service (`_service_debts_from_pools` — oldest first, capped at what the pools
+hold, `diverting` debts skipped so the embezzlement-discovery loop survives)
+and defaulted-contract liens (`_service_contract_liens_from_pools` — the
+agreed percent of the fresh gross; there is deliberately NO separate
+landing-time garnishment machinery). Debts feel like big deals and
+unavoidable; counterplay is dramatic — refute, go to war, get them
+cancelled — never a collection-scheduling dodge.
 
 **Rejected:** pool caps (a hard stop reads as punishment and hides the
 risk-concentration drama); passive trickle with an active bonus (recreates the

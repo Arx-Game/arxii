@@ -556,7 +556,6 @@ class ContractTests(TestCase):
         from world.currency.models import ContractTerm, OrganizationTreasury, OrgIncomeStream
         from world.currency.services import (
             get_or_create_purse,
-            process_income_stream,
             settle_contract_cycle,
             sign_contract,
         )
@@ -580,18 +579,27 @@ class ContractTests(TestCase):
         contract.refresh_from_db()
         assert contract.status == "defaulted"
 
-        # Default activates the agreed lien: half the stream's net diverts.
+        # Default activates the agreed lien AT SOURCE (#930): half the fresh
+        # gross diverts from the pool before the debtor can touch it.
         OrganizationTreasury.flush_instance_cache()
-        process_income_stream(stream, 900)
+        from world.currency.services import (
+            _service_contract_liens_from_pools,
+            accrue_income_stream,
+        )
+
+        accrue_income_stream(stream)
+        diverted = _service_contract_liens_from_pools(self.org)
+        assert diverted == 500  # 50% of the 1000 gross
+        stream.refresh_from_db()
+        assert stream.uncollected_pool == 500
         purse = get_or_create_purse(self.payee.character_sheet)
         purse.refresh_from_db()
-        assert purse.balance == 450  # 50% of 900
+        assert purse.balance == 500
 
     def test_garnishment_inert_before_default(self) -> None:
         from world.currency.models import ContractTerm, OrgIncomeStream
         from world.currency.services import (
             get_or_create_purse,
-            process_income_stream,
             sign_contract,
         )
 
@@ -605,11 +613,19 @@ class ContractTests(TestCase):
         )
         sign_contract(contract)
 
-        process_income_stream(stream, 900)
+        from world.currency.services import (
+            _service_contract_liens_from_pools,
+            accrue_income_stream,
+        )
 
+        accrue_income_stream(stream)
+        assert _service_contract_liens_from_pools(self.org) == 0
+
+        stream.refresh_from_db()
+        assert stream.uncollected_pool == 1000  # agreed lien, no default — untouched
         purse = get_or_create_purse(self.payee.character_sheet)
         purse.refresh_from_db()
-        assert purse.balance == 0  # agreed lien, but no default — no enforcement
+        assert purse.balance == 0
 
 
 class ProfessionTests(TestCase):
