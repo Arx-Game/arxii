@@ -188,7 +188,16 @@ class CraftAttachFacetQueryCountTests(TestCase):
 
         The guard fires when per-row queries are introduced: even 1 extra query per
         consequence row (3 rows) would push the count up by ≥3, exceeding this ceiling.
+
+        ``flush_instance_cache`` in setUp ensures the SharedMemoryModel identity map is
+        clean — without it, a lookup-model object (e.g. QualityTier, ActionPointConfig)
+        cached from a preceding test in a different shard ordering can satisfy a read
+        from the identity map instead of the DB, reducing the count by 1 and making the
+        pinned count fragile across CI shard regroupings.
         """
+        from evennia.utils.idmapper.models import SharedMemoryModel
+
+        SharedMemoryModel.flush_instance_cache()
         with force_check_outcome(self.success_outcome):
             with self.assertNumQueries(66):
                 result = craft_attach_facet(
