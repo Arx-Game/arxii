@@ -86,6 +86,10 @@ class RoomCommandParseTests(TestCase):
         key, kwargs = self._dispatch(["home"], "")
         assert (key, kwargs) == ("set_primary_home", {})
 
+    def test_style_switch_routes_to_set_building_style(self) -> None:
+        key, kwargs = self._dispatch(["style"], "Antique Imperial")
+        assert (key, kwargs) == ("set_building_style", {"style": "Antique Imperial"})
+
     def test_extend_routes_added_budget(self) -> None:
         key, kwargs = self._dispatch(["extend"], "50")
         assert (key, kwargs) == ("start_building_extension", {"added_budget": "50"})
