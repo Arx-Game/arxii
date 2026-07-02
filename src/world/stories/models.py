@@ -2082,6 +2082,20 @@ class StakeResolution(SharedMemoryModel):
 
     stake = models.ForeignKey("stories.Stake", on_delete=models.CASCADE, related_name="resolutions")
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
+    outcome_key = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text=(
+            "Short designer-authored slug naming this branch within its "
+            "column's polarity (#1760) — e.g. 'destroyed', 'captured', "
+            "'given_to_allies'. Blank = the column's single default branch "
+            "(backward compatible with pre-#1760 content). column stays the "
+            "coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/"
+            "machine-grading rule keys off; outcome_key is a finer dimension "
+            "within it, not a replacement axis."
+        ),
+    )
     consequence_pool = models.ForeignKey(
         CONSEQUENCE_POOL_MODEL,
         null=True,
@@ -2130,10 +2144,11 @@ class StakeResolution(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["stake", "column"]
+        ordering = ["stake", "column", "outcome_key"]
         constraints = [
             models.UniqueConstraint(
-                fields=["stake", "column"], name="unique_resolution_per_stake_column"
+                fields=["stake", "column", "outcome_key"],
+                name="unique_resolution_per_stake_column_outcome_key",
             )
         ]
 
@@ -2157,7 +2172,8 @@ class StakeResolution(SharedMemoryModel):
             raise ValidationError({problem.field: problem.message})
 
     def __str__(self) -> str:
-        return f"StakeResolution({self.stake_id}:{self.column})"
+        suffix = f"/{self.outcome_key}" if self.outcome_key else ""
+        return f"StakeResolution({self.stake_id}:{self.column}{suffix})"
 
 
 class StakeRewardLine(SharedMemoryModel):
