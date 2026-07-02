@@ -13,8 +13,14 @@ Styles (Apostate's design):
   specialization if held; difficulty from the giver's standing). Success doubles the money and
   raises fame/prestige; failure keeps the baseline. Grants +1 Insidia. Only offered to a
   reporter who has the Persuasion skill.
-- **Mostly-accurate** — dodges the criminal/society consequences; those + heat ride #1765, so
-  it's inert until then and is not offered by the surfaces yet.
+- **Mostly-accurate** — a check to report around the truth (#1765): success dodges the criminal
+  consequences (heat + the society sting) a CRIME_WATCH line would mint; failure applies them.
+  Never grants the fame/prestige swing either way. PROVISIONAL: rides the same Persuasion check
+  as Embellished until the specialized-check foundation (#1688) lands.
+
+Reporting a masked deed barefaced (the run was accepted under a different persona than the one
+reporting) risks the *association chance* (#1765): a failed check copies the mask's pursuit heat
+onto the reporting persona — the rep-with-thieves-but-not-with-nobles tradeoff.
 
 Magnitudes are PLACEHOLDER pending a tuning pass.
 """
@@ -62,6 +68,8 @@ class MissionReportResult:
     functionary: Functionary
     # None unless the style was EMBELLISHED; then True/False for the manipulation check.
     embellish_success: bool | None = None
+    # None unless the style was MOSTLY_ACCURATE; then True/False for the dodge check (#1765).
+    dodge_success: bool | None = None
 
 
 def report_to_role_for(instance: MissionInstance) -> NPCRole | None:
@@ -159,6 +167,66 @@ def _run_embellish_check(reporter: ObjectDB, functionary: Functionary) -> bool:
     return result.outcome is not None and result.outcome.success_level >= 0
 
 
+def _run_consequence_dodge_check(reporter: ObjectDB, functionary: Functionary) -> bool:
+    """The mostly-accurate check: report around the truth to dodge the criminal fallout (#1765).
+
+    PROVISIONAL check choice (flagged on the issue): rides the same Persuasion check +
+    Manipulation specialization + giver-standing difficulty as Embellished until the
+    specialized-check foundation (#1688) provides a better-fitting gate. Unlike Embellished
+    there is no skill gate — anyone may try to talk around the truth; the dice decide.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name__iexact="Persuasion").first()
+    if check_type is None:
+        return False  # unseeded world: the dodge simply fails, consequences apply.
+    result = perform_check(
+        reporter,
+        check_type,
+        target_difficulty=_embellish_difficulty(functionary),
+        specialization=_manipulation_specialization(reporter),
+    )
+    return result.outcome is not None and result.outcome.success_level >= 0
+
+
+def _apply_masked_deed_association(
+    instance: MissionInstance, reporter: ObjectDB, functionary: Functionary
+) -> None:
+    """The association chance (#1765): reporting a masked run barefaced risks the link.
+
+    When the run was accepted under one persona (the mask) and the report is collected under
+    another (the face taking the renown), a failed check copies the mask's pursuit heat onto
+    the reporting persona via :func:`world.justice.services.associate_heat` — the same seam
+    the #1334 secrets-outing writer uses later. Success means nobody made the connection.
+    PROVISIONAL check choice, same basis as the dodge check. Unseeded worlds fail harsh
+    (association happens without a roll) — consistent with the dodge failing closed.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.justice.services import associate_heat  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    mask = instance.accepted_as_persona
+    sheet = getattr(reporter, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if mask is None or sheet is None or mask.character_sheet_id != sheet.pk:
+        return
+    reporting_persona = active_persona_for_sheet(sheet)
+    if reporting_persona is None or reporting_persona.pk == mask.pk:
+        return
+    check_type = CheckType.objects.filter(name__iexact="Persuasion").first()
+    if check_type is not None:
+        result = perform_check(
+            reporter,
+            check_type,
+            target_difficulty=_embellish_difficulty(functionary),
+            specialization=_manipulation_specialization(reporter),
+        )
+        if result.outcome is not None and result.outcome.success_level >= 0:
+            return  # slipped away clean — nobody connected the faces.
+    associate_heat(from_persona=mask, to_persona=reporting_persona)
+
+
 # ---------------------------------------------------------------------------
 # Style effects
 # ---------------------------------------------------------------------------
@@ -211,18 +279,34 @@ def _apply_style_payout(
     style: str,
     reporter: ObjectDB,
     functionary: Functionary,
-) -> bool | None:
-    """Deliver money / fame-prestige / resonance for the style; return the embellish result."""
+) -> tuple[bool | None, bool | None]:
+    """Deliver money / fame-prestige / resonance for the style.
+
+    Returns ``(embellish_success, dodge_success)`` — each None unless its style ran.
+    """
     deed = _terminal_deed(instance)
     base_money = _base_money_for(deed, reporter) if deed is not None else 0
 
     embellish_success: bool | None = None
     if style == ReportStyle.EMBELLISHED:
         embellish_success = _run_embellish_check(reporter, functionary)
+    dodge_success: bool | None = None
+    if style == ReportStyle.MOSTLY_ACCURATE:
+        dodge_success = _run_consequence_dodge_check(reporter, functionary)
 
-    # Baseline money (all styles) — the authored lines; skip the not-yet-built criminal sinks.
+    # Baseline money (all styles) — the authored lines. CRIME_WATCH is live
+    # (#1765): it mints at the report room unless the dodge succeeded; RUMOR
+    # stays skip_unbuilt. The association chance runs regardless of style —
+    # dodging the *new* consequence doesn't erase the risk of being connected
+    # to the mask that already carries the heat.
     if deed is not None:
-        apply_deed_rewards(deed, skip_unbuilt=True)
+        apply_deed_rewards(
+            deed,
+            skip_unbuilt=True,
+            room=reporter.location,
+            skip_criminal=bool(dodge_success),
+        )
+        _apply_masked_deed_association(instance, reporter, functionary)
 
     # Embellished success doubles the money.
     if style == ReportStyle.EMBELLISHED and embellish_success and base_money > 0:
@@ -238,7 +322,7 @@ def _apply_style_payout(
     # NOTE: a failed embellish should sting the giver's affection toward the reporter; class-1
     # Functionaries carry no persistent NPCStanding, so that's a no-op until class-2 Standing
     # NPCs become report targets — the seam lives here for then.
-    return embellish_success
+    return embellish_success, dodge_success
 
 
 def report_mission(
@@ -254,11 +338,6 @@ def report_mission(
     if style not in ReportStyle.values:
         msg = f"Unknown reporting style '{style}'."
         raise MissionReportError(msg)
-    if style == ReportStyle.MOSTLY_ACCURATE:
-        # Mostly-accurate only differs by dodging criminal/society consequences (heat, #1765),
-        # which don't exist yet — so it's not offerable until that layer lands.
-        msg = "Reporting carefully around the truth isn't possible yet."
-        raise MissionReportError(msg)
     participant_for(instance, reporter)  # NotParticipantError (404) if not on this mission
     if instance.status != MissionStatus.RESOLVED:
         msg = "This mission is not awaiting a report."
@@ -273,7 +352,7 @@ def report_mission(
         raise MissionReportError(msg)
 
     with transaction.atomic():
-        embellish_success = _apply_style_payout(
+        embellish_success, dodge_success = _apply_style_payout(
             instance=instance, style=style, reporter=reporter, functionary=functionary
         )
         instance.report_style = style
@@ -286,4 +365,5 @@ def report_mission(
         style=style,
         functionary=functionary,
         embellish_success=embellish_success,
+        dodge_success=dodge_success,
     )

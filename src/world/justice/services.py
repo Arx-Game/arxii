@@ -45,7 +45,7 @@ def _chain(area: Area | None) -> list[Area]:
     return chain
 
 
-def _area_for_room(room: ObjectDB) -> Area | None:
+def area_for_room(room: ObjectDB) -> Area | None:
     from world.areas.services import get_room_profile  # noqa: PLC0415
 
     profile = get_room_profile(room)
@@ -143,7 +143,7 @@ def accrue_for_deed_knowledge(*, deed: LegendEntry, room: ObjectDB, new_knower_c
     kinds = [tag.crime_kind for tag in deed.crime_tags.all()]
     if not kinds:
         return
-    area = _area_for_room(room)
+    area = area_for_room(room)
     if area is None:
         return
     for kind in kinds:
@@ -164,7 +164,7 @@ def heat_for(persona: Persona, room: ObjectDB, *, include_sources: bool = False)
     Sanctuary (a guild hall whose building-level area declares a different
     dominant society) and cross-border immunity are the same mismatch.
     """
-    area = _area_for_room(room)
+    area = area_for_room(room)
     local_society = enforcing_society_for(area)
     if area is None or local_society is None:
         return HeatReading(value=0, tier=tier_for_value(0))

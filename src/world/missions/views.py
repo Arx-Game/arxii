@@ -571,6 +571,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
                     "status": result.instance.status,
                     "style": result.style,
                     "embellish_success": result.embellish_success,
+                    "dodge_success": result.dodge_success,
                 }
             ).data
         )
