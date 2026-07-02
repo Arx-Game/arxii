@@ -1126,7 +1126,10 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
     """Full serializer for TransitionRequiredOutcome.
 
     Records a beat outcome that must be satisfied for this specific transition
-    to be eligible when the episode is resolved.
+    to be eligible when the episode is resolved. Stake-level routing (#1770
+    PR2): when ``stake`` is set the requirement routes on the stake's latest
+    StakeOutcome column (``required_stake_column``) instead of the beat's
+    coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
     """
 
     class Meta:
@@ -1136,8 +1139,38 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
             "transition",
             "beat",
             "required_outcome",
+            "stake",
+            "required_stake_column",
         ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Mirror the model clean(): stake ⇔ required_stake_column, stake on this beat."""
+        existing: dict[str, Any] = {}
+        if self.instance is not None:
+            for field_name in ("beat", "stake", "required_stake_column"):
+                existing[field_name] = getattr(self.instance, field_name)
+        merged = {**existing, **attrs}
+
+        stake = merged.get("stake")
+        required_stake_column = merged.get("required_stake_column") or ""
+        beat = merged.get("beat")
+
+        if stake is not None:
+            if not required_stake_column:
+                raise serializers.ValidationError(
+                    {"required_stake_column": "Required when stake is set."}
+                )
+            if beat is not None and stake.beat_id != beat.pk:
+                raise serializers.ValidationError(
+                    {"stake": "The stake must belong to this requirement's beat."}
+                )
+        elif required_stake_column:
+            raise serializers.ValidationError(
+                {"required_stake_column": "Only allowed when stake is set."}
+            )
+
+        return attrs
 
 
 # ---------------------------------------------------------------------------
