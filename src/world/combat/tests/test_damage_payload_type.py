@@ -104,3 +104,33 @@ class DamagePayloadTypeTests(TestCase):
         pre_apply_payloads = [p for n, p in captured if n == EventName.DAMAGE_PRE_APPLY]
         self.assertEqual(len(pre_apply_payloads), 1)
         self.assertIsNone(pre_apply_payloads[0].damage_type)
+
+    def test_amount_stays_int_after_fractional_multiply(self) -> None:
+        """effective_damage must be int even when MODIFY_PAYLOAD multiplies by a fraction.
+
+        The DEFEND stance halves incoming damage via MODIFY_PAYLOAD(multiply 0.5),
+        which widens ``int`` → ``float`` in memory (e.g. 40 → 20.0). The combat
+        pipeline coerces ``effective_damage = int(pre_payload.amount)`` so that a
+        float never flows into the vitals debit or threshold comparisons (#1318).
+        """
+        from flows.constants import EventName
+        from world.combat.services import apply_damage_to_participant
+
+        class _FakeStack:
+            def was_cancelled(self) -> bool:
+                return False
+
+        def _halve_amount(event_name: str, payload: object, **kwargs: object) -> _FakeStack:
+            # Simulate the DEFEND MODIFY_PAYLOAD(multiply 0.5) mutation
+            if event_name == EventName.DAMAGE_PRE_APPLY:
+                payload.amount = payload.amount * 0.5
+            return _FakeStack()
+
+        with patch("world.combat.services.emit_event", side_effect=_halve_amount):
+            result = apply_damage_to_participant(self.participant, 41)
+
+        # 41 * 0.5 = 20.5 → int(20.5) = 20, not 20.0
+        self.assertIsInstance(result.damage_dealt, int)
+        self.assertEqual(result.damage_dealt, 20)
+        self.vitals.refresh_from_db(fields=["health"])
+        self.assertEqual(self.vitals.health, 100 - 20)
