@@ -430,6 +430,30 @@ class IsStakeResolutionBeatStoryOwnerOrStaff(permissions.BasePermission):
         return beat_permission.has_object_permission(request, view, obj.stake.beat)
 
 
+class IsStakeRewardLineBeatStoryOwnerOrStaff(permissions.BasePermission):
+    """Permission class for StakeRewardLine (#1770 PR3).
+
+    Delegates to story ownership through obj.resolution.stake.beat -> episode
+    -> chapter -> story, mirroring IsStakeResolutionBeatStoryOwnerOrStaff one
+    hop deeper.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Check basic permission"""
+        return request.user.is_authenticated
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check if user has permission to access this reward line"""
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_staff:
+            return True
+
+        beat_permission = IsBeatStoryOwnerOrStaff()
+        return beat_permission.has_object_permission(request, view, obj.resolution.stake.beat)
+
+
 class IsGroupProgressMemberOrStaff(permissions.BasePermission):
     """Members of the GMTable with active membership can read; Lead GM of
     the table (GMTable.gm) and staff can write.

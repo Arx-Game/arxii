@@ -19,6 +19,7 @@ from world.stories.models import (
     Stake,
     StakeContractActivation,
     StakeResolution,
+    StakeRewardLine,
     StakeTemplate,
     Story,
     StoryFeedback,
@@ -551,6 +552,17 @@ class StakeResolutionFilter(django_filters.FilterSet):
     class Meta:
         model = StakeResolution
         fields = ["stake", "column"]
+
+
+class StakeRewardLineFilter(django_filters.FilterSet):
+    """Filter for StakeRewardLine model — by resolution and sink (#1770 PR3)."""
+
+    resolution = django_filters.NumberFilter(field_name="resolution_id")
+    sink = django_filters.CharFilter(field_name="sink")
+
+    class Meta:
+        model = StakeRewardLine
+        fields = ["resolution", "sink"]
 
 
 class StakeTemplateFilter(django_filters.FilterSet):

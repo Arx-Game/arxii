@@ -12073,6 +12073,7 @@ paths:
           - SANCTUM_WEAVING
           - SCENE_ENTRY
           - STAFF_GRANT
+          - STAKE_REWARD
           - STYLE_PRESENTATION
         description: |-
           Discriminator. Identifies which source_* FK is populated.
@@ -12091,6 +12092,7 @@ paths:
           * `STYLE_PRESENTATION` - Style presentation
           * `MISSION_REWARD` - Mission reward
           * `MISSION_REPORT` - Mission report style
+          * `STAKE_REWARD` - Stake reward
       tags:
       - magic
       security:
@@ -22023,6 +22025,196 @@ paths:
         required: true
       tags:
       - stake-resolutions
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/stake-reward-lines/:
+    get:
+      operationId: stake_reward_lines_list
+      description: |-
+        ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Access delegated to the parent resolution's stake's beat story ownership
+        via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+        one hop deeper. The serializer enforces the create-path ownership gate,
+        the open-activation lock, and the sink/resonance shape.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: resolution
+        schema:
+          type: number
+      - in: query
+        name: sink
+        schema:
+          type: string
+      tags:
+      - stake-reward-lines
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStakeRewardLineList'
+          description: ''
+    post:
+      operationId: stake_reward_lines_create
+      description: |-
+        ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Access delegated to the parent resolution's stake's beat story ownership
+        via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+        one hop deeper. The serializer enforces the create-path ownership gate,
+        the open-activation lock, and the sink/resonance shape.
+      tags:
+      - stake-reward-lines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeRewardLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeRewardLine'
+          description: ''
+  /api/stake-reward-lines/{id}/:
+    get:
+      operationId: stake_reward_lines_retrieve
+      description: |-
+        ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Access delegated to the parent resolution's stake's beat story ownership
+        via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+        one hop deeper. The serializer enforces the create-path ownership gate,
+        the open-activation lock, and the sink/resonance shape.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake reward line.
+        required: true
+      tags:
+      - stake-reward-lines
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeRewardLine'
+          description: ''
+    put:
+      operationId: stake_reward_lines_update
+      description: |-
+        ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Access delegated to the parent resolution's stake's beat story ownership
+        via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+        one hop deeper. The serializer enforces the create-path ownership gate,
+        the open-activation lock, and the sink/resonance shape.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake reward line.
+        required: true
+      tags:
+      - stake-reward-lines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeRewardLineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeRewardLine'
+          description: ''
+    patch:
+      operationId: stake_reward_lines_partial_update
+      description: |-
+        ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Access delegated to the parent resolution's stake's beat story ownership
+        via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+        one hop deeper. The serializer enforces the create-path ownership gate,
+        the open-activation lock, and the sink/resonance shape.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake reward line.
+        required: true
+      tags:
+      - stake-reward-lines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStakeRewardLineRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeRewardLine'
+          description: ''
+    delete:
+      operationId: stake_reward_lines_destroy
+      description: |-
+        ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Access delegated to the parent resolution's stake's beat story ownership
+        via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+        one hop deeper. The serializer enforces the create-path ownership gate,
+        the open-activation lock, and the sink/resonance shape.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this stake reward line.
+        required: true
+      tags:
+      - stake-reward-lines
       security:
       - cookieAuth: []
       responses:
@@ -35628,7 +35820,7 @@ components:
             * `propagation` - Propagation
         sink:
           allOf:
-          - $ref: '#/components/schemas/SinkEnum'
+          - $ref: '#/components/schemas/MissionOptionRouteRewardSinkEnum'
           description: |-
             Which ledger the emitted line pays into.
 
@@ -35690,7 +35882,7 @@ components:
             * `propagation` - Propagation
         sink:
           allOf:
-          - $ref: '#/components/schemas/SinkEnum'
+          - $ref: '#/components/schemas/MissionOptionRouteRewardSinkEnum'
           description: |-
             Which ledger the emitted line pays into.
 
@@ -35709,6 +35901,22 @@ components:
       required:
       - kind
       - sink
+    MissionOptionRouteRewardSinkEnum:
+      enum:
+      - money
+      - legend_points
+      - resonance
+      - rumor
+      - crime_watch
+      - beat
+      type: string
+      description: |-
+        * `money` - Money
+        * `legend_points` - Legend Points
+        * `resonance` - Resonance
+        * `rumor` - Rumor
+        * `crime_watch` - Crime Watch
+        * `beat` - Beat
     MissionOptionSourceKindEnum:
       enum:
       - authored
@@ -39946,6 +40154,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StakeResolution'
+    PaginatedStakeRewardLineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeRewardLine'
     PaginatedStakeTemplateList:
       type: object
       required:
@@ -41434,7 +41665,7 @@ components:
             * `propagation` - Propagation
         sink:
           allOf:
-          - $ref: '#/components/schemas/SinkEnum'
+          - $ref: '#/components/schemas/MissionOptionRouteRewardSinkEnum'
           description: |-
             Which ledger the emitted line pays into.
 
@@ -41980,6 +42211,8 @@ components:
         sheet is not player-held; item forfeiture and affection deltas must match
         the stake's subject kind. No column-ordering/escalation validation (the
         fuse walk measures reachability, not monotonicity).
+        ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+        read-only; they are written via the stake-reward-lines endpoint.
       properties:
         stake:
           type: integer
@@ -42026,6 +42259,33 @@ components:
           oneOf:
           - $ref: '#/components/schemas/SetsSubjectLifecycleEnum'
           - $ref: '#/components/schemas/BlankEnum'
+    PatchedStakeRewardLineRequest:
+      type: object
+      description: |-
+        Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+        walk via resolution.stake.beat (create-path enforcement), the two-sided
+        open-activation lock, and the sink/resonance shape rule (resonance
+        required iff sink=RESONANCE; amount >= 1 rides the model validator).
+        Banding against the tier's reward floor/ceiling is deliberately NOT
+        rejected here — out-of-band rewards make the contract UNREADY instead
+        (pillar 7 auto-downgrade).
+      properties:
+        resolution:
+          type: integer
+        sink:
+          $ref: '#/components/schemas/StakeRewardLineSinkEnum'
+        amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Money-equivalent scalar paid to EACH participant (banded by
+            calibration).
+        resonance:
+          type: integer
+          nullable: true
+          description: Required when sink=RESONANCE; must be null otherwise.
     PatchedStakeTemplateRequest:
       type: object
       description: |-
@@ -44822,6 +45082,7 @@ components:
             * `STYLE_PRESENTATION` - Style presentation
             * `MISSION_REWARD` - Mission reward
             * `MISSION_REPORT` - Mission report style
+            * `STAKE_REWARD` - Stake reward
         granted_at:
           type: string
           format: date-time
@@ -46579,22 +46840,6 @@ components:
       - new_hollow_current
       - new_lifetime_helped
       - units_accepted
-    SinkEnum:
-      enum:
-      - money
-      - legend_points
-      - resonance
-      - rumor
-      - crime_watch
-      - beat
-      type: string
-      description: |-
-        * `money` - Money
-        * `legend_points` - Legend Points
-        * `resonance` - Resonance
-        * `rumor` - Rumor
-        * `crime_watch` - Crime Watch
-        * `beat` - Beat
     SinnerRoleEnum:
       enum:
       - SINNER
@@ -47186,6 +47431,7 @@ components:
       - STYLE_PRESENTATION
       - MISSION_REWARD
       - MISSION_REPORT
+      - STAKE_REWARD
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -47202,6 +47448,7 @@ components:
         * `STYLE_PRESENTATION` - Style presentation
         * `MISSION_REWARD` - Mission reward
         * `MISSION_REPORT` - Mission report style
+        * `STAKE_REWARD` - Stake reward
     Specialization:
       type: object
       description: Serializer for Specialization model.
@@ -47683,6 +47930,8 @@ components:
         sheet is not player-held; item forfeiture and affection deltas must match
         the stake's subject kind. No column-ordering/escalation validation (the
         fuse walk measures reachability, not monotonicity).
+        ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+        read-only; they are written via the stake-reward-lines endpoint.
       properties:
         id:
           type: integer
@@ -47732,9 +47981,15 @@ components:
           oneOf:
           - $ref: '#/components/schemas/SetsSubjectLifecycleEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        reward_lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/StakeRewardLine'
+          readOnly: true
       required:
       - column
       - id
+      - reward_lines
       - stake
     StakeResolutionRequest:
       type: object
@@ -47746,6 +48001,8 @@ components:
         sheet is not player-held; item forfeiture and affection deltas must match
         the stake's subject kind. No column-ordering/escalation validation (the
         fuse walk measures reachability, not monotonicity).
+        ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+        read-only; they are written via the stake-reward-lines endpoint.
       properties:
         stake:
           type: integer
@@ -47795,6 +48052,80 @@ components:
       required:
       - column
       - stake
+    StakeRewardLine:
+      type: object
+      description: |-
+        Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+        walk via resolution.stake.beat (create-path enforcement), the two-sided
+        open-activation lock, and the sink/resonance shape rule (resonance
+        required iff sink=RESONANCE; amount >= 1 rides the model validator).
+        Banding against the tier's reward floor/ceiling is deliberately NOT
+        rejected here — out-of-band rewards make the contract UNREADY instead
+        (pillar 7 auto-downgrade).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        resolution:
+          type: integer
+        sink:
+          $ref: '#/components/schemas/StakeRewardLineSinkEnum'
+        amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Money-equivalent scalar paid to EACH participant (banded by
+            calibration).
+        resonance:
+          type: integer
+          nullable: true
+          description: Required when sink=RESONANCE; must be null otherwise.
+      required:
+      - amount
+      - id
+      - resolution
+      - sink
+    StakeRewardLineRequest:
+      type: object
+      description: |-
+        Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+
+        Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+        walk via resolution.stake.beat (create-path enforcement), the two-sided
+        open-activation lock, and the sink/resonance shape rule (resonance
+        required iff sink=RESONANCE; amount >= 1 rides the model validator).
+        Banding against the tier's reward floor/ceiling is deliberately NOT
+        rejected here — out-of-band rewards make the contract UNREADY instead
+        (pillar 7 auto-downgrade).
+      properties:
+        resolution:
+          type: integer
+        sink:
+          $ref: '#/components/schemas/StakeRewardLineSinkEnum'
+        amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Money-equivalent scalar paid to EACH participant (banded by
+            calibration).
+        resonance:
+          type: integer
+          nullable: true
+          description: Required when sink=RESONANCE; must be null otherwise.
+      required:
+      - amount
+      - resolution
+      - sink
+    StakeRewardLineSinkEnum:
+      enum:
+      - money
+      - resonance
+      type: string
+      description: |-
+        * `money` - Money
+        * `resonance` - Resonance
     StakeTemplate:
       type: object
       description: |-

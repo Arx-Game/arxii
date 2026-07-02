@@ -13122,6 +13122,86 @@ export interface paths {
     patch: operations['stake_resolutions_partial_update'];
     trace?: never;
   };
+  '/api/stake-reward-lines/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Access delegated to the parent resolution's stake's beat story ownership
+     *     via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+     *     one hop deeper. The serializer enforces the create-path ownership gate,
+     *     the open-activation lock, and the sink/resonance shape.
+     */
+    get: operations['stake_reward_lines_list'];
+    put?: never;
+    /**
+     * @description ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Access delegated to the parent resolution's stake's beat story ownership
+     *     via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+     *     one hop deeper. The serializer enforces the create-path ownership gate,
+     *     the open-activation lock, and the sink/resonance shape.
+     */
+    post: operations['stake_reward_lines_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stake-reward-lines/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Access delegated to the parent resolution's stake's beat story ownership
+     *     via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+     *     one hop deeper. The serializer enforces the create-path ownership gate,
+     *     the open-activation lock, and the sink/resonance shape.
+     */
+    get: operations['stake_reward_lines_retrieve'];
+    /**
+     * @description ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Access delegated to the parent resolution's stake's beat story ownership
+     *     via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+     *     one hop deeper. The serializer enforces the create-path ownership gate,
+     *     the open-activation lock, and the sink/resonance shape.
+     */
+    put: operations['stake_reward_lines_update'];
+    post?: never;
+    /**
+     * @description ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Access delegated to the parent resolution's stake's beat story ownership
+     *     via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+     *     one hop deeper. The serializer enforces the create-path ownership gate,
+     *     the open-activation lock, and the sink/resonance shape.
+     */
+    delete: operations['stake_reward_lines_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Access delegated to the parent resolution's stake's beat story ownership
+     *     via obj.resolution.stake.beat — the same walk as StakeResolutionViewSet,
+     *     one hop deeper. The serializer enforces the create-path ownership gate,
+     *     the open-activation lock, and the sink/resonance shape.
+     */
+    patch: operations['stake_reward_lines_partial_update'];
+    trace?: never;
+  };
   '/api/stake-templates/': {
     parameters: {
       query?: never;
@@ -19657,7 +19737,7 @@ export interface components {
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
        */
-      sink: components['schemas']['SinkEnum'];
+      sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
     };
@@ -19699,10 +19779,26 @@ export interface components {
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
        */
-      sink: components['schemas']['SinkEnum'];
+      sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
     };
+    /**
+     * @description * `money` - Money
+     *     * `legend_points` - Legend Points
+     *     * `resonance` - Resonance
+     *     * `rumor` - Rumor
+     *     * `crime_watch` - Crime Watch
+     *     * `beat` - Beat
+     * @enum {string}
+     */
+    MissionOptionRouteRewardSinkEnum:
+      | 'money'
+      | 'legend_points'
+      | 'resonance'
+      | 'rumor'
+      | 'crime_watch'
+      | 'beat';
     /**
      * @description * `authored` - Authored
      *     * `challenge` - Challenge
@@ -22166,6 +22262,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StakeResolution'][];
     };
+    PaginatedStakeRewardLineList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StakeRewardLine'][];
+    };
     PaginatedStakeTemplateList: {
       /** @example 123 */
       count: number;
@@ -23066,7 +23177,7 @@ export interface components {
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
        */
-      sink?: components['schemas']['SinkEnum'];
+      sink?: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
     };
@@ -23393,6 +23504,8 @@ export interface components {
      *     sheet is not player-held; item forfeiture and affection deltas must match
      *     the stake's subject kind. No column-ordering/escalation validation (the
      *     fuse walk measures reachability, not monotonicity).
+     *     ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+     *     read-only; they are written via the stake-reward-lines endpoint.
      */
     PatchedStakeResolutionRequest: {
       stake?: number;
@@ -23429,6 +23542,25 @@ export interface components {
       sets_subject_lifecycle?:
         | components['schemas']['SetsSubjectLifecycleEnum']
         | components['schemas']['BlankEnum'];
+    };
+    /**
+     * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+     *     walk via resolution.stake.beat (create-path enforcement), the two-sided
+     *     open-activation lock, and the sink/resonance shape rule (resonance
+     *     required iff sink=RESONANCE; amount >= 1 rides the model validator).
+     *     Banding against the tier's reward floor/ceiling is deliberately NOT
+     *     rejected here — out-of-band rewards make the contract UNREADY instead
+     *     (pillar 7 auto-downgrade).
+     */
+    PatchedStakeRewardLineRequest: {
+      resolution?: number;
+      sink?: components['schemas']['StakeRewardLineSinkEnum'];
+      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
+      amount?: number;
+      /** @description Required when sink=RESONANCE; must be null otherwise. */
+      resonance?: number | null;
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -24807,6 +24939,7 @@ export interface components {
        *     * `STYLE_PRESENTATION` - Style presentation
        *     * `MISSION_REWARD` - Mission reward
        *     * `MISSION_REPORT` - Mission report style
+       *     * `STAKE_REWARD` - Stake reward
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -25629,16 +25762,6 @@ export interface components {
       readonly audit_row_id: number;
     };
     /**
-     * @description * `money` - Money
-     *     * `legend_points` - Legend Points
-     *     * `resonance` - Resonance
-     *     * `rumor` - Rumor
-     *     * `crime_watch` - Crime Watch
-     *     * `beat` - Beat
-     * @enum {string}
-     */
-    SinkEnum: 'money' | 'legend_points' | 'resonance' | 'rumor' | 'crime_watch' | 'beat';
-    /**
      * @description * `SINNER` - SINNER
      *     * `SINEATER` - SINEATER
      * @enum {string}
@@ -25915,6 +26038,7 @@ export interface components {
      *     * `STYLE_PRESENTATION` - Style presentation
      *     * `MISSION_REWARD` - Mission reward
      *     * `MISSION_REPORT` - Mission report style
+     *     * `STAKE_REWARD` - Stake reward
      * @enum {string}
      */
     SourceEnum:
@@ -25931,7 +26055,8 @@ export interface components {
       | 'DRAMATIC_MOMENT'
       | 'STYLE_PRESENTATION'
       | 'MISSION_REWARD'
-      | 'MISSION_REPORT';
+      | 'MISSION_REPORT'
+      | 'STAKE_REWARD';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -26155,6 +26280,8 @@ export interface components {
      *     sheet is not player-held; item forfeiture and affection deltas must match
      *     the stake's subject kind. No column-ordering/escalation validation (the
      *     fuse walk measures reachability, not monotonicity).
+     *     ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+     *     read-only; they are written via the stake-reward-lines endpoint.
      */
     StakeResolution: {
       readonly id: number;
@@ -26192,6 +26319,7 @@ export interface components {
       sets_subject_lifecycle?:
         | components['schemas']['SetsSubjectLifecycleEnum']
         | components['schemas']['BlankEnum'];
+      readonly reward_lines: components['schemas']['StakeRewardLine'][];
     };
     /**
      * @description Full serializer for StakeResolution (#1770 pillar 1).
@@ -26201,6 +26329,8 @@ export interface components {
      *     sheet is not player-held; item forfeiture and affection deltas must match
      *     the stake's subject kind. No column-ordering/escalation validation (the
      *     fuse walk measures reachability, not monotonicity).
+     *     ``reward_lines`` (PR3) exposes the branch's authored win-reward payouts
+     *     read-only; they are written via the stake-reward-lines endpoint.
      */
     StakeResolutionRequest: {
       stake: number;
@@ -26238,6 +26368,51 @@ export interface components {
         | components['schemas']['SetsSubjectLifecycleEnum']
         | components['schemas']['BlankEnum'];
     };
+    /**
+     * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+     *     walk via resolution.stake.beat (create-path enforcement), the two-sided
+     *     open-activation lock, and the sink/resonance shape rule (resonance
+     *     required iff sink=RESONANCE; amount >= 1 rides the model validator).
+     *     Banding against the tier's reward floor/ceiling is deliberately NOT
+     *     rejected here — out-of-band rewards make the contract UNREADY instead
+     *     (pillar 7 auto-downgrade).
+     */
+    StakeRewardLine: {
+      readonly id: number;
+      resolution: number;
+      sink: components['schemas']['StakeRewardLineSinkEnum'];
+      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
+      amount: number;
+      /** @description Required when sink=RESONANCE; must be null otherwise. */
+      resonance?: number | null;
+    };
+    /**
+     * @description Full serializer for StakeRewardLine (#1770 PR3 — the contract's win side).
+     *
+     *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
+     *     walk via resolution.stake.beat (create-path enforcement), the two-sided
+     *     open-activation lock, and the sink/resonance shape rule (resonance
+     *     required iff sink=RESONANCE; amount >= 1 rides the model validator).
+     *     Banding against the tier's reward floor/ceiling is deliberately NOT
+     *     rejected here — out-of-band rewards make the contract UNREADY instead
+     *     (pillar 7 auto-downgrade).
+     */
+    StakeRewardLineRequest: {
+      resolution: number;
+      sink: components['schemas']['StakeRewardLineSinkEnum'];
+      /** @description Money-equivalent scalar paid to EACH participant (banded by calibration). */
+      amount: number;
+      /** @description Required when sink=RESONANCE; must be null otherwise. */
+      resonance?: number | null;
+    };
+    /**
+     * @description * `money` - Money
+     *     * `resonance` - Resonance
+     * @enum {string}
+     */
+    StakeRewardLineSinkEnum: 'money' | 'resonance';
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
      *
@@ -38306,6 +38481,7 @@ export interface operations {
          *     * `STYLE_PRESENTATION` - Style presentation
          *     * `MISSION_REWARD` - Mission reward
          *     * `MISSION_REPORT` - Mission report style
+         *     * `STAKE_REWARD` - Stake reward
          */
         source?:
           | 'DRAMATIC_MOMENT'
@@ -38321,6 +38497,7 @@ export interface operations {
           | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
           | 'STAFF_GRANT'
+          | 'STAKE_REWARD'
           | 'STYLE_PRESENTATION';
       };
       header?: never;
@@ -46912,6 +47089,152 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StakeResolution'];
+        };
+      };
+    };
+  };
+  stake_reward_lines_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        resolution?: number;
+        sink?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStakeRewardLineList'];
+        };
+      };
+    };
+  };
+  stake_reward_lines_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeRewardLineRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeRewardLine'];
+        };
+      };
+    };
+  };
+  stake_reward_lines_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake reward line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeRewardLine'];
+        };
+      };
+    };
+  };
+  stake_reward_lines_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake reward line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeRewardLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeRewardLine'];
+        };
+      };
+    };
+  };
+  stake_reward_lines_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake reward line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stake_reward_lines_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake reward line. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStakeRewardLineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StakeRewardLine'];
         };
       };
     };
