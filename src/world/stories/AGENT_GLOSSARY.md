@@ -55,3 +55,15 @@ _Avoid_: adjusted risk, scaled risk.
 **Activation** (stakes contract):
 The `StakeContractActivation` row locking a beat's stakes contract at scene start — snapshots `declared_risk`/`declared_target_level`/`party_average_level`, computes and freezes `effective_risk`, and (while `resolved_at IS NULL`) blocks any edit to the beat's Stakes/StakeResolutions. At most one open activation per beat (partial unique constraint). Not to be confused with activating/engaging a Covenant Role, or any other domain's "activation."
 _Avoid_: lock (use Activation for the row; "lock" for the behavior it enforces), snapshot.
+
+**Stake Outcome**:
+The per-stake resolution audit + routing row (`StakeOutcome`, #1770 PR2) — which column a Stake resolved at, how it was decided (`StakeOutcomeMethod`: MACHINE grading in the completion tail, or a GM's Constrained Pick), and which authored `StakeResolution` branch fired (null when no branch was authored for the column). The latest StakeOutcome per stake wins for transition routing. Distinct from `BeatCompletion` (the beat-level ledger row) and from `StakeResolution` (the authored branch itself).
+_Avoid_: stake result, stake completion.
+
+**Constrained Pick**:
+The GM's resolution move on a pending stake (`resolve_stake_by_gm_pick`, `POST /api/stakes/{id}/resolve/`): choosing one of the stake's *authored* resolution columns — never composing a consequence freehand at resolution time. The picked branch fires exactly like the machine path (pool + writers); the StakeOutcome records `GM_PICK`, the GM, and notes. One pick per stake.
+_Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bounded by authorship).
+
+**Withdrawal Column**:
+The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED (`withdrawal=True` through `record_outcome_tier_completion`); stakes without an authored WITHDRAWAL branch pend with the beat's PENDING_GM_REVIEW for a Constrained Pick. The beat itself still awaits GM adjudication.
+_Avoid_: flee branch, retreat outcome.

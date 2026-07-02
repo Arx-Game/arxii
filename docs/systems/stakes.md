@@ -5,7 +5,9 @@ The GM-authored, player-visible "what's actually at risk" declaration for a stor
 lost before players commit to a scene, and scales the Legend payoff by how
 dangerous the declared risk actually is *for this party right now*.
 
-**Issue:** #1770 (PR 1 — data model, readiness/activation services, API). **ADR:**
+**Issue:** #1770 (PR 1 — data model, readiness/activation services, API;
+PR 2 — per-stake resolution: machine grading, GM constrained pick, world-state
+writers, stake-level transition routing). **ADR:**
 [ADR-0067](../adr/0067-beat-risk-is-the-stakes-wager-declaration.md) (why `Beat.risk`
 is reused as the wager declaration rather than a new model).
 
@@ -120,14 +122,52 @@ The authored branch for one stake × one outcome column.
 | `consequence_pool` | FK → checks `ConsequencePool` (null, SET_NULL) | Pool to fire when this column resolves (tier-aware) |
 | `escalates_to_risk` | CharField (`RenownRisk` choices, blank) | The [fuse](#chain-rule--fuse-length) mechanic — the risk tier the situation spawned by this branch carries. Blank = no escalation declared |
 | `narrative_summary` | TextField (blank) | What happens in the story when this branch fires (GM-authored) |
+| `forfeits_subject_item` | BooleanField (default False) | **PR2 writer.** On fire, soft-forfeits the stake's `subject_item` (`forfeit_item_instance` — `destroyed_at` + a receiver-less `TRANSFERRED` `OwnershipEvent`; never hard-deleted). Requires an `ITEM` stake with `subject_item` set |
+| `npc_affection_delta` | SmallIntegerField (default 0) | **PR2 writer.** On fire, `adjust_npc_affection` between the subject sheet's primary persona and each completion participant persona. Requires `NPC_FATE`/`FACTION` + `subject_sheet` |
+| `sets_subject_lifecycle` | CharField (`LifecycleState` choices, blank) | **PR2 writer.** On fire, `set_lifecycle_state(subject_sheet, value)`. **Pillar-12 gated:** only legal for `NPC_FATE` stakes whose subject sheet is not player-held |
 
 Unique constraint: `(stake, column)` — one resolution per stake per column.
 
-Pillar 12 (no-fiat removal): this model deliberately carries **no direct
-lifecycle/world-state payload** in PR1 — a branch only fires a consequence pool
-and/or declares an escalation risk. Structured world-state writers (the actual
-mechanism by which a WIN or LOSS *does something permanent*) arrive in PR2 with
-validation that rejects direct lifecycle writes from this model.
+**Pillar 12 (no-fiat removal):** the writer payloads are validated in *both*
+`StakeResolutionSerializer.validate` and `StakeResolution.clean` (shared
+`stake_resolution_payload_problems`): a branch can never write lifecycle state
+onto a player-held sheet — PC removal is mechanically mediated (route into peril
+via `escalates_to_risk` + consequence pools → `process_damage_consequences` →
+`_mark_dead`, which now also propagates `LifecycleState.DEAD` to the roster).
+The writer itself re-checks the player-held gate at fire time (defense in
+depth) and skips-and-logs instead of raising. Captivity of a PC is deliberately
+**not** a branch payload — capture arrives via terminal consequence pools
+(`EffectType.CAPTURE`), already wired.
+
+### `StakeOutcome` (PR2)
+
+The per-stake resolution audit + routing row — mirrors `EpisodeResolution` (GM
+narrative-decision audit) and `BeatCompletion` (append-only ledger). The
+**latest row per stake wins** for transition routing.
+
+| Field | Type | Notes |
+|---|---|---|
+| `stake` | FK → `stories.Stake` (`related_name="outcomes"`, CASCADE) | |
+| `activation` | FK → `stories.StakeContractActivation` (null, SET_NULL, `related_name="stake_outcomes"`) | Which locked contract this outcome resolved under (audit) |
+| `resolution` | FK → `stories.StakeResolution` (null, SET_NULL) | The authored branch that fired; **null = no branch was authored for the column** (audit honesty — an unready contract that ran anyway) |
+| `column` | CharField (`StakeResolutionColumn` choices) | |
+| `method` | CharField (`StakeOutcomeMethod` choices) | `MACHINE` (completion-tail grading) or `GM_PICK` (constrained pick) |
+| `resolved_by` | FK → `gm.GMProfile` (null, SET_NULL) | The picking GM; null for MACHINE |
+| `gm_notes` | TextField (blank) | |
+| `created_at` | DateTimeField (auto_now_add) | Ordering `-created_at` |
+
+### `TransitionRequiredOutcome.stake` + `required_stake_column` (PR2)
+
+Stake-level transition routing: when `stake` is set on a
+`TransitionRequiredOutcome`, the requirement is satisfied iff the stake's
+**latest** `StakeOutcome.column` equals `required_stake_column` (instead of the
+beat's coarse outcome) — so one beat's stakes can route to different downstream
+episodes. `clean()` (mirrored in the serializer) enforces: stake set ⇒
+`required_stake_column` required and the stake belongs to the requirement's
+beat; stake null ⇒ column blank. Conditioned unique constraints keep one
+beat-level row per `(transition, beat)` and one stake-level row per
+`(transition, stake)`. In the fuse walk, a stake-level requirement counts as
+failure-following iff it requires `LOSS`.
 
 ### `StakeContractActivation`
 
@@ -157,6 +197,8 @@ open activation per beat**. This is the actual lock backstop (see
 - **`StakeSubjectKind`**: `PERSONAL_JEOPARDY`, `NPC_FATE`, `LOCATION`, `FACTION`,
   `ITEM`, `CAMPAIGN_TRACK`, `CUSTOM` (trust-gated).
 - **`StakeResolutionColumn`**: `WIN`, `LOSS`, `WITHDRAWAL`.
+- **`StakeOutcomeMethod`** (PR2): `MACHINE` (graded by the completion tail),
+  `GM_PICK` (constrained pick among authored columns).
 - **`RISK_LADDER`**: `["none", "low", "moderate", "high", "extreme"]` — index order
   matters; `services.stakes.risk_index` positions a `RenownRisk` value on it.
 - **`DEFAULT_RISK_CALIBRATIONS`**: seed values for the four non-`NONE`
@@ -260,15 +302,65 @@ there is no separate versioned/snapshotted copy of the `Stake` rows themselves
 `get_open_activation(beat)` is the single query both the lock check and
 `effective_risk_for_beat` share.
 
-**Known PR1 gap:** `activate_stakes_contract` has no production call site yet —
-it is fully built and unit-tested but nothing currently calls it at scene start.
-`resolve_open_activation` **is** wired, into the beat-completion tail
-(`world.stories.services.beats._create_completion_and_fire_pool`, called after
-the completion's consequence pool fires). Wiring the actual scene-start triggers is
-#1770's own remaining PR spine (PR2 combat encounter start, PR3 mission issue,
+**Known gap (still open after PR2):** `activate_stakes_contract` has no
+production call site yet — it is fully built and unit-tested but nothing
+currently calls it at scene start. `resolve_open_activation` **is** wired, into
+the beat-completion tail
+(`world.stories.services.beats._create_completion_and_fire_pool`, after the
+completion's consequence pool and the per-stake resolver run). Wiring the
+actual scene-start triggers is #1770's remaining PR spine (PR3 mission issue,
 PR4 GM scene action — scene *grading* specifically rides #1748). The separate
 sibling #1771 owns only the player-boundary registry behind
 `check_stake_boundaries`, not activation wiring.
+
+## Resolution (PR2)
+
+When a staked beat completes, `resolve_stakes_for_completion`
+(`world.stories.services.stake_resolution`) runs inside the atomic completion
+tail — between the beat-level pool fire and `resolve_open_activation`, so the
+open activation is still readable for the `StakeOutcome.activation` audit FK.
+
+**Machine grading (pillar 11 — grade off data where it exists):**
+
+- Beat `SUCCESS` → `WIN` column; `FAILURE`/`EXPIRED` → `LOSS`.
+- **NPC-vitals override:** an `NPC_FATE` stake whose `subject_sheet`'s
+  `CharacterVitals.life_state` reads `DEAD` grades `LOSS` even on a beat-level
+  SUCCESS — combat already wrote the truth into vitals.
+- The chosen column's authored branch fires its `consequence_pool` (tier-aware
+  via `apply_pool_for_tier` when the completion carries an `outcome_tier`, else
+  `apply_pool_deterministically`) with the **same guards and
+  `ResolutionContext` construction as beat-level pools** (shared
+  `beats._fire_pool_with_context`), then applies the writer payloads.
+- A missing branch still writes a `StakeOutcome` with `resolution=None` (an
+  unready contract that ran anyway is auditable, not invisible).
+- Idempotent: stakes that already carry a `StakeOutcome` (e.g. an earlier GM
+  pick) are skipped.
+- `PENDING_GM_REVIEW` (non-withdrawal) defers all stakes — they wait for the
+  GM's pick or final mark.
+
+**Withdrawal (combat FLED/ABANDONED):** the combat auto-wire
+(`world.combat.beat_wiring.encounter_completed_beat_handler`) passes
+`withdrawal=True` through `record_outcome_tier_completion` (legal only with
+`force_outcome=PENDING_GM_REVIEW`). Stakes **with** an authored `WITHDRAWAL`
+resolution fire it immediately (method `MACHINE`); stakes without one pend with
+the beat's `PENDING_GM_REVIEW` for the GM's constrained pick. The beat outcome
+itself stays `PENDING_GM_REVIEW` (a GM still adjudicates the beat). This
+resolves #1746's deferred withdrawal design.
+
+**GM constrained pick:** `resolve_stake_by_gm_pick` /
+`POST /api/stakes/{id}/resolve/` — the GM picks **among the stake's authored
+resolution columns only** (never free composition; author the branch first).
+The branch fires exactly like the machine path (pool + writers); the
+`StakeOutcome` records `method=GM_PICK`, `resolved_by`, and `gm_notes`. One
+pick per stake (a second attempt is rejected). When a GM later finally marks a
+pending beat, the completion tail's resolver auto-resolves the *remaining*
+unresolved stakes at the marked column; picked stakes are untouched
+(idempotency).
+
+**Escalation:** `escalates_to_risk` stays recorded on the fired resolution and
+is readable by authoring; there is no automatic scene-spawn in PR2 (the fuse
+walk validates reachability; spawning the follow-up situation is GM/story
+work).
 
 ## Three Concepts Named "Risk"/"Stakes" — Disambiguation
 
@@ -312,6 +404,22 @@ only the plain-language wager.
 `StakesReadinessReport` (`world.stories.types`): `is_staked: bool`,
 `is_ready: bool`, `problems: tuple[str, ...]`.
 
+## Services (`world.stories.services.stake_resolution`, PR2)
+
+| Function | Signature | Purpose |
+|---|---|---|
+| `resolve_stakes_for_completion` | `(*, beat, outcome, progress, scope, participants, outcome_tier=None, withdrawal=False) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches — see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
+| `resolve_stake_by_gm_pick` | `(stake, *, column, gm_profile, gm_notes="") -> StakeOutcome` | The GM constrained pick — fires the authored branch like the machine path, records `GM_PICK` |
+| `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, npc_affection_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`) |
+| `sheet_is_player_held` | `(sheet: CharacterSheet) -> bool` | The pillar-12 gate: RosterEntry with a current tenure |
+
+Plumbing added in PR2: `record_outcome_tier_completion` gained
+`withdrawal: bool = False` (legal only with `force_outcome=PENDING_GM_REVIEW`);
+`beats._fire_pool_with_context` is the extracted shared pool-fire core;
+`vitals.services._mark_dead` now propagates `LifecycleState.DEAD` to the
+sheet's roster lifecycle (the single seam where combat death reaches the
+roster).
+
 ## API
 
 All five ViewSets live in `world.stories.views`, registered in
@@ -321,7 +429,7 @@ All five ViewSets live in `world.stories.views`, registered in
 |---|---|---|
 | `RiskCalibrationViewSet` | `/api/risk-calibrations/` | `IsStaffOrReadOnly` — every authenticated user reads, only staff writes |
 | `StakeTemplateViewSet` | `/api/stake-templates/` | `IsStaffOrReadOnly` |
-| `StakeViewSet` | `/api/stakes/` | `IsStakeBeatStoryOwnerOrStaff` (delegates to `obj.beat` → episode → chapter → story ownership, same chain as `BeatViewSet`) |
+| `StakeViewSet` | `/api/stakes/` | `IsStakeBeatStoryOwnerOrStaff` (delegates to `obj.beat` → episode → chapter → story ownership, same chain as `BeatViewSet`). PR2: nested read-only `outcomes` list; `POST /api/stakes/{id}/resolve/` (permission `CanResolveStake` — the `CanMarkBeat` gate via `stake.beat`; input `ResolveStakeInputSerializer`; returns `StakeOutcomeSerializer` at 201) |
 | `StakeResolutionViewSet` | `/api/stake-resolutions/` | `IsStakeResolutionBeatStoryOwnerOrStaff` (delegates via `obj.stake.beat`) |
 | `StakeContractActivationViewSet` | `/api/stake-activations/` | Read-only; `IsStakeBeatStoryOwnerOrStaff` |
 
@@ -337,14 +445,13 @@ isn't enough on POST):
   template-null (custom) path to staff only, mirroring `BeatSerializer.validate`'s
   risk staff-gate.
 
-## PR2–4: Planned, Not Yet Built
+## PR3–4: Planned, Not Yet Built
 
-The following are explicitly **out of scope for PR1** and marked `[ABSENT]` —
+The following are explicitly out of scope for PR1–2 and marked `[ABSENT]` —
 they do not exist in code yet:
 
 | Planned surface | Target PR | Notes |
 |---|---|---|
-| Structured world-state writers for `StakeResolution` (the actual mechanism by which a WIN/LOSS *does something permanent* to the named subject) | PR2 | Pillar 12 — validated to reject direct lifecycle writes |
 | `apply_deed_rewards` WIN-column reward wiring (consuming `RiskCalibration.reward_floor`/`reward_ceiling`) | PR3 | These two fields exist on `RiskCalibration` now, unused until PR3 |
 | Opt-in player-facing surfaces (frontend: viewing/accepting a stakes contract before committing to a scene) + the scene-start activation triggers | #1770 PR4 (scene grading: #1748) | Includes wiring the currently-uncalled `activate_stakes_contract` to real scene-start seams; the boundary-registry *backing store* for `check_stake_boundaries` is sibling #1771 |
 
@@ -358,6 +465,17 @@ they do not exist in code yet:
 - `src/world/stories/tests/test_serializers_stakes.py` — lock gate (both sides of
   a re-point), ownership gate, template risk-band validation, custom-stake staff
   gate
+- `src/world/stories/tests/test_services_stake_resolution.py` (PR2) — machine
+  grading E2E (pool fire + audit rows + activation close), NPC-vitals LOSS
+  override, withdrawal, GM constrained pick (service + endpoint), pillar-12
+  serializer guard, writers (forfeit / affection / lifecycle + player-held
+  refusal), stake-level transition routing
+- `src/world/combat/tests/test_encounter_beat_wiring.py` (PR2) — FLED fires
+  withdrawal-authored stakes, pends unauthored ones
+- `src/world/vitals/tests/test_life_state.py` (PR2) — `_mark_dead` →
+  `lifecycle_state DEAD` propagation
+- `src/world/items/tests/test_usage_service.py` (PR2) — `forfeit_item_instance`
+  soft-delete + `TRANSFERRED` event + idempotency
 
 ## Integrates With
 
@@ -381,13 +499,22 @@ they do not exist in code yet:
 
 `src/world/stories/`
 - `models.py` (end of file) — `RiskCalibration`, `StakeTemplate`, `Stake`,
-  `StakeResolution`, `StakeContractActivation`; `Beat.target_level`
+  `StakeResolution`, `StakeContractActivation`, `StakeOutcome`;
+  `Beat.target_level`; `TransitionRequiredOutcome.stake`
 - `constants.py` — `StakeSeverity`, `StakeSubjectKind`, `StakeResolutionColumn`,
-  `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`
-- `services/stakes.py` — all service functions above
-- `types.py` — `StakesReadinessReport`
-- `serializers.py` — the five serializers (search `#1770 PR1`)
-- `views.py` / `urls.py` — the five ViewSets
+  `StakeOutcomeMethod`, `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`
+- `services/stakes.py` — readiness / activation / effective-risk services
+- `services/stake_resolution.py` — per-stake resolution, GM pick, writers,
+  pillar-12 payload validation
+- `types.py` — `StakesReadinessReport`, `StakePayloadProblem`
+- `serializers.py` — the stake serializers (search `#1770`)
+- `views.py` / `urls.py` — the ViewSets + `StakeViewSet.resolve`
 - `permissions.py` — `IsStaffOrReadOnly`, `IsStakeBeatStoryOwnerOrStaff`,
-  `IsStakeResolutionBeatStoryOwnerOrStaff`, `user_owns_beat_story`
+  `IsStakeResolutionBeatStoryOwnerOrStaff`, `CanResolveStake`,
+  `user_owns_beat_story`
 - `factories.py` — `seed_default_risk_calibrations` + FactoryBoy factories
+
+Cross-app (PR2): `world/combat/beat_wiring.py` (withdrawal wire),
+`world/items/services/usage.py::forfeit_item_instance`,
+`world/vitals/services.py::_mark_dead` (lifecycle propagation),
+`world/npc_services/services.py::adjust_npc_affection` (reused, unchanged).

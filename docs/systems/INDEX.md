@@ -1013,22 +1013,28 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
-### Stakes Contract Engine (#1770 PR1)
+### Stakes Contract Engine (#1770 PR1–2)
 GM-authored, player-visible "what's actually at risk" contract backing a story
 `Beat`'s risk declaration — named stakes with WIN/LOSS/WITHDRAWAL branches, banded
 by designer-tunable calibration rows, priced for the actual party at scene-start
-lock, and read by the Legend award. ADR-0067.
+lock, read by the Legend award, and resolved per-stake at beat completion
+(machine grading / GM constrained pick). ADR-0067.
 
 - **Models:** `RiskCalibration` (per-tier severity floor/ceiling + `max_fuse_hops`
   chain-rule bound; `reward_floor`/`reward_ceiling` reserved for PR3), `StakeTemplate`
   (menu-first catalog, `min_risk`/`max_risk` band), `Stake` (beat FK
   `related_name="stakes"`; typed subject FKs + `subject_label`; `player_summary`),
   `StakeResolution` (stake FK `related_name="resolutions"`; `column`
-  WIN/LOSS/WITHDRAWAL; `consequence_pool`; `escalates_to_risk` — no world-state
-  payload in PR1, pillar 12), `StakeContractActivation` (lock + audit row;
-  partial-unique open-per-beat; `effective_risk`); `Beat.target_level` (new field).
+  WIN/LOSS/WITHDRAWAL; `consequence_pool`; `escalates_to_risk`; PR2 writer
+  payloads `forfeits_subject_item` / `npc_affection_delta` /
+  `sets_subject_lifecycle` — pillar-12 validated), `StakeContractActivation`
+  (lock + audit row; partial-unique open-per-beat; `effective_risk`),
+  `StakeOutcome` (PR2 per-stake resolution audit/routing row; latest wins);
+  `Beat.target_level`; `TransitionRequiredOutcome.stake` +
+  `required_stake_column` (PR2 stake-level transition routing).
 - **Enums:** `StakeSeverity` (SETBACK…REMOVAL, 1-5), `StakeSubjectKind`,
-  `StakeResolutionColumn`, `RISK_LADDER`, `DEFAULT_RISK_CALIBRATIONS`.
+  `StakeResolutionColumn`, `StakeOutcomeMethod` (MACHINE/GM_PICK), `RISK_LADDER`,
+  `DEFAULT_RISK_CALIBRATIONS`.
 - **Key Services (`world.stories.services.stakes`):** `compute_effective_risk`
   (party-level-vs-target-level curve, `LEVELS_PER_TIER=2`, bounded +1 under-level
   upgrade), `validate_stakes_readiness` (severity bands + jeopardy-reachability
@@ -1036,12 +1042,23 @@ lock, and read by the Legend award. ADR-0067.
   `activate_stakes_contract` (idempotent lock; unready → effective `NONE`),
   `effective_risk_for_beat` (read seam consumed by `_legend_award`),
   `resolve_open_activation` (wired into the beat-completion tail).
+- **Key Services (`world.stories.services.stake_resolution`, PR2):**
+  `resolve_stakes_for_completion` (completion-tail machine grading; NPC-vitals
+  DEAD → LOSS override; withdrawal branch firing; idempotent audit rows),
+  `resolve_stake_by_gm_pick` (constrained pick; `POST /api/stakes/{id}/resolve/`),
+  `stake_resolution_payload_problems` + `sheet_is_player_held` (pillar-12
+  no-fiat validation). Cross-app writers: `items.forfeit_item_instance`
+  (soft-forfeit), `npc_services.adjust_npc_affection`,
+  `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
+  `LifecycleState.DEAD` to the roster lifecycle.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
 - **Integrates with:** stories (`Beat.risk`/`target_level`, `Transition` fuse
-  walk), societies (`RISK_LEGEND_AWARDS`), mechanics (`_legend_award` scaling),
-  checks (`Consequence.character_loss` reachability test)
+  walk + stake-level routing), societies (`RISK_LEGEND_AWARDS`), mechanics
+  (`_legend_award` scaling), checks (`Consequence.character_loss` reachability
+  test; branch pools via the shared `_fire_pool_with_context`), combat
+  (FLED/ABANDONED withdrawal wire), items / npc_services / roster (writers)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
 

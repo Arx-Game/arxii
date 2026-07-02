@@ -13228,6 +13228,31 @@ export interface paths {
     patch: operations['stakes_partial_update'];
     trace?: never;
   };
+  '/api/stakes/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
+     *
+     *     Lead GM, staff, or an AGM with an approved claim on the stake's beat
+     *     picks one of the stake's AUTHORED resolution columns; the branch fires
+     *     exactly like the machine path (pool + writers) and the StakeOutcome
+     *     audit row records method=GM_PICK with the GM and notes. Returns 201
+     *     with the StakeOutcome.
+     */
+    post: operations['stakes_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/status/': {
     parameters: {
       query?: never;
@@ -19220,6 +19245,12 @@ export interface components {
       name: string;
     };
     /**
+     * @description * `machine` - Machine
+     *     * `gm_pick` - GM pick
+     * @enum {string}
+     */
+    MethodEnum: 'machine' | 'gm_pick';
+    /**
      * @description * `none` - None
      *     * `low` - Low
      *     * `moderate` - Moderate
@@ -23324,6 +23355,7 @@ export interface components {
      *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
      *     Any write (create or update) is rejected while the beat carries an open
      *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     PatchedStakeRequest: {
       beat?: number;
@@ -23347,7 +23379,10 @@ export interface components {
     /**
      * @description Full serializer for StakeResolution (#1770 pillar 1).
      *
-     *     Lock check only in PR1 — no column-ordering/escalation validation (the
+     *     PR2 adds the writer-payload fields and the pillar-12 no-fiat guard:
+     *     sets_subject_lifecycle is only legal for NPC_FATE stakes whose subject
+     *     sheet is not player-held; item forfeiture and affection deltas must match
+     *     the stake's subject kind. No column-ordering/escalation validation (the
      *     fuse walk measures reachability, not monotonicity).
      */
     PatchedStakeResolutionRequest: {
@@ -23369,6 +23404,22 @@ export interface components {
         | components['schemas']['BlankEnum'];
       /** @description What happens in the story when this branch fires (GM-authored). */
       narrative_summary?: string;
+      /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
+      forfeits_subject_item?: boolean;
+      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
+      npc_affection_delta?: number;
+      /**
+       * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
+       *
+       *     * `ALIVE` - Alive
+       *     * `CAPTURED` - Captured / Unknown
+       *     * `COMA` - Coma
+       *     * `RETIRED` - Retired
+       *     * `DEAD` - Dead
+       */
+      sets_subject_lifecycle?:
+        | components['schemas']['SetsSubjectLifecycleEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -23545,12 +23596,27 @@ export interface components {
      * @description Full serializer for TransitionRequiredOutcome.
      *
      *     Records a beat outcome that must be satisfied for this specific transition
-     *     to be eligible when the episode is resolved.
+     *     to be eligible when the episode is resolved. Stake-level routing (#1770
+     *     PR2): when ``stake`` is set the requirement routes on the stake's latest
+     *     StakeOutcome column (``required_stake_column``) instead of the beat's
+     *     coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
      */
     PatchedTransitionRequiredOutcomeRequest: {
       transition?: number;
       beat?: number;
       required_outcome?: components['schemas']['RequiredOutcomeEnum'];
+      /** @description When set, this requirement routes on the stake's latest StakeOutcome column instead of the beat's outcome. */
+      stake?: number | null;
+      /**
+       * @description Required StakeOutcome column; only with stake set.
+       *
+       *     * `win` - Win
+       *     * `loss` - Loss
+       *     * `withdrawal` - Withdrawal
+       */
+      required_stake_column?:
+        | components['schemas']['RequiredStakeColumnEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
@@ -24626,6 +24692,13 @@ export interface components {
      * @enum {string}
      */
     RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    /**
+     * @description * `win` - Win
+     *     * `loss` - Loss
+     *     * `withdrawal` - Withdrawal
+     * @enum {string}
+     */
+    RequiredStakeColumnEnum: 'win' | 'loss' | 'withdrawal';
     /** @description Read serializer for RescueOutcome payloads. */
     RescueOutcome: {
       severity_reduced: number;
@@ -25430,6 +25503,15 @@ export interface components {
       per_target_repeat_lock?: boolean;
     };
     /**
+     * @description * `ALIVE` - Alive
+     *     * `CAPTURED` - Captured / Unknown
+     *     * `COMA` - Coma
+     *     * `RETIRED` - Retired
+     *     * `DEAD` - Dead
+     * @enum {string}
+     */
+    SetsSubjectLifecycleEnum: 'ALIVE' | 'CAPTURED' | 'COMA' | 'RETIRED' | 'DEAD';
+    /**
      * @description * `1` - Setback
      *     * `2` - Costly
      *     * `3` - Grave
@@ -25940,6 +26022,7 @@ export interface components {
      *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
      *     Any write (create or update) is rejected while the beat carries an open
      *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     Stake: {
       readonly id: number;
@@ -25960,6 +26043,7 @@ export interface components {
       subject_label?: string;
       /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
       player_summary: string;
+      readonly outcomes: components['schemas']['StakeOutcome'][];
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -25992,6 +26076,26 @@ export interface components {
       readonly readiness_notes: string;
     };
     /**
+     * @description Read-only serializer for StakeOutcome — the per-stake resolution audit
+     *     row (#1770 PR2). Written only by the resolution services (machine grading
+     *     or the constrained-pick endpoint), never via direct CRUD.
+     */
+    StakeOutcome: {
+      readonly id: number;
+      readonly stake: number;
+      /** @description Which locked contract this outcome resolved under (audit). */
+      readonly activation: number | null;
+      /** @description The authored branch that fired; null = no branch authored for the column. */
+      readonly resolution: number | null;
+      readonly column: components['schemas']['ColumnEnum'];
+      readonly method: components['schemas']['MethodEnum'];
+      /** @description The GM who picked the column (GM_PICK only; null for MACHINE). */
+      readonly resolved_by: number | null;
+      readonly gm_notes: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
      * @description Full serializer for Stake (#1770 pillar 1).
      *
      *     Template-set path denormalizes subject_kind/severity from the template
@@ -26001,6 +26105,7 @@ export interface components {
      *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
      *     Any write (create or update) is rejected while the beat carries an open
      *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     StakeRequest: {
       beat: number;
@@ -26024,7 +26129,10 @@ export interface components {
     /**
      * @description Full serializer for StakeResolution (#1770 pillar 1).
      *
-     *     Lock check only in PR1 — no column-ordering/escalation validation (the
+     *     PR2 adds the writer-payload fields and the pillar-12 no-fiat guard:
+     *     sets_subject_lifecycle is only legal for NPC_FATE stakes whose subject
+     *     sheet is not player-held; item forfeiture and affection deltas must match
+     *     the stake's subject kind. No column-ordering/escalation validation (the
      *     fuse walk measures reachability, not monotonicity).
      */
     StakeResolution: {
@@ -26047,11 +26155,30 @@ export interface components {
         | components['schemas']['BlankEnum'];
       /** @description What happens in the story when this branch fires (GM-authored). */
       narrative_summary?: string;
+      /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
+      forfeits_subject_item?: boolean;
+      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
+      npc_affection_delta?: number;
+      /**
+       * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
+       *
+       *     * `ALIVE` - Alive
+       *     * `CAPTURED` - Captured / Unknown
+       *     * `COMA` - Coma
+       *     * `RETIRED` - Retired
+       *     * `DEAD` - Dead
+       */
+      sets_subject_lifecycle?:
+        | components['schemas']['SetsSubjectLifecycleEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Full serializer for StakeResolution (#1770 pillar 1).
      *
-     *     Lock check only in PR1 — no column-ordering/escalation validation (the
+     *     PR2 adds the writer-payload fields and the pillar-12 no-fiat guard:
+     *     sets_subject_lifecycle is only legal for NPC_FATE stakes whose subject
+     *     sheet is not player-held; item forfeiture and affection deltas must match
+     *     the stake's subject kind. No column-ordering/escalation validation (the
      *     fuse walk measures reachability, not monotonicity).
      */
     StakeResolutionRequest: {
@@ -26073,6 +26200,22 @@ export interface components {
         | components['schemas']['BlankEnum'];
       /** @description What happens in the story when this branch fires (GM-authored). */
       narrative_summary?: string;
+      /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
+      forfeits_subject_item?: boolean;
+      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
+      npc_affection_delta?: number;
+      /**
+       * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
+       *
+       *     * `ALIVE` - Alive
+       *     * `CAPTURED` - Captured / Unknown
+       *     * `COMA` - Coma
+       *     * `RETIRED` - Retired
+       *     * `DEAD` - Dead
+       */
+      sets_subject_lifecycle?:
+        | components['schemas']['SetsSubjectLifecycleEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
@@ -27234,24 +27377,54 @@ export interface components {
      * @description Full serializer for TransitionRequiredOutcome.
      *
      *     Records a beat outcome that must be satisfied for this specific transition
-     *     to be eligible when the episode is resolved.
+     *     to be eligible when the episode is resolved. Stake-level routing (#1770
+     *     PR2): when ``stake`` is set the requirement routes on the stake's latest
+     *     StakeOutcome column (``required_stake_column``) instead of the beat's
+     *     coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
      */
     TransitionRequiredOutcome: {
       readonly id: number;
       transition: number;
       beat: number;
       required_outcome: components['schemas']['RequiredOutcomeEnum'];
+      /** @description When set, this requirement routes on the stake's latest StakeOutcome column instead of the beat's outcome. */
+      stake?: number | null;
+      /**
+       * @description Required StakeOutcome column; only with stake set.
+       *
+       *     * `win` - Win
+       *     * `loss` - Loss
+       *     * `withdrawal` - Withdrawal
+       */
+      required_stake_column?:
+        | components['schemas']['RequiredStakeColumnEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description Full serializer for TransitionRequiredOutcome.
      *
      *     Records a beat outcome that must be satisfied for this specific transition
-     *     to be eligible when the episode is resolved.
+     *     to be eligible when the episode is resolved. Stake-level routing (#1770
+     *     PR2): when ``stake`` is set the requirement routes on the stake's latest
+     *     StakeOutcome column (``required_stake_column``) instead of the beat's
+     *     coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
      */
     TransitionRequiredOutcomeRequest: {
       transition: number;
       beat: number;
       required_outcome: components['schemas']['RequiredOutcomeEnum'];
+      /** @description When set, this requirement routes on the stake's latest StakeOutcome column instead of the beat's outcome. */
+      stake?: number | null;
+      /**
+       * @description Required StakeOutcome column; only with stake set.
+       *
+       *     * `win` - Win
+       *     * `loss` - Loss
+       *     * `withdrawal` - Withdrawal
+       */
+      required_stake_column?:
+        | components['schemas']['RequiredStakeColumnEnum']
+        | components['schemas']['BlankEnum'];
     };
     /**
      * @description One candidate treatment a helper may offer a target persona (#1486).
@@ -46979,6 +47152,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedStakeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Stake'];
+        };
+      };
+    };
+  };
+  stakes_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this stake. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StakeRequest'];
       };
     };
     responses: {

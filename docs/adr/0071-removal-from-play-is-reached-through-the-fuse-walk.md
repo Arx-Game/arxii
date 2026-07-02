@@ -9,13 +9,16 @@ transitions away). `services.stakes._jeopardy_reachable` BFS-walks the authored
 failure cascade (`Transition.cached_required_outcomes` — FAILURE-gated or
 unconditioned transitions, stopping at PITCH-maturity episodes) to enforce
 this at readiness-check time. Removal itself stays mechanically mediated
-end-to-end: `StakeResolution` carries no direct lifecycle payload in PR1 (only
-a `consequence_pool` FK and an `escalates_to_risk` fuse value) — a branch
-firing routes through the existing vitals/consequence pipeline, never a
-bespoke "kill this character" write.
-Structured world-state writers with validation that rejects direct lifecycle
-mutation land in PR2; deaths only ever happen via a succession of lost stakes
-walking the fuse to its end, never a single beat's fiat.
+end-to-end: a branch firing routes through the existing vitals/consequence
+pipeline, never a bespoke "kill this character" write. PR2's structured
+world-state writers enforce this with validation
+(`stake_resolution_payload_problems`, shared by serializer and model `clean`):
+`StakeResolution.sets_subject_lifecycle` is only legal for NPC_FATE subjects
+whose sheet is not player-held, and the writer re-checks the gate at fire
+time. PC deaths only ever happen via a succession of lost stakes walking the
+fuse to its end (peril pools → `process_damage_consequences` → `_mark_dead`,
+which propagates `LifecycleState.DEAD` to the roster), never a single beat's
+fiat.
 
 We rejected requiring every beat to wager jeopardy directly (mandatory
 per-beat stakes at the terminal severity) as too blunt — a staked negotiation
