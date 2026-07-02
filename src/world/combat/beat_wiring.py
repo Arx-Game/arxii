@@ -75,9 +75,10 @@ def activate_stakes_for_scene(
         return
     for beat in staked_unsatisfied_beats_for_scene(scene):
         report = check_stake_boundaries(beat.stakes.all(), participant_sheets)
-        if not report.allowed:
+        if not report.cleared:
             logger.info(
-                "Stakes contract on beat %s not activated: blocked by a player boundary.",
+                "Stakes contract on beat %s not activated: blocked or awaiting "
+                "sign-off on a player boundary.",
                 beat.pk,
             )
             continue

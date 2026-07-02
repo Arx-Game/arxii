@@ -41,6 +41,10 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
+    from world.scenes.models import Scene
+    from world.stories.models import StakeContractActivation
+
 
 _NO_GM_PERMISSION = "Only the story's Lead GM or staff may do that."
 _NO_MARK_PERMISSION = (
@@ -372,7 +376,7 @@ class MarkBeatAction(Action):
         return ActionResult(success=True, message=f"Beat marked {outcome.label}.")
 
 
-def _stakes_declaration_text(beat: Beat, activation: Any) -> str:
+def _stakes_declaration_text(beat: Beat, activation: StakeContractActivation) -> str:
     """Compose the room-visible stakes declaration (#1770 pillar 9).
 
     Lists each stake's severity label + player_summary and the effective
@@ -388,14 +392,49 @@ def _stakes_declaration_text(beat: Beat, activation: Any) -> str:
     return "\n".join(lines)
 
 
+def _actor_may_declare_stakes(account: AccountDB | None, beat: Beat, scene: Scene) -> bool:
+    """Whether *account* may declare this beat's stakes into *scene* (#1770 PR4).
+
+    Beat-mark permission (Lead GM / staff / approved AGM) OR the scene's GM.
+    The scene-GM leg is deliberately broader than story roles — a freeform
+    scene's GM may not hold any story-level role — and it is safe ONLY
+    because the caller separately requires the beat's episode to be linked
+    to the current scene via EpisodeScene: a scene GM can declare exactly
+    the beats attached to their own scene, nothing else.
+    """
+    return _actor_may_mark_beat(account, beat) or scene.is_gm(account)
+
+
+def _present_participant_sheets(scene: Scene) -> list[CharacterSheet]:
+    """Sheets of scene participants whose characters are physically present.
+
+    Filters ``active_participant_personas()`` (which expands EVERY available
+    character of each participating account) down to characters standing in
+    the scene's location — an account's off-scene alts must not skew the
+    activation's ``party_average_level``. Deduped, order-preserving.
+    """
+    location = scene.location
+    if location is None:
+        return []
+    present_ids = {obj.pk for obj in location.contents}
+    personas = scene.persona_handler.active_participant_personas()
+    sheets = [
+        persona.character_sheet
+        for persona in personas
+        if persona.character_sheet.character_id in present_ids
+    ]
+    return list(dict.fromkeys(sheets))
+
+
 @dataclass
 class DeclareStakesAction(Action):
     """Present and lock a beat's stakes contract for the current scene (#1770 PR4).
 
     The opt-in moment for freeform (non-combat, non-mission) play: the GM
     declares the wager to the room, and the contract locks for the scene's
-    active participants. Gated to whoever may mark the beat (Lead GM / staff /
-    approved AGM) or the scene's GM.
+    present participants. Gated to whoever may mark the beat (Lead GM /
+    staff / approved AGM) or the scene's GM — the latter bounded by the
+    EpisodeScene linkage check (see _actor_may_declare_stakes).
     """
 
     key: str = "declare_stakes"
@@ -415,6 +454,8 @@ class DeclareStakesAction(Action):
         from flows.service_functions.communication import message_location  # noqa: PLC0415
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
         from world.societies.constants import RenownRisk  # noqa: PLC0415
+        from world.stories.constants import BeatOutcome  # noqa: PLC0415
+        from world.stories.models import EpisodeScene  # noqa: PLC0415
         from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
         from world.stories.services.stakes import activate_stakes_contract  # noqa: PLC0415
 
@@ -427,8 +468,22 @@ class DeclareStakesAction(Action):
         if scene is None:
             return ActionResult(success=False, message="There is no active scene here.")
 
-        if not (_actor_may_mark_beat(account, beat) or scene.is_gm(account)):
+        if not _actor_may_declare_stakes(account, beat, scene):
             return ActionResult(success=False, message=_NO_DECLARE_PERMISSION)
+
+        # The scene-GM permission leg is bounded by this linkage: only beats
+        # whose episode is attached to THIS scene can be declared here.
+        if not EpisodeScene.objects.filter(episode=beat.episode, scene=scene).exists():
+            return ActionResult(
+                success=False,
+                message="That beat's episode is not linked to this scene.",
+            )
+
+        if beat.outcome != BeatOutcome.UNSATISFIED:
+            return ActionResult(
+                success=False,
+                message="That beat is already resolved; its stakes can no longer be declared.",
+            )
 
         if beat.risk == RenownRisk.NONE or not beat.stakes.exists():
             return ActionResult(
@@ -436,9 +491,7 @@ class DeclareStakesAction(Action):
                 message="That beat has no stakes to declare (risk NONE or no stakes authored).",
             )
 
-        personas = scene.persona_handler.active_participant_personas()
-        # Dedupe sheets (order-preserving) — alts of one account still count once each.
-        sheets = list(dict.fromkeys(persona.character_sheet for persona in personas))
+        sheets = _present_participant_sheets(scene)
         if not sheets:
             return ActionResult(
                 success=False,
@@ -446,7 +499,7 @@ class DeclareStakesAction(Action):
             )
 
         report = check_stake_boundaries(beat.stakes.all(), sheets)
-        if not report.allowed:
+        if not report.cleared:
             # The private reason is never surfaced (ADR-0033).
             return ActionResult(success=False, message="These stakes could not be presented.")
 

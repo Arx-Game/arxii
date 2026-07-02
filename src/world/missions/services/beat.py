@@ -183,10 +183,10 @@ def activate_stakes_for_instance(
     if beat is None or beat.risk == RenownRisk.NONE:
         return
     report = check_stake_boundaries(beat.stakes.all(), participant_sheets)
-    if not report.allowed:
+    if not report.cleared:
         logger.info(
             "Stakes contract on beat %s not activated for mission instance %s: "
-            "blocked by a player boundary.",
+            "blocked or awaiting sign-off on a player boundary.",
             beat.pk,
             instance.pk,
         )

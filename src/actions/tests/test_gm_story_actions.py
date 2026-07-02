@@ -460,7 +460,7 @@ class DeclareStakesActionTests(GMStoryActionTestBase):
         from world.scenes.interaction_services import invalidate_active_scene_cache
         from world.societies.constants import RenownRisk
         from world.stories.constants import StakeSeverity
-        from world.stories.factories import StakeFactory
+        from world.stories.factories import EpisodeSceneFactory, StakeFactory
 
         super().setUp()
         invalidate_active_scene_cache(self.room)
@@ -474,6 +474,9 @@ class DeclareStakesActionTests(GMStoryActionTestBase):
             risk=RenownRisk.HIGH,
             target_level=4,
         )
+        # The beat's episode must be linked to the current scene — the bound
+        # that keeps the scene-GM permission leg scoped to their own scene.
+        EpisodeSceneFactory(episode=self.ep1, scene=self.scene)
         self.stake = StakeFactory(
             beat=self.beat,
             severity=StakeSeverity.DIRE,
@@ -568,3 +571,58 @@ class DeclareStakesActionTests(GMStoryActionTestBase):
         # The private reason never leaks (ADR-0033).
         self.assertNotIn("healers", result.message)
         self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
+
+    def test_unlinked_beat_rejected(self) -> None:
+        """A beat whose episode is not linked to this scene cannot be declared here."""
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import StakeFactory
+        from world.stories.models import StakeContractActivation
+
+        other_beat = BeatFactory(episode=self.ep2, risk=RenownRisk.HIGH, target_level=4)
+        StakeFactory(beat=other_beat, severity=4)
+        from actions.definitions.gm_stories import DeclareStakesAction
+
+        result = DeclareStakesAction().run(self.lead_gm_actor, beat_id=other_beat.pk)
+
+        self.assertFalse(result.success)
+        self.assertIn("not linked to this scene", result.message)
+        self.assertFalse(StakeContractActivation.objects.filter(beat=other_beat).exists())
+
+    def test_resolved_beat_rejected(self) -> None:
+        from world.stories.constants import BeatOutcome
+        from world.stories.models import StakeContractActivation
+
+        self.beat.outcome = BeatOutcome.SUCCESS
+        self.beat.save(update_fields=["outcome"])
+
+        result = self._declare(self.lead_gm_actor)
+
+        self.assertFalse(result.success)
+        self.assertIn("already resolved", result.message)
+        self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
+
+    def test_off_scene_alts_do_not_join_the_party(self) -> None:
+        """Party sheets come from characters PRESENT in the scene's room only."""
+        from actions.definitions.gm_stories import _present_participant_sheets
+
+        # Give the player account a second character standing elsewhere.
+        # (Reuse the account's existing PlayerData — it is unique per account.)
+        from world.roster.factories import RosterTenureFactory as TenureFactory
+
+        elsewhere = _make_room("Elsewhere")
+        alt_char = CharacterFactory(db_key="off_scene_alt", location=elsewhere)
+        alt_sheet = CharacterSheetFactory(character=alt_char)
+        TenureFactory(
+            roster_entry__character_sheet=alt_sheet,
+            player_data=self.player_account.player_data,
+            end_date=None,
+        )
+
+        sheets = _present_participant_sheets(self.scene)
+
+        self.assertNotIn(alt_sheet, sheets)
+        # The participating characters standing in the room ARE included.
+        present_ids = {obj.pk for obj in self.scene.location.contents}
+        self.assertTrue(sheets)
+        for sheet in sheets:
+            self.assertIn(sheet.character_id, present_ids)
