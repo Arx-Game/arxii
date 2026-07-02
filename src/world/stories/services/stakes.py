@@ -12,6 +12,7 @@ import logging
 from statistics import mean
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.utils import timezone
 
@@ -210,6 +211,10 @@ def activate_stakes_contract(
     Idempotent while open: a second activation attempt (e.g. two encounter
     starts racing) returns the existing open row unchanged. Unready contracts
     activate at effective NONE — the scene runs, nothing pays (#1770 pillar 7).
+    The idempotency check-then-create has a race window; the partial unique
+    constraint `unique_open_activation_per_beat` is the real backstop, and a
+    losing concurrent create re-fetches and returns the winner's row instead
+    of raising.
     """
     from world.stories.services.beats import _character_level  # noqa: PLC0415
 
@@ -228,15 +233,22 @@ def activate_stakes_contract(
         effective = compute_effective_risk(beat.risk, target, party_average)
     else:
         effective = RenownRisk.NONE
-    activation = StakeContractActivation.objects.create(
-        beat=beat,
-        party_average_level=party_average,
-        declared_target_level=target,
-        declared_risk=beat.risk,
-        effective_risk=effective,
-        is_ready=report.is_ready,
-        readiness_notes="; ".join(report.problems),
-    )
+    try:
+        with transaction.atomic():
+            activation = StakeContractActivation.objects.create(
+                beat=beat,
+                party_average_level=party_average,
+                declared_target_level=target,
+                declared_risk=beat.risk,
+                effective_risk=effective,
+                is_ready=report.is_ready,
+                readiness_notes="; ".join(report.problems),
+            )
+    except IntegrityError:
+        activation = get_open_activation(beat)
+        if activation is None:
+            raise
+        return activation
     if report.is_staked and not report.is_ready:
         logger.warning(
             "Stakes contract on beat %s activated UNREADY (effective NONE): %s",

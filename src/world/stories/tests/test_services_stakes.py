@@ -1,5 +1,7 @@
 """Service tests for the stakes contract engine (#1770 PR1)."""
 
+from unittest import mock
+
 from django.test import TestCase
 from evennia.utils.test_resources import EvenniaTestCase
 
@@ -270,3 +272,26 @@ class ActivationTests(EvenniaTestCase):
         activation.refresh_from_db()
         self.assertIsNotNone(activation.resolved_at)
         self.assertIsNone(get_open_activation(beat))
+
+    def test_activation_race_returns_existing_row(self):
+        """A losing concurrent create re-fetches and returns the winner's row.
+
+        Simulates the race by forcing the up-front idempotency check to miss
+        (as if a concurrent caller's create hadn't landed yet when this one
+        checked) even though a row already exists — so this call's own
+        ``.create()`` collides with ``unique_open_activation_per_beat`` and
+        must recover via the real ``get_open_activation`` instead of letting
+        the ``IntegrityError`` escape.
+        """
+        beat = self._ready_beat()
+        sheets = self._sheets_at_levels(4, 4)
+        existing = activate_stakes_contract(beat, sheets)
+
+        real_get_open_activation = get_open_activation
+        with mock.patch(
+            "world.stories.services.stakes.get_open_activation",
+            side_effect=[None, real_get_open_activation(beat)],
+        ):
+            result = activate_stakes_contract(beat, sheets)
+
+        self.assertEqual(result.pk, existing.pk)
