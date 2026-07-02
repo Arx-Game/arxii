@@ -77,6 +77,7 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
     """
     import logging  # noqa: PLC0415
 
+    from world.combat.constants import EncounterOutcome  # noqa: PLC0415
     from world.stories.constants import BeatOutcome, BeatPredicateType  # noqa: PLC0415
     from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
     from world.stories.services.beats import record_outcome_tier_completion  # noqa: PLC0415
@@ -104,6 +105,13 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
         return
 
     outcome_tier = classify_battle_outcome(encounter)
+    # FLED/ABANDONED = the party walked away from the wager (#1770 PR2): the
+    # beat still pends for GM adjudication, but withdrawal-authored stakes
+    # fire their WITHDRAWAL branch immediately; unauthored stakes pend.
+    is_withdrawal = encounter.outcome in (
+        EncounterOutcome.FLED,
+        EncounterOutcome.ABANDONED,
+    )
 
     for beat in beats:
         progress = get_active_progress_for_story(beat.episode.chapter.story)
@@ -118,6 +126,7 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
                 progress=progress,
                 beat=beat,
                 force_outcome=BeatOutcome.PENDING_GM_REVIEW,
+                withdrawal=is_withdrawal,
             )
         else:
             record_outcome_tier_completion(
