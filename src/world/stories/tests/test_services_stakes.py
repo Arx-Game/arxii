@@ -7,9 +7,12 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.checks.factories import ConsequenceFactory
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.societies.constants import RenownRisk
+from world.societies.factories import LegendSourceTypeFactory
+from world.societies.models import LegendEvent
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
@@ -295,3 +298,143 @@ class ActivationTests(EvenniaTestCase):
             result = activate_stakes_contract(beat, sheets)
 
         self.assertEqual(result.pk, existing.pk)
+
+
+class LegendPaysEffectiveRiskTests(EvenniaTestCase):
+    """Legend award scales off the beat's EFFECTIVE risk (#1770 auto-downgrade), not
+    the raw declared ``Beat.risk`` — end-to-end through the completion tail while the
+    activation is still open (``resolve_open_activation`` runs after the pool fires)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+        # success_level=3 is below the outlier threshold (8), so completion
+        # resolves plain SUCCESS: tier_multiplier(3) = 1.0 + 3/5 = 1.6.
+        cls.decisive = CheckOutcomeFactory(name="Decisive Victory Effective Risk", success_level=3)
+        source_type = LegendSourceTypeFactory()
+        consequence = ConsequenceFactory(outcome_tier=cls.decisive)
+        cls.legend_effect = ConsequenceEffectFactory(
+            consequence=consequence,
+            effect_type=EffectType.LEGEND_AWARD,
+            legend_base_value=10,
+            legend_source_type=source_type,
+            legend_description_template="Effective-risk victory.",
+        )
+        cls.pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=cls.pool, consequence=consequence)
+
+    def _ready_beat(self, episode, risk=RenownRisk.HIGH, target_level=4):
+        """Same shape as ``ActivationTests._ready_beat``, parameterized on ``episode``.
+
+        Building the beat directly on the caller's episode (rather than letting
+        BeatFactory mint its own and reassigning ``beat.episode`` afterward) keeps
+        the failure-hop ``Transition`` anchored to the beat's real episode, so
+        ``validate_stakes_readiness`` still finds the downstream REMOVAL jeopardy
+        and the contract actually clears as ready.
+        """
+        beat = BeatFactory(
+            episode=episode,
+            risk=risk,
+            target_level=target_level,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            success_consequences=self.pool,
+        )
+        stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        fight_episode = EpisodeFactory(chapter=beat.episode.chapter, maturity=StoryMaturity.OUTLINE)
+        transition = TransitionFactory(source_episode=beat.episode, target_episode=fight_episode)
+        TransitionRequiredOutcome.objects.create(
+            transition=transition, beat=beat, required_outcome=BeatOutcome.FAILURE
+        )
+        fight_beat = BeatFactory(episode=fight_episode, risk=RenownRisk.EXTREME)
+        removal_stake = StakeFactory(beat=fight_beat, severity=StakeSeverity.REMOVAL)
+        StakeResolutionFactory(stake=removal_stake, column=StakeResolutionColumn.WIN)
+        StakeResolutionFactory(stake=removal_stake, column=StakeResolutionColumn.LOSS)
+        return beat
+
+    def _sheets_at_levels(self, *levels):
+        """Build CharacterSheet rows whose ``_character_level`` is exactly ``levels``."""
+        sheets = []
+        for level in levels:
+            sheet = CharacterSheetFactory()
+            char_class = CharacterClassFactory()
+            CharacterClassLevelFactory(
+                character=sheet.character, character_class=char_class, level=level
+            )
+            sheets.append(sheet)
+        return sheets
+
+    def test_over_leveled_party_downgrades_legend_award_to_effective_risk(self):
+        """A HIGH beat run by an over-leveled party pays LOW's legend award, not HIGH's.
+
+        RISK_LEGEND_AWARDS[HIGH]=250 vs RISK_LEGEND_AWARDS[LOW]=10; if the raw
+        declared risk leaked through, base_value would be round(250*1.6)=400. The
+        party (avg 8, target 4 -> 4 levels over -> -2 tiers: HIGH->MODERATE->LOW)
+        prices the contract at LOW instead, so base_value = round(10*1.6) = 16.
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = self._ready_beat(episode)
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+
+        over_leveled_sheets = self._sheets_at_levels(8, 8)
+        activation = activate_stakes_contract(beat, over_leveled_sheets)
+        self.assertTrue(activation.is_ready)
+        self.assertEqual(activation.declared_risk, RenownRisk.HIGH)
+        self.assertEqual(activation.effective_risk, RenownRisk.LOW)
+
+        completion = record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=self.decisive
+        )
+
+        assert completion.outcome == BeatOutcome.SUCCESS
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        assert event.base_value == 16
+
+        activation.refresh_from_db()
+        assert activation.resolved_at is not None
+        self.assertIsNone(get_open_activation(beat))
+
+    def test_unready_contract_floors_legend_award_at_authored_base_value(self):
+        """An unready (no stakes) contract prices at NONE; the author's floor survives.
+
+        RISK_LEGEND_AWARDS[NONE]=0, so the risk-derived component is
+        round(0*1.6)=0 regardless of the tier multiplier; the completion still
+        fires the pool (non-legend consequences would fire too), and the Legend
+        award falls back to ``max(effect.legend_base_value, 0)`` — the author's
+        explicit floor is never scaled down to zero (#1716 Decision 4).
+        """
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            risk=RenownRisk.HIGH,
+            target_level=4,
+            success_consequences=self.pool,
+        )  # no stakes declared at all -> unready
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+
+        sheets = self._sheets_at_levels(4, 4)
+        activation = activate_stakes_contract(beat, sheets)
+        self.assertFalse(activation.is_ready)
+        self.assertEqual(activation.effective_risk, RenownRisk.NONE)
+
+        completion = record_outcome_tier_completion(
+            progress=progress, beat=beat, outcome_tier=self.decisive
+        )
+
+        assert completion.outcome == BeatOutcome.SUCCESS
+        event = LegendEvent.objects.order_by("-pk").first()
+        assert event is not None
+        assert event.base_value == max(self.legend_effect.legend_base_value, 0)
+
+        activation.refresh_from_db()
+        assert activation.resolved_at is not None
+        self.assertIsNone(get_open_activation(beat))

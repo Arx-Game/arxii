@@ -362,12 +362,18 @@ def _legend_award(
 
     Magnitude: when both ``context.beat`` and ``context.outcome_tier`` are
     present (the graded beat-completion path), the award scales by risk x
-    performance: ``RISK_LEGEND_AWARDS[beat.risk] * tier_multiplier(outcome_tier
+    performance: ``RISK_LEGEND_AWARDS[effective_risk] * tier_multiplier(outcome_tier
     .success_level)``, floored by ``effect.legend_base_value`` (an author's
     explicit override never gets scaled down — see Decision 4, #1716). When
     either is absent (a hand-fired GM deed outside the beat pipeline, or any
     pre-existing caller), the award is the flat ``effect.legend_base_value``,
     unchanged from prior behavior.
+
+    ``effective_risk`` comes from ``effective_risk_for_beat`` (#1770): the beat's
+    open ``StakeContractActivation`` when one exists (auto-downgrade for
+    over/under-leveled parties + target-level pricing), else ``Beat.risk``
+    unchanged. The completion tail resolves the activation only after this
+    handler runs, so the open activation's effective risk is still visible here.
 
     Description fallback chain:
       1. ``effect.legend_description_template`` (if non-blank)
@@ -383,7 +389,9 @@ def _legend_award(
 
     base_value = effect.legend_base_value
     if context.beat is not None and context.outcome_tier is not None:
-        risk_award = RISK_LEGEND_AWARDS[context.beat.risk]
+        from world.stories.services.stakes import effective_risk_for_beat  # noqa: PLC0415
+
+        risk_award = RISK_LEGEND_AWARDS[effective_risk_for_beat(context.beat)]
         multiplier = _tier_multiplier(context.outcome_tier.success_level)
         base_value = max(base_value, round(risk_award * multiplier))
 
