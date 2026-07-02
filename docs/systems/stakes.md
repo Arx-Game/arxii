@@ -95,16 +95,19 @@ One named wager on a beat's contract.
 | `template` | FK → `stories.StakeTemplate` (null, SET_NULL) | Null only for trust-gated custom stakes |
 | `subject_kind` | CharField (`StakeSubjectKind` choices) | Denormalized from template at creation (serializer) so a later template retune never rewrites live contracts |
 | `severity` | PositiveSmallIntegerField (`StakeSeverity` choices) | Denormalized the same way |
-| `subject_sheet` | FK → `character_sheets.CharacterSheet` (null) | For `PERSONAL_JEOPARDY` / `NPC_FATE` subjects |
-| `subject_item` | FK → `items.ItemInstance` (null) | For `ITEM` subjects |
-| `subject_society` | FK → `societies.Society` (null) | For `FACTION` subjects (society-level) |
-| `subject_organization` | FK → `societies.Organization` (null) | For `FACTION` subjects (organization-level) |
+| `subject_sheet` | FK → `character_sheets.CharacterSheet` (null, SET_NULL) | For `PERSONAL_JEOPARDY` / `NPC_FATE` subjects |
+| `subject_item` | FK → `items.ItemInstance` (null, SET_NULL) | For `ITEM` subjects |
+| `subject_society` | FK → `societies.Society` (null, SET_NULL) | For `FACTION` subjects (society-level) |
+| `subject_organization` | FK → `societies.Organization` (null, SET_NULL) | For `FACTION` subjects (organization-level) |
 | `subject_label` | CharField(200, blank) | Freeform subject name — `CUSTOM` / `CAMPAIGN_TRACK`, or flavor text on any kind |
 | `player_summary` | TextField | Player-facing line shown at opt-in: what is wagered, how badly |
 | `created_at` / `updated_at` | DateTimeField | |
 
 Exactly one typed subject FK (or `subject_label` for `CUSTOM`) should be populated
-per stake; enforcement lives in the serializer, not `clean()`.
+per stake; enforcement lives in the serializer, not `clean()`. A stake is
+story-significant data: it survives its subject's deletion — the subject FK
+nulls out (SET_NULL, never CASCADE) and `subject_label` / `player_summary`
+keep carrying the name for display.
 
 ### `StakeResolution`
 

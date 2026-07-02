@@ -1951,37 +1951,42 @@ class Stake(SharedMemoryModel):
     )
     subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
     severity = models.PositiveSmallIntegerField(choices=StakeSeverity.choices)
+    # A Stake is story-significant data: it must outlive the deletion of its
+    # subject. All four subject FKs are SET_NULL (never CASCADE) so a
+    # consumed/deleted subject doesn't erase the wager — subject_label and
+    # player_summary already carry the name for display after the pointer
+    # goes null.
     subject_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
-        help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects.",
+        help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted.",
     )
     subject_item = models.ForeignKey(
         "items.ItemInstance",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
-        help_text="For ITEM subjects.",
+        help_text="For ITEM subjects. Nulls if the item instance is deleted/consumed.",
     )
     subject_society = models.ForeignKey(
         "societies.Society",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
-        help_text="For FACTION subjects (society-level).",
+        help_text="For FACTION subjects (society-level). Nulls if the society is deleted.",
     )
     subject_organization = models.ForeignKey(
         "societies.Organization",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="+",
-        help_text="For FACTION subjects (organization-level).",
+        help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
     )
     subject_label = models.CharField(
         max_length=200,

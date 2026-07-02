@@ -1,1 +1,1 @@
-0006_riskcalibration_staketemplate_beat_target_level_and_more
+0007_alter_stake_subject_item_and_more
