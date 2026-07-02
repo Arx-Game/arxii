@@ -298,6 +298,15 @@ scales as `RISK_LEGEND_AWARDS[effective_risk_for_beat(beat)] × tier_multiplier`
 floored by the effect's authored `legend_base_value` (an author's explicit
 override never scales down).
 
+**Carve-out for war-scale Battle stakes (#1785, ADR-0080):** `activate_stakes_contract`
+takes an additive `scale_by_party_level: bool = True` parameter. Battle activation
+(`battles.beat_wiring.activate_stakes_for_battle`) passes `False` — a war's stakes
+are fought over an objective, not diluted or inflated by which specific PCs
+happen to be enlisted, unlike scene-level stakes. When `False`, a ready
+contract's effective risk equals its declared risk unconditionally, skipping
+the level-gap math above entirely; the readiness gate (unready → `NONE`) still
+applies. Every other caller keeps the default `True` — this is Battle-only.
+
 ## Lock Lifecycle (authoring → activation → completion)
 
 ```
@@ -568,11 +577,13 @@ be presented" failure (ADR-0033 privacy).
 | Hostile cast seed/feed | `combat.cast_seed.seed_or_feed_encounter_from_cast` → same | caster + target sheets |
 | Mission acceptance | `missions.services.offer_handler.issue_mission` → `missions.services.beat.activate_stakes_for_instance` | accepting persona's sheet (no-op until an offer path sets `source_beat`) |
 | Freeform scene | `declare_stakes` GM action (`actions/definitions/gm_stories.py`) | the scene's active participants' sheets |
+| Battle round 1 opening | `battles.services.begin_battle_round` → `battles.beat_wiring.activate_stakes_for_battle` | all enlisted ACTIVE participants' sheets, `scale_by_party_level=False` (see [Effective Risk](#effective-risk)) |
 
-`staked_unsatisfied_beats_for_scene(scene)` (`combat.beat_wiring`) is the
+`staked_unsatisfied_beats_for_scene(scene)` (`world.stories.services.stakes`,
+re-exported from `combat.beat_wiring` for its existing caller) is the
 Scene → EpisodeScene → Episode → Beat discovery helper (any predicate type;
 risk above NONE; outcome UNSATISFIED). Activation stays idempotent while an
-activation is open, so overlapping encounters on one scene are safe.
+activation is open, so overlapping encounters/battles on one scene are safe.
 
 ### Mission risk gate (`world.missions`)
 
@@ -602,7 +613,7 @@ stake's severity label + `player_summary` and the locked effective risk.
 | `compute_effective_risk` | `(declared_risk, target_level, party_average_level) -> str` | See [Effective Risk](#effective-risk) |
 | `validate_stakes_readiness` | `(beat: Beat) -> StakesReadinessReport` | Readiness gate: target_level declared, ≥1 stake, every stake has WIN+LOSS resolutions, severity within calibration bands, WIN reward total within the tier's reward band (PR3; skipped when `reward_ceiling == 0`), removal reachable within `max_fuse_hops`. Unstaked beats (`risk == NONE`) are trivially ready |
 | `get_open_activation` | `(beat: Beat) -> StakeContractActivation \| None` | The single open activation for a beat, if any |
-| `activate_stakes_contract` | `(beat, participants) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion) |
+| `activate_stakes_contract` | `(beat, participants, *, scale_by_party_level=True) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion); `scale_by_party_level=False` (Battle only, #1785) prices at declared risk unconditionally — see [Effective Risk](#effective-risk) |
 | `effective_risk_for_beat` | `(beat: Beat) -> str` | Read seam: open activation's effective risk, else `beat.risk` |
 | `resolve_open_activation` | `(beat: Beat) -> None` | Closes the open activation (sets `resolved_at`); called by the completion tail |
 | `reward_band_problems_for_beat` | `(beat: Beat) -> list[str]` | Re-runnable reward-band check (PR3): the readiness path *and* `_apply_stake_rewards` at pay time both use it |
@@ -669,6 +680,7 @@ issues:
 | Opt-in player-facing surfaces + the scene-start activation triggers | **SHIPPED in PR4** — see [Opt-in & Visibility Surfaces](#opt-in--visibility-surfaces-1770-pr4) |
 | Player-boundary registry backing `check_stake_boundaries` | Sibling **#1771** (the seam ships allow-all) |
 | Scene *grading* | **#1748** |
+| Battle (war-scale) activation + outcome grading | **SHIPPED in #1785** — see `world.battles.beat_wiring` |
 
 ## Test Coverage
 
@@ -691,6 +703,8 @@ issues:
   GM-pick payout with/without participants, reward-line serializer gates
 - `src/world/combat/tests/test_encounter_beat_wiring.py` (PR2) — FLED fires
   withdrawal-authored stakes, pends unauthored ones
+- `src/world/battles/tests/test_beat_wiring.py` (#1785) — Battle conclusion
+  classify/activate/resolve wiring, `scale_by_party_level=False` carve-out
 - `src/world/vitals/tests/test_life_state.py` (PR2) — `_mark_dead` →
   `lifecycle_state DEAD` propagation
 - `src/world/items/tests/test_usage_service.py` (PR2) — `forfeit_item_instance`
