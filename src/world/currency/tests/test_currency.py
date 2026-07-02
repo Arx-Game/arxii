@@ -760,23 +760,25 @@ class WeeklyEconomyTests(TestCase):
 
         assert counts["interest"] == 1
         assert counts["income"] == 1
+        assert counts["debt_service"] == 1
         from world.currency.models import DebtInstrument
 
         stream = OrgIncomeStream.objects.get(organization=org)
-        # #930 / ADR-0081: the rollover only pools — nothing lands, nothing withholds.
-        assert stream.uncollected_pool == 1000
         debt = DebtInstrument.objects.get(debtor_organization=org)
-        # weekly fraction (500 // 4 = 125) accrued and STAYS in arrears until a
-        # collection dispatch lands income for the withholding to ride.
-        assert debt.arrears == 125
-        from world.currency.services import get_or_create_treasury, process_income_stream
-
-        process_income_stream(stream, 900)  # a landed collection covers the arrears
-        debt.refresh_from_db()
+        # #930 / ADR-0081 + the asymmetry rule: income only POOLS (no passive
+        # gain), but the weekly arrears (500 // 4 = 125) were serviced from the
+        # pool automatically — the creditor collects at source (automatic loss).
+        assert stream.uncollected_pool == 1000 - 125
         assert debt.arrears == 0
+        from world.currency.services import get_or_create_treasury
+
         creditor_treasury = get_or_create_treasury(blighton)
         creditor_treasury.refresh_from_db()
         assert creditor_treasury.balance == 125
+        # The debtor's treasury holds only the loan principal — no income landed.
+        debtor_treasury = get_or_create_treasury(org)
+        debtor_treasury.refresh_from_db()
+        assert debtor_treasury.balance == 100_000
 
     def test_wages_skip_inactive_players(self) -> None:
         from world.currency.models import CharacterEmployment, Profession

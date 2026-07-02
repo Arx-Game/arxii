@@ -561,6 +561,63 @@ def accrue_monthly_interest(organization: Organization) -> int:
     return total
 
 
+def _service_debts_from_pools(organization: Organization) -> int:
+    """Weekly at-source debt service (#930): the creditor collects from the pools.
+
+    Apostate's asymmetry rule: automatic LOSS is fine, automatic gain is not —
+    so while income never lands passively (ADR-0081), contractual debt service
+    deducts from the amassing pools every cycle without the debtor lifting a
+    finger. Oldest debt first, capped at what the pools hold (over-leverage
+    bottoms at empty pools, never seizure); ``diverting`` debts are skipped —
+    that money pools whole, the arrears keep growing, and discovery stays the
+    player-facing risk loop. Pool money is off-ledger, so the creditor-side
+    transfer is mint-shaped (the same way landing mints at collection).
+    Returns coppers serviced.
+    """
+    debts = list(
+        DebtInstrument.objects.filter(
+            debtor_organization=organization,
+            active=True,
+            diverting=False,
+            arrears__gt=0,
+        ).order_by("created_at")
+    )
+    if not debts:
+        return 0
+    streams = list(
+        OrgIncomeStream.objects.filter(
+            organization=organization, active=True, uncollected_pool__gt=0
+        )
+    )
+    available = sum(stream.uncollected_pool for stream in streams)
+    if available <= 0:
+        return 0
+    paid_total = 0
+    for debt in debts:
+        if available <= 0:
+            break
+        payment = min(debt.arrears, available)
+        transfer(
+            amount=payment,
+            reason=f"debt service at source: {debt.creditor_organization.name}",
+            to_treasury=get_or_create_treasury(debt.creditor_organization),
+        )
+        debt.arrears -= payment
+        debt.save(update_fields=["arrears"])
+        available -= payment
+        paid_total += payment
+    remaining = paid_total
+    for stream in streams:
+        take = min(stream.uncollected_pool, remaining)
+        if take > 0:
+            stream.uncollected_pool = stream.uncollected_pool - take
+            stream.save(update_fields=["uncollected_pool"])
+            remaining -= take
+        if remaining <= 0:
+            break
+    return paid_total
+
+
 def _withhold_debt_service(
     stream: OrgIncomeStream, treasury: OrganizationTreasury, available: int
 ) -> int:
@@ -883,22 +940,43 @@ def run_business_week(business: Business, *, fortune: int) -> int:
 
 
 def run_weekly_economy() -> dict[str, int]:
-    """The Sunday-rollover economy pass (#932). Returns per-phase counts.
+    """The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.
 
-    Order matters: interest accrues into arrears FIRST so this week's
-    income withholding services this week's interest; then income streams
-    flow (graft → debt withholding → garnishment → declaration); then
-    notarized contracts settle; then employment wages pay for
-    actively-played weeks; then businesses roll their fortune. Each phase
-    isolates failures per row — one broken org never wedges the rollover.
+    Order matters: interest accrues into arrears FIRST; then income streams
+    pool their gross (never landing — ADR-0081); then at-source debt service
+    deducts this week's arrears from the pools automatically (automatic loss
+    is fine, automatic gain is not); then notarized contracts settle; then
+    employment wages pay for actively-played weeks; then businesses roll
+    their fortune. Each phase isolates failures per row — one broken org
+    never wedges the rollover.
     """
     return {
         "interest": _weekly_interest_accrual(),
         "income": _weekly_income_streams(),
+        "debt_service": _weekly_debt_service(),
         "contracts": _weekly_contract_settlement(),
         "wages": _weekly_wages(),
         "businesses": _weekly_business_fortunes(),
     }
+
+
+def _weekly_debt_service() -> int:
+    """At-source servicing for every indebted org with pooled income (#930)."""
+    count = 0
+    org_ids = (
+        DebtInstrument.objects.filter(active=True, diverting=False, arrears__gt=0)
+        .values_list("debtor_organization_id", flat=True)
+        .distinct()
+    )
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    for organization in Organization.objects.filter(pk__in=org_ids):
+        try:
+            if _service_debts_from_pools(organization) > 0:
+                count += 1
+        except Exception:
+            logger.exception("weekly economy: debt service failed for org %s", organization.pk)
+    return count
 
 
 def _weekly_interest_accrual() -> int:

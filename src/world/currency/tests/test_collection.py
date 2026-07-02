@@ -162,3 +162,70 @@ class ImprovementTestCase(TestCase):
         self.assertFalse(result.gross_raised)
         self.assertFalse(result.graft_cracked)
         self.assertEqual(result.new_graft_pct, 10)
+
+
+class AtSourceDebtServiceTests(TestCase):
+    """#930 asymmetry rule: automatic loss (debt service from pools) is fine."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.org = OrganizationFactory()
+        cls.bank = OrganizationFactory()
+
+    def _debt(self, arrears: int, *, diverting: bool = False):
+        from world.currency.models import DebtInstrument
+
+        return DebtInstrument.objects.create(
+            creditor_organization=self.bank,
+            debtor_organization=self.org,
+            principal=10_000,
+            arrears=arrears,
+            active=True,
+            diverting=diverting,
+        )
+
+    def _stream(self, pool: int):
+        stream = OrgIncomeStream.objects.create(
+            organization=self.org, name=f"Stream {pool}", kind="domain_tax", gross_amount=pool
+        )
+        accrue_income_stream(stream)
+        return stream
+
+    def test_pools_cover_arrears_without_any_player_action(self) -> None:
+        from world.currency.services import _service_debts_from_pools
+
+        stream = self._stream(1000)
+        debt = self._debt(125)
+        paid = _service_debts_from_pools(self.org)
+        self.assertEqual(paid, 125)
+        stream.refresh_from_db()
+        debt.refresh_from_db()
+        self.assertEqual(stream.uncollected_pool, 875)
+        self.assertEqual(debt.arrears, 0)
+        bank_treasury = get_or_create_treasury(self.bank)
+        bank_treasury.refresh_from_db()
+        self.assertEqual(bank_treasury.balance, 125)
+
+    def test_thin_pools_pay_partially_and_arrears_remain(self) -> None:
+        from world.currency.services import _service_debts_from_pools
+
+        stream = self._stream(100)
+        debt = self._debt(250)
+        paid = _service_debts_from_pools(self.org)
+        self.assertEqual(paid, 100)
+        stream.refresh_from_db()
+        debt.refresh_from_db()
+        self.assertEqual(stream.uncollected_pool, 0)
+        self.assertEqual(debt.arrears, 150)
+
+    def test_diverting_debt_is_untouched(self) -> None:
+        from world.currency.services import _service_debts_from_pools
+
+        stream = self._stream(1000)
+        debt = self._debt(125, diverting=True)
+        paid = _service_debts_from_pools(self.org)
+        self.assertEqual(paid, 0)
+        stream.refresh_from_db()
+        debt.refresh_from_db()
+        self.assertEqual(stream.uncollected_pool, 1000)  # pools whole, arrears grow
+        self.assertEqual(debt.arrears, 125)

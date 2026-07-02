@@ -14,7 +14,17 @@ accrues to it or against it. The design line (Apostate): *slightly undesirable
 to never collect — a hoarded pool is concentrated outcome risk and a bigger
 absolute graft bite — but never a knockout for not logging in.*
 
+**The asymmetry rule (Apostate):** *automatic loss is fine; automatic gain is
+not.* Contractual debt service therefore deducts from the amassing pools every
+cycle without the debtor lifting a finger (`_service_debts_from_pools` —
+oldest debt first, capped at what the pools hold, `diverting` debts skipped so
+the embezzlement-discovery loop survives), while income itself never lands
+without the dispatch. Court garnishments stay collection-time: liens seize
+money in motion, creditors collect at source.
+
 **Rejected:** pool caps (a hard stop reads as punishment and hides the
 risk-concentration drama); passive trickle with an active bonus (recreates the
 AFK-rich-house failure the change exists to kill); decay of held wealth
-(punishes absence, the other side of the forbidden line).
+(punishes absence, the other side of the forbidden line); debt service waiting
+for collection (rewards an indebted house for never collecting — inverts the
+asymmetry rule).
