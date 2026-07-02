@@ -100,20 +100,25 @@ filesystem state.
 
 2. **Check for an existing project-local worktree directory:**
    ```bash
-   ls -d .worktrees 2>/dev/null     # Preferred (hidden)
-   ls -d worktrees 2>/dev/null       # Alternative
+   ls -d .claude/worktrees 2>/dev/null   # Preferred (named volume in devcontainer)
+   ls -d .worktrees 2>/dev/null          # Fallback (hidden)
+   ls -d worktrees 2>/dev/null          # Alternative
    ```
-   If found, use it. If both exist, `.worktrees` wins.
+   Use the first match. `.claude/worktrees` wins because it is a Linux-native
+   named volume in the devcontainer (`arxii-worktrees`), where `uv` hardlinks
+   venvs from the colocated `UV_CACHE_DIR` — a worktree there sets up in under a
+   second instead of ~10 min on the slow 9p bind mount. See
+   `docs/devcontainer-setup.md`.
 
-3. **If there is no other guidance available**, default to `.worktrees/` at the
-   project root.
+3. **If there is no other guidance available**, default to `.claude/worktrees/`
+   at the project root (same reason: the named volume lives there).
 
 #### Safety Verification (project-local directories only)
 
 **MUST verify directory is ignored before creating worktree:**
 
 ```bash
-git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
+git check-ignore -q .claude/worktrees 2>/dev/null || git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
 ```
 
 **If NOT ignored:** Add to .gitignore, commit the change, then proceed.
@@ -124,7 +129,7 @@ git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/d
 
 ```bash
 # Use the BRANCH detected in Step 0 (or the current branch).
-LOCATION=".worktrees"   # or the existing/preferred directory from above
+LOCATION=".claude/worktrees"   # or the existing/preferred directory from above
 path="$LOCATION/$BRANCH"
 
 # If the branch already exists (e.g. created by pickup-issue.sh but you are on
@@ -188,10 +193,11 @@ Ready to implement <feature-name>
 | In a submodule | Treat as normal repo (Step 0 guard) |
 | Native worktree tool available | Use it (Step 1a) |
 | No native tool | Git worktree fallback (Step 1b) |
+| `.claude/worktrees/` exists | Use it (named volume; verify ignored) |
 | `.worktrees/` exists | Use it (verify ignored) |
 | `worktrees/` exists | Use it (verify ignored) |
-| Both exist | Use `.worktrees/` |
-| Neither exists | Check instruction file, then default `.worktrees/` |
+| Multiple exist | Use `.claude/worktrees/` |
+| None exist | Check instruction file, then default `.claude/worktrees/` |
 | Directory not ignored | Add to .gitignore + commit |
 | Permission error on create | Sandbox fallback, work in place |
 | Tests fail during baseline | Report failures + ask |
