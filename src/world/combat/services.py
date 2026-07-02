@@ -2828,8 +2828,13 @@ def apply_damage_to_participant(  # noqa: PLR0913
             permanent_wound_eligible=False,
         )
 
-    # Use the (possibly interposed/modified) amount from the payload
-    effective_damage = pre_payload.amount
+    # Use the (possibly interposed/modified) amount from the payload.
+    # Coerce to int: the MODIFY_PAYLOAD multiply op (DEFEND halves amount by
+    # multiplying by 0.5) and INTERPOSE's floor-division both can widen an
+    # int amount to float in memory. Django coerces on save, but keeping the
+    # in-memory value integral avoids a float flowing through the damage
+    # reductions and threshold comparisons below (#1318).
+    effective_damage = int(pre_payload.amount)
 
     # Thread-derived damage reduction (Spec A §5.8 lines 1658–1668).
     # Inlined here rather than a flow subscriber because the flow/event
