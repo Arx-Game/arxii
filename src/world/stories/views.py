@@ -186,6 +186,7 @@ from world.stories.serializers import (
     UpdateBulletinPostInputSerializer,
     UpdateBulletinReplyInputSerializer,
     WithdrawOfferInputSerializer,
+    stakes_summary_for_beat,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
 from world.stories.services.era import advance_era, archive_era
@@ -1367,6 +1368,23 @@ class BeatViewSet(viewsets.ModelViewSet):
             extra_participants=data.get("extra_participants") or None,
         )
         return Response(BeatCompletionSerializer(completion).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="stakes-summary",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def stakes_summary(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+
+        Readable by any authenticated user (participants need it before they
+        commit): it leaks only player_summary/severity plus declared/effective
+        risk and readiness, by design. Branch contents (StakeResolution rows)
+        are never included.
+        """
+        beat = self.get_object()
+        return Response(stakes_summary_for_beat(beat))
 
     @action(
         detail=True,

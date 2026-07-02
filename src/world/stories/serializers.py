@@ -2459,3 +2459,55 @@ class StakeContractActivationSerializer(serializers.ModelSerializer):
             "readiness_notes",
         ]
         read_only_fields = fields
+
+
+class StakeSummarySerializer(serializers.ModelSerializer):
+    """Player-visible summary of one Stake (#1770 pillar 9).
+
+    What is wagered is visible; branch contents stay hidden — resolutions
+    (consequence pools, escalations, narrative) are deliberately NOT fields
+    here and must never be added.
+    """
+
+    severity_label = serializers.CharField(source="get_severity_display", read_only=True)
+
+    class Meta:
+        model = Stake
+        fields = ["id", "player_summary", "severity", "severity_label"]
+        read_only_fields = fields
+
+
+class StakesSummarySerializer(serializers.Serializer):
+    """Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+
+    Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+    ``effective_risk`` is the open activation's locked value when one exists,
+    else the declared risk.
+    """
+
+    declared_risk = serializers.CharField(read_only=True)
+    effective_risk = serializers.CharField(read_only=True)
+    is_ready = serializers.BooleanField(read_only=True)
+    stakes = StakeSummarySerializer(many=True, read_only=True)
+
+
+def stakes_summary_for_beat(beat: Beat) -> dict:
+    """Build the player-visible stakes-summary payload for a beat.
+
+    Shared by the BeatViewSet ``stakes-summary`` endpoint and the combat
+    consent-prompt surface (``combat_stakes``) so the shape stays single-
+    sourced. Leaks only player_summary/severity by design (#1770 pillar 9).
+    """
+    from world.stories.services.stakes import (  # noqa: PLC0415
+        effective_risk_for_beat,
+        validate_stakes_readiness,
+    )
+
+    return StakesSummarySerializer(
+        {
+            "declared_risk": beat.risk,
+            "effective_risk": effective_risk_for_beat(beat),
+            "is_ready": validate_stakes_readiness(beat).is_ready,
+            "stakes": beat.stakes.all(),
+        }
+    ).data

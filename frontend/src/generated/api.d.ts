@@ -783,6 +783,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/beats/{id}/stakes-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+     *
+     *     Readable by any authenticated user (participants need it before they
+     *     commit): it leaks only player_summary/severity plus declared/effective
+     *     risk and readiness, by design. Branch contents (StakeResolution rows)
+     *     are never included.
+     */
+    get: operations['beats_stakes_summary_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/blocks/': {
     parameters: {
       query?: never;
@@ -28679,6 +28703,28 @@ export interface operations {
         'application/json': components['schemas']['BeatRequest'];
       };
     };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_stakes_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

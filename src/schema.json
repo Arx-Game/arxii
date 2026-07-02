@@ -1187,6 +1187,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beat'
           description: ''
+  /api/beats/{id}/stakes-summary/:
+    get:
+      operationId: beats_stakes_summary_retrieve
+      description: |-
+        GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+
+        Readable by any authenticated user (participants need it before they
+        commit): it leaks only player_summary/severity plus declared/effective
+        risk and readiness, by design. Branch contents (StakeResolution rows)
+        are never included.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beat'
+          description: ''
   /api/blocks/:
     get:
       operationId: blocks_list
