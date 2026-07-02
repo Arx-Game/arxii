@@ -1,6 +1,11 @@
 from django.test import TestCase
 
-from world.battles.constants import BattleOutcome, BattleSideRole, BattleUnitStatus
+from world.battles.constants import (
+    BattleActionScope,
+    BattleOutcome,
+    BattleSideRole,
+    BattleUnitStatus,
+)
 from world.battles.factories import (
     BattleFactory,
     BattlePlaceFactory,
@@ -63,3 +68,25 @@ class BattleActionDeclarationTechniqueTests(TestCase):
         technique = TechniqueFactory()
         declaration = BattleActionDeclarationFactory(technique=technique)
         self.assertEqual(declaration.technique, technique)
+
+    def test_declaration_scope_defaults_to_unit(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+
+        decl = BattleActionDeclarationFactory()
+        self.assertEqual(decl.scope, BattleActionScope.UNIT)
+        self.assertIsNone(decl.target_place)
+        self.assertIsNone(decl.target_side)
+
+    def test_declaration_scope_side_accepts_target_side(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+
+        battle = BattleFactory()
+        # DEFENDER avoids colliding with the participant subfactory's default
+        # ATTACKER-role BattleSide on the same battle (unique_battle_side_role).
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        decl = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        self.assertEqual(decl.target_side_id, side.pk)

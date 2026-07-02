@@ -8,6 +8,7 @@ import factory.django as factory_django
 from world.battles.constants import (
     DEFAULT_VICTORY_THRESHOLD,
     BattleActionKind,
+    BattleActionScope,
     BattleParticipantStatus,
     BattleSideRole,
     BattleUnitStatus,
@@ -95,5 +96,6 @@ class BattleActionDeclarationFactory(factory_django.DjangoModelFactory):
     )
     technique = factory.SubFactory(TechniqueFactory, action_template=None)
     action_kind = BattleActionKind.STRIKE
+    scope = BattleActionScope.UNIT
     resolved = False
     success_level = 0

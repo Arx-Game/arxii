@@ -1,1 +1,1 @@
-0005_battleside_covenant
+0006_battleactiondeclaration_scope_and_more

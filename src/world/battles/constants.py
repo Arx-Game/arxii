@@ -26,6 +26,19 @@ class BattleActionKind(models.TextChoices):
     RESCUE = "rescue", "Rescue a surrounded ally"
 
 
+class BattleActionScope(models.TextChoices):
+    """Targeting breadth of a battle-round declaration (#1710).
+
+    UNIT is the pre-existing default (a single BattleUnit/BattleParticipant).
+    PLACE/SIDE require the declaring participant to hold the matching
+    command_tier — see world.battles.services.declare_battle_action.
+    """
+
+    UNIT = "unit", "Unit"
+    PLACE = "place", "Place (front-wide)"
+    SIDE = "side", "Side (army-wide)"
+
+
 class BattleOutcome(models.TextChoices):
     UNRESOLVED = "unresolved", "Unresolved"
     ATTACKER_DECISIVE = "attacker_decisive", "Attacker — decisive"

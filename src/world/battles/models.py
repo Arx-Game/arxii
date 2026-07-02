@@ -14,6 +14,7 @@ from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     BattleActionKind,
+    BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
     BattleSideRole,
@@ -316,6 +317,28 @@ class BattleActionDeclaration(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="support_declarations",
+    )
+    scope = models.CharField(
+        max_length=10,
+        choices=BattleActionScope.choices,
+        default=BattleActionScope.UNIT,
+        help_text="Targeting breadth (#1710) — UNIT/PLACE/SIDE.",
+    )
+    target_place = models.ForeignKey(
+        BattlePlace,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="scoped_declarations",
+        help_text="Set when scope=PLACE.",
+    )
+    target_side = models.ForeignKey(
+        BattleSide,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="scoped_declarations",
+        help_text="Set when scope=SIDE.",
     )
     resolved = models.BooleanField(default=False)
     success_level = models.SmallIntegerField(
