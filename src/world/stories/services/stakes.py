@@ -26,6 +26,7 @@ from world.stories.constants import (
 )
 from world.stories.models import (
     Beat,
+    EpisodeScene,
     RiskCalibration,
     Stake,
     StakeContractActivation,
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from world.character_sheets.models import CharacterSheet
+    from world.scenes.models import Scene
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +292,23 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
 def get_open_activation(beat: Beat) -> StakeContractActivation | None:
     """The single open (unresolved) activation for this beat, if any."""
     return beat.stake_activations.filter(resolved_at__isnull=True).first()
+
+
+def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:
+    """Staked, still-open beats on episodes linked to this scene (#1770 PR4).
+
+    A beat is staked when its declared risk is above NONE; only UNSATISFIED
+    beats can still be wagered on. Scene -> EpisodeScene -> Episode -> Beat
+    discovery (any predicate type — not just OUTCOME_TIER; any predicate type
+    can carry a stakes contract).
+    """
+    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
+    return list(
+        Beat.objects.filter(
+            episode_id__in=episode_ids,
+            outcome=BeatOutcome.UNSATISFIED,
+        ).exclude(risk=RenownRisk.NONE)
+    )
 
 
 def activate_stakes_contract(

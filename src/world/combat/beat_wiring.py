@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from world.stories.services.stakes import staked_unsatisfied_beats_for_scene
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -25,33 +26,10 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.scenes.models import Scene
-    from world.stories.models import Beat
 
 logger = logging.getLogger(__name__)
 
 ENCOUNTER_BEAT_TRIGGER_NAME = "encounter_completed_beat_wiring"
-
-
-def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:
-    """Staked, still-open beats on episodes linked to this scene (#1770 PR4).
-
-    A beat is staked when its declared risk is above NONE; only UNSATISFIED
-    beats can still be wagered on. Uses the same Scene -> EpisodeScene ->
-    Episode -> Beat discovery as ``encounter_completed_beat_handler`` but
-    without its OUTCOME_TIER restriction — any predicate type can carry a
-    stakes contract.
-    """
-    from world.societies.constants import RenownRisk  # noqa: PLC0415
-    from world.stories.constants import BeatOutcome  # noqa: PLC0415
-    from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
-
-    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
-    return list(
-        Beat.objects.filter(
-            episode_id__in=episode_ids,
-            outcome=BeatOutcome.UNSATISFIED,
-        ).exclude(risk=RenownRisk.NONE)
-    )
 
 
 def activate_stakes_for_scene(
