@@ -99,3 +99,44 @@ class BattleActionDeclarationFactory(factory_django.DjangoModelFactory):
     scope = BattleActionScope.UNIT
     resolved = False
     success_level = 0
+
+
+_PAYLOAD_PARAM = "@payload"
+
+
+def _build_champion_duel_outcome_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the outcome handler."""
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+    from world.battles.duel_wiring import CHAMPION_DUEL_TRIGGER_NAME
+
+    flow, _ = FlowDefinition.objects.get_or_create(name=CHAMPION_DUEL_TRIGGER_NAME)
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.battles.duel_wiring.apply_champion_duel_outcome",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class BattleDuelOutcomeTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the ENCOUNTER_COMPLETED -> Champion duel outcome consumer (#1710).
+
+    Installed on duel-encounter rooms by ``install_champion_duel_trigger``;
+    dispatches ENCOUNTER_COMPLETED to ``apply_champion_duel_outcome``, which
+    routs/destroys the losing side's unit at the bound BattlePlace and credits
+    the winner's side.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "encounter_completed_champion_duel_outcome"
+    event_name = "encounter_completed"
+    flow_definition = factory.LazyFunction(_build_champion_duel_outcome_flow)
+    priority = 40
+    base_filter_condition = None
