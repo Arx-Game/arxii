@@ -42773,12 +42773,16 @@ components:
           type: boolean
           description: On fire, soft-forfeit the stake's subject_item (ITEM stakes
             only).
-        npc_affection_delta:
+        subject_standing_delta:
           type: integer
           maximum: 32767
           minimum: -32768
-          description: On fire, adjust NPCStanding between the stake's subject_sheet's
-            primary persona and each participant persona (NPC_FATE/FACTION).
+          description: 'On fire, adjust standing between the stake''s subject and
+            each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet''s
+            primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation
+            or OrganizationReputation (whichever of subject_society/subject_organization
+            is set) — previously a dead FK (subject_society/subject_organization were
+            never read); this is the fix.'
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -48604,12 +48608,16 @@ components:
           type: boolean
           description: On fire, soft-forfeit the stake's subject_item (ITEM stakes
             only).
-        npc_affection_delta:
+        subject_standing_delta:
           type: integer
           maximum: 32767
           minimum: -32768
-          description: On fire, adjust NPCStanding between the stake's subject_sheet's
-            primary persona and each participant persona (NPC_FATE/FACTION).
+          description: 'On fire, adjust standing between the stake''s subject and
+            each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet''s
+            primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation
+            or OrganizationReputation (whichever of subject_society/subject_organization
+            is set) — previously a dead FK (subject_society/subject_organization were
+            never read); this is the fix.'
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -48672,12 +48680,16 @@ components:
           type: boolean
           description: On fire, soft-forfeit the stake's subject_item (ITEM stakes
             only).
-        npc_affection_delta:
+        subject_standing_delta:
           type: integer
           maximum: 32767
           minimum: -32768
-          description: On fire, adjust NPCStanding between the stake's subject_sheet's
-            primary persona and each participant persona (NPC_FATE/FACTION).
+          description: 'On fire, adjust standing between the stake''s subject and
+            each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet''s
+            primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation
+            or OrganizationReputation (whichever of subject_society/subject_organization
+            is set) — previously a dead FK (subject_society/subject_organization were
+            never read); this is the fix.'
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).

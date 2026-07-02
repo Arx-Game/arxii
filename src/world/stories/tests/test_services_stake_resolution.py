@@ -600,9 +600,9 @@ class NoFiatSerializerTests(APITestCase):
 
     def test_affection_delta_requires_npc_or_faction_subject(self):
         stake = StakeFactory(beat=self.beat)  # CUSTOM, no subject_sheet
-        resp = self._post_resolution(stake, npc_affection_delta=-2)
+        resp = self._post_resolution(stake, subject_standing_delta=-2)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("npc_affection_delta", str(resp.data))
+        self.assertIn("subject_standing_delta", str(resp.data))
 
 
 class WriterTests(EvenniaTestCase):
@@ -637,7 +637,7 @@ class WriterTests(EvenniaTestCase):
             beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
         )
         StakeResolutionFactory(
-            stake=stake, column=StakeResolutionColumn.LOSS, npc_affection_delta=-3
+            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-3
         )
 
         record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
@@ -646,6 +646,33 @@ class WriterTests(EvenniaTestCase):
             persona=sheet.primary_persona, npc_persona=npc_sheet.primary_persona
         )
         self.assertEqual(standing.affection, -3)
+
+    def test_faction_subject_society_resolution_bumps_society_reputation(self) -> None:
+        from world.societies.factories import SocietyFactory
+        from world.societies.models import SocietyReputation
+
+        society = SocietyFactory()
+        pc_sheet = CharacterSheetFactory()  # post_generation hook auto-creates a PRIMARY persona
+        persona = pc_sheet.primary_persona  # PersonaType.PRIMARY -> is_established_or_primary=True
+
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat,
+            subject_kind=StakeSubjectKind.FACTION,
+            subject_society=society,
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.WIN,
+            subject_standing_delta=50,
+        )
+        story = beat.episode.chapter.story
+        progress = StoryProgressFactory(story=story, character_sheet=pc_sheet)
+
+        record_gm_marked_outcome(progress=progress, beat=beat, outcome=BeatOutcome.SUCCESS)
+
+        rep = SocietyReputation.objects.get(persona=persona, society=society)
+        self.assertEqual(rep.value, 50)
 
     def test_lifecycle_write_on_unheld_npc(self):
         _sheet, beat, progress = _character_story_beat()
@@ -820,14 +847,14 @@ class GroupScopeGMPickTests(EvenniaTestCase):
         self.assertTrue(LegendEvent.objects.exists())
 
     def test_group_pick_affection_delta_reaches_participants(self):
-        """The same participant list feeds the npc_affection_delta writer."""
+        """The same participant list feeds the subject_standing_delta writer."""
         stake = _group_story_pending_staked_beat()
         npc_sheet = CharacterSheetFactory()
         stake.subject_kind = StakeSubjectKind.NPC_FATE
         stake.subject_sheet = npc_sheet
         stake.save(update_fields=["subject_kind", "subject_sheet"])
         loss = StakeResolutionFactory(
-            stake=stake, column=StakeResolutionColumn.LOSS, npc_affection_delta=-2
+            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-2
         )
         self.assertIsNotNone(loss)
         persona = CharacterSheetFactory().primary_persona

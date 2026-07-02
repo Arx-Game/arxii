@@ -23807,8 +23807,8 @@ export interface components {
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
       forfeits_subject_item?: boolean;
-      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
-      npc_affection_delta?: number;
+      /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
+      subject_standing_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -26644,8 +26644,8 @@ export interface components {
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
       forfeits_subject_item?: boolean;
-      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
-      npc_affection_delta?: number;
+      /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
+      subject_standing_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -26692,8 +26692,8 @@ export interface components {
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
       forfeits_subject_item?: boolean;
-      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
-      npc_affection_delta?: number;
+      /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
+      subject_standing_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *

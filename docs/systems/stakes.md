@@ -127,7 +127,7 @@ The authored branch for one stake × one outcome column.
 | `escalates_to_risk` | CharField (`RenownRisk` choices, blank) | The [fuse](#chain-rule--fuse-length) mechanic — the risk tier the situation spawned by this branch carries. Blank = no escalation declared |
 | `narrative_summary` | TextField (blank) | What happens in the story when this branch fires (GM-authored) |
 | `forfeits_subject_item` | BooleanField (default False) | **PR2 writer.** On fire, soft-forfeits the stake's `subject_item` (`forfeit_item_instance` — `destroyed_at` + a receiver-less `TRANSFERRED` `OwnershipEvent`; never hard-deleted). Requires an `ITEM` stake with `subject_item` set |
-| `npc_affection_delta` | SmallIntegerField (default 0) | **PR2 writer.** On fire, `adjust_npc_affection` between the subject sheet's primary persona and each completion participant persona. Requires `NPC_FATE`/`FACTION` + `subject_sheet` |
+| `subject_standing_delta` | SmallIntegerField (default 0) | **PR2 writer, dispatch by `subject_kind` (#1760).** On fire: `NPC_FATE` calls `adjust_npc_affection` between `subject_sheet`'s primary persona and each completion participant persona (unchanged). `FACTION` calls `bump_society_reputation`/`bump_organization_reputation` (whichever of `subject_society`/`subject_organization` is set) for each participant's own persona. Requires an `NPC_FATE` stake with `subject_sheet` set, or a `FACTION` stake with `subject_society` or `subject_organization` set |
 | `sets_subject_lifecycle` | CharField (`LifecycleState` choices, blank) | **PR2 writer.** On fire, `set_lifecycle_state(subject_sheet, value)`. **Pillar-12 gated:** only legal for `NPC_FATE` stakes whose subject sheet is not player-held |
 
 Unique constraint: `(stake, column)` — one resolution per stake per column.
@@ -616,7 +616,7 @@ stake's severity label + `player_summary` and the locked effective risk.
 |---|---|---|
 | `resolve_stakes_for_completion` | `(*, beat, outcome, completion, progress, scope, explicit_participants=None, outcome_tier=None, withdrawal=False) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches — see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
 | `resolve_stake_by_gm_pick` | `(stake, *, column, gm_profile, gm_notes="", participants=None, extra_participants=None) -> StakeOutcome` | The GM constrained pick — fires the authored branch like the machine path, records `GM_PICK` |
-| `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, npc_affection_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`) |
+| `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, subject_standing_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`) |
 | `sheet_is_player_held` | `(sheet: CharacterSheet) -> bool` | The pillar-12 gate: RosterEntry with a current tenure |
 
 Plumbing added in PR2: `record_outcome_tier_completion` gained

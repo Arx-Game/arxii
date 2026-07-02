@@ -61,7 +61,7 @@ def stake_resolution_payload_problems(
     *,
     stake: Stake,
     forfeits_subject_item: bool,
-    npc_affection_delta: int,
+    subject_standing_delta: int,
     sets_subject_lifecycle: str,
 ) -> list[StakePayloadProblem]:
     """Validate a StakeResolution's writer payloads against its stake (pillar 12).
@@ -91,19 +91,22 @@ def stake_resolution_payload_problems(
             )
         )
 
-    if npc_affection_delta != 0 and (
-        stake.subject_kind not in (StakeSubjectKind.NPC_FATE, StakeSubjectKind.FACTION)
-        or stake.subject_sheet_id is None
-    ):
-        problems.append(
-            StakePayloadProblem(
-                field="npc_affection_delta",
-                message=(
-                    "npc_affection_delta requires an NPC_FATE or FACTION stake "
-                    "with subject_sheet set."
-                ),
-            )
+    if subject_standing_delta != 0:
+        npc_ok = stake.subject_kind == StakeSubjectKind.NPC_FATE and stake.subject_sheet_id
+        faction_ok = stake.subject_kind == StakeSubjectKind.FACTION and (
+            stake.subject_society_id or stake.subject_organization_id
         )
+        if not (npc_ok or faction_ok):
+            problems.append(
+                StakePayloadProblem(
+                    field="subject_standing_delta",
+                    message=(
+                        "subject_standing_delta requires an NPC_FATE stake with "
+                        "subject_sheet set, or a FACTION stake with subject_society "
+                        "or subject_organization set."
+                    ),
+                )
+            )
 
     return problems
 
@@ -387,7 +390,7 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     GROUP scope uses ``participants`` (required when the picked branch's pool
     carries LEGEND_AWARD); CHARACTER scope credits the progress's primary
     persona plus ``extra_participants``; GLOBAL takes none. The same list
-    feeds the branch's npc_affection_delta writer.
+    feeds the branch's subject_standing_delta writer.
 
     Defensive guards only (ResolveStakeInputSerializer validates for API
     callers): the stake must be unresolved and the column must be authored.
@@ -486,8 +489,8 @@ def _apply_branch_writers(
         _write_subject_lifecycle(resolution, stake)
     if resolution.forfeits_subject_item:
         _write_item_forfeit(resolution, stake)
-    if resolution.npc_affection_delta != 0:
-        _write_npc_affection(resolution, stake, participants)
+    if resolution.subject_standing_delta != 0:
+        _write_subject_standing(resolution, stake, participants)
 
 
 def _write_subject_lifecycle(resolution: StakeResolution, stake: Stake) -> None:
@@ -660,7 +663,27 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
     )
 
 
-def _write_npc_affection(
+def _write_subject_standing(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+) -> None:
+    """Adjust standing between the stake's subject and each participant (#1760).
+
+    Dispatches on subject_kind: NPC_FATE writes NPCStanding via
+    subject_sheet's primary persona (unchanged). FACTION writes
+    SocietyReputation or OrganizationReputation via the participant's OWN
+    persona (a society/org doesn't have a "primary persona" to be the other
+    side of a pairwise standing row — reputation is persona-to-faction, not
+    persona-to-persona).
+    """
+    if stake.subject_kind == StakeSubjectKind.NPC_FATE:
+        _write_npc_standing(resolution, stake, participants)
+    elif stake.subject_kind == StakeSubjectKind.FACTION:
+        _write_faction_standing(resolution, stake, participants)
+
+
+def _write_npc_standing(
     resolution: StakeResolution,
     stake: Stake,
     participants: list[Persona] | None,
@@ -672,10 +695,10 @@ def _write_npc_affection(
     sheet = stake.subject_sheet
     if sheet is None:
         logger.warning(
-            "StakeResolution %s: npc_affection_delta=%s but stake %s has no "
+            "StakeResolution %s: subject_standing_delta=%s but stake %s has no "
             "subject_sheet; skipping.",
             resolution.pk,
-            resolution.npc_affection_delta,
+            resolution.subject_standing_delta,
             stake.pk,
         )
         return
@@ -683,19 +706,61 @@ def _write_npc_affection(
         npc_persona = sheet.primary_persona
     except Persona.DoesNotExist:
         logger.warning(
-            "StakeResolution %s: subject sheet %s has no primary persona; "
-            "skipping affection delta.",
+            "StakeResolution %s: subject sheet %s has no primary persona; skipping standing delta.",
             resolution.pk,
             sheet.pk,
         )
         return
     if not participants:
         logger.warning(
-            "StakeResolution %s: npc_affection_delta=%s but no participants "
+            "StakeResolution %s: subject_standing_delta=%s but no participants "
             "resolved for the completion; skipping.",
             resolution.pk,
-            resolution.npc_affection_delta,
+            resolution.subject_standing_delta,
         )
         return
     for participant in participants:
-        adjust_npc_affection(participant, npc_persona, delta=resolution.npc_affection_delta)
+        adjust_npc_affection(participant, npc_persona, delta=resolution.subject_standing_delta)
+
+
+def _write_faction_standing(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+) -> None:
+    """Adjust SocietyReputation/OrganizationReputation for each participant (#1760).
+
+    Exactly one of subject_society/subject_organization is set per the
+    payload validation gate — checks society first, matching how Stake's own
+    FACTION-kind serializer validation orders the pair.
+    """
+    from world.societies.renown import (  # noqa: PLC0415
+        bump_organization_reputation,
+        bump_society_reputation,
+    )
+
+    if not participants:
+        logger.warning(
+            "StakeResolution %s: subject_standing_delta=%s but no participants "
+            "resolved for the completion; skipping.",
+            resolution.pk,
+            resolution.subject_standing_delta,
+        )
+        return
+    if stake.subject_society_id is not None:
+        for participant in participants:
+            bump_society_reputation(
+                participant, stake.subject_society, resolution.subject_standing_delta
+            )
+    elif stake.subject_organization_id is not None:
+        for participant in participants:
+            bump_organization_reputation(
+                participant, stake.subject_organization, resolution.subject_standing_delta
+            )
+    else:
+        logger.warning(
+            "StakeResolution %s: FACTION stake %s has neither subject_society "
+            "nor subject_organization set; skipping.",
+            resolution.pk,
+            stake.pk,
+        )

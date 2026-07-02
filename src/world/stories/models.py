@@ -2125,11 +2125,16 @@ class StakeResolution(SharedMemoryModel):
         default=False,
         help_text="On fire, soft-forfeit the stake's subject_item (ITEM stakes only).",
     )
-    npc_affection_delta = models.SmallIntegerField(
+    subject_standing_delta = models.SmallIntegerField(
         default=0,
         help_text=(
-            "On fire, adjust NPCStanding between the stake's subject_sheet's "
-            "primary persona and each participant persona (NPC_FATE/FACTION)."
+            "On fire, adjust standing between the stake's subject and each "
+            "participant persona (#1760). NPC_FATE: adjusts NPCStanding via "
+            "subject_sheet's primary persona (unchanged pre-#1760 behavior). "
+            "FACTION: adjusts SocietyReputation or OrganizationReputation "
+            "(whichever of subject_society/subject_organization is set) — "
+            "previously a dead FK (subject_society/subject_organization were "
+            "never read); this is the fix."
         ),
     )
     sets_subject_lifecycle = models.CharField(
@@ -2181,7 +2186,7 @@ class StakeResolution(SharedMemoryModel):
         for problem in stake_resolution_payload_problems(
             stake=self.stake,
             forfeits_subject_item=self.forfeits_subject_item,
-            npc_affection_delta=self.npc_affection_delta,
+            subject_standing_delta=self.subject_standing_delta,
             sets_subject_lifecycle=self.sets_subject_lifecycle,
         ):
             raise ValidationError({problem.field: problem.message})

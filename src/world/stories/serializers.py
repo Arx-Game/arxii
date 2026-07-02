@@ -2743,7 +2743,7 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "escalates_to_risk",
             "narrative_summary",
             "forfeits_subject_item",
-            "npc_affection_delta",
+            "subject_standing_delta",
             "sets_subject_lifecycle",
             "reward_lines",
         ]
@@ -2824,7 +2824,7 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
         problems = stake_resolution_payload_problems(
             stake=stake,
             forfeits_subject_item=merged("forfeits_subject_item", default=False),
-            npc_affection_delta=merged("npc_affection_delta", default=0),
+            subject_standing_delta=merged("subject_standing_delta", default=0),
             sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
         )
         if problems:

@@ -1029,7 +1029,9 @@ and paying authored win-reward lines through an anti-farming activation gate
   `related_name="stakes"`; typed subject FKs + `subject_label`; `player_summary`),
   `StakeResolution` (stake FK `related_name="resolutions"`; `column`
   WIN/LOSS/WITHDRAWAL; `consequence_pool`; `escalates_to_risk`; PR2 writer
-  payloads `forfeits_subject_item` / `npc_affection_delta` /
+  payloads `forfeits_subject_item` / `subject_standing_delta` (dispatch by
+  `subject_kind` — `NPC_FATE` writes `NPCStanding`, `FACTION` writes
+  `SocietyReputation`/`OrganizationReputation`, #1760) /
   `sets_subject_lifecycle` — pillar-12 validated), `StakeRewardLine` (PR3;
   resolution FK `related_name="reward_lines"`; `sink` MONEY/RESONANCE; `amount`
   per-participant money-equivalent scalar; `resonance` required iff
