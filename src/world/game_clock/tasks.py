@@ -390,6 +390,19 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.justice.services import heat_decay_tick
+
+    register_task(
+        CronDefinition(
+            # Decay persona pursuit heat toward zero and drop cold rows (#1765).
+            # Cadence + magnitude are PLACEHOLDER for the tuning pass.
+            task_key="justice.heat_decay",
+            callable=heat_decay_tick,
+            interval=timedelta(hours=24),
+            description="Decay persona pursuit heat toward zero (#1765).",
+        )
+    )
+
     from world.scenes.tasks import block_finalize_task
 
     register_task(

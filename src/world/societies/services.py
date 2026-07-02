@@ -86,6 +86,7 @@ def create_solo_deed(  # noqa: PLR0913
             deed=entry,
             personas=scene_witness_personas(scene),
             source=DeedKnowledgeSource.WITNESSED,
+            room=scene.location,
         )
     new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
@@ -162,7 +163,12 @@ def create_legend_event(  # noqa: PLR0913
 
         witnesses = scene_witness_personas(scene)
         for e in entries:
-            grant_deed_knowledge(deed=e, personas=witnesses, source=DeedKnowledgeSource.WITNESSED)
+            grant_deed_knowledge(
+                deed=e,
+                personas=witnesses,
+                source=DeedKnowledgeSource.WITNESSED,
+                room=scene.location,
+            )
     all_credits: list[CovenantLegendCredit] = []
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))

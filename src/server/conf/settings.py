@@ -85,6 +85,7 @@ INSTALLED_APPS += [
     "world.achievements.apps.AchievementsConfig",
     "world.tarot.apps.TarotConfig",
     "world.areas.apps.AreasConfig",
+    "world.justice.apps.JusticeConfig",
     "world.locations.apps.LocationsConfig",
     "world.weather.apps.WeatherConfig",
     "world.instances.apps.InstancesConfig",
