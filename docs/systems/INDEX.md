@@ -1277,7 +1277,7 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   - `contribution_value_for_construction(contribution) -> int` — material/money
     value formula (materials ~110% baseline, lore-bearing materials scale by
     `lore_value`)
-- **Space budget (#670, ADR-0071):** `Building.space_budget` snapshots
+- **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
   `max_rooms = rooms_per_size_tier × target_size` flat count — rooms trade
@@ -1291,7 +1291,10 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
     entry room, installed feature, active design project, graph connectivity;
     evicts tenants + contents to `entry_room`)
   - `link_rooms` / `unlink_rooms` (connectivity-guarded) / `rename_exit`
+  - `place_room(persona, room, grid_x, grid_y, floor=None)` (#670 PR2) —
+    cosmetic map re-placement (web canvas drag); only guard is cell collision
   - `space_used(building)` / `space_remaining(building)` / `building_for_room(room)`
+    / `building_exits(building)`
   - `start_building_extension(persona, building, added_budget)` +
     `complete_building_extension` handler; `commission_decoration(persona,
     building, template, room=None)` + `complete_interior_design` handler —
@@ -1302,10 +1305,27 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
 - **Actions:** `ActivatePermitAction` (in `src/actions/definitions/items.py`);
   the #670 builder family in `src/actions/definitions/locations.py` —
   `dig_room`, `resize_room`, `remove_room`, `link_rooms`, `unlink_rooms`,
-  `rename_exit`, `assign_room_tenant`, `end_room_tenancy`, `set_primary_home`,
-  `commission_decoration`, `start_building_extension` — owner-gated
-  (`IsRoomOwnerPrerequisite`) except home (`IsRoomTenantPrerequisite`)/tenancy-end.
+  `rename_exit`, `place_room`, `assign_room_tenant`, `end_room_tenancy`,
+  `set_primary_home`, `commission_decoration`, `start_building_extension` —
+  owner-gated (`IsRoomOwnerPrerequisite`) except home
+  (`IsRoomTenantPrerequisite`)/tenancy-end. Structural actions accept an
+  explicit `room_id` anchor (+ `to_room_id`/`exit_id`) so the web canvas can
+  operate building-wide; the prerequisite gates on the resolved room (#670 PR2).
   Telnet: the `room` family (`CmdRoom`, aliases `build`/`manageroom`).
+- **REST API (#670 PR2, `world/buildings/{serializers,views,urls}.py`, mounted
+  at `/api/buildings/`):** `manager/<building_id>/` (owner-gated manager
+  payload — rooms w/ sizes+grid+tenancies, exits, budget, floors; pinned at 12
+  queries), `manager/for-room/<room_id>/` (RoomPanel resolver: `building_id`,
+  `is_owner`, `is_tenant`, `is_primary_home_here` — ids/booleans only),
+  `room-size-tiers/` + `decoration-templates/` ReadOnly catalogs. Viewer =
+  `?character_id=` validated via `RosterEntry.objects.for_account` →
+  `active_persona_for_sheet`. Writes go through action dispatch, never REST.
+- **Web builder** (`frontend/src/buildings/`, #670 PR2): `BuildingBuilderDialog`
+  (mounted from RoomPanel "Manage Building"; full-screen, keeps the game
+  websocket alive), React Flow `BuilderCanvas` (grid rooms, ghost-cell digs,
+  drag → `place_room`, exit-pair edges), `RoomDetailPanel` (identity/size/
+  exits/tenants/remove), Dig/Decoration/Extension dialogs, `BudgetMeter`;
+  tenants get "Set as Home" on RoomPanel (`set_primary_home`).
 - **Predicate leaf:** `has_item` (persona-scoped) registered with the
   `building_permit` dispatch entry — checks if a persona holds an unconsumed
   building permit.

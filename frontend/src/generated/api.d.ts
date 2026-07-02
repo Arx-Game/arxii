@@ -835,6 +835,108 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/buildings/decoration-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The admin-authored INTERIOR_DESIGN template catalog (public read). */
+    get: operations['buildings_decoration_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/decoration-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The admin-authored INTERIOR_DESIGN template catalog (public read). */
+    get: operations['buildings_decoration_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/manager/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/buildings/manager/<building_id>/ — the full manager payload. */
+    get: operations['buildings_manager_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/manager/for-room/{room_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /api/buildings/manager/for-room/<room_id>/ — ids + permission flags only. */
+    get: operations['buildings_manager_for_room_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/room-size-tiers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The shared room-size unit ladder (smallest first). */
+    get: operations['buildings_room_size_tiers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/room-size-tiers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The shared room-size unit ladder (smallest first). */
+    get: operations['buildings_room_size_tiers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -15256,6 +15358,12 @@ export interface components {
       /** @description Whether available in character creation */
       is_cg_selectable?: boolean;
     };
+    /** @description The full owner-facing manager payload. */
+    BuildingManager: {
+      building: components['schemas']['ManagerBuilding'];
+      rooms: components['schemas']['ManagerRoom'][];
+      exits: components['schemas']['ManagerExit'][];
+    };
     /** @description Serializer for CG point budget configuration. */
     CGPointBudget: {
       readonly id: number;
@@ -16689,6 +16797,7 @@ export interface components {
     DebtRow: {
       id: number;
       creditor: string;
+      summon_role_id: number | null;
       principal: number;
       arrears: number;
       interest_bps_monthly: number;
@@ -16710,6 +16819,18 @@ export interface components {
      * @enum {string}
      */
     DeclaredRiskEnum: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    /** @description An INTERIOR_DESIGN ProjectTemplate row from the admin-authored catalog. */
+    DecorationTemplate: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description Gold cost to commission this project (Phase E will wire deduction). */
+      base_cost?: number;
+      /** @description Coppers per real-time week to keep this project's polish active. The weekly cron sinks it from the owner's purse (#932). */
+      weekly_upkeep_cost?: number;
+      increments: components['schemas']['PolishIncrement'][];
+      tier_prerequisites: string[];
+    };
     /** @description A persona's written account of a deed (#745 Phase 4 lore). */
     DeedStory: {
       readonly id: number;
@@ -17975,6 +18096,13 @@ export interface components {
       /** @default private */
       visibility: components['schemas']['VisibilityFdaEnum'];
     };
+    /** @description Cheap RoomPanel resolver: which building, and what the viewer may do. */
+    ForRoomResult: {
+      building_id: number | null;
+      is_owner: boolean;
+      is_tenant: boolean;
+      is_primary_home_here: boolean;
+    };
     FormTrait: {
       readonly id: number;
       /** @description Internal key */
@@ -19217,6 +19345,48 @@ export interface components {
       ap_amount: number;
       mentor_persona_id?: number | null;
     };
+    /** @description Building header: identity, style, and the space budget meter. */
+    ManagerBuilding: {
+      id: number;
+      name: string;
+      kind: string;
+      style: string | null;
+      space_budget: number;
+      space_used: number;
+      space_remaining: number;
+      entry_room_id: number | null;
+      floors: number[];
+    };
+    /** @description One directed exit between two rooms of the building. */
+    ManagerExit: {
+      id: number;
+      name: string;
+      from_room_id: number;
+      to_room_id: number;
+    };
+    /** @description One room in the manager payload (id = the room's ObjectDB pk). */
+    ManagerRoom: {
+      id: number;
+      name: string;
+      description: string;
+      is_public: boolean;
+      size_name: string | null;
+      size_units: number | null;
+      grid_x: number | null;
+      grid_y: number | null;
+      floor: number;
+      is_entry: boolean;
+      tenancies: components['schemas']['ManagerTenancy'][];
+    };
+    /** @description An active tenancy row, as the building owner sees it. */
+    ManagerTenancy: {
+      id: number;
+      tenant_persona_id: number;
+      tenant_name: string;
+      is_primary_home: boolean;
+      /** Format: date-time */
+      ends_at: string | null;
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -20061,6 +20231,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20092,9 +20263,10 @@ export interface components {
     /**
      * @description * `permit` - Permit
      *     * `mission` - Mission
+     *     * `loan` - Loan
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission';
+    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20102,6 +20274,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20379,6 +20552,7 @@ export interface components {
       balance: number;
       spend_rank_max: number;
       graft_pct: number;
+      steward_role_id: number | null;
       income_streams: components['schemas']['IncomeStreamRow'][];
       debts: components['schemas']['DebtRow'][];
       obligations: components['schemas']['ObligationRow'][];
@@ -20814,6 +20988,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
+    };
+    PaginatedDecorationTemplateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['DecorationTemplate'][];
     };
     PaginatedDeedStoryList: {
       /** @example 123 */
@@ -21850,6 +22039,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Ritual'][];
+    };
+    PaginatedRoomSizeTierList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RoomSizeTier'][];
     };
     PaginatedRosterEntryList: {
       /** @example 123 */
@@ -23151,6 +23355,7 @@ export interface components {
        *
        *     * `permit` - Permit
        *     * `mission` - Mission
+       *     * `loan` - Loan
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -24266,6 +24471,11 @@ export interface components {
        */
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
+    /** @description Per-category polish a decoration template grants on completion. */
+    PolishIncrement: {
+      category: string;
+      value: number;
+    };
     /**
      * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
      *
@@ -25070,6 +25280,12 @@ export interface components {
       state: string;
       /** Format: date-time */
       responded_at: string | null;
+    };
+    /** @description The shared room-size unit ladder. */
+    RoomSizeTier: {
+      readonly id: number;
+      name: string;
+      units: number;
     };
     /** @description Validate a roster application message. */
     RosterApplication: {
@@ -28990,6 +29206,146 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Block'];
+        };
+      };
+    };
+  };
+  buildings_decoration_templates_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDecorationTemplateList'];
+        };
+      };
+    };
+  };
+  buildings_decoration_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this project template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DecorationTemplate'];
+        };
+      };
+    };
+  };
+  buildings_manager_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BuildingManager'];
+        };
+      };
+    };
+  };
+  buildings_manager_for_room_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        room_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ForRoomResult'];
+        };
+      };
+    };
+  };
+  buildings_room_size_tiers_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRoomSizeTierList'];
+        };
+      };
+    };
+  };
+  buildings_room_size_tiers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this room size tier. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomSizeTier'];
         };
       };
     };

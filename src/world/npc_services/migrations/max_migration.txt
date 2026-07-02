@@ -1,1 +1,1 @@
-0006_functionary
+0007_alter_npcserviceoffer_kind_loanofferdetails

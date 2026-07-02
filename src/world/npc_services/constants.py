@@ -8,7 +8,8 @@ class OfferKind(models.TextChoices):
 
     PERMIT = "permit", "Permit"
     MISSION = "mission", "Mission"
-    # Future kinds: loans/training/favors/marriage/attunement.
+    LOAN = "loan", "Loan"
+    # Future kinds: training/favors/marriage/attunement.
 
 
 class DrawMode(models.TextChoices):

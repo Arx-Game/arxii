@@ -73,4 +73,6 @@ urlpatterns = [
     # Checks API
     path("checks/", include("world.checks.urls", namespace="checks")),
     path("societies/", include("world.societies.urls", namespace="societies")),
+    # Building-manager API (#670)
+    path("buildings/", include("world.buildings.urls", namespace="buildings")),
 ]

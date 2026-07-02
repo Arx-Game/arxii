@@ -33,5 +33,5 @@ this declared tier), and (2) paid on through `StakeContractActivation.effective_
 rather than the raw declared value — the contract locks and prices itself for
 the actual party at scene start (`activate_stakes_contract`), and Legend pays
 on that effective figure (`effective_risk_for_beat`), not `Beat.risk` directly.
-See ADR-0071 (chain rule), ADR-0072 (effective risk), and ADR-0073 (menu-first
+See ADR-0076 (chain rule), ADR-0077 (effective risk), and ADR-0078 (menu-first
 calibration).

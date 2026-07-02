@@ -24,3 +24,18 @@ class RoomFeaturesConfig(AppConfig):
             ProjectKind.ROOM_FEATURE_PROGRESSION,
             complete_room_feature_progression,
         )
+
+        # COMMAND_CENTER (#930) is a generic feature — this app IS its home,
+        # so its strategy registers here (Sanctum's registers from world.magic).
+        from world.room_features.constants import (  # noqa: PLC0415
+            RoomFeatureServiceStrategy,
+        )
+        from world.room_features.services import (  # noqa: PLC0415
+            handle_command_center_progression,
+            register_room_feature_strategy,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.COMMAND_CENTER,
+            handle_command_center_progression,
+        )

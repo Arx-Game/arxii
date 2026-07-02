@@ -4,11 +4,12 @@
  * One composite read (GET /api/currency/org-books/{orgId}/) renders the whole
  * page: treasury, graft, income streams, debts, obligations, contributions,
  * and the recent ledger. Exact numbers, per the ledger tenet — the books are
- * where a house stops estimating. Line-item affordances (summon a steward or
- * the creditor's representative about a row) arrive with the NPC-summon work;
- * the row IDs in the payload exist for that.
+ * where a house stops estimating. The books are a mission-giver: line items
+ * carry summon affordances — the creditor's representative on a debt row, the
+ * house steward from the header — spawning real NPC interactions (#930).
  */
 
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Badge } from '@/components/ui/badge';
@@ -24,8 +25,11 @@ import {
 } from '@/components/ui/table';
 import { formatCoppers } from '@/lib/currency';
 import { formatRelativeTime } from '@/lib/relativeTime';
+import { Button } from '@/components/ui/button';
+import { NPCInteractionDialog } from '@/npc_services/components/NPCInteractionDialog';
 import type { DebtRow } from '@/org_books/api';
-import { useOrgBooks } from '@/org_books/queries';
+import { orgBooksKeys, useOrgBooks } from '@/org_books/queries';
+import { useQueryClient } from '@tanstack/react-query';
 
 // ---------------------------------------------------------------------------
 // Small display helpers
@@ -83,6 +87,8 @@ function BooksSkeleton() {
 
 function OrgBooksInner({ orgId }: { orgId: number }) {
   const { data: books, isLoading } = useOrgBooks(orgId);
+  const queryClient = useQueryClient();
+  const [summon, setSummon] = useState<{ roleId: number; title: string } | null>(null);
 
   if (isLoading) return <BooksSkeleton />;
   if (!books) {
@@ -95,7 +101,20 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
 
   return (
     <div className="space-y-4" data-testid="org-books">
-      <h1 className="text-2xl font-bold">{books.organization_name} — the Books</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">{books.organization_name} — the Books</h1>
+        {books.steward_role_id != null && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setSummon({ roleId: books.steward_role_id!, title: 'Summon the steward' })
+            }
+          >
+            Summon steward
+          </Button>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
@@ -131,6 +150,20 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
           </CardContent>
         </Card>
       </div>
+
+      {summon && (
+        <NPCInteractionDialog
+          roleId={summon.roleId}
+          title={summon.title}
+          open
+          onOpenChange={(dialogOpen) => {
+            if (!dialogOpen) setSummon(null);
+          }}
+          onConcluded={() => {
+            void queryClient.invalidateQueries({ queryKey: orgBooksKeys.books(orgId) });
+          }}
+        />
+      )}
 
       <SectionCard title="Income">
         {books.income_streams.length === 0 ? (
@@ -177,6 +210,7 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
                 <TableHead className="text-right">Arrears</TableHead>
                 <TableHead className="text-right">Interest</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -196,6 +230,22 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
                   </TableCell>
                   <TableCell>
                     <DebtStatusBadge debt={debt} />
+                  </TableCell>
+                  <TableCell>
+                    {debt.summon_role_id != null && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setSummon({
+                            roleId: debt.summon_role_id!,
+                            title: `Summon the ${debt.creditor} representative`,
+                          })
+                        }
+                      >
+                        Summon
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

@@ -1271,6 +1271,162 @@ paths:
               schema:
                 $ref: '#/components/schemas/Block'
           description: ''
+  /api/buildings/decoration-templates/:
+    get:
+      operationId: buildings_decoration_templates_list
+      description: The admin-authored INTERIOR_DESIGN template catalog (public read).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDecorationTemplateList'
+          description: ''
+  /api/buildings/decoration-templates/{id}/:
+    get:
+      operationId: buildings_decoration_templates_retrieve
+      description: The admin-authored INTERIOR_DESIGN template catalog (public read).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project template.
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecorationTemplate'
+          description: ''
+  /api/buildings/manager/{id}/:
+    get:
+      operationId: buildings_manager_retrieve
+      description: GET /api/buildings/manager/<building_id>/ — the full manager payload.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingManager'
+          description: ''
+  /api/buildings/manager/for-room/{room_id}/:
+    get:
+      operationId: buildings_manager_for_room_retrieve
+      description: GET /api/buildings/manager/for-room/<room_id>/ — ids + permission
+        flags only.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: room_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForRoomResult'
+          description: ''
+  /api/buildings/room-size-tiers/:
+    get:
+      operationId: buildings_room_size_tiers_list
+      description: The shared room-size unit ladder (smallest first).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoomSizeTierList'
+          description: ''
+  /api/buildings/room-size-tiers/{id}/:
+    get:
+      operationId: buildings_room_size_tiers_retrieve
+      description: The shared room-size unit ladder (smallest first).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this room size tier.
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomSizeTier'
+          description: ''
   /api/chapters/:
     get:
       operationId: chapters_list
@@ -26232,6 +26388,24 @@ components:
       required:
       - display_name
       - name
+    BuildingManager:
+      type: object
+      description: The full owner-facing manager payload.
+      properties:
+        building:
+          $ref: '#/components/schemas/ManagerBuilding'
+        rooms:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerRoom'
+        exits:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerExit'
+      required:
+      - building
+      - exits
+      - rooms
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -29447,6 +29621,9 @@ components:
           type: integer
         creditor:
           type: string
+        summon_role_id:
+          type: integer
+          nullable: true
         principal:
           type: integer
         arrears:
@@ -29465,6 +29642,7 @@ components:
       - in_default
       - interest_bps_monthly
       - principal
+      - summon_role_id
     DecisionEnum:
       enum:
       - accept
@@ -29487,6 +29665,43 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    DecorationTemplate:
+      type: object
+      description: An INTERIOR_DESIGN ProjectTemplate row from the admin-authored
+        catalog.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        base_cost:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Gold cost to commission this project (Phase E will wire deduction).
+        weekly_upkeep_cost:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Coppers per real-time week to keep this project's polish active.
+            The weekly cron sinks it from the owner's purse (#932).
+        increments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolishIncrement'
+        tier_prerequisites:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - increments
+      - name
+      - tier_prerequisites
     DeedStory:
       type: object
       description: A persona's written account of a deed (#745 Phase 4 lore).
@@ -32135,6 +32350,25 @@ components:
       - title
       - track_id
       - writeup
+    ForRoomResult:
+      type: object
+      description: 'Cheap RoomPanel resolver: which building, and what the viewer
+        may do.'
+      properties:
+        building_id:
+          type: integer
+          nullable: true
+        is_owner:
+          type: boolean
+        is_tenant:
+          type: boolean
+        is_primary_home_here:
+          type: boolean
+      required:
+      - building_id
+      - is_owner
+      - is_primary_home_here
+      - is_tenant
     FormTrait:
       type: object
       properties:
@@ -34790,6 +35024,125 @@ components:
           nullable: true
       required:
       - ap_amount
+    ManagerBuilding:
+      type: object
+      description: 'Building header: identity, style, and the space budget meter.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        kind:
+          type: string
+        style:
+          type: string
+          nullable: true
+        space_budget:
+          type: integer
+        space_used:
+          type: integer
+        space_remaining:
+          type: integer
+        entry_room_id:
+          type: integer
+          nullable: true
+        floors:
+          type: array
+          items:
+            type: integer
+      required:
+      - entry_room_id
+      - floors
+      - id
+      - kind
+      - name
+      - space_budget
+      - space_remaining
+      - space_used
+      - style
+    ManagerExit:
+      type: object
+      description: One directed exit between two rooms of the building.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        from_room_id:
+          type: integer
+        to_room_id:
+          type: integer
+      required:
+      - from_room_id
+      - id
+      - name
+      - to_room_id
+    ManagerRoom:
+      type: object
+      description: One room in the manager payload (id = the room's ObjectDB pk).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        is_public:
+          type: boolean
+        size_name:
+          type: string
+          nullable: true
+        size_units:
+          type: integer
+          nullable: true
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
+        floor:
+          type: integer
+        is_entry:
+          type: boolean
+        tenancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagerTenancy'
+      required:
+      - description
+      - floor
+      - grid_x
+      - grid_y
+      - id
+      - is_entry
+      - is_public
+      - name
+      - size_name
+      - size_units
+      - tenancies
+    ManagerTenancy:
+      type: object
+      description: An active tenancy row, as the building owner sees it.
+      properties:
+        id:
+          type: integer
+        tenant_persona_id:
+          type: integer
+        tenant_name:
+          type: string
+        is_primary_home:
+          type: boolean
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - ends_at
+      - id
+      - is_primary_home
+      - tenant_name
+      - tenant_persona_id
     MaturityEnum:
       enum:
       - pitch
@@ -36389,6 +36742,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           description: UI display text for the menu option.
@@ -36453,10 +36807,12 @@ components:
       enum:
       - permit
       - mission
+      - loan
       type: string
       description: |-
         * `permit` - Permit
         * `mission` - Mission
+        * `loan` - Loan
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -36470,6 +36826,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           minLength: 1
@@ -37010,6 +37367,9 @@ components:
           type: integer
         graft_pct:
           type: integer
+        steward_role_id:
+          type: integer
+          nullable: true
         income_streams:
           type: array
           items:
@@ -37041,6 +37401,7 @@ components:
       - organization_id
       - organization_name
       - spend_rank_max
+      - steward_role_id
     Organization:
       type: object
       properties:
@@ -37817,6 +38178,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CovenantRite'
+    PaginatedDecorationTemplateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecorationTemplate'
     PaginatedDeedStoryList:
       type: object
       required:
@@ -39463,6 +39847,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ritual'
+    PaginatedRoomSizeTierList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomSizeTier'
     PaginatedRosterEntryList:
       type: object
       required:
@@ -41589,6 +41996,7 @@ components:
 
             * `permit` - Permit
             * `mission` - Mission
+            * `loan` - Loan
         label:
           type: string
           minLength: 1
@@ -43645,6 +44053,17 @@ components:
             * `4` - Expert
           minimum: -2147483648
           maximum: 2147483647
+    PolishIncrement:
+      type: object
+      description: Per-category polish a decoration template grants on completion.
+      properties:
+        category:
+          type: string
+        value:
+          type: integer
+      required:
+      - category
+      - value
     PoseEndorsement:
       type: object
       description: |-
@@ -45364,6 +45783,24 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    RoomSizeTier:
+      type: object
+      description: The shared room-size unit ladder.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 40
+        units:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
+      - units
     RosterApplication:
       type: object
       description: Validate a roster application message.

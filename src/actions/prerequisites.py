@@ -138,7 +138,12 @@ class IsRoomTenantPrerequisite(Prerequisite):
 
 @dataclass
 class IsRoomOwnerPrerequisite(Prerequisite):
-    """The actor's active persona must own the room they're standing in (#1470)."""
+    """The actor's active persona must own the anchor room (#1470, #670 PR2).
+
+    The anchor is the ``room_id`` kwarg when the web canvas supplies one
+    (read via the kwargs-via-context convention), else the room the actor is
+    standing in — the same resolution the actions themselves use.
+    """
 
     def is_met(
         self,
@@ -151,9 +156,21 @@ class IsRoomOwnerPrerequisite(Prerequisite):
         from world.locations.services import is_owner  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        room = actor.location
-        if room is None:
-            return False, "You're not in a room."
+        kwargs = (context or {}).get("kwargs", {})
+        room_id = kwargs.get("room_id")
+        if room_id:
+            from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+            profile = (
+                RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
+            )
+            if profile is None:
+                return False, "No such room."
+            room = profile.objectdb
+        else:
+            room = actor.location
+            if room is None:
+                return False, "You're not in a room."
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
