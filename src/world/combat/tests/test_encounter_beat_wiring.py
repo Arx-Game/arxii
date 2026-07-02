@@ -215,3 +215,41 @@ class EncounterCompletedBeatWiringTests(EvenniaTestCase):
         self.assertEqual(outcome.method, StakeOutcomeMethod.MACHINE)
         self.assertEqual(outcome.resolution_id, withdrawal_branch.pk)
         self.assertFalse(StakeOutcome.objects.filter(stake=unauthored).exists())
+
+    def test_fled_withdraws_even_when_a_mapping_row_is_authored(self) -> None:
+        """Withdrawal is structural (#1770 PR2): a designer-authored
+        EncounterOutcomeMapping tier for FLED is ignored — the beat still
+        pends and the withdrawal branch fires; the mapped tier never grades
+        the beat.
+        """
+        mapped_tier = CheckOutcome.objects.create(name="Fled Mapped Tier", success_level=5)
+        EncounterOutcomeMapping.objects.create(
+            outcome=EncounterOutcome.FLED,
+            risk_level=RiskLevel.MODERATE,
+            check_outcome=mapped_tier,
+        )
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        stake = StakeFactory(beat=beat)
+        branch = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WITHDRAWAL)
+        StoryProgressFactory(story=story, character_sheet=sheet)
+        encounter = CombatEncounterFactory(
+            outcome=EncounterOutcome.FLED, risk_level=RiskLevel.MODERATE
+        )
+        EpisodeSceneFactory(episode=episode, scene=encounter.scene)
+        install_encounter_beat_trigger(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.FLED)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.PENDING_GM_REVIEW)
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.column, StakeResolutionColumn.WITHDRAWAL)
+        self.assertEqual(outcome.resolution_id, branch.pk)
