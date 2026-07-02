@@ -86,6 +86,7 @@ from actions.definitions.gm_combat import (
 )
 from actions.definitions.gm_stories import (
     CompleteStoryAction,
+    DeclareStakesAction,
     MarkBeatAction,
     PromoteEpisodeAction,
     ResolveEpisodeAction,
@@ -316,6 +317,7 @@ _ALL_ACTIONS: list[Action] = [
     ResolveEpisodeAction(),
     PromoteEpisodeAction(),
     MarkBeatAction(),
+    DeclareStakesAction(),
     ResolveAlterationAction(),
     RestAction(),
     ToggleFavoriteAction(),

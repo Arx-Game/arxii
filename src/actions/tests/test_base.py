@@ -248,6 +248,7 @@ class ActionRegistryTests(TestCase):
             "resolve_episode",
             "promote_episode",
             "mark_beat",
+            "declare_stakes",
             "manage_training",
             "purchase_unlock",
             "toggle_interaction_favorite",

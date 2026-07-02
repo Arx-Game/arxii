@@ -46,6 +46,10 @@ _NO_GM_PERMISSION = "Only the story's Lead GM or staff may do that."
 _NO_MARK_PERMISSION = (
     "Only the story's Lead GM, staff, or an approved Assistant GM may mark a beat."
 )
+_NO_DECLARE_PERMISSION = (
+    "Only the story's Lead GM, staff, an approved Assistant GM, "
+    "or this scene's GM may declare stakes."
+)
 _NO_PROGRESS = "No active progress record found for this story."
 
 
@@ -366,3 +370,91 @@ class MarkBeatAction(Action):
             return ActionResult(success=False, message=str(exc))
 
         return ActionResult(success=True, message=f"Beat marked {outcome.label}.")
+
+
+def _stakes_declaration_text(beat: Beat, activation: Any) -> str:
+    """Compose the room-visible stakes declaration (#1770 pillar 9).
+
+    Lists each stake's severity label + player_summary and the effective
+    risk the activation locked in. Branch contents are never included.
+    """
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+
+    effective_label = RenownRisk(activation.effective_risk).label
+    lines = [f"|wStakes are declared|n (effective risk: {effective_label}):"]
+    lines.extend(
+        f"  - {stake.get_severity_display()}: {stake.player_summary}" for stake in beat.stakes.all()
+    )
+    return "\n".join(lines)
+
+
+@dataclass
+class DeclareStakesAction(Action):
+    """Present and lock a beat's stakes contract for the current scene (#1770 PR4).
+
+    The opt-in moment for freeform (non-combat, non-mission) play: the GM
+    declares the wager to the room, and the contract locks for the scene's
+    active participants. Gated to whoever may mark the beat (Lead GM / staff /
+    approved AGM) or the scene's GM.
+    """
+
+    key: str = "declare_stakes"
+    name: str = "Declare Stakes"
+    icon: str = "scale"
+    category: str = "story"
+    target_type: TargetType = TargetType.SELF
+    costs_turn: bool = False
+
+    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+        from flows.service_functions.communication import message_location  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+        from world.societies.constants import RenownRisk  # noqa: PLC0415
+        from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
+        from world.stories.services.stakes import activate_stakes_contract  # noqa: PLC0415
+
+        account = resolve_account_or_none(actor)
+        beat, error = _beat_or_error(kwargs.get("beat_id"))
+        if error:
+            return error
+
+        scene = get_active_scene(actor.location)
+        if scene is None:
+            return ActionResult(success=False, message="There is no active scene here.")
+
+        if not (_actor_may_mark_beat(account, beat) or scene.is_gm(account)):
+            return ActionResult(success=False, message=_NO_DECLARE_PERMISSION)
+
+        if beat.risk == RenownRisk.NONE or not beat.stakes.exists():
+            return ActionResult(
+                success=False,
+                message="That beat has no stakes to declare (risk NONE or no stakes authored).",
+            )
+
+        personas = scene.persona_handler.active_participant_personas()
+        # Dedupe sheets (order-preserving) — alts of one account still count once each.
+        sheets = list(dict.fromkeys(persona.character_sheet for persona in personas))
+        if not sheets:
+            return ActionResult(
+                success=False,
+                message="No active participants are present to commit to these stakes.",
+            )
+
+        report = check_stake_boundaries(beat.stakes.all(), sheets)
+        if not report.allowed:
+            # The private reason is never surfaced (ADR-0033).
+            return ActionResult(success=False, message="These stakes could not be presented.")
+
+        activation = activate_stakes_contract(beat, sheets)
+
+        text = _stakes_declaration_text(beat, activation)
+        sdm = context.scene_data if context else SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(actor)
+        message_location(caller_state, text)
+
+        return ActionResult(success=True, message=text)
