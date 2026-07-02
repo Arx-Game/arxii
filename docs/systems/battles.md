@@ -53,6 +53,7 @@ One side in a battle (attacker or defender) with its victory-point tally.
 |---|---|---|
 | `battle` | FK → `Battle` (`related_name="sides"`) | |
 | `role` | CharField | `BattleSideRole` — ATTACKER / DEFENDER |
+| `covenant` | FK → `covenants.Covenant` (null, `related_name="battle_sides"`) | Optional War Covenant fielding this side (#1710) |
 | `victory_points` | PositiveIntegerField | Accumulates each round |
 | `victory_threshold` | PositiveIntegerField | Default 100; how many VP to win |
 
@@ -346,7 +347,7 @@ Multi-write operations use `@transaction.atomic`.
 | Service | Signature | Effect |
 |---|---|---|
 | `create_battle` | `(*, name, campaign_story=None, round_limit=DEFAULT_ROUND_LIMIT) -> Battle` | Creates Battle + backing Scene |
-| `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD) -> BattleSide` | Adds a side |
+| `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD, covenant=None) -> BattleSide` | Adds a side, optionally fielded by a War Covenant (#1710) |
 | `add_place` | `(*, battle, name) -> BattlePlace` | Adds a named front |
 | `add_unit` | `(*, battle, side, name, unit_type, strength=100, place=None) -> BattleUnit` | Adds an abstract unit |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |

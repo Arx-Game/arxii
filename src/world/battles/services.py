@@ -41,6 +41,7 @@ from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.covenants.models import Covenant
     from world.magic.models import Technique
     from world.stories.models import Story
 
@@ -78,6 +79,7 @@ def add_side(
     battle: Battle,
     role: str,
     victory_threshold: int = DEFAULT_VICTORY_THRESHOLD,
+    covenant: Covenant | None = None,
 ) -> BattleSide:
     """Add a side (attacker or defender) to a battle.
 
@@ -85,6 +87,7 @@ def add_side(
         battle: The ``Battle`` to add the side to.
         role: A ``BattleSideRole`` value.
         victory_threshold: VP total required for this side to win.
+        covenant: Optional War Covenant fielding this side (#1710).
 
     Returns:
         The newly created ``BattleSide``.
@@ -93,6 +96,7 @@ def add_side(
         battle=battle,
         role=role,
         victory_threshold=victory_threshold,
+        covenant=covenant,
     )
 
 

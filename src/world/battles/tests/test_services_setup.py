@@ -18,6 +18,8 @@ from world.battles.constants import (
 from world.battles.exceptions import BattleConcludedError
 from world.battles.factories import BattleFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory
 from world.scenes.constants import RoundStatus
 
 
@@ -77,6 +79,14 @@ class AddSideTests(TestCase):
         add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
 
         self.assertEqual(self.battle.sides.count(), 2)
+
+    def test_add_side_accepts_covenant(self) -> None:
+        from world.battles.services import add_side, create_battle
+
+        battle = create_battle(name="Siege of Thornwall")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER, covenant=covenant)
+        self.assertEqual(side.covenant_id, covenant.pk)
 
 
 class AddPlaceTests(TestCase):

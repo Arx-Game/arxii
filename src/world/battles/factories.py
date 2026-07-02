@@ -42,6 +42,7 @@ class BattleSideFactory(factory_django.DjangoModelFactory):
     battle = factory.SubFactory(BattleFactory)
     role = BattleSideRole.ATTACKER
     victory_threshold = DEFAULT_VICTORY_THRESHOLD
+    covenant = None
 
 
 class BattlePlaceFactory(factory_django.DjangoModelFactory):

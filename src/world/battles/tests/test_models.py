@@ -7,6 +7,8 @@ from world.battles.factories import (
     BattleSideFactory,
     BattleUnitFactory,
 )
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory
 from world.magic.factories import TechniqueFactory
 
 
@@ -43,6 +45,15 @@ class BattleModelTests(TestCase):
     def test_unit_factory_side_matches_battle(self) -> None:
         unit = BattleUnitFactory()
         self.assertEqual(unit.battle_id, unit.side.battle_id)
+
+    def test_battle_side_covenant_defaults_to_none(self) -> None:
+        side = BattleSideFactory()
+        self.assertIsNone(side.covenant)
+
+    def test_battle_side_covenant_can_be_set(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        side = BattleSideFactory(covenant=covenant)
+        self.assertEqual(side.covenant_id, covenant.pk)
 
 
 class BattleActionDeclarationTechniqueTests(TestCase):

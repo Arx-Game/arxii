@@ -532,6 +532,7 @@
 ### BattleSide
 **Foreign Keys:**
   - battle -> battles.Battle [FK]
+  - covenant -> covenants.Covenant [FK] (nullable)
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
@@ -578,7 +579,7 @@
 
 ### Service Functions
 - `add_place(*, battle: 'Battle', name: 'str') -> 'BattlePlace' — Add a named front/zone to a battle.`
-- `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
+- `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100, covenant: 'Covenant | None' = None) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
 - `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', unit_type: 'str', strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
@@ -1609,6 +1610,7 @@
   - rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
+  - battle_sides <- battles.BattleSide
 
 ### CovenantRole
 **Foreign Keys:**

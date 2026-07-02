@@ -28,6 +28,7 @@ STORY_MODEL = "stories.Story"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 TECHNIQUE_MODEL = "magic.Technique"
+COVENANT_MODEL = "covenants.Covenant"
 
 
 class Battle(SharedMemoryModel):
@@ -113,6 +114,14 @@ class BattleSide(SharedMemoryModel):
         max_length=20,
         choices=BattleSideRole.choices,
         default=BattleSideRole.ATTACKER,
+    )
+    covenant = models.ForeignKey(
+        COVENANT_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="battle_sides",
+        help_text="The War Covenant fielding this side, if any (#1710).",
     )
     victory_points = models.PositiveIntegerField(default=0)
     victory_threshold = models.PositiveIntegerField(default=DEFAULT_VICTORY_THRESHOLD)
