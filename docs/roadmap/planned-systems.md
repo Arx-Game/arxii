@@ -22,7 +22,7 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 - **Damage/condition immunity & vulnerability framework** — "people who can't drown," vampires harmed
   by sunlight, fire-immune species, etc. `partial` — **#1740/#1588** built the core unified seam
   (`resolve_damage_type_resistance`; combat/traps/DoT-tick net condition + gift-thread resistance
-  against a `damage_type`, immunity = high resistance not boolean, ADR-0066) plus the first live
+  against a `damage_type`, immunity = high resistance not boolean, ADR-0073) plus the first live
   trigger (Sunlight Exposure). Aquatic ("can't drown") and other species-specific triggers beyond
   sunlight are still unbuilt. The companion mitigation layer (an ally or a location granting cover
   against a hazard) shipped as **#1744** (ADR-0069): Succor maneuver + location `DAMAGE_TYPE`
@@ -196,11 +196,13 @@ Build to the ADR; these are not open questions. See
 
 ## Species & racial framework
 
-- **Species/racial framework** — `world/species` is a near-empty stub. A thin racial-*language* notion
-  exists (species racial language, `world/character_creation/models.py:257`), but **gifts, abilities,
-  and progression are absent**. Needs: **racial gifts**, **growing stronger at racial abilities**
-  (racial progression), and species **status vulnerabilities** (e.g. **vampires harmed by sunlight** —
-  no vampire/sunlight code today) via the immunity/vulnerability primitive. `intent`, `unrecorded`.
+- **Species/racial framework** — `world/species` has the species gift substrate
+  (`SpeciesGiftGrant` + `provision_species_gifts`, #1580) and the environmental
+  vulnerability framework (vampire↔sunlight as `ConditionDamageOverTime` riding the
+  peril pipeline, #1740; see ADR-0073). Still **absent**: **racial gifts** (seeded
+  species Minor Gift data), **growing stronger at racial abilities** (racial
+  progression), and broader **status vulnerabilities** beyond sunlight. `intent`,
+  `unrecorded`.
 
 ## GM tooling, missions, knowledge
 

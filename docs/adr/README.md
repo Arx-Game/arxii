@@ -110,7 +110,9 @@ treat those names as hints to confirm, not gospel.
 - [0060 — Reactive defenses are mutation-only DAMAGE_PRE_APPLY flow handlers with a shared anima-cost pattern](0060-reactive-defenses-are-mutation-only-flow-handlers.md)
 - [0061 — Access-change fires one shared surface; discoverability is a shared abstract base](0061-access-change-fires-one-surface-discoverable-is-shared-base.md)
 - [0069 — Succor is a RoundContext capability; location shelter is a hard gate, not arithmetic resistance](0069-succor-roundcontext-capability.md)
-- [0070 — Battle Surrounded peril may override AFK-safety, narrowly and explicitly](0070-battle-peril-may-override-afk-safety-narrowly.md)
+- [0070 — NPC ontology: Functionary, Standing, and Story NPCs as class-1..4](0070-npc-ontology-functionary-standing-story.md)
+- [0073 — Environmental vulnerabilities are ConditionDamageOverTime rows riding the peril pipeline](0073-environmental-vulnerabilities-are-dot-rows-riding-the-peril-pipeline.md)
+- [0074 — Battle Surrounded peril may override AFK-safety, narrowly and explicitly](0074-battle-peril-may-override-afk-safety-narrowly.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
@@ -120,7 +122,8 @@ treat those names as hints to confirm, not gospel.
 - [0054 — Falling gains power; redemption is lossy (asymmetric resonance conversion)](0054-falling-gains-power-redemption-is-lossy.md)
 - [0055 — One specialization engine: resonance × entity → customized techniques (Gift, Path, Covenant Role)](0055-one-specialization-engine-resonance-times-entity.md)
 - [0056 — Technique-threads are an optional "signature" axis, distinct from the gift-thread](0056-technique-threads-are-an-optional-signature-axis.md)
-- [0062 — Species-gift drawbacks are conditions the gift's own thread mitigates](0062-species-gift-drawbacks-mitigated-by-gift-thread.md)
+- [0071 — Species-gift drawbacks are conditions the gift's own thread mitigates](0071-species-gift-drawbacks-mitigated-by-gift-thread.md)
+- [0072 — Signature motif bonus is an additive flourish, not a discovered TechniqueVariant](0072-signature-motif-bonus-is-additive-not-a-variant.md)
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)

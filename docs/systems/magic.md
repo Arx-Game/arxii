@@ -267,7 +267,7 @@ magic checks at all is an open design question (#1363).
 | `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
 | `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
 
-### Signature Motif Bonus (#1582 — ADR-0065) [BUILT & WIRED]
+### Signature Motif Bonus (#1582 — ADR-0072) [BUILT & WIRED]
 
 A **`SignatureMotifBonus`** is a staff-authored, facet/resonance-gated additive bonus
 that a player may attach to a TECHNIQUE-kind Thread. Signing a technique applies the
@@ -356,7 +356,7 @@ RelationshipCapstone / CovenantRole / Mantle / SanctumDetails. The bare ROOM
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER), `signature_bonus` (nullable FK to `SignatureMotifBonus`, PROTECT — only settable on TECHNIQUE-kind threads, enforced by `clean()` + `CheckConstraint`, #1582 ADR-0065) |
+| `Thread` | Per-character attachment to one anchor that channels one Resonance | `owner` FK CharacterSheet, `resonance` FK, `target_kind`, `target_trait` / `target_technique` / `target_facet` / `target_relationship_track` / `target_capstone` / `target_covenant_role` / `target_gift` / `target_mantle` / `target_sanctum_details` (exactly one populated per kind), `name`, `description`, `developed_points`, `level`, `created_at`, `updated_at`, `retired_at` (soft-retire), `slot_kind` (SANCTUM only: PERSONAL_OWN / COVENANT / HELPER), `signature_bonus` (nullable FK to `SignatureMotifBonus`, PROTECT — only settable on TECHNIQUE-kind threads, enforced by `clean()` + `CheckConstraint`, #1582 ADR-0072) |
 | `ThreadLevelUnlock` | Per-thread XP-locked-boundary receipt | `thread` FK, `unlocked_level`, `xp_spent`, `acquired_at` (unique per (thread, unlocked_level)) |
 
 **Integrity layers on Thread.** (1) `clean()` asserts exactly one `target_*`
@@ -601,7 +601,7 @@ from `finalize_magic_data` after the Major-gift block; it mints the MINOR `Chara
 gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE` that nets
 against the drawback vulnerability at the combat-damage seam. `gift_thread_resistance(character,
 damage_type) -> int` (services/threads.py) returns the aggregate resistance (passive +
-active paid-pull snapshots). See ADR-0050, ADR-0062. E2E:
+active paid-pull snapshots). See ADR-0050, ADR-0071. E2E:
 `world/magic/tests/integration/test_species_gift_e2e.py`.
 
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)

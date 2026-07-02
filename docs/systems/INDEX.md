@@ -24,7 +24,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
-  - **Signature Motif Bonus (ADR-0065 — #1582):** `SignatureMotifBonus` (staff-authored
+  - **Signature Motif Bonus (ADR-0072 — #1582):** `SignatureMotifBonus` (staff-authored
     catalog; `required_facet` FK, `required_resonance` FK, `flat_intensity_delta`,
     `narrative_snippet`; `qualifies_for(character_sheet)` gate predicate),
     `SignatureMotifBonusCapabilityGrant` / `SignatureMotifBonusDamageProfile` /
@@ -428,7 +428,7 @@ Species/race definitions with stat bonuses, language assignments, and species-gi
 - **Key Services:** `provision_species_gifts(sheet, *, resonance=None)` (`world/species/services.py`) —
   mints the MINOR `CharacterGift`, the latent level-0 GIFT thread (via
   `provision_latent_gift_thread`), and applies any drawback idempotently; called from
-  `finalize_magic_data` (CG, after the Major-gift block). See ADR-0062.
+  `finalize_magic_data` (CG, after the Major-gift block). See ADR-0071.
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species), forms (physical traits),
   magic (GIFT thread via `provision_latent_gift_thread`), conditions (drawback application)
@@ -1872,7 +1872,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   an enemy-vs-pvp pool (`select_surrounded_terminal_pool`, ADR-0023-safe); a new
   `BattleActionKind.RESCUE` clears an ally's Surrounded condition
   (`_resolve_rescue_success`), declared via `battle declare rescue <ally> with
-  <technique>`. See ADR-0070 for the AFK-safety exception.
+  <technique>`. See ADR-0074 for the AFK-safety exception.
 - **Deferred follow-ups:** battle writeup page (#1735), rich type-matchups (#1711),
   command hierarchy / naval / aerial / siege (#1710, #1713, #1714), campaign propagation
   (#1716).

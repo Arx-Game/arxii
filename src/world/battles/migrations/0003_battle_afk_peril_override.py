@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
             name="afk_peril_override",
             field=models.BooleanField(
                 default=False,
-                help_text="When true, a Surrounded participant's peril escalates every round the GM resolves regardless of whether they declared this round (narrow, explicit ADR-0004 exception scoped to peril only — see ADR-0070).",
+                help_text="When true, a Surrounded participant's peril escalates every round the GM resolves regardless of whether they declared this round (narrow, explicit ADR-0004 exception scoped to peril only — see ADR-0074).",
             ),
         ),
         migrations.AlterField(

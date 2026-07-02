@@ -38,7 +38,7 @@ All models use `SharedMemoryModel` from `evennia.utils.idmapper.models`.
 | `round_limit` | PositiveSmallIntegerField | Default 10; auto-concludes at expiry |
 | `outcome` | CharField | `BattleOutcome` choice; default UNRESOLVED |
 | `concluded_at` | DateTimeField (null) | Timestamp when concluded |
-| `afk_peril_override` | BooleanField | Default False; when True, Surrounded peril escalates every round regardless of declaration (#1733, see ADR-0070) |
+| `afk_peril_override` | BooleanField | Default False; when True, Surrounded peril escalates every round regardless of declaration (#1733, see ADR-0074) |
 | `created_at` | DateTimeField (auto) | |
 
 **Properties:**
@@ -196,7 +196,7 @@ Returns a `BattleRoundResult` dataclass:
 
 Isolated participants can be cut off and swarmed — a staged "Surrounded" acute-peril
 condition, generalizing the same guarded-consequence-pool machinery Bleeding-Out uses
-(#1479 / ADR-0049), specialized for battles. See ADR-0070 for the AFK-safety exception
+(#1479 / ADR-0049), specialized for battles. See ADR-0074 for the AFK-safety exception
 this introduces.
 
 ### The "Surrounded" condition (`world/vitals/factories.py::ensure_surrounded_content`)
@@ -286,7 +286,7 @@ Surrounded. Telnet: `battle declare rescue <ally> with <technique>` (`CmdBattle`
 
 `BooleanField`, default `False`. When `True`, a Surrounded participant's peril escalates
 every round the GM resolves regardless of whether they declared — a narrow, explicit
-exception to ADR-0004 scoped to peril only (see **ADR-0070**).
+exception to ADR-0004 scoped to peril only (see **ADR-0074**).
 
 ## Services (`src/world/battles/services.py`)
 

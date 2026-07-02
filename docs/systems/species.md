@@ -42,7 +42,7 @@ All models use `NaturalKeyMixin` (fixture support). `Species` and `Language` use
 
 `provision_species_gifts` (`world.species.services`) mints the gift and applies both
 `drawback_condition` and `benefit_condition` idempotently at CG finalization —
-see `docs/adr/0062-species-gift-drawbacks-mitigated-by-gift-thread.md`.
+see `docs/adr/0071-species-gift-drawbacks-mitigated-by-gift-thread.md`.
 
 ### Hierarchy Design
 

@@ -18,7 +18,7 @@ Code wins over this doc.
   and applies any drawback idempotently. GIFT anchor cap built: `path_stage × 10`.
   The gift's GIFT thread carries a tier-0 `ThreadPullEffect` with `effect_kind=RESISTANCE`
   that nets against the drawback vulnerability at the combat-damage seam (`apply_damage_to_participant`).
-  ADR-0062. E2E: `world/magic/tests/integration/test_species_gift_e2e.py`.
+  ADR-0071. E2E: `world/magic/tests/integration/test_species_gift_e2e.py`.
 
 ## The design (ADR-0050): species abilities are Minor Gifts
 
@@ -40,7 +40,7 @@ Acquisition rides the XP-unlock contract (ADR-0053). See the gift/resonance econ
 - **Species vulnerabilities** (e.g. vampire ↔ sunlight) + broad immunity/vulnerability framework —
   [BUILT & WIRED] (#1740/#1588): `resolve_damage_type_resistance` is the single unified seam —
   combat, traps, and DoT round-tick all net condition-resistance + gift-thread resistance against a
-  `damage_type`; immunity is high resistance, not a boolean (ADR-0066, extends ADR-0062). Sunlight
+  `damage_type`; immunity is high resistance, not a boolean (ADR-0073, extends ADR-0071). Sunlight
   Exposure is the first live environmental vulnerability: `reconcile_sunlight_exposure` applies a
   radiant DoT outdoors during day via the existing peril pipeline (E2E:
   `test_sunlight_exposure_e2e.py`). Pending: seed hazards beyond sunlight. **Cover against a hazard**

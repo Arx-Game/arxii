@@ -15,4 +15,4 @@ resonance-less signature (every thread has resonance, and forbidding divergence 
 interesting case — one technique that breaks from your gift's affinity). Today `TargetKind.TECHNIQUE`
 is wired for a broader role — verify what it currently feeds and re-scope it to the signature delta.
 
-> Status: **superseded by ADR-0065** · The resonance-divergence model described here was replaced by the motif-bonus model (additive flourish, not a discovered variant). See ADR-0065 for the decision and the invariants that apply.
+> Status: **superseded by ADR-0072** · The resonance-divergence model described here was replaced by the motif-bonus model (additive flourish, not a discovered variant). See ADR-0072 for the decision and the invariants that apply.

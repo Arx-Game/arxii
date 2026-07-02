@@ -262,7 +262,7 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 - New players see only their path's cantrips; returning players (advanced mode) see all cantrips
 - 5 styles map 1:1 to 5 Prospect paths: Manifestation→Steel, Subtle→Whispers, Performance→Voice, Prayer→Chosen, Incantation→Tome
 
-### Signature Motif Bonus (#1582 — ADR-0065)
+### Signature Motif Bonus (#1582 — ADR-0072)
 
 A character may *sign* one of their TECHNIQUE-kind Threads by attaching a
 `SignatureMotifBonus` (`models/signature.py`) — a staff-authored, Motif-gated ADDITIVE
@@ -412,7 +412,7 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   `SanctumSlotKind`: PERSONAL_OWN / COVENANT / HELPER),
   `signature_bonus` (nullable FK → `SignatureMotifBonus`, PROTECT — only settable on
   TECHNIQUE-kind threads; enforced by `clean()` + DB CheckConstraint
-  `"thread_signature_bonus_technique_only"`; #1582 ADR-0065).
+  `"thread_signature_bonus_technique_only"`; #1582 ADR-0072).
   All typed FKs use `on_delete=PROTECT`. Three layers of integrity: `clean()`, per-kind
   CheckConstraints, per-kind partial UniqueConstraints.
   **SANCTUM anchor:** `Thread.target_sanctum_details` (FK to `SanctumDetails`).
@@ -577,7 +577,7 @@ resonance picker remains a needs-design follow-up. Proven end-to-end by
   `drawback_condition` FK. `provision_species_gifts(sheet, *, resonance=None)`
   (`world/species/services.py`) is called from `finalize_magic_data` after the Major-gift
   block; mints the MINOR `CharacterGift`, calls `provision_latent_gift_thread`, applies any
-  drawback idempotently. See ADR-0062.
+  drawback idempotently. See ADR-0071.
 - **Gift-specific pull-effect lookup** — `get_pull_effects_for_thread(thread, **filters)`
   (`world/magic/services/pull_effects.py`): for `TargetKind.GIFT` threads, tries rows where
   `target_gift == thread.target_gift` first, falls back to `target_gift IS NULL`; all other

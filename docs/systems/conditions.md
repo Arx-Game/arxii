@@ -168,7 +168,7 @@ unconditional application. Resistance strength comes from the existing check-mod
 seam: a permanent condition (e.g. a species benefit condition, see
 `SpeciesGiftGrant.benefit_condition` in the species system doc) carrying a
 `ConditionCheckModifier` for the resist check type raises the target's roll —
-"math, not a boolean," per ADR-0066's tenet extended to the condition-application
+"math, not a boolean," per ADR-0073's tenet extended to the condition-application
 axis.
 
 ### Querying Modifiers
