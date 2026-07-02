@@ -263,3 +263,18 @@ class FrontierStoryEntry(TypedDict):
     story_id: int
     story_title: str
     scope: str
+
+
+@dataclass(frozen=True)
+class StakesReadinessReport:
+    """Result of validate_stakes_readiness (world.stories.services.stakes).
+
+    is_staked: beat.risk != NONE (an unstaked beat is trivially ready).
+    is_ready: the contract is complete enough to activate at declared risk;
+        False means activation auto-downgrades effective risk to NONE.
+    problems: human-readable reasons is_ready is False (empty when ready).
+    """
+
+    is_staked: bool
+    is_ready: bool
+    problems: tuple[str, ...] = ()
