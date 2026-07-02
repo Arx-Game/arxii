@@ -165,6 +165,19 @@ class StakeResolutionColumn(models.TextChoices):
     WITHDRAWAL = "withdrawal", "Withdrawal"
 
 
+class StakeRewardSink(models.TextChoices):
+    """Where a StakeRewardLine's payout lands (#1770 PR3 — two-sided contract).
+
+    Only sinks with a real, coherent delivery service are offered: MONEY
+    (world.currency.services.deliver_mission_money) and RESONANCE
+    (world.magic.services.resonance.grant_resonance). Legend is deliberately
+    NOT a sink — it stays automatic on top via effective risk (pillar 6).
+    """
+
+    MONEY = "money", "Money"
+    RESONANCE = "resonance", "Resonance"
+
+
 class StakeOutcomeMethod(models.TextChoices):
     """How a StakeOutcome was decided (#1770 PR2).
 
@@ -192,19 +205,39 @@ RISK_LADDER: tuple[str, ...] = (
 # max_fuse_hops implements the chain rule: how many failure-cascade hops may
 # separate this tier from a reachable removal-from-play stake. EXTREME = 0:
 # the beat itself must offer removal.
+# reward_floor/reward_ceiling band the total declared WIN-column reward value
+# (money-equivalent scalars summed across the beat's StakeRewardLine rows,
+# #1770 PR3). Starting values — designer-tunable rows, not invariants. LOW's
+# floor stays 0 so a zero-reward LOW contract remains ready.
 DEFAULT_RISK_CALIBRATIONS: Mapping[str, dict[str, int]] = types.MappingProxyType(
     {
-        "low": {"severity_floor_total": 1, "severity_ceiling": 2, "max_fuse_hops": 3},
+        "low": {
+            "severity_floor_total": 1,
+            "severity_ceiling": 2,
+            "max_fuse_hops": 3,
+            "reward_floor": 0,
+            "reward_ceiling": 200,
+        },
         "moderate": {
             "severity_floor_total": 2,
             "severity_ceiling": 3,
             "max_fuse_hops": 2,
+            "reward_floor": 100,
+            "reward_ceiling": 600,
         },
-        "high": {"severity_floor_total": 4, "severity_ceiling": 4, "max_fuse_hops": 1},
+        "high": {
+            "severity_floor_total": 4,
+            "severity_ceiling": 4,
+            "max_fuse_hops": 1,
+            "reward_floor": 300,
+            "reward_ceiling": 1500,
+        },
         "extreme": {
             "severity_floor_total": 6,
             "severity_ceiling": 5,
             "max_fuse_hops": 0,
+            "reward_floor": 800,
+            "reward_ceiling": 4000,
         },
     }
 )
