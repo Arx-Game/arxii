@@ -125,7 +125,10 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         battle: The owning ``Battle``.
         side: The ``BattleSide`` this unit belongs to.
         name: Display name for this unit (e.g. "Cavalry").
-        unit_type: Descriptive type tag (e.g. "cavalry", "zombies-on-nightmares").
+        unit_type: Descriptive flavor tag (e.g. "cavalry", "zombies-on-nightmares").
+            Maps to ``BattleUnit.descriptor`` (#1711) — narrative only; use
+            ``composition``/``quality`` defaults or set them post-creation for
+            mechanics.
         strength: Starting strength value (default 100).
         place: Optional ``BattlePlace`` this unit is stationed at.
 
@@ -136,7 +139,7 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         battle=battle,
         side=side,
         name=name,
-        unit_type=unit_type,
+        descriptor=unit_type,
         strength=strength,
         status=BattleUnitStatus.ACTIVE,
         place=place,
