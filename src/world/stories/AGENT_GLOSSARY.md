@@ -31,3 +31,27 @@ _Avoid_: GM note, comment, pitch.
 **Story Scope**:
 Which kind of subject a Story progresses for — `StoryScope`: UNASSIGNED (the default, not yet placed), CHARACTER (personal), GROUP, or GLOBAL. It selects the progress-pointer type, and an UNASSIGNED story rejects progress creation until it is assigned a scope.
 _Avoid_: level, reach, audience.
+
+**Stake**:
+One named wager on a Beat's stakes contract (`Stake` model, #1770) — what is actually at risk (a character, an NPC, a location, a faction relationship, an item, a campaign track, or a custom subject), authored with a `player_summary` shown to players at opt-in and a `severity` (`StakeSeverity`, SETBACK..REMOVAL) denormalized from a `StakeTemplate` at creation. Distinct from `Beat.risk` (the tier-level declaration a Stake concretizes) and from a `StakeResolution` (what happens to the Stake on a given outcome).
+_Avoid_: wager, bet, consequence (use Stake for the thing at risk, StakeResolution for what happens to it).
+
+**Stakes Contract**:
+The full authored bundle backing a staked Beat: its `Beat.risk` + `Beat.target_level` declaration, one or more `Stake` rows, and each Stake's `StakeResolution` rows (WIN/LOSS/WITHDRAWAL branches). "The contract" is complete when `validate_stakes_readiness` reports it ready; see `docs/systems/stakes.md` for the full model and lifecycle.
+_Avoid_: wager sheet, risk sheet.
+
+**Severity**:
+`StakeSeverity` (SETBACK/COSTLY/GRAVE/DIRE/REMOVAL, 1-5) — how bad losing (or how good winning) a single Stake is. `RiskCalibration.severity_ceiling` caps the worst severity any one Stake may carry at a given risk tier; `severity_floor_total` is the minimum summed severity across a beat's Stakes (no fake stakes). REMOVAL is the character-loss band.
+_Avoid_: danger level, magnitude (Magnitude is a separate `societies` renown axis).
+
+**Fuse / Chain Rule**:
+The reachability rule (#1770) that a risk tier below EXTREME is only honest if losing the beat can plausibly cascade into a character-removal outcome, even when this beat doesn't stake removal directly. `RiskCalibration.max_fuse_hops` bounds how many failure-gated `Transition` hops the BFS walk (`_jeopardy_reachable`) may take to find a downstream beat that offers removal; EXTREME's `max_fuse_hops=0` means the beat itself must offer it. PITCH-maturity episodes never count toward the walk.
+_Avoid_: escalation ladder (that's `StakeResolution.escalates_to_risk`, a related but separate authored field), removal chain.
+
+**Effective Risk**:
+What a stakes contract actually pays out on for the party currently running the scene — `compute_effective_risk(declared_risk, target_level, party_average_level)`, decaying an over-leveled party's declared risk toward NONE and giving an under-leveled party a bounded one-tier upgrade. Read via `effective_risk_for_beat(beat)`, which prefers the open `StakeContractActivation.effective_risk` and falls back to the raw `Beat.risk`. Distinct from `Beat.risk` (the GM's declared, unscaled risk).
+_Avoid_: adjusted risk, scaled risk.
+
+**Activation** (stakes contract):
+The `StakeContractActivation` row locking a beat's stakes contract at scene start — snapshots `declared_risk`/`declared_target_level`/`party_average_level`, computes and freezes `effective_risk`, and (while `resolved_at IS NULL`) blocks any edit to the beat's Stakes/StakeResolutions. At most one open activation per beat (partial unique constraint). Not to be confused with activating/engaging a Covenant Role, or any other domain's "activation."
+_Avoid_: lock (use Activation for the row; "lock" for the behavior it enforces), snapshot.
