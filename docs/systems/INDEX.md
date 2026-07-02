@@ -1260,7 +1260,7 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   - `contribution_value_for_construction(contribution) -> int` — material/money
     value formula (materials ~110% baseline, lore-bearing materials scale by
     `lore_value`)
-- **Space budget (#670, ADR-0071):** `Building.space_budget` snapshots
+- **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
   `max_rooms = rooms_per_size_tier × target_size` flat count — rooms trade
