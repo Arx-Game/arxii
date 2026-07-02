@@ -397,6 +397,46 @@ class RenameExitAction(_RoomBuilderAction):
 
 
 @dataclass
+class PlaceRoomAction(_RoomBuilderAction):
+    """Re-place a room on the building map grid (cosmetic; web canvas drag).
+
+    Kwargs: ``room_id``, ``grid_x``, ``grid_y``, optional ``floor``.
+    """
+
+    key: str = "place_room"
+    name: str = "Place Room"
+    icon: str = "move"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.room_services import RoomBuildError, place_room  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        try:
+            grid_x, grid_y = int(kwargs["grid_x"]), int(kwargs["grid_y"])
+        except (KeyError, TypeError, ValueError):
+            return ActionResult(success=False, message="Pick a spot on the map.")
+        floor = kwargs.get("floor")
+        try:
+            place_room(
+                persona=_persona_for(actor),
+                room=room,
+                grid_x=grid_x,
+                grid_y=grid_y,
+                floor=int(floor) if floor is not None else None,
+            )
+        except RoomBuildError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Room placed.")
+
+
+@dataclass
 class AssignRoomTenantAction(_RoomBuilderAction):
     """Owner grants a persona tenancy of the current room. Kwarg: ``tenant_persona_id``."""
 

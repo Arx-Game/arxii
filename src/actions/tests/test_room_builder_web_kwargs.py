@@ -186,3 +186,23 @@ class OwnershipGateTests(WebKwargsBase):
 
         result = get_action("resize_room").run(actor=self.actor, room_id=other_room.pk, size="Snug")
         self.assertFalse(result.success)
+
+
+class PlaceRoomActionTests(WebKwargsBase):
+    def test_place_room_by_id(self) -> None:
+        result = get_action("place_room").run(
+            actor=self.actor, room_id=self.study.pk, grid_x=2, grid_y=2, floor=0
+        )
+        self.assertTrue(result.success, result.message)
+        self.study.room_profile.refresh_from_db()
+        self.assertEqual((self.study.room_profile.grid_x, self.study.room_profile.grid_y), (2, 2))
+
+    def test_place_room_needs_coordinates(self) -> None:
+        result = get_action("place_room").run(actor=self.actor, room_id=self.study.pk)
+        self.assertFalse(result.success)
+
+    def test_place_room_occupied_cell_surfaces_error(self) -> None:
+        result = get_action("place_room").run(
+            actor=self.actor, room_id=self.study.pk, grid_x=0, grid_y=0, floor=0
+        )
+        self.assertFalse(result.success)

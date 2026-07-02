@@ -164,3 +164,40 @@ class DigRoomTests(RoomBuilderBase):
                 direction="north",
                 name="Kitchen",
             )
+
+
+class PlaceRoomTests(RoomBuilderBase):
+    def test_place_sets_coords(self) -> None:
+        from world.buildings.room_services import place_room
+
+        loose = _room_in(self.building.area, size=self.snug, name="Loose Room")
+        profile = place_room(persona=self.owner, room=loose.objectdb, grid_x=2, grid_y=3, floor=1)
+        self.assertEqual((profile.grid_x, profile.grid_y, profile.floor), (2, 3, 1))
+
+    def test_place_defaults_to_current_floor(self) -> None:
+        from world.buildings.room_services import place_room
+
+        attic = _room_in(self.building.area, size=self.snug, grid=(4, 4, 2), name="Attic")
+        profile = place_room(persona=self.owner, room=attic.objectdb, grid_x=5, grid_y=4)
+        self.assertEqual((profile.grid_x, profile.grid_y, profile.floor), (5, 4, 2))
+
+    def test_place_onto_occupied_cell_refused(self) -> None:
+        from world.buildings.room_services import place_room
+
+        loose = _room_in(self.building.area, size=self.snug, name="Loose Room")
+        with self.assertRaises(RoomBuildError):
+            place_room(persona=self.owner, room=loose.objectdb, grid_x=0, grid_y=0, floor=0)
+
+    def test_place_onto_own_cell_is_noop_success(self) -> None:
+        from world.buildings.room_services import place_room
+
+        profile = place_room(
+            persona=self.owner, room=self.entry.objectdb, grid_x=0, grid_y=0, floor=0
+        )
+        self.assertEqual((profile.grid_x, profile.grid_y), (0, 0))
+
+    def test_place_requires_owner(self) -> None:
+        from world.buildings.room_services import place_room
+
+        with self.assertRaises(RoomBuildError):
+            place_room(persona=self.stranger, room=self.entry.objectdb, grid_x=1, grid_y=1)
