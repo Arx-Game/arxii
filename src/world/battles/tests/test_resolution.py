@@ -18,11 +18,30 @@ from world.battles.constants import (
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
     BattleActionKind,
+    BattleActionScope,
     BattleSideRole,
 )
-from world.battles.services import add_side, add_unit, begin_battle_round, enlist_participant
+from world.battles.exceptions import InsufficientCommandTierError, NoCommandHierarchyError
+from world.battles.factories import (
+    BattleFactory,
+    BattleParticipantFactory,
+    BattleRoundFactory,
+    BattleSideFactory,
+    BattleUnitFactory,
+)
+from world.battles.services import (
+    add_side,
+    add_unit,
+    begin_battle_round,
+    declare_battle_action,
+    enlist_participant,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.types import CheckResult
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -210,6 +229,81 @@ class DeclareBattleActionTests(TestCase):
                 technique=bare_technique,
                 target_unit=self.unit,
             )
+
+
+class ScopePermissionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.battle = BattleFactory()
+        cls.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        cls.side = BattleSideFactory(battle=cls.battle, covenant=cls.covenant)
+        cls.no_covenant_side = BattleSideFactory(battle=cls.battle, role=BattleSideRole.DEFENDER)
+        cls.rank = CovenantRankFactory(covenant=cls.covenant)
+        cls.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        cls.supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="scope-test-supreme",
+        )
+
+    def _enlist(self, side):
+        sheet = CharacterSheetFactory()
+        CharacterTechniqueFactory(character=sheet, technique=self.technique)
+        participant = BattleParticipantFactory(battle=self.battle, side=side, character_sheet=sheet)
+        BattleRoundFactory(battle=self.battle, status=RoundStatus.DECLARING)
+        return participant, sheet
+
+    def test_side_scope_requires_supreme_command(self) -> None:
+        participant, _sheet = self._enlist(self.side)
+        with self.assertRaises(InsufficientCommandTierError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+    def test_side_scope_allowed_for_engaged_supreme_commander(self) -> None:
+        participant, sheet = self._enlist(self.side)
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=sheet,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        decl = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            scope=BattleActionScope.SIDE,
+            target_side=self.side,
+        )
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+
+    def test_side_scope_rejected_with_no_covenant_on_side(self) -> None:
+        participant, _sheet = self._enlist(self.no_covenant_side)
+        with self.assertRaises(NoCommandHierarchyError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.no_covenant_side,
+            )
+
+    def test_unit_scope_unaffected_by_command_tier(self) -> None:
+        participant, _sheet = self._enlist(self.side)
+        unit = BattleUnitFactory(battle=self.battle, side=self.side)
+        decl = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+        self.assertEqual(decl.scope, BattleActionScope.UNIT)
 
 
 class ResolveBattleRoundSuccessTests(TestCase):

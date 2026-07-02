@@ -51,3 +51,20 @@ class TechniqueNotBattleReadyError(BattleError):
         user_message: str = "That technique cannot be used in battle (no action template).",
     ) -> None:
         super().__init__(user_message)
+
+
+class NoCommandHierarchyError(BattleError):
+    """Raised when a PLACE/SIDE-scope declaration targets a side with no covenant."""
+
+    def __init__(self, user_message: str = "This side has no command hierarchy.") -> None:
+        super().__init__(user_message)
+
+
+class InsufficientCommandTierError(BattleError):
+    """Raised when a participant lacks the command tier their declared scope requires."""
+
+    def __init__(
+        self,
+        user_message: str = "You don't hold the command authority for that scope.",
+    ) -> None:
+        super().__init__(user_message)

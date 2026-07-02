@@ -17,6 +17,7 @@ from world.battles.constants import (
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
     BattleSideRole,
@@ -25,6 +26,8 @@ from world.battles.constants import (
 from world.battles.exceptions import (
     BattleConcludedError,
     CharacterDoesNotKnowTechniqueError,
+    InsufficientCommandTierError,
+    NoCommandHierarchyError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -219,13 +222,16 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(
+def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declaration facet
     *,
     participant: BattleParticipant,
     action_kind: str,
     technique: Technique,
     target_unit: BattleUnit | None = None,
     target_ally: BattleParticipant | None = None,
+    scope: str = BattleActionScope.UNIT,
+    target_place: BattlePlace | None = None,
+    target_side: BattleSide | None = None,
 ) -> BattleActionDeclaration:
     """Record or update the participant's action declaration for the current round.
 
@@ -240,12 +246,21 @@ def declare_battle_action(
         target_unit: The ``BattleUnit`` being struck (STRIKE only).
         target_ally: The ``BattleParticipant`` being supported (SUPPORT) or rescued
             (RESCUE).
+        scope: A ``BattleActionScope`` value (#1710). PLACE/SIDE require the
+            participant to hold a matching engaged command_tier on the side's
+            covenant.
+        target_place: The ``BattlePlace`` affected (scope=PLACE).
+        target_side: The ``BattleSide`` affected (scope=SIDE).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
         CharacterDoesNotKnowTechniqueError: If the participant's character doesn't
             know ``technique``.
         TechniqueNotBattleReadyError: If ``technique`` has no ``action_template``.
+        NoCommandHierarchyError: If scope is PLACE/SIDE and the participant's
+            side has no covenant.
+        InsufficientCommandTierError: If scope is PLACE/SIDE and the
+            participant lacks the required engaged command_tier.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -266,6 +281,9 @@ def declare_battle_action(
     if not technique.action_template_id:
         raise TechniqueNotBattleReadyError
 
+    if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE):
+        _validate_command_scope(participant=participant, scope=scope)
+
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
         participant=participant,
@@ -274,10 +292,43 @@ def declare_battle_action(
             "technique": technique,
             "target_unit": target_unit,
             "target_ally": target_ally,
+            "scope": scope,
+            "target_place": target_place,
+            "target_side": target_side,
             "resolved": False,
         },
     )
     return declaration
+
+
+def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> None:
+    """Raise unless *participant* holds the command tier *scope* requires.
+
+    PLACE requires an engaged CharacterCovenantRole with command_tier in
+    (SUBORDINATE, SUPREME) on the side's covenant; SIDE requires SUPREME.
+    A side with no covenant has no command hierarchy at all.
+    """
+    from world.covenants.constants import CommandTier  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    covenant = participant.side.covenant
+    if covenant is None:
+        raise NoCommandHierarchyError
+
+    required_tiers = (
+        [CommandTier.SUPREME]
+        if scope == BattleActionScope.SIDE
+        else [CommandTier.SUBORDINATE, CommandTier.SUPREME]
+    )
+    has_tier = CharacterCovenantRole.objects.filter(
+        character_sheet=participant.character_sheet,
+        covenant=covenant,
+        covenant_role__command_tier__in=required_tiers,
+        engaged=True,
+        left_at__isnull=True,
+    ).exists()
+    if not has_tier:
+        raise InsufficientCommandTierError
 
 
 # ---------------------------------------------------------------------------
