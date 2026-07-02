@@ -141,6 +141,25 @@ export interface PlayerActionsResponse {
   results: PlayerAction[];
 }
 
+/** One wagered stake in a stakes-contract summary (#1770 pillar 9). */
+export interface StakeSummaryEntry {
+  id: number;
+  player_summary: string;
+  severity: number;
+  severity_label: string;
+}
+
+/**
+ * Beat-level stakes summary shown at commit surfaces (#1770 pillar 9).
+ * What is wagered is visible; branch contents are never included.
+ */
+export interface StakesSummary {
+  declared_risk: string;
+  effective_risk: string;
+  is_ready: boolean;
+  stakes: StakeSummaryEntry[];
+}
+
 /** Mirrors SceneActionRequestSerializer's FLAT payload (#892 — keep in sync). */
 export interface ActionRequest {
   id: number;
@@ -153,6 +172,8 @@ export interface ActionRequest {
   strain_commitment: number;
   /** Risk level of the encounter accepting this hostile cast would join (#777). */
   combat_risk_level?: string | null;
+  /** Stakes summaries for staked beats behind the gating encounter (#1770). */
+  combat_stakes?: StakesSummary[] | null;
   created_at: string;
 }
 
@@ -317,5 +338,7 @@ export interface PendingActionTarget {
   pose_text: string;
   strain_commitment: number;
   combat_risk_level?: string | null;
+  /** Stakes summaries for staked beats behind the gating encounter (#1770). */
+  combat_stakes?: StakesSummary[] | null;
   created_at: string;
 }

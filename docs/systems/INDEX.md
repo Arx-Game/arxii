@@ -1013,13 +1013,14 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 
-### Stakes Contract Engine (#1770 PR1–3)
+### Stakes Contract Engine (#1770 PR1–4)
 GM-authored, player-visible "what's actually at risk" contract backing a story
 `Beat`'s risk declaration — named stakes with WIN/LOSS/WITHDRAWAL branches, banded
 by designer-tunable calibration rows, priced for the actual party at scene-start
-lock, read by the Legend award, resolved per-stake at beat completion
-(machine grading / GM constrained pick), and paying authored win-reward lines
-through an anti-farming activation gate (PR3). ADR-0067.
+lock (activation wired at every commit surface, PR4), read by the Legend award,
+resolved per-stake at beat completion (machine grading / GM constrained pick),
+and paying authored win-reward lines through an anti-farming activation gate
+(PR3). ADR-0067.
 
 - **Models:** `RiskCalibration` (per-tier severity floor/ceiling + `max_fuse_hops`
   chain-rule bound; `reward_floor`/`reward_ceiling` band the WIN reward total —
@@ -1062,6 +1063,22 @@ through an anti-farming activation gate (PR3). ADR-0067.
   (soft-forfeit), `npc_services.adjust_npc_affection`,
   `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
   `LifecycleState.DEAD` to the roster lifecycle.
+- **Opt-in surfaces (PR4):** `check_stake_boundaries`
+  (`world.stories.services.boundaries`, allow-all stub → registry is #1771;
+  `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
+  staff-only, ADR-0033); `stakes_summary_for_beat` +
+  `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
+  never serialized); `GET /api/beats/{id}/stakes-summary/`; `combat_stakes` on
+  both consent-prompt serializers (`world.scenes.action_serializers`) rendered
+  by `ConsentPrompt`; activation wired at `create_pvp_duel`/`create_lethal_duel`/
+  `seed_or_feed_encounter_from_cast` (via `combat.beat_wiring.
+  activate_stakes_for_scene` + `staked_unsatisfied_beats_for_scene`), at
+  `issue_mission` (via `missions.services.beat.activate_stakes_for_instance`),
+  and via the `declare_stakes` GM action (freeform scenes);
+  `missions.MissionRiskAcknowledgement` + `MISSION_RISK_ACK_TIER` gate with the
+  two-phase `acknowledge_risk` opt-in inside `npc_resolve`
+  (`MissionRiskUnacknowledgedError`); `InteractionOfferSerializer.risk_tier`
+  pre-accept surfacing.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
@@ -1069,8 +1086,9 @@ through an anti-farming activation gate (PR3). ADR-0067.
   walk + stake-level routing), societies (`RISK_LEGEND_AWARDS`), mechanics
   (`_legend_award` scaling), checks (`Consequence.character_loss` reachability
   test; branch pools via the shared `_fire_pool_with_context`), combat
-  (FLED/ABANDONED withdrawal wire), items / npc_services / roster (writers),
-  currency / magic (PR3 win-reward sinks)
+  (FLED/ABANDONED withdrawal wire + PR4 activation seams), items /
+  npc_services / roster (writers), currency / magic (PR3 win-reward sinks),
+  scenes / missions / actions (PR4 opt-in surfaces)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
 
@@ -1289,7 +1307,7 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   - `contribution_value_for_construction(contribution) -> int` — material/money
     value formula (materials ~110% baseline, lore-bearing materials scale by
     `lore_value`)
-- **Space budget (#670, ADR-0071):** `Building.space_budget` snapshots
+- **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
   `max_rooms = rooms_per_size_tier × target_size` flat count — rooms trade
@@ -1303,7 +1321,10 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
     entry room, installed feature, active design project, graph connectivity;
     evicts tenants + contents to `entry_room`)
   - `link_rooms` / `unlink_rooms` (connectivity-guarded) / `rename_exit`
+  - `place_room(persona, room, grid_x, grid_y, floor=None)` (#670 PR2) —
+    cosmetic map re-placement (web canvas drag); only guard is cell collision
   - `space_used(building)` / `space_remaining(building)` / `building_for_room(room)`
+    / `building_exits(building)`
   - `start_building_extension(persona, building, added_budget)` +
     `complete_building_extension` handler; `commission_decoration(persona,
     building, template, room=None)` + `complete_interior_design` handler —
@@ -1314,10 +1335,49 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
 - **Actions:** `ActivatePermitAction` (in `src/actions/definitions/items.py`);
   the #670 builder family in `src/actions/definitions/locations.py` —
   `dig_room`, `resize_room`, `remove_room`, `link_rooms`, `unlink_rooms`,
-  `rename_exit`, `assign_room_tenant`, `end_room_tenancy`, `set_primary_home`,
-  `commission_decoration`, `start_building_extension` — owner-gated
-  (`IsRoomOwnerPrerequisite`) except home (`IsRoomTenantPrerequisite`)/tenancy-end.
+  `rename_exit`, `place_room`, `assign_room_tenant`, `end_room_tenancy`,
+  `set_primary_home`, `commission_decoration`, `start_building_extension` —
+  owner-gated (`IsRoomOwnerPrerequisite`) except home
+  (`IsRoomTenantPrerequisite`)/tenancy-end. Structural actions accept an
+  explicit `room_id` anchor (+ `to_room_id`/`exit_id`) so the web canvas can
+  operate building-wide; the prerequisite gates on the resolved room (#670 PR2).
   Telnet: the `room` family (`CmdRoom`, aliases `build`/`manageroom`).
+- **REST API (#670 PR2, `world/buildings/{serializers,views,urls}.py`, mounted
+  at `/api/buildings/`):** `manager/<building_id>/` (owner-gated manager
+  payload — rooms w/ sizes+grid+tenancies, exits, budget, floors; pinned at 12
+  queries), `manager/for-room/<room_id>/` (RoomPanel resolver: `building_id`,
+  `is_owner`, `is_tenant`, `is_primary_home_here` — ids/booleans only),
+  `room-size-tiers/` + `decoration-templates/` ReadOnly catalogs. Viewer =
+  `?character_id=` validated via `RosterEntry.objects.for_account` →
+  `active_persona_for_sheet`. Writes go through action dispatch, never REST.
+- **Web builder** (`frontend/src/buildings/`, #670 PR2): `BuildingBuilderDialog`
+  (mounted from RoomPanel "Manage Building"; full-screen, keeps the game
+  websocket alive), React Flow `BuilderCanvas` (grid rooms, ghost-cell digs,
+  drag → `place_room`, exit-pair edges), `RoomDetailPanel` (identity/size/
+  exits/tenants/remove), Dig/Decoration/Extension dialogs, `BudgetMeter`;
+  tenants get "Set as Home" on RoomPanel (`set_primary_home`).
+- **Architectural style tiers (#1469):** `ArchitecturalStyle.is_default` /
+  `prestige_bonus` / `cost_multiplier` (PLACEHOLDER magnitudes; cost charging
+  awaits the economy pass). Throwback (non-default) styles gate on codex
+  knowledge of `codex_subject` — `can_build_style(persona, style)`
+  (`world/buildings/services.py`); unlocked via the clue→RESEARCH pipeline
+  (ADR-0079). `SetBuildingStyleAction` (key `set_building_style`, owner-gated,
+  `room_id` anchor) is the player verb; telnet `room/style <name>`. Owned home
+  building's style adds `prestige_bonus` in
+  `recompute_persona_prestige_from_dwellings`. Seeds:
+  `ensure_architectural_styles()` (2 default + 2 discoverable PLACEHOLDER rows
+  w/ codex subjects/entries/clues).
+- **Comfort fixtures + owner build-HUD (#1514 close-out):**
+  `PlaceFixtureAction`/`RemoveFixtureAction` (keys `place_room_fixture` /
+  `remove_room_fixture`, owner-gated, `room_id` anchor; telnet `room/fixture` /
+  `room/removefixture`) — the first production callers of
+  `place_decoration`/`remove_decoration`. `ensure_decoration_kinds()` seeds 3
+  PLACEHOLDER kinds. HUD read: `GET
+  /api/buildings/manager/room/<room_id>/comfort/` (owner-gated) — enclosure,
+  comfort level/points/amenity, per-axis pressure/mitigation/net
+  (`world.locations.services.room_exposure_breakdown`), placed fixtures, and
+  the kinds catalog; rendered by `ComfortSection` in the web builder's room
+  panel.
 - **Predicate leaf:** `has_item` (persona-scoped) registered with the
   `building_permit` dispatch entry — checks if a persona holds an unconsumed
   building permit.

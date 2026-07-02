@@ -627,11 +627,43 @@ def _recompute_building_comfort_effect(building: Building) -> None:
         _recompute_room_comfort_effect(profile)
 
 
+def can_build_style(persona: Persona, style: ArchitecturalStyle) -> bool:
+    """Whether this persona may build in this style (#1469).
+
+    Default (living-realm) styles are open to everyone. Non-default styles are
+    the discoverable throwback tier: buildable only once the persona's character
+    KNOWS at least one codex entry under the style's ``codex_subject`` — the
+    state the clue→RESEARCH pipeline grants on completion. A throwback style
+    with no codex subject is unbuildable by construction (nothing can unlock it).
+    """
+    if not style.is_active:
+        return False
+    if style.is_default:
+        return True
+    if style.codex_subject_id is None:
+        return False
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+
+    try:
+        roster_entry = persona.character_sheet.roster_entry
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+    return CharacterCodexKnowledge.objects.filter(
+        roster_entry=roster_entry,
+        entry__subject=style.codex_subject,
+        status=CodexKnowledgeStatus.KNOWN,
+    ).exists()
+
+
 @transaction.atomic
 def set_building_style(building: Building, style: ArchitecturalStyle | None) -> Building:
     """Assign (or clear) a building's architectural style and re-sync its climate modifiers.
 
-    Permission gating is the caller's concern (owner standing, renovation-Project completion).
+    Permission gating is the caller's concern (owner standing, renovation-Project completion;
+    the knowledge gate is ``can_build_style``, checked by ``SetBuildingStyleAction``).
     The style→modifier materialization lives here so callers don't reimplement it.
     """
     building.architectural_style = style

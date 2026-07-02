@@ -2557,7 +2557,59 @@ class StakeSerializer(serializers.ModelSerializer):
                     {"severity": "severity is required when template is null."}
                 )
 
+        self._check_boundaries(beat, attrs)
+
         return attrs
+
+    def _candidate_stake(self, beat: Any, attrs: Any) -> Stake:
+        """An unsaved Stake carrying this write's effective field values.
+
+        For updates, fields absent from ``attrs`` fall back to the instance,
+        so the screen sees the row as it would exist after the write.
+        """
+        field_names = (
+            "template",
+            "subject_kind",
+            "severity",
+            "subject_sheet",
+            "subject_item",
+            "subject_society",
+            "subject_organization",
+            "subject_label",
+            "player_summary",
+        )
+        values = {}
+        for name in field_names:
+            if name in attrs:
+                values[name] = attrs[name]
+            elif self.instance is not None:
+                values[name] = getattr(self.instance, name)
+        return Stake(beat=beat, **values)
+
+    def _check_boundaries(self, beat: Any, attrs: Any) -> None:
+        """Authoring-time boundary screen (#1770 pillar 10).
+
+        Screens the beat's existing stakes PLUS the candidate write (an
+        unsaved Stake built from the effective attrs), so the screen sees the
+        contract as it would exist after this write. Participants are unknown
+        at authoring, so the sheet list is empty — this becomes a real screen
+        when the boundary registry (#1771) ships; today's stub never blocks.
+        A pending sign-off requirement blocks like a denial (#1771 forward
+        compatibility). The failure message is deliberately generic: a
+        player's boundary is never surfaced (ADR-0033).
+        """
+        from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
+
+        existing = []
+        if beat is not None:
+            existing_qs = beat.stakes.all()
+            if self.instance is not None:
+                existing_qs = existing_qs.exclude(pk=self.instance.pk)
+            existing = list(existing_qs)
+        report = check_stake_boundaries([*existing, self._candidate_stake(beat, attrs)], [])
+        if not report.cleared:
+            msg = "These stakes could not be authored against a player boundary."
+            raise serializers.ValidationError(msg)
 
 
 class StakeRewardLineSerializer(serializers.ModelSerializer):
@@ -2741,6 +2793,8 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
 
         self._validate_writer_payloads(attrs, stake)
 
+        self._validate_writer_payloads(attrs, stake)
+
         return attrs
 
     def _validate_writer_payloads(self, attrs: Any, stake: Any) -> None:
@@ -2792,3 +2846,55 @@ class StakeContractActivationSerializer(serializers.ModelSerializer):
             "readiness_notes",
         ]
         read_only_fields = fields
+
+
+class StakeSummarySerializer(serializers.ModelSerializer):
+    """Player-visible summary of one Stake (#1770 pillar 9).
+
+    What is wagered is visible; branch contents stay hidden — resolutions
+    (consequence pools, escalations, narrative) are deliberately NOT fields
+    here and must never be added.
+    """
+
+    severity_label = serializers.CharField(source="get_severity_display", read_only=True)
+
+    class Meta:
+        model = Stake
+        fields = ["id", "player_summary", "severity", "severity_label"]
+        read_only_fields = fields
+
+
+class StakesSummarySerializer(serializers.Serializer):
+    """Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+
+    Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+    ``effective_risk`` is the open activation's locked value when one exists,
+    else the declared risk.
+    """
+
+    declared_risk = serializers.CharField(read_only=True)
+    effective_risk = serializers.CharField(read_only=True)
+    is_ready = serializers.BooleanField(read_only=True)
+    stakes = StakeSummarySerializer(many=True, read_only=True)
+
+
+def stakes_summary_for_beat(beat: Beat) -> dict:
+    """Build the player-visible stakes-summary payload for a beat.
+
+    Shared by the BeatViewSet ``stakes-summary`` endpoint and the combat
+    consent-prompt surface (``combat_stakes``) so the shape stays single-
+    sourced. Leaks only player_summary/severity by design (#1770 pillar 9).
+    """
+    from world.stories.services.stakes import (  # noqa: PLC0415
+        effective_risk_for_beat,
+        validate_stakes_readiness,
+    )
+
+    return StakesSummarySerializer(
+        {
+            "declared_risk": beat.risk,
+            "effective_risk": effective_risk_for_beat(beat),
+            "is_ready": validate_stakes_readiness(beat).is_ready,
+            "stakes": beat.stakes.all(),
+        }
+    ).data

@@ -1,11 +1,11 @@
 # Rooms, Buildings & Estates
 
-**Status:** in progress — Room Builder backend shipped (#670 PR1)
+**Status:** Room Builder shipped (#670 — PR1 backend + PR2 web builder)
 **Depends on:** Areas (data layer), Items (containers, ownership), Roster (character ownership)
 
 ## Built (2026-07-01, #670 PR1 — Room Builder backend)
 
-- **Space-budget model (ADR-0071):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
+- **Space-budget model (ADR-0075):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
   PLACEHOLDER) → `Building.space_budget`; rooms carry `RoomSizeTier` units
   (Micro 2 → Expanse 2500 — the shared ladder the future creature-size stat
   reads) and spend from the pool. Replaced `max_rooms`.
@@ -25,8 +25,49 @@
   `/public`, `/addexit`, `/removeexit`, `/renameexit`, `/drop confirm`,
   `/map`, `/home`, `/tenant`, `/evict`, `/extend`, `/decorate`), aliases
   `build` + legacy `manageroom`.
-- **Next (PR2):** building-manager read API + the web map canvas (the
-  builder's primary surface), grown from the #1470 `RoomEditorPanel`.
+## Built (2026-07-02, #670 PR2 — building-manager API + web builder)
+
+- **Web-addressable actions:** structural builder actions take an explicit
+  `room_id` anchor (`to_room_id`/`exit_id` for links), prerequisite-gated on
+  the resolved room, so the canvas operates building-wide; new `place_room`
+  action for cosmetic map re-placement (drag).
+- **Read API** (`/api/buildings/`): owner-gated manager payload (rooms +
+  sizes + grid + tenancies, exits, budget, floors), the for-room resolver
+  RoomPanel uses (permission booleans only), room-size-tier + decoration-
+  template catalogs. Writes stay on action dispatch.
+- **Web builder** (`frontend/src/buildings/`): "Manage Building" on RoomPanel
+  opens a full-screen React Flow canvas — rooms on the grid, click a ghost
+  cell to dig (direction prefilled), drag to re-place, exit-pair edges,
+  floor switcher, budget meter — with a room detail panel (identity, size,
+  exits, tenants, duplicate-via-`like=`, remove w/ stranded-room guard
+  surfaced) and dialogs for decoration commissions + budget extensions.
+  Tenants get "Set as Home" on RoomPanel.
+
+## Built (2026-07-02, #1469 — discoverable throwback styles)
+
+- Style tiers: default (living-realm) vs discoverable throwback
+  (`is_default=False`, higher `prestige_bonus`, `cost_multiplier` knob —
+  PLACEHOLDER magnitudes; charging deferred to the economy pass).
+- Discovery composes the existing clue→codex→RESEARCH pipeline (ADR-0079):
+  research the style's clue → contributors learn its codex entry →
+  `can_build_style` opens → `room/style <name>` / `set_building_style` action
+  dresses the building (climate affinities re-sync via `set_building_style`).
+- Owned home building's style now feeds dwelling prestige. Ratified out of
+  scope (Apostate, 2026-07-02): ship styles, caste vernaculars, out-of-place
+  social reads.
+
+## Built (2026-07-02, #1514 close-out — owner build-HUD + fixture verbs)
+
+- `room_exposure_breakdown(room)` — per-axis pressure/mitigation/net (the
+  build-to-win readout: "COLD +6, −4 hearth = +2 residual").
+- Fixture verbs `place_room_fixture`/`remove_room_fixture` (+ telnet
+  `room/fixture`/`room/removefixture`) — comfort decorations finally have a
+  player caller; 3 PLACEHOLDER kinds seeded.
+- Owner build-HUD in the web builder (ComfortSection on the room panel,
+  backed by `manager/room/<id>/comfort/`).
+- Deliberately not built: websocket room-state comfort duplication (the
+  inhabitant surfacing shipped as #1522's REST widgets + weather echo);
+  Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
 
 ## Overview
 

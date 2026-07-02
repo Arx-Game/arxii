@@ -247,7 +247,7 @@ def resize_room(*, persona: Persona, room: DefaultObject, size: RoomSizeTier) ->
     return profile
 
 
-def _building_exits(building: Building) -> list[DefaultObject]:
+def building_exits(building: Building) -> list[DefaultObject]:
     """All Exit objects whose source room is in this building."""
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
@@ -280,7 +280,7 @@ def _stranded_rooms(
     )
     room_ids.discard(drop_room_id)
     adjacency: dict[int, set[int]] = {rid: set() for rid in room_ids}
-    for exit_obj in _building_exits(building):
+    for exit_obj in building_exits(building):
         if exit_obj.pk in drop_exit_ids:
             continue
         src, dst = exit_obj.db_location_id, exit_obj.db_destination_id
@@ -383,6 +383,39 @@ def rename_exit(*, persona: Persona, exit_obj: DefaultObject, name: str) -> None
         raise RoomBuildError(msg)
     exit_obj.db_key = name.strip()
     exit_obj.save(update_fields=["db_key"])
+
+
+def place_room(
+    *,
+    persona: Persona,
+    room: DefaultObject,
+    grid_x: int,
+    grid_y: int,
+    floor: int | None = None,
+) -> RoomProfile:
+    """Re-place a room on the building's cosmetic map grid (web canvas drag).
+
+    Placement never gates play — it only moves the room's map cell. The one
+    guard is cell collision on the target floor, so the map stays readable.
+    """
+    building = _require_building_owner(persona, room)
+    profile = room.room_profile
+    target_floor = profile.floor if floor is None else floor
+    occupied = (
+        RoomProfile.objects.filter(
+            area=building.area, grid_x=grid_x, grid_y=grid_y, floor=target_floor
+        )
+        .exclude(pk=profile.pk)
+        .exists()
+    )
+    if occupied:
+        msg = "That spot on the map is already occupied."
+        raise RoomBuildError(msg)
+    profile.grid_x = grid_x
+    profile.grid_y = grid_y
+    profile.floor = target_floor
+    profile.save(update_fields=["grid_x", "grid_y", "floor"])
+    return profile
 
 
 def _room_removal_guards(building: Building, room: DefaultObject) -> None:

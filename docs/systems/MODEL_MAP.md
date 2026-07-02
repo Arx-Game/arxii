@@ -733,6 +733,7 @@
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
+- `can_build_style(persona: 'Persona', style: 'ArchitecturalStyle') -> 'bool' — Whether this persona may build in this style (#1469).`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
@@ -2189,6 +2190,7 @@
 - `ownership_history_for(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None) -> 'QuerySet[LocationOwnership]' — Return ALL LocationOwnership rows (active and ended) for a`
 - `room_discomfort(room: 'DefaultObject') -> 'int' — Total residual environmental discomfort at a room (#1514, #1522).`
 - `room_enclosure(room: 'DefaultObject') -> 'RoomEnclosure' — The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile.`
+- `room_exposure_breakdown(room: 'DefaultObject') -> 'list[AxisBreakdown]' — Per-axis pressure/mitigation/net for a room — the build-HUD's engine (#1514).`
 - `set_primary_home(*, persona: 'Persona', room: 'DefaultObject') -> 'LocationTenancy' — Designate one of the persona's active room tenancies as their home (#670).`
 - `set_residence(*, character: 'DefaultObject', room: 'DefaultObject') -> 'None' — Set a character's primary residence (#1514).`
 - `set_room_display_data(*, room: 'DefaultObject', persona: 'Persona', name: 'str | None' = None, description: 'str | None' = None, is_public: 'bool | None' = None) -> 'None' — Owner-gated edit of a room's display name, description, and public listing.`
@@ -3422,6 +3424,11 @@
   - deed -> missions.MissionDeedRecord [FK]
   - line -> missions.MissionDeedRewardLine [FK]
 
+### MissionRiskAcknowledgement
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [FK]
+  - persona -> scenes.Persona [FK]
+
 ### Service Functions
 - `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False) -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
@@ -3514,6 +3521,7 @@
   - role -> npc_services.NPCRole [FK]
   - check_type -> checks.CheckType [FK] (nullable)
 **Pointed to by:**
+  - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - cooldowns <- npc_services.OfferCooldown
   - mission_offer_details <- npc_services.MissionOfferDetails
   - permit_offer_details <- npc_services.PermitOfferDetails
@@ -4219,6 +4227,7 @@
   - invitations_sent <- events.EventInvitation
   - combat_opponents <- combat.CombatOpponent
   - gm_table_memberships <- gm.GMTableMembership
+  - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - projects_owned <- projects.Project
   - project_contributions <- projects.Contribution
   - npc_standings <- npc_services.NPCStanding

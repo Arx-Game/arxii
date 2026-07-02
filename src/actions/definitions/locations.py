@@ -64,9 +64,9 @@ class RoomEditAction(Action):
         )
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         persona = active_persona_for_sheet(actor.sheet_data)
         try:
             set_room_display_data(
@@ -85,6 +85,26 @@ def _persona_for(actor: ObjectDB):
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     return active_persona_for_sheet(actor.sheet_data)
+
+
+def _resolve_room(actor: ObjectDB, kwargs: dict[str, Any]) -> ObjectDB | None:
+    """The action's anchor room: explicit ``room_id`` (web canvas) else ``actor.location``."""
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    room_id = kwargs.get("room_id")
+    if room_id:
+        profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
+        return profile.objectdb if profile else None
+    return actor.location
+
+
+def _no_room_message(kwargs: dict[str, Any]) -> str:
+    return "No such room." if kwargs.get("room_id") else "You're not in a room."
+
+
+def _no_exit_message(kwargs: dict[str, Any]) -> str:
+    exit_name = (kwargs.get("exit") or "").strip()
+    return f"No exit '{exit_name}' here." if exit_name else "No such exit here."
 
 
 def _budget_suffix(room: ObjectDB) -> str:
@@ -121,6 +141,17 @@ def _find_exit_in_room(room: ObjectDB, name: str) -> ObjectDB | None:
     ).first()
 
 
+def _resolve_exit(room: ObjectDB, kwargs: dict[str, Any]) -> ObjectDB | None:
+    """An exit in the anchor room, by explicit ``exit_id`` (web) or ``exit`` name (telnet)."""
+    exit_id = kwargs.get("exit_id")
+    if exit_id:
+        return ObjectDB.objects.filter(
+            pk=exit_id, db_typeclass_path="typeclasses.exits.Exit", db_location=room
+        ).first()
+    exit_name = (kwargs.get("exit") or "").strip()
+    return _find_exit_in_room(room, exit_name) if exit_name else None
+
+
 @dataclass
 class _RoomBuilderAction(Action):
     """Shared shape for the owner-gated structural verbs (#670)."""
@@ -154,9 +185,9 @@ class DigRoomAction(_RoomBuilderAction):
         from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
         from world.buildings.room_services import RoomBuildError, dig_room  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         size = None
         size_name = (kwargs.get("size") or "").strip()
         if size_name:
@@ -209,9 +240,9 @@ class ResizeRoomAction(_RoomBuilderAction):
         from evennia_extensions.models import RoomSizeTier  # noqa: PLC0415
         from world.buildings.room_services import RoomBuildError, resize_room  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         size_name = (kwargs.get("size") or "").strip()
         size = RoomSizeTier.objects.filter(name__iexact=size_name).first()
         if size is None:
@@ -245,9 +276,9 @@ class RemoveRoomAction(_RoomBuilderAction):
             space_used,
         )
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         try:
             remove_room(persona=_persona_for(actor), room=room)
@@ -279,11 +310,15 @@ class LinkRoomsAction(_RoomBuilderAction):
     ) -> ActionResult:
         from world.buildings.room_services import RoomBuildError, link_rooms  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         to_name = (kwargs.get("to") or "").strip()
-        other = _find_room_in_building(room, to_name) if to_name else None
+        to_room_id = kwargs.get("to_room_id")
+        if to_room_id:
+            other = _resolve_room(actor, {"room_id": to_room_id})
+        else:
+            other = _find_room_in_building(room, to_name) if to_name else None
         if other is None:
             return ActionResult(
                 success=False, message=f"No room named '{to_name}' in this building."
@@ -317,13 +352,12 @@ class UnlinkRoomsAction(_RoomBuilderAction):
     ) -> ActionResult:
         from world.buildings.room_services import RoomBuildError, unlink_rooms  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
-        exit_name = (kwargs.get("exit") or "").strip()
-        exit_obj = _find_exit_in_room(room, exit_name) if exit_name else None
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        exit_obj = _resolve_exit(room, kwargs)
         if exit_obj is None:
-            return ActionResult(success=False, message=f"No exit '{exit_name}' here.")
+            return ActionResult(success=False, message=_no_exit_message(kwargs))
         try:
             unlink_rooms(persona=_persona_for(actor), exit_obj=exit_obj)
         except RoomBuildError as exc:
@@ -347,13 +381,12 @@ class RenameExitAction(_RoomBuilderAction):
     ) -> ActionResult:
         from world.buildings.room_services import RoomBuildError, rename_exit  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
-        exit_name = (kwargs.get("exit") or "").strip()
-        exit_obj = _find_exit_in_room(room, exit_name) if exit_name else None
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        exit_obj = _resolve_exit(room, kwargs)
         if exit_obj is None:
-            return ActionResult(success=False, message=f"No exit '{exit_name}' here.")
+            return ActionResult(success=False, message=_no_exit_message(kwargs))
         try:
             rename_exit(
                 persona=_persona_for(actor), exit_obj=exit_obj, name=kwargs.get("name") or ""
@@ -361,6 +394,97 @@ class RenameExitAction(_RoomBuilderAction):
         except RoomBuildError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True, message="Exit renamed.")
+
+
+@dataclass
+class PlaceRoomAction(_RoomBuilderAction):
+    """Re-place a room on the building map grid (cosmetic; web canvas drag).
+
+    Kwargs: ``room_id``, ``grid_x``, ``grid_y``, optional ``floor``.
+    """
+
+    key: str = "place_room"
+    name: str = "Place Room"
+    icon: str = "move"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.room_services import RoomBuildError, place_room  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        try:
+            grid_x, grid_y = int(kwargs["grid_x"]), int(kwargs["grid_y"])
+        except (KeyError, TypeError, ValueError):
+            return ActionResult(success=False, message="Pick a spot on the map.")
+        floor = kwargs.get("floor")
+        try:
+            place_room(
+                persona=_persona_for(actor),
+                room=room,
+                grid_x=grid_x,
+                grid_y=grid_y,
+                floor=int(floor) if floor is not None else None,
+            )
+        except RoomBuildError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Room placed.")
+
+
+@dataclass
+class SetBuildingStyleAction(_RoomBuilderAction):
+    """Dress the building in an architectural style. Kwargs: ``style``, optional ``room_id``.
+
+    Default (living-realm) styles are open; throwback styles (#1469) require
+    the codex knowledge their research projects grant (``can_build_style``).
+    """
+
+    key: str = "set_building_style"
+    name: str = "Set Building Style"
+    icon: str = "landmark"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.models import ArchitecturalStyle  # noqa: PLC0415
+        from world.buildings.room_services import building_for_room  # noqa: PLC0415
+        from world.buildings.services import (  # noqa: PLC0415
+            can_build_style,
+            set_building_style,
+        )
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        building = building_for_room(room)
+        if building is None:
+            return ActionResult(success=False, message="This room isn't part of a building.")
+        style_name = (kwargs.get("style") or "").strip()
+        if not style_name:
+            options = ", ".join(
+                ArchitecturalStyle.objects.filter(is_active=True).values_list("name", flat=True)
+            )
+            return ActionResult(success=False, message=f"Pick a style: {options}.")
+        style = ArchitecturalStyle.objects.filter(name__iexact=style_name).first()
+        if style is None:
+            return ActionResult(success=False, message=f"No style named '{style_name}'.")
+        if not can_build_style(_persona_for(actor), style):
+            return ActionResult(
+                success=False,
+                message=f"You haven't learned to build in the {style.name} style.",
+            )
+        set_building_style(building, style)
+        return ActionResult(
+            success=True, message=f"{building.area.name} is now built in the {style.name} style."
+        )
 
 
 @dataclass
@@ -380,9 +504,9 @@ class AssignRoomTenantAction(_RoomBuilderAction):
         from world.locations.services import RoomEditError, assign_room_tenant  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         tenant = Persona.objects.filter(pk=kwargs.get("tenant_persona_id")).first()
         if tenant is None:
             return ActionResult(success=False, message="No such persona.")
@@ -483,9 +607,9 @@ class CommissionDecorationAction(_RoomBuilderAction):
             commission_decoration,
         )
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         if building is None:
             return ActionResult(success=False, message="This room isn't part of a building.")
@@ -527,9 +651,9 @@ class StartExtensionAction(_RoomBuilderAction):
             start_building_extension,
         )
 
-        room = actor.location
+        room = _resolve_room(actor, kwargs)
         if room is None:
-            return ActionResult(success=False, message="You're not in a room.")
+            return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         if building is None:
             return ActionResult(success=False, message="This room isn't part of a building.")
@@ -547,3 +671,77 @@ class StartExtensionAction(_RoomBuilderAction):
             success=True,
             message=f"Extension project #{project.pk} opened (+{added} units on completion).",
         )
+
+
+@dataclass
+class PlaceFixtureAction(_RoomBuilderAction):
+    """Place a comfort fixture in a room. Kwargs: ``kind``, optional ``room_id``.
+
+    Fixtures are the build-to-win mitigation tools (#1514): stackable,
+    presence-only (no toggle — a hearth is always lit), instant and free
+    (cost is the economy pass's knob).
+    """
+
+    key: str = "place_room_fixture"
+    name: str = "Place Fixture"
+    icon: str = "flame"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.buildings.models import DecorationKind  # noqa: PLC0415
+        from world.buildings.services import place_decoration  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        kind_name = (kwargs.get("kind") or "").strip()
+        kind = DecorationKind.objects.filter(name__iexact=kind_name).first() if kind_name else None
+        if kind is None:
+            options = ", ".join(DecorationKind.objects.values_list("name", flat=True))
+            return ActionResult(success=False, message=f"Pick a fixture: {options}.")
+        try:
+            profile = room.room_profile
+        except RoomProfile.DoesNotExist:
+            return ActionResult(success=False, message="This room can't hold fixtures.")
+        place_decoration(profile, kind)
+        return ActionResult(success=True, message=f"{kind.name} placed.")
+
+
+@dataclass
+class RemoveFixtureAction(_RoomBuilderAction):
+    """Remove a placed comfort fixture. Kwargs: ``kind``, optional ``room_id``."""
+
+    key: str = "remove_room_fixture"
+    name: str = "Remove Fixture"
+    icon: str = "flame-kindling"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.models import RoomDecoration  # noqa: PLC0415
+        from world.buildings.services import remove_decoration  # noqa: PLC0415
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        kind_name = (kwargs.get("kind") or "").strip()
+        decoration = (
+            RoomDecoration.objects.filter(room_profile__objectdb=room, kind__name__iexact=kind_name)
+            .order_by("-placed_at")
+            .first()
+            if kind_name
+            else None
+        )
+        if decoration is None:
+            return ActionResult(success=False, message=f"No '{kind_name}' fixture here.")
+        name = decoration.kind.name
+        remove_decoration(decoration)
+        return ActionResult(success=True, message=f"{name} removed.")

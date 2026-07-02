@@ -21,6 +21,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -1627,3 +1628,46 @@ class MissionRewardQueue(SharedMemoryModel):
     def __str__(self) -> str:
         applied = "applied" if self.applied else "pending"
         return f"queue {self.kind}/{self.sink} ({applied})"
+
+
+class MissionRiskAcknowledgement(SharedMemoryModel):
+    """A persona's on-record acknowledgement of a risky mission offer (#1770 PR4).
+
+    The mission sibling of ``combat.EncounterRiskAcknowledgement``: recorded
+    idempotently before accepting an offer whose template's ``risk_tier`` is
+    at or above ``MISSION_RISK_ACK_TIER``; ``issue_mission`` refuses to
+    create the run without one. Keyed on the offer (the thing accepted) and
+    the accepting persona, mirroring the per-(persona x role) gates in
+    npc_services. At most one row per (offer, persona); the tier is
+    snapshotted at first acknowledgement.
+    """
+
+    offer = models.ForeignKey(
+        "npc_services.NPCServiceOffer",
+        on_delete=models.CASCADE,
+        related_name="mission_risk_acknowledgements",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="mission_risk_acknowledgements",
+    )
+    acknowledged_risk_tier = models.PositiveSmallIntegerField(
+        help_text="The template's risk_tier at acknowledgement time."
+    )
+    acknowledged_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["acknowledged_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["offer", "persona"],
+                name="unique_mission_risk_ack_per_offer_persona",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"persona {self.persona_id} acknowledged risk tier "
+            f"{self.acknowledged_risk_tier} on offer {self.offer_id}"
+        )

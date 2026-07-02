@@ -10,6 +10,7 @@ from django.db import models, transaction
 from django.db.models import Count, Manager, Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from rest_framework import filters, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -98,6 +99,7 @@ from world.stories.permissions import (
     CanParticipateInStory,
     CanReplyToBulletinPost,
     CanResolveStake,
+    CanViewBeatStakesSummary,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
     IsBulletinReplyAuthorOrStaff,
@@ -176,6 +178,7 @@ from world.stories.serializers import (
     StakeResolutionSerializer,
     StakeRewardLineSerializer,
     StakeSerializer,
+    StakesSummarySerializer,
     StakeTemplateSerializer,
     StoryCreateSerializer,
     StoryDetailSerializer,
@@ -193,6 +196,7 @@ from world.stories.serializers import (
     UpdateBulletinPostInputSerializer,
     UpdateBulletinReplyInputSerializer,
     WithdrawOfferInputSerializer,
+    stakes_summary_for_beat,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
 from world.stories.services.era import advance_era, archive_era
@@ -1374,6 +1378,26 @@ class BeatViewSet(viewsets.ModelViewSet):
             extra_participants=data.get("extra_participants") or None,
         )
         return Response(BeatCompletionSerializer(completion).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(responses=StakesSummarySerializer)
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="stakes-summary",
+        permission_classes=[CanViewBeatStakesSummary],
+    )
+    def stakes_summary(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
+
+        Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+        be SECRET; an open wager list leaks GM plans): readable by staff, the
+        beat's story owner, or a participant of a scene linked to the beat's
+        episode. The payload leaks only player_summary/severity plus
+        declared/effective risk and readiness; branch contents
+        (StakeResolution rows) are never included.
+        """
+        beat = self.get_object()
+        return Response(stakes_summary_for_beat(beat))
 
     @action(
         detail=True,

@@ -9,6 +9,16 @@ from django.db import models
 # Upper bound for MissionTemplate.percent_replace (a percentage).
 MAX_PERCENT_REPLACE = 100
 
+# #1770 PR4 — the mission-accept risk gate. A MissionTemplate whose risk_tier
+# is at or above this threshold requires an on-record
+# MissionRiskAcknowledgement from the accepting persona before issue_mission
+# will create the run (the mission sibling of combat's
+# EncounterRiskAcknowledgement / #777 gate). Tiers below it accept without
+# ceremony — tier 1 is routine work. Designer-tunable by code change only,
+# like the stakes-engine ladder constants (a moved gate is an invariant
+# shift, not content).
+MISSION_RISK_ACK_TIER = 3
+
 
 # ---------------------------------------------------------------------------
 # Phase 2 — mission graph data model choices

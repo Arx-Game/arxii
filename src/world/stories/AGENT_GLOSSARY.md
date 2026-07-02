@@ -75,3 +75,15 @@ _Avoid_: reward row, payout entry, deed line.
 **Reward Band**:
 The per-tier `RiskCalibration.reward_floor`/`reward_ceiling` window (#1770 PR3) that the summed WIN-column Reward Line amounts across a beat's stakes must fall inside for the contract to be ready (`_reward_band_problems`). Out-of-band totals mark the contract UNREADY (auto-downgrade, pillar 7) — never an authoring rejection. `reward_ceiling == 0` means banding is unconfigured for that tier and both checks are skipped.
 _Avoid_: reward cap (the band has a floor too), payout limit.
+
+**Stakes Summary**:
+The one player-visible wire shape for a beat's stakes contract (#1770 PR4) — `{declared_risk, effective_risk, is_ready, stakes: [{id, player_summary, severity, severity_label}]}`, built by `stakes_summary_for_beat` (`world.stories.serializers`) and served at `GET /api/beats/{id}/stakes-summary/` and as `combat_stakes` on the consent-prompt serializers. What is wagered is visible; branch contents (`StakeResolution`) are never part of the shape (pillar 9).
+_Avoid_: stakes preview, contract dump (a summary never includes resolutions).
+
+**Boundary Check** (stakes):
+The screen `check_stake_boundaries(stakes, character_sheets) -> StakeBoundaryReport` (`world.stories.services.boundaries`, #1770 PR4), run at authoring time (existing stakes + the candidate write) and at every activation/commit call site; call sites gate on `report.cleared` (allowed AND no pending sign-off). Allow-all stub until the boundary registry (#1771) ships. `blocked_reason_private` is staff/audit only — a player's boundary is never surfaced to the GM or other players (ADR-0033); callers show only a generic "stakes could not be presented" failure.
+_Avoid_: consent check (that's the ADR-0024 social-consent app; a boundary is a content limit, not a per-action consent), veto.
+
+**Opt-in / Commit Step** (stakes):
+The moment a player commits to a staked scene and the contract activates (#1770 pillar 9): entering combat (duel creation, hostile-cast seed/feed — surfaced via `combat_stakes` on the consent prompt), accepting a risky mission (`MissionRiskAcknowledgement` + the `acknowledge_risk` two-phase inside `npc_resolve`), or a GM's room-visible `declare_stakes` action in freeform play. The summary shown at this step is the Stakes Summary above.
+_Avoid_: consent gate (see Boundary Check note), buy-in.

@@ -557,3 +557,42 @@ class PermitOfferDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"PermitOfferDetails for {self.offer}"
+
+
+class LoanOfferDetails(SharedMemoryModel):
+    """Per-kind details for ``NPCServiceOffer`` rows of kind=LOAN (#930).
+
+    The Blighton-representative loop: a summoned creditor rep offers fixed
+    terms; accepting extends a fiat loan (``currency.extend_loan``) to the
+    organization whose books the PC keeps. Negotiated terms (charm with
+    backfire chances) await the specialized-check foundation — these rows
+    are the menu of fixed offers until then.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="loan_offer_details",
+        help_text="The NPCServiceOffer row this details model decorates.",
+    )
+    principal = models.PositiveBigIntegerField(
+        help_text="Coppers lent on acceptance. PLACEHOLDER magnitudes."
+    )
+    interest_bps_monthly = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Monthly interest in basis points. PLACEHOLDER magnitudes.",
+    )
+    creditor_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="loan_offers",
+        help_text=(
+            "The lender. Blank falls back to the role's faction_affiliation "
+            "(the org the representative works for)."
+        ),
+    )
+
+    def __str__(self) -> str:
+        return f"LoanOffer: {self.offer.label} ({self.principal} @ {self.interest_bps_monthly}bps)"
