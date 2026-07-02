@@ -390,13 +390,13 @@ class LegendPaysEffectiveRiskTests(EvenniaTestCase):
             progress=progress, beat=beat, outcome_tier=self.decisive
         )
 
-        assert completion.outcome == BeatOutcome.SUCCESS
+        self.assertEqual(completion.outcome, BeatOutcome.SUCCESS)
         event = LegendEvent.objects.order_by("-pk").first()
-        assert event is not None
-        assert event.base_value == 16
+        self.assertIsNotNone(event)
+        self.assertEqual(event.base_value, 16)
 
         activation.refresh_from_db()
-        assert activation.resolved_at is not None
+        self.assertIsNotNone(activation.resolved_at)
         self.assertIsNone(get_open_activation(beat))
 
     def test_unready_contract_floors_legend_award_at_authored_base_value(self):
@@ -430,11 +430,11 @@ class LegendPaysEffectiveRiskTests(EvenniaTestCase):
             progress=progress, beat=beat, outcome_tier=self.decisive
         )
 
-        assert completion.outcome == BeatOutcome.SUCCESS
+        self.assertEqual(completion.outcome, BeatOutcome.SUCCESS)
         event = LegendEvent.objects.order_by("-pk").first()
-        assert event is not None
-        assert event.base_value == max(self.legend_effect.legend_base_value, 0)
+        self.assertIsNotNone(event)
+        self.assertEqual(event.base_value, max(self.legend_effect.legend_base_value, 0))
 
         activation.refresh_from_db()
-        assert activation.resolved_at is not None
+        self.assertIsNotNone(activation.resolved_at)
         self.assertIsNone(get_open_activation(beat))

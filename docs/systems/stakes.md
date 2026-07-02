@@ -227,11 +227,12 @@ override never scales down).
 ```
   AUTHORING                    ACTIVATION (lock)              COMPLETION (resolve)
   ────────────                 ───────────────────             ─────────────────────
-  GM declares Beat.risk +      activate_stakes_contract()      _complete_beat_tail()
-  target_level, authors        called at scene start:            (services/beats.py)
-  Stake + StakeResolution        1. idempotent — an open           after firing the
-  rows (blocked while an          activation already exists?       completion's
-  open activation exists)         return it unchanged             consequence pool:
+  GM declares Beat.risk +      activate_stakes_contract()      _create_completion_and_
+  target_level, authors        called at scene start:            fire_pool()
+  Stake + StakeResolution        1. idempotent — an open           (services/beats.py)
+  rows (blocked while an          activation already exists?       after firing the
+  open activation exists)         return it unchanged             completion's
+                                                                     consequence pool:
                                 2. validate_stakes_readiness()    resolve_open_activation()
                                 3. ready?  -> effective_risk        sets resolved_at,
                                    computed via compute_          re-opening authoring
@@ -259,8 +260,8 @@ there is no separate versioned/snapshotted copy of the `Stake` rows themselves
 **Known PR1 gap:** `activate_stakes_contract` has no production call site yet —
 it is fully built and unit-tested but nothing currently calls it at scene start.
 `resolve_open_activation` **is** wired, into the beat-completion tail
-(`world.stories.services.beats._complete_beat_tail`, called after the
-completion's consequence pool fires). Wiring the actual scene-start triggers is
+(`world.stories.services.beats._create_completion_and_fire_pool`, called after
+the completion's consequence pool fires). Wiring the actual scene-start triggers is
 #1770's own remaining PR spine (PR2 combat encounter start, PR3 mission issue,
 PR4 GM scene action — scene *grading* specifically rides #1748). The separate
 sibling #1771 owns only the player-boundary registry behind

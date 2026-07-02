@@ -6,12 +6,13 @@ Legend requires that removal-from-play (character death/permanent loss) be
 episode-hops may separate a beat from a stake at `StakeSeverity.REMOVAL` — EXTREME
 is 0 (the beat itself must offer removal), LOW is 3 (removal may be three failed
 transitions away). `services.stakes._jeopardy_reachable` BFS-walks the authored
-failure cascade (`Transition.cached_required_outcomes` gated to the FAILURE
-column, stopping at PITCH-maturity episodes) to enforce this at readiness-check
-time. Removal itself stays mechanically mediated end-to-end: `StakeResolution`
-carries no direct lifecycle payload in PR1 (only a `consequence_pool` FK and an
-`escalates_to_risk` fuse value) — a branch firing routes through the existing
-vitals/consequence pipeline, never a bespoke "kill this character" write.
+failure cascade (`Transition.cached_required_outcomes` — FAILURE-gated or
+unconditioned transitions, stopping at PITCH-maturity episodes) to enforce
+this at readiness-check time. Removal itself stays mechanically mediated
+end-to-end: `StakeResolution` carries no direct lifecycle payload in PR1 (only
+a `consequence_pool` FK and an `escalates_to_risk` fuse value) — a branch
+firing routes through the existing vitals/consequence pipeline, never a
+bespoke "kill this character" write.
 Structured world-state writers with validation that rejects direct lifecycle
 mutation land in PR2; deaths only ever happen via a succession of lost stakes
 walking the fuse to its end, never a single beat's fiat.

@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+import types
+
 from django.db import models
 
 
@@ -163,30 +166,32 @@ class StakeResolutionColumn(models.TextChoices):
 
 
 # Risk ladder for effective-risk shifts (index order matters).
-RISK_LADDER: list[str] = [
+RISK_LADDER: tuple[str, ...] = (
     # RenownRisk values, weakest to strongest.
     "none",
     "low",
     "moderate",
     "high",
     "extreme",
-]
+)
 
 # Seed values for RiskCalibration rows (designer-tunable in admin afterwards).
 # max_fuse_hops implements the chain rule: how many failure-cascade hops may
 # separate this tier from a reachable removal-from-play stake. EXTREME = 0:
 # the beat itself must offer removal.
-DEFAULT_RISK_CALIBRATIONS: dict[str, dict[str, int]] = {
-    "low": {"severity_floor_total": 1, "severity_ceiling": 2, "max_fuse_hops": 3},
-    "moderate": {
-        "severity_floor_total": 2,
-        "severity_ceiling": 3,
-        "max_fuse_hops": 2,
-    },
-    "high": {"severity_floor_total": 4, "severity_ceiling": 4, "max_fuse_hops": 1},
-    "extreme": {
-        "severity_floor_total": 6,
-        "severity_ceiling": 5,
-        "max_fuse_hops": 0,
-    },
-}
+DEFAULT_RISK_CALIBRATIONS: Mapping[str, dict[str, int]] = types.MappingProxyType(
+    {
+        "low": {"severity_floor_total": 1, "severity_ceiling": 2, "max_fuse_hops": 3},
+        "moderate": {
+            "severity_floor_total": 2,
+            "severity_ceiling": 3,
+            "max_fuse_hops": 2,
+        },
+        "high": {"severity_floor_total": 4, "severity_ceiling": 4, "max_fuse_hops": 1},
+        "extreme": {
+            "severity_floor_total": 6,
+            "severity_ceiling": 5,
+            "max_fuse_hops": 0,
+        },
+    }
+)

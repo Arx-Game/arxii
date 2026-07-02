@@ -2312,14 +2312,16 @@ class StakeSerializer(serializers.ModelSerializer):
         old_beat = self.instance.beat if self.instance is not None else None
         is_repoint = old_beat is not None and beat is not None and old_beat.pk != beat.pk
 
-        _check_stake_beat_lock(beat, old_beat, is_repoint)
-
         request = self.context.get("request")
         user = request.user if request is not None else None
         # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
         is_staff = bool(user is not None and user.is_staff)
 
+        # Ownership before lock (#1770 review): a non-owner probing a foreign
+        # beat must get the permission error, never learn the lock state.
         _check_stake_beat_ownership(user, is_staff, beat, old_beat, is_repoint)
+
+        _check_stake_beat_lock(beat, old_beat, is_repoint)
 
         template = merged.get("template")
 
@@ -2390,14 +2392,6 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
         stake = attrs.get("stake") or old_stake
         is_repoint = old_stake is not None and stake is not None and old_stake.pk != stake.pk
 
-        # Lock check (#1770 PR1 review): re-pointing to/from a stake whose beat
-        # is locked is rejected either way — check both sides when re-pointing.
-        stakes_to_check = [stake] if not is_repoint else [stake, old_stake]
-        for candidate in stakes_to_check:
-            if candidate is not None and get_open_activation(candidate.beat) is not None:
-                msg = "This beat's stakes contract is locked by an open activation."
-                raise serializers.ValidationError(msg)
-
         request = self.context.get("request")
         user = request.user if request is not None else None
         # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
@@ -2407,13 +2401,23 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
         # on create, so IsStakeResolutionBeatStoryOwnerOrStaff alone lets any
         # authenticated user POST a StakeResolution onto anyone's stake. Enforce
         # the same ownership walk here. On re-point, both the old and new
-        # stake's beat's story must be owned.
+        # stake's beat's story must be owned. Ownership before lock (#1770
+        # review): a non-owner probing a foreign stake must get the permission
+        # error, never learn the lock state.
         if not is_staff:
             owners_ok = stake is not None and user_owns_beat_story(cast(Any, user), stake.beat)
             if is_repoint:
                 owners_ok = owners_ok and user_owns_beat_story(cast(Any, user), old_stake.beat)
             if not owners_ok:
                 msg = "You do not have permission to author a resolution on this stake."
+                raise serializers.ValidationError(msg)
+
+        # Lock check (#1770 PR1 review): re-pointing to/from a stake whose beat
+        # is locked is rejected either way — check both sides when re-pointing.
+        stakes_to_check = [stake] if not is_repoint else [stake, old_stake]
+        for candidate in stakes_to_check:
+            if candidate is not None and get_open_activation(candidate.beat) is not None:
+                msg = "This beat's stakes contract is locked by an open activation."
                 raise serializers.ValidationError(msg)
 
         return attrs

@@ -500,3 +500,211 @@ class StakeResolutionRepointLockTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("locked", str(resp.data).lower())
+
+
+# ---------------------------------------------------------------------------
+# #1770 PR1 final review: ownership must also be checked on BOTH sides of a
+# re-point (not just the lock). A user who owns only the old target, or only
+# the new target, must be rejected either way; staff may re-point across
+# foreign targets freely. Mirrors the RepointLock classes above, but for the
+# ownership gate rather than the activation lock.
+# ---------------------------------------------------------------------------
+
+
+class StakeOwnershipRepointTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.owner_a = AccountFactory(is_staff=False)
+        cls.owner_b = AccountFactory(is_staff=False)
+        cls.story_a = StoryFactory(owners=[cls.owner_a])
+        cls.story_b = StoryFactory(owners=[cls.owner_b])
+        cls.chapter_a = ChapterFactory(story=cls.story_a)
+        cls.chapter_b = ChapterFactory(story=cls.story_b)
+        cls.episode_a = EpisodeFactory(chapter=cls.chapter_a)
+        cls.episode_b = EpisodeFactory(chapter=cls.chapter_b)
+        cls.beat_a = BeatFactory(episode=cls.episode_a, risk=RenownRisk.LOW, target_level=2)
+        cls.beat_b = BeatFactory(episode=cls.episode_b, risk=RenownRisk.LOW, target_level=2)
+        cls.template = StakeTemplateFactory(
+            subject_kind=StakeSubjectKind.ITEM,
+            severity=StakeSeverity.DIRE,
+            min_risk=RenownRisk.NONE,
+            max_risk=RenownRisk.EXTREME,
+        )
+
+    def _stake(self):
+        return StakeFactory(
+            beat=self.beat_a,
+            template=self.template,
+            subject_kind=StakeSubjectKind.ITEM,
+            severity=StakeSeverity.DIRE,
+            subject_label="Wager A",
+        )
+
+    def test_owner_of_old_beat_only_cannot_repoint(self):
+        stake = self._stake()
+        self.client.force_authenticate(user=self.owner_a)
+        resp = self.client.patch(
+            reverse("stake-detail", kwargs={"pk": stake.pk}),
+            {"beat": self.beat_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("permission", str(resp.data).lower())
+
+    def test_owner_of_new_beat_only_cannot_repoint(self):
+        """Owning only the incoming beat is rejected too — but earlier than the
+        serializer: DRF calls has_object_permission against the CURRENT (old)
+        object on PATCH, so IsStakeBeatStoryOwnerOrStaff denies with 403 before
+        validate()'s re-point check ever runs.
+        """
+        stake = self._stake()
+        self.client.force_authenticate(user=self.owner_b)
+        resp = self.client.patch(
+            reverse("stake-detail", kwargs={"pk": stake.pk}),
+            {"beat": self.beat_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("permission", str(resp.data).lower())
+
+    def test_staff_can_repoint_across_foreign_beats(self):
+        stake = self._stake()
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("stake-detail", kwargs={"pk": stake.pk}),
+            {"beat": self.beat_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+
+class StakeResolutionOwnershipRepointTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.owner_a = AccountFactory(is_staff=False)
+        cls.owner_b = AccountFactory(is_staff=False)
+        cls.story_a = StoryFactory(owners=[cls.owner_a])
+        cls.story_b = StoryFactory(owners=[cls.owner_b])
+        cls.chapter_a = ChapterFactory(story=cls.story_a)
+        cls.chapter_b = ChapterFactory(story=cls.story_b)
+        cls.episode_a = EpisodeFactory(chapter=cls.chapter_a)
+        cls.episode_b = EpisodeFactory(chapter=cls.chapter_b)
+        cls.beat_a = BeatFactory(episode=cls.episode_a, risk=RenownRisk.LOW, target_level=2)
+        cls.beat_b = BeatFactory(episode=cls.episode_b, risk=RenownRisk.LOW, target_level=2)
+        cls.stake_a = StakeFactory(
+            beat=cls.beat_a,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            severity=StakeSeverity.GRAVE,
+            subject_label="Wager A",
+        )
+        cls.stake_b = StakeFactory(
+            beat=cls.beat_b,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            severity=StakeSeverity.GRAVE,
+            subject_label="Wager B",
+        )
+
+    def _resolution(self):
+        return StakeResolutionFactory(
+            stake=self.stake_a, column="win", narrative_summary="Fine so far."
+        )
+
+    def test_owner_of_old_stake_only_cannot_repoint(self):
+        resolution = self._resolution()
+        self.client.force_authenticate(user=self.owner_a)
+        resp = self.client.patch(
+            reverse("stakeresolution-detail", kwargs={"pk": resolution.pk}),
+            {"stake": self.stake_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("permission", str(resp.data).lower())
+
+    def test_owner_of_new_stake_only_cannot_repoint(self):
+        """Owning only the incoming stake is rejected too — but earlier than the
+        serializer: DRF calls has_object_permission against the CURRENT (old)
+        object on PATCH, so IsStakeResolutionBeatStoryOwnerOrStaff denies with
+        403 before validate()'s re-point check ever runs.
+        """
+        resolution = self._resolution()
+        self.client.force_authenticate(user=self.owner_b)
+        resp = self.client.patch(
+            reverse("stakeresolution-detail", kwargs={"pk": resolution.pk}),
+            {"stake": self.stake_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("permission", str(resp.data).lower())
+
+    def test_staff_can_repoint_across_foreign_stakes(self):
+        resolution = self._resolution()
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("stakeresolution-detail", kwargs={"pk": resolution.pk}),
+            {"stake": self.stake_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+
+class BeatOwnershipRepointTests(APITestCase):
+    """#1770 review fold-in: Beat's episode re-point shares the same ownership
+    gate shape as Stake/StakeResolution — no activation lock applies to Beat
+    itself, so this covers ownership only.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        cls.owner_a = AccountFactory(is_staff=False)
+        cls.owner_b = AccountFactory(is_staff=False)
+        cls.story_a = StoryFactory(owners=[cls.owner_a])
+        cls.story_b = StoryFactory(owners=[cls.owner_b])
+        cls.chapter_a = ChapterFactory(story=cls.story_a)
+        cls.chapter_b = ChapterFactory(story=cls.story_b)
+        cls.episode_a = EpisodeFactory(chapter=cls.chapter_a)
+        cls.episode_b = EpisodeFactory(chapter=cls.chapter_b)
+
+    def _beat(self):
+        return BeatFactory(episode=self.episode_a, risk=RenownRisk.NONE, target_level=1)
+
+    def test_owner_of_old_episode_only_cannot_repoint(self):
+        beat = self._beat()
+        self.client.force_authenticate(user=self.owner_a)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": beat.pk}),
+            {"episode": self.episode_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("permission", str(resp.data).lower())
+
+    def test_owner_of_new_episode_only_cannot_repoint(self):
+        """Owning only the incoming episode is rejected too — but earlier than
+        the serializer: DRF calls has_object_permission against the CURRENT
+        (old) object on PATCH, so IsBeatStoryOwnerOrStaff denies with 403
+        before validate()'s re-point check ever runs.
+        """
+        beat = self._beat()
+        self.client.force_authenticate(user=self.owner_b)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": beat.pk}),
+            {"episode": self.episode_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("permission", str(resp.data).lower())
+
+    def test_staff_can_repoint_across_foreign_episodes(self):
+        beat = self._beat()
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": beat.pk}),
+            {"episode": self.episode_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
