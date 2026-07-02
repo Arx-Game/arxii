@@ -90,7 +90,7 @@ class AccrualAndReadTests(JusticeFixtureMixin, TestCase):
         self.assertEqual(row.society, self.crown)
         reading = heat_for(self.persona, self.ward_room)
         self.assertEqual(reading.value, DEFAULT_HEAT_WEIGHT)
-        self.assertEqual(reading.tier, HeatTier.WATCHED)
+        self.assertEqual(reading.tier, HeatTier.TENSE)
 
     def test_ward_heat_is_invisible_up_in_the_city(self):
         """Emergent falloff: heat minted in the ward doesn't read at city scope."""

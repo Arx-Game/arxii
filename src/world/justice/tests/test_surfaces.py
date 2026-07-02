@@ -79,7 +79,7 @@ class DisplayLineTests(TestCase):
         self.assertIsNone(safe_transition_line(self.character, self.hall_room, self.hall_room))
 
     def test_low_heat_transition_is_silent(self) -> None:
-        self._heat(_floor(HeatTier.WATCHED))
+        self._heat(_floor(HeatTier.TENSE))
         self.assertIsNone(safe_transition_line(self.character, self.city_room, self.hall_room))
 
 
@@ -100,7 +100,7 @@ class HeatApiTests(APITestCase):
         data = self.client.get(HEAT_URL, {"viewer": self.entry.pk}).data
         rows = data["results"]
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["tier"], HeatTier.HUNTED.value)
+        self.assertEqual(rows[0]["tier"], HeatTier.DANGEROUS.value)
         self.assertEqual(rows[0]["area_name"], self.city.name)
         self.assertNotIn("value", rows[0])  # tiers only — never the raw number
 

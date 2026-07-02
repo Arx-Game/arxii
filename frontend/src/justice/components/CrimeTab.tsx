@@ -19,8 +19,8 @@ interface Props {
 }
 
 const TIER_STYLES: Record<string, string> = {
-  watched: 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400',
-  hunted: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
+  tense: 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400',
+  dangerous: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
   heat_is_on: 'bg-red-500/15 text-red-600 dark:text-red-400',
   extreme_heat: 'bg-red-600/25 text-red-700 dark:text-red-300',
 };

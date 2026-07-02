@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
 # PLACEHOLDER copy + colours for the telnet line, keyed by tier.
 _TIER_LINES: dict[HeatTier, str] = {
-    HeatTier.WATCHED: "|yPLACEHOLDER: Someone here has been asking about you.|n",
-    HeatTier.HUNTED: "|530PLACEHOLDER: The watch is looking for you here.|n",
+    HeatTier.TENSE: "|yPLACEHOLDER: Someone here has been asking about you.|n",
+    HeatTier.DANGEROUS: "|530PLACEHOLDER: The watch is looking for you here.|n",
     HeatTier.HEAT_IS_ON: "|rPLACEHOLDER: The heat is on — guards actively hunt you in this area.|n",
     HeatTier.EXTREME_HEAT: (
         "|RPLACEHOLDER: Guards are searching everyone nearby — discovery could be imminent.|n"

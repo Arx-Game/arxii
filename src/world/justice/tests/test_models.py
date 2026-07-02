@@ -12,9 +12,9 @@ from world.scenes.factories import PersonaFactory
 class TierLadderTest(TestCase):
     def test_tier_boundaries(self):
         self.assertEqual(tier_for_value(0), HeatTier.SAFE)
-        self.assertEqual(tier_for_value(1), HeatTier.WATCHED)
-        self.assertEqual(tier_for_value(24), HeatTier.WATCHED)
-        self.assertEqual(tier_for_value(25), HeatTier.HUNTED)
+        self.assertEqual(tier_for_value(1), HeatTier.TENSE)
+        self.assertEqual(tier_for_value(24), HeatTier.TENSE)
+        self.assertEqual(tier_for_value(25), HeatTier.DANGEROUS)
         self.assertEqual(tier_for_value(60), HeatTier.HEAT_IS_ON)
         self.assertEqual(tier_for_value(99), HeatTier.HEAT_IS_ON)
         self.assertEqual(tier_for_value(100), HeatTier.EXTREME_HEAT)

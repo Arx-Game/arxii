@@ -65,3 +65,22 @@ class KnowledgeSeamAccrualTests(TestCase):
             room=self.city_room,
         )
         self.assertEqual(PersonaHeat.objects.count(), 0)
+
+
+class CreationTimeTaggingTests(TestCase):
+    """#1765 — criminality is declared at deed birth (create_solo_deed / create_legend_event)."""
+
+    def test_create_solo_deed_accepts_crime_kinds(self) -> None:
+        from world.societies.factories import LegendSourceTypeFactory
+        from world.societies.services import create_solo_deed
+
+        arson = CrimeKindFactory(slug="arson", name="Arson")
+        persona = PersonaFactory()
+        entry = create_solo_deed(
+            persona,
+            "PLACEHOLDER: burned the granary",
+            LegendSourceTypeFactory(),
+            10,
+            crime_kinds=[arson],
+        )
+        self.assertEqual([t.crime_kind for t in entry.crime_tags.all()], [arson])

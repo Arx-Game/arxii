@@ -14,13 +14,13 @@ HEAT_DECAY_PER_DAY = 5
 class HeatTier(models.TextChoices):
     """Player-facing pursuit ratings, colour-coded — never a raw number.
 
-    SAFE / HEAT_IS_ON / EXTREME_HEAT names are user-ratified endpoints; the
-    intermediate names are PLACEHOLDER.
+    All four hot names are user-ratified (Apostate, 2026-07-02); only the
+    thresholds remain PLACEHOLDER.
     """
 
     SAFE = "safe", "Safe"
-    WATCHED = "watched", "Watched"  # PLACEHOLDER name
-    HUNTED = "hunted", "Hunted"  # PLACEHOLDER name
+    TENSE = "tense", "Tense"
+    DANGEROUS = "dangerous", "Dangerous"
     HEAT_IS_ON = "heat_is_on", "The Heat Is On"
     EXTREME_HEAT = "extreme_heat", "Extreme Heat"
 
@@ -29,8 +29,8 @@ class HeatTier(models.TextChoices):
 HEAT_TIER_FLOORS: tuple[tuple[HeatTier, int], ...] = (
     (HeatTier.EXTREME_HEAT, 100),
     (HeatTier.HEAT_IS_ON, 60),
-    (HeatTier.HUNTED, 25),
-    (HeatTier.WATCHED, 1),
+    (HeatTier.DANGEROUS, 25),
+    (HeatTier.TENSE, 1),
     (HeatTier.SAFE, 0),
 )
 

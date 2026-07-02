@@ -65,8 +65,12 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    else active persona) at the report room + a `bump_society_reputation` sting.
    `ReportStyle.MOSTLY_ACCURATE` runs a dodge check (PROVISIONAL Persuasion) to
    skip both; reporting a masked run barefaced risks the association check.
-   Mission-born legend entries are **not yet crime-tagged** at emission (flagged
-   on #1765) — mission heat mints at report time only.
+
+**Criminality is declared at deed birth** (user-ratified): mission runs tag every
+legend entry minted at renown emission with the run's CRIME_WATCH kinds
+(`renown_emission._tag_criminal_entries` — the crime belongs to the run, so each
+participant soaks their own heat as word of their part spreads), and scene-born
+deeds accept `crime_kinds=` on `create_solo_deed` / `create_legend_event`.
 
 ## Surfaces (all self-only — leak table on #1765)
 
@@ -80,8 +84,7 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
 
 ## Constants
 
-`HeatTier` ladder (SAFE / WATCHED* / HUNTED* / HEAT_IS_ON / EXTREME_HEAT — *names
-PLACEHOLDER), `HEAT_TIER_FLOORS`, `tier_for_value`, `DEFAULT_HEAT_WEIGHT`,
+`HeatTier` ladder (SAFE / TENSE / DANGEROUS / HEAT_IS_ON / EXTREME_HEAT — names user-ratified), `HEAT_TIER_FLOORS`, `tier_for_value`, `DEFAULT_HEAT_WEIGHT`,
 `HEAT_DECAY_PER_DAY` — all magnitudes PLACEHOLDER for the tuning pass.
 
 ## Deferred (verified against code at spec time)
@@ -89,5 +92,4 @@ PLACEHOLDER), `HEAT_TIER_FLOORS`, `tier_for_value`, `DEFAULT_HEAT_WEIGHT`,
 Guard-encounter spawning (combat domain — no pursuit-NPC surface exists);
 #1334 secrets-outing writer (calls `associate_heat`); accusation-minting
 surfaces; allied-society warrant sharing; active heat-clearing (bribe/pardon);
-wanted-poster/public-knowledge surfaces; mission legend-entry crime-tagging at
-renown emission.
+wanted-poster/public-knowledge surfaces.
