@@ -48,7 +48,16 @@ They do not use the command system, dispatchers, or handlers.
   new service is `toggle_action_ready`, extracted from the inline web `ready` toggle;
   `locations.py` — `RoomEditAction`, key `"edit_room"` (#1470), owner-gated
   (`IsRoomOwnerPrerequisite`) edit of the current room's name/description/public-listing via
-  `world.locations.services.set_room_display_data`; shared by telnet `CmdManageRoom` + web dispatch;
+  `world.locations.services.set_room_display_data`; shared by the telnet `room` family (`CmdRoom`)
+  + web dispatch. Plus the #670 Room Builder family (all REGISTRY, `target_type=SELF`, thin over
+  `world.buildings.room_services` / `world.locations.services`): `DigRoomAction` (`"dig_room"`),
+  `ResizeRoomAction` (`"resize_room"`), `RemoveRoomAction` (`"remove_room"`), `LinkRoomsAction`
+  (`"link_rooms"`), `UnlinkRoomsAction` (`"unlink_rooms"`), `RenameExitAction` (`"rename_exit"`),
+  `AssignRoomTenantAction` (`"assign_room_tenant"`), `EndRoomTenancyAction`
+  (`"end_room_tenancy"`), `SetPrimaryHomeAction` (`"set_primary_home"`,
+  `IsRoomTenantPrerequisite`), `CommissionDecorationAction` (`"commission_decoration"`),
+  `StartExtensionAction` (`"start_building_extension"`). Structural verbs reuse
+  `IsRoomOwnerPrerequisite`; success messages carry `Space: used/total`;
   `personas.py` — `SetActivePersonaAction`, key `"set_active_persona"` (#1347), REGISTRY backend,
   `target_type=SELF`, kwarg `persona_id`; the single action.run() path for set-active shared by
   telnet `CmdPersona` and the web `PersonaViewSet.set_active`. Validates the persona belongs to

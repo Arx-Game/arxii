@@ -33,6 +33,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [items](src/world/items/AGENT_GLOSSARY.md)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas/positioning](src/world/areas/positioning/AGENT_GLOSSARY.md)
+- [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)
 
 ## Relationships (how the root concepts connect)

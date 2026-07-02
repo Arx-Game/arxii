@@ -6,8 +6,9 @@ Covers:
 - ``Building.owner_persona`` + ``RoomProfile.tenant_persona`` FKs.
 - ``apply_project_completion`` — template → instance + BuildingPolish bump.
 - ``apply_room_polish_delta`` — direct room polish add with clamp + roll-up.
-- ``recompute_persona_prestige_from_dwellings`` — sums + intentional
-  owner-tenant double-count per spec.
+- ``recompute_persona_prestige_from_dwellings`` — primary-home-anchored
+  (#670, ratified): home room polish + building polish iff the persona
+  owns the home's building. Replaces the #676 portfolio-sum/double-count.
 """
 
 from __future__ import annotations
@@ -64,11 +65,19 @@ def _make_building(area=None, owner=None):
 
 
 def _make_room(area=None, tenant=None):
-    """RoomProfile inside ``area`` with tenant_persona set."""
+    """RoomProfile inside ``area``; ``tenant`` gets a primary-home tenancy here (#670)."""
+    from world.locations.constants import HolderType, LocationParentType
+    from world.locations.models import LocationTenancy
+
     profile = RoomProfileFactory(area=area)
     if tenant is not None:
-        profile.tenant_persona = tenant
-        profile.save(update_fields=["tenant_persona"])
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=tenant,
+            is_primary_home=True,
+        )
     return profile
 
 
@@ -144,7 +153,9 @@ class ApplyProjectCompletionTests(TestCase):
 
     def test_completion_recomputes_owner_prestige(self) -> None:
         owner = _make_primary_persona()
-        building = _make_building(owner=owner)
+        area = AreaFactory(level=10)
+        building = _make_building(area=area, owner=owner)
+        _make_room(area=area, tenant=owner)  # owner's primary home is in the building
         op = PolishCategory.objects.create(name="Opulence")
         template = _make_template("Lacquered Hall", [(op, 1500)])
 
@@ -154,6 +165,15 @@ class ApplyProjectCompletionTests(TestCase):
         self.assertEqual(owner.prestige_from_dwellings, 1500)
         # total_prestige denorm follows.
         self.assertEqual(owner.total_prestige, 1500)
+
+    def test_completion_without_home_in_building_scores_zero(self) -> None:
+        """Home-anchored rule (#670): owning polish elsewhere means nothing without a home."""
+        owner = _make_primary_persona()
+        building = _make_building(owner=owner)
+        op = PolishCategory.objects.create(name="Opulence")
+        apply_project_completion(building, _make_template("Hall", [(op, 900)]))
+        owner.refresh_from_db()
+        self.assertEqual(owner.prestige_from_dwellings, 0)
 
     def test_unowned_building_no_recompute(self) -> None:
         """No owner_persona → no persona to credit; service must not crash."""
@@ -182,7 +202,7 @@ class ApplyRoomPolishDeltaTests(TestCase):
         result = apply_room_polish_delta(room, cat, -200)
         self.assertEqual(result, 0)
 
-    def test_room_polish_credits_tenant(self) -> None:
+    def test_room_polish_credits_home_holder(self) -> None:
         tenant = _make_primary_persona()
         room = _make_room(tenant=tenant)
         cat = PolishCategory.objects.create(name="Elegance")
@@ -190,80 +210,97 @@ class ApplyRoomPolishDeltaTests(TestCase):
         tenant.refresh_from_db()
         self.assertEqual(tenant.prestige_from_dwellings, 300)
 
-    def test_room_polish_rolls_up_to_building_owner(self) -> None:
+    def test_renters_home_room_scores_room_only_not_building(self) -> None:
+        """Home-anchored rule (#670): a renter counts their room, never the landlord's walls."""
         owner = _make_primary_persona()
         tenant = _make_primary_persona()
         area = AreaFactory(level=10)
-        _make_building(area=area, owner=owner)
+        building = _make_building(area=area, owner=owner)
         room = _make_room(area=area, tenant=tenant)
+        op = PolishCategory.objects.create(name="Opulence")
+        BuildingPolish.objects.create(building=building, category=op, value=1000)
         cat = PolishCategory.objects.create(name="Elegance")
 
         apply_room_polish_delta(room, cat, 500)
 
         owner.refresh_from_db()
         tenant.refresh_from_db()
-        # Tenant gets the room polish directly.
+        # The renter's home room polish counts; the building polish is the owner's.
         self.assertEqual(tenant.prestige_from_dwellings, 500)
-        # Owner gets the roll-up.
-        self.assertEqual(owner.prestige_from_dwellings, 500)
+        # The owner has no primary home here, so their prestige is 0 (home-anchored).
+        self.assertEqual(owner.prestige_from_dwellings, 0)
 
-    def test_owner_tenanting_own_room_gets_intentional_double_count(self) -> None:
-        """Per spec: head of house in their own grand suite = doubly prestigious."""
+    def test_owner_living_in_own_building_gets_room_plus_building(self) -> None:
+        """Build your own manse and live in it: home room + your building's polish."""
         owner_tenant = _make_primary_persona()
         area = AreaFactory(level=10)
-        _make_building(area=area, owner=owner_tenant)
+        building = _make_building(area=area, owner=owner_tenant)
         room = _make_room(area=area, tenant=owner_tenant)
+        op = PolishCategory.objects.create(name="Opulence")
+        BuildingPolish.objects.create(building=building, category=op, value=1000)
         cat = PolishCategory.objects.create(name="Elegance")
 
         apply_room_polish_delta(room, cat, 400)
 
         owner_tenant.refresh_from_db()
-        # 400 (as tenant) + 400 (rolled up as owner) = 800 — intentional double-count.
-        self.assertEqual(owner_tenant.prestige_from_dwellings, 800)
+        # 400 (home room) + 1000 (owned building the home is in) = 1400.
+        self.assertEqual(owner_tenant.prestige_from_dwellings, 1400)
 
 
 class RecomputePrestigeFromDwellingsTests(TestCase):
-    def test_owner_sums_building_polish(self) -> None:
+    """The home-anchored matrix (#670): home in own building / rented / none."""
+
+    def test_home_in_own_building_scores_room_plus_building(self) -> None:
         owner = _make_primary_persona()
-        building = _make_building(owner=owner)
+        area = AreaFactory(level=10)
+        building = _make_building(area=area, owner=owner)
+        home = _make_room(area=area, tenant=owner)
         op = PolishCategory.objects.create(name="Opulence")
         el = PolishCategory.objects.create(name="Elegance")
         BuildingPolish.objects.create(building=building, category=op, value=200)
         BuildingPolish.objects.create(building=building, category=el, value=300)
+        RoomPolish.objects.create(room=home, category=op, value=150)
 
         result = recompute_persona_prestige_from_dwellings(owner)
 
-        self.assertEqual(result, 500)
+        self.assertEqual(result, 650)
         owner.refresh_from_db()
-        self.assertEqual(owner.prestige_from_dwellings, 500)
+        self.assertEqual(owner.prestige_from_dwellings, 650)
 
-    def test_persona_with_no_dwellings(self) -> None:
+    def test_persona_with_no_home(self) -> None:
         persona = _make_primary_persona()
         result = recompute_persona_prestige_from_dwellings(persona)
         self.assertEqual(result, 0)
         persona.refresh_from_db()
         self.assertEqual(persona.prestige_from_dwellings, 0)
 
-    def test_sums_buildings_and_rooms_and_owned_rollup(self) -> None:
-        owner = _make_primary_persona()
-        tenant = _make_primary_persona()
-        area_a = AreaFactory(level=10, name="Manor A")
-        area_b = AreaFactory(level=10, name="Manor B")
-        building_a = _make_building(area=area_a, owner=owner)
-        building_b = _make_building(area=area_b, owner=tenant)  # tenant also owns their own
-        room_in_a = _make_room(area=area_a, tenant=tenant)
+    def test_owning_polish_elsewhere_does_not_count(self) -> None:
+        """A property portfolio is not a home — only the home's building can add."""
+        persona = _make_primary_persona()
+        area_home = AreaFactory(level=10, name="Rented Inn")
+        area_owned = AreaFactory(level=10, name="Manor B")
+        landlord = _make_primary_persona()
+        _make_building(area=area_home, owner=landlord)
+        building_owned = _make_building(area=area_owned, owner=persona)
+        home = _make_room(area=area_home, tenant=persona)
         op = PolishCategory.objects.create(name="Opulence")
 
-        BuildingPolish.objects.create(building=building_a, category=op, value=1000)
-        BuildingPolish.objects.create(building=building_b, category=op, value=500)
-        RoomPolish.objects.create(room=room_in_a, category=op, value=200)
+        BuildingPolish.objects.create(building=building_owned, category=op, value=5000)
+        RoomPolish.objects.create(room=home, category=op, value=200)
 
-        # Owner: their building (1000) + roll-up of room in their building (200) = 1200.
-        # Tenant: their own building (500) + their tenanted room (200) = 700.
-        recompute_persona_prestige_from_dwellings(owner)
-        recompute_persona_prestige_from_dwellings(tenant)
+        result = recompute_persona_prestige_from_dwellings(persona)
 
-        owner.refresh_from_db()
-        tenant.refresh_from_db()
-        self.assertEqual(owner.prestige_from_dwellings, 1200)
-        self.assertEqual(tenant.prestige_from_dwellings, 700)
+        # Only the rented home room (200); the owned-but-not-lived-in manor adds nothing.
+        self.assertEqual(result, 200)
+
+    def test_ended_home_tenancy_scores_zero(self) -> None:
+        from django.utils import timezone
+
+        from world.locations.models import LocationTenancy
+
+        persona = _make_primary_persona()
+        home = _make_room(tenant=persona)
+        op = PolishCategory.objects.create(name="Opulence")
+        RoomPolish.objects.create(room=home, category=op, value=400)
+        LocationTenancy.objects.filter(tenant_persona=persona).update(ends_at=timezone.now())
+        self.assertEqual(recompute_persona_prestige_from_dwellings(persona), 0)

@@ -37,6 +37,7 @@ from world.buildings.models import (
     Building,
     BuildingMaterial,
     BuildingPermitDetails,
+    BuildingSizeTier,
     DecorationKind,
     RoomDecoration,
 )
@@ -418,10 +419,11 @@ def complete_building_construction(
 
     Reads the project's ``BuildingConstructionDetails`` for kind / size /
     grandeur / ward. Creates the Building (with an Area shell at level
-    BUILDING parented to the ward), computes ``max_rooms`` via the
-    formula, snapshots material contributions to ``BuildingMaterial``
-    rows (bulk_create), deletes consumed ItemInstances in one statement,
-    generates the placeholder entry-hall Room.
+    BUILDING parented to the ward), snapshots ``space_budget`` from
+    ``BuildingSizeTier[target_size]`` (seeded rows — see ``seeds.py``),
+    snapshots material contributions to ``BuildingMaterial`` rows
+    (bulk_create), deletes consumed ItemInstances in one statement, and
+    generates the entry Room (``_generate_entry_room``).
 
     Idempotent: if a Building already exists for this project, return it
     without re-creating. The unique constraint on
@@ -453,7 +455,7 @@ def complete_building_construction(
         kind=kind,
         target_size=target_size,
         target_grandeur=target_grandeur,
-        max_rooms=kind.rooms_per_size_tier * target_size,
+        space_budget=BuildingSizeTier.objects.get(tier=target_size).space_budget,
         constructed_by_persona=details.constructed_by_persona,
         source_project=project,
     )
@@ -496,38 +498,47 @@ def complete_building_construction(
         OwnershipEvent.objects.bulk_create(events)
         ItemInstance.objects.filter(pk__in=[c.item_instance_id for c in contributions]).delete()
 
-    _generate_placeholder_rooms(building)
+    _generate_entry_room(building)
     return building
 
 
-def _generate_placeholder_rooms(building: Building) -> None:
-    """Create the building's entry-hall Room; rest deferred to #670.
+def _generate_entry_room(building: Building) -> None:
+    """Create the building's entry Room and point ``Building.entry_room`` at it.
 
-    Plan 3 creates exactly ONE Evennia Room ObjectDB (the entry hall)
-    with a RoomProfile linking it to the Building's Area, so the
-    Building is immediately enterable. The remaining ``max_rooms - 1``
-    rooms are authored later via #670 (Room Builder Tool) — creating
-    200+ placeholder ObjectDBs upfront would be wasteful for Buildings
-    that get immediately restructured.
+    Construction creates exactly ONE Evennia Room ObjectDB so the Building
+    is immediately enterable; owners lay out the rest with the Room Builder
+    (dig/resize/drop, #670) against the space budget. The entry room gets
+    the default size tier (seeded ``Modest``; NULL if seeds are absent) and
+    the map origin (0, 0, floor 0). Its "Entry Hall" name is PLACEHOLDER —
+    owners rename it like any other room.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
-    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from evennia_extensions.models import RoomProfile, RoomSizeTier  # noqa: PLC0415
+    from evennia_extensions.seeds import DEFAULT_ROOM_SIZE_NAME  # noqa: PLC0415
 
     room = ObjectDB.objects.create(
         db_key="Entry Hall",
         db_typeclass_path="typeclasses.rooms.Room",
     )
-    RoomProfile.objects.update_or_create(
+    profile, _ = RoomProfile.objects.update_or_create(
         objectdb=room,
-        defaults={"area": building.area, "is_outdoor": False},
+        defaults={
+            "area": building.area,
+            "is_outdoor": False,
+            "size": RoomSizeTier.objects.filter(name=DEFAULT_ROOM_SIZE_NAME).first(),
+            "grid_x": 0,
+            "grid_y": 0,
+            "floor": 0,
+        },
     )
+    building.entry_room = profile
+    building.save(update_fields=["entry_room"])
     logger.info(
-        "Building %s constructed with max_rooms=%d (entry hall created; "
-        "remaining %d rooms deferred to #670).",
+        "Building %s constructed (entry room %s; space budget %d units).",
         building.pk,
-        building.max_rooms,
-        max(0, building.max_rooms - 1),
+        profile.pk,
+        building.space_budget,
     )
 
 

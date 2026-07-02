@@ -52,11 +52,33 @@ def ensure_house_kind() -> BuildingKind:
                 "kinds (manors, taverns, ships, ritual sites, etc.) land "
                 "via content authoring."
             ),
-            "rooms_per_size_tier": 20,
             "is_residential": True,
         },
     )
     return kind
+
+
+# PLACEHOLDER magnitudes (#670) — ratified super-linear curve (one big build ≈ 2× two
+# half-size builds); absolute values await the economy/tuning pass. Admin-editable rows.
+BUILDING_SIZE_TIERS: tuple[tuple[int, str, int], ...] = (
+    (1, "Hut", 50),
+    (2, "Cottage", 125),
+    (3, "House", 250),
+    (4, "Manor", 600),
+    (5, "Estate", 1250),
+    (6, "Palace", 2500),
+    (7, "Citadel", 5000),
+)
+
+
+def ensure_building_size_tiers() -> None:
+    """Get-or-create the building-size budget ladder (#670)."""
+    from world.buildings.models import BuildingSizeTier  # noqa: PLC0415
+
+    for tier, name, space_budget in BUILDING_SIZE_TIERS:
+        BuildingSizeTier.objects.get_or_create(
+            tier=tier, defaults={"name": name, "space_budget": space_budget}
+        )
 
 
 def ensure_default_kind_on_permit_offers() -> None:
@@ -98,3 +120,9 @@ def ensure_plan_3_seeds() -> None:
     ensure_building_permit_template()
     ensure_house_kind()
     ensure_default_kind_on_permit_offers()
+    ensure_building_size_tiers()
+    # Room-size ladder (#670) lives in evennia_extensions but construction depends
+    # on it for the entry room's default size — seed it alongside.
+    from evennia_extensions.seeds import ensure_room_size_tiers  # noqa: PLC0415
+
+    ensure_room_size_tiers()

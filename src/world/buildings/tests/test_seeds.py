@@ -32,7 +32,6 @@ class HouseKindSeedTests(TestCase):
         house = ensure_house_kind()
         self.assertEqual(house.name, HOUSE_KIND_NAME)
         self.assertTrue(house.is_residential)
-        self.assertEqual(house.rooms_per_size_tier, 20)
 
     def test_idempotent(self) -> None:
         ensure_house_kind()

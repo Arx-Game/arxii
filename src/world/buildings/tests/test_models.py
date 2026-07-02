@@ -15,12 +15,10 @@ class BuildingKindModelTests(TestCase):
     def test_create(self) -> None:
         kind = BuildingKindFactory(
             name="Manor",
-            rooms_per_size_tier=30,
             is_residential=True,
             is_fortified=True,
         )
         self.assertEqual(kind.name, "Manor")
-        self.assertEqual(kind.rooms_per_size_tier, 30)
         self.assertTrue(kind.is_residential)
         self.assertTrue(kind.is_fortified)
         self.assertFalse(kind.is_occult)
@@ -36,13 +34,9 @@ class BuildingModelTests(TestCase):
     def test_create(self) -> None:
         building = BuildingFactory(target_size=5)
         self.assertEqual(building.target_size, 5)
-        # max_rooms = rooms_per_size_tier × target_size; default kind has 20×5=100.
-        self.assertEqual(building.max_rooms, building.kind.rooms_per_size_tier * 5)
-
-    def test_max_rooms_formula(self) -> None:
-        manor_kind = BuildingKindFactory(name="Manor", rooms_per_size_tier=30)
-        building = BuildingFactory(kind=manor_kind, target_size=8)
-        self.assertEqual(building.max_rooms, 240)
+        # target_size is a space budget index (#670), not a room-count multiplier.
+        self.assertEqual(building.space_budget, 1250)
+        self.assertIsNone(building.entry_room)
 
     def test_computed_stats_empty_when_no_effects(self) -> None:
         building = BuildingFactory()

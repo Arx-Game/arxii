@@ -3,7 +3,9 @@
 Per the Plan 3 spec (#668):
 
 - ``BuildingKind`` is an open catalog (rows, not enum) with non-exclusive
-  descriptive boolean flags. Each row tunes ``rooms_per_size_tier``.
+  descriptive boolean flags.
+- ``BuildingSizeTier`` (#670) maps ``target_size`` to a total space budget;
+  rooms spend their ``RoomSizeTier`` units from it (no flat room cap).
 - ``Building`` decorates an ``Area`` at level BUILDING; spawned by
   ``BUILDING_CONSTRUCTION`` Project completion.
 - ``BuildingMaterial`` is the per-Building snapshot of materials used
@@ -43,9 +45,7 @@ class BuildingKind(SharedMemoryModel):
 
     Open catalog — rows authored by staff, not an enum. Each row carries
     non-exclusive descriptive flags (a fortified floating witch-king
-    manor is ``residential + fortified + occult + aerial``) plus the
-    ``rooms_per_size_tier`` knob that drives the construction-time
-    room budget formula.
+    manor is ``residential + fortified + occult + aerial``).
 
     Per the brainstorm, the flag set is NOT a taxonomy. Flags are
     sort/filter axes used by authoring NPCs to decide what they issue
@@ -57,16 +57,6 @@ class BuildingKind(SharedMemoryModel):
         blank=True,
         help_text="Admin-editable flavor describing what this kind is.",
     )
-    rooms_per_size_tier = models.PositiveIntegerField(
-        default=1,
-        help_text=(
-            "Multiplier in the room-budget formula. "
-            "``Building.max_rooms = rooms_per_size_tier × Project.target_size`` "
-            "at construction. A House at 20 gives Size-1=20, Size-10=200 rooms. "
-            "Witch's Cottage at 4 gives Size-10=40. Per-kind tuning."
-        ),
-    )
-
     # Non-exclusive descriptive flags — see Plan 3 spec.
     is_residential = models.BooleanField(default=False)
     is_commercial = models.BooleanField(default=False)
@@ -80,6 +70,27 @@ class BuildingKind(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class BuildingSizeTier(SharedMemoryModel):
+    """Named building size → total space budget (#670; PLACEHOLDER magnitudes).
+
+    ``Building.target_size`` indexes into this table at construction to
+    snapshot ``space_budget``. Super-linear by design (ratified on #670):
+    one big build ≈ 2× the budget of two half-size builds — a
+    consolidation premium. Admin-editable rows; the economy pass retunes
+    values without code changes.
+    """
+
+    tier = models.PositiveSmallIntegerField(unique=True)
+    name = models.CharField(max_length=40, unique=True)
+    space_budget = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["tier"]
+
+    def __str__(self) -> str:
+        return f"{self.name} (tier {self.tier}, {self.space_budget} units)"
 
 
 class MaterialLoreEffect(SharedMemoryModel):
@@ -218,11 +229,23 @@ class Building(SharedMemoryModel):
             "Construction-time grandeur target (1-10). Snapshotted from the Project at completion."
         ),
     )
-    max_rooms = models.PositiveIntegerField(
+    space_budget = models.PositiveIntegerField(
         help_text=(
-            "Mutable room cap. Computed at construction as "
-            "``kind.rooms_per_size_tier × target_size``. Raised by "
-            "BUILDING_EXTENSION (#673), recalculated by BUILDING_UPGRADE."
+            "Total room-size units this building can hold (#670). Snapshotted at "
+            "construction from BuildingSizeTier[target_size]; raised by "
+            "BUILDING_EXTENSION. Rooms spend their RoomSizeTier units from this pool."
+        ),
+    )
+    entry_room = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entry_for_buildings",
+        help_text=(
+            "The building's designated entrance (#670): fallback destination for "
+            "evicted contents/characters and the root of exit-connectivity checks. "
+            "Undroppable; otherwise an ordinary room."
         ),
     )
     constructed_at = models.DateTimeField(auto_now_add=True)
@@ -457,6 +480,91 @@ class BuildingPermitDetails(SharedMemoryModel):
         )
 
 
+class BuildingExtensionDetails(SharedMemoryModel):
+    """Per-(BUILDING_EXTENSION Project) details payload (#670).
+
+    Growing a building's ``space_budget`` is a funded project (money /
+    materials / AP through the standard contribution pipe); rooms dug
+    *within* the budget are instant and free. ``applied_at`` is the
+    idempotency marker — the handler adds the budget exactly once.
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="building_extension_details",
+        primary_key=True,
+    )
+    building = models.ForeignKey(
+        "buildings.Building",
+        on_delete=models.CASCADE,
+        related_name="extension_details",
+    )
+    added_budget = models.PositiveIntegerField(
+        validators=[MinValueValidator(1)],
+        help_text="Space-budget units this extension adds on completion.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the budget was applied; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Building extension details"
+
+    def __str__(self) -> str:
+        return f"Extension +{self.added_budget} units for building {self.building_id}"
+
+
+class InteriorDesignDetails(SharedMemoryModel):
+    """Per-(INTERIOR_DESIGN Project) details payload (#670).
+
+    Commissions an admin-authored polish ``ProjectTemplate`` against a
+    building (or one room of it, when ``room`` is set). On completion the
+    handler finally drives the polish machinery: ``apply_project_completion``
+    for building targets, per-increment ``apply_room_polish_delta`` for room
+    targets.
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="interior_design_details",
+        primary_key=True,
+    )
+    template = models.ForeignKey(
+        "buildings.ProjectTemplate",
+        on_delete=models.PROTECT,
+        related_name="design_details",
+    )
+    building = models.ForeignKey(
+        "buildings.Building",
+        on_delete=models.CASCADE,
+        related_name="design_details",
+    )
+    room = models.ForeignKey(
+        _ROOM_PROFILE_FK,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="design_details",
+        help_text="Target room; NULL = the whole building.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the polish was applied; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Interior design details"
+
+    def __str__(self) -> str:
+        target = f"room {self.room_id}" if self.room_id else f"building {self.building_id}"
+        return f"Interior design '{self.template}' for {target}"
+
+
 class BuildingConstructionDetails(SharedMemoryModel):
     """Per-(BUILDING_CONSTRUCTION Project) details payload.
 
@@ -520,12 +628,10 @@ class BuildingConstructionDetails(SharedMemoryModel):
 # Grand / Palatial …) are derived from TierThreshold rows per category,
 # not stored on the buildings/rooms.
 #
-# Ownership credits:
-#   * Building polish credits Building.owner_persona.
-#   * Room polish credits RoomProfile.tenant_persona AND rolls up to
-#     Building.owner_persona — the spec calls out the double-count as
-#     intentional ("a head of house living in their own splendid suite
-#     is doubly prestigious").
+# Ownership credits (#670, home-anchored — replaces the #676 double-count):
+#   * prestige_from_dwellings = the persona's PRIMARY-HOME room polish
+#     (LocationTenancy.is_primary_home), plus the building's polish iff
+#     the persona owns that building (Building.owner_persona).
 # ---------------------------------------------------------------------------
 
 

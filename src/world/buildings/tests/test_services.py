@@ -12,7 +12,11 @@ from world.buildings.constants import PermitEligibility
 from world.buildings.factories import (
     BuildingPermitDetailsFactory,
 )
-from world.buildings.seeds import ensure_building_permit_template, ensure_house_kind
+from world.buildings.seeds import (
+    ensure_building_permit_template,
+    ensure_building_size_tiers,
+    ensure_house_kind,
+)
 from world.buildings.services import (
     MATERIAL_BASE_BOOST,
     PermitAlreadyConsumedError,
@@ -281,6 +285,7 @@ class ActivatePermitRoundtripTests(TestCase):
         from world.items.models import OwnershipEvent
 
         ensure_building_permit_template()
+        ensure_building_size_tiers()
         house = ensure_house_kind()
         ward = AreaFactory(level=AreaLevel.WARD, name="roundtrip-ward")
         ward.permit_eligibility = PermitEligibility.OPEN
@@ -325,7 +330,7 @@ class ActivatePermitRoundtripTests(TestCase):
         building = complete_building_construction(project)
         self.assertEqual(building.kind, house)
         self.assertEqual(building.target_size, 5)
-        self.assertEqual(building.max_rooms, house.rooms_per_size_tier * 5)
+        self.assertEqual(building.space_budget, 1250)  # Estate tier-5 seed value.
         # Idempotent — second call returns the existing Building.
         again = complete_building_construction(project)
         self.assertEqual(building.pk, again.pk)

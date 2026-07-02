@@ -1,1 +1,1 @@
-0006_roomprofile_is_social_hub
+0008_remove_roomprofile_tenant_persona

@@ -129,9 +129,15 @@ def apply_room_polish_delta(
     """Add ``delta`` polish to a (room, category) pair, clamped at 0.
 
     Returns the new ``RoomPolish.value``. Recomputes
-    prestige_from_dwellings for the room's tenant_persona AND rolls up
-    to the building owner (intentional double-count per spec).
+    prestige_from_dwellings for everyone whose primary home is this room
+    (#670 home-anchored rule), plus the building owner when their home is
+    in this building.
     """
+    from django.db.models import Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.locations.models import LocationTenancy  # noqa: PLC0415
+
     rp, _created = RoomPolish.objects.get_or_create(
         room=room,
         category=category,
@@ -142,54 +148,69 @@ def apply_room_polish_delta(
         rp.value = new_value
         rp.save(update_fields=["value"])
 
-    # Tenant credit.
-    if room.tenant_persona_id is not None:
-        recompute_persona_prestige_from_dwellings(room.tenant_persona)
+    # Whoever calls this room home.
+    now = timezone.now()
+    home_holders = (
+        LocationTenancy.objects.filter(room_profile=room, is_primary_home=True)
+        .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now))
+        .select_related("tenant_persona")
+    )
+    recomputed: set[int] = set()
+    for tenancy in home_holders:
+        if tenancy.tenant_persona is not None:
+            recompute_persona_prestige_from_dwellings(tenancy.tenant_persona)
+            recomputed.add(tenancy.tenant_persona_id)
 
-    # Roll-up to building owner (when the room is inside a building).
+    # The building's owner (their home may be elsewhere in this building).
     owner = _resolve_room_building_owner(room)
-    tenant_pk = room.tenant_persona.pk if room.tenant_persona_id is not None else None
-    if owner is not None and owner.pk != tenant_pk:
+    if owner is not None and owner.pk not in recomputed:
         recompute_persona_prestige_from_dwellings(owner)
 
     return new_value
 
 
+def _primary_home_room(persona):
+    """The RoomProfile of the persona's active primary-home tenancy, or None."""
+    from django.db.models import Q  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.locations.models import LocationTenancy  # noqa: PLC0415
+
+    now = timezone.now()
+    tenancy = (
+        LocationTenancy.objects.filter(tenant_persona=persona, is_primary_home=True)
+        .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now))
+        .select_related("room_profile")
+        .first()
+    )
+    return tenancy.room_profile if tenancy else None
+
+
 def recompute_persona_prestige_from_dwellings(persona) -> int:
-    """Read building + room polish totals into ``persona.prestige_from_dwellings``.
+    """Read the persona's PRIMARY-HOME polish into ``persona.prestige_from_dwellings``.
 
     Returns the new value. Writes through ``total_prestige`` denorm.
 
-    Persona's total is:
-        sum of value over BuildingPolish rows for buildings this persona owns
-      + sum of value over RoomPolish rows for rooms this persona tenants
-      + (double-count): sum of value over RoomPolish rows for rooms in
-        buildings this persona owns (regardless of tenant)
+    Primary-home-anchored (#670, ratified — replaces the earlier
+    sum-over-portfolio + double-count):
+        the home room's polish
+      + the building's polish IFF this persona owns that building
+        (``Building.owner_persona``, the polish system's owner notion).
+    No primary home designated → 0. Prestige rewards a home, not a
+    property portfolio.
     """
-    owned_buildings_polish = (
-        BuildingPolish.objects.filter(building__owner_persona=persona).aggregate(
-            total=Sum("value")
-        )["total"]
-        or 0
-    )
-    tenanted_rooms_polish = (
-        RoomPolish.objects.filter(room__tenant_persona=persona).aggregate(total=Sum("value"))[
-            "total"
-        ]
-        or 0
-    )
-    # Roll-up: every room in any building this persona owns, regardless of
-    # whether they're also the tenant. When they ARE the tenant, this adds
-    # the room's polish a SECOND time on purpose (the spec's intentional
-    # double-count for owner-tenanting).
-    owned_building_rooms_polish = (
-        RoomPolish.objects.filter(
-            room__area__building_profile__owner_persona=persona,
-        ).aggregate(total=Sum("value"))["total"]
-        or 0
-    )
-
-    total = owned_buildings_polish + tenanted_rooms_polish + owned_building_rooms_polish
+    home = _primary_home_room(persona)
+    total = 0
+    if home is not None:
+        total += RoomPolish.objects.filter(room=home).aggregate(total=Sum("value"))["total"] or 0
+        if home.area_id is not None:
+            total += (
+                BuildingPolish.objects.filter(
+                    building__area_id=home.area_id,
+                    building__owner_persona=persona,
+                ).aggregate(total=Sum("value"))["total"]
+                or 0
+            )
     persona.prestige_from_dwellings = total
     persona.total_prestige = (
         persona.prestige_from_dwellings
