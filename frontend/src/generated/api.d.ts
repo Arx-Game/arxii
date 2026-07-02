@@ -18949,6 +18949,7 @@ export interface components {
       kind: string;
       is_final: boolean;
       rapport_requirement: number;
+      risk_tier?: number | null;
     };
     InteractionReaction: {
       readonly id: number;
@@ -18971,6 +18972,8 @@ export interface components {
     /** @description POST /api/npc-services/interactions/resolve/ body. */
     InteractionResolveRequestRequest: {
       offer_id: number;
+      /** @default false */
+      acknowledge_risk: boolean;
     };
     /** @description POST /api/npc-services/interactions/start/ body. */
     InteractionStartRequestRequest: {

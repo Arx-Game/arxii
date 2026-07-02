@@ -156,14 +156,21 @@ class CmdHire(ArxCommand):
         if session is None:
             self.msg("No interaction is in progress.")
             return
+        # #1770 PR4: `hire offer <id> acknowledge_risk=yes` is phase two of
+        # the risky-mission opt-in (the gate's prompt names the token).
+        first, _, rest = args.partition(" ")
+        acknowledge_risk = rest.strip().lower() in {"acknowledge_risk=yes", "acknowledge_risk=y"}
+        if acknowledge_risk:
+            args = first
         if not args.isdigit():
-            self.msg("Usage: hire offer <offer id>")
+            self.msg("Usage: hire offer <offer id> [acknowledge_risk=yes]")
             return
         offer_id = int(args)
         result = resolve_npc_offer.run(
             actor=self.caller,
             session=session,
             offer_id=offer_id,
+            acknowledge_risk=acknowledge_risk,
         )
         if not result.success:
             self.msg(result.message)

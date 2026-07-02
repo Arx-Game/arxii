@@ -34116,6 +34116,9 @@ components:
           type: boolean
         rapport_requirement:
           type: integer
+        risk_tier:
+          type: integer
+          nullable: true
       required:
       - id
       - is_final
@@ -34179,6 +34182,9 @@ components:
         offer_id:
           type: integer
           minimum: 1
+        acknowledge_risk:
+          type: boolean
+          default: false
       required:
       - offer_id
     InteractionStartRequestRequest:

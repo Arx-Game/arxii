@@ -26,17 +26,92 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from world.missions.constants import MissionStatus
-from world.missions.models import MissionInstance, MissionParticipant
+from world.missions.constants import MISSION_RISK_ACK_TIER, MissionStatus
+from world.missions.models import MissionInstance, MissionParticipant, MissionRiskAcknowledgement
 from world.missions.services.resolution import enter_node
 from world.missions.services.run import anchor_room_for
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import EffectResult
+from world.npc_services.services import ResolveOfferError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from world.missions.models import MissionNode, MissionTemplate
     from world.npc_services.models import NPCServiceOffer
     from world.scenes.models import Persona
+
+
+class MissionRiskUnacknowledgedError(ResolveOfferError):
+    """A risky mission was accepted without an on-record acknowledgement (#1770 PR4).
+
+    Carries the template's ``risk_tier`` and the player-visible stake
+    summaries (empty today — offers carry no beat link yet, see
+    ``_require_risk_acknowledgement``) so the player surface can show what
+    is being committed to and instruct re-running with
+    ``acknowledge_risk=yes``.
+    """
+
+    user_message = "This job is dangerous; you must acknowledge the risk before accepting."
+
+    def __init__(
+        self,
+        msg: str,
+        *,
+        risk_tier: int,
+        stake_summaries: Iterable[str] = (),
+    ) -> None:
+        super().__init__(msg)
+        self.risk_tier = risk_tier
+        self.stake_summaries = tuple(stake_summaries)
+
+
+def acknowledge_mission_risk(
+    offer: NPCServiceOffer,
+    persona: Persona,
+) -> MissionRiskAcknowledgement | None:
+    """Idempotently record that a persona acknowledged an offer's mission risk.
+
+    Mirrors ``combat.services.acknowledge_encounter_risk`` (get_or_create;
+    the tier is snapshotted at first acknowledgement). Returns None for
+    offers that are not mission-kind (nothing to acknowledge).
+    """
+    from world.npc_services.models import MissionOfferDetails  # noqa: PLC0415
+
+    details = MissionOfferDetails.objects.filter(offer=offer).first()
+    if details is None:
+        return None
+    ack, _created = MissionRiskAcknowledgement.objects.get_or_create(
+        offer=offer,
+        persona=persona,
+        defaults={"acknowledged_risk_tier": details.mission_template.risk_tier},
+    )
+    return ack
+
+
+def _require_risk_acknowledgement(
+    offer: NPCServiceOffer,
+    persona: Persona,
+    template: MissionTemplate,
+) -> None:
+    """The mission-accept risk gate (#1770 PR4).
+
+    A template at or above ``MISSION_RISK_ACK_TIER`` requires a
+    ``MissionRiskAcknowledgement`` row before the run is created. Offers
+    carry no story-beat link today (``source_beat`` is only set on
+    beat-launched runs, never by this handler), so the "linked beat has
+    stakes" leg of the gate has nothing to check at offer time — it lives in
+    ``activate_stakes_for_instance``, which runs whenever a beat link exists.
+    """
+    if template.risk_tier < MISSION_RISK_ACK_TIER:
+        return
+    if MissionRiskAcknowledgement.objects.filter(offer=offer, persona=persona).exists():
+        return
+    msg = (
+        f"Offer {offer.pk} (template {template.pk!r}, risk_tier {template.risk_tier}) "
+        f"requires a MissionRiskAcknowledgement from persona {persona.pk}."
+    )
+    raise MissionRiskUnacknowledgedError(msg, risk_tier=template.risk_tier)
 
 
 def _entry_node(template: MissionTemplate) -> MissionNode:
@@ -70,6 +145,11 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     template = details.mission_template
     character = persona.character_sheet.character
 
+    # #1770 PR4: risky work needs an on-record acknowledgement BEFORE any
+    # state is written (the atomic block would roll back anyway; gating first
+    # keeps the state machine honest).
+    _require_risk_acknowledgement(offer, persona, template)
+
     instance = MissionInstance.objects.create(
         template=template,
         source_offer=offer,
@@ -84,6 +164,14 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         is_contract_holder=True,
     )
     enter_node(instance, _entry_node(template))
+
+    # #1770 PR4: mission acceptance is the stakes commit moment (pillar 9) —
+    # lock any staked linked beat's contract for the accepting party. A no-op
+    # today for offer-issued runs (no beat link is set by this handler); live
+    # the moment a beat-linked offer path ships.
+    from world.missions.services.beat import activate_stakes_for_instance  # noqa: PLC0415
+
+    activate_stakes_for_instance(instance, [persona.character_sheet])
 
     # ``template.cooldown`` is NOT NULL at the schema level, so the
     # ``or`` fallback can never resolve to None; no guard needed.

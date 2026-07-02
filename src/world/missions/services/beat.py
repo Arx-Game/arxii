@@ -37,6 +37,9 @@ from django.utils import timezone
 from world.missions.types import MissionBeatTriggerRecord
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionInstance, MissionOptionRoute
 
 logger = logging.getLogger(__name__)
@@ -155,6 +158,40 @@ def _complete_linked_beat(
             beat.predicate_type,
             has_tier,
         )
+
+
+def activate_stakes_for_instance(
+    instance: MissionInstance,
+    participant_sheets: Sequence[CharacterSheet],
+) -> None:
+    """Lock a staked linked beat's contract at mission acceptance (#1770 PR4).
+
+    Mission acceptance is the commit moment (pillar 9): when the run resolves
+    a specific ``source_beat`` that carries a stakes contract, activate it
+    for the accepting party. No-op for free runs (``source_beat`` null) and
+    unstaked beats. Boundary screen first (pillar 10): a blocked contract is
+    skipped and logged privately — the reason is never surfaced (ADR-0033).
+    ``activate_stakes_contract`` is idempotent while an activation is open.
+    """
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+    from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
+    from world.stories.services.stakes import activate_stakes_contract  # noqa: PLC0415
+
+    if instance.source_beat_id is None or not participant_sheets:
+        return
+    beat = instance.source_beat
+    if beat is None or beat.risk == RenownRisk.NONE:
+        return
+    report = check_stake_boundaries(beat.stakes.all(), participant_sheets)
+    if not report.allowed:
+        logger.info(
+            "Stakes contract on beat %s not activated for mission instance %s: "
+            "blocked by a player boundary.",
+            beat.pk,
+            instance.pk,
+        )
+        return
+    activate_stakes_contract(beat, participant_sheets)
 
 
 def get_triggers() -> tuple[MissionBeatTriggerRecord, ...]:

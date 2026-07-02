@@ -143,6 +143,10 @@ class InteractionOfferSerializer(serializers.Serializer):
     kind = serializers.CharField()
     is_final = serializers.BooleanField()
     rapport_requirement = serializers.IntegerField()
+    # #1770 PR4: the wrapped MissionTemplate's risk_tier for MISSION-kind
+    # offers (null otherwise) — surfaced pre-accept so the ack gate
+    # (MISSION_RISK_ACK_TIER) is never a surprise.
+    risk_tier = serializers.IntegerField(allow_null=True, default=None)
 
 
 class InteractionStateSerializer(serializers.Serializer):
@@ -159,3 +163,6 @@ class InteractionResolveRequestSerializer(serializers.Serializer):
     """POST /api/npc-services/interactions/resolve/ body."""
 
     offer_id = serializers.IntegerField(min_value=1)
+    # #1770 PR4: phase two of the risky-mission opt-in — re-send with True
+    # after the gate's informed-consent prompt to accept the danger.
+    acknowledge_risk = serializers.BooleanField(default=False)

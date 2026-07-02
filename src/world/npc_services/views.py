@@ -295,6 +295,7 @@ class InteractionViewSet(viewsets.ViewSet):
             actor=character,
             session=session,
             offer_id=body.validated_data["offer_id"],
+            acknowledge_risk=body.validated_data["acknowledge_risk"],
         )
         if not result.success:
             if result.data.get("not_found"):

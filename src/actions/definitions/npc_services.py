@@ -17,6 +17,28 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.missions.services.offer_handler import MissionRiskUnacknowledgedError
+
+# Kwarg spellings accepted as "yes, I acknowledge the risk" (#1770 PR4) —
+# telnet passes strings, the web dispatcher may pass a bool.
+_TRUTHY_VALUES = frozenset({"yes", "y", "true", "1"})
+
+
+def _truthy(value: Any) -> bool:
+    """Interpret an acknowledge_risk kwarg from either surface."""
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in _TRUTHY_VALUES if value is not None else False
+
+
+def _risk_prompt_message(exc: MissionRiskUnacknowledgedError) -> str:
+    """The informed-consent prompt for a risky mission offer (#1770 PR4)."""
+    lines = [f"This job is dangerous (risk tier {exc.risk_tier}). At stake:"]
+    lines.extend(f"  - {summary}" for summary in exc.stake_summaries)
+    if not exc.stake_summaries:
+        lines.append("  - The usual hazards of work at this tier.")
+    lines.append("Accept again with acknowledge_risk=yes to take the job anyway.")
+    return "\n".join(lines)
 
 
 @dataclass
@@ -93,12 +115,16 @@ class ResolveNPCOfferAction(Action):
     category: str = "social"
     target_type: TargetType = TargetType.SELF
 
-    def execute(
+    def execute(  # noqa: PLR0911 - distinct guard failures read clearest as early returns
         self,
         actor: ObjectDB,
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.missions.services.offer_handler import (  # noqa: PLC0415
+            MissionRiskUnacknowledgedError,
+            acknowledge_mission_risk,
+        )
         from world.npc_services.models import NPCServiceOffer  # noqa: PLC0415
         from world.npc_services.services import ResolveOfferError, resolve_offer  # noqa: PLC0415
 
@@ -120,8 +146,25 @@ class ResolveNPCOfferAction(Action):
                 data={"not_found": True},
             )
 
+        # #1770 PR4: the two-phase risk opt-in lives inside npc_resolve. Phase
+        # two — the player re-runs with acknowledge_risk=yes — writes the
+        # idempotent ack row before resolving; phase one falls into the typed
+        # gate error below and returns the informed-consent prompt.
+        if _truthy(kwargs.get("acknowledge_risk")):
+            acknowledge_mission_risk(offer, session.persona)
+
         try:
             result = resolve_offer(session, offer)
+        except MissionRiskUnacknowledgedError as exc:
+            return ActionResult(
+                success=False,
+                message=_risk_prompt_message(exc),
+                data={
+                    "requires_risk_acknowledgement": True,
+                    "risk_tier": exc.risk_tier,
+                    "stake_summaries": list(exc.stake_summaries),
+                },
+            )
         except ResolveOfferError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
