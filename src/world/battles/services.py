@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.constants import (
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
@@ -195,7 +196,11 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         next_number = prior.round_number + 1
     else:
         last = battle.rounds.order_by("-round_number").first()
-        next_number = (last.round_number + 1) if last is not None else 1
+        if last is None:
+            next_number = 1
+            activate_stakes_for_battle(battle)
+        else:
+            next_number = last.round_number + 1
 
     return BattleRound.objects.create(
         battle=battle,
@@ -303,10 +308,15 @@ def check_victory(*, battle: Battle) -> BattleOutcome | None:
 
 @transaction.atomic
 def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
-    """Set the battle's outcome and end the backing scene.
+    """Set the battle's outcome, end the backing scene, and resolve any linked
+    story beat's stakes contract.
 
-    Does NOT call ``complete_story`` — campaign propagation is deferred to #1716.
-    Idempotent: if the battle is already concluded, returns it unchanged.
+    Resolves every UNSATISFIED OUTCOME_TIER beat linked to the battle's scene
+    via resolve_battle_beats (#1785) — classifying battle.outcome through
+    BattleOutcomeMapping and completing the beat through the same
+    record_outcome_tier_completion seam combat/missions already use. Idempotent:
+    if the battle is already concluded, returns it unchanged (resolve_battle_beats
+    does not re-fire).
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -327,6 +337,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.is_active = False
     scene.date_finished = timezone.now()
     scene.save(update_fields=["is_active", "date_finished"])
+
+    resolve_battle_beats(battle)
 
     return battle
 

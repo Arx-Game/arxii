@@ -146,6 +146,8 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         assert "north" not in obj_names
 
     def test_payload_has_all_expected_keys(self):
-        """Payload should contain room, characters, objects, exits, and scene."""
+        """Payload should contain room, characters, objects, exits, scene, and heat (#1765)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
-        assert set(payload.keys()) == {"room", "characters", "objects", "exits", "scene"}
+        assert set(payload.keys()) == {"room", "characters", "objects", "exits", "scene", "heat"}
+        # Cold persona → the self-only heat field is None (never another player's data).
+        assert payload["heat"] is None

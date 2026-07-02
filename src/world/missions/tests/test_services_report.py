@@ -120,10 +120,18 @@ class ReportMissionTests(TestCase):
         with self.assertRaises(MissionReportError):
             report_mission(instance=self.instance, style="bragging", reporter=self.reporter)
 
-    def test_mostly_accurate_not_offerable_yet(self) -> None:
+    @patch(_DELIVER)
+    def test_mostly_accurate_is_offerable(self, mock_deliver) -> None:
+        # #1765 lit this style up; the dodge/consequence matrix lives in
+        # test_report_heat.py — here we just pin that it completes the run.
         self._place_clerk()
-        with self.assertRaises(MissionReportError):
-            report_mission(instance=self.instance, style="mostly_accurate", reporter=self.reporter)
+        result = report_mission(
+            instance=self.instance, style="mostly_accurate", reporter=self.reporter
+        )
+        mock_deliver.assert_called_once()
+        self.assertIsNotNone(result.dodge_success)
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
 
     @patch(_DELIVER)
     def test_humble_grants_bene_resonance(self, mock_deliver) -> None:  # noqa: ARG002

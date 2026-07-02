@@ -38,6 +38,13 @@ and verify issue number↔title before any mutation. Temporary — removal track
   flags every `cd && <command>` for manual approval as a bare-repo-attack
   mitigation, which blocks automation — a workaround for a CC permission behavior,
   mid-2026. Relax if future releases stop flagging it.)
+- **Worktrees are mandatory** — always work in a git worktree under
+  `.claude/worktrees/` (the `arxii-worktrees` named volume in the devcontainer),
+  never in the main checkout. Other paths land on the slow 9p bind mount, where
+  a worktree's `uv sync` takes ~10 min instead of <1 s via hardlinks from the
+  colocated `UV_CACHE_DIR`. The `using-git-worktrees` skill makes this mandatory
+  (no opt-out) and creates the worktree automatically; see
+  `docs/devcontainer-setup.md`.
 - **`gh` discipline** (see the `github-operations` skill): take new issue/PR
   numbers from the URL the create command returns — never compute `N+1` (issues and
   PRs share one counter); verify number↔title before any mutation; keep issue/PR

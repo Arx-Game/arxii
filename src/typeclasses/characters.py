@@ -314,6 +314,13 @@ class Character(ObjectParent, DefaultCharacter):
         # Send room state to frontend
         self.send_room_state()
 
+        # #1765 — relief line when a hot persona crosses into safety (self-only).
+        from world.justice.display import safe_transition_line
+
+        relief = safe_transition_line(self, source_location, self.location)
+        if relief:
+            self.msg(relief)
+
         # Reconcile presence-tied ALIGNED resonance buff for arrival location.
         # Guard mirrors at_post_puppet: some Character-typeclass objects have no sheet.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):

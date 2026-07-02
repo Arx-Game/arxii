@@ -141,15 +141,16 @@ jobs:
               web web.admin web.api
               world.game_clock world.skills world.consent world.player_submissions
               world.clues world.seeds world.instances
-          # shard-6 (~2,545): commands (660) + world.missions (636) + world.progression (366)
+          # shard-6 (~2,579): commands (660) + world.missions (636) + world.progression (366)
           #                   + world.locations (256) + world.relationships (160) + world.gm (122)
           #                   + world.npc_services (108) + world.codex (79) + world.weather (57)
           #                   + world.traits (39) + world.room_features (33) + world.staff_inbox (29)
+          #                   + world.justice (34)
           - name: shard-6
             apps: >-
               commands world.missions world.progression world.locations world.relationships
               world.gm world.npc_services world.codex world.weather world.traits
-              world.room_features world.staff_inbox
+              world.room_features world.staff_inbox world.justice
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the

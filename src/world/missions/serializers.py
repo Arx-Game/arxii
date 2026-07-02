@@ -594,12 +594,13 @@ class MissionAbandonResultSerializer(serializers.Serializer):
 
 
 class MissionReportResultSerializer(serializers.Serializer):
-    """Result of the #1753 report endpoint — run id/status, chosen style, embellish outcome."""
+    """Result of the #1753 report endpoint — run id/status, chosen style, check outcomes."""
 
     id = serializers.IntegerField(read_only=True)
     status = serializers.CharField(read_only=True)
     style = serializers.CharField(read_only=True)
     embellish_success = serializers.BooleanField(read_only=True, allow_null=True)
+    dodge_success = serializers.BooleanField(read_only=True, allow_null=True)
 
 
 class GroupBallotStateSerializer(serializers.Serializer):

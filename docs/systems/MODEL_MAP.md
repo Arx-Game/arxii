@@ -445,6 +445,8 @@
 **Pointed to by:**
   - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
+  - laws <- justice.AreaLaw
+  - heat_rows <- justice.PersonaHeat
   - stat_overrides <- locations.LocationValueOverride
   - stat_modifiers <- locations.LocationValueModifier
   - ownership_records <- locations.LocationOwnership
@@ -3430,7 +3432,7 @@
   - persona -> scenes.Persona [FK]
 
 ### Service Functions
-- `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False) -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
+- `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False, room: 'ObjectDB | None' = None, skip_criminal: 'bool' = False) -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
 - `apply_mission_reward_batch() -> 'RewardBatchResult' — Walk every ``applied=False`` :class:`MissionRewardQueue` row and try to grant it.`
 - `beat_for(instance: 'MissionInstance', character: 'ObjectDB') -> 'BeatView | None' — The current beat as ``character`` sees it; None when the run is done.`
 - `build_group_option_list(instance: 'MissionInstance', node: 'MissionNode') -> 'list[PresentedOption]' — Union of every participant's Phase-3 option list at ``node``.`
@@ -4225,6 +4227,7 @@
   - businesses <- currency.Business
   - authored_secrets <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
+  - heat_rows <- justice.PersonaHeat
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
@@ -4585,6 +4588,7 @@
   - fame_reaction_lines <- societies.FameReactionLine
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
+  - heat_rows <- justice.PersonaHeat
   - fashion_presentations <- items.FashionPresentation
   - facet_momentum <- items.FacetVogueMomentum
   - trendsetters <- items.Trendsetter
@@ -4695,6 +4699,8 @@
   - knowledge_rows <- societies.PersonaDeedKnowledge
   - covenant_credits <- societies.CovenantLegendCredit
   - explaining_secrets <- secrets.Secret
+  - crime_tags <- justice.DeedCrimeTag
+  - heat_sources <- justice.HeatSource
 
 ### LegendSpread
 **Foreign Keys:**

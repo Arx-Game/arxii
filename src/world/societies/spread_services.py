@@ -298,6 +298,7 @@ def _resolve_spread_tale(action_request, result) -> None:
             deed=deed,
             personas=scene_witness_personas(action_request.scene),
             source=DeedKnowledgeSource.HEARD_TOLD,
+            room=action_request.scene.location,
         )
     _open_spread_assist_window(action_request, deed, value)
     tier_changed = apply_spread_fame_bump(

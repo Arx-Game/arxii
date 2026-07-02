@@ -136,3 +136,4 @@ treat those names as hints to confirm, not gospel.
 - [0077 — Effective risk is priced relative to declared target level, not the raw declared tier](0077-effective-risk-is-priced-relative-to-target-level.md)
 - [0078 — Stakes are menu-first, calibrated by band, not freehand-authored per table](0078-menu-first-stakes-with-calibration-bands.md)
 - [0079 — Style discovery rides the clue→codex→RESEARCH pipeline, not a parallel unlock model](0079-style-discovery-rides-the-clue-research-pipeline.md)
+- [0080 — Heat jurisdiction is judged at the commit location, enforcement scoped to the dominant society](0080-heat-jurisdiction-judged-at-the-commit-location.md)

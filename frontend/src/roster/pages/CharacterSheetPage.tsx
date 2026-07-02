@@ -19,6 +19,7 @@ import { FriendsTab } from '@/friends/components/FriendsTab';
 import { GossipPanel } from '@/secrets/components/GossipPanel';
 import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
+import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 
 export function CharacterSheetPage() {
@@ -68,6 +69,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="crime">Crime</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="friends">Friends</TabsTrigger>}
         </TabsList>
 
@@ -146,6 +148,15 @@ export function CharacterSheetPage() {
                 social hub (#1572) — so it's a self-only tab keyed on the active RosterEntry, not the
                 viewed subject. Radix unmounts inactive tabs, so the query only fires when opened. */}
             <GossipPanel viewerId={viewerEntryId} />
+          </TabsContent>
+        )}
+
+        {isMyCharacter && (
+          <TabsContent value="crime" className="space-y-4">
+            {/* Where your active persona is wanted (#1765) — self-only risk information keyed on
+                the active RosterEntry, like Gossip. Radix unmounts inactive tabs, so the query
+                only fires when opened. */}
+            <CrimeTab viewerEntryId={viewerEntryId} />
           </TabsContent>
         )}
 
