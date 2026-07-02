@@ -6,9 +6,14 @@ actually pay for THIS party (effective risk), and the lock lifecycle
 (activation -> resolution).
 """
 
+from __future__ import annotations
+
 import logging
+from statistics import mean
+from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
+from django.utils import timezone
 
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
@@ -18,8 +23,13 @@ from world.stories.constants import (
     StakeSeverity,
     StoryMaturity,
 )
-from world.stories.models import Beat, RiskCalibration, Stake, Transition
+from world.stories.models import Beat, RiskCalibration, Stake, StakeContractActivation, Transition
 from world.stories.types import StakesReadinessReport
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
 
@@ -185,3 +195,67 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
         problems.extend(_calibration_band_problems(beat, calibration, stakes))
 
     return StakesReadinessReport(is_staked=True, is_ready=not problems, problems=tuple(problems))
+
+
+def get_open_activation(beat: Beat) -> StakeContractActivation | None:
+    """The single open (unresolved) activation for this beat, if any."""
+    return beat.stake_activations.filter(resolved_at__isnull=True).first()
+
+
+def activate_stakes_contract(
+    beat: Beat, participants: Sequence[CharacterSheet]
+) -> StakeContractActivation:
+    """Lock the contract at scene start and price it for this party.
+
+    Idempotent while open: a second activation attempt (e.g. two encounter
+    starts racing) returns the existing open row unchanged. Unready contracts
+    activate at effective NONE — the scene runs, nothing pays (#1770 pillar 7).
+    """
+    from world.stories.services.beats import _character_level  # noqa: PLC0415
+
+    if not participants:
+        msg = f"activate_stakes_contract(beat={beat.pk}): participants must be non-empty"
+        raise ValueError(msg)
+
+    existing = get_open_activation(beat)
+    if existing is not None:
+        return existing
+
+    report = validate_stakes_readiness(beat)
+    party_average = round(mean(_character_level(sheet) for sheet in participants))
+    target = beat.target_level or 0
+    if report.is_staked and report.is_ready:
+        effective = compute_effective_risk(beat.risk, target, party_average)
+    else:
+        effective = RenownRisk.NONE
+    activation = StakeContractActivation.objects.create(
+        beat=beat,
+        party_average_level=party_average,
+        declared_target_level=target,
+        declared_risk=beat.risk,
+        effective_risk=effective,
+        is_ready=report.is_ready,
+        readiness_notes="; ".join(report.problems),
+    )
+    if report.is_staked and not report.is_ready:
+        logger.warning(
+            "Stakes contract on beat %s activated UNREADY (effective NONE): %s",
+            beat.pk,
+            activation.readiness_notes,
+        )
+    return activation
+
+
+def effective_risk_for_beat(beat: Beat) -> str:
+    """Risk value Legend should pay on: open activation's effective risk,
+    else the declared Beat.risk (paths with no activation keep old behavior)."""
+    activation = get_open_activation(beat)
+    return activation.effective_risk if activation is not None else beat.risk
+
+
+def resolve_open_activation(beat: Beat) -> None:
+    """Close the open activation (if any) — called by the completion tail."""
+    activation = get_open_activation(beat)
+    if activation is not None:
+        activation.resolved_at = timezone.now()
+        activation.save(update_fields=["resolved_at"])
