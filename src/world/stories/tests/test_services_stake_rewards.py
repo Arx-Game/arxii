@@ -17,6 +17,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.currency.models import CurrencyTransfer
 from world.currency.services import get_or_create_purse
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.magic.constants import GainSource
@@ -132,6 +133,10 @@ class WinRewardE2ETests(EvenniaTestCase):
         purse = get_or_create_purse(sheet)
         purse.refresh_from_db()
         self.assertEqual(purse.balance, 300)
+        # Ledger honesty (#1770 PR3 review): the reason names a stake reward,
+        # not a mission reward.
+        ledger_row = CurrencyTransfer.objects.get(to_purse=purse)
+        self.assertEqual(ledger_row.reason, f"stake reward: stake:{stake.pk}")
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
         self.assertEqual(cr.balance, 100)
         grant = ResonanceGrant.objects.get(character_sheet=sheet)
@@ -359,3 +364,237 @@ class StakeRewardLineSerializerTests(APITestCase):
         resp = self._post_line(self.staff, amount=0)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("amount", str(resp.data))
+
+    def test_non_win_resolution_rejected(self):
+        """WIN-column only (#1770 PR3 review) — a LOSS consolation line is refused."""
+        loss = StakeResolutionFactory(stake=self.win.stake, column=StakeResolutionColumn.LOSS)
+        resp = self._post_line(self.staff, resolution=loss.pk)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("WIN-column", str(resp.data))
+
+    def test_model_clean_rejects_non_win_resolution(self):
+        from django.core.exceptions import ValidationError
+
+        from world.stories.models import StakeRewardLine
+
+        loss = StakeResolutionFactory(stake=self.win.stake, column=StakeResolutionColumn.WITHDRAWAL)
+        line = StakeRewardLine(resolution=loss, sink=StakeRewardSink.MONEY, amount=10)
+        with self.assertRaises(ValidationError):
+            line.clean()
+
+
+class CompletedBeatEditRefusalTests(APITestCase):
+    """#1770 PR3 review finding 1a: contract editing ends when the beat completes.
+
+    The open-activation lock alone leaves a hole — the completion tail closes
+    the activation while stakes still pend for a GM pick, which would reopen
+    reward-line (and resolution) editing on a contract that already ran.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+        story = StoryFactory(owners=[cls.staff])
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        cls.beat = BeatFactory(episode=episode)
+        cls.stake = StakeFactory(beat=cls.beat)
+        cls.win = StakeResolutionFactory(stake=cls.stake, column=StakeResolutionColumn.WIN)
+        cls.line = StakeRewardLineFactory(resolution=cls.win, amount=100)
+
+    def _complete_beat(self):
+        # Mutate the canonical ORM instance, not the per-test TestData copy —
+        # the serializer walks the idmapper-cached Beat, which a copy's
+        # .save() would leave stale.
+        from world.stories.models import Beat
+
+        beat = Beat.objects.get(pk=self.beat.pk)
+        beat.outcome = BeatOutcome.PENDING_GM_REVIEW
+        beat.save(update_fields=["outcome"])
+
+    def test_reward_line_create_refused_after_completion(self):
+        self._complete_beat()
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stakerewardline-list"),
+            {"resolution": self.win.pk, "sink": StakeRewardSink.MONEY, "amount": 100},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("completed", str(resp.data))
+
+    def test_reward_line_update_refused_after_completion(self):
+        self._complete_beat()
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            reverse("stakerewardline-detail", kwargs={"pk": self.line.pk}),
+            {"amount": 99999},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("completed", str(resp.data))
+
+    def test_resolution_write_refused_after_completion(self):
+        """Same hole on StakeResolution: no re-authoring branches post-completion."""
+        self._complete_beat()
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stakeresolution-list"),
+            {"stake": self.stake.pk, "column": StakeResolutionColumn.WITHDRAWAL},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("completed", str(resp.data))
+
+
+class PayTimeBandRecheckTests(EvenniaTestCase):
+    """#1770 PR3 review finding 1b: the payout re-verifies the reward band.
+
+    The activation's frozen is_ready verdict can go stale in the
+    pending-GM-pick window; an out-of-band live total skips the payout.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+        cls.gm_profile = GMProfileFactory()
+
+    def test_out_of_band_at_pay_time_skips_payout(self):
+        sheet, beat, progress, stake, win = _character_story_ready_beat(money=300)
+        _level_sheet(sheet, 4)
+        activation = activate_stakes_contract(beat, [sheet])
+        self.assertTrue(activation.is_ready)
+        record_outcome_tier_completion(
+            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
+        )
+
+        # Simulate the bypass: the line changes after the contract ran
+        # (e.g. via admin or a pre-fix API); HIGH's ceiling is 1500.
+        line = win.reward_lines.get()
+        line.amount = 5000
+        line.save(update_fields=["amount"])
+
+        outcome = resolve_stake_by_gm_pick(
+            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
+        )
+
+        self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 0)
+
+
+class ClaimBeforePayTests(EvenniaTestCase):
+    """#1770 PR3 review finding 2: the StakeOutcome claim precedes any firing.
+
+    A losing concurrent create must return the winner's row WITHOUT firing
+    pool/writers/rewards again — the purse holds one payout, never two.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+
+    def test_double_fire_pays_once(self):
+        from world.stories.constants import StakeOutcomeMethod
+        from world.stories.services.stake_resolution import _fire_branch_and_record
+
+        sheet, beat, _progress, stake, win = _character_story_ready_beat(money=300)
+        _level_sheet(sheet, 4)
+        activation = activate_stakes_contract(beat, [sheet])
+        persona = sheet.primary_persona
+
+        def fire():
+            return _fire_branch_and_record(
+                stake=stake,
+                resolution=win,
+                column=StakeResolutionColumn.WIN,
+                method=StakeOutcomeMethod.MACHINE,
+                activation=activation,
+                progress=None,
+                scope=StoryScope.CHARACTER,
+                participants=[persona],
+            )
+
+        first = fire()
+        second = fire()  # simulates the loser whose .exists() pre-check missed
+
+        self.assertEqual(second.pk, first.pk)
+        self.assertEqual(StakeOutcome.objects.filter(stake=stake).count(), 1)
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 300)  # paid once, not 600
+
+
+class GMPickGateAndActivationTests(EvenniaTestCase):
+    """GM picks honor the anti-farming gate and resolve under the activation
+    the stake actually pended with (#1770 PR3 review findings 3 + 5)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        seed_default_risk_calibrations()
+        cls.gm_profile = GMProfileFactory()
+
+    def _pend(self, progress, beat):
+        record_outcome_tier_completion(
+            progress=progress, beat=beat, force_outcome=BeatOutcome.PENDING_GM_REVIEW
+        )
+
+    def test_pick_under_unready_activation_skips_payout(self):
+        sheet, beat, progress, stake, _win = _character_story_ready_beat(
+            target_level=None, money=300
+        )
+        _level_sheet(sheet, 4)
+        activation = activate_stakes_contract(beat, [sheet])
+        self.assertFalse(activation.is_ready)
+        self._pend(progress, beat)
+
+        outcome = resolve_stake_by_gm_pick(
+            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
+        )
+
+        self.assertEqual(outcome.column, StakeResolutionColumn.WIN)
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 0)
+
+    def test_pick_under_effective_none_activation_skips_payout(self):
+        sheet, beat, progress, stake, _win = _character_story_ready_beat(money=300)
+        _level_sheet(sheet, 12)  # target 4 + 8 over -> effective NONE
+        activation = activate_stakes_contract(beat, [sheet])
+        self.assertEqual(activation.effective_risk, RenownRisk.NONE)
+        self._pend(progress, beat)
+
+        resolve_stake_by_gm_pick(
+            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
+        )
+
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 0)
+
+    def test_pick_uses_activation_of_the_pended_completion(self):
+        """A new activation opened AFTER the pend (beat re-engaged) must not
+        change the pended stake's gate or its audit row."""
+        sheet, beat, progress, stake, _win = _character_story_ready_beat(money=300)
+        _level_sheet(sheet, 4)
+        pended_under = activate_stakes_contract(beat, [sheet])
+        self.assertEqual(pended_under.effective_risk, RenownRisk.HIGH)
+        self._pend(progress, beat)
+
+        # Beat re-engaged by a grossly over-leveled party: a NEW open
+        # activation at effective NONE. The old selection logic (open
+        # activation first) would starve the pended stake's payout.
+        overleveled = _level_sheet(CharacterSheetFactory(), 12)
+        later = activate_stakes_contract(beat, [overleveled])
+        self.assertIsNone(later.resolved_at)
+        self.assertEqual(later.effective_risk, RenownRisk.NONE)
+
+        outcome = resolve_stake_by_gm_pick(
+            stake, column=StakeResolutionColumn.WIN, gm_profile=self.gm_profile
+        )
+
+        self.assertEqual(outcome.activation_id, pended_under.pk)
+        purse = get_or_create_purse(sheet)
+        purse.refresh_from_db()
+        self.assertEqual(purse.balance, 300)

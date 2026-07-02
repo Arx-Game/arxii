@@ -23548,11 +23548,12 @@ export interface components {
      *
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
-     *     open-activation lock, and the sink/resonance shape rule (resonance
-     *     required iff sink=RESONANCE; amount >= 1 rides the model validator).
+     *     open-activation lock, the completed-beat refusal, the WIN-column-only
+     *     rule, and the sink/resonance shape rule (resonance required iff
+     *     sink=RESONANCE; amount >= 1 rides the model validator).
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
-     *     (pillar 7 auto-downgrade).
+     *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
      */
     PatchedStakeRewardLineRequest: {
       resolution?: number;
@@ -26373,11 +26374,12 @@ export interface components {
      *
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
-     *     open-activation lock, and the sink/resonance shape rule (resonance
-     *     required iff sink=RESONANCE; amount >= 1 rides the model validator).
+     *     open-activation lock, the completed-beat refusal, the WIN-column-only
+     *     rule, and the sink/resonance shape rule (resonance required iff
+     *     sink=RESONANCE; amount >= 1 rides the model validator).
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
-     *     (pillar 7 auto-downgrade).
+     *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
      */
     StakeRewardLine: {
       readonly id: number;
@@ -26393,11 +26395,12 @@ export interface components {
      *
      *     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
      *     walk via resolution.stake.beat (create-path enforcement), the two-sided
-     *     open-activation lock, and the sink/resonance shape rule (resonance
-     *     required iff sink=RESONANCE; amount >= 1 rides the model validator).
+     *     open-activation lock, the completed-beat refusal, the WIN-column-only
+     *     rule, and the sink/resonance shape rule (resonance required iff
+     *     sink=RESONANCE; amount >= 1 rides the model validator).
      *     Banding against the tier's reward floor/ceiling is deliberately NOT
      *     rejected here — out-of-band rewards make the contract UNREADY instead
-     *     (pillar 7 auto-downgrade).
+     *     (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
      */
     StakeRewardLineRequest: {
       resolution: number;

@@ -69,7 +69,7 @@ The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when t
 _Avoid_: flee branch, retreat outcome.
 
 **Reward Line**:
-One authored win payout on a stake's branch (`StakeRewardLine`, #1770 PR3) — a `sink` (`StakeRewardSink`: MONEY or RESONANCE), an `amount` (a money-equivalent scalar paid to EACH completion participant, ALL_EQUAL), and a `resonance` FK when the sink is RESONANCE. Hangs off a `StakeResolution` (in practice the WIN column); paid by `_apply_stake_rewards` only under a ready, effective-risk-bearing Activation. Distinct from missions' `MissionDeedRewardLine` (deed-anchored; stakes deliberately reuse the sink *services*, not the deed router).
+One authored win payout on a stake's branch (`StakeRewardLine`, #1770 PR3) — a `sink` (`StakeRewardSink`: MONEY or RESONANCE), an `amount` (a money-equivalent scalar paid to EACH completion participant, ALL_EQUAL), and a `resonance` FK when the sink is RESONANCE. Hangs off a WIN-column `StakeResolution` (WIN-only, enforced in clean() + serializer); paid by `_apply_stake_rewards` only under a ready, effective-risk-bearing Activation, with the Reward Band re-checked at pay time. Distinct from missions' `MissionDeedRewardLine` (deed-anchored; stakes deliberately reuse the sink *services*, not the deed router).
 _Avoid_: reward row, payout entry, deed line.
 
 **Reward Band**:

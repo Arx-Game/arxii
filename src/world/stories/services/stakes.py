@@ -216,6 +216,47 @@ def _reward_band_problems(
     return problems
 
 
+def _stakes_with_authored_branches(beat: Beat) -> list[Stake]:
+    """The beat's stakes with resolutions + reward lines prefetched (to_attr)."""
+    return list(
+        beat.stakes.prefetch_related(
+            Prefetch(
+                "resolutions",
+                queryset=StakeResolution.objects.prefetch_related(
+                    Prefetch(
+                        "reward_lines",
+                        queryset=StakeRewardLine.objects.all(),
+                        to_attr="prefetched_reward_lines",
+                    )
+                ),
+                to_attr="prefetched_resolutions",
+            )
+        )
+    )
+
+
+def reward_band_problems_for_beat(beat: Beat) -> list[str]:
+    """Re-runnable reward-band check for a beat's whole contract (#1770 PR3).
+
+    Used by ``validate_stakes_readiness`` (via ``_calibration_band_problems``,
+    which passes its own prefetch) AND re-run at pay time by
+    ``stake_resolution._apply_stake_rewards`` — the readiness verdict frozen
+    on the activation can go stale if reward lines change after the beat
+    completes (the GM-pick window), so the payout re-verifies the band
+    against live data. Missing calibration / no stakes / risk NONE return []
+    here (those are readiness problems, not band problems).
+    """
+    if beat.risk == RenownRisk.NONE:
+        return []
+    calibration = RiskCalibration.objects.filter(risk=beat.risk).first()
+    if calibration is None:
+        return []
+    stakes = _stakes_with_authored_branches(beat)
+    if not stakes:
+        return []
+    return _reward_band_problems(beat, calibration, stakes)
+
+
 def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     """Is this beat's contract complete enough to run at its declared risk?
 
@@ -235,21 +276,7 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     if calibration is None:
         problems.append(f"no RiskCalibration row for risk {beat.risk!r}")
 
-    stakes = list(
-        beat.stakes.prefetch_related(
-            Prefetch(
-                "resolutions",
-                queryset=StakeResolution.objects.prefetch_related(
-                    Prefetch(
-                        "reward_lines",
-                        queryset=StakeRewardLine.objects.all(),
-                        to_attr="prefetched_reward_lines",
-                    )
-                ),
-                to_attr="prefetched_resolutions",
-            )
-        )
-    )
+    stakes = _stakes_with_authored_branches(beat)
     if not stakes:
         problems.append("no stakes declared")
     problems.extend(_stake_column_problems(stakes))

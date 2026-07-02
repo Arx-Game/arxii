@@ -2161,15 +2161,17 @@ class StakeResolution(SharedMemoryModel):
 
 
 class StakeRewardLine(SharedMemoryModel):
-    """One authored win-reward payout on a stake's branch (#1770 PR3).
+    """One authored win-reward payout on a stake's WIN branch (#1770 PR3).
 
-    Authored pre-scene alongside the branch it hangs off (in practice the WIN
-    column — the two-sided contract's reward side). When the branch fires
-    under a ready, effective-risk-bearing activation, EVERY completion
-    participant receives each line's full amount (ALL_EQUAL semantics,
-    mirroring mission reward distribution). ``amount`` is a money-equivalent
-    scalar for every sink so RiskCalibration.reward_floor/reward_ceiling can
-    band the summed total per beat.
+    Authored pre-scene alongside the branch it hangs off — WIN-column
+    resolutions only, enforced in clean() + serializer (a "consolation" line
+    on LOSS/WITHDRAWAL would be silently inert; an authoring foot-gun, not a
+    feature). When the branch fires under a ready, effective-risk-bearing
+    activation, EVERY completion participant receives each line's full amount
+    (ALL_EQUAL semantics, mirroring mission reward distribution). ``amount``
+    is a money-equivalent scalar for every sink so
+    RiskCalibration.reward_floor/reward_ceiling can band the summed total per
+    beat.
     """
 
     resolution = models.ForeignKey(
@@ -2197,6 +2199,10 @@ class StakeRewardLine(SharedMemoryModel):
     def clean(self) -> None:
         """Sink/payload shape guard (mirrored in StakeRewardLineSerializer)."""
         super().clean()
+        if self.resolution_id is not None and self.resolution.column != StakeResolutionColumn.WIN:
+            raise ValidationError(
+                {"resolution": "Reward lines only attach to WIN-column resolutions."}
+            )
         if self.sink == StakeRewardSink.RESONANCE and self.resonance_id is None:
             raise ValidationError({"resonance": "Required when sink is RESONANCE."})
         if self.sink != StakeRewardSink.RESONANCE and self.resonance_id is not None:

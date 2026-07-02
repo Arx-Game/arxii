@@ -2565,11 +2565,12 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
 
     Mirrors StakeResolutionSerializer's gates one hop deeper: the ownership
     walk via resolution.stake.beat (create-path enforcement), the two-sided
-    open-activation lock, and the sink/resonance shape rule (resonance
-    required iff sink=RESONANCE; amount >= 1 rides the model validator).
+    open-activation lock, the completed-beat refusal, the WIN-column-only
+    rule, and the sink/resonance shape rule (resonance required iff
+    sink=RESONANCE; amount >= 1 rides the model validator).
     Banding against the tier's reward floor/ceiling is deliberately NOT
     rejected here — out-of-band rewards make the contract UNREADY instead
-    (pillar 7 auto-downgrade).
+    (pillar 7 auto-downgrade); the payout re-checks the band at pay time.
     """
 
     class Meta:
@@ -2620,11 +2621,26 @@ class StakeRewardLineSerializer(serializers.ModelSerializer):
 
         # Lock check: re-pointing to/from a resolution whose beat is locked is
         # rejected either way — check both sides when re-pointing.
+        # Completed-beat check (#1770 PR3 review): once the completion tail
+        # closes the activation (with stakes possibly pending a GM pick), the
+        # open-activation lock no longer bites — without this check reward
+        # lines could be re-authored after the contract ran and pay out on
+        # the stale activation's readiness verdict.
         resolutions_to_check = [resolution] if not is_repoint else [resolution, old_resolution]
         for candidate in resolutions_to_check:
             if candidate is not None and get_open_activation(candidate.stake.beat) is not None:
                 msg = "This beat's stakes contract is locked by an open activation."
                 raise serializers.ValidationError(msg)
+            if candidate is not None and candidate.stake.beat.outcome != BeatOutcome.UNSATISFIED:
+                msg = "This beat has completed; its stakes contract can no longer be edited."
+                raise serializers.ValidationError(msg)
+
+        # WIN-column only (#1770 PR3 review): a "consolation" line on a
+        # LOSS/WITHDRAWAL branch would be silently inert — refuse it.
+        if resolution is not None and resolution.column != StakeResolutionColumn.WIN:
+            raise serializers.ValidationError(
+                {"resolution": "Reward lines only attach to WIN-column resolutions."}
+            )
 
         self._validate_sink_shape(attrs)
 
@@ -2709,10 +2725,18 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
 
         # Lock check (#1770 PR1 review): re-pointing to/from a stake whose beat
         # is locked is rejected either way — check both sides when re-pointing.
+        # Completed-beat check (#1770 PR3 review): the open-activation lock
+        # alone leaves a hole — the completion tail closes the activation
+        # while stakes can still pend for a GM pick, which would reopen
+        # editing on a contract that already ran. Contract editing ends when
+        # the beat completes (pillar 8's spirit).
         stakes_to_check = [stake] if not is_repoint else [stake, old_stake]
         for candidate in stakes_to_check:
             if candidate is not None and get_open_activation(candidate.beat) is not None:
                 msg = "This beat's stakes contract is locked by an open activation."
+                raise serializers.ValidationError(msg)
+            if candidate is not None and candidate.beat.outcome != BeatOutcome.UNSATISFIED:
+                msg = "This beat has completed; its stakes contract can no longer be edited."
                 raise serializers.ValidationError(msg)
 
         self._validate_writer_payloads(attrs, stake)

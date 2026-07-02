@@ -268,17 +268,43 @@ def _fire_branch_and_record(  # noqa: PLR0913
     resolved_by: GMProfile | None = None,
     gm_notes: str = "",
 ) -> StakeOutcome:
-    """Fire one stake's branch (pool + writer payloads) and write its audit row.
+    """Claim one stake's audit row, then fire its branch (pool + writer payloads).
 
     Shared by the machine path and the GM constrained pick — the only
     differences between them are ``method``/``resolved_by``/``gm_notes``.
 
-    One-outcome-per-stake is enforced by the ``unique_outcome_per_stake``
-    constraint; the callers' ``.exists()`` pre-checks are the fast path, and a
-    losing concurrent create recovers by returning the winner's row (same
-    pattern as PR1's activation race handling).
+    Claim-before-pay (#1770 PR3 review): the StakeOutcome row is created
+    FIRST — winning the ``unique_outcome_per_stake`` constraint is the claim.
+    A losing concurrent create refetches and returns the winner's row WITHOUT
+    firing anything, so two racing resolutions can never both pay the WIN
+    rewards (or double-fire the pool/writers). The callers' ``.exists()``
+    pre-checks remain the fast path. The caller's enclosing transaction still
+    rolls the claim and its effects back together on a genuine error.
     """
     from world.stories.services.beats import _fire_pool_with_context  # noqa: PLC0415
+
+    try:
+        with transaction.atomic():
+            outcome = StakeOutcome.objects.create(
+                stake=stake,
+                activation=activation,
+                resolution=resolution,
+                column=column,
+                method=method,
+                resolved_by=resolved_by,
+                gm_notes=gm_notes,
+            )
+    except IntegrityError:
+        existing = StakeOutcome.objects.filter(stake=stake).first()
+        if existing is None:
+            raise
+        logger.info(
+            "Stake %s already claimed by a concurrent resolution (outcome %s); "
+            "not firing this branch again.",
+            stake.pk,
+            existing.pk,
+        )
+        return existing
 
     if resolution is not None:
         if resolution.consequence_pool_id is not None:
@@ -300,22 +326,7 @@ def _fire_branch_and_record(  # noqa: PLR0913
             stake.pk,
             column,
         )
-    try:
-        with transaction.atomic():
-            return StakeOutcome.objects.create(
-                stake=stake,
-                activation=activation,
-                resolution=resolution,
-                column=column,
-                method=method,
-                resolved_by=resolved_by,
-                gm_notes=gm_notes,
-            )
-    except IntegrityError:
-        existing = StakeOutcome.objects.filter(stake=stake).first()
-        if existing is None:
-            raise
-        return existing
+    return outcome
 
 
 def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcome's surface
@@ -346,7 +357,6 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     callers): the stake must be unresolved and the column must be authored.
     """
     from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
-    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
 
     # Direct table query — never the related manager, whose prefetched cache
     # on the idmapper-shared Stake instance can be stale.
@@ -376,9 +386,7 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     elif scope == StoryScope.GROUP and participants:
         resolved_participants = list(participants)
 
-    # The open activation is normally already closed by the completion tail;
-    # fall back to the most recent activation for the audit FK.
-    activation = get_open_activation(stake.beat) or stake.beat.stake_activations.first()
+    activation = _activation_for_gm_pick(stake.beat)
 
     with transaction.atomic():
         return _fire_branch_and_record(
@@ -393,6 +401,28 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
             resolved_by=gm_profile,
             gm_notes=gm_notes,
         )
+
+
+def _activation_for_gm_pick(beat: Beat) -> StakeContractActivation | None:
+    """The activation the pended stakes actually ran under (#1770 PR3 review).
+
+    A GM pick resolves a stake that pended at some earlier completion. Prefer
+    the most recent activation locked at-or-before the beat's most recent
+    BeatCompletion — a NEW activation opened after the stake pended (the beat
+    re-engaged) must not change the pended stake's payout gate or its
+    StakeOutcome.activation audit row. Fall back to the open activation, then
+    the most recent one (picks on a beat with no completion yet).
+    """
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    completion = beat.completions.order_by("-recorded_at", "-pk").first()
+    if completion is not None:
+        # StakeContractActivation.Meta.ordering is ["-locked_at"], so first()
+        # is the most recent activation at-or-before that completion.
+        activation = beat.stake_activations.filter(locked_at__lte=completion.recorded_at).first()
+        if activation is not None:
+            return activation
+    return get_open_activation(beat) or beat.stake_activations.first()
 
 
 # ---------------------------------------------------------------------------
@@ -483,12 +513,20 @@ def _apply_stake_rewards(
     care; only the payout math does); the GM-pick path honors the same gate
     via the activation the pick resolves under.
 
+    The reward band is re-verified at pay time (#1770 PR3 review): the
+    ``is_ready`` verdict frozen on the activation can go stale in the
+    pending-GM-pick window, so an out-of-band live total also skips the
+    payout (banding bypass closed at both ends — the serializer refuses
+    completed-beat edits, and the payout re-checks the band regardless).
+
     Delivery is per line x participant (ALL_EQUAL, mirroring mission reward
     distribution) through the SAME sink services the missions deed router
     dispatches to — never the deed-anchored router itself (it reads
     MissionDeedRecord rows, and stories must not depend on missions,
     ADR-0010). Same contract as the other writers: skip-and-log, never raise.
     """
+    from world.stories.services.stakes import reward_band_problems_for_beat  # noqa: PLC0415
+
     lines = _reward_lines_for(resolution)
     if not lines:
         return
@@ -525,6 +563,16 @@ def _apply_stake_rewards(
             len(lines),
         )
         return
+    band_problems = reward_band_problems_for_beat(stake.beat)
+    if band_problems:
+        logger.warning(
+            "Stake %s WIN: skipping %d reward line(s) — reward band violated at "
+            "pay time (lines changed after activation?): %s",
+            stake.pk,
+            len(lines),
+            "; ".join(band_problems),
+        )
+        return
     for line in lines:
         for participant in participants:
             _deliver_reward_line(line, participant, stake)
@@ -548,7 +596,12 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
     # (Persona.character_sheet is a non-null FK).
     sheet = participant.character_sheet
     if line.sink == StakeRewardSink.MONEY:
-        deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=f"stake:{stake.pk}")
+        deliver_mission_money(
+            recipient_sheet=sheet,
+            amount=line.amount,
+            ref=f"stake:{stake.pk}",
+            reason_label="stake reward",
+        )
         return
     if line.sink == StakeRewardSink.RESONANCE:
         if line.resonance is None:
