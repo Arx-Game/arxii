@@ -14,13 +14,27 @@ from django.test import TestCase, tag
 from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
+    BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
+    BATTLE_POSTURE_VP_MULTIPLIER,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
     BattleActionKind,
+    BattlePosture,
     BattleSideRole,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
-from world.battles.services import add_side, add_unit, begin_battle_round, enlist_participant
+from world.battles.factories import BattlePlaceFactory
+from world.battles.models import TechniqueCompositionAffinity, TerrainCompositionEffect
+from world.battles.services import (
+    add_place,
+    add_side,
+    add_unit,
+    begin_battle_round,
+    enlist_participant,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.types import CheckResult
 from world.magic.factories import (
@@ -791,3 +805,271 @@ class RescueResolutionTests(TestCase):
         assert not get_active_conditions(
             victim_sheet.character, condition=self.content["condition"]
         ).exists()
+
+
+class CompositionAffinityModifierTests(TestCase):
+    def test_returns_zero_when_no_row(self) -> None:
+        from world.battles.resolution import _composition_affinity_modifier
+
+        technique = TechniqueFactory()
+        self.assertEqual(_composition_affinity_modifier(technique, UnitComposition.CAVALRY), 0)
+
+    def test_returns_authored_modifier(self) -> None:
+        from world.battles.resolution import _composition_affinity_modifier
+
+        technique = TechniqueFactory()
+        TechniqueCompositionAffinity.objects.create(
+            technique=technique, composition=UnitComposition.CAVALRY, modifier=15
+        )
+        self.assertEqual(_composition_affinity_modifier(technique, UnitComposition.CAVALRY), 15)
+
+
+class TerrainEffectModifierTests(TestCase):
+    def test_returns_zero_when_no_place(self) -> None:
+        from world.battles.resolution import _terrain_effect_modifier
+
+        self.assertEqual(_terrain_effect_modifier(None, UnitComposition.CAVALRY), 0)
+
+    def test_returns_authored_modifier(self) -> None:
+        from world.battles.resolution import _terrain_effect_modifier
+
+        place = BattlePlaceFactory(terrain_type=TerrainType.DIFFICULT)
+        TerrainCompositionEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=20
+        )
+        self.assertEqual(_terrain_effect_modifier(place, UnitComposition.CAVALRY), 20)
+
+
+class QualityModifierTests(TestCase):
+    def test_maps_quality_to_modifier(self) -> None:
+        from world.battles.resolution import _quality_modifier
+
+        self.assertEqual(_quality_modifier(UnitQuality.ELITE), -20)
+        self.assertEqual(_quality_modifier(UnitQuality.TRAINED), 0)
+
+
+class CommanderBonusForSideAtPlaceTests(TestCase):
+    def test_zero_when_no_commanded_unit_present(self) -> None:
+        from world.battles.resolution import commander_bonus_for_side_at_place
+
+        battle = create_battle_for_test()
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        self.assertEqual(commander_bonus_for_side_at_place(side, place), 0)
+
+    def test_returns_max_across_commanders(self) -> None:
+        from world.battles.resolution import commander_bonus_for_side_at_place
+        from world.battles.services import add_unit
+
+        battle = create_battle_for_test()
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        weak_commander = CharacterSheetFactory()
+        strong_commander = CharacterSheetFactory()
+        add_unit(battle=battle, side=side, name="Unit A", place=place, commander=weak_commander)
+        add_unit(battle=battle, side=side, name="Unit B", place=place, commander=strong_commander)
+
+        # world.battles.resolution.commander_bonus_for_side_at_place does a
+        # function-local `from world.mechanics.services import get_modifier_total`
+        # — the name is never bound at `world.battles.resolution` module scope, so
+        # patching it there raises AttributeError (verified empirically). Per this
+        # repo's lazy-import-then-patch-origin convention, patch the ORIGIN instead.
+        with patch(
+            "world.mechanics.services.get_modifier_total",
+            side_effect=lambda character, _target: 5 if character == weak_commander else 12,
+        ):
+            bonus = commander_bonus_for_side_at_place(side, place)
+
+        self.assertEqual(bonus, 12)
+
+
+def create_battle_for_test():
+    from world.battles.services import create_battle
+
+    return create_battle(name="Modifier Stack Test Battle")
+
+
+class BattleTechniqueResolverModifierStackTests(TestCase):
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+    def test_sums_composition_terrain_quality_posture_into_extra_modifiers(self) -> None:
+        from world.battles.resolution import BattleTechniqueResolver
+        from world.battles.services import (
+            add_place,
+            add_side,
+            add_unit,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+            set_battle_side_posture,
+        )
+
+        battle = create_battle(name="Full Stack Test")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+        set_battle_side_posture(side=attacker, posture=BattlePosture.AGGRESSIVE)
+
+        place = add_place(battle=battle, name="The Marsh", terrain_type=TerrainType.DIFFICULT)
+        unit = add_unit(
+            battle=battle,
+            side=defender,
+            name="Heavy Cavalry",
+            composition=UnitComposition.CAVALRY,
+            quality=UnitQuality.ELITE,
+            place=place,
+        )
+        TechniqueCompositionAffinity.objects.create(
+            technique=self.technique, composition=UnitComposition.CAVALRY, modifier=10
+        )
+        TerrainCompositionEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=20
+        )
+
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=attacker)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+
+        resolver = BattleTechniqueResolver(
+            character=self.sheet.character, technique=self.technique, declaration=declaration
+        )
+        fake_result = _success_result()
+        # Expected: composition(+10) + terrain(+20) + quality(ELITE=-20)
+        #   + posture(AGGRESSIVE=-5) + commander(0, none assigned) + incoming(0) = 5
+        expected_total = 10 + 20 + (-20) + (-5) + 0 + 0
+        with patch(
+            "world.battles.resolution.perform_check", return_value=fake_result
+        ) as mock_check:
+            resolver(power=0, ledger=None, extra_modifiers=0)
+
+        mock_check.assert_called_once()
+        _called_args, called_kwargs = mock_check.call_args
+        self.assertEqual(called_kwargs["extra_modifiers"], expected_total)
+
+    def test_zero_stack_for_support_declaration_with_no_target_unit(self) -> None:
+        """A SUPPORT declaration has no target_unit — the stack degrades to just
+        posture + commander (both 0 by default here), proving no AttributeError
+        when target_unit is None.
+        """
+        from world.battles.resolution import BattleTechniqueResolver
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+
+        battle = create_battle(name="Support No-Unit Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        resolver = BattleTechniqueResolver(
+            character=self.sheet.character, technique=self.technique, declaration=declaration
+        )
+        with patch(
+            "world.battles.resolution.perform_check", return_value=_success_result()
+        ) as mock_check:
+            resolver(power=0, ledger=None, extra_modifiers=0)
+
+        mock_check.assert_called_once()
+        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], 0)
+
+
+class PostureVpScalingTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = create_battle_for_test()
+        self.attacker = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=self.sheet, health=100, max_health=100)
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+    def test_aggressive_posture_scales_up_strike_vp(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_unit,
+            declare_battle_action,
+            enlist_participant,
+            set_battle_side_posture,
+        )
+
+        set_battle_side_posture(side=self.attacker, posture=BattlePosture.AGGRESSIVE)
+        unit = add_unit(battle=self.battle, side=self.defender, name="Foes")
+        participant = enlist_participant(
+            battle=self.battle, character_sheet=self.sheet, side=self.attacker
+        )
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+
+        success_level = 5
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(success_level)
+            resolve_battle_round(battle_round=battle_round)
+
+        self.attacker.refresh_from_db()
+        base_vp = success_level * STRIKE_VP_PER_LEVEL
+        expected_vp = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER[BattlePosture.AGGRESSIVE])
+        self.assertEqual(self.attacker.victory_points, expected_vp)
+
+    def test_defensive_posture_reduces_failure_damage(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_unit,
+            declare_battle_action,
+            enlist_participant,
+            set_battle_side_posture,
+        )
+
+        set_battle_side_posture(side=self.attacker, posture=BattlePosture.DEFENSIVE)
+        unit = add_unit(battle=self.battle, side=self.defender, name="Foes")
+        participant = enlist_participant(
+            battle=self.battle, character_sheet=self.sheet, side=self.attacker
+        )
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+
+        failure_level = -3
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _failure_result(failure_level)
+            resolve_battle_round(battle_round=battle_round)
+
+        vitals = self.sheet.vitals
+        vitals.refresh_from_db()
+        expected_damage = (
+            BASE_FAILURE_DAMAGE
+            + abs(failure_level)
+            + BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER[BattlePosture.DEFENSIVE]
+        )
+        self.assertEqual(vitals.health, 100 - expected_damage)
