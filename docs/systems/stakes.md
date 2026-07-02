@@ -260,8 +260,11 @@ there is no separate versioned/snapshotted copy of the `Stake` rows themselves
 it is fully built and unit-tested but nothing currently calls it at scene start.
 `resolve_open_activation` **is** wired, into the beat-completion tail
 (`world.stories.services.beats._complete_beat_tail`, called after the
-completion's consequence pool fires). Wiring an actual scene-start trigger is
-part of the opt-in-surfaces / boundary-seam follow-up (#1771).
+completion's consequence pool fires). Wiring the actual scene-start triggers is
+#1770's own remaining PR spine (PR2 combat encounter start, PR3 mission issue,
+PR4 GM scene action — scene *grading* specifically rides #1748). The separate
+sibling #1771 owns only the player-boundary registry behind
+`check_stake_boundaries`, not activation wiring.
 
 ## Three Concepts Named "Risk"/"Stakes" — Disambiguation
 
@@ -339,7 +342,7 @@ they do not exist in code yet:
 |---|---|---|
 | Structured world-state writers for `StakeResolution` (the actual mechanism by which a WIN/LOSS *does something permanent* to the named subject) | PR2 | Pillar 12 — validated to reject direct lifecycle writes |
 | `apply_deed_rewards` WIN-column reward wiring (consuming `RiskCalibration.reward_floor`/`reward_ceiling`) | PR3 | These two fields exist on `RiskCalibration` now, unused until PR3 |
-| Opt-in player-facing surfaces (frontend: viewing/accepting a stakes contract before committing to a scene) + the scene-start activation trigger / boundary seam | PR4 / #1771 | Includes wiring the currently-uncalled `activate_stakes_contract` to a real scene-start seam |
+| Opt-in player-facing surfaces (frontend: viewing/accepting a stakes contract before committing to a scene) + the scene-start activation triggers | #1770 PR4 (scene grading: #1748) | Includes wiring the currently-uncalled `activate_stakes_contract` to real scene-start seams; the boundary-registry *backing store* for `check_stake_boundaries` is sibling #1771 |
 
 ## Test Coverage
 
