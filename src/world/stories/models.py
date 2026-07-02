@@ -2124,6 +2124,25 @@ class StakeResolution(SharedMemoryModel):
             )
         ]
 
+    def clean(self) -> None:
+        """Pillar-12 payload validation (mirrored in StakeResolutionSerializer).
+
+        Kept at the model level too so admin-inline authoring can't sidestep
+        the no-fiat rule.
+        """
+        from world.stories.services.stake_resolution import (  # noqa: PLC0415
+            stake_resolution_payload_problems,
+        )
+
+        super().clean()
+        for problem in stake_resolution_payload_problems(
+            stake=self.stake,
+            forfeits_subject_item=self.forfeits_subject_item,
+            npc_affection_delta=self.npc_affection_delta,
+            sets_subject_lifecycle=self.sets_subject_lifecycle,
+        ):
+            raise ValidationError({problem.field: problem.message})
+
     def __str__(self) -> str:
         return f"StakeResolution({self.stake_id}:{self.column})"
 

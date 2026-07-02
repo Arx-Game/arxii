@@ -2367,7 +2367,10 @@ class StakeSerializer(serializers.ModelSerializer):
 class StakeResolutionSerializer(serializers.ModelSerializer):
     """Full serializer for StakeResolution (#1770 pillar 1).
 
-    Lock check only in PR1 — no column-ordering/escalation validation (the
+    PR2 adds the writer-payload fields and the pillar-12 no-fiat guard:
+    sets_subject_lifecycle is only legal for NPC_FATE stakes whose subject
+    sheet is not player-held; item forfeiture and affection deltas must match
+    the stake's subject kind. No column-ordering/escalation validation (the
     fuse walk measures reachability, not monotonicity).
     """
 
@@ -2380,6 +2383,9 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "consequence_pool",
             "escalates_to_risk",
             "narrative_summary",
+            "forfeits_subject_item",
+            "npc_affection_delta",
+            "sets_subject_lifecycle",
         ]
         read_only_fields = ["id"]
 
@@ -2420,7 +2426,39 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
                 msg = "This beat's stakes contract is locked by an open activation."
                 raise serializers.ValidationError(msg)
 
+        self._validate_writer_payloads(attrs, stake)
+
         return attrs
+
+    def _validate_writer_payloads(self, attrs: Any, stake: Any) -> None:
+        """Pillar-12 no-fiat guard on the writer payloads (#1770 PR2).
+
+        Merges attrs with the instance (partial update) and rejects payload
+        combinations that don't fit the stake's subject kind — most
+        importantly, any lifecycle write outside a non-player-held NPC_FATE
+        subject (removal is mechanically mediated, never branch fiat).
+        """
+        from world.stories.services.stake_resolution import (  # noqa: PLC0415
+            stake_resolution_payload_problems,
+        )
+
+        def merged(field_name: str, default: Any) -> Any:
+            if field_name in attrs:
+                return attrs[field_name]
+            if self.instance is not None:
+                return getattr(self.instance, field_name)
+            return default
+
+        if stake is None:
+            return
+        problems = stake_resolution_payload_problems(
+            stake=stake,
+            forfeits_subject_item=merged("forfeits_subject_item", default=False),
+            npc_affection_delta=merged("npc_affection_delta", default=0),
+            sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
+        )
+        if problems:
+            raise serializers.ValidationError({p.field: p.message for p in problems})
 
 
 class StakeContractActivationSerializer(serializers.ModelSerializer):
