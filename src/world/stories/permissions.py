@@ -407,6 +407,38 @@ class IsStakeBeatStoryOwnerOrStaff(permissions.BasePermission):
         return beat_permission.has_object_permission(request, view, obj.beat)
 
 
+class CanViewBeatStakesSummary(permissions.BasePermission):
+    """Access gate for ``BeatViewSet.stakes_summary`` (#1770 PR4).
+
+    Pillar 9 is visibility *at opt-in*, not global enumeration: beats can be
+    SECRET, and an open wager list leaks GM plans. Readable by staff, the
+    beat's story owner, or a requester who participates in a scene linked to
+    the beat's episode via ``EpisodeScene`` — i.e. the party the contract
+    could actually activate for.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated check at view level; object-level enforces scope."""
+        return request.user.is_authenticated
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Staff, story owner, or a participant of a scene linked to the beat's episode."""
+        from world.stories.models import EpisodeScene  # noqa: PLC0415
+
+        user = request.user
+        if not user.is_authenticated:
+            return False
+        if user.is_staff:
+            return True
+        beat = cast(Beat, obj)
+        if user_owns_beat_story(user, beat):
+            return True
+        return EpisodeScene.objects.filter(
+            episode=beat.episode,
+            scene__participations__account=user,
+        ).exists()
+
+
 class IsStakeResolutionBeatStoryOwnerOrStaff(permissions.BasePermission):
     """Permission class for StakeResolution model (#1770 pillar 1).
 

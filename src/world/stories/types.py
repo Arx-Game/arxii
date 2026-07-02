@@ -285,6 +285,16 @@ class StakeBoundaryReport:
     requires_signoff: tuple[int, ...] = ()
     blocked_reason_private: str = ""
 
+    @property
+    def cleared(self) -> bool:
+        """Allowed AND no pending sign-off — the one predicate call sites gate on.
+
+        A pending sign-off is treated as not-yet-allowed, so the #1771
+        registry can start returning ``requires_signoff`` without any call
+        site changing.
+        """
+        return self.allowed and not self.requires_signoff
+
 
 @dataclass(frozen=True)
 class StakesReadinessReport:

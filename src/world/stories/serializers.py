@@ -2361,23 +2361,57 @@ class StakeSerializer(serializers.ModelSerializer):
                     {"severity": "severity is required when template is null."}
                 )
 
-        self._check_boundaries(beat)
+        self._check_boundaries(beat, attrs)
 
         return attrs
 
-    def _check_boundaries(self, beat: Any) -> None:
+    def _candidate_stake(self, beat: Any, attrs: Any) -> Stake:
+        """An unsaved Stake carrying this write's effective field values.
+
+        For updates, fields absent from ``attrs`` fall back to the instance,
+        so the screen sees the row as it would exist after the write.
+        """
+        field_names = (
+            "template",
+            "subject_kind",
+            "severity",
+            "subject_sheet",
+            "subject_item",
+            "subject_society",
+            "subject_organization",
+            "subject_label",
+            "player_summary",
+        )
+        values = {}
+        for name in field_names:
+            if name in attrs:
+                values[name] = attrs[name]
+            elif self.instance is not None:
+                values[name] = getattr(self.instance, name)
+        return Stake(beat=beat, **values)
+
+    def _check_boundaries(self, beat: Any, attrs: Any) -> None:
         """Authoring-time boundary screen (#1770 pillar 10).
 
-        Participants are unknown at authoring, so the sheet list is empty —
-        this becomes a real screen when the boundary registry (#1771) ships;
-        today's stub never blocks. The failure message is deliberately
-        generic: a player's boundary is never surfaced (ADR-0033).
+        Screens the beat's existing stakes PLUS the candidate write (an
+        unsaved Stake built from the effective attrs), so the screen sees the
+        contract as it would exist after this write. Participants are unknown
+        at authoring, so the sheet list is empty — this becomes a real screen
+        when the boundary registry (#1771) ships; today's stub never blocks.
+        A pending sign-off requirement blocks like a denial (#1771 forward
+        compatibility). The failure message is deliberately generic: a
+        player's boundary is never surfaced (ADR-0033).
         """
         from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
 
-        existing_stakes = beat.stakes.all() if beat is not None else []
-        report = check_stake_boundaries(existing_stakes, [])
-        if not report.allowed:
+        existing = []
+        if beat is not None:
+            existing_qs = beat.stakes.all()
+            if self.instance is not None:
+                existing_qs = existing_qs.exclude(pk=self.instance.pk)
+            existing = list(existing_qs)
+        report = check_stake_boundaries([*existing, self._candidate_stake(beat, attrs)], [])
+        if not report.cleared:
             msg = "These stakes could not be authored against a player boundary."
             raise serializers.ValidationError(msg)
 

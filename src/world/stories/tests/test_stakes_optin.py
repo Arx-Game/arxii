@@ -44,6 +44,11 @@ class CheckStakeBoundariesStubTests(TestCase):
         sheet = CharacterSheetFactory()
         report = check_stake_boundaries([stake], [sheet])
         self.assertTrue(report.allowed)
+        self.assertTrue(report.cleared)
+
+    def test_cleared_is_false_when_blocked_or_signoff_pending(self):
+        self.assertFalse(StakeBoundaryReport(allowed=False).cleared)
+        self.assertFalse(StakeBoundaryReport(allowed=True, requires_signoff=(7,)).cleared)
 
 
 class StakeSerializerBoundaryCallSiteTests(APITestCase):
@@ -79,8 +84,23 @@ class StakeSerializerBoundaryCallSiteTests(APITestCase):
             resp = self._post_stake()
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         mocked.assert_called_once()
-        _stakes_arg, sheets_arg = mocked.call_args.args
+        stakes_arg, sheets_arg = mocked.call_args.args
         self.assertEqual(list(sheets_arg), [])
+        # The CANDIDATE write is screened too, not just pre-existing stakes.
+        candidate = list(stakes_arg)[-1]
+        self.assertIsNone(candidate.pk)
+        self.assertEqual(candidate.player_summary, "The archive may burn.")
+        self.assertEqual(candidate.severity, StakeSeverity.GRAVE)
+
+    def test_pending_signoff_blocks_like_a_denial(self):
+        """requires_signoff is treated as not-yet-allowed (#1771 forward compat)."""
+        pending = StakeBoundaryReport(allowed=True, requires_signoff=(1,))
+        with mock.patch(
+            "world.stories.services.boundaries.check_stake_boundaries",
+            return_value=pending,
+        ):
+            resp = self._post_stake()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_blocked_report_rejects_with_generic_message(self):
         blocked = StakeBoundaryReport(
@@ -98,10 +118,18 @@ class StakeSerializerBoundaryCallSiteTests(APITestCase):
 
 
 class BeatStakesSummaryEndpointTests(APITestCase):
-    """GET /api/beats/{id}/stakes-summary/ — pillar 9 visibility contract."""
+    """GET /api/beats/{id}/stakes-summary/ — pillar 9 visibility contract.
+
+    Access is scoped (staff / story owner / linked-scene participant):
+    pillar 9 is visibility AT OPT-IN, not global enumeration — beats can be
+    SECRET and an open wager list leaks GM plans.
+    """
 
     @classmethod
     def setUpTestData(cls):
+        from world.scenes.factories import SceneFactory
+        from world.stories.factories import EpisodeSceneFactory
+
         cls.player = AccountFactory(is_staff=False)
         cls.beat = BeatFactory(risk=RenownRisk.HIGH, target_level=4)
         cls.stake = StakeFactory(
@@ -113,6 +141,10 @@ class BeatStakesSummaryEndpointTests(APITestCase):
             stake=cls.stake,
             narrative_summary="SECRET: she is assassinated by the cabal.",
         )
+        # cls.player participates in a scene linked to the beat's episode —
+        # the party the contract could activate for.
+        cls.scene = SceneFactory(participants=[cls.player])
+        EpisodeSceneFactory(episode=cls.beat.episode, scene=cls.scene)
 
     def _get(self):
         self.client.force_authenticate(user=self.player)
@@ -161,3 +193,23 @@ class BeatStakesSummaryEndpointTests(APITestCase):
             resp.status_code,
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
+
+    def test_non_participant_stranger_denied(self):
+        """A stranger (no ownership, no linked-scene participation) gets 403/404."""
+        stranger = AccountFactory(is_staff=False)
+        self.client.force_authenticate(user=stranger)
+        resp = self.client.get(
+            reverse("beat-stakes-summary", kwargs={"pk": self.beat.pk}),
+        )
+        self.assertIn(
+            resp.status_code,
+            (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND),
+        )
+
+    def test_staff_allowed_without_participation(self):
+        staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff)
+        resp = self.client.get(
+            reverse("beat-stakes-summary", kwargs={"pk": self.beat.pk}),
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)

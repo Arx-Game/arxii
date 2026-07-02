@@ -61,7 +61,7 @@ The one player-visible wire shape for a beat's stakes contract (#1770 PR4) — `
 _Avoid_: stakes preview, contract dump (a summary never includes resolutions).
 
 **Boundary Check** (stakes):
-The pre-presentation screen `check_stake_boundaries(stakes, character_sheets) -> StakeBoundaryReport` (`world.stories.services.boundaries`, #1770 PR4) run before a contract is authored, presented, or activated. Allow-all stub until the boundary registry (#1771) ships. `blocked_reason_private` is staff/audit only — a player's boundary is never surfaced to the GM or other players (ADR-0033); callers show only a generic "stakes could not be presented" failure.
+The screen `check_stake_boundaries(stakes, character_sheets) -> StakeBoundaryReport` (`world.stories.services.boundaries`, #1770 PR4), run at authoring time (existing stakes + the candidate write) and at every activation/commit call site; call sites gate on `report.cleared` (allowed AND no pending sign-off). Allow-all stub until the boundary registry (#1771) ships. `blocked_reason_private` is staff/audit only — a player's boundary is never surfaced to the GM or other players (ADR-0033); callers show only a generic "stakes could not be presented" failure.
 _Avoid_: consent check (that's the ADR-0024 social-consent app; a boundary is a content limit, not a per-action consent), veto.
 
 **Opt-in / Commit Step** (stakes):

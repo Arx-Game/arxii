@@ -312,7 +312,10 @@ contents (pools, escalations, narrative) are deliberately never fields here.
 Exposed at:
 
 - **`GET /api/beats/{id}/stakes-summary/`** (`BeatViewSet.stakes_summary`,
-  permission `IsAuthenticated` — participants need it before they commit).
+  permission `CanViewBeatStakesSummary`: staff, the beat's story owner, or a
+  participant of a scene linked to the beat's episode via `EpisodeScene` —
+  pillar 9 is visibility *at opt-in*, not global enumeration; beats can be
+  SECRET and an open wager list leaks GM plans).
 - **`combat_stakes`** on `SceneActionRequestSerializer` and
   `SceneActionTargetSerializer` (`world.scenes.action_serializers`) — non-null
   only when the #777 risk-acknowledgement gate is active AND the scene carries
@@ -323,7 +326,11 @@ Exposed at:
 
 `check_stake_boundaries(stakes, character_sheets) -> StakeBoundaryReport`
 (`world.stories.types`: `allowed`, `requires_signoff`,
-`blocked_reason_private`) is called before every presentation/activation.
+`blocked_reason_private`, derived `cleared`) runs at authoring time
+(`StakeSerializer` screens existing stakes plus the candidate write) and at
+every activation/commit call site (the wiring-map rows below). Call sites
+gate on `report.cleared` — allowed AND no pending sign-off — so the #1771
+registry can start returning `requires_signoff` without any call-site change.
 Allow-all stub today; the per-player boundary registry is sibling **#1771**
 (pattern: the consent app, ADR-0024). `blocked_reason_private` is staff/audit
 only — a blocked contract surfaces exclusively as a generic "stakes could not
@@ -391,7 +398,7 @@ All five ViewSets live in `world.stories.views`, registered in
 | `StakeViewSet` | `/api/stakes/` | `IsStakeBeatStoryOwnerOrStaff` (delegates to `obj.beat` → episode → chapter → story ownership, same chain as `BeatViewSet`) |
 | `StakeResolutionViewSet` | `/api/stake-resolutions/` | `IsStakeResolutionBeatStoryOwnerOrStaff` (delegates via `obj.stake.beat`) |
 | `StakeContractActivationViewSet` | `/api/stake-activations/` | Read-only; `IsStakeBeatStoryOwnerOrStaff` |
-| `BeatViewSet.stakes_summary` (#1770 PR4) | `GET /api/beats/{id}/stakes-summary/` | `IsAuthenticated` — leaks only `player_summary`/severity + risk/readiness by design |
+| `BeatViewSet.stakes_summary` (#1770 PR4) | `GET /api/beats/{id}/stakes-summary/` | `CanViewBeatStakesSummary` (staff / story owner / linked-scene participant); leaks only `player_summary`/severity + risk/readiness by design |
 
 `StakeSerializer` and `StakeResolutionSerializer` both enforce, in `validate()`
 (DRF never calls `has_object_permission` on create, so the permission class alone

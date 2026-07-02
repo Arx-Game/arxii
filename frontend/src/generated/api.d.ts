@@ -793,10 +793,12 @@ export interface paths {
     /**
      * @description GET /api/beats/{id}/stakes-summary/ — what this beat wagers (#1770 pillar 9).
      *
-     *     Readable by any authenticated user (participants need it before they
-     *     commit): it leaks only player_summary/severity plus declared/effective
-     *     risk and readiness, by design. Branch contents (StakeResolution rows)
-     *     are never included.
+     *     Pillar 9 is visibility *at opt-in*, not global enumeration (beats can
+     *     be SECRET; an open wager list leaks GM plans): readable by staff, the
+     *     beat's story owner, or a participant of a scene linked to the beat's
+     *     episode. The payload leaks only player_summary/severity plus
+     *     declared/effective risk and readiness; branch contents
+     *     (StakeResolution rows) are never included.
      */
     get: operations['beats_stakes_summary_retrieve'];
     put?: never;
@@ -25121,6 +25123,14 @@ export interface components {
       deed: number;
       text: string;
     };
+    /**
+     * @description Per-instance memoization for the consent-prompt risk/stakes fields (#1770 PR4).
+     *
+     *     With ``many=True`` DRF reuses ONE child serializer instance for every
+     *     row, so these caches make N rows cost one gating-encounter lookup per
+     *     row (shared by combat_risk_level AND combat_stakes) and one
+     *     stakes-discovery + summary pass per scene.
+     */
     SceneActionRequest: {
       readonly id: number;
       /** @description The scene where this action takes place */
@@ -26127,6 +26137,20 @@ export interface components {
       narrative_summary?: string;
     };
     /**
+     * @description Player-visible summary of one Stake (#1770 pillar 9).
+     *
+     *     What is wagered is visible; branch contents stay hidden — resolutions
+     *     (consequence pools, escalations, narrative) are deliberately NOT fields
+     *     here and must never be added.
+     */
+    StakeSummary: {
+      readonly id: number;
+      /** @description Player-facing line shown at opt-in: what is wagered, how badly. */
+      readonly player_summary: string;
+      readonly severity: components['schemas']['SeverityEnum'];
+      readonly severity_label: string;
+    };
+    /**
      * @description Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
      *
      *     Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
@@ -26170,6 +26194,19 @@ export interface components {
      * @enum {string}
      */
     StakesLevelEnum: 'local' | 'regional' | 'national' | 'continental' | 'world';
+    /**
+     * @description Beat-level stakes summary shown at every opt-in surface (#1770 pillar 9).
+     *
+     *     Read-only wire shape; build the payload via ``stakes_summary_for_beat``.
+     *     ``effective_risk`` is the open activation's locked value when one exists,
+     *     else the declared risk.
+     */
+    StakesSummary: {
+      readonly declared_risk: string;
+      readonly effective_risk: string;
+      readonly is_ready: boolean;
+      readonly stakes: components['schemas']['StakeSummary'][];
+    };
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
       readonly id: number;
@@ -28759,7 +28796,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Beat'];
+          'application/json': components['schemas']['StakesSummary'];
         };
       };
     };
