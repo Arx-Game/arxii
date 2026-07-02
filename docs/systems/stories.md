@@ -252,7 +252,8 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `order` | PositiveIntegerField | |
 | `kind` | BeatKind | SITUATION / ENCOUNTER / TASK (default) / REQUIREMENT — what the beat *is*; resolution still flows through `predicate_type` |
 | `advances` | BooleanField | Default True; False = Tangent (recorded for history, never gates a transition) |
-| `risk` | PositiveSmallIntegerField | Default 0; plain risk number (meaning assigned later with consequence work). Authoring trust-gated in `BeatSerializer` — only staff may author `risk > 0` |
+| `risk` | CharField (RenownRisk choices) | Default NONE. The stakes-wager declaration (ADR-0067) — how life-threatening/consequential this beat is, backing a full stakes contract (`Stake`/`StakeResolution`/`StakeContractActivation`, #1770). Drives Legend award magnitude on SUCCESS via `RISK_LEGEND_AWARDS`, scaled by the beat's effective risk. Authoring trust-gated in `BeatSerializer` — only staff may author `risk != NONE`. See [stakes.md](stakes.md) for the full contract model, chain rule, and effective-risk formula |
+| `target_level` | PositiveSmallIntegerField (nullable) | The character level this beat's stakes are declared against (e.g. "EXTREME at level 4"). Required (via readiness validation, not `clean()`) when `risk != NONE`. Compared against the actual party's average level at activation to compute effective risk — see [stakes.md](stakes.md) |
 
 **Per-predicate config fields (exactly one set should be non-null per predicate type):**
 
@@ -648,6 +649,7 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 | **scenes** | `EpisodeScene` links scenes to episodes; `Persona` used as `host_persona` for session event creation |
 | **classes** | `CharacterClassLevel` queried for `CHARACTER_LEVEL_AT_LEAST` evaluation |
 | **Era** | `BeatCompletion.era`, `EpisodeResolution.era`, `AggregateBeatContribution.era` — stamped with active era at event time; `Story.created_in_era` for grouping |
+| **societies / mechanics / checks (#1770)** | `Beat.risk` + `Beat.target_level` back the stakes-contract engine (`Stake`/`StakeResolution`/`RiskCalibration`/`StakeContractActivation`); `RISK_LEGEND_AWARDS` scaling consumed by `world.mechanics.effect_handlers._legend_award` via `effective_risk_for_beat`; see [stakes.md](stakes.md) |
 
 ---
 

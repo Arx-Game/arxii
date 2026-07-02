@@ -39,6 +39,10 @@ from world.stories.filters import (
     GroupStoryProgressFilter,
     PlayerTrustFilter,
     SessionRequestFilter,
+    StakeContractActivationFilter,
+    StakeFilter,
+    StakeResolutionFilter,
+    StakeTemplateFilter,
     StoryFeedbackFilter,
     StoryFilter,
     StoryGMOfferFilter,
@@ -61,7 +65,12 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
+    RiskCalibration,
     SessionRequest,
+    Stake,
+    StakeContractActivation,
+    StakeResolution,
+    StakeTemplate,
     Story,
     StoryFeedback,
     StoryGMOffer,
@@ -109,6 +118,9 @@ from world.stories.permissions import (
     IsReviewerOrStoryOwnerOrStaff,
     IsSessionRequestGMOrStaff,
     IsSessionRequestParticipantOrStaff,
+    IsStaffOrReadOnly,
+    IsStakeBeatStoryOwnerOrStaff,
+    IsStakeResolutionBeatStoryOwnerOrStaff,
     IsStoryGMOfferParticipantOrStaff,
     IsStoryOwnerOrStaff,
     _user_can_read_bulletin_post,
@@ -151,8 +163,13 @@ from world.stories.serializers import (
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
     ResolveSessionRequestInputSerializer,
+    RiskCalibrationSerializer,
     SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
+    StakeContractActivationSerializer,
+    StakeResolutionSerializer,
+    StakeSerializer,
+    StakeTemplateSerializer,
     StoryCreateSerializer,
     StoryDetailSerializer,
     StoryFeedbackCreateSerializer,
@@ -2877,3 +2894,88 @@ class TableBulletinReplyViewSet(viewsets.ModelViewSet):
         reply = self.get_object()
         reply.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# #1770 PR1: Stakes-contract engine ViewSets
+# ---------------------------------------------------------------------------
+
+
+class RiskCalibrationViewSet(viewsets.ModelViewSet):
+    """ViewSet for RiskCalibration — staff-tunable calibration bands (#1770 pillar 5)."""
+
+    queryset = RiskCalibration.objects.all()
+    serializer_class = RiskCalibrationSerializer
+    permission_classes = [IsStaffOrReadOnly]
+    filter_backends = [filters.OrderingFilter]
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["risk"]
+    ordering = ["risk"]
+
+
+class StakeTemplateViewSet(viewsets.ModelViewSet):
+    """ViewSet for StakeTemplate — the GM-facing stake catalog (#1770 pillar 5)."""
+
+    queryset = StakeTemplate.objects.all()
+    serializer_class = StakeTemplateSerializer
+    permission_classes = [IsStaffOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StakeTemplateFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["subject_kind", "severity", "name"]
+    ordering = ["subject_kind", "severity", "name"]
+
+
+class StakeViewSet(viewsets.ModelViewSet):
+    """ViewSet for Stake (#1770 pillar 1).
+
+    Access delegated to beat story ownership via obj.beat, same chain as
+    BeatViewSet (beat -> episode -> chapter -> story).
+    """
+
+    queryset = Stake.objects.select_related(
+        "beat",
+        "template",
+        "subject_sheet",
+        "subject_item",
+        "subject_society",
+        "subject_organization",
+    )
+    serializer_class = StakeSerializer
+    permission_classes = [IsStakeBeatStoryOwnerOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StakeFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["severity", "created_at", "updated_at"]
+    ordering = ["beat", "-severity", "pk"]
+
+
+class StakeResolutionViewSet(viewsets.ModelViewSet):
+    """ViewSet for StakeResolution (#1770 pillar 1).
+
+    Access delegated to the parent stake's beat story ownership via
+    obj.stake.beat.
+    """
+
+    queryset = StakeResolution.objects.select_related("stake__beat", "consequence_pool")
+    serializer_class = StakeResolutionSerializer
+    permission_classes = [IsStakeResolutionBeatStoryOwnerOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StakeResolutionFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["column"]
+    ordering = ["stake", "column"]
+
+
+class StakeContractActivationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for StakeContractActivation — the lock/audit surface
+    (#1770 pillars 7-8)."""
+
+    queryset = StakeContractActivation.objects.select_related("beat")
+    serializer_class = StakeContractActivationSerializer
+    permission_classes = [IsStakeBeatStoryOwnerOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StakeContractActivationFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["locked_at"]
+    ordering = ["-locked_at"]

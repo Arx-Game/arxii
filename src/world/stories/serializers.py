@@ -35,7 +35,12 @@ from world.stories.models import (
     GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    RiskCalibration,
     SessionRequest,
+    Stake,
+    StakeContractActivation,
+    StakeResolution,
+    StakeTemplate,
     Story,
     StoryFeedback,
     StoryGMOffer,
@@ -922,6 +927,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "kind",
             "advances",
             "risk",
+            "target_level",
             # Predicate config fields
             "required_level",
             "required_achievement",
@@ -999,6 +1005,7 @@ class BeatSerializer(serializers.ModelSerializer):
                 "kind",
                 "advances",
                 "risk",
+                "target_level",
                 "agm_eligible",
                 "deadline",
             ]:
@@ -1015,6 +1022,30 @@ class BeatSerializer(serializers.ModelSerializer):
         user = request.user if request is not None else None
         # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
         is_staff = bool(user is not None and user.is_staff)
+
+        # Ownership gate (#1770 PR1 review, fold-in): DRF never calls
+        # has_object_permission on create, so IsBeatStoryOwnerOrStaff alone lets
+        # any authenticated user POST a Beat onto anyone's episode. Enforce the
+        # same ownership walk here via the shared predicate. On re-point (the
+        # episode FK is being changed), both the old and new episode's story
+        # must be owned by the requesting user.
+        from world.stories.permissions import user_owns_episode_story  # noqa: PLC0415
+
+        if not is_staff:
+            episode = merged.get("episode")
+            old_episode = self.instance.episode if self.instance is not None else None
+            is_repoint = (
+                old_episode is not None and episode is not None and old_episode.pk != episode.pk
+            )
+            owners_ok = episode is not None and user_owns_episode_story(cast(Any, user), episode)
+            if is_repoint:
+                owners_ok = owners_ok and user_owns_episode_story(
+                    cast(Any, user), cast(Episode, old_episode)
+                )
+            if not owners_ok:
+                msg = "You do not have permission to author a beat on this episode."
+                raise serializers.ValidationError(msg)
+
         if merged_risk != RenownRisk.NONE and not is_staff:
             raise serializers.ValidationError(
                 {
@@ -2144,3 +2175,269 @@ class StoryNoteSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         validated_data["author_account"] = request.user
         return cast(Any, StoryNote).objects.create(**validated_data)
+
+
+# ---------------------------------------------------------------------------
+# #1770 PR1: Stakes-contract engine serializers
+# ---------------------------------------------------------------------------
+
+
+class RiskCalibrationSerializer(serializers.ModelSerializer):
+    """Full serializer for RiskCalibration (#1770 pillar 5).
+
+    Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+    ViewSet, not here.
+    """
+
+    class Meta:
+        model = RiskCalibration
+        fields = [
+            "id",
+            "risk",
+            "severity_floor_total",
+            "severity_ceiling",
+            "max_fuse_hops",
+            "reward_floor",
+            "reward_ceiling",
+        ]
+        read_only_fields = ["id"]
+
+
+class StakeTemplateSerializer(serializers.ModelSerializer):
+    """Full serializer for StakeTemplate (#1770 pillar 5, menu-first catalog).
+
+    Staff-write / authenticated-read — enforced by IsStaffOrReadOnly on the
+    ViewSet, not here.
+    """
+
+    class Meta:
+        model = StakeTemplate
+        fields = [
+            "id",
+            "name",
+            "subject_kind",
+            "severity",
+            "min_risk",
+            "max_risk",
+            "player_summary_template",
+            "description",
+            "is_active",
+        ]
+        read_only_fields = ["id"]
+
+
+def _check_stake_beat_lock(beat: Any, old_beat: Any, is_repoint: bool) -> None:
+    """Reject the write if the effective beat (or, on re-point, the old beat) is locked.
+
+    #1770 PR1 review: re-pointing a Stake to/from a locked beat must be rejected
+    either way, not just checked against the incoming beat.
+    """
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    beats_to_check = [beat] if not is_repoint else [beat, old_beat]
+    for candidate in beats_to_check:
+        if candidate is not None and get_open_activation(candidate) is not None:
+            msg = "This beat's stakes contract is locked by an open activation."
+            raise serializers.ValidationError(msg)
+
+
+def _check_stake_beat_ownership(
+    user: Any, is_staff: bool, beat: Any, old_beat: Any, is_repoint: bool
+) -> None:
+    """Reject the write unless staff or the requesting user owns the beat's story.
+
+    #1770 PR1 review: DRF never calls has_object_permission on create, so
+    IsStakeBeatStoryOwnerOrStaff alone lets any authenticated user POST a Stake
+    onto anyone's beat. On re-point, both the old and new beat's story must be
+    owned by the requesting user.
+    """
+    from world.stories.permissions import user_owns_beat_story  # noqa: PLC0415
+
+    if is_staff:
+        return
+    owners_ok = beat is not None and user_owns_beat_story(user, beat)
+    if is_repoint:
+        owners_ok = owners_ok and user_owns_beat_story(user, old_beat)
+    if not owners_ok:
+        msg = "You do not have permission to author a stake on this beat."
+        raise serializers.ValidationError(msg)
+
+
+class StakeSerializer(serializers.ModelSerializer):
+    """Full serializer for Stake (#1770 pillar 1).
+
+    Template-set path denormalizes subject_kind/severity from the template
+    (so a later template retune never rewrites live contracts) and validates
+    the beat's declared risk falls within the template's [min_risk, max_risk]
+    band (by risk_index). The template-null (CUSTOM) path is staff-gated,
+    mirroring BeatSerializer.validate's risk staff gate verbatim in style.
+    Any write (create or update) is rejected while the beat carries an open
+    StakeContractActivation — the lock (#1770 pillar 8).
+    """
+
+    class Meta:
+        model = Stake
+        fields = [
+            "id",
+            "beat",
+            "template",
+            "subject_kind",
+            "severity",
+            "subject_sheet",
+            "subject_item",
+            "subject_society",
+            "subject_organization",
+            "subject_label",
+            "player_summary",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {
+            "subject_kind": {"required": False},
+            "severity": {"required": False},
+        }
+
+    def validate(self, attrs: Any) -> Any:
+        """Ownership gate, two-sided lock check, template defaulting/banding, custom-stake gate."""
+        from world.stories.services.stakes import risk_index  # noqa: PLC0415
+
+        existing: dict[str, Any] = {}
+        if self.instance is not None:
+            for field_name in ("beat", "template", "subject_kind", "severity"):
+                existing[field_name] = getattr(self.instance, field_name)
+        merged = {**existing, **attrs}
+
+        beat = merged.get("beat")
+        old_beat = self.instance.beat if self.instance is not None else None
+        is_repoint = old_beat is not None and beat is not None and old_beat.pk != beat.pk
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
+        is_staff = bool(user is not None and user.is_staff)
+
+        # Ownership before lock (#1770 review): a non-owner probing a foreign
+        # beat must get the permission error, never learn the lock state.
+        _check_stake_beat_ownership(user, is_staff, beat, old_beat, is_repoint)
+
+        _check_stake_beat_lock(beat, old_beat, is_repoint)
+
+        template = merged.get("template")
+
+        if template is not None:
+            if beat is not None:
+                beat_idx = risk_index(beat.risk)
+                band_lo = risk_index(template.min_risk)
+                band_hi = risk_index(template.max_risk)
+                if not band_lo <= beat_idx <= band_hi:
+                    raise serializers.ValidationError(
+                        {
+                            "template": (
+                                f"Template {template.name!r} is banded for risk "
+                                f"{template.min_risk}-{template.max_risk}; "
+                                f"this beat is declared at {beat.risk}."
+                            )
+                        }
+                    )
+            attrs.setdefault("subject_kind", template.subject_kind)
+            attrs.setdefault("severity", template.severity)
+        else:
+            if not is_staff:
+                raise serializers.ValidationError(
+                    {
+                        "template": (
+                            "Only staff may author custom stakes (template=null). "
+                            "Use a StakeTemplate instead."
+                        )
+                    }
+                )
+            if merged.get("subject_kind") is None:
+                raise serializers.ValidationError(
+                    {"subject_kind": "subject_kind is required when template is null."}
+                )
+            if merged.get("severity") is None:
+                raise serializers.ValidationError(
+                    {"severity": "severity is required when template is null."}
+                )
+
+        return attrs
+
+
+class StakeResolutionSerializer(serializers.ModelSerializer):
+    """Full serializer for StakeResolution (#1770 pillar 1).
+
+    Lock check only in PR1 — no column-ordering/escalation validation (the
+    fuse walk measures reachability, not monotonicity).
+    """
+
+    class Meta:
+        model = StakeResolution
+        fields = [
+            "id",
+            "stake",
+            "column",
+            "consequence_pool",
+            "escalates_to_risk",
+            "narrative_summary",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Ownership gate + two-sided lock check via the (possibly re-pointed) stake."""
+        from world.stories.permissions import user_owns_beat_story  # noqa: PLC0415
+        from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+        old_stake = self.instance.stake if self.instance is not None else None
+        stake = attrs.get("stake") or old_stake
+        is_repoint = old_stake is not None and stake is not None and old_stake.pk != stake.pk
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
+        is_staff = bool(user is not None and user.is_staff)
+
+        # Ownership gate (#1770 PR1 review): DRF never calls has_object_permission
+        # on create, so IsStakeResolutionBeatStoryOwnerOrStaff alone lets any
+        # authenticated user POST a StakeResolution onto anyone's stake. Enforce
+        # the same ownership walk here. On re-point, both the old and new
+        # stake's beat's story must be owned. Ownership before lock (#1770
+        # review): a non-owner probing a foreign stake must get the permission
+        # error, never learn the lock state.
+        if not is_staff:
+            owners_ok = stake is not None and user_owns_beat_story(cast(Any, user), stake.beat)
+            if is_repoint:
+                owners_ok = owners_ok and user_owns_beat_story(cast(Any, user), old_stake.beat)
+            if not owners_ok:
+                msg = "You do not have permission to author a resolution on this stake."
+                raise serializers.ValidationError(msg)
+
+        # Lock check (#1770 PR1 review): re-pointing to/from a stake whose beat
+        # is locked is rejected either way — check both sides when re-pointing.
+        stakes_to_check = [stake] if not is_repoint else [stake, old_stake]
+        for candidate in stakes_to_check:
+            if candidate is not None and get_open_activation(candidate.beat) is not None:
+                msg = "This beat's stakes contract is locked by an open activation."
+                raise serializers.ValidationError(msg)
+
+        return attrs
+
+
+class StakeContractActivationSerializer(serializers.ModelSerializer):
+    """Read-only full serializer for StakeContractActivation (#1770 pillars 7-8)."""
+
+    class Meta:
+        model = StakeContractActivation
+        fields = [
+            "id",
+            "beat",
+            "locked_at",
+            "resolved_at",
+            "party_average_level",
+            "declared_target_level",
+            "declared_risk",
+            "effective_risk",
+            "is_ready",
+            "readiness_notes",
+        ]
+        read_only_fields = fields

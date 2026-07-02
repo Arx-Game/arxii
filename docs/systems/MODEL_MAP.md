@@ -4896,6 +4896,8 @@
   - aggregate_contributions <- stories.AggregateBeatContribution
   - completions <- stories.BeatCompletion
   - assistant_claims <- stories.AssistantGMClaim
+  - stakes <- stories.Stake
+  - stake_activations <- stories.StakeContractActivation
 
 ### EpisodeProgressionRequirement
 **Foreign Keys:**
@@ -4989,6 +4991,32 @@
 **Foreign Keys:**
   - post -> stories.TableBulletinPost [FK]
   - author_persona -> scenes.Persona [FK] (nullable)
+
+### RiskCalibration
+
+### StakeTemplate
+**Pointed to by:**
+  - stakes <- stories.Stake
+
+### Stake
+**Foreign Keys:**
+  - beat -> stories.Beat [FK]
+  - template -> stories.StakeTemplate [FK] (nullable)
+  - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - subject_item -> items.ItemInstance [FK] (nullable)
+  - subject_society -> societies.Society [FK] (nullable)
+  - subject_organization -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - resolutions <- stories.StakeResolution
+
+### StakeResolution
+**Foreign Keys:**
+  - stake -> stories.Stake [FK]
+  - consequence_pool -> actions.ConsequencePool [FK] (nullable)
+
+### StakeContractActivation
+**Foreign Keys:**
+  - beat -> stories.Beat [FK]
 
 
 ## world.traits

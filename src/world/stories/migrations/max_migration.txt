@@ -1,1 +1,1 @@
-0005_alter_beat_predicate_type
+0007_alter_stake_subject_item_and_more
