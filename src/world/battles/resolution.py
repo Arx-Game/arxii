@@ -310,9 +310,13 @@ def _resolve_strike_success(
 
     Fans out across every active unit at the declaration's scope target
     (SIDE/PLACE, #1710) — each unit takes the same per-level attrition; VP is
-    awarded once per declaration regardless of scope breadth.
+    awarded once per declaration regardless of scope breadth. Units on the
+    declaring participant's own side are excluded — SIDE/PLACE scope fans out
+    across a shared bucket that isn't itself side-aware, so STRIKE must never
+    attrite the caster's own units (friendly fire).
     """
     units = _scope_target_units(declaration)
+    units = [u for u in units if u.side_id != declaration.participant.side_id]
     if not units:
         return
 
@@ -352,13 +356,17 @@ def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     Fans out across every active participant at the declaration's scope target
     (SIDE/PLACE) instead of a single ally when scope != UNIT. No VP awarded —
     rescue trades round economy for saving allies, not battlefield progress.
-    No-op for a target that isn't (or is no longer) Surrounded.
+    No-op for a target that isn't (or is no longer) Surrounded. Participants on
+    an enemy side are excluded — a PLACE-scope target bucket may hold both
+    sides' participants (a shared front), and RESCUE must never clear Surrounded
+    from an enemy (that would help the enemy, not the caster's side).
     """
     from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_active_conditions, remove_condition  # noqa: PLC0415
 
     targets = _scope_target_participants(declaration)
+    targets = [t for t in targets if t.side_id == declaration.participant.side_id]
     if not targets:
         return
 

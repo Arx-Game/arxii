@@ -19,6 +19,7 @@ from world.battles.constants import BattleActionKind, BattleActionScope
 from world.battles.factories import (
     BattleFactory,
     BattleParticipantFactory,
+    BattlePlaceFactory,
     BattleRoundFactory,
     BattleSideFactory,
     BattleUnitFactory,
@@ -235,4 +236,35 @@ class CmdBattleDeclareTests(TestCase):
             battle_round=self.battle_round, participant=self.participant
         )
         self.assertEqual(decl.scope, BattleActionScope.SIDE)
-        self.assertEqual(decl.target_side_id, self.defender_side.pk)
+        # The player is on defender_side — "strike side" must target the OPPOSING
+        # side (attacker_side), never the caster's own side (#1710 friendly-fire fix).
+        self.assertEqual(decl.target_side_id, self.attacker_side.pk)
+
+    def test_declare_strike_place_scope_dispatches_place_target(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle, name="North Ridge")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        subordinate_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="cmd-test-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=subordinate_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare strike place North Ridge with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.scope, BattleActionScope.PLACE)
+        self.assertEqual(decl.target_place_id, place.pk)

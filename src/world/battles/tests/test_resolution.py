@@ -416,6 +416,35 @@ class ResolveBattleRoundSuccessTests(TestCase):
         self.assertEqual(unit_a.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
         self.assertEqual(unit_b.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
 
+    def test_side_scope_strike_excludes_casters_own_side_unit(self) -> None:
+        """STRIKE at SIDE/PLACE scope must never attrite the caster's own side (#1710).
+
+        Defensive regression: even if a declaration is (mis)constructed with
+        target_side equal to the declaring participant's own side, the resolver
+        must filter that unit out rather than attrite it (friendly fire).
+        """
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_strike_success
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        own_unit = BattleUnitFactory(battle=battle, side=side, strength=100)
+        participant = BattleParticipantFactory(battle=battle, side=side)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_strike_success(declaration, result, success_level=2)
+
+        own_unit.refresh_from_db()
+        self.assertEqual(own_unit.strength, 100)
+        self.assertNotIn(side.pk, result.vp_awarded)
+
 
 class ResolveBattleRoundSupportTests(TestCase):
     """SUPPORT success: side VP increases by SUPPORT_VP."""
@@ -920,12 +949,13 @@ class RescueResolutionTests(TestCase):
 
         battle = BattleFactory()
         place = BattlePlaceFactory(battle=battle)
-        # DEFENDER: BattleActionDeclarationFactory's default participant SubFactory creates
-        # its own default (ATTACKER) BattleSide for this battle — using DEFENDER here avoids
-        # colliding with that on BattleSide's (battle, role) uniqueness constraint.
         side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
         ally_a = BattleParticipantFactory(battle=battle, side=side, place=place)
         ally_b = BattleParticipantFactory(battle=battle, side=side, place=place)
+        # The declaring (rescuing) participant must be on the SAME side as the allies
+        # it rescues — _resolve_rescue_success (#1710 friendly-fire fix) restricts
+        # scope fan-out to declaration.participant.side_id.
+        rescuer = BattleParticipantFactory(battle=battle, side=side, place=place)
         # ConditionInstanceFactory direct creation, not apply_condition — apply_condition
         # routes through _build_bulk_context's PG-only DISTINCT ON query for progressive
         # conditions (Surrounded is progressive) and errors on the SQLite fast tier (same
@@ -942,6 +972,7 @@ class RescueResolutionTests(TestCase):
         )
         declaration = BattleActionDeclarationFactory(
             battle_round__battle=battle,
+            participant=rescuer,
             action_kind=BattleActionKind.RESCUE,
             scope=BattleActionScope.PLACE,
             target_place=place,
@@ -954,4 +985,53 @@ class RescueResolutionTests(TestCase):
         ).exists()
         assert not get_active_conditions(
             ally_b.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+
+    def test_place_scope_rescue_excludes_enemy_participant_at_place(self) -> None:
+        """RESCUE at PLACE scope must never clear Surrounded from an enemy (#1710).
+
+        A shared front (BattlePlace) can hold both sides' participants. The
+        rescuer's own-side ally should be cleared; an enemy participant Surrounded
+        at the same place must be left alone (clearing it would help the enemy).
+        """
+        from world.battles.factories import (
+            BattleActionDeclarationFactory,
+            BattlePlaceFactory,
+        )
+        from world.battles.resolution import _resolve_rescue_success
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        friendly_side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        enemy_side = BattleSideFactory(battle=battle, role=BattleSideRole.ATTACKER)
+        ally = BattleParticipantFactory(battle=battle, side=friendly_side, place=place)
+        rescuer = BattleParticipantFactory(battle=battle, side=friendly_side, place=place)
+        enemy = BattleParticipantFactory(battle=battle, side=enemy_side, place=place)
+        ConditionInstanceFactory(
+            target=ally.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        ConditionInstanceFactory(
+            target=enemy.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        _resolve_rescue_success(declaration)
+
+        assert not get_active_conditions(
+            ally.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+        assert get_active_conditions(
+            enemy.character_sheet.character, condition=self.content["condition"]
         ).exists()
