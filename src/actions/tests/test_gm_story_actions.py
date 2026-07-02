@@ -450,3 +450,121 @@ class ActionIdentifierValidationTests(GMStoryActionTestBase):
         )
         self.assertFalse(result.success)
         self.assertEqual(result.message, "No beat with that ID exists.")
+
+
+class DeclareStakesActionTests(GMStoryActionTestBase):
+    """DeclareStakesAction — the freeform-scene stakes opt-in moment (#1770 PR4)."""
+
+    def setUp(self) -> None:
+        from world.scenes.factories import SceneFactory
+        from world.scenes.interaction_services import invalidate_active_scene_cache
+        from world.societies.constants import RenownRisk
+        from world.stories.constants import StakeSeverity
+        from world.stories.factories import StakeFactory
+
+        super().setUp()
+        invalidate_active_scene_cache(self.room)
+        # An active scene at the actors' room with the player as participant.
+        self.scene = SceneFactory(
+            location=self.room,
+            participants=[self.player_account, self.lead_gm_account],
+        )
+        self.beat = BeatFactory(
+            episode=self.ep1,
+            risk=RenownRisk.HIGH,
+            target_level=4,
+        )
+        self.stake = StakeFactory(
+            beat=self.beat,
+            severity=StakeSeverity.DIRE,
+            player_summary="The healer NPC may die.",
+        )
+
+    def _declare(self, actor, **kwargs):
+        from actions.definitions.gm_stories import DeclareStakesAction
+
+        return DeclareStakesAction().run(actor, beat_id=self.beat.pk, **kwargs)
+
+    def test_lead_gm_declares_and_activates(self) -> None:
+        from world.stories.models import StakeContractActivation
+
+        result = self._declare(self.lead_gm_actor)
+
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(
+            StakeContractActivation.objects.filter(
+                beat=self.beat, resolved_at__isnull=True
+            ).exists()
+        )
+        # The declaration lists each stake's severity label + player summary.
+        self.assertIn("The healer NPC may die.", result.message)
+        self.assertIn("Dire", result.message)
+        self.assertIn("effective risk", result.message)
+
+    def test_scene_gm_without_story_role_may_declare(self) -> None:
+        from world.scenes.factories import SceneParticipationFactory
+        from world.stories.models import StakeContractActivation
+
+        scene_gm_account = AccountFactory(username="scenegm")
+        scene_gm_actor, _ = _make_actor_with_account(
+            "scene_gm_actor",
+            self.room,
+            scene_gm_account,
+        )
+        SceneParticipationFactory(scene=self.scene, account=scene_gm_account, is_gm=True)
+
+        result = self._declare(scene_gm_actor)
+
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(StakeContractActivation.objects.filter(beat=self.beat).exists())
+
+    def test_non_gm_player_denied(self) -> None:
+        from world.stories.models import StakeContractActivation
+
+        result = self._declare(self.player_actor)
+
+        self.assertFalse(result.success)
+        self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())
+
+    def test_unstaked_beat_rejected(self) -> None:
+        from world.societies.constants import RenownRisk
+
+        self.stake.delete()
+        self.beat.risk = RenownRisk.NONE
+        self.beat.save(update_fields=["risk"])
+
+        result = self._declare(self.lead_gm_actor)
+
+        self.assertFalse(result.success)
+        self.assertIn("no stakes", result.message)
+
+    def test_no_active_scene_rejected(self) -> None:
+        from world.scenes.interaction_services import invalidate_active_scene_cache
+
+        self.scene.finish_scene()
+        invalidate_active_scene_cache(self.room)
+
+        result = self._declare(self.lead_gm_actor)
+
+        self.assertFalse(result.success)
+        self.assertIn("no active scene", result.message.lower())
+
+    def test_blocked_boundary_returns_generic_failure(self) -> None:
+        from unittest import mock
+
+        from world.stories.models import StakeContractActivation
+        from world.stories.types import StakeBoundaryReport
+
+        blocked = StakeBoundaryReport(
+            allowed=False, blocked_reason_private="player X never wagers healers"
+        )
+        with mock.patch(
+            "world.stories.services.boundaries.check_stake_boundaries",
+            return_value=blocked,
+        ):
+            result = self._declare(self.lead_gm_actor)
+
+        self.assertFalse(result.success)
+        # The private reason never leaks (ADR-0033).
+        self.assertNotIn("healers", result.message)
+        self.assertFalse(StakeContractActivation.objects.filter(beat=self.beat).exists())

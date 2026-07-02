@@ -119,6 +119,83 @@ class SceneActionRequestSerializerRiskLevelTests(CastScenarioMixin):
         self.assertIsNone(data["combat_risk_level"])
 
 
+class SceneActionRequestSerializerCombatStakesTests(CastScenarioMixin):
+    """combat_stakes surfaces the staked beats behind a gating hostile cast (#1770 pillar 9).
+
+    Non-None only when the #777 gate is active AND the scene carries staked
+    UNSATISFIED beats; the payload is the stakes-summary shape (what is
+    wagered), never branch contents.
+    """
+
+    scene: Scene
+
+    def _make_encounter(self, risk_level: str) -> CombatEncounter:
+        return CombatEncounter.objects.create(
+            room=self.scene.location,
+            scene=self.scene,
+            status=RoundStatus.BETWEEN_ROUNDS,
+            risk_level=risk_level,
+            encounter_type=EncounterType.PARTY_COMBAT,
+        )
+
+    def _hostile_cast(self):
+        technique = make_hostile_castable_technique()
+        grant_technique(self.caster, technique)
+        return request_technique_cast(
+            scene=self.scene,
+            initiator_persona=self.caster,
+            target_persona=self.target,
+            technique=technique,
+        )
+
+    def _staked_beat_on_scene(self):
+        from world.societies.constants import RenownRisk
+        from world.stories.constants import StakeSeverity
+        from world.stories.factories import (
+            BeatFactory,
+            EpisodeSceneFactory,
+            StakeFactory,
+        )
+
+        beat = BeatFactory(risk=RenownRisk.HIGH, target_level=4)
+        EpisodeSceneFactory(episode=beat.episode, scene=self.scene)
+        StakeFactory(
+            beat=beat,
+            severity=StakeSeverity.DIRE,
+            player_summary="The healer NPC may die.",
+        )
+        return beat
+
+    def test_gated_hostile_cast_with_staked_beat_serializes_stakes(self) -> None:
+        self._make_encounter(RiskLevel.LETHAL)
+        beat = self._staked_beat_on_scene()
+
+        cast = self._hostile_cast()
+
+        data = SceneActionRequestSerializer(instance=cast.request).data
+        self.assertIsNotNone(data["combat_stakes"])
+        self.assertEqual(len(data["combat_stakes"]), 1)
+        summary = data["combat_stakes"][0]
+        self.assertEqual(summary["declared_risk"], beat.risk)
+        self.assertEqual(summary["stakes"][0]["player_summary"], "The healer NPC may die.")
+
+    def test_gated_hostile_cast_without_staked_beat_serializes_none(self) -> None:
+        self._make_encounter(RiskLevel.LETHAL)
+
+        cast = self._hostile_cast()
+
+        data = SceneActionRequestSerializer(instance=cast.request).data
+        self.assertIsNone(data["combat_stakes"])
+
+    def test_no_gating_encounter_serializes_none_even_with_staked_beat(self) -> None:
+        self._staked_beat_on_scene()
+
+        cast = self._hostile_cast()
+
+        data = SceneActionRequestSerializer(instance=cast.request).data
+        self.assertIsNone(data["combat_stakes"])
+
+
 class SceneActionTargetSerializerRiskLevelTests(CastScenarioMixin):
     """combat_risk_level surfaces per additional-target row, keyed on that row's persona (#1259).
 
