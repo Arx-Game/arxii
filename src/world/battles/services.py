@@ -17,6 +17,7 @@ from world.battles.constants import (
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    BattleActionKind,
     BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
@@ -25,8 +26,10 @@ from world.battles.constants import (
 )
 from world.battles.exceptions import (
     BattleConcludedError,
+    CannotStrikeOwnSideError,
     CharacterDoesNotKnowTechniqueError,
     InsufficientCommandTierError,
+    MissingScopeTargetError,
     NoCommandHierarchyError,
     NotAChampionError,
     PlaceAlreadyDuelingError,
@@ -265,6 +268,10 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
             side has no covenant.
         InsufficientCommandTierError: If scope is PLACE/SIDE and the
             participant lacks the required engaged command_tier.
+        MissingScopeTargetError: If scope is PLACE and ``target_place`` is
+            None, or scope is SIDE and ``target_side`` is None.
+        CannotStrikeOwnSideError: If ``action_kind`` is STRIKE, scope is SIDE,
+            and ``target_side`` is the participant's own side.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -287,6 +294,19 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
 
     if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE):
         _validate_command_scope(participant=participant, scope=scope)
+
+    if scope == BattleActionScope.PLACE and target_place is None:
+        raise MissingScopeTargetError
+    if scope == BattleActionScope.SIDE and target_side is None:
+        raise MissingScopeTargetError
+
+    if (
+        action_kind == BattleActionKind.STRIKE
+        and scope == BattleActionScope.SIDE
+        and target_side is not None
+        and target_side.pk == participant.side_id
+    ):
+        raise CannotStrikeOwnSideError
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,

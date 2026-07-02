@@ -418,18 +418,21 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         )
         set_engaged_membership(membership=membership)
 
+        # Target the enemy (attacker) side, not the commander's own (defender)
+        # side (#1710 Finding 2: STRIKE against target_side == participant's
+        # own side is rejected at declare time).
         result = DeclareBattleActionAction().run(
             self.player_char,
             action_kind=BattleActionKind.STRIKE,
             technique_id=self.technique.pk,
             scope=BattleActionScope.SIDE,
-            target_side=self.defender_side,
+            target_side=self.attacker_side,
         )
 
         self.assertTrue(result.success, result.message)
         decl = BattleActionDeclaration.objects.get(pk=result.data["declaration_id"])
         self.assertEqual(decl.scope, BattleActionScope.SIDE)
-        self.assertEqual(decl.target_side_id, self.defender_side.pk)
+        self.assertEqual(decl.target_side_id, self.attacker_side.pk)
 
 
 class ChallengeChampionDuelActionTests(BattleActionTestBase):

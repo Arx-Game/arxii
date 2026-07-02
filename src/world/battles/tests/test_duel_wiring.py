@@ -88,6 +88,48 @@ class ChampionDuelOutcomeWiringTests(TestCase):
         self.challenger_side.refresh_from_db()
         self.assertGreater(self.challenger_side.victory_points, 0)
 
+    def test_champion_defeat_routs_own_unit_at_place(self) -> None:
+        """Boss wins (challenger is None): the CHALLENGER'S OWN unit is routed.
+
+        Mirrors the victory test above, but knocks out the PC's own character
+        (instead of defeating the opponent) so ``resolve_duel_end`` takes the
+        ``winner_sheet=None`` / ``EncounterOutcome.DEFEAT`` branch, and asserts
+        the challenger's own side's unit at the place -- not the enemy's -- is
+        the one routed/destroyed (#1710 Finding 3).
+        """
+        from world.vitals.constants import CharacterLifeState
+        from world.vitals.factories import CharacterVitalsFactory
+
+        challenger_unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.challenger_side,
+            place=self.place,
+            strength=100,
+        )
+
+        enc = create_lethal_duel(
+            self.pc_sheet,
+            {"name": "Boss", "max_health": 1, "threat_pool": self.threat_pool},
+            self.room,
+        )
+        self.place.combat_encounter = enc
+        self.place.save(update_fields=["combat_encounter"])
+        install_champion_duel_trigger(enc)
+        self.room.trigger_handler.refresh()
+
+        # Down the PC (not the opponent) so resolve_duel_end takes the DEFEAT
+        # branch (winner_sheet=None) via the real resolution path.
+        CharacterVitalsFactory(character_sheet=self.pc_sheet, life_state=CharacterLifeState.DEAD)
+        resolve_duel_end(enc)
+
+        challenger_unit.refresh_from_db()
+        self.assertIn(challenger_unit.status, (BattleUnitStatus.ROUTED, BattleUnitStatus.DESTROYED))
+        # The enemy's unit at this place must be untouched by the defeat branch.
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.enemy_unit.status, BattleUnitStatus.ACTIVE)
+        self.challenger_side.refresh_from_db()
+        self.assertEqual(self.challenger_side.victory_points, 0)
+
     def test_apply_champion_duel_outcome_noop_when_not_battle_bound(self) -> None:
         enc = create_lethal_duel(
             self.pc_sheet,

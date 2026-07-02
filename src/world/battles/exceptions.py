@@ -70,6 +70,22 @@ class InsufficientCommandTierError(BattleError):
         super().__init__(user_message)
 
 
+class MissingScopeTargetError(BattleError):
+    """Raised when a PLACE/SIDE-scope declaration has no matching target set."""
+
+    def __init__(
+        self, user_message: str = "That declaration needs a target for its scope."
+    ) -> None:
+        super().__init__(user_message)
+
+
+class CannotStrikeOwnSideError(BattleError):
+    """Raised when a STRIKE declaration's target_side is the caster's own side."""
+
+    def __init__(self, user_message: str = "You cannot strike your own side.") -> None:
+        super().__init__(user_message)
+
+
 class NotAChampionError(BattleError):
     """Raised when a non-Champion participant attempts to open a Champion duel."""
 

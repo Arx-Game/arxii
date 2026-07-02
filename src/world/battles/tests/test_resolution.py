@@ -21,7 +21,12 @@ from world.battles.constants import (
     BattleActionScope,
     BattleSideRole,
 )
-from world.battles.exceptions import InsufficientCommandTierError, NoCommandHierarchyError
+from world.battles.exceptions import (
+    CannotStrikeOwnSideError,
+    InsufficientCommandTierError,
+    MissingScopeTargetError,
+    NoCommandHierarchyError,
+)
 from world.battles.factories import (
     BattleFactory,
     BattleParticipantFactory,
@@ -274,12 +279,14 @@ class ScopePermissionTests(TestCase):
             engaged=False,
         )
         set_engaged_membership(membership=membership)
+        # Target the enemy side, not the commander's own side (#1710 Finding 2:
+        # STRIKE against target_side == participant's own side is rejected).
         decl = declare_battle_action(
             participant=participant,
             action_kind=BattleActionKind.STRIKE,
             technique=self.technique,
             scope=BattleActionScope.SIDE,
-            target_side=self.side,
+            target_side=self.no_covenant_side,
         )
         self.assertEqual(decl.scope, BattleActionScope.SIDE)
 
@@ -304,6 +311,57 @@ class ScopePermissionTests(TestCase):
             target_unit=unit,
         )
         self.assertEqual(decl.scope, BattleActionScope.UNIT)
+
+    def _enlist_with_engaged_supreme_command(self, side):
+        """Enlist a participant on *side* holding an engaged SUPREME command tier.
+
+        Isolates the missing-target / own-side checks below from the separate
+        command-tier check (_validate_command_scope), which is covered by the
+        tests above.
+        """
+        participant, sheet = self._enlist(side)
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=sheet,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        return participant
+
+    def test_side_scope_missing_target_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(MissingScopeTargetError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=None,
+            )
+
+    def test_place_scope_missing_target_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(MissingScopeTargetError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.PLACE,
+                target_place=None,
+            )
+
+    def test_side_scope_strike_own_side_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(CannotStrikeOwnSideError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
 
 
 class ResolveBattleRoundSuccessTests(TestCase):
