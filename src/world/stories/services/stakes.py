@@ -24,7 +24,15 @@ from world.stories.constants import (
     StakeSeverity,
     StoryMaturity,
 )
-from world.stories.models import Beat, RiskCalibration, Stake, StakeContractActivation, Transition
+from world.stories.models import (
+    Beat,
+    RiskCalibration,
+    Stake,
+    StakeContractActivation,
+    StakeResolution,
+    StakeRewardLine,
+    Transition,
+)
 from world.stories.types import StakesReadinessReport
 
 if TYPE_CHECKING:
@@ -165,9 +173,45 @@ def _calibration_band_problems(
             f"a stake at severity {worst} exceeds the "
             f"{beat.risk} ceiling {calibration.severity_ceiling}"
         )
+    problems.extend(_reward_band_problems(beat, calibration, stakes))
     if not _jeopardy_reachable(beat, calibration.max_fuse_hops):
         problems.append(
             f"removal-from-play is not reachable within {calibration.max_fuse_hops} failure hop(s)"
+        )
+    return problems
+
+
+def _reward_band_problems(
+    beat: Beat, calibration: RiskCalibration, stakes: list[Stake]
+) -> list[str]:
+    """Band the total declared WIN-column reward value (#1770 PR3, pillar 6).
+
+    Sums every reward line hanging off the stakes' WIN resolutions (the lines
+    ride the nested ``prefetched_reward_lines`` to_attr, so no queries in the
+    loop).
+    ``reward_ceiling == 0`` means banding is unconfigured for this tier —
+    both checks are skipped so pre-PR3 calibration rows keep their meaning.
+    Out-of-band rewards make the contract UNREADY (auto-downgrade, pillar 7);
+    they are never rejected at authoring time.
+    """
+    if calibration.reward_ceiling <= 0:
+        return []
+    total = sum(
+        line.amount
+        for stake in stakes
+        for resolution in stake.prefetched_resolutions
+        if resolution.column == StakeResolutionColumn.WIN
+        for line in resolution.prefetched_reward_lines
+    )
+    problems: list[str] = []
+    if total < calibration.reward_floor:
+        problems.append(
+            f"declared win reward {total} is under the {beat.risk} floor {calibration.reward_floor}"
+        )
+    if total > calibration.reward_ceiling:
+        problems.append(
+            f"declared win reward {total} exceeds the "
+            f"{beat.risk} ceiling {calibration.reward_ceiling}"
         )
     return problems
 
@@ -192,7 +236,19 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
         problems.append(f"no RiskCalibration row for risk {beat.risk!r}")
 
     stakes = list(
-        beat.stakes.prefetch_related(Prefetch("resolutions", to_attr="prefetched_resolutions"))
+        beat.stakes.prefetch_related(
+            Prefetch(
+                "resolutions",
+                queryset=StakeResolution.objects.prefetch_related(
+                    Prefetch(
+                        "reward_lines",
+                        queryset=StakeRewardLine.objects.all(),
+                        to_attr="prefetched_reward_lines",
+                    )
+                ),
+                to_attr="prefetched_resolutions",
+            )
+        )
     )
     if not stakes:
         problems.append("no stakes declared")

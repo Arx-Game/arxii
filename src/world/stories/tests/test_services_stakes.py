@@ -27,12 +27,13 @@ from world.stories.factories import (
     EpisodeFactory,
     StakeFactory,
     StakeResolutionFactory,
+    StakeRewardLineFactory,
     StoryFactory,
     StoryProgressFactory,
     TransitionFactory,
     seed_default_risk_calibrations,
 )
-from world.stories.models import TransitionRequiredOutcome
+from world.stories.models import RiskCalibration, TransitionRequiredOutcome
 from world.stories.services.beats import record_outcome_tier_completion
 from world.stories.services.stakes import (
     activate_stakes_contract,
@@ -77,10 +78,13 @@ class ValidateStakesReadinessTests(TestCase):
             predicate_type=BeatPredicateType.OUTCOME_TIER,
         )
 
-    def _complete_stake(self, beat, severity=StakeSeverity.DIRE):
+    def _complete_stake(self, beat, severity=StakeSeverity.DIRE, win_reward=0):
+        """Author a WIN+LOSS stake; win_reward > 0 adds a MONEY reward line (#1770 PR3)."""
         stake = StakeFactory(beat=beat, severity=severity)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
         StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        if win_reward:
+            StakeRewardLineFactory(resolution=win, amount=win_reward)
         return stake
 
     def test_unstaked_beat_is_trivially_ready(self):
@@ -116,7 +120,7 @@ class ValidateStakesReadinessTests(TestCase):
 
     def test_extreme_requires_removal_on_the_beat_itself(self):
         beat = self._staked_beat(risk=RenownRisk.EXTREME)  # hops=0, floor 6
-        self._complete_stake(beat, severity=StakeSeverity.DIRE)
+        self._complete_stake(beat, severity=StakeSeverity.DIRE, win_reward=1000)
         self._complete_stake(beat, severity=StakeSeverity.COSTLY)  # total 6, no REMOVAL
         report = validate_stakes_readiness(beat)
         self.assertFalse(report.is_ready)
@@ -127,7 +131,7 @@ class ValidateStakesReadinessTests(TestCase):
         # HIGH (hops=1): negotiation beat; failure routes to a hard-fight
         # episode (OUTLINE) whose beat carries a REMOVAL stake.
         beat = self._staked_beat(risk=RenownRisk.HIGH)
-        self._complete_stake(beat, severity=StakeSeverity.DIRE)  # total 4, no REMOVAL here
+        self._complete_stake(beat, severity=StakeSeverity.DIRE, win_reward=400)
         fight_episode = EpisodeFactory(chapter=beat.episode.chapter, maturity=StoryMaturity.OUTLINE)
         transition = TransitionFactory(source_episode=beat.episode, target_episode=fight_episode)
         TransitionRequiredOutcome.objects.create(
@@ -147,13 +151,69 @@ class ValidateStakesReadinessTests(TestCase):
         report = validate_stakes_readiness(beat)
         self.assertFalse(report.is_ready)  # PITCH doesn't count as authored
 
+    def _ready_shape_high(self, win_reward=0):
+        """A HIGH beat that clears every non-reward readiness rule (#1770 PR3)."""
+        beat = self._staked_beat(risk=RenownRisk.HIGH)
+        self._complete_stake(beat, severity=StakeSeverity.DIRE, win_reward=win_reward)
+        fight_episode = EpisodeFactory(chapter=beat.episode.chapter, maturity=StoryMaturity.OUTLINE)
+        transition = TransitionFactory(source_episode=beat.episode, target_episode=fight_episode)
+        TransitionRequiredOutcome.objects.create(
+            transition=transition, beat=beat, required_outcome=BeatOutcome.FAILURE
+        )
+        fight_beat = BeatFactory(episode=fight_episode, risk=RenownRisk.EXTREME)
+        StakeFactory(beat=fight_beat, severity=StakeSeverity.REMOVAL)
+        return beat
+
+    def test_reward_under_floor_marks_unready(self):
+        beat = self._ready_shape_high(win_reward=0)  # HIGH floor 300
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(report.is_ready)
+        self.assertTrue(
+            any("declared win reward 0 is under the high floor 300" in p for p in report.problems)
+        )
+
+    def test_reward_over_ceiling_marks_unready(self):
+        beat = self._ready_shape_high(win_reward=2000)  # HIGH ceiling 1500
+        report = validate_stakes_readiness(beat)
+        self.assertFalse(report.is_ready)
+        self.assertTrue(
+            any(
+                "declared win reward 2000 exceeds the high ceiling 1500" in p
+                for p in report.problems
+            )
+        )
+
+    def test_reward_in_band_stays_ready(self):
+        beat = self._ready_shape_high(win_reward=400)
+        self.assertTrue(validate_stakes_readiness(beat).is_ready)
+
+    def test_reward_ceiling_zero_skips_banding(self):
+        """reward_ceiling == 0 means banding unconfigured — zero-reward contracts stay ready."""
+        # .save() (not queryset .update()) so the idmapper-cached row changes
+        # too; restore via addCleanup because the transaction rollback alone
+        # doesn't reset the identity-map instance for the other tests.
+        calibration = RiskCalibration.objects.get(risk=RenownRisk.HIGH)
+        original_floor, original_ceiling = calibration.reward_floor, calibration.reward_ceiling
+
+        def _restore():
+            calibration.reward_floor = original_floor
+            calibration.reward_ceiling = original_ceiling
+            calibration.save(update_fields=["reward_floor", "reward_ceiling"])
+
+        self.addCleanup(_restore)
+        calibration.reward_floor = 0
+        calibration.reward_ceiling = 0
+        calibration.save(update_fields=["reward_floor", "reward_ceiling"])
+        beat = self._ready_shape_high(win_reward=0)
+        self.assertTrue(validate_stakes_readiness(beat).is_ready)
+
     def test_fuse_walk_finds_character_loss_pool_downstream(self):
         # HIGH (hops=1): same shape as the REMOVAL-stake case above, but the
         # downstream OUTLINE beat carries no REMOVAL stake at all — the
         # jeopardy signal instead comes from a character_loss=True Consequence
         # sitting in its failure_consequences pool (#1770 chain-rule fold-in).
         beat = self._staked_beat(risk=RenownRisk.HIGH)
-        self._complete_stake(beat, severity=StakeSeverity.DIRE)  # total 4, no REMOVAL here
+        self._complete_stake(beat, severity=StakeSeverity.DIRE, win_reward=400)
         fight_episode = EpisodeFactory(chapter=beat.episode.chapter, maturity=StoryMaturity.OUTLINE)
         transition = TransitionFactory(source_episode=beat.episode, target_episode=fight_episode)
         TransitionRequiredOutcome.objects.create(
@@ -190,8 +250,9 @@ class ActivationTests(EvenniaTestCase):
             predicate_type=BeatPredicateType.OUTCOME_TIER,
         )
         stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
         StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StakeRewardLineFactory(resolution=win, amount=400)  # in HIGH's reward band (#1770 PR3)
         fight_episode = EpisodeFactory(chapter=beat.episode.chapter, maturity=StoryMaturity.OUTLINE)
         transition = TransitionFactory(source_episode=beat.episode, target_episode=fight_episode)
         TransitionRequiredOutcome.objects.create(
@@ -340,8 +401,9 @@ class LegendPaysEffectiveRiskTests(EvenniaTestCase):
             success_consequences=self.pool,
         )
         stake = StakeFactory(beat=beat, severity=StakeSeverity.DIRE)
-        StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
+        win = StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.WIN)
         StakeResolutionFactory(stake=stake, column=StakeResolutionColumn.LOSS)
+        StakeRewardLineFactory(resolution=win, amount=400)  # in HIGH's reward band (#1770 PR3)
         fight_episode = EpisodeFactory(chapter=beat.episode.chapter, maturity=StoryMaturity.OUTLINE)
         transition = TransitionFactory(source_episode=beat.episode, target_episode=fight_episode)
         TransitionRequiredOutcome.objects.create(
