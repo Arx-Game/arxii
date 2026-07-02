@@ -14,6 +14,7 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     SessionRequestStatus,
+    StakeResolutionColumn,
     StoryGMOfferStatus,
     StoryMaturity,
     StoryScope,
@@ -39,6 +40,7 @@ from world.stories.models import (
     SessionRequest,
     Stake,
     StakeContractActivation,
+    StakeOutcome,
     StakeResolution,
     StakeTemplate,
     Story,
@@ -2263,6 +2265,77 @@ def _check_stake_beat_ownership(
         raise serializers.ValidationError(msg)
 
 
+class StakeOutcomeSerializer(serializers.ModelSerializer):
+    """Read-only serializer for StakeOutcome — the per-stake resolution audit
+    row (#1770 PR2). Written only by the resolution services (machine grading
+    or the constrained-pick endpoint), never via direct CRUD.
+    """
+
+    class Meta:
+        model = StakeOutcome
+        fields = [
+            "id",
+            "stake",
+            "activation",
+            "resolution",
+            "column",
+            "method",
+            "resolved_by",
+            "gm_notes",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class ResolveStakeInputSerializer(serializers.Serializer):
+    """Input for POST /api/stakes/{id}/resolve/ — the GM constrained pick.
+
+    Context required:
+        stake (Stake): the stake being resolved.
+
+    Validates:
+        - The stake has no StakeOutcome yet (a pick is final; idempotent API).
+        - The chosen column is among the stake's AUTHORED resolutions — the
+          pick is constrained, never free composition.
+        - The stake's beat has completed (outcome != UNSATISFIED).
+    """
+
+    column = serializers.ChoiceField(choices=StakeResolutionColumn.choices)
+    gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:
+        stake = self.context["stake"]
+
+        if stake.outcomes.exists():
+            raise serializers.ValidationError(
+                {"non_field_errors": "This stake has already been resolved."}
+            )
+
+        authored = set(stake.resolutions.values_list("column", flat=True))
+        if attrs["column"] not in authored:
+            raise serializers.ValidationError(
+                {
+                    "column": (
+                        "A GM pick is constrained to the stake's authored resolution "
+                        f"columns ({sorted(authored) or 'none authored'}) — never free "
+                        "composition. Author the branch first."
+                    )
+                }
+            )
+
+        if stake.beat.outcome == BeatOutcome.UNSATISFIED:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        "The stake's beat has not completed; stakes resolve at or "
+                        "after beat completion."
+                    )
+                }
+            )
+
+        return attrs
+
+
 class StakeSerializer(serializers.ModelSerializer):
     """Full serializer for Stake (#1770 pillar 1).
 
@@ -2273,7 +2346,10 @@ class StakeSerializer(serializers.ModelSerializer):
     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
     Any write (create or update) is rejected while the beat carries an open
     StakeContractActivation — the lock (#1770 pillar 8).
+    ``outcomes`` (PR2) exposes the read-only resolution audit rows.
     """
+
+    outcomes = StakeOutcomeSerializer(many=True, read_only=True)
 
     class Meta:
         model = Stake
@@ -2289,6 +2365,7 @@ class StakeSerializer(serializers.ModelSerializer):
             "subject_organization",
             "subject_label",
             "player_summary",
+            "outcomes",
             "created_at",
             "updated_at",
         ]

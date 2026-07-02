@@ -95,6 +95,7 @@ from world.stories.permissions import (
     CanMarkBeat,
     CanParticipateInStory,
     CanReplyToBulletinPost,
+    CanResolveStake,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
     IsBulletinReplyAuthorOrStaff,
@@ -163,10 +164,12 @@ from world.stories.serializers import (
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
     ResolveSessionRequestInputSerializer,
+    ResolveStakeInputSerializer,
     RiskCalibrationSerializer,
     SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
     StakeContractActivationSerializer,
+    StakeOutcomeSerializer,
     StakeResolutionSerializer,
     StakeSerializer,
     StakeTemplateSerializer,
@@ -2940,7 +2943,9 @@ class StakeViewSet(viewsets.ModelViewSet):
         "subject_item",
         "subject_society",
         "subject_organization",
-    )
+        # DRF's nested StakeOutcomeSerializer reads the related manager, so the
+        # prefetch must populate the default cache (to_attr would be unused).
+    ).prefetch_related("outcomes")  # noqa: PREFETCH_STRING
     serializer_class = StakeSerializer
     permission_classes = [IsStakeBeatStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -2948,6 +2953,43 @@ class StakeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["severity", "created_at", "updated_at"]
     ordering = ["beat", "-severity", "pk"]
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="resolve",
+        permission_classes=[CanResolveStake],
+    )
+    def resolve(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stakes/{id}/resolve/ — GM constrained pick (#1770 PR2).
+
+        Lead GM, staff, or an AGM with an approved claim on the stake's beat
+        picks one of the stake's AUTHORED resolution columns; the branch fires
+        exactly like the machine path (pool + writers) and the StakeOutcome
+        audit row records method=GM_PICK with the GM and notes. Returns 201
+        with the StakeOutcome.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.services.stake_resolution import (  # noqa: PLC0415
+            resolve_stake_by_gm_pick,
+        )
+
+        stake = self.get_object()
+        ser = ResolveStakeInputSerializer(data=request.data, context={"stake": stake})
+        ser.is_valid(raise_exception=True)
+
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
+
+        outcome = resolve_stake_by_gm_pick(
+            stake,
+            column=ser.validated_data["column"],
+            gm_profile=gm_profile,
+            gm_notes=ser.validated_data["gm_notes"],
+        )
+        return Response(StakeOutcomeSerializer(outcome).data, status=status.HTTP_201_CREATED)
 
 
 class StakeResolutionViewSet(viewsets.ModelViewSet):

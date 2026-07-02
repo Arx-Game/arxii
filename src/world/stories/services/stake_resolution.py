@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.db.models import Prefetch
 
 from world.stories.constants import (
@@ -18,6 +19,7 @@ from world.stories.constants import (
     StakeOutcomeMethod,
     StakeResolutionColumn,
     StakeSubjectKind,
+    StoryScope,
 )
 from world.stories.models import StakeOutcome, StakeResolution
 from world.stories.types import StakePayloadProblem
@@ -272,6 +274,67 @@ def _fire_branch_and_record(  # noqa: PLR0913
         resolved_by=resolved_by,
         gm_notes=gm_notes,
     )
+
+
+def resolve_stake_by_gm_pick(
+    stake: Stake,
+    *,
+    column: str,
+    gm_profile: GMProfile | None,
+    gm_notes: str = "",
+) -> StakeOutcome:
+    """Resolve one stake at a GM-chosen column (#1770 PR2 — constrained pick).
+
+    Fires the chosen column's authored branch exactly like the machine path
+    (pool + writer payloads) but records method=GM_PICK with the deciding GM
+    and their notes. The pick is constrained: the column must be among the
+    stake's authored resolutions — a GM never composes a consequence freehand
+    at resolution time.
+
+    Defensive guards only (ResolveStakeInputSerializer validates for API
+    callers): the stake must be unresolved and the column must be authored.
+    """
+    from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
+    from world.stories.services.stakes import get_open_activation  # noqa: PLC0415
+
+    if stake.outcomes.exists():
+        msg = (
+            f"Stake {stake.pk} already has a StakeOutcome; "
+            "ResolveStakeInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
+    resolution = stake.resolutions.filter(column=column).first()
+    if resolution is None:
+        msg = (
+            f"Stake {stake.pk} has no authored resolution for column {column!r}; "
+            "a GM pick is constrained to authored columns."
+        )
+        raise ValueError(msg)
+
+    story = stake.beat.episode.chapter.story
+    scope = story.scope
+    progress = get_active_progress_for_story(story)
+    participants: list[Persona] = []
+    if scope == StoryScope.CHARACTER and progress is not None:
+        participants = [progress.character_sheet.primary_persona]
+
+    # The open activation is normally already closed by the completion tail;
+    # fall back to the most recent activation for the audit FK.
+    activation = get_open_activation(stake.beat) or stake.beat.stake_activations.first()
+
+    with transaction.atomic():
+        return _fire_branch_and_record(
+            stake=stake,
+            resolution=resolution,
+            column=column,
+            method=StakeOutcomeMethod.GM_PICK,
+            activation=activation,
+            progress=progress,
+            scope=scope,
+            participants=participants,
+            resolved_by=gm_profile,
+            gm_notes=gm_notes,
+        )
 
 
 # ---------------------------------------------------------------------------
