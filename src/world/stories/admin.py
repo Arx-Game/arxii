@@ -15,7 +15,12 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrustLevel,
+    RiskCalibration,
     SessionRequest,
+    Stake,
+    StakeContractActivation,
+    StakeResolution,
+    StakeTemplate,
     Story,
     StoryFeedback,
     StoryGMOffer,
@@ -535,3 +540,46 @@ class TableBulletinReplyAdmin(admin.ModelAdmin):
     search_fields = ("body", "post__title")
     readonly_fields = ("created_at",)
     raw_id_fields = ("post", "author_persona")
+
+
+# ---------------------------------------------------------------------------
+# #1770 PR1: stakes-contract admin
+# ---------------------------------------------------------------------------
+
+
+@admin.register(RiskCalibration)
+class RiskCalibrationAdmin(admin.ModelAdmin):
+    list_display = ("risk", "severity_floor_total", "severity_ceiling", "max_fuse_hops")
+    ordering = ("risk",)
+
+
+@admin.register(StakeTemplate)
+class StakeTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "subject_kind", "severity", "is_active")
+    list_filter = ("subject_kind", "severity", "is_active")
+    search_fields = ("name", "description")
+
+
+class StakeResolutionInline(admin.TabularInline):
+    model = StakeResolution
+    extra = 0
+    fields = ("column", "consequence_pool", "escalates_to_risk", "narrative_summary")
+
+
+@admin.register(Stake)
+class StakeAdmin(admin.ModelAdmin):
+    list_display = ("beat", "subject_kind", "severity", "subject_label")
+    list_filter = ("subject_kind", "severity")
+    search_fields = ("subject_label", "player_summary", "beat__internal_description")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("beat", "template", "subject_sheet", "subject_item")
+    inlines = [StakeResolutionInline]
+
+
+@admin.register(StakeContractActivation)
+class StakeContractActivationAdmin(admin.ModelAdmin):
+    list_display = ("beat", "locked_at", "resolved_at", "effective_risk", "is_ready")
+    list_filter = ("effective_risk", "is_ready")
+    search_fields = ("beat__internal_description",)
+    readonly_fields = tuple(f.name for f in StakeContractActivation._meta.fields)  # noqa: SLF001
+    raw_id_fields = ("beat",)

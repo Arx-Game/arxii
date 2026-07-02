@@ -15,6 +15,9 @@ from world.stories.constants import (
     EraStatus,
     ProgressStatus,
     SessionRequestStatus,
+    StakeResolutionColumn,
+    StakeSeverity,
+    StakeSubjectKind,
     StoryGMOfferStatus,
     StoryMaturity,
     StoryMilestoneType,
@@ -974,6 +977,16 @@ class Beat(SharedMemoryModel):
             "in the serializer."
         ),
     )
+    target_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The character level this beat's stakes are declared against "
+            "('EXTREME at level 4'). Effective risk at activation is computed "
+            "from the gap between this and the actual party's average level. "
+            "Required (via readiness validation, not clean()) when risk != NONE."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1863,3 +1876,217 @@ class TableBulletinReply(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"TableBulletinReply(#{self.pk}, post=#{self.post_id})"
+
+
+class RiskCalibration(SharedMemoryModel):
+    """Designer-tunable calibration bands per risk tier (#1770 pillar 5).
+
+    One row per RenownRisk tier above NONE. severity_floor_total is the minimum
+    summed StakeSeverity a beat at this risk must wager (no fake stakes);
+    severity_ceiling caps any single stake (no 'everyone dies' at LOW);
+    max_fuse_hops is the chain rule — how many failure-cascade hops may
+    separate this tier from reachable removal-from-play (EXTREME=0).
+    reward_floor/reward_ceiling band the declared win-column reward value
+    (consumed by PR3; stored now so calibration is one row, authored once).
+    """
+
+    risk = models.CharField(max_length=10, choices=RenownRisk.choices, unique=True)
+    severity_floor_total = models.PositiveSmallIntegerField()
+    severity_ceiling = models.PositiveSmallIntegerField(choices=StakeSeverity.choices)
+    max_fuse_hops = models.PositiveSmallIntegerField()
+    reward_floor = models.PositiveIntegerField(default=0)
+    reward_ceiling = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["risk"]
+
+    def __str__(self) -> str:
+        return f"RiskCalibration({self.risk})"
+
+
+class StakeTemplate(SharedMemoryModel):
+    """Catalog row a GM instantiates a Stake from (#1770 pillar 5, menu-first).
+
+    min_risk/max_risk bound which risk tiers may carry this template
+    (compared by RISK_LADDER index, see services.stakes.risk_index).
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
+    severity = models.PositiveSmallIntegerField(choices=StakeSeverity.choices)
+    min_risk = models.CharField(max_length=10, choices=RenownRisk.choices, default=RenownRisk.LOW)
+    max_risk = models.CharField(
+        max_length=10, choices=RenownRisk.choices, default=RenownRisk.EXTREME
+    )
+    player_summary_template = models.TextField(
+        help_text="Player-facing summary shown at opt-in; GM fills the specifics."
+    )
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["subject_kind", "severity", "name"]
+
+    def __str__(self) -> str:
+        return f"StakeTemplate({self.name})"
+
+
+class Stake(SharedMemoryModel):
+    """One named wager on a Beat's stakes contract (#1770 pillar 1).
+
+    Exactly one typed subject pointer (or subject_label for CUSTOM) names the
+    concrete thing wagered. severity/subject_kind denormalize from template at
+    creation (serializer) so a later template retune never rewrites live
+    contracts.
+    """
+
+    beat = models.ForeignKey("stories.Beat", on_delete=models.CASCADE, related_name="stakes")
+    template = models.ForeignKey(
+        "stories.StakeTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stakes",
+        help_text="Null only for trust-gated custom stakes.",
+    )
+    subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
+    severity = models.PositiveSmallIntegerField(choices=StakeSeverity.choices)
+    subject_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects.",
+    )
+    subject_item = models.ForeignKey(
+        "items.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For ITEM subjects.",
+    )
+    subject_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For FACTION subjects (society-level).",
+    )
+    subject_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For FACTION subjects (organization-level).",
+    )
+    subject_label = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or flavor).",
+    )
+    player_summary = models.TextField(
+        help_text="Player-facing line shown at opt-in: what is wagered, how badly."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["beat", "-severity", "pk"]
+        indexes = [models.Index(fields=["beat"])]
+
+    def __str__(self) -> str:
+        return f"Stake({self.get_subject_kind_display()}: {self.subject_label or self.pk})"
+
+
+class StakeResolution(SharedMemoryModel):
+    """Authored branch for one stake x one outcome column (#1770 pillar 1).
+
+    Pillar 12 (no-fiat removal) note: this model deliberately has NO direct
+    lifecycle/world-state payload in PR1 — a branch fires a consequence pool
+    and/or escalates risk; structured world-state writers arrive in PR2 with
+    validation that rejects direct lifecycle writes.
+    """
+
+    stake = models.ForeignKey("stories.Stake", on_delete=models.CASCADE, related_name="resolutions")
+    column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
+    consequence_pool = models.ForeignKey(
+        CONSEQUENCE_POOL_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Pool to fire when this column resolves (tier-aware).",
+    )
+    escalates_to_risk = models.CharField(
+        max_length=10,
+        choices=RenownRisk.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "The risk tier the situation spawned by this branch carries — the "
+            "fuse mechanic. Blank = no escalation declared."
+        ),
+    )
+    narrative_summary = models.TextField(
+        blank=True,
+        help_text="What happens in the story when this branch fires (GM-authored).",
+    )
+
+    class Meta:
+        ordering = ["stake", "column"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stake", "column"], name="unique_resolution_per_stake_column"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"StakeResolution({self.stake_id}:{self.column})"
+
+
+class StakeContractActivation(SharedMemoryModel):
+    """The lock + audit row written when a staked scene starts (#1770 pillars 7-8).
+
+    Lock-not-copy MVP: while an open activation exists (resolved_at null),
+    serializers refuse edits to the beat's stakes/resolutions; resolution
+    reads effective_risk off this row. Closed by the beat-completion tail.
+    """
+
+    beat = models.ForeignKey(
+        "stories.Beat", on_delete=models.CASCADE, related_name="stake_activations"
+    )
+    locked_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    party_average_level = models.PositiveIntegerField()
+    declared_target_level = models.PositiveIntegerField(
+        default=0, help_text="Beat.target_level snapshot at activation (0 = unset)."
+    )
+    declared_risk = models.CharField(max_length=10, choices=RenownRisk.choices)
+    effective_risk = models.CharField(
+        max_length=10,
+        choices=RenownRisk.choices,
+        help_text="What Legend actually pays on — see compute_effective_risk.",
+    )
+    is_ready = models.BooleanField(
+        help_text="Readiness verdict at activation; False forced effective NONE."
+    )
+    readiness_notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-locked_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["beat"],
+                condition=models.Q(resolved_at__isnull=True),
+                name="unique_open_activation_per_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        state = "open" if self.resolved_at is None else "resolved"
+        return f"StakeContractActivation({self.beat_id}, {state}, {self.effective_risk})"

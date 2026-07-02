@@ -1,1 +1,1 @@
-0005_alter_beat_predicate_type
+0006_riskcalibration_staketemplate_beat_target_level_and_more
