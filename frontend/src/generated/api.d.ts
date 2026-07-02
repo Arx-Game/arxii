@@ -25167,6 +25167,20 @@ export interface components {
       strain_commitment?: number;
       /** @description Risk level of the encounter a PENDING hostile cast would pull the target into (#777). */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+       *
+       *     Non-None only when the same #777 gate that drives combat_risk_level is
+       *     active AND the scene carries staked, still-open beats — the consent
+       *     prompt is the target's commit moment, so they see what is wagered.
+       *     Same shape as the BeatViewSet stakes-summary payload (one entry per
+       *     staked beat); branch contents are never included.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       /** Format: date-time */
       readonly created_at: string;
       /**
@@ -25218,6 +25232,17 @@ export interface components {
        *     its own informed-consent warning.
        */
       readonly combat_risk_level: string | null;
+      /**
+       * @description Stakes summaries for this target's gating encounter (#1770 pillar 9).
+       *
+       *     Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+       *     additional target of a hostile AOE cast.
+       */
+      readonly combat_stakes:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       readonly pose_text: string;
       readonly strain_commitment: number;
       /** Format: date-time */

@@ -14,14 +14,74 @@ pre-authored consequence.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.scenes.models import Scene
+    from world.stories.models import Beat
+
+logger = logging.getLogger(__name__)
 
 ENCOUNTER_BEAT_TRIGGER_NAME = "encounter_completed_beat_wiring"
+
+
+def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:
+    """Staked, still-open beats on episodes linked to this scene (#1770 PR4).
+
+    A beat is staked when its declared risk is above NONE; only UNSATISFIED
+    beats can still be wagered on. Uses the same Scene -> EpisodeScene ->
+    Episode -> Beat discovery as ``encounter_completed_beat_handler`` but
+    without its OUTCOME_TIER restriction — any predicate type can carry a
+    stakes contract.
+    """
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+    from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
+
+    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
+    return list(
+        Beat.objects.filter(
+            episode_id__in=episode_ids,
+            outcome=BeatOutcome.UNSATISFIED,
+        ).exclude(risk=RenownRisk.NONE)
+    )
+
+
+def activate_stakes_for_scene(
+    scene: Scene | None,
+    participant_sheets: Sequence[CharacterSheet],
+) -> None:
+    """Lock any staked beats' contracts for this scene's combat party (#1770 PR4).
+
+    Called from the combat encounter-creation seams (``create_pvp_duel``,
+    ``create_lethal_duel``, ``seed_or_feed_encounter_from_cast``) — combat
+    entry is the commit moment (pillar 9). ``activate_stakes_contract`` is
+    idempotent while an activation is open, so two encounters sharing a
+    scene are safe. Boundary screen first (pillar 10): a blocked contract is
+    skipped and logged privately — the reason is never surfaced to the GM
+    or players (ADR-0033).
+    """
+    from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
+    from world.stories.services.stakes import activate_stakes_contract  # noqa: PLC0415
+
+    if scene is None or not participant_sheets:
+        return
+    for beat in staked_unsatisfied_beats_for_scene(scene):
+        report = check_stake_boundaries(beat.stakes.all(), participant_sheets)
+        if not report.allowed:
+            logger.info(
+                "Stakes contract on beat %s not activated: blocked by a player boundary.",
+                beat.pk,
+            )
+            continue
+        activate_stakes_contract(beat, participant_sheets)
 
 
 def classify_battle_outcome(encounter: CombatEncounter) -> CheckOutcome | None:

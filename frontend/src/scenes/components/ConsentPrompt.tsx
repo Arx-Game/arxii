@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { fetchPendingRequests, fetchPendingTargets, respondToRequest } from '../actionQueries';
-import type { ActionRequest, PendingActionTarget } from '../actionTypes';
+import type { ActionRequest, PendingActionTarget, StakesSummary } from '../actionTypes';
 
 interface Props {
   sceneId: string;
@@ -41,6 +41,7 @@ interface ConsentCardProps {
   techniqueName?: string | null;
   strainCommitment: number;
   combatRiskLevel?: string | null;
+  combatStakes?: StakesSummary[] | null;
   resistEffort: string;
   onResistChange: (v: string) => void;
   onDeny: () => void;
@@ -55,6 +56,7 @@ function ConsentCard({
   techniqueName,
   strainCommitment,
   combatRiskLevel,
+  combatStakes,
   resistEffort,
   onResistChange,
   onDeny,
@@ -84,6 +86,25 @@ function ConsentCard({
             The fight before you is {combatRiskLevel.toUpperCase()} risk — accepting wades your
             character into the combat encounter.
           </p>
+        )}
+        {combatStakes && combatStakes.length > 0 && (
+          <div className="mt-1 space-y-1">
+            {combatStakes.map((summary, idx) => (
+              <div key={idx} className="text-xs text-red-700 dark:text-red-300">
+                <p className="font-semibold">
+                  Stakes on the table (effective risk {summary.effective_risk.toUpperCase()}):
+                </p>
+                <ul className="ml-4 list-disc">
+                  {summary.stakes.map((stake) => (
+                    <li key={stake.id}>
+                      <span className="font-medium">{stake.severity_label}:</span>{' '}
+                      {stake.player_summary}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1.5">
@@ -230,6 +251,7 @@ export function ConsentPrompt({ sceneId }: Props) {
             techniqueName={req.technique_name}
             strainCommitment={req.strain_commitment}
             combatRiskLevel={req.combat_risk_level}
+            combatStakes={req.combat_stakes}
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() => respond.mutate({ requestId: req.id, accept: false })}
@@ -260,6 +282,7 @@ export function ConsentPrompt({ sceneId }: Props) {
             techniqueName={t.technique_name}
             strainCommitment={t.strain_commitment}
             combatRiskLevel={t.combat_risk_level}
+            combatStakes={t.combat_stakes}
             resistEffort={selectedResist}
             onResistChange={(val) => setResistEffort((prev) => ({ ...prev, [cardKey]: val }))}
             onDeny={() =>

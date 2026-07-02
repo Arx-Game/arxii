@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -15,6 +17,9 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
+
+if TYPE_CHECKING:
+    from world.scenes.models import Scene
 
 
 def _cap_fury_by_provocation(attrs: dict) -> dict:
@@ -284,11 +289,30 @@ class CastableTechniqueSerializer(serializers.Serializer):
         }
 
 
+def _combat_stakes_for_gated_request(risk_level: str | None, scene: Scene) -> list[dict] | None:
+    """Stakes-summary payloads for a #777-gated consent prompt (#1770 PR4).
+
+    ``risk_level`` is the serializer's own get_combat_risk_level value — None
+    means no gating encounter, so no stakes are surfaced either. Returns one
+    stakes-summary dict per staked UNSATISFIED beat on the scene, or None.
+    """
+    from world.combat.beat_wiring import staked_unsatisfied_beats_for_scene  # noqa: PLC0415
+    from world.stories.serializers import stakes_summary_for_beat  # noqa: PLC0415
+
+    if risk_level is None:
+        return None
+    beats = staked_unsatisfied_beats_for_scene(scene)
+    if not beats:
+        return None
+    return [stakes_summary_for_beat(beat) for beat in beats]
+
+
 class SceneActionRequestSerializer(serializers.ModelSerializer):
     initiator_name = serializers.CharField(source="initiator_persona.name", read_only=True)
     target_name = serializers.CharField(source="target_persona.name", read_only=True)
     technique_name = serializers.SerializerMethodField()
     combat_risk_level = serializers.SerializerMethodField()
+    combat_stakes = serializers.SerializerMethodField()
 
     def get_technique_name(self, obj: SceneActionRequest) -> str | None:
         """Human label for the enhancing technique (#892 — ConsentPrompt display)."""
@@ -304,6 +328,17 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             obj.scene, obj.target_persona.character_sheet
         )
         return encounter.risk_level if encounter is not None else None
+
+    def get_combat_stakes(self, obj: SceneActionRequest) -> list[dict] | None:
+        """Stakes summaries for staked beats behind the gating encounter (#1770 pillar 9).
+
+        Non-None only when the same #777 gate that drives combat_risk_level is
+        active AND the scene carries staked, still-open beats — the consent
+        prompt is the target's commit moment, so they see what is wagered.
+        Same shape as the BeatViewSet stakes-summary payload (one entry per
+        staked beat); branch contents are never included.
+        """
+        return _combat_stakes_for_gated_request(self.get_combat_risk_level(obj), obj.scene)
 
     class Meta:
         model = SceneActionRequest
@@ -326,6 +361,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "action_interaction",
             "strain_commitment",
             "combat_risk_level",
+            "combat_stakes",
             "created_at",
             "resolved_at",
         ]
@@ -333,6 +369,7 @@ class SceneActionRequestSerializer(serializers.ModelSerializer):
             "id",
             "status",
             "combat_risk_level",
+            "combat_stakes",
             "resolved_difficulty",
             "result_interaction",
             "action_interaction",
@@ -554,6 +591,7 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
     )
     technique_name = serializers.SerializerMethodField()
     combat_risk_level = serializers.SerializerMethodField()
+    combat_stakes = serializers.SerializerMethodField()
     pose_text = serializers.CharField(source="action_request.pose_text", read_only=True)
     strain_commitment = serializers.IntegerField(
         source="action_request.strain_commitment", read_only=True
@@ -582,6 +620,16 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
         )
         return encounter.risk_level if encounter is not None else None
 
+    def get_combat_stakes(self, obj: SceneActionTarget) -> list[dict] | None:
+        """Stakes summaries for this target's gating encounter (#1770 pillar 9).
+
+        Mirrors SceneActionRequestSerializer.get_combat_stakes for each
+        additional target of a hostile AOE cast.
+        """
+        return _combat_stakes_for_gated_request(
+            self.get_combat_risk_level(obj), obj.action_request.scene
+        )
+
     class Meta:
         model = SceneActionTarget
         fields = [
@@ -597,6 +645,7 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
             "technique",
             "technique_name",
             "combat_risk_level",
+            "combat_stakes",
             "pose_text",
             "strain_commitment",
             "created_at",
@@ -614,6 +663,7 @@ class SceneActionTargetSerializer(serializers.ModelSerializer):
             "technique",
             "technique_name",
             "combat_risk_level",
+            "combat_stakes",
             "pose_text",
             "strain_commitment",
             "created_at",
