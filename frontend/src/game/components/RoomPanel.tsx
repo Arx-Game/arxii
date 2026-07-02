@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { startScene, finishScene } from '@/scenes/queries';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionScene } from '@/store/gameSlice';
 import type { RoomStateObject, SceneSummary } from '@/hooks/types';
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { dispatchRoomBuilder } from '@/buildings/api';
+import { buildingKeys, useBuildingForRoomQuery } from '@/buildings/queries';
+import { BuildingBuilderDialog } from '@/buildings/components/BuildingBuilderDialog';
 import { RoomHeader } from './room-panel/RoomHeader';
 import { RoomDescription } from './room-panel/RoomDescription';
 import { CharactersList } from './room-panel/CharactersList';
@@ -43,7 +48,27 @@ export function RoomPanel({
 }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(false);
+
+  // Which building this room belongs to + what the viewer may do here
+  // (owner → manage; tenant → set home). Booleans and ids only.
+  const forRoom = useBuildingForRoomQuery(room?.id, characterId);
+
+  const setHome = useMutation({
+    mutationFn: () => dispatchRoomBuilder(characterId!, 'set_primary_home', {}),
+    onSuccess: (message: string) => {
+      toast.success(message);
+      if (room) {
+        void queryClient.invalidateQueries({ queryKey: buildingKeys.forRoom(room.id) });
+      }
+      if (character) {
+        send(character, 'look');
+      }
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const start = useMutation({
     mutationFn: () => {
@@ -113,6 +138,38 @@ export function RoomPanel({
           </DialogContent>
         </Dialog>
       )}
+
+      {characterId != null &&
+        (room.is_owner && forRoom.data?.building_id != null ? (
+          <div className="border-b p-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setBuilderOpen(true)}
+            >
+              Manage Building
+            </Button>
+            <BuildingBuilderDialog
+              buildingId={forRoom.data.building_id}
+              characterId={characterId}
+              open={builderOpen}
+              onOpenChange={setBuilderOpen}
+            />
+          </div>
+        ) : forRoom.data?.is_tenant && !forRoom.data.is_primary_home_here ? (
+          <div className="border-b p-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={setHome.isPending}
+              onClick={() => setHome.mutate()}
+            >
+              Set as Home
+            </Button>
+          </div>
+        ) : null)}
 
       {room.thumbnail_url && (
         <div className="border-b">
