@@ -728,7 +728,11 @@ export async function deleteTransition(id: number): Promise<void> {
 
 export interface OutcomeInputBody {
   beat: number;
-  required_outcome: string;
+  /** Beat-level rows only; blank/omitted on stake-level rows (#1770 PR2). */
+  required_outcome?: string;
+  /** Stake-level routing (#1770 PR2): route on the stake's StakeOutcome column. */
+  stake?: number;
+  required_stake_column?: string;
 }
 
 export interface SaveTransitionWithOutcomesBody {

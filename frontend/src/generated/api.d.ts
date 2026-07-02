@@ -13243,8 +13243,15 @@ export interface paths {
      *     Lead GM, staff, or an AGM with an approved claim on the stake's beat
      *     picks one of the stake's AUTHORED resolution columns; the branch fires
      *     exactly like the machine path (pool + writers) and the StakeOutcome
-     *     audit row records method=GM_PICK with the GM and notes. Returns 201
-     *     with the StakeOutcome.
+     *     audit row records method=GM_PICK with the GM and notes. Optional
+     *     ``participants`` / ``extra_participants`` carry the personas the
+     *     branch's pool and affection writer credit (MarkBeat semantics).
+     *     Returns 201 with the StakeOutcome.
+     *
+     *     The LEGEND_AWARD participant guards fire inside the service's pool
+     *     walk — pre-validating them in the serializer would duplicate
+     *     resolve_pool_consequences; they are surfaced as 400 here (same
+     *     exception-block carve-out as EpisodeViewSet.resolve).
      */
     post: operations['stakes_resolve_create'];
     delete?: never;
@@ -14436,6 +14443,8 @@ export interface paths {
      *             "connection_summary": "<str>",
      *             "order": <int>,
      *             "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+     *                          {"beat": <int>, "stake": <int>,
+     *                           "required_stake_column": "win" | "loss" | "withdrawal"},
      *                          ...],
      *             "existing_id": <int | null>   # omit or null for create
      *         }
@@ -23597,15 +23606,27 @@ export interface components {
      *
      *     Records a beat outcome that must be satisfied for this specific transition
      *     to be eligible when the episode is resolved. Stake-level routing (#1770
-     *     PR2): when ``stake`` is set the requirement routes on the stake's latest
-     *     StakeOutcome column (``required_stake_column``) instead of the beat's
-     *     coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
+     *     PR2): when ``stake`` is set the requirement routes on the stake's
+     *     StakeOutcome column (``required_stake_column``) and ``required_outcome``
+     *     must be blank — exactly one predicate shape per row; validation mirrors
+     *     TransitionRequiredOutcome.clean().
      */
     PatchedTransitionRequiredOutcomeRequest: {
       transition?: number;
       beat?: number;
-      required_outcome?: components['schemas']['RequiredOutcomeEnum'];
-      /** @description When set, this requirement routes on the stake's latest StakeOutcome column instead of the beat's outcome. */
+      /**
+       * @description Required beat outcome; blank on stake-level rows.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       *     * `pending_gm_review` - Pending GM review
+       */
+      required_outcome?:
+        | components['schemas']['RequiredOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       stake?: number | null;
       /**
        * @description Required StakeOutcome column; only with stake set.
@@ -27378,16 +27399,28 @@ export interface components {
      *
      *     Records a beat outcome that must be satisfied for this specific transition
      *     to be eligible when the episode is resolved. Stake-level routing (#1770
-     *     PR2): when ``stake`` is set the requirement routes on the stake's latest
-     *     StakeOutcome column (``required_stake_column``) instead of the beat's
-     *     coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
+     *     PR2): when ``stake`` is set the requirement routes on the stake's
+     *     StakeOutcome column (``required_stake_column``) and ``required_outcome``
+     *     must be blank — exactly one predicate shape per row; validation mirrors
+     *     TransitionRequiredOutcome.clean().
      */
     TransitionRequiredOutcome: {
       readonly id: number;
       transition: number;
       beat: number;
-      required_outcome: components['schemas']['RequiredOutcomeEnum'];
-      /** @description When set, this requirement routes on the stake's latest StakeOutcome column instead of the beat's outcome. */
+      /**
+       * @description Required beat outcome; blank on stake-level rows.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       *     * `pending_gm_review` - Pending GM review
+       */
+      required_outcome?:
+        | components['schemas']['RequiredOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       stake?: number | null;
       /**
        * @description Required StakeOutcome column; only with stake set.
@@ -27405,15 +27438,27 @@ export interface components {
      *
      *     Records a beat outcome that must be satisfied for this specific transition
      *     to be eligible when the episode is resolved. Stake-level routing (#1770
-     *     PR2): when ``stake`` is set the requirement routes on the stake's latest
-     *     StakeOutcome column (``required_stake_column``) instead of the beat's
-     *     coarse outcome — validation mirrors TransitionRequiredOutcome.clean().
+     *     PR2): when ``stake`` is set the requirement routes on the stake's
+     *     StakeOutcome column (``required_stake_column``) and ``required_outcome``
+     *     must be blank — exactly one predicate shape per row; validation mirrors
+     *     TransitionRequiredOutcome.clean().
      */
     TransitionRequiredOutcomeRequest: {
       transition: number;
       beat: number;
-      required_outcome: components['schemas']['RequiredOutcomeEnum'];
-      /** @description When set, this requirement routes on the stake's latest StakeOutcome column instead of the beat's outcome. */
+      /**
+       * @description Required beat outcome; blank on stake-level rows.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       *     * `pending_gm_review` - Pending GM review
+       */
+      required_outcome?:
+        | components['schemas']['RequiredOutcomeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description When set, this requirement routes on the stake's StakeOutcome column instead of the beat's outcome. */
       stake?: number | null;
       /**
        * @description Required StakeOutcome column; only with stake set.
