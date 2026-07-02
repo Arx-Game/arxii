@@ -266,6 +266,27 @@ class FrontierStoryEntry(TypedDict):
 
 
 @dataclass(frozen=True)
+class StakeBoundaryReport:
+    """Result of check_stake_boundaries (world.stories.services.boundaries).
+
+    allowed: the stakes may be presented to this party. The stub always
+        allows; a real boundary registry (see the boundaries sibling issue
+        of #1770) will consult per-player limits.
+    requires_signoff: character_sheet ids that need an explicit pre-scene
+        sign-off before the contract can activate for them.
+    blocked_reason_private: why the check blocked, for staff/audit logging
+        ONLY. This is MVP-gating privacy (ADR-0033): a player's boundary is
+        never surfaced to the GM or other players — callers must show a
+        generic "stakes could not be presented" message and keep this
+        string out of every player- and GM-facing surface.
+    """
+
+    allowed: bool
+    requires_signoff: tuple[int, ...] = ()
+    blocked_reason_private: str = ""
+
+
+@dataclass(frozen=True)
 class StakesReadinessReport:
     """Result of validate_stakes_readiness (world.stories.services.stakes).
 

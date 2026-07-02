@@ -2361,7 +2361,25 @@ class StakeSerializer(serializers.ModelSerializer):
                     {"severity": "severity is required when template is null."}
                 )
 
+        self._check_boundaries(beat)
+
         return attrs
+
+    def _check_boundaries(self, beat: Any) -> None:
+        """Authoring-time boundary screen (#1770 pillar 10).
+
+        Participants are unknown at authoring, so the sheet list is empty —
+        this becomes a real screen when the boundary registry (#1771) ships;
+        today's stub never blocks. The failure message is deliberately
+        generic: a player's boundary is never surfaced (ADR-0033).
+        """
+        from world.stories.services.boundaries import check_stake_boundaries  # noqa: PLC0415
+
+        existing_stakes = beat.stakes.all() if beat is not None else []
+        report = check_stake_boundaries(existing_stakes, [])
+        if not report.allowed:
+            msg = "These stakes could not be authored against a player boundary."
+            raise serializers.ValidationError(msg)
 
 
 class StakeResolutionSerializer(serializers.ModelSerializer):
