@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.covenants.constants import CovenantType, RoleArchetype
+from world.covenants.constants import CommandTier, CovenantType, RoleArchetype
 from world.covenants.factories import CovenantRoleFactory
 from world.covenants.models import (
     Covenant,
@@ -82,6 +82,35 @@ class CovenantRoleTests(TestCase):
         """CovenantRole must NOT have an is_leadership field after #1027."""
         role = CovenantRole()
         self.assertFalse(hasattr(role, "is_leadership"))
+
+    def test_command_tier_defaults_to_none(self) -> None:
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        self.assertEqual(role.command_tier, CommandTier.NONE)
+        self.assertFalse(role.is_champion_role)
+
+    def test_command_tier_requires_battle_covenant_type(self) -> None:
+        role = CovenantRoleFactory.build(
+            covenant_type=CovenantType.DURANCE,
+            command_tier=CommandTier.SUPREME,
+        )
+        with self.assertRaises(ValidationError):
+            role.full_clean()
+
+    def test_champion_role_requires_battle_covenant_type(self) -> None:
+        role = CovenantRoleFactory.build(
+            covenant_type=CovenantType.DURANCE,
+            is_champion_role=True,
+        )
+        with self.assertRaises(ValidationError):
+            role.full_clean()
+
+    def test_command_tier_allowed_on_battle_covenant(self) -> None:
+        role = CovenantRoleFactory.build(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="test-supreme-commander",
+        )
+        role.full_clean()  # must not raise
 
 
 class GearArchetypeCompatibilityTests(TestCase):
