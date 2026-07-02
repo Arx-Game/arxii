@@ -293,7 +293,10 @@ def get_open_activation(beat: Beat) -> StakeContractActivation | None:
 
 
 def activate_stakes_contract(
-    beat: Beat, participants: Sequence[CharacterSheet]
+    beat: Beat,
+    participants: Sequence[CharacterSheet],
+    *,
+    scale_by_party_level: bool = True,
 ) -> StakeContractActivation:
     """Lock the contract at scene start and price it for this party.
 
@@ -304,6 +307,15 @@ def activate_stakes_contract(
     constraint `unique_open_activation_per_beat` is the real backstop, and a
     losing concurrent create re-fetches and returns the winner's row instead
     of raising.
+
+    ``scale_by_party_level`` — when False, skips the party-level-gap
+    adjustment (``compute_effective_risk``) entirely: a ready contract's
+    effective risk equals its declared risk, unconditionally. Used by
+    war-scale Battle stakes (#1785), whose objective doesn't get less real
+    because strong PCs happened to be enlisted — unlike scene-level stakes,
+    which do scale by party level (ADR-0077; see ADR-0080 for this carve-out).
+    ``party_average_level`` is still computed and stored on the activation row
+    as an audit value even when this is False.
     """
     from world.stories.services.beats import _character_level  # noqa: PLC0415
 
@@ -319,7 +331,11 @@ def activate_stakes_contract(
     party_average = round(mean(_character_level(sheet) for sheet in participants))
     target = beat.target_level or 0
     if report.is_staked and report.is_ready:
-        effective = compute_effective_risk(beat.risk, target, party_average)
+        effective = (
+            compute_effective_risk(beat.risk, target, party_average)
+            if scale_by_party_level
+            else beat.risk
+        )
     else:
         effective = RenownRisk.NONE
     try:
