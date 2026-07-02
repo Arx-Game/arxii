@@ -196,13 +196,62 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
-      # The default arxii_test DB MUST be migrated before `arx test`: Evennia's
-      # test runner calls evennia._init() in setup_test_environment(), which
-      # queries server_serverconfig on the DEFAULT connection before the test
-      # DB is built. An unmigrated default DB => "relation server_serverconfig
-      # does not exist". (See #990 — removing this step turned all shards red.)
-      - name: Run migrations
-        run: uv run arx manage migrate
+      # Cache the migrated Postgres data directory to avoid replaying ~500
+      # migrations (~12 min) on every shard of every PR. The cache key is the
+      # merge-base SHA with origin/main — representing main's migration state
+      # that every PR branches from. On a cache HIT, we restore the data dir
+      # and run `migrate` which only applies the PR's new migrations (seconds).
+      # On a MISS (first run after a main push), we do the full migrate and
+      # save the result for subsequent PRs. All shards share one cache entry
+      # (keyed on the merge-base, not the PR head), so the first shard to
+      # finish populates it for the rest.
+      - name: Compute migration cache key
+        id: cache-key
+        run: |
+          BASE=$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD)
+          echo "base-sha=$BASE" >> "$GITHUB_OUTPUT"
+          # Include a version stamp so we can bust the cache manually if needed.
+          echo "key=pg-migrated-${BASE}-v1" >> "$GITHUB_OUTPUT"
+      - name: Restore migrated Postgres data dir
+        id: restore-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/pg-data-snapshot.tar.gz
+          key: ${{ steps.cache-key.outputs.key }}
+      - name: Run migrations (or restore from cache)
+        run: |
+          if [ -f /tmp/pg-data-snapshot.tar.gz ]; then
+            echo "Cache HIT — restoring migrated Postgres data dir..."
+            docker stop postgres-ci
+            docker exec postgres-ci rm -rf /var/lib/postgresql/data/* 2>/dev/null || true
+            docker cp /tmp/pg-data-snapshot.tar.gz postgres-ci:/tmp/pg-data-snapshot.tar.gz
+            docker exec postgres-ci tar xzf /tmp/pg-data-snapshot.tar.gz -C /var/lib/postgresql/data
+            docker start postgres-ci
+            # Wait for Postgres to be ready after restore
+            for i in $(seq 1 15); do
+              if docker exec postgres-ci pg_isready -U postgres -d arxii_test; then
+                break
+              fi
+              sleep 1
+            done
+            # Apply any NEW migrations the PR added on top of main's state.
+            echo "Applying new migrations (if any)..."
+            uv run arx manage migrate
+          else
+            echo "Cache MISS — running full migration..."
+            uv run arx manage migrate
+            # Snapshot the migrated data dir for the cache.
+            docker stop postgres-ci
+            docker exec postgres-ci tar czf /tmp/pg-data-snapshot.tar.gz -C /var/lib/postgresql/data .
+            docker start postgres-ci
+            for i in $(seq 1 15); do
+              if docker exec postgres-ci pg_isready -U postgres -d arxii_test; then
+                break
+              fi
+              sleep 1
+            done
+            docker cp postgres-ci:/tmp/pg-data-snapshot.tar.gz /tmp/pg-data-snapshot.tar.gz
+          fi
       # Build the test DB by CLONING the just-migrated default DB rather than
       # letting Django replay all ~217 migrations a second time (~6.5 min/shard
       # of pure waste). Postgres `CREATE DATABASE ... TEMPLATE` is a near-instant
