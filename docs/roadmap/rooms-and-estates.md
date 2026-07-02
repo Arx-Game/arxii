@@ -56,6 +56,19 @@
   scope (Apostate, 2026-07-02): ship styles, caste vernaculars, out-of-place
   social reads.
 
+## Built (2026-07-02, #1514 close-out — owner build-HUD + fixture verbs)
+
+- `room_exposure_breakdown(room)` — per-axis pressure/mitigation/net (the
+  build-to-win readout: "COLD +6, −4 hearth = +2 residual").
+- Fixture verbs `place_room_fixture`/`remove_room_fixture` (+ telnet
+  `room/fixture`/`room/removefixture`) — comfort decorations finally have a
+  player caller; 3 PLACEHOLDER kinds seeded.
+- Owner build-HUD in the web builder (ComfortSection on the room panel,
+  backed by `manager/room/<id>/comfort/`).
+- Deliberately not built: websocket room-state comfort duplication (the
+  inhabitant surfacing shipped as #1522's REST widgets + weather echo);
+  Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
+
 ## Overview
 
 Rooms are the spatial substrate of the world. Buildings and estates are

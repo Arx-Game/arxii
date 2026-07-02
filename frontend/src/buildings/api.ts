@@ -3,6 +3,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type {
   BuildingManagerPayload,
   ForRoomResult,
+  RoomComfortBreakdown,
   PaginatedDecorationTemplateList,
   PaginatedRoomSizeTierList,
   RoomBuilderActionKey,
@@ -39,6 +40,16 @@ export function fetchBuildingForRoom(roomId: number, characterId: number): Promi
   return getJson(
     `/api/buildings/manager/for-room/${roomId}/?character_id=${characterId}`,
     'Failed to resolve the building.'
+  );
+}
+
+export function fetchRoomComfort(
+  roomId: number,
+  characterId: number
+): Promise<RoomComfortBreakdown> {
+  return getJson(
+    `/api/buildings/manager/room/${roomId}/comfort/?character_id=${characterId}`,
+    'Failed to load the comfort readout.'
   );
 }
 

@@ -194,3 +194,32 @@ def ensure_architectural_styles() -> None:
                 "resolution_mode": ClueResolution.RESEARCH,
             },
         )
+
+
+def ensure_decoration_kinds() -> None:
+    """Seed comfort-fixture kinds (#1514/#1469 follow-through). PLACEHOLDER content.
+
+    The mitigation fixtures the build-to-win loop needs playable: each kind's
+    affinities are negative modifiers that eat one discomfort axis (the 0-floor
+    means they can never harm). Magnitudes are PLACEHOLDER for the tuning pass.
+    """
+    from world.buildings.models import DecorationAffinity, DecorationKind  # noqa: PLC0415
+    from world.locations.constants import StatKey  # noqa: PLC0415
+
+    kinds = (
+        ("Great Hearth PLACEHOLDER", 1, ((StatKey.COLD, -4),)),
+        ("Oiled Awning PLACEHOLDER", 0, ((StatKey.WET, -3),)),
+        ("Shade Colonnade PLACEHOLDER", 0, ((StatKey.HEAT, -3),)),
+    )
+    for name, amenity, affinities in kinds:
+        kind, _ = DecorationKind.objects.update_or_create(
+            name=name,
+            defaults={
+                "description": "PLACEHOLDER — a comfort fixture awaiting its authored prose.",
+                "amenity": amenity,
+            },
+        )
+        for stat_key, value in affinities:
+            DecorationAffinity.objects.update_or_create(
+                kind=kind, stat_key=stat_key, defaults={"value": value}
+            )

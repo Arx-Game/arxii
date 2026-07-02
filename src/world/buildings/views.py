@@ -30,8 +30,10 @@ from rest_framework.response import Response
 from evennia_extensions.models import ObjectDisplayData, RoomProfile, RoomSizeTier
 from world.buildings.models import (
     Building,
+    DecorationKind,
     ProjectTemplate,
     ProjectTemplatePolishIncrement,
+    RoomDecoration,
 )
 from world.buildings.room_services import building_exits, building_for_room, space_used
 from world.buildings.serializers import (
@@ -39,6 +41,7 @@ from world.buildings.serializers import (
     CharacterContextRequestSerializer,
     DecorationTemplateSerializer,
     ForRoomResultSerializer,
+    RoomComfortBreakdownSerializer,
     RoomSizeTierSerializer,
 )
 from world.character_sheets.models import CharacterSheet
@@ -212,6 +215,75 @@ class BuildingManagerViewSet(viewsets.ViewSet):
             ),
         }
         return Response(ForRoomResultSerializer(payload).data)
+
+    @extend_schema(
+        parameters=[_CHARACTER_ID_PARAM],
+        responses={200: RoomComfortBreakdownSerializer},
+    )
+    @action(detail=False, methods=["get"], url_path=r"room/(?P<room_id>\d+)/comfort")
+    def room_comfort(self, request: Request, room_id: str | None = None) -> Response:
+        """GET /api/buildings/manager/room/<room_id>/comfort/ — the owner build-HUD (#1514).
+
+        Per-axis pressure/mitigation/net, the room's comfort level, its placed
+        fixtures, and the placeable kinds catalog — "COLD +6, −4 (hearth) = +2
+        residual; add insulation." Owner-gated: interior comfort tuning is the
+        builder's view.
+        """
+        persona = _viewer_persona(request)
+        if persona is None:
+            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+        profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
+        if profile is None:
+            return Response({"detail": "No such room."}, status=status.HTTP_404_NOT_FOUND)
+        room_obj = profile.objectdb
+        if not is_owner(persona, room_obj):
+            return Response(
+                {"detail": "You don't manage this room."}, status=status.HTTP_403_FORBIDDEN
+            )
+        from world.locations.services import (  # noqa: PLC0415
+            comfort_summary,
+            room_exposure_breakdown,
+        )
+
+        summary = comfort_summary(room_obj)
+        axes = room_exposure_breakdown(room_obj)
+        fixtures = RoomDecoration.objects.filter(room_profile=profile).select_related("kind")
+        kinds = DecorationKind.objects.all()
+        kind_affinities = {
+            kind.pk: [
+                {"key": affinity.stat_key, "value": affinity.value}
+                for affinity in kind.affinities.all()
+            ]
+            for kind in kinds
+        }
+        payload = {
+            "enclosure": profile.enclosure,
+            "level": summary.level,
+            "points": summary.points,
+            "amenity": summary.amenity,
+            "axes": [
+                {
+                    "key": row.stat_key,
+                    "pressure": row.pressure,
+                    "mitigation": row.mitigation,
+                    "net": row.net,
+                    "sheltered": row.sheltered,
+                }
+                for row in axes
+            ],
+            "fixtures": [{"id": d.pk, "kind": d.kind.name} for d in fixtures],
+            "fixture_kinds": [
+                {
+                    "id": kind.pk,
+                    "name": kind.name,
+                    "description": kind.description,
+                    "amenity": kind.amenity,
+                    "affinities": kind_affinities[kind.pk],
+                }
+                for kind in kinds
+            ],
+        }
+        return Response(RoomComfortBreakdownSerializer(payload).data)
 
 
 class BuildingsCatalogPagination(PageNumberPagination):
