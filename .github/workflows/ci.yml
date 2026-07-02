@@ -87,41 +87,69 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          # Shard groupings by approximate test-method count (as of 2026-05-02).
-          # Run `grep -rc "def test_" src/<app>/tests/ | awk -F: '{s+=$2} END {print s}'`
+          # Shard groupings by approximate test-method count (as of 2026-07-02).
+          # Run `grep -rE '^\s*def test_' src/<app>/ --include='*.py' | wc -l`
           # per app to refresh counts after adding significant test suites.
+          # Rebalanced from 4 shards → 6 shards: the old 4-shard split (dated
+          # 2026-05-02) had shard-1 at ~4,705 tests and shard-4 at ~5,861 —
+          # both 3-4× their designed size after the suite roughly doubled.
+          # Six shards at ~2,545 each cuts the bottleneck-shard wall-clock
+          # roughly in half.
           #
-          # shard-1 (~1,532): world.magic (887) + world.combat (328) + world.missions (246) + world.battles (71)
+          # shard-1 (~2,544): world.magic (2544) — the largest app, nearly a
+          #                    full shard on its own. world.realms (0) is inert.
           - name: shard-1
-            apps: "world.magic world.combat world.missions world.battles"
-          # shard-2 (~1,465): world.stories (759) + world.mechanics (258)
-          #                   + world.conditions (190) + world.items (198)
-          #                   + world.areas (39) + world.instances (21)
+            apps: "world.magic world.realms"
+          # shard-2 (~2,545): world.combat (1432) + flows (291) + world.character_creation (228)
+          #                   + world.roster (156) + world.events (112) + world.battles (93)
+          #                   + world.goals (77) + world.journals (56) + world.classes (38)
+          #                   + world.projects (34) + world.species (28)
           - name: shard-2
-            apps: "world.stories world.mechanics world.conditions world.items world.areas world.instances"
-          # shard-3 (~1,604): flows (259) + world.progression (255) + world.scenes (227)
-          #                   + world.character_sheets (202) + world.character_creation (200)
-          #                   + world.gm (120) + actions (115) + world.locations (187)
-          #                   + world.traits (39)
+            apps: >-
+              world.combat flows world.character_creation world.roster world.events
+              world.battles world.goals world.journals world.classes world.projects world.species
+          # shard-3 (~2,525): world.stories (1046) + world.mechanics (370)
+          #                   + integration_tests.pipeline (158) + integration_tests.game_content (165)
+          #                   + world.checks (190) + world.vitals (149) + world.fatigue (117)
+          #                   + core_management (94) + world.achievements (68) + world.secrets (63)
+          #                   + world.action_points (40) + evennia_extensions (34) + typeclasses (25)
+          #                   + behaviors (6)
           - name: shard-3
-            apps: "flows world.progression world.scenes world.character_sheets world.character_creation world.gm actions world.locations world.traits"
-          # shard-4 (~1,447): all remaining apps — roster, societies, game_clock, fatigue,
-          #                   events, skills, relationships, distinctions, codex, goals, checks,
-          #                   web, integration_tests, core_management, action_points, narrative,
-          #                   journals, achievements, forms, commands, covenants, tarot, vitals,
-          #                   player_submissions, classes, staff_inbox, typeclasses, consent,
-          #                   behaviors, evennia_extensions (25), realms (0), species (0)
+            apps: >-
+              world.stories world.mechanics world.checks world.vitals world.fatigue
+              core_management world.achievements world.secrets world.action_points
+              evennia_extensions typeclasses behaviors
+              integration_tests.pipeline integration_tests.game_content
+          # shard-4 (~2,545): world.scenes (892) + world.items (529) + world.conditions (326)
+          #                   + world.areas (224) + world.buildings (135) + world.forms (114)
+          #                   + world.narrative (84) + world.distinctions (82) + world.currency (59)
+          #                   + world.captivity (37) + world.tarot (36) + world.predicates (21)
+          #                   + world.tidings (6)
           - name: shard-4
             apps: >-
-              world.roster world.societies world.currency world.game_clock world.fatigue world.events
-              world.skills world.relationships world.distinctions world.codex world.goals
-              world.checks world.action_points world.narrative world.journals world.achievements
-              world.forms world.covenants world.tarot world.vitals world.player_submissions
-              world.classes world.staff_inbox world.consent
+              world.scenes world.items world.conditions world.areas world.buildings
+              world.forms world.narrative world.distinctions world.currency
+              world.captivity world.tarot world.predicates world.tidings
+          # shard-5 (~2,545): actions (817) + world.covenants (543) + world.societies (350)
+          #                   + world.character_sheets (253) + web (72) + web.admin (48) + web.api (24)
+          #                   + world.game_clock (109) + world.skills (97) + world.consent (67)
+          #                   + world.player_submissions (59) + world.clues (54) + world.seeds (31)
+          #                   + world.instances (21)
+          - name: shard-5
+            apps: >-
+              actions world.covenants world.societies world.character_sheets
               web web.admin web.api
-              integration_tests.pipeline integration_tests.game_content
-              core_management commands typeclasses behaviors
-              evennia_extensions world.realms world.species world.projects world.npc_services world.predicates world.buildings world.room_features world.captivity world.clues world.secrets world.tidings world.weather
+              world.game_clock world.skills world.consent world.player_submissions
+              world.clues world.seeds world.instances
+          # shard-6 (~2,545): commands (660) + world.missions (636) + world.progression (366)
+          #                   + world.locations (256) + world.relationships (160) + world.gm (122)
+          #                   + world.npc_services (108) + world.codex (79) + world.weather (57)
+          #                   + world.traits (39) + world.room_features (33) + world.staff_inbox (29)
+          - name: shard-6
+            apps: >-
+              commands world.missions world.progression world.locations world.relationships
+              world.gm world.npc_services world.codex world.weather world.traits
+              world.room_features world.staff_inbox
     # NOTE: We use a manual `docker run` rather than the GitHub Actions `services:`
     # block because the `services:` block has no way to pass a positional COMMAND to
     # the Postgres container. We need to bump `max_locks_per_transaction` past the
