@@ -610,6 +610,11 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
 
     No-op when the character has no vitals row (defensive; callers should
     gate on vitals existing before calling advance_bleed_out).
+
+    Also propagates DEAD to the sheet's roster lifecycle_state (#1770 PR2):
+    _mark_dead is the single death writer and only fires on the real terminal
+    path (death_deferred is gated upstream via death_is_permitted), so this is
+    the one seam where combat death reaches CharacterSheet.lifecycle_state.
     """
     try:
         vitals = character_sheet.vitals
@@ -618,6 +623,12 @@ def _mark_dead(character_sheet: CharacterSheet) -> None:
     vitals.life_state = CharacterLifeState.DEAD
     vitals.died_at = timezone.now()
     vitals.save(update_fields=["life_state", "died_at"])
+
+    # Lazy import per repo convention: vitals must not import roster at module level.
+    from world.character_sheets.types import LifecycleState  # noqa: PLC0415
+    from world.roster.services.activity import set_lifecycle_state  # noqa: PLC0415
+
+    set_lifecycle_state(character_sheet, LifecycleState.DEAD)
 
 
 def _resolve_peril_via_pool(
