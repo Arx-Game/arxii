@@ -28,10 +28,18 @@ function RoomNodeComponent({ data }: NodeProps<RoomNodeType>) {
   const { room, selected } = data;
   return (
     <div
+      role="button"
+      tabIndex={0}
       className={`h-[104px] w-[104px] cursor-pointer overflow-hidden rounded-md border bg-card p-2 shadow-sm transition-colors hover:border-primary/60 ${
         selected ? 'border-primary ring-2 ring-primary/40' : 'border-border'
       }`}
       onClick={() => data.onSelect(room.id)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          data.onSelect(room.id);
+        }
+      }}
       data-testid="builder-room-node"
       data-room-id={room.id}
     >
