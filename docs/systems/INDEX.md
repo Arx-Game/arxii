@@ -1260,7 +1260,7 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   - `contribution_value_for_construction(contribution) -> int` — material/money
     value formula (materials ~110% baseline, lore-bearing materials scale by
     `lore_value`)
-- **Space budget (#670, ADR-0071):** `Building.space_budget` snapshots
+- **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
   `max_rooms = rooms_per_size_tier × target_size` flat count — rooms trade
@@ -1320,6 +1320,17 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   `recompute_persona_prestige_from_dwellings`. Seeds:
   `ensure_architectural_styles()` (2 default + 2 discoverable PLACEHOLDER rows
   w/ codex subjects/entries/clues).
+- **Comfort fixtures + owner build-HUD (#1514 close-out):**
+  `PlaceFixtureAction`/`RemoveFixtureAction` (keys `place_room_fixture` /
+  `remove_room_fixture`, owner-gated, `room_id` anchor; telnet `room/fixture` /
+  `room/removefixture`) — the first production callers of
+  `place_decoration`/`remove_decoration`. `ensure_decoration_kinds()` seeds 3
+  PLACEHOLDER kinds. HUD read: `GET
+  /api/buildings/manager/room/<room_id>/comfort/` (owner-gated) — enclosure,
+  comfort level/points/amenity, per-axis pressure/mitigation/net
+  (`world.locations.services.room_exposure_breakdown`), placed fixtures, and
+  the kinds catalog; rendered by `ComfortSection` in the web builder's room
+  panel.
 - **Predicate leaf:** `has_item` (persona-scoped) registered with the
   `building_permit` dispatch entry — checks if a persona holds an unconsumed
   building permit.

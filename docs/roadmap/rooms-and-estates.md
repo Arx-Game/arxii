@@ -5,7 +5,7 @@
 
 ## Built (2026-07-01, #670 PR1 — Room Builder backend)
 
-- **Space-budget model (ADR-0071):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
+- **Space-budget model (ADR-0075):** `BuildingSizeTier` (Hut 50 → Citadel 5000,
   PLACEHOLDER) → `Building.space_budget`; rooms carry `RoomSizeTier` units
   (Micro 2 → Expanse 2500 — the shared ladder the future creature-size stat
   reads) and spend from the pool. Replaced `max_rooms`.
@@ -55,6 +55,19 @@
 - Owned home building's style now feeds dwelling prestige. Ratified out of
   scope (Apostate, 2026-07-02): ship styles, caste vernaculars, out-of-place
   social reads.
+
+## Built (2026-07-02, #1514 close-out — owner build-HUD + fixture verbs)
+
+- `room_exposure_breakdown(room)` — per-axis pressure/mitigation/net (the
+  build-to-win readout: "COLD +6, −4 hearth = +2 residual").
+- Fixture verbs `place_room_fixture`/`remove_room_fixture` (+ telnet
+  `room/fixture`/`room/removefixture`) — comfort decorations finally have a
+  player caller; 3 PLACEHOLDER kinds seeded.
+- Owner build-HUD in the web builder (ComfortSection on the room panel,
+  backed by `manager/room/<id>/comfort/`).
+- Deliberately not built: websocket room-state comfort duplication (the
+  inhabitant surfacing shipped as #1522's REST widgets + weather echo);
+  Chilled/Soaked threshold conditions (Tehom's integration, per the spec).
 
 ## Overview
 

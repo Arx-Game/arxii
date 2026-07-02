@@ -42,6 +42,7 @@ class IncomeStreamRowSerializer(serializers.Serializer):
 class DebtRowSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     creditor = serializers.CharField()
+    summon_role_id = serializers.IntegerField(allow_null=True)
     principal = serializers.IntegerField()
     arrears = serializers.IntegerField()
     interest_bps_monthly = serializers.IntegerField()
@@ -90,6 +91,7 @@ class OrgBooksSerializer(serializers.Serializer):
     balance = serializers.IntegerField()
     spend_rank_max = serializers.IntegerField()
     graft_pct = serializers.IntegerField()
+    steward_role_id = serializers.IntegerField(allow_null=True)
     income_streams = IncomeStreamRowSerializer(many=True)
     debts = DebtRowSerializer(many=True)
     obligations = ObligationRowSerializer(many=True)
@@ -184,6 +186,25 @@ def _viewer_persona(request: Request):
         return None
 
 
+def _summon_roles_by_org(org_ids: list[int]) -> dict[int, int]:
+    """org id -> an enabled NPCRole affiliated with it (the summonable face, #930).
+
+    Lazy view-layer lookup: currency stays model-independent of npc_services;
+    the books simply annotate which representative a line item can summon.
+    """
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
+
+    roles = (
+        NPCRole.objects.filter(faction_affiliation_id__in=org_ids, is_active=True)
+        .order_by("pk")
+        .values_list("faction_affiliation_id", "pk")
+    )
+    by_org: dict[int, int] = {}
+    for org_id, role_id in roles:
+        by_org.setdefault(org_id, role_id)
+    return by_org
+
+
 def _books_payload(organization) -> dict:
     treasury = get_or_create_treasury(organization)
     economics = get_or_create_economics(organization)
@@ -217,12 +238,22 @@ def _books_payload(organization) -> dict:
         reverse=True,
     )[:_RECENT_ROWS]
 
+    debts = list(
+        DebtInstrument.objects.filter(debtor_organization=organization, active=True).select_related(
+            "creditor_organization"
+        )
+    )
+    summon_roles = _summon_roles_by_org(
+        [organization.pk, *(d.creditor_organization_id for d in debts)]
+    )
+
     return {
         "organization_id": organization.pk,
         "organization_name": organization.name,
         "balance": treasury.balance,
         "spend_rank_max": treasury.spend_rank_max,
         "graft_pct": economics.graft_pct,
+        "steward_role_id": summon_roles.get(organization.pk),
         "income_streams": [
             {
                 "id": s.pk,
@@ -237,15 +268,14 @@ def _books_payload(organization) -> dict:
             {
                 "id": d.pk,
                 "creditor": d.creditor_organization.name,
+                "summon_role_id": summon_roles.get(d.creditor_organization_id),
                 "principal": d.principal,
                 "arrears": d.arrears,
                 "interest_bps_monthly": d.interest_bps_monthly,
                 "diverting": d.diverting,
                 "in_default": d.in_default,
             }
-            for d in DebtInstrument.objects.filter(
-                debtor_organization=organization, active=True
-            ).select_related("creditor_organization")
+            for d in debts
         ],
         "obligations": [
             {
