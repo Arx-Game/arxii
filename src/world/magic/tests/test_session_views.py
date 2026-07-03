@@ -612,6 +612,91 @@ class RitualInductionRoundTripTests(TestCase):
         self.assertEqual(membership.covenant_role_id, candidate_role.pk)
 
 
+class RitualFormationRoundTripTests(TestCase):
+    """Integration: draft → all founders accept with COVENANT_ROLE refs → fire → covenant created.
+
+    Mirrors RitualInductionRoundTripTests but for FORMATION. The key asymmetry:
+    in FORMATION *every* accepting participant (including the initiator) supplies
+    a chosen role — there is no ``applies_to: "candidate_only"`` gate.
+    """
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def test_draft_accept_fire_creates_covenant_with_founder_roles(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import CharacterCovenantRole, Covenant
+
+        # --- participants (two founders) ---
+        _, initiator_account, initiator_sheet = _make_tenure_with_account()
+        _, invitee_account, invitee_sheet = _make_tenure_with_account()
+
+        # --- roles (both DURANCE to match the session kwargs below) ---
+        initiator_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        invitee_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        ritual = _make_formation_ritual()
+
+        # --- step 1: initiator drafts with session-level kwargs + their own role ref ---
+        # The initiator is auto-ACCEPTED at draft time; their COVENANT_ROLE reference
+        # is supplied via initiator_references (not a separate accept call).
+        self.client.force_authenticate(user=initiator_account)
+        draft = self.client.post(
+            "/api/magic/rituals/sessions/",
+            {
+                "ritual_id": ritual.pk,
+                "invitee_ids": [invitee_sheet.pk],
+                "session_kwargs": {
+                    "name": "The Iron Pact",
+                    "covenant_type": CovenantType.DURANCE.value,
+                    "sworn_objective": "Defend the realm",
+                },
+                "initiator_references": [
+                    {"kind": "COVENANT_ROLE", "ref_covenant_role_id": initiator_role.pk}
+                ],
+                "expires_at": _future_dt(),
+            },
+            format="json",
+        )
+        self.assertEqual(draft.status_code, 201, draft.data)
+        session_id = draft.data["id"]
+
+        # --- step 2: invitee accepts with COVENANT_ROLE ref ---
+        self.client.force_authenticate(user=invitee_account)
+        accept_inv = self.client.post(
+            f"/api/magic/rituals/sessions/{session_id}/accept/",
+            {
+                "participant_kwargs": {},
+                "references": [{"kind": "COVENANT_ROLE", "ref_covenant_role_id": invitee_role.pk}],
+            },
+            format="json",
+        )
+        self.assertEqual(accept_inv.status_code, 200, accept_inv.data)
+
+        # --- step 3: initiator fires ---
+        self.client.force_authenticate(user=initiator_account)
+        fire = self.client.post(
+            f"/api/magic/rituals/sessions/{session_id}/fire/", {}, format="json"
+        )
+        self.assertEqual(fire.status_code, 200, fire.data)
+        self.assertEqual(fire.data["result_kind"], "covenant")
+
+        # --- assert: covenant was created ---
+        covenant = Covenant.objects.get(name="The Iron Pact")
+        self.assertEqual(covenant.covenant_type, CovenantType.DURANCE.value)
+
+        # --- assert: both founders have CCR rows with their chosen roles ---
+        init_membership = CharacterCovenantRole.objects.get(
+            character_sheet=initiator_sheet, covenant=covenant
+        )
+        self.assertEqual(init_membership.covenant_role_id, initiator_role.pk)
+        inv_membership = CharacterCovenantRole.objects.get(
+            character_sheet=invitee_sheet, covenant=covenant
+        )
+        self.assertEqual(inv_membership.covenant_role_id, invitee_role.pk)
+
+
 class RitualSessionDetailParticipantFieldsTests(TestCase):
     """GET /api/magic/rituals/sessions/{id}/ exposes participant_fields."""
 
@@ -632,3 +717,18 @@ class RitualSessionDetailParticipantFieldsTests(TestCase):
         self.assertIn("chosen_covenant_role", names)
         role_field = next(f for f in fields if f["name"] == "chosen_covenant_role")
         self.assertEqual(role_field["emits_reference"], "COVENANT_ROLE")
+
+    def test_detail_exposes_participant_fields_for_formation(self) -> None:
+        from world.magic.factories import RitualSessionFactory
+
+        _, account, sheet = _make_tenure_with_account()
+        ritual = _make_formation_ritual()
+        session = RitualSessionFactory(ritual=ritual, initiator=sheet)
+        self.client.force_authenticate(user=account)
+        response = self.client.get(f"/api/magic/rituals/sessions/{session.pk}/")
+        self.assertEqual(response.status_code, 200)
+        fields = response.data["participant_fields"]
+        role_field = next(f for f in fields if f["name"] == "chosen_covenant_role")
+        self.assertEqual(role_field["emits_reference"], "COVENANT_ROLE")
+        # FORMATION must NOT gate the role field — all founders need a role.
+        self.assertNotIn("applies_to", role_field)
