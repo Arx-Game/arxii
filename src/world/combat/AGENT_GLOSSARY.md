@@ -85,3 +85,7 @@ force-field (absorb_pool, priority 10), reflect (reflect_damage, priority 20), o
 interceptors guard `if payload.amount <= 0: return`. Cost: `reactive_anima_cost` per fire;
 can't pay → fizzle, attack lands. No `CANCEL_EVENT` child step (ADR-0060).
 _Avoid_: cancel-event interceptor, reactive cancel, shield handler
+
+**Knockback**:
+A deterministic on-hit effect that shoves the defender one Position away from the attacker, authored via `ThreatPoolEntry.on_hit_consequence_pool` firing a `MOVE_TO_POSITION`/`AWAY_FROM_ACTOR` consequence effect. Fires only after the #1273 Interpose seam resolves — a clean block prevents it for free.
+_Avoid_: push (reserved for Clash tug-of-war progress), shove, displace

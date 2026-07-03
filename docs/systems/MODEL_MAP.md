@@ -474,6 +474,7 @@
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
+  - traps <- room_features.Trap
 
 ### PositionEdge
 **Foreign Keys:**
