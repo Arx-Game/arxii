@@ -38,6 +38,8 @@ from world.battles.exceptions import (
     FortificationOwnershipMismatchError,
     FortificationTargetRequiredError,
     InsufficientCommandTierError,
+    InvalidEnvironmentScopeError,
+    MissingEnvironmentTargetError,
     MissingScopeTargetError,
     NoCommandHierarchyError,
     NotAChampionError,
@@ -354,7 +356,7 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declaration facet
+def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + validation checks
     *,
     participant: BattleParticipant,
     action_kind: str,
@@ -405,6 +407,10 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
         FortificationAlreadyBreachedError: If target_fortification.breached is True.
         FortificationOwnershipMismatchError: If BREACH targets your own side's
             fortification, or FORTIFY targets the enemy's.
+        InvalidEnvironmentScopeError: If action_kind is SET_ENVIRONMENT and scope is
+            not BATTLE or PLACE.
+        MissingEnvironmentTargetError: If action_kind is SET_ENVIRONMENT and
+            technique.target_weather_type is None.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -431,7 +437,13 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
     ):
         raise PlaceScopeRequiredError
 
-    if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE):
+    if action_kind == BattleActionKind.SET_ENVIRONMENT:
+        if scope not in (BattleActionScope.BATTLE, BattleActionScope.PLACE):
+            raise InvalidEnvironmentScopeError
+        if technique.target_weather_type_id is None:
+            raise MissingEnvironmentTargetError
+
+    if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
         _validate_command_scope(participant=participant, scope=scope)
 
     if scope == BattleActionScope.PLACE and target_place is None:
@@ -476,8 +488,9 @@ def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> No
     """Raise unless *participant* holds the command tier *scope* requires.
 
     PLACE requires an engaged CharacterCovenantRole with command_tier in
-    (SUBORDINATE, SUPREME) on the side's covenant; SIDE requires SUPREME.
-    A side with no covenant has no command hierarchy at all.
+    (SUBORDINATE, SUPREME) on the side's covenant; SIDE and BATTLE (#1715, the
+    widest scope) require SUPREME. A side with no covenant has no command
+    hierarchy at all.
     """
     from world.covenants.constants import CommandTier  # noqa: PLC0415
     from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
@@ -488,7 +501,7 @@ def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> No
 
     required_tiers = (
         [CommandTier.SUPREME]
-        if scope == BattleActionScope.SIDE
+        if scope in (BattleActionScope.SIDE, BattleActionScope.BATTLE)
         else [CommandTier.SUBORDINATE, CommandTier.SUPREME]
     )
     has_tier = CharacterCovenantRole.objects.filter(

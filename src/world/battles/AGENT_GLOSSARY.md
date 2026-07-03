@@ -21,6 +21,28 @@ property/terrain-effect matchups (#1794). Can be bound to a real `CombatEncounte
 Champion duel (#1710).
 _Avoid_: front (descriptive only), zone, location.
 
+**Weather Override**:
+A cast-set (or, at the `Battle` level, ambient-seeded) `WeatherType` held on `Battle` or
+`BattlePlace`, with a round-count expiry (#1715). See "Local Exception" for the
+`BattlePlace`-level variant's precedence rule.
+_Avoid_: environment state, weather condition (already means something else in
+`world.conditions`).
+
+**Local Exception**:
+A `BattlePlace.weather_override` that beats the `Battle`-level `weather_override`/ambient
+value at that front only (#1715) — cover, a ward, or a hostile local squall cast with
+`BattleActionScope.PLACE`. Resolution order: local exception -> battle-wide override ->
+ambient (via `Battle.region`) -> none. See `world.battles.resolution.effective_weather`.
+_Avoid_: local override (ambiguous with the battle-wide tier), place weather.
+
+**Weather Challenge**:
+A `WeatherTypeCapabilityChallenge` row — an authored `(weather_type, capability, threshold,
+modifier)` tuple applying when a unit's `effective_capability(capability)` falls strictly
+below `threshold` (#1715). The first absence/threshold-based battle modifier in the
+codebase; everything else is presence- (`has_property`) or `>=`-threshold
+(`prerequisites_met`) based.
+_Avoid_: capability penalty (too generic), weather vulnerability.
+
 **Unit**:
 A `BattleUnit` — an abstract typed force (friendly or enemy) stationed at a place.
 Carries `properties` (a plain M2M to the same `Property` catalog characters use — see

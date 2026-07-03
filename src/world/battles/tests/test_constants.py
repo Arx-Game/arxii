@@ -21,6 +21,7 @@ class BattleConstantsTests(TestCase):
             "hold",
             "breach",
             "fortify",
+            "set_environment",
         }
 
     def test_battle_action_kind_has_rescue(self) -> None:

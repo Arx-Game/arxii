@@ -400,6 +400,16 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         help_text="Property-based targeting preconditions a target must satisfy "
         "(ALL must pass) to be a legal target for this technique.",
     )
+    target_weather_type = models.ForeignKey(
+        "weather.WeatherType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="conjuring_techniques",
+        help_text="For SET_ENVIRONMENT battle actions (#1715): which WeatherType this "
+        "cast conjures when successfully declared as a battle environmental effect. "
+        "Null on every non-environmental technique.",
+    )
 
     class Meta:
         verbose_name = "Technique"

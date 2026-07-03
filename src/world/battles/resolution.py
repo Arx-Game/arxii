@@ -25,6 +25,7 @@ separate call site is needed here). ``resolve_battle_round`` calls
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -64,7 +65,8 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionInstance
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
-    from world.mechanics.types import HasProperties
+    from world.mechanics.types import HasCapabilities, HasProperties
+    from world.weather.models import WeatherType
 
 
 def _is_isolated(participant: BattleParticipant) -> bool:
@@ -133,6 +135,64 @@ def _terrain_property_modifier(place: BattlePlace | None, holder: HasProperties)
         "property"
     )
     return sum(row.modifier for row in rows if holder.has_property(row.property))
+
+
+def effective_weather(place: BattlePlace | None) -> WeatherType | None:
+    """Two-tier weather resolution (#1715): local place override -> battle
+    override -> ambient (via Battle.region) -> None.
+
+    Returns None when place is None (the unit has no place assigned) as well
+    as when no tier resolves to a value.
+    """
+    from world.weather.services import get_effective_weather  # noqa: PLC0415
+
+    if place is None:
+        return None
+    if place.weather_override is not None:
+        return place.weather_override
+    battle = place.battle
+    if battle.weather_override is not None:
+        return battle.weather_override
+    if battle.region is not None:
+        state = get_effective_weather(battle.region)
+        return state.weather_type if state is not None else None
+    return None
+
+
+def _weather_property_modifier(place: BattlePlace | None, holder: HasProperties) -> int:
+    """Sum every WeatherTypePropertyEffect row matching one of holder's properties (#1715).
+
+    Returns 0 when there's no effective weather at place, or no row matches.
+    """
+    from world.battles.models import WeatherTypePropertyEffect  # noqa: PLC0415
+
+    weather_type = effective_weather(place)
+    if weather_type is None:
+        return 0
+    rows = WeatherTypePropertyEffect.objects.filter(weather_type=weather_type).select_related(
+        "property"
+    )
+    return sum(row.modifier for row in rows if holder.has_property(row.property))
+
+
+def _weather_capability_modifier(place: BattlePlace | None, holder: HasCapabilities) -> int:
+    """Sum every WeatherTypeCapabilityChallenge row where holder's capability magnitude
+    is strictly below the authored threshold (#1715) — the first absence/threshold-based
+    battle modifier in the codebase (everything else is presence- or >=-threshold based).
+
+    Returns 0 when there's no effective weather at place, or no row applies.
+    """
+    from world.battles.models import WeatherTypeCapabilityChallenge  # noqa: PLC0415
+
+    weather_type = effective_weather(place)
+    if weather_type is None:
+        return 0
+    rows = WeatherTypeCapabilityChallenge.objects.filter(weather_type=weather_type).select_related(
+        "capability"
+    )
+    return sum(
+        row.modifier for row in rows if holder.effective_capability(row.capability) < row.threshold
+    )
 
 
 def _quality_modifier(quality: str) -> int:
@@ -258,9 +318,9 @@ class BattleTechniqueResolution:
 class BattleTechniqueResolver:
     """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
     own check, folding in the full battle modifier stack (Property affinity,
-    terrain, unit quality, commander bonus, posture — #1711/#1794). Battle has no
-    damage-profile/condition application of its own — that stays in
-    ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
+    terrain, weather property/capability, unit quality, commander bonus, posture —
+    #1711/#1794/#1715). Battle has no damage-profile/condition application of its
+    own — that stays in ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
     """
 
     character: ObjectDB
@@ -280,7 +340,7 @@ class BattleTechniqueResolver:
         return BattleTechniqueResolution(check_result=check_result)
 
     def _battle_modifier_stack(self) -> int:
-        """Sum every modifier source relevant to this declaration (#1711/#1794)."""
+        """Sum every modifier source relevant to this declaration (#1711/#1794/#1715)."""
         participant = self.declaration.participant
         unit = self.declaration.target_unit
 
@@ -288,11 +348,23 @@ class BattleTechniqueResolver:
             _property_affinity_modifier(self.technique, unit) if unit is not None else 0
         )
         terrain = _terrain_property_modifier(unit.place, unit) if unit is not None else 0
+        weather_property = _weather_property_modifier(unit.place, unit) if unit is not None else 0
+        weather_capability = (
+            _weather_capability_modifier(unit.place, unit) if unit is not None else 0
+        )
         quality = _quality_modifier(unit.quality) if unit is not None else 0
         commander = commander_bonus_for_side_at_place(participant.side, participant.place)
         posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
 
-        return property_affinity + terrain + quality + commander + posture
+        return (
+            property_affinity
+            + terrain
+            + weather_property
+            + weather_capability
+            + quality
+            + commander
+            + posture
+        )
 
 
 def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckResult | None:
@@ -664,6 +736,48 @@ def _resolve_fortify_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
+def _resolve_environment_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+    round_number: int,
+) -> None:
+    """Apply SET_ENVIRONMENT success: set the cast weather at the declared scope,
+    award flat VP (#1715).
+
+    BATTLE scope writes Battle.weather_override (the battle-wide default);
+    PLACE scope writes a local exception on the target BattlePlace that beats
+    the battle-wide value there only (see resolution.effective_weather).
+    Duration scales with success_level so a stronger cast holds longer — see
+    SET_ENVIRONMENT_BASE_ROUNDS's docstring for the >= 2 round guarantee.
+    """
+    from world.battles.constants import (  # noqa: PLC0415
+        SET_ENVIRONMENT_BASE_ROUNDS,
+        SET_ENVIRONMENT_VP,
+        BattleActionScope,
+    )
+
+    weather_type = declaration.technique.target_weather_type
+    expires_round = round_number + SET_ENVIRONMENT_BASE_ROUNDS + success_level
+
+    if declaration.scope == BattleActionScope.BATTLE:
+        battle = declaration.battle_round.battle
+        battle.weather_override = weather_type
+        battle.weather_override_expires_round = expires_round
+        battle.save(update_fields=["weather_override", "weather_override_expires_round"])
+    else:
+        place = declaration.target_place
+        place.weather_override = weather_type
+        place.weather_override_expires_round = expires_round
+        place.save(update_fields=["weather_override", "weather_override_expires_round"])
+
+    side = declaration.participant.side
+    vp_gain = round(SET_ENVIRONMENT_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
 def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     """Apply RESCUE success: clear Surrounded from the ally/allies at scope (#1733, #1710).
 
@@ -849,45 +963,58 @@ def _dispatch_success_handler(
     result: BattleRoundResult,
     success_level: int,
     place_defense_bonus: dict[int, int],
+    round_number: int,
 ) -> None:
-    """Route a successful declaration to its action-kind-specific resolver (#1712).
+    """Route a successful declaration to its action-kind-specific resolver (#1712/#1715).
 
     Extracted from ``resolve_battle_round`` to keep that function's own branching
     within the McCabe complexity budget — this is purely a dispatch table, kept
     separate from round-level orchestration (declaration ordering, failure
-    handling, Surrounded advancement).
+    handling, Surrounded advancement). A dict-of-closures (rather than an
+    if/elif chain) keeps this function's own complexity flat as action kinds
+    are added — each handler takes a different subset of the shared locals, so
+    the dict maps to zero-arg closures rather than the handlers directly.
     """
-    if declaration.action_kind == BattleActionKind.STRIKE:
-        _resolve_strike_success(declaration, result, success_level, place_defense_bonus)
-    elif declaration.action_kind == BattleActionKind.RESCUE:
-        _resolve_rescue_success(declaration)
-    elif declaration.action_kind == BattleActionKind.ROUT:
-        _resolve_rout_success(declaration, result, success_level)
-    elif declaration.action_kind == BattleActionKind.RALLY:
-        _resolve_rally_success(declaration, result, success_level)
-    elif declaration.action_kind == BattleActionKind.REPEL:
-        _resolve_repel_success(declaration, result, place_defense_bonus)
-    elif declaration.action_kind == BattleActionKind.HOLD:
-        _resolve_hold_success(declaration, result)
-    elif declaration.action_kind == BattleActionKind.SUPPORT:
-        _resolve_support_success(declaration, result)
-    elif declaration.action_kind == BattleActionKind.BREACH:
-        _resolve_breach_success(declaration, result, success_level)
-    elif declaration.action_kind == BattleActionKind.FORTIFY:
-        _resolve_fortify_success(declaration, result, success_level)
-    else:
-        _resolve_support_success(declaration, result)
+    handlers: dict[str, Callable[[], None]] = {
+        BattleActionKind.STRIKE: lambda: _resolve_strike_success(
+            declaration, result, success_level, place_defense_bonus
+        ),
+        BattleActionKind.RESCUE: lambda: _resolve_rescue_success(declaration),
+        BattleActionKind.ROUT: lambda: _resolve_rout_success(declaration, result, success_level),
+        BattleActionKind.RALLY: lambda: _resolve_rally_success(declaration, result, success_level),
+        BattleActionKind.REPEL: lambda: _resolve_repel_success(
+            declaration, result, place_defense_bonus
+        ),
+        BattleActionKind.HOLD: lambda: _resolve_hold_success(declaration, result),
+        BattleActionKind.SET_ENVIRONMENT: lambda: _resolve_environment_success(
+            declaration, result, success_level, round_number
+        ),
+        BattleActionKind.SUPPORT: lambda: _resolve_support_success(declaration, result),
+        BattleActionKind.BREACH: lambda: _resolve_breach_success(
+            declaration, result, success_level
+        ),
+        BattleActionKind.FORTIFY: lambda: _resolve_fortify_success(
+            declaration, result, success_level
+        ),
+    }
+    handler = handlers.get(
+        declaration.action_kind, lambda: _resolve_support_success(declaration, result)
+    )
+    handler()
 
 
 @transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
 
-    For each unresolved declaration, casts its declared technique through
-    ``resolve_battle_technique`` (the real magic envelope) and routes
-    success / failure to the appropriate sub-handlers. Before marking the
-    round complete, ticks every ACTIVE Surrounded participant's peril once
-    via ``_advance_surrounded_participants`` (#1733) — gated by declaration
+    Before any declaration resolves, clears any battle- or place-level
+    weather override whose ``weather_override_expires_round`` has passed
+    (round-boundary weather expiry, #1715). For each unresolved declaration,
+    casts its declared technique through ``resolve_battle_technique`` (the
+    real magic envelope) and routes success / failure to the appropriate
+    sub-handlers. Before marking the round complete, ticks every ACTIVE
+    Surrounded participant's peril once via
+    ``_advance_surrounded_participants`` (#1733) — gated by declaration
     this round or ``battle.afk_peril_override``. Sets
     ``battle_round.status = COMPLETED`` at the end.
 
@@ -908,12 +1035,36 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "target_side",
             "target_fortification",
             "technique__action_template",
+            "technique__target_weather_type",
         )
     )
-    # REPEL must resolve before every other action kind this round (#1712) — its
-    # success populates place_defense_bonus in time for STRIKE to read it below.
-    # A stable sort preserves every other kind's relative (declaration) order.
-    declarations.sort(key=lambda d: 0 if d.action_kind == BattleActionKind.REPEL else 1)
+    # Round-boundary weather expiry (#1715) — clear before any declaration
+    # resolves, including this round's own SET_ENVIRONMENT casts (a fresh cast's
+    # expires_round is always round_number + at least 2, so it can never be
+    # cleared by this same check in the round it's cast).
+    battle = battle_round.battle
+    if (
+        battle.weather_override_expires_round is not None
+        and battle.weather_override_expires_round < battle_round.round_number
+    ):
+        battle.weather_override = None
+        battle.weather_override_expires_round = None
+        battle.save(update_fields=["weather_override", "weather_override_expires_round"])
+
+    for place in battle.places.filter(weather_override_expires_round__lt=battle_round.round_number):
+        place.weather_override = None
+        place.weather_override_expires_round = None
+        place.save(update_fields=["weather_override", "weather_override_expires_round"])
+
+    # REPEL and SET_ENVIRONMENT must resolve before every other action kind this
+    # round (#1712/#1715) — REPEL's success populates place_defense_bonus, and
+    # SET_ENVIRONMENT's success sets weather, both in time for STRIKE to read
+    # them below. A stable sort preserves every other kind's relative order.
+    declarations.sort(
+        key=lambda d: 0
+        if d.action_kind in (BattleActionKind.REPEL, BattleActionKind.SET_ENVIRONMENT)
+        else 1
+    )
 
     place_defense_bonus: dict[int, int] = {}
     newly_surrounded_participant_ids: set[int] = set()
@@ -922,7 +1073,9 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
         sl = check_result.success_level if check_result is not None else 0
 
         if sl > 0:
-            _dispatch_success_handler(declaration, result, sl, place_defense_bonus)
+            _dispatch_success_handler(
+                declaration, result, sl, place_defense_bonus, battle_round.round_number
+            )
         elif _resolve_failure(declaration, result, sl):
             newly_surrounded_participant_ids.add(declaration.participant_id)
 

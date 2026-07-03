@@ -53,19 +53,23 @@ class BattleActionKind(models.TextChoices):
     HOLD = "hold", "Hold or seize an objective"
     BREACH = "breach", "Breach a fortification"
     FORTIFY = "fortify", "Fortify a structure"
+    SET_ENVIRONMENT = "set_environment", "Set battlefield weather"
 
 
 class BattleActionScope(models.TextChoices):
     """Targeting breadth of a battle-round declaration (#1710).
 
     UNIT is the pre-existing default (a single BattleUnit/BattleParticipant).
-    PLACE/SIDE require the declaring participant to hold the matching
+    PLACE/SIDE/BATTLE require the declaring participant to hold the matching
     command_tier — see world.battles.services.declare_battle_action.
+    BATTLE is the widest scope (#1715) — no unit/place/side target, affects
+    the whole Battle; gated at the same SUPREME tier as SIDE.
     """
 
     UNIT = "unit", "Unit"
     PLACE = "place", "Place (front-wide)"
     SIDE = "side", "Side (army-wide)"
+    BATTLE = "battle", "Battle (whole-battle-wide)"
 
 
 class FortificationKind(models.TextChoices):
@@ -180,3 +184,10 @@ BASE_INTEGRITY: dict[str, int] = {
     FortificationKind.GATE: 60,
 }
 FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20
+
+# SET_ENVIRONMENT tuning (#1715). Duration is always >= 2 rounds since
+# success_level >= 1 on any success branch — "stronger cast holds longer"
+# (user story 6) can never silently round down to zero effective rounds.
+# Flat VP like REPEL/HOLD — SET_ENVIRONMENT doesn't move a numeric resource.
+SET_ENVIRONMENT_BASE_ROUNDS = 1
+SET_ENVIRONMENT_VP = 4

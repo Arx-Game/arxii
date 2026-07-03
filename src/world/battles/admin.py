@@ -21,6 +21,8 @@ from world.battles.models import (
     Fortification,
     TechniquePropertyAffinity,
     TerrainPropertyEffect,
+    WeatherTypeCapabilityChallenge,
+    WeatherTypePropertyEffect,
 )
 
 
@@ -105,6 +107,20 @@ class TerrainPropertyEffectAdmin(admin.ModelAdmin):
     list_display = ("terrain_type", "property", "modifier")
     list_filter = ("terrain_type", "property")
     autocomplete_fields = ("property",)
+
+
+@admin.register(WeatherTypePropertyEffect)
+class WeatherTypePropertyEffectAdmin(admin.ModelAdmin):
+    list_display = ("weather_type", "property", "modifier")
+    list_filter = ("weather_type", "property")
+    autocomplete_fields = ("weather_type", "property")
+
+
+@admin.register(WeatherTypeCapabilityChallenge)
+class WeatherTypeCapabilityChallengeAdmin(admin.ModelAdmin):
+    list_display = ("weather_type", "capability", "threshold", "modifier")
+    list_filter = ("weather_type", "capability")
+    autocomplete_fields = ("weather_type", "capability")
 
 
 @admin.register(BattleOutcomeMapping)

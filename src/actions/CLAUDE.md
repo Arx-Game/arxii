@@ -163,16 +163,18 @@ They do not use the command system, dispatchers, or handlers.
   auto-concludes via `check_victory` when a side crosses threshold),
   `ConcludeBattleAction` (`"conclude_battle"`, `target_type=AREA`, GM/staff; natural win →
   timer → DEFENDER_MARGINAL default), `DeclareBattleActionAction` (`"declare_battle_action"`,
-  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 9
+  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 10
   `BattleActionKind` values through the same generic `action_kind`/`target_unit`/
   `target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs it
-  always had — #1712 added ROUT/RALLY/REPEL/HOLD and #1713 added BREACH/FORTIFY with
-  zero new Action classes; all new-kind validation (command scope,
-  `PlaceScopeRequiredError`, the #1713 Fortification target/ownership checks) lives in
+  always had — #1712 added ROUT/RALLY/REPEL/HOLD, #1713 added BREACH/FORTIFY, and #1715
+  added SET_ENVIRONMENT, all with zero new Action classes; all new-kind validation
+  (command scope, `PlaceScopeRequiredError`, the #1713 Fortification target/ownership
+  checks, `InvalidEnvironmentScopeError`/`MissingEnvironmentTargetError`) lives in
   `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
   (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
   binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
-  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`).
+  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`) — every `BattleActionKind`,
+  including SET_ENVIRONMENT, has a matching `battle declare` subverb.
   `room_features.py` (#1234) — two REGISTRY actions, both `target_type=SELF`,
   `category="items"`: `StartRoomFeatureProjectAction` (key `"start_room_feature_project"`)
   — generic install/upgrade project starter for any PROJECT-mechanism `RoomFeatureKind`

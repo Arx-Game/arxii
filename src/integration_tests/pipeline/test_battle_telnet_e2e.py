@@ -34,15 +34,21 @@ from world.battles.constants import (
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     BattleActionKind,
+    BattleActionScope,
     BattleSideRole,
 )
 from world.battles.models import BattleActionDeclaration, BattleRound
 from world.battles.services import add_side, add_unit, create_battle, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory, TechniqueFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.factories import CharacterVitalsFactory
+from world.weather.factories import WeatherTypeFactory
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -364,3 +370,86 @@ class BattleTelnetE2EJourneyTest(TestCase):
         mock_check.assert_called_once()
         called_kwargs = mock_check.call_args.kwargs
         self.assertEqual(called_kwargs["extra_modifiers"], expected_stack)
+
+    # -----------------------------------------------------------------------
+    # #1715 final-review finding: prove SET_ENVIRONMENT through the real
+    # telnet seam (CmdBattle -> DeclareBattleActionAction), not just the
+    # service-layer tests in test_environmental_effects.py.
+    # -----------------------------------------------------------------------
+
+    def test_set_environment_battle_scope_through_telnet(self) -> None:
+        """PC1 casts a BATTLE-scope SET_ENVIRONMENT via ``battle declare
+        set_environment with <technique>``, resolved through the real
+        ``CmdBattle`` -> ``DeclareBattleActionAction.run()`` dispatch — the
+        same seam every other declare kind is proven through — and the cast
+        weather lands on ``Battle.weather_override``.
+
+        A fresh test method so it doesn't disturb the full-lifecycle
+        journey's VP/attrition arithmetic above.
+        """
+        # BATTLE scope requires an engaged SUPREME command_tier on the
+        # declarant's side's covenant (same gate as SIDE scope, #1710/#1715).
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="env-e2e-supreme",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.pc1_sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        weather_type = WeatherTypeFactory()
+        env_technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=weather_type
+        )
+        CharacterTechniqueFactory(character=self.pc1_sheet, technique=env_technique)
+
+        # ------------------------------------------------------------
+        # Step 1: GM opens a round.
+        # ------------------------------------------------------------
+        _run(self.gm_char, "round")
+        battle_round = BattleRound.objects.get(battle=self.battle, status=RoundStatus.DECLARING)
+
+        # ------------------------------------------------------------
+        # Step 2: PC1 declares SET_ENVIRONMENT at BATTLE scope through the
+        # real telnet command — no direct declare_battle_action() call.
+        # ------------------------------------------------------------
+        _run(self.pc1_char, f"declare set_environment with {env_technique.name}")
+        declare_msg = self.pc1_char.msg.call_args[0][0]
+        self.assertIn("declare", declare_msg.lower())
+
+        declaration = BattleActionDeclaration.objects.get(
+            battle_round=battle_round,
+            participant=self.pc1_participant,
+            action_kind=BattleActionKind.SET_ENVIRONMENT,
+        )
+        self.assertEqual(declaration.scope, BattleActionScope.BATTLE)
+        self.assertEqual(declaration.technique_id, env_technique.pk)
+
+        # ------------------------------------------------------------
+        # Step 3: GM resolves the round with a patched deterministic check.
+        # ------------------------------------------------------------
+        with patch(
+            "world.battles.resolution.perform_check",
+            return_value=_stub_check(2),
+        ):
+            _run(self.gm_char, "resolve")
+
+        # ------------------------------------------------------------
+        # Step 4: the cast weather landed on the battle-wide override.
+        # ------------------------------------------------------------
+        self.battle.refresh_from_db()
+        self.assertEqual(
+            self.battle.weather_override_id,
+            weather_type.pk,
+            "BATTLE-scope SET_ENVIRONMENT cast through telnet should set Battle.weather_override.",
+        )
