@@ -368,6 +368,7 @@ class CraftingQuoteStationStatusTests(TestCase):
         self.assertFalse(quote.station_status.is_broken)
         self.assertEqual(quote.station_status.durability, 3)
         self.assertEqual(quote.station_status.max_durability, 20)
+        self.assertEqual(quote.station_status.feature_instance_id, self.station.feature_instance_id)
 
     def test_station_status_missing_and_not_affordable_when_no_station_in_room(self) -> None:
         from world.items.crafting.constants import CraftingRecipeKind
@@ -382,6 +383,7 @@ class CraftingQuoteStationStatusTests(TestCase):
         self.assertIsNotNone(quote.station_status)
         self.assertFalse(quote.station_status.present)
         self.assertTrue(quote.station_status.is_broken)
+        self.assertIsNone(quote.station_status.feature_instance_id)
         self.assertFalse(quote.affordable)
 
     def test_station_status_none_when_recipe_does_not_require_one(self) -> None:

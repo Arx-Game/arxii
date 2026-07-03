@@ -243,6 +243,7 @@ class StationStatusSerializer(serializers.Serializer):
     durability = serializers.IntegerField()
     max_durability = serializers.IntegerField()
     is_broken = serializers.BooleanField()
+    feature_instance_id = serializers.IntegerField(allow_null=True)
 
 
 class CraftingQuoteSerializer(serializers.Serializer):

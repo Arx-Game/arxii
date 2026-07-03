@@ -27179,6 +27179,7 @@ export interface components {
       durability: number;
       max_durability: number;
       is_broken: boolean;
+      feature_instance_id: number | null;
     };
     /**
      * @description * `submitted` - Submitted

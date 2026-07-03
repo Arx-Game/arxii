@@ -117,12 +117,19 @@ class CraftingQuoteRisk:
 
 @dataclass(frozen=True)
 class StationStatus:
-    """Read-only snapshot of the crafter's room's LAB station, for the quote (#1234)."""
+    """Read-only snapshot of the crafter's room's LAB station, for the quote (#1234).
+
+    ``feature_instance_id`` is populated only when ``present`` is True — it lets
+    the frontend act on the station (repair) directly from quote data, since
+    there is no "current room" context primitive elsewhere in the frontend to
+    resolve it independently (see Task 14).
+    """
 
     present: bool
     durability: int
     max_durability: int
     is_broken: bool
+    feature_instance_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -247,6 +254,7 @@ def build_crafting_quote(
                 durability=station.durability,
                 max_durability=station.max_durability,
                 is_broken=station.is_broken,
+                feature_instance_id=station.feature_instance_id,
             )
             if station.is_broken:
                 affordable = False

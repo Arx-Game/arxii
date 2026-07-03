@@ -95,6 +95,7 @@ class FacetQuoteTests(CraftingApiTestCase):
         cls.owner_char.save()
         kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
         instance = RoomFeatureInstanceFactory(room_profile=room_profile, feature_kind=kind, level=1)
+        cls.lab_feature_instance = instance
         LabStationDetails.objects.create(
             feature_instance=instance, durability=20, max_durability=20
         )
@@ -189,6 +190,7 @@ class FacetQuoteTests(CraftingApiTestCase):
         self.assertEqual(station_status["durability"], 20)
         self.assertEqual(station_status["max_durability"], 20)
         self.assertFalse(station_status["is_broken"])
+        self.assertEqual(station_status["feature_instance_id"], self.lab_feature_instance.pk)
 
 
 class FacetCraftResultConsumedTests(CraftingApiTestCase):
@@ -290,13 +292,23 @@ class CraftingQuoteSerializerStationStatusTests(TestCase):
             max_quality_tier=None,
             failure_risk=(),
             station_status=StationStatus(
-                present=True, durability=15, max_durability=20, is_broken=False
+                present=True,
+                durability=15,
+                max_durability=20,
+                is_broken=False,
+                feature_instance_id=42,
             ),
         )
         data = CraftingQuoteSerializer(quote).data
         self.assertEqual(
             data["station_status"],
-            {"present": True, "durability": 15, "max_durability": 20, "is_broken": False},
+            {
+                "present": True,
+                "durability": 15,
+                "max_durability": 20,
+                "is_broken": False,
+                "feature_instance_id": 42,
+            },
         )
 
     def test_station_status_round_trips_when_none(self) -> None:

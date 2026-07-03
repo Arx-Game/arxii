@@ -49458,8 +49458,12 @@ components:
           type: integer
         is_broken:
           type: boolean
+        feature_instance_id:
+          type: integer
+          nullable: true
       required:
       - durability
+      - feature_instance_id
       - is_broken
       - max_durability
       - present
