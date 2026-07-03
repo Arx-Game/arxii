@@ -660,3 +660,45 @@ class TargetPrerequisitesEnforcementTest(TestCase):
         validate_cast_target(
             technique=technique, initiator_persona=caster, target_personas=[target]
         )  # does not raise
+
+
+class FilteredGroupTargetPrerequisitesPreFlightTest(TestCase):
+    """validate_cast_target must not pre-flight-block a FILTERED_GROUP cast (#1793).
+
+    Third-pass review finding: nothing in the code actually prevents a client from
+    sending ``target_persona`` (which `request_technique_cast` forwards into
+    ``validate_cast_target``'s ``target_personas``) alongside a FILTERED_GROUP request
+    — the "omit target_persona for AoE" rule is only a serializer-comment convention,
+    not enforced. Before this fix, ``_check_target_prerequisites`` had no early-out for
+    AREA/FILTERED_GROUP and fell through into the unconditional per-persona raise loop,
+    so one arbitrary supplied persona failing the prerequisite would hard-block the
+    whole cast — the exact bug class already fixed on the combat side
+    (``CombatAoETargetPrerequisitesPreFlightTest``). This test mirrors that test in
+    spirit: prove the pre-flight guard can't be tricked into wrongly blocking an
+    AoE-shaped cast. The real per-target filtering happens in ``resolve_targets``
+    (already correct, Task 5) — never in this pre-flight check.
+    """
+
+    def test_filtered_group_does_not_raise_when_supplied_persona_lacks_property(self) -> None:
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            target_type=ActionTargetType.FILTERED_GROUP,
+        )
+        TechniqueAppliedConditionFactory(technique=technique, target_kind=ConditionTargetKind.ALLY)
+        prereq = PrerequisiteFactory(
+            property=AerialPropertyFactory(),
+            property_holder=PropertyHolder.TARGET,
+            minimum_value=1,
+        )
+        technique.target_prerequisites.add(prereq)
+        caster = PersonaFactory()
+        # Improperly (but not-prevented) supplied alongside a FILTERED_GROUP cast;
+        # lacks the required property.
+        grounded_persona = PersonaFactory()
+
+        validate_cast_target(
+            technique=technique,
+            initiator_persona=caster,
+            target_personas=[grounded_persona],
+        )  # must NOT raise

@@ -201,11 +201,16 @@ constraints + frontend target picker), and the optional resonance→aspect mappi
 
 **Property-gated targeting precondition (#1793):** `Technique.target_prerequisites`
 (M2M to `mechanics.Prerequisite`) lets a technique require a target currently hold a
-Property at or above a threshold. Enforced in `validate_cast_target`/`resolve_targets`
-(`services/targeting.py`) for non-combat casts and in `resolve_combat_technique`
-(`world/combat/services.py`) for combat. This is a precondition layered on the
-existing target-resolution machinery — it does not build the still-deferred general
-targeting model (AoE constraints, frontend target picker) noted above.
+Property at or above a threshold. Enforced symmetrically in both cast paths: non-combat
+(`validate_cast_target`/`resolve_targets`, `services/targeting.py`) and combat
+(`resolve_combat_technique`, `world/combat/services.py`). In both, SINGLE/SELF raise
+`InvalidCastTarget` pre-flight (SELF checks the caster directly, since a SELF cast
+conventionally supplies no explicit target); AREA/FILTERED_GROUP get NO pre-flight
+check at all and instead defer entirely to a silent per-target filter downstream
+(`resolve_targets` non-combat, `_filter_by_target_prerequisites` combat) — an AoE cast
+skips ineligible targets rather than hard-blocking the whole cast (ADR-0045). This is a
+precondition layered on the existing target-resolution machinery — it does not build the
+still-deferred general targeting model (AoE constraints, frontend target picker) noted above.
 
 `Technique.properties` (M2M to `mechanics.Property`) carries neutral descriptive tags
 on the technique itself (e.g. cursed) via `Technique.has_property(name)`; this is

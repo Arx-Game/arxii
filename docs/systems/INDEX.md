@@ -256,9 +256,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     source_character) -> list[AppliedConditionResult]` (`world/magic/services/condition_application.py`)
     — shared by both combat and standalone cast paths; extracted from combat's `_apply_conditions`.
     `Technique.target_prerequisites` (#1793, M2M to `mechanics.Prerequisite`) — Property-gated
-    targeting precondition; enforced in `validate_cast_target`/`resolve_targets` (non-combat,
-    raises `InvalidCastTarget` for SINGLE/SELF, silently filters AREA/FILTERED_GROUP) and in
-    `resolve_combat_technique` (`world/combat/services.py`, combat — always raises).
+    targeting precondition; enforced symmetrically in both cast paths — non-combat
+    (`validate_cast_target`/`resolve_targets`, `world/magic/services/targeting.py`) and combat
+    (`_check_combat_target_prerequisites`/`_filter_by_target_prerequisites` under
+    `resolve_combat_technique`, `world/combat/services.py`): SINGLE and SELF raise
+    `InvalidCastTarget` pre-flight (SELF checks the caster directly); AREA/FILTERED_GROUP get NO
+    pre-flight check and instead silently filter ineligible targets out of the resolved set.
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls

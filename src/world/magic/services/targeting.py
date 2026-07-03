@@ -79,9 +79,23 @@ def _check_target_prerequisites(
     (world/scenes/cast_services.py) conventionally omits an explicit target for a SELF
     cast, so target_personas is []. Check initiator_persona directly against the
     prerequisites in that case rather than relying on target_personas being populated.
+
+    AREA/FILTERED_GROUP get NO pre-flight check at all: the one production caller
+    (`request_technique_cast`, world/scenes/cast_services.py) conventionally omits
+    `target_persona` for an AoE cast, but nothing enforces that — a client could send
+    `target_persona` alongside `supplied_personas` on a FILTERED_GROUP request, and
+    that one arbitrary persona failing the prerequisite would otherwise hard-block a
+    cast where other eligible personas legitimately pass. Defer entirely to
+    `resolve_targets`'s existing silent per-persona filter. Mirrors combat's
+    `_check_combat_target_prerequisites` (world/combat/services.py, #1793 second-pass
+    fix).
     """
     if not technique.cached_target_prerequisites:
         return
+
+    if technique.target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+        return
+
     caster_od = initiator_persona.character_sheet.character
     msg = "Target does not meet this technique's targeting requirement."
 
