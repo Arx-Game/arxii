@@ -72,3 +72,43 @@ class StartRoomFeatureProjectActionTests(TestCase):
             target_level=1,
         )
         self.assertFalse(result.success)
+
+    def test_upgrade_succeeds_at_higher_level(self) -> None:
+        RoomFeatureInstanceFactory(room_profile=self.room_profile, feature_kind=self.kind, level=1)
+        result = self.action_cls().run(
+            actor=self.character,
+            room_profile=self.room_profile,
+            feature_kind=self.kind,
+            target_level=2,
+        )
+        self.assertTrue(result.success, result.message)
+        project = Project.objects.get(kind=ProjectKind.ROOM_FEATURE_PROGRESSION)
+        details = RoomFeatureProgressionDetails.objects.get(project=project)
+        self.assertEqual(details.target_room_profile, self.room_profile)
+        self.assertEqual(details.target_feature_kind, self.kind)
+        self.assertEqual(details.target_level, 2)
+
+    def test_upgrade_rejected_when_target_level_not_higher(self) -> None:
+        RoomFeatureInstanceFactory(room_profile=self.room_profile, feature_kind=self.kind, level=2)
+        result = self.action_cls().run(
+            actor=self.character,
+            room_profile=self.room_profile,
+            feature_kind=self.kind,
+            target_level=2,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("not be an upgrade", result.message)
+
+    def test_install_rejected_when_mechanism_is_ritual(self) -> None:
+        ritual_kind = RoomFeatureKindFactory(
+            service_strategy=RoomFeatureServiceStrategy.GRANARY,
+            install_mechanism=RoomFeatureInstallMechanism.RITUAL,
+        )
+        result = self.action_cls().run(
+            actor=self.character,
+            room_profile=self.room_profile,
+            feature_kind=ritual_kind,
+            target_level=1,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("cannot be installed via a project", result.message)
