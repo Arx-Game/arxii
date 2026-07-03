@@ -43,7 +43,8 @@ class LookAction(Action):
 
         sdm = context.scene_data if context else SceneDataManager()
         target_state = sdm.initialize_state_for_object(target)
-        description = target_state.return_appearance(mode="look")
+        looker_state = sdm.initialize_state_for_object(actor)
+        description = target_state.return_appearance(mode="look", looker=looker_state)
 
         return ActionResult(
             success=True,

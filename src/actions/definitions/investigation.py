@@ -93,6 +93,7 @@ class SearchAction(Action):
         actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if actor_sheet is None or actor.location is None:
             return
+        detected_any = False
         for candidate in actor.location.contents:
             if candidate == actor or can_perceive(actor, candidate):
                 continue
@@ -107,3 +108,8 @@ class SearchAction(Action):
             )
             if result.outcome is not None and result.outcome.success_level >= 0:
                 register_detection(actor_sheet, candidate)
+                detected_any = True
+        if detected_any and hasattr(actor, "send_room_state"):
+            # A newly-detected character won't appear in the actor's room-occupant
+            # list until the next natural refresh — push one now (#1225).
+            actor.send_room_state()

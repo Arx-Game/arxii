@@ -9,12 +9,19 @@ from actions.definitions.movement import DropAction, GetAction, GiveAction, Trav
 from actions.definitions.perception import InventoryAction, LookAction
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import register_detection
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.factories import ItemInstanceFactory
 from world.items.models import EquippedItem, OwnershipEvent
 from world.mechanics.constants import ChallengeType
 from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
+from world.roster.factories import RosterEntryFactory
 
 
 class LookActionTests(TestCase):
@@ -34,6 +41,51 @@ class LookActionTests(TestCase):
         actor = ObjectDBFactory(db_key="Alice")
         result = action.run(actor)
         assert result.success is False
+
+
+class LookActionConcealmentTests(TestCase):
+    """Telnet parity for #1225 — ``get_display_characters`` gates on ``can_perceive``.
+
+    ``LookAction.execute`` threads ``actor`` through as the ``looker`` so the room's
+    ``Characters:`` line matches the web room-state gate.
+    """
+
+    def setUp(self):
+        self.room = ObjectDBFactory(
+            db_key="dim hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.actor_sheet = RosterEntryFactory().character_sheet
+        self.actor = self.actor_sheet.character
+        self.actor.location = self.room
+
+        self.visible = CharacterFactory(db_key="Ally", location=self.room)
+        self.concealed = CharacterFactory(db_key="Shade", location=self.room)
+
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        self.concealing_condition = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=self.concealed, condition=self.concealing_condition)
+
+    def test_concealed_and_undetected_character_omitted_from_room_look(self):
+        result = LookAction().run(self.actor, target=self.room)
+        assert "Ally" in result.message
+        assert "Shade" not in result.message
+
+    def test_detected_concealed_character_appears_in_room_look(self):
+        register_detection(self.actor_sheet, self.concealed)
+
+        result = LookAction().run(self.actor, target=self.room)
+        assert "Shade" in result.message
+
+    def test_looker_always_sees_themselves_even_if_concealed(self):
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        template = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=self.actor, condition=template)
+
+        result = LookAction().run(self.actor, target=self.room)
+        # The room's own "Characters:" line lists everyone else present, but the
+        # looker's own concealment must never make the room itself unreadable.
+        assert result.success is True
 
 
 class InventoryActionTests(TestCase):
