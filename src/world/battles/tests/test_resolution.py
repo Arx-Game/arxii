@@ -1731,6 +1731,22 @@ class TerrainPropertyModifierTests(TestCase):
         )
         self.assertEqual(_terrain_property_modifier(place, unit), 20)
 
+    def test_sums_across_multiple_matching_properties(self) -> None:
+        from world.battles.resolution import _terrain_property_modifier
+
+        place = BattlePlaceFactory(terrain_type=TerrainType.DIFFICULT)
+        unit = BattleUnitFactory()
+        aquatic = PropertyFactory(name="aquatic")
+        heavily_armored = PropertyFactory(name="heavily-armored")
+        unit.properties.set([aquatic, heavily_armored])
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=aquatic, modifier=20
+        )
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=heavily_armored, modifier=-8
+        )
+        self.assertEqual(_terrain_property_modifier(place, unit), 12)
+
 
 class QualityModifierTests(TestCase):
     def test_maps_quality_to_modifier(self) -> None:
