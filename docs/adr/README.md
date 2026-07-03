@@ -73,6 +73,7 @@ treat those names as hints to confirm, not gospel.
 - [0021 — main uses a GitHub merge queue + single-leaf migration guard](0021-main-uses-a-merge-queue.md)
 - [0022 — Staff config & game-tuning tooling is admin-hosted, not React](0022-staff-tooling-is-admin-hosted.md)
 - [0083 — CI/test databases build schema from model state; migration replay runs nightly only](0083-ci-schema-from-models.md)
+- [0084 — SQLite fast tier restores a cached schema template instead of rebuilding per run](0084-sqlite-test-schema-template-cache.md)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
