@@ -49,6 +49,11 @@ from world.battles.models import BattleParticipant, BattleRound
 from world.checks.services import perform_check
 from world.scenes.constants import RoundStatus
 
+# BREACH_INTEGRITY_PER_LEVEL/FORTIFY_INTEGRITY_PER_LEVEL/BREACH_VP_PER_LEVEL/FORTIFY_VP
+# are imported lazily inside _resolve_breach_success/_resolve_fortify_success below,
+# matching how ROUT_MORALE_PER_LEVEL/RALLY_MORALE_PER_LEVEL etc. are imported lazily
+# inside _resolve_rout_success/_resolve_rally_success rather than at module level.
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -602,6 +607,63 @@ def _resolve_hold_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
+def _resolve_breach_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+) -> None:
+    """Apply BREACH success: attrite the target Fortification's integrity, award VP
+    (#1713). Ownership is enforced at declare time (FortificationOwnershipMismatchError)
+    — this handler trusts target_fortification is set and legally targeted.
+    """
+    from world.battles.constants import (  # noqa: PLC0415
+        BREACH_INTEGRITY_PER_LEVEL,
+        BREACH_VP_PER_LEVEL,
+    )
+
+    fort = declaration.target_fortification
+    if fort is None:
+        return
+
+    damage = success_level * BREACH_INTEGRITY_PER_LEVEL
+    fort.integrity = max(0, fort.integrity - damage)
+    if fort.integrity == 0:
+        fort.breached = True
+    fort.save(update_fields=["integrity", "breached"])
+
+    side = declaration.participant.side
+    base_vp = success_level * BREACH_VP_PER_LEVEL
+    vp_gain = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_fortify_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+) -> None:
+    """Apply FORTIFY success: restore the target Fortification's integrity (capped at
+    max_integrity), award flat VP (#1713). Ownership is enforced at declare time.
+    """
+    from world.battles.constants import FORTIFY_INTEGRITY_PER_LEVEL, FORTIFY_VP  # noqa: PLC0415
+
+    fort = declaration.target_fortification
+    if fort is None:
+        return
+
+    restore = success_level * FORTIFY_INTEGRITY_PER_LEVEL
+    fort.integrity = min(fort.max_integrity, fort.integrity + restore)
+    fort.save(update_fields=["integrity"])
+
+    side = declaration.participant.side
+    vp_gain = round(FORTIFY_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
 def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     """Apply RESCUE success: clear Surrounded from the ally/allies at scope (#1733, #1710).
 
@@ -809,6 +871,10 @@ def _dispatch_success_handler(
         _resolve_hold_success(declaration, result)
     elif declaration.action_kind == BattleActionKind.SUPPORT:
         _resolve_support_success(declaration, result)
+    elif declaration.action_kind == BattleActionKind.BREACH:
+        _resolve_breach_success(declaration, result, success_level)
+    elif declaration.action_kind == BattleActionKind.FORTIFY:
+        _resolve_fortify_success(declaration, result, success_level)
     else:
         _resolve_support_success(declaration, result)
 
@@ -840,6 +906,7 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "target_unit",
             "target_place",
             "target_side",
+            "target_fortification",
             "technique__action_template",
         )
     )

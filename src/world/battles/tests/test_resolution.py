@@ -1226,6 +1226,109 @@ class HoldResolutionTests(TestCase):
         self.assertEqual(self.side.victory_points, expected_vp)
 
 
+class BreachResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
+        self.fort = FortificationFactory(
+            place=self.place, defending_side=self.defender_side, integrity=25, max_integrity=100
+        )
+
+    def test_breach_attrites_integrity_and_awards_vp(self) -> None:
+        from world.battles.constants import BREACH_INTEGRITY_PER_LEVEL, BREACH_VP_PER_LEVEL
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_breach_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.BREACH,
+            target_fortification=self.fort,
+        )
+        result = BattleRoundResult()
+
+        _resolve_breach_success(declaration, result, success_level=1)
+
+        self.fort.refresh_from_db()
+        self.assertEqual(self.fort.integrity, 25 - BREACH_INTEGRITY_PER_LEVEL)
+        self.assertFalse(self.fort.breached)
+
+        self.attacker_side.refresh_from_db()
+        self.assertEqual(self.attacker_side.victory_points, BREACH_VP_PER_LEVEL)
+        self.assertEqual(result.vp_awarded[self.attacker_side.pk], BREACH_VP_PER_LEVEL)
+
+    def test_breach_to_zero_sets_breached(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_breach_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.BREACH,
+            target_fortification=self.fort,
+        )
+        result = BattleRoundResult()
+
+        _resolve_breach_success(declaration, result, success_level=3)  # 3*10=30 > 25
+
+        self.fort.refresh_from_db()
+        self.assertEqual(self.fort.integrity, 0)
+        self.assertTrue(self.fort.breached)
+
+
+class FortifyResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+        self.fort = FortificationFactory(
+            place=self.place, defending_side=self.side, integrity=50, max_integrity=100
+        )
+
+    def test_fortify_restores_integrity_and_awards_flat_vp(self) -> None:
+        from world.battles.constants import FORTIFY_INTEGRITY_PER_LEVEL, FORTIFY_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_fortify_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.FORTIFY,
+            target_fortification=self.fort,
+        )
+        result = BattleRoundResult()
+
+        _resolve_fortify_success(declaration, result, success_level=1)
+
+        self.fort.refresh_from_db()
+        self.assertEqual(self.fort.integrity, 50 + FORTIFY_INTEGRITY_PER_LEVEL)
+
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, FORTIFY_VP)
+        self.assertEqual(result.vp_awarded[self.side.pk], FORTIFY_VP)
+
+    def test_fortify_caps_at_max_integrity(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_fortify_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.FORTIFY,
+            target_fortification=self.fort,
+        )
+        result = BattleRoundResult()
+
+        _resolve_fortify_success(declaration, result, success_level=10)  # would overshoot
+
+        self.fort.refresh_from_db()
+        self.assertEqual(self.fort.integrity, self.fort.max_integrity)
+
+
 class ResolveBattleRoundFailureTests(TestCase):
     """STRIKE failure: PC health debited."""
 
