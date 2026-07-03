@@ -443,6 +443,7 @@
   - dominant_society -> societies.Society [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
+  - income_streams <- currency.OrgIncomeStream
   - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
   - laws <- justice.AreaLaw
@@ -4765,8 +4766,8 @@
   - mission_awards <- missions.MissionRenownAward
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' — Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' — Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' — Sum the legend this character earned that was credited to covenants where they held ``role``.`

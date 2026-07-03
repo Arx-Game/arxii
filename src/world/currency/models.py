@@ -222,12 +222,15 @@ class OrgEconomicsProfile(SharedMemoryModel):
 
 
 class OrgIncomeStream(SharedMemoryModel):
-    """A recurring org income source (#926).
+    """A recurring org income source (#926; active collection #930).
 
     Domain taxes and crime-turf kick-ups are the same machinery with
-    different fictions: a gross amount flows in per cycle, graft leaks off
-    the top, the net lands in the treasury, and the gross/net pair is
-    recorded for declared-vs-actual obligations.
+    different fictions. Income never lands passively: each cycle the gross
+    accrues into ``uncollected_pool`` (no cap — ADR-0081), and money only
+    reaches the treasury through an active collection dispatch whose graded
+    outcome decides how much of the pool arrives. Graft leaks off the
+    collected aggregate; the gross/net pair is recorded for declared-vs-
+    actual obligations at collection time.
     """
 
     organization = models.ForeignKey(
@@ -238,6 +241,24 @@ class OrgIncomeStream(SharedMemoryModel):
     name = models.CharField(max_length=100, help_text="e.g. 'Westrock land taxes'.")
     kind = models.CharField(max_length=20, choices=IncomeStreamKind.choices)
     gross_amount = models.PositiveBigIntegerField(help_text="Coppers per cycle before graft leaks.")
+    uncollected_pool = models.PositiveBigIntegerField(
+        default=0,
+        help_text=(
+            "Coppers amassed awaiting an active collection dispatch (#930). No cap: "
+            "a hoarded pool is concentrated outcome risk, never a passive deposit."
+        ),
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="income_streams",
+        help_text=(
+            "Where this stream's domain sits — feeds the collection-difficulty "
+            "modifier from local order/crime when set (#930)."
+        ),
+    )
     active = models.BooleanField(default=True)
 
     class Meta:
