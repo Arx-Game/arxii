@@ -562,14 +562,17 @@ def _apply_renown_award(  # noqa: PLR0913
 
 
 def bump_society_reputation(persona: Persona, society, delta: int) -> int | None:
-    """Apply a clamped reputation delta to (persona, society) (#1760).
+    """Apply a clamped reputation delta to (persona, society) (#1760, #1765).
 
     The relational/targeted channel for Society, symmetric with
     bump_organization_reputation for Organization — a direct hit independent
     of the society's principles (unlike apply_archetype_society_reputation,
     which dot-products an archetype vector against principles). No-op for
-    non-established personas or a zero delta; otherwise returns the new
-    clamped value.
+    non-established personas (a TEMPORARY mask holds heat but never
+    reputation) or a zero delta; otherwise returns the new clamped value.
+    Callers: stakes' FACTION-subject resolution writer (#1760) and the
+    criminal-consequence layer, where a reported crime stings the enforcing
+    society's regard (#1765).
     """
     if delta == 0 or not persona.is_established_or_primary:
         return None
@@ -602,19 +605,6 @@ def apply_archetype_society_reputation(persona: Persona, societies, archetypes) 
         bump_society_reputation(persona, society, delta)
         applied[society.pk] = delta
     return applied
-
-
-def bump_society_reputation(persona: Persona, society, delta: int) -> None:
-    """Apply a clamped relational reputation delta to (persona, society) (#1765).
-
-    Public seam for direct society-level hits independent of philosophy — the
-    first gameplay writer is the criminal-consequence layer (a reported crime
-    stings the enforcing society's regard). No-op for non-established personas
-    (a TEMPORARY mask holds heat but never reputation) or a zero delta.
-    """
-    if delta == 0 or not persona.is_established_or_primary:
-        return
-    _bump_society_reputation(persona, society, delta)
 
 
 def bump_organization_reputation(persona: Persona, organization, delta: int) -> int | None:
