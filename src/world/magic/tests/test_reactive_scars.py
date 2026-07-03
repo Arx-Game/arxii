@@ -22,7 +22,7 @@ from flows.consts import FlowActionChoices
 from flows.emit import emit_event
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
-from world.conditions.factories import ReactiveConditionFactory
+from world.conditions.factories import CapabilityTypeFactory, ReactiveConditionFactory
 from world.magic.factories import TechniqueFactory
 from world.mechanics.factories import AerialPropertyFactory, ObjectPropertyFactory, PropertyFactory
 
@@ -332,6 +332,30 @@ class HasPropertyReadsObjectPropertyTest(TestCase):
         abyssal = PropertyFactory(name="abyssal-htest")
         sheet.primary_persona.properties.add(abyssal)
         self.assertTrue(character.has_property("abyssal-htest"))
+
+
+class HasCapabilityCharacterMethodTest(TestCase):
+    """Character.has_capability reads get_effective_capability_value."""
+
+    def test_true_when_innate_baseline_positive(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        CapabilityTypeFactory(name="flight-htest", innate_baseline=1)
+        self.assertTrue(sheet.character.has_capability("flight-htest"))
+
+    def test_false_when_innate_baseline_zero(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        CapabilityTypeFactory(name="flight-htest-2", innate_baseline=0)
+        self.assertFalse(sheet.character.has_capability("flight-htest-2"))
+
+    def test_false_when_capability_type_unknown(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        self.assertFalse(sheet.character.has_capability("nonexistent-capability"))
 
 
 class PropertyTaggedTechniqueTest(TestCase):

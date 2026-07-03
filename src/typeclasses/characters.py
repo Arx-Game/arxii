@@ -252,6 +252,26 @@ class Character(ObjectParent, DefaultCharacter):
             return False
         return persona.properties.filter(name=name).exists()
 
+    def has_capability(self, name: str) -> bool:
+        """True if this character's effective value for the named Capability is > 0.
+
+        The capability-typed sibling of ``has_property`` for reactive-trigger
+        effect negation (e.g. "flying" modeled as an intrinsic Capability
+        rather than a runtime Property). Used by the reactive-filter
+        ``has_capability`` op.
+        """
+        from world.conditions.models import CapabilityType
+        from world.conditions.services import get_effective_capability_value
+
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return False
+        try:
+            capability = CapabilityType.objects.get(name=name)
+        except CapabilityType.DoesNotExist:
+            return False
+        return get_effective_capability_value(sheet, capability) > 0
+
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)
