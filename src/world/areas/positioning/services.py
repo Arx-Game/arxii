@@ -22,12 +22,13 @@ from world.areas.positioning.models import (
     PositionBlueprint,
     PositionEdge,
 )
+from world.mechanics.models import ChallengeInstance
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.mechanics.models import ChallengeInstance, ChallengeTemplate
+    from world.mechanics.models import ChallengeTemplate
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,12 @@ def instantiate_blueprint(
 
     Wraps the entire operation in a transaction so a mid-way failure rolls back cleanly.
 
+    A blueprint edge with a ``gating_challenge_template`` mints a live
+    ``ChallengeInstance`` when cloned. Restaging with ``replace=True`` deactivates
+    (``is_active=False``) any such ``ChallengeInstance`` left behind by the room's
+    prior staging — the cascade-delete below removes the old ``PositionEdge`` rows
+    but does not touch the ``ChallengeInstance`` they pointed to.
+
     Args:
         blueprint: The PositionBlueprint to clone.
         room: The target room (ObjectDB) to stage.
@@ -196,6 +203,21 @@ def instantiate_blueprint(
             if ObjectPosition.objects.filter(position__room=room).exists():
                 msg = "Cannot restage an occupied room."
                 raise PositionError(msg)
+            # Deactivate any gating ChallengeInstance the old edges pointed to — the
+            # cascade-delete below removes the PositionEdge rows but does not touch
+            # ChallengeInstance (the FK points the other way), which would otherwise
+            # dangle as still-active with nothing referencing it.
+            stale_challenge_ids = list(
+                PositionEdge.objects.filter(
+                    position_a__room=room, gating_challenge__isnull=False
+                ).values_list("gating_challenge_id", flat=True)
+            )
+            if stale_challenge_ids:
+                ChallengeInstance.objects.filter(pk__in=stale_challenge_ids).update(is_active=False)
+                # Bulk .update() writes the DB row directly, bypassing per-instance
+                # .save() — the idmapper identity map never sees it, so any cached
+                # ChallengeInstance for these pks would still report is_active=True.
+                ChallengeInstance.flush_instance_cache()
             # Cascade deletes PositionEdges and ObjectPositions via FK on_delete=CASCADE.
             Position.objects.filter(room=room).delete()
 

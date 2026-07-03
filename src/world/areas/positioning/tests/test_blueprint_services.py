@@ -300,3 +300,32 @@ class InstantiateBlueprintGatedEdgeTests(TestCase):
 
         self.assertIsNotNone(ungated_live_edge)
         self.assertIsNone(ungated_live_edge.gating_challenge_id)
+
+    def test_replace_deactivates_orphaned_gating_challenge_instance(self):
+        """Restaging a gated blueprint must not leave the old ChallengeInstance active.
+
+        The cascade-delete of the old Position/PositionEdge rows does not touch
+        ChallengeInstance (the FK points PositionEdge -> ChallengeInstance, not the
+        other way), so instantiate_blueprint must explicitly deactivate it first.
+        """
+        from world.areas.positioning.services import edge_between
+        from world.mechanics.models import ChallengeInstance
+
+        instantiate_blueprint(self.bp, self.room)
+        near_live = Position.objects.get(room=self.room, name="Near Side")
+        far_live = Position.objects.get(room=self.room, name="Far Side")
+        old_edge = edge_between(near_live, far_live)
+        old_challenge_pk = old_edge.gating_challenge_id
+        self.assertIsNotNone(old_challenge_pk)
+
+        instantiate_blueprint(self.bp, self.room, replace=True)
+
+        old_challenge = ChallengeInstance.objects.get(pk=old_challenge_pk)
+        self.assertFalse(old_challenge.is_active)
+
+        new_near_live = Position.objects.get(room=self.room, name="Near Side")
+        new_far_live = Position.objects.get(room=self.room, name="Far Side")
+        new_edge = edge_between(new_near_live, new_far_live)
+        self.assertIsNotNone(new_edge.gating_challenge_id)
+        self.assertNotEqual(new_edge.gating_challenge_id, old_challenge_pk)
+        self.assertTrue(new_edge.gating_challenge.is_active)
