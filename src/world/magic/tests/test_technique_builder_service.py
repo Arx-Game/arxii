@@ -424,3 +424,94 @@ class CreateTechniqueDefaultActionTemplateTests(TestCase):
         tech = create_technique(**self._minimal_kwargs(), action_template=custom)
         self.assertEqual(tech.action_template_id, custom.pk)
         self.assertEqual(tech.action_template.name, "Bespoke Cast")
+
+
+# =============================================================================
+# §11 consequence-pool catalog resolution (#1320)
+# =============================================================================
+
+
+class ConsequencePoolCatalogResolutionTests(TestCase):
+    def test_none_pool_id_returns_shared_base_template(self):
+        from world.magic.seeds_cast import get_standalone_cast_template
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        template = resolve_cast_action_template(None)
+        self.assertEqual(template.pk, get_standalone_cast_template().pk)
+
+    def test_catalog_pool_id_returns_matching_template(self):
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+        resolved = resolve_cast_action_template(chosen.consequence_pool_id)
+        self.assertEqual(resolved.pk, chosen.pk)
+
+    def test_invalid_pool_id_raises(self):
+        from world.magic.exceptions import InvalidConsequencePoolChoice
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        with self.assertRaises(InvalidConsequencePoolChoice):
+            resolve_cast_action_template(999999)
+
+    def test_non_catalog_pool_id_raises(self):
+        """A ConsequencePool that exists but isn't a child of the base pool is rejected."""
+        from actions.factories import ConsequencePoolFactory
+        from world.magic.exceptions import InvalidConsequencePoolChoice
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        stray_pool = ConsequencePoolFactory()
+        with self.assertRaises(InvalidConsequencePoolChoice):
+            resolve_cast_action_template(stray_pool.pk)
+
+    def test_catalog_listing_returns_only_children_of_base(self):
+        from actions.factories import ConsequencePoolFactory
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+        from world.magic.services.technique_builder import get_technique_cast_catalog
+
+        ensure_technique_catalog_content()
+        ConsequencePoolFactory()  # stray, unrelated pool — must not appear
+        catalog = get_technique_cast_catalog()
+        self.assertEqual(catalog.count(), 2)
+
+
+class BuildTechniqueConsequencePoolTests(TestCase):
+    def _minimal_design_kwargs(self, **overrides):
+        from world.magic.types.technique_builder import TechniqueDesignInput
+
+        sheet = CharacterSheetFactory()
+        gift = GiftFactory(creator=sheet)
+        kwargs = {
+            "name": "Test Technique",
+            "description": "",
+            "gift_id": gift.pk,
+            "style_id": TechniqueStyleFactory().pk,
+            "effect_type_id": EffectTypeFactory().pk,
+            "action_category": "physical",
+            "tier": 1,
+            "intensity": 1,
+            "control": 1,
+            "anima_cost": 1,
+            "level": 1,
+        }
+        kwargs.update(overrides)
+        return TechniqueDesignInput(**kwargs)
+
+    def test_no_pool_choice_defaults_to_shared_template(self):
+        from world.magic.seeds_cast import get_standalone_cast_template
+        from world.magic.services.technique_builder import build_technique
+
+        design = self._minimal_design_kwargs()
+        tech = build_technique(design, creator=None)
+        self.assertEqual(tech.action_template_id, get_standalone_cast_template().pk)
+
+    def test_catalog_pool_choice_assigns_matching_template(self):
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+        from world.magic.services.technique_builder import build_technique
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[1]
+        design = self._minimal_design_kwargs(consequence_pool_id=chosen.consequence_pool_id)
+        tech = build_technique(design, creator=None)
+        self.assertEqual(tech.action_template_id, chosen.pk)
