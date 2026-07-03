@@ -628,6 +628,51 @@ class ObjectProperty(SharedMemoryModel):
         return f"{self.object.db_key}: {self.property.name} ({self.value})"
 
 
+class PropertyDamageModifier(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Defines how a target's Property modifies damage of a given type.
+
+    Examples:
+      - Flammable gives +10 to fire damage
+      - Waterlogged gives -20 to lightning damage
+    """
+
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="damage_modifiers",
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="property_damage_modifiers",
+        help_text="Specific damage type, or null for ALL damage types",
+    )
+    modifier_value = models.IntegerField(
+        help_text="Modifier to damage (positive = bonus, negative = reduction)",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["property", "damage_type"],
+                name="property_damage_modifier_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["property", "damage_type"]
+        dependencies = ["mechanics.Property", "conditions.DamageType"]
+
+    def __str__(self) -> str:
+        dt_name = self.damage_type.name if self.damage_type else "ALL"
+        return f"{self.property.name} -> {self.modifier_value:+d} {dt_name}"
+
+
 class Application(NaturalKeyMixin, SharedMemoryModel):
     """
     Pure eligibility record: Capability + Property = 'you can attempt this'.

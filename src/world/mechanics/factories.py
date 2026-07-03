@@ -32,6 +32,7 @@ from world.mechanics.models import (
     Prerequisite,
     Property,
     PropertyCategory,
+    PropertyDamageModifier,
     SituationChallengeLink,
     SituationInstance,
     SituationTemplate,
@@ -240,6 +241,17 @@ class ObjectPropertyFactory(DjangoModelFactory):
 
     property = factory.SubFactory(PropertyFactory)
     value = 1
+
+
+class PropertyDamageModifierFactory(DjangoModelFactory):
+    """Factory for creating PropertyDamageModifier instances."""
+
+    class Meta:
+        model = PropertyDamageModifier
+
+    property = factory.SubFactory(PropertyFactory)
+    damage_type = None
+    modifier_value = 10
 
 
 class ApplicationFactory(DjangoModelFactory):
