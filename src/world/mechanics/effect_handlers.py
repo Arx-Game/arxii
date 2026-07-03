@@ -648,15 +648,25 @@ def _resolve_position(
     Returns None when unresolved (handler skips).
     """
     from world.areas.positioning.models import Position  # noqa: PLC0415
-    from world.areas.positioning.services import position_of  # noqa: PLC0415
-    from world.checks.constants import PositionDestination  # noqa: PLC0415
 
     room = context.location
     if role == _ROLE_NAMED:
         return Position.objects.filter(room=room, name=effect.position_name).first()
     if role == _ROLE_NAMED_B:
         return Position.objects.filter(room=room, name=effect.position_name_b).first()
-    # destination role — dispatch on PositionDestination value
+    return _resolve_destination(effect, context)
+
+
+def _resolve_destination(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> "Position | None":
+    """Dispatch role="destination" on effect.position_destination."""
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.checks.constants import PositionDestination  # noqa: PLC0415
+
+    room = context.location
     dest = effect.position_destination
     if dest == PositionDestination.ACTOR_POSITION:
         return position_of(context.character)
@@ -664,7 +674,45 @@ def _resolve_position(
         return Position.objects.filter(room=room, name=effect.position_name).first()
     if dest == PositionDestination.GATING_FAR_SIDE:
         return _gating_far_side(effect, context)
+    if dest == PositionDestination.AWAY_FROM_ACTOR:
+        return _resolve_away_from_actor(effect, context)
     return None
+
+
+def _resolve_away_from_actor(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> "Position | None":
+    """Resolve a knockback destination: a Position adjacent to the TARGET that
+    is not itself adjacent to the actor (i.e. actually puts distance between
+    them). Deterministic tie-break by lowest pk. Returns None if either side
+    lacks a Position or the target has no valid neighbor to be pushed into.
+    """
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        adjacent_open_positions,
+        position_of,
+    )
+
+    target = _resolve_target(effect, context)
+    actor_pos = position_of(context.character)
+    target_pos = position_of(target)
+    if actor_pos is None or target_pos is None:
+        return None
+
+    target_edges = adjacent_open_positions(target_pos)
+    neighbors = [
+        e.position_b if e.position_a_id == target_pos.pk else e.position_a for e in target_edges
+    ]
+    if not neighbors:
+        return None
+
+    actor_neighbor_ids = {
+        e.position_b_id if e.position_a_id == actor_pos.pk else e.position_a_id
+        for e in adjacent_open_positions(actor_pos)
+    }
+    away = [p for p in neighbors if p.pk not in actor_neighbor_ids and p.pk != actor_pos.pk]
+    candidates = away or neighbors
+    return min(candidates, key=lambda p: p.pk)
 
 
 def _create_position(

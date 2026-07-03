@@ -23,7 +23,7 @@ from world.checks.constants import EffectTarget, EffectType, PositionDestination
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
 from world.mechanics.constants import CapabilitySourceType, ResolutionType
-from world.mechanics.effect_handlers import apply_effect
+from world.mechanics.effect_handlers import apply_all_effects, apply_effect
 from world.mechanics.factories import (
     AerialPropertyFactory,
     ApplicationFactory,
@@ -154,6 +154,95 @@ class MoveToPositionHandlerTests(TestCase):
         result = apply_effect(effect, ResolutionContext(character=self.char))
         self.assertFalse(result.applied)
         self.assertIsNotNone(result.skip_reason)
+
+
+class AwayFromActorHandlerTests(TestCase):
+    """Tests for MOVE_TO_POSITION / AWAY_FROM_ACTOR (knockback, #1317)."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="KnockbackRoom", nohome=True)
+        self.attacker = CharacterFactory(location=self.room)
+        self.defender = CharacterFactory(location=self.room)
+        self.attacker_pos = Position.objects.create(room=self.room, name="attacker_spot")
+        self.defender_pos = Position.objects.create(room=self.room, name="defender_spot")
+        self.far_pos = Position.objects.create(room=self.room, name="far_spot")
+        place_in_position(self.attacker, self.attacker_pos)
+        place_in_position(self.defender, self.defender_pos)
+        # attacker_spot <-> defender_spot <-> far_spot (a line); far_spot is NOT
+        # adjacent to attacker_spot, so it's the correct "away" destination.
+        connect_positions(self.attacker_pos, self.defender_pos)
+        connect_positions(self.defender_pos, self.far_pos)
+        self.consequence = ConsequenceFactory()
+
+    def test_knockback_moves_defender_away_from_attacker(self) -> None:
+        """AWAY_FROM_ACTOR shoves the TARGET to the neighbor farthest from the actor."""
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.AWAY_FROM_ACTOR,
+            target=EffectTarget.TARGET,
+        )
+        apply_effect(effect, ResolutionContext(character=self.attacker, target=self.defender))
+        self.assertEqual(position_of(self.defender).pk, self.far_pos.pk)
+
+    def test_knockback_noop_when_defender_has_no_neighbor(self) -> None:
+        """No valid destination -> applied=False, defender stays put."""
+        isolated = Position.objects.create(room=self.room, name="isolated_spot")
+        place_in_position(self.defender, isolated)
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.AWAY_FROM_ACTOR,
+            target=EffectTarget.TARGET,
+        )
+        result = apply_effect(
+            effect, ResolutionContext(character=self.attacker, target=self.defender)
+        )
+        self.assertFalse(result.applied)
+        self.assertEqual(position_of(self.defender).pk, isolated.pk)
+
+    def test_knockback_noop_when_attacker_has_no_position(self) -> None:
+        """Attacker not placed in any Position -> can't compute 'away', no-op."""
+        no_pos_attacker = CharacterFactory(location=self.room)
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.AWAY_FROM_ACTOR,
+            target=EffectTarget.TARGET,
+        )
+        result = apply_effect(
+            effect, ResolutionContext(character=no_pos_attacker, target=self.defender)
+        )
+        self.assertFalse(result.applied)
+
+    def test_knockback_two_effects_chain_two_hops(self) -> None:
+        """Two AWAY_FROM_ACTOR rows on one Consequence chain into a 2-hop shove.
+
+        Each row resolves fresh, so the second row computes 'away from actor'
+        using the defender's position AFTER the first row already moved them.
+        """
+        beyond_pos = Position.objects.create(room=self.room, name="beyond_spot")
+        connect_positions(self.far_pos, beyond_pos)
+        ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.AWAY_FROM_ACTOR,
+            target=EffectTarget.TARGET,
+            execution_order=0,
+        )
+        ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.AWAY_FROM_ACTOR,
+            target=EffectTarget.TARGET,
+            execution_order=1,
+        )
+        apply_all_effects(
+            self.consequence, ResolutionContext(character=self.attacker, target=self.defender)
+        )
+        self.assertEqual(position_of(self.defender).pk, beyond_pos.pk)
 
 
 class SeverEdgeHandlerTests(TestCase):
