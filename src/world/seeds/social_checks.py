@@ -45,7 +45,11 @@ _SOCIAL_SPECIALIZATIONS: list[tuple[str, str]] = [
 _SOCIAL_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None]] = {
     "Intimidation": ("presence", "Persuasion", "Intimidation"),
     "Persuasion": ("charm", "Persuasion", None),
-    "Deception": ("charm", "Persuasion", "Manipulation"),
+    # Apostate 2026-07-03: deception splits by stat — presence = Deceive
+    # (fooling people in the moment, incl. under a disguise), charm = Con
+    # (talking someone into a curated version of events).
+    "Deceive": ("presence", "Persuasion", "Manipulation"),
+    "Con": ("charm", "Persuasion", "Manipulation"),
     "Seduction": ("charm", "Persuasion", "Seduction"),
     "Performance": ("presence", "Performance", None),
     "Gossip": ("charm", "Persuasion", "Gossip"),  # #1572 — the gossip plant/seek/suppress check
@@ -117,6 +121,22 @@ def _ensure_stat_trait(name: str):
     return trait
 
 
+def _rename_legacy_deception() -> None:
+    """One-way data rename: the charm-era "Deception" CheckType becomes "Deceive".
+
+    In-place rename (pk stable) so the Deceive social ActionTemplate's FK
+    survives; the authoritative composition rewrite below then re-stats it to
+    presence, and "Con" arrives as the charm row. Idempotent: no-ops once
+    renamed or on fresh databases.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    legacy = CheckType.objects.filter(name="Deception").first()
+    if legacy is not None and not CheckType.objects.filter(name="Deceive").exists():
+        legacy.name = "Deceive"
+        legacy.save(update_fields=["name"])
+
+
 def ensure_social_check_compositions(
     skills: dict[str, object], specs: dict[str, object]
 ) -> dict[str, object]:
@@ -157,4 +177,5 @@ def seed_social_check_content() -> None:
     """Cluster entry — seed the social skills, specializations, and check compositions (#1688)."""
     skills = ensure_social_skills()
     specs = ensure_social_specializations(skills)
+    _rename_legacy_deception()
     ensure_social_check_compositions(skills, specs)

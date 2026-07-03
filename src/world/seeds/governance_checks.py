@@ -1,11 +1,13 @@
 """Governance check content seed (#930) — the domain-running skills and checks.
 
 Two new skills (Apostate, 2026-07-02): **Scholarship → Economics** (book-learning;
-improving domains) and **Organization → Stewardship** (directing anyone in the
+improving domains) and **Leadership → Stewardship** (directing anyone in the
 household/org; boosts a dispatched collector). Two check compositions ride them:
 
-- **Tax Collection** — presence + Organization (+ Stewardship): how well a
+- **Tax Collection** — presence + Leadership (+ Stewardship): how well a
   dispatched collection run goes.
+- **Household Command** — presence + Leadership (+ Stewardship): the general
+  be-obeyed-by-your-household check (in-house scandal containment).
 - **Domain Investment** — intellect + Scholarship (+ Economics): improving an
   org's income streams / cracking down on graft.
 
@@ -26,7 +28,7 @@ _GOVERNANCE_SKILLS: list[tuple[str, str, str]] = [
         "mental",
     ),
     (
-        "Organization",
+        "Leadership",
         "Directing people — households, retainers, crews, and chains of command.",
         "social",
     ),
@@ -35,12 +37,16 @@ _GOVERNANCE_SKILLS: list[tuple[str, str, str]] = [
 # (specialization name, parent skill name)
 _GOVERNANCE_SPECIALIZATIONS: list[tuple[str, str]] = [
     ("Economics", "Scholarship"),
-    ("Stewardship", "Organization"),
+    ("Stewardship", "Leadership"),
 ]
 
 # CheckType name -> (stat trait, parent skill, specialization).
 _GOVERNANCE_CHECK_COMPOSITION: dict[str, tuple[str, str, str]] = {
-    "Tax Collection": ("presence", "Organization", "Stewardship"),
+    "Tax Collection": ("presence", "Leadership", "Stewardship"),
+    # The general control-your-household check (Apostate 2026-07-03): be obeyed
+    # by household servants — in-house scandal containment, and later the
+    # direction bonus atop dispatched functionary agents (#672 seam).
+    "Household Command": ("presence", "Leadership", "Stewardship"),
     "Domain Investment": ("intellect", "Scholarship", "Economics"),
 }
 
@@ -56,6 +62,20 @@ def _ensure_governance_category():
         },
     )
     return category
+
+
+def _rename_legacy_organization() -> None:
+    """One-way data rename: the "Organization" skill trait becomes "Leadership".
+
+    Apostate 2026-07-03 — Arx 1 continuity. In-place (pk stable) so the
+    Stewardship spec + any trait values survive; idempotent on fresh DBs.
+    """
+    from world.traits.models import Trait  # noqa: PLC0415
+
+    legacy = Trait.objects.filter(name="Organization").first()
+    if legacy is not None and not Trait.objects.filter(name="Leadership").exists():
+        legacy.name = "Leadership"
+        legacy.save(update_fields=["name"])
 
 
 def ensure_governance_skills() -> dict[str, object]:
@@ -147,6 +167,7 @@ def ensure_governance_check_compositions(
 
 def seed_governance_check_content() -> None:
     """Cluster entry — seed the governance skills, specializations, and checks (#930)."""
+    _rename_legacy_organization()
     skills = ensure_governance_skills()
     specs = ensure_governance_specializations(skills)
     ensure_governance_check_compositions(skills, specs)
