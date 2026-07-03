@@ -7,6 +7,7 @@ directly.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -24,7 +25,6 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     TerrainType,
-    UnitComposition,
     UnitQuality,
 )
 from world.battles.exceptions import (
@@ -48,8 +48,11 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
+    BattleUnitCapability,
 )
 from world.combat.constants import OpponentTier
+from world.conditions.models import CapabilityType
+from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
@@ -150,12 +153,14 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     side: BattleSide,
     name: str,
     descriptor: str = "",
-    composition: str = UnitComposition.IRREGULAR,
     quality: str = UnitQuality.TRAINED,
     commander: CharacterSheet | None = None,
     summoned_by: CharacterSheet | None = None,
     strength: int = 100,
     place: BattlePlace | None = None,
+    properties: Iterable[Property] = (),
+    capability_values: Iterable[tuple[CapabilityType, int]] = (),
+    individual_count: int | None = None,
 ) -> BattleUnit:
     """Add an abstract typed unit to a battle side.
 
@@ -164,30 +169,40 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         side: The ``BattleSide`` this unit belongs to.
         name: Display name for this unit (e.g. "Cavalry").
         descriptor: Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only.
-        composition: A ``UnitComposition`` value (#1711). Defaults to IRREGULAR.
         quality: A ``UnitQuality`` value (#1711). Defaults to TRAINED.
         commander: Optional commanding ``CharacterSheet`` (#1711).
         summoned_by: Optional summoning ``CharacterSheet``, set by the military-summon
             bridge (#1711).
         strength: Starting strength value (default 100).
         place: Optional ``BattlePlace`` this unit is stationed at.
+        properties: Property tags to attach (#1794) — presence-only.
+        capability_values: (CapabilityType, magnitude) pairs to attach (#1794) —
+            each becomes a BattleUnitCapability row.
+        individual_count: Optional population data point (#1794); mirrors
+            CombatOpponent.swarm_count's naming — no swarm-math wired against it yet.
 
     Returns:
         The newly created ``BattleUnit``.
     """
-    return BattleUnit.objects.create(
+    unit = BattleUnit.objects.create(
         battle=battle,
         side=side,
         name=name,
         descriptor=descriptor,
-        composition=composition,
         quality=quality,
         commander=commander,
         summoned_by=summoned_by,
         strength=strength,
         status=BattleUnitStatus.ACTIVE,
         place=place,
+        individual_count=individual_count,
     )
+    unit.properties.set(properties)
+    BattleUnitCapability.objects.bulk_create(
+        BattleUnitCapability(unit=unit, capability=capability, value=value)
+        for capability, value in capability_values
+    )
+    return unit
 
 
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
