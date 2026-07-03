@@ -436,6 +436,10 @@ class UnknownGift(UnknownTechniqueVocab):
     user_message = "Unknown gift."
 
 
+class InvalidConsequencePoolChoice(MagicError):
+    user_message = "That outcome flavor isn't available. Choose one from the catalog."
+
+
 class GiftNotOwned(MagicError):
     user_message = "You do not know that gift."
 

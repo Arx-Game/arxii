@@ -33,6 +33,7 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
+    from actions.models import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import TechniqueDraft
 
@@ -41,7 +42,8 @@ _USAGE = (
     "  technique show                  — show current draft + live price\n"
     "  technique set <field>=<v> ...   — set one or more draft fields\n"
     "    (fields: name, description, gift, style, effect_type,\n"
-    "             action_category, tier, intensity, control, anima_cost)\n"
+    "             action_category, tier, intensity, control, anima_cost,\n"
+    "             consequence_pool)\n"
     "    (put name= / description= LAST — they consume the rest of the line)\n"
     "  technique restrict add|remove <name>\n"
     "  technique grant add capability=<n> base=<n> mult=<f>\n"
@@ -69,6 +71,7 @@ _SET_FIELDS = frozenset(
         "intensity",
         "control",
         "anima_cost",
+        "consequence_pool",
     }
 )
 
@@ -328,9 +331,19 @@ class CmdTechnique(ArxCommand):
             idx += 1
         return out
 
+    def _simple_fk_fields(self) -> dict:
+        """Field name -> (model, human label) for the plain name-or-id lookups."""
+        from world.magic.models import EffectType, Gift, TechniqueStyle  # noqa: PLC0415
+
+        return {
+            "gift": (Gift, "gift"),
+            "style": (TechniqueStyle, "style"),
+            "effect_type": (EffectType, "effect type"),
+        }
+
     def _resolve_set_fields(self, parsed: dict[str, str]) -> dict:
         """Translate string-keyed tokens into typed model field kwargs."""
-        from world.magic.models import EffectType, Gift, TechniqueStyle  # noqa: PLC0415
+        simple_fk_fields = self._simple_fk_fields()
 
         fields: dict = {}
         for key, value in parsed.items():
@@ -339,18 +352,13 @@ class CmdTechnique(ArxCommand):
                 raise CommandError(msg)
             if key in ("name", "description"):
                 fields[key] = value
-            elif key == "gift":  # noqa: STRING_LITERAL
-                fields["gift"] = self.resolve_by_name_or_id(
-                    Gift, value, not_found_msg=f"No gift found for '{value}'."
+            elif key in simple_fk_fields:
+                model, label = simple_fk_fields[key]
+                fields[key] = self.resolve_by_name_or_id(
+                    model, value, not_found_msg=f"No {label} found for '{value}'."
                 )
-            elif key == "style":  # noqa: STRING_LITERAL
-                fields["style"] = self.resolve_by_name_or_id(
-                    TechniqueStyle, value, not_found_msg=f"No style found for '{value}'."
-                )
-            elif key == "effect_type":  # noqa: STRING_LITERAL
-                fields["effect_type"] = self.resolve_by_name_or_id(
-                    EffectType, value, not_found_msg=f"No effect type found for '{value}'."
-                )
+            elif key == "consequence_pool":  # noqa: STRING_LITERAL
+                fields["consequence_pool"] = self._resolve_consequence_pool_field(value)
             elif key == "action_category":  # noqa: STRING_LITERAL
                 fields["action_category"] = self._resolve_action_category(value)
             elif key in ("tier", "intensity", "control", "anima_cost"):
@@ -359,6 +367,21 @@ class CmdTechnique(ArxCommand):
             msg = "No valid fields found. Usage: technique set <field>=<value> …"
             raise CommandError(msg)
         return fields
+
+    def _resolve_consequence_pool_field(self, value: str) -> ConsequencePool:
+        """Resolve a `set consequence_pool=<name or id>` token to a catalog ConsequencePool."""
+        from actions.models import ConsequencePool  # noqa: PLC0415
+        from world.magic.services.technique_builder import (  # noqa: PLC0415
+            get_technique_cast_catalog,
+        )
+
+        catalog_ids = list(get_technique_cast_catalog().values_list("pk", flat=True))
+        return self.resolve_by_name_or_id(
+            ConsequencePool,
+            value,
+            not_found_msg=f"No catalog consequence pool found for '{value}'.",
+            pk__in=catalog_ids,
+        )
 
     def _resolve_action_category(self, value: str) -> str:
         """Validate and return a normalised ActionCategory string."""

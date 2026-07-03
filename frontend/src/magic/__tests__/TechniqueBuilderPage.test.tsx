@@ -8,11 +8,25 @@ import { TechniqueBuilderPage } from '../pages/TechniqueBuilderPage';
 // --- Capture the props the page hands to the (mocked) form ------------------
 const formProps = vi.fn();
 vi.mock('../components/TechniqueBuilderForm', () => ({
-  TechniqueBuilderForm: (props: { characterId?: number }) => {
+  TechniqueBuilderForm: (props: {
+    characterId?: number;
+    consequencePools?: { id: number; name: string; description: string }[];
+  }) => {
     formProps(props);
-    return <div data-testid="form" data-character-id={props.characterId ?? 'none'} />;
+    return (
+      <div
+        data-testid="form"
+        data-character-id={props.characterId ?? 'none'}
+        data-consequence-pool-count={props.consequencePools?.length ?? 0}
+      />
+    );
   },
 }));
+
+const CONSEQUENCE_POOL_CATALOG = [
+  { id: 1, name: 'Standard', description: 'The default outcome flavor.' },
+  { id: 2, name: 'Volatile', description: 'Chaotic, unpredictable consequences.' },
+];
 
 // --- Roster hook is the source of the account's played characters -----------
 const useMyRosterEntriesQuery = vi.fn();
@@ -25,6 +39,7 @@ vi.mock('@/store/hooks', () => ({ useAccount: () => ({ is_staff: false }) }));
 vi.mock('@/character-creation/queries', () => ({
   useTechniqueStyles: () => ({ data: [], isLoading: false }),
   useEffectTypes: () => ({ data: [], isLoading: false }),
+  useConsequencePoolCatalog: () => ({ data: CONSEQUENCE_POOL_CATALOG, isLoading: false }),
 }));
 vi.mock('@/character-creation/api', () => ({ getGifts: () => Promise.resolve([]) }));
 vi.mock('@/conditions/queries', () => ({ useDamageTypes: () => ({ data: [], isLoading: false }) }));
@@ -92,6 +107,17 @@ describe('TechniqueBuilderPage alt wiring (#774)', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('form')).toHaveAttribute('data-character-id', '2')
+    );
+  });
+
+  it('passes the consequence pool catalog through to the form (#1320)', async () => {
+    useMyRosterEntriesQuery.mockReturnValue({ data: [entry(7, 'Solo')] });
+    renderPage();
+
+    const form = await screen.findByTestId('form');
+    expect(form).toHaveAttribute('data-consequence-pool-count', '2');
+    expect(formProps).toHaveBeenCalledWith(
+      expect.objectContaining({ consequencePools: CONSEQUENCE_POOL_CATALOG })
     );
   });
 });

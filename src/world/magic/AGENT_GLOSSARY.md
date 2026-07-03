@@ -43,6 +43,9 @@ _Avoid_: power, spell, ability.
 A staff-curated starter Technique template selected during character creation; at CG finalization it produces a real Technique in the character's Gift. Its mechanical fields are hidden from the player.
 _Avoid_: starter spell, baby technique (informal only).
 
+**Consequence-Pool Catalog**:
+The curated set of `ConsequencePool` rows selectable when authoring a technique or customizing a cantrip's starting technique — structurally, the single-depth children of the base "Magic: Technique Cast" pool (`ConsequencePool.parent`). Each catalog entry has a matching `ActionTemplate` sharing the base template's `check_type`/`pipeline`/`target_type`; only `consequence_pool` differs. (#1320.)
+
 **Intensity**:
 The magnitude a caster *channels* — it drives cost and risk (anima cost, control mishap, Soulfray, Audere gating, resonance attribution). It is a base/static value on the Technique and is never reduced by a ward.
 

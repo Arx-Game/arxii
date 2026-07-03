@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from actions.models import ConsequencePool
 from actions.serializers import TargetSpecSerializer
 from world.character_sheets.models import CharacterSheet
 
@@ -118,6 +119,14 @@ class TechniqueStyleSerializer(serializers.ModelSerializer):
         model = TechniqueStyle
         fields = ["id", "name", "description"]
         read_only_fields = fields
+
+
+class ConsequencePoolCatalogSerializer(serializers.ModelSerializer):
+    """Read-only serializer for the curated technique-cast consequence-pool catalog."""
+
+    class Meta:
+        model = ConsequencePool
+        fields = ["id", "name", "description"]
 
 
 class EffectTypeSerializer(serializers.ModelSerializer):
@@ -3048,10 +3057,12 @@ class TechniqueDesignSerializer(serializers.Serializer):
     damage_profiles = _DamageProfileSpecSerializer(many=True, required=False, default=list)
     applied_conditions = _AppliedConditionSpecSerializer(many=True, required=False, default=list)
     removed_conditions = _RemovedConditionSpecSerializer(many=True, required=False, default=list)
+    consequence_pool_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs):
-        from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.magic.exceptions import InvalidConsequencePoolChoice, MagicError  # noqa: PLC0415
         from world.magic.services.technique_builder import (  # noqa: PLC0415
+            resolve_cast_action_template,
             validate_design_for_character,
         )
 
@@ -3066,6 +3077,11 @@ class TechniqueDesignSerializer(serializers.Serializer):
             validate_design_for_character(attrs["_design"], policy, character)
         except MagicError as exc:
             raise serializers.ValidationError({"gift_id": exc.user_message}) from exc
+
+        try:
+            resolve_cast_action_template(attrs["_design"].consequence_pool_id)
+        except InvalidConsequencePoolChoice as exc:
+            raise serializers.ValidationError({"consequence_pool_id": exc.user_message}) from exc
 
         return attrs
 
@@ -3131,6 +3147,7 @@ class TechniqueDesignSerializer(serializers.Serializer):
                 )
                 for r in attrs["removed_conditions"]
             ),
+            consequence_pool_id=attrs.get("consequence_pool_id"),
         )
 
 

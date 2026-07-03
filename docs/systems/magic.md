@@ -197,10 +197,23 @@ per-technique via the FK. Key surfaces:
 | `get_character_cast_check(character)` | `services/anima.py` | Resolves the per-character check type for cast resolution |
 | `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual) |
 | `provision_player_anima_ritual(...)` | `services/anima.py` | Points `RitualCheckConfig.check_type` at the per-character check so ritual and technique casts share the same roll |
+| `ensure_technique_catalog_content()` | `seeds_cast.py` | Idempotent seed: curated catalog of consequence-pool flavors (children of the base pool) + matching ActionTemplates |
+| `resolve_cast_action_template()` | `services/technique_builder.py` | Resolves a chosen catalog pool id (or `None`) to the ActionTemplate a Technique's `action_template` should point at |
 
 Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caster's personal
 check into `start_action_resolution` via the `check_type` override (optional kwarg added to
 `src/actions/services.py`). No schema migration — all seeded via `ensure_technique_cast_content()`.
+
+**Consequence-pool catalog (#1320) [BUILT & WIRED]** — beyond the single shared "Magic: Technique Cast"
+pool above, a curated **catalog** of pool "flavors" exists as single-depth children of
+that base pool (`ConsequencePool.objects.filter(parent=<base pool>)`, seeded by
+`ensure_technique_catalog_content()`). A technique's author may pick one instead of the
+default: the web technique builder, telnet `technique set consequence_pool=<id>`, or the
+CG cantrip-finalize flow (a `selected_consequence_pool_id` draft-data key — see
+`src/world/character_creation/CLAUDE.md`). `resolve_cast_action_template()` turns the
+choice (or `None`) into the `ActionTemplate` the Technique's `action_template` FK is set
+to; every catalog `ActionTemplate` shares the base template's `check_type`/`pipeline`/
+`target_type`, so only the consequence pool actually varies.
 
 ### Targeting Model (#1321) [BUILT & WIRED]
 
