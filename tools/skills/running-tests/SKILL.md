@@ -23,7 +23,7 @@ Write focused unit tests only when logic is genuinely fiddly and wouldn't be obs
 Production runs Postgres exclusively. Tests run in TWO tiers:
 
 1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: a typical app runs in 1-15s vs 5-30s on PG.
-2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. **Do NOT run this locally in the devcontainer** — Postgres test DB rebuilds are too slow and will time out (10+ minutes for a single app, 30+ for the full suite). Let CI be the parity gate. The only exception is reproducing a specific CI failure that the SQLite tier can't surface; in that case use `--keepdb` to avoid the rebuild. CI's 4-shard matrix (`.github/workflows/ci.yml:46-76`) runs every PR on this tier.
+2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Runs the same migration chain CI runs. **Do NOT run this locally in the devcontainer** — Postgres test DB rebuilds are too slow and will time out (10+ minutes for a single app, 30+ for the full suite). Let CI be the parity gate. The only exception is reproducing a specific CI failure that the SQLite tier can't surface; in that case use `--keepdb` to avoid the rebuild. CI's 6-shard matrix (`.github/workflows/ci.yml`) runs every PR on this tier.
 
 ### Local testing rule
 
@@ -43,8 +43,15 @@ For the PG-only apps, `--sqlite` either fails immediately (carved out via `MIGRA
 
 ```bash
 # Inner-loop (SQLite tier — fast, excludes @tag("postgres")):
-just test-fast <app>                     # one app
-just test-fast <app>.tests.test_module   # one module
+just test-fast <app>                     # one app (serial)
+just test-fast <app>.tests.test_module   # one module (serial)
+just test-fast <app1> <app2>             # multiple apps (auto --parallel)
+just test-fast-par <app>                 # force --parallel on one large app
+
+# Change-impact-aware (recommended for PR work — runs only apps your branch
+# touches PLUS apps that import from them):
+just test-affected                       # diff vs origin/main
+just test-affected --keepdb              # extra args passed to arx test
 
 # Parity tier (PG, parallel; what CI runs):
 just test-parity <app>                   # one app
@@ -82,11 +89,17 @@ Recurring stumbles, all avoidable:
   grep the output instead.
 - **`ruff` and `pre-commit` are not on PATH** — use `uv run ruff` /
   `uv run pre-commit` (same as `uv run arx`).
-- **Don't store Evennia objects (ObjectDB / RoomProfile / typeclassed rows)
-  in `setUpTestData`.** Django deepcopies class-level test data per test,
-  and these objects acquire un-deepcopyable typeclass internals once the
-  full suite has loaded — tests then pass standalone but error under
-  `arx test` with `un(deep)copyable object`. Create them in `setUp`.
+- **Bare `arx` is not on PATH either** for the main Bash tool's non-interactive
+  shell (or `run_in_background` shells) — subagents get it via their profile,
+  but the controller doesn't. Always invoke via `uv run arx test ...` or the
+  `just` recipes, never bare `arx`.
+
+Five more specific failure signatures (DbHolder/`setUpTestData` copy errors,
+`EvenniaTest` login breakage, `pnpm test` watch-mode hangs, a stray
+`src/.venv` failing `shard-coverage`, parallel-session Postgres DB
+contention) are in
+[`references/known-test-failures.md`](references/known-test-failures.md) —
+look there when you actually hit one of those symptoms.
 
 ## When tests fail on SQLite but pass on PG
 
@@ -97,9 +110,13 @@ The two-tier model exposes a small set of patterns:
 
 See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canonical `@tag("postgres")` pattern.
 
+**A test failing only on the SQLite fast tier is not automatically your bug.** Two whole apps (`world.areas`, and `world.magic`/`world.vitals`/`world.mechanics` via `apply_condition`) have known pre-existing PG-only failure patterns, and parallel worktree sessions can contend over the shared Postgres test DB. See [`references/known-test-failures.md`](references/known-test-failures.md) before spending time chasing either.
+
 ## CI is the full-regression gate
 
-Run the fast SQLite tier for the apps you changed (`just test-fast <app>`), then push and **monitor the PR**. CI runs the full Postgres parity suite on every PR — let it catch regressions and fix what it reports there. Run a local `just regression` only to reproduce a CI failure the fast tier doesn't surface.
+**For PR work, prefer `just test-affected`** — it diffs your branch against `origin/main` and runs only the apps you touched plus apps that import from them, so you don't waste time running unrelated suites. For a single app, use `just test-fast <app>`.
+
+Then push and **monitor the PR**. CI runs the full Postgres parity suite on every PR (6 parallel shards, ~2,500 tests each) — let it catch regressions and fix what it reports there. Run a local `just regression` only to reproduce a CI failure the fast tier doesn't surface.
 
 ## `--keepdb` and faithful local repro
 
@@ -122,7 +139,9 @@ just regression                        # echo "yes" | arx test — fresh DB, mat
 ```bash
 just                        # list recipes
 just test flows --keepdb    # arx test pass-through
-just test-fast world.foo    # SQLite inner loop
+just test-fast world.foo    # SQLite inner loop (serial)
+just test-fast-par world.foo # SQLite inner loop (forced parallel)
+just test-affected          # only apps your branch touches + importers
 just test-parity world.foo  # PG parity tier (parallel)
 just regression             # full no-keepdb regression run
 just lint                   # ruff check

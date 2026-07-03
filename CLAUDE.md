@@ -22,6 +22,25 @@ GitHub edits). The skill carries the full rule set; the essentials: emit
 and verify issue number↔title before any mutation. Temporary — removal tracked in
 **#883** (grep `HARNESS-BUNDLING-WORKAROUND`); delete when the harness is fixed.
 
+## Tool & Subagent Sequencing
+
+**Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer
+subagents) run strictly sequentially — one per message, verify the result
+before the next.** Parallelism is only for read-only fan-out (greps, reads,
+Explore/research agents). Two concrete failure modes motivate this:
+
+- **Parallel implementer subagents on a shared worktree corrupt the git
+  index** — they revert each other's uncommitted edits and cross-contaminate
+  commits. Dispatch one, await it, verify the commit actually landed
+  (`git log -1`), then the next.
+- **Batched mutating tool calls cascade-cancel**: when one call in a parallel
+  batch errors or hits an approval prompt, the harness cancels every sibling
+  in that batch, and most of the intended work silently doesn't run.
+
+Destructive or approval-gated git operations (`reset --hard`, force-push) go
+alone in their own message. Never cite an issue/PR number that wasn't read
+back from the creating command's own stdout.
+
 ## Git Workflow
 
 - **Never work directly on main.** Branch first: `git checkout -b feature-name`.
@@ -38,6 +57,13 @@ and verify issue number↔title before any mutation. Temporary — removal track
   flags every `cd && <command>` for manual approval as a bare-repo-attack
   mitigation, which blocks automation — a workaround for a CC permission behavior,
   mid-2026. Relax if future releases stop flagging it.)
+- **Worktrees are mandatory** — always work in a git worktree under
+  `.claude/worktrees/` (the `arxii-worktrees` named volume in the devcontainer),
+  never in the main checkout. Other paths land on the slow 9p bind mount, where
+  a worktree's `uv sync` takes ~10 min instead of <1 s via hardlinks from the
+  colocated `UV_CACHE_DIR`. The `using-git-worktrees` skill makes this mandatory
+  (no opt-out) and creates the worktree automatically; see
+  `docs/devcontainer-setup.md`.
 - **`gh` discipline** (see the `github-operations` skill): take new issue/PR
   numbers from the URL the create command returns — never compute `N+1` (issues and
   PRs share one counter); verify number↔title before any mutation; keep issue/PR
@@ -237,6 +263,10 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
 `just regression`), which CI runs on every PR.
 
+**For PR work, prefer `just test-affected`** — it diffs against `origin/main`
+and runs only the apps your branch touches plus import dependents, so you don't
+waste time on unrelated suites. For a single app, use `just test-fast <app>`.
+
 Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
 fixing what CI catches. **CI is the full-regression gate** — run a local
 `just regression` only to reproduce a CI failure the fast tier doesn't surface. For
@@ -261,6 +291,7 @@ rule: see the `running-tests` skill.
   *in this PR*. A code change that leaves its docs stale is incomplete.
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
-- **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).
+- **Run the fast SQLite tier** for the apps you touched (`just test-affected`
+  or `just test-fast <app>`).
 - **Push and let CI gate regression** — CI runs the Postgres parity suite on every
   PR; monitor the PR and fix failures there.

@@ -6800,6 +6800,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/justice/heat/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The viewer's own pursuit picture — where they're wanted, and for what. */
+    get: operations['justice_heat_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/justice/heat/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The viewer's own pursuit picture — where they're wanted, and for what. */
+    get: operations['justice_heat_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/locations/comfort/': {
     parameters: {
       query?: never;
@@ -18908,6 +18942,7 @@ export interface components {
       name: string;
       kind: string;
       gross_amount: number;
+      uncollected_pool: number;
       active: boolean;
     };
     /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
@@ -20423,6 +20458,8 @@ export interface components {
        *     * `permit` - Permit
        *     * `mission` - Mission
        *     * `loan` - Loan
+       *     * `collection` - Collection
+       *     * `improvement` - Improvement
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20455,9 +20492,11 @@ export interface components {
      * @description * `permit` - Permit
      *     * `mission` - Mission
      *     * `loan` - Loan
+     *     * `collection` - Collection
+     *     * `improvement` - Improvement
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan';
+    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan' | 'collection' | 'improvement';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20466,6 +20505,8 @@ export interface components {
        *     * `permit` - Permit
        *     * `mission` - Mission
        *     * `loan` - Loan
+       *     * `collection` - Collection
+       *     * `improvement` - Improvement
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20744,6 +20785,7 @@ export interface components {
       spend_rank_max: number;
       graft_pct: number;
       steward_role_id: number | null;
+      uncollected_total: number;
       income_streams: components['schemas']['IncomeStreamRow'][];
       debts: components['schemas']['DebtRow'][];
       obligations: components['schemas']['ObligationRow'][];
@@ -22065,6 +22107,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['PermitOfferDetails'][];
+    };
+    PaginatedPersonaHeatList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PersonaHeat'][];
     };
     PaginatedPersonaList: {
       /** @example 123 */
@@ -23568,6 +23625,8 @@ export interface components {
        *     * `permit` - Permit
        *     * `mission` - Mission
        *     * `loan` - Loan
+       *     * `collection` - Collection
+       *     * `improvement` - Improvement
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -24408,6 +24467,20 @@ export interface components {
        *     Defaults to True when there is no tenure or preference row.
        */
       readonly allow_social_actions: boolean;
+    };
+    /**
+     * @description One warrant row on the viewer's own crime tab — tiers only, never the raw number.
+     *
+     *     Alleged deeds render as recorded: a false accusation reads the same as a
+     *     true one (falsity is emergent, #1765).
+     */
+    PersonaHeat: {
+      readonly id: number;
+      readonly area_name: string;
+      readonly society_name: string;
+      readonly tier: string;
+      readonly tier_label: string;
+      readonly alleged_deeds: string[];
     };
     /** @description A scene persona and the Position it currently occupies (or null). */
     PersonaPosition: {
@@ -37838,6 +37911,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  justice_heat_list: {
+    parameters: {
+      query?: {
+        area?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPersonaHeatList'];
+        };
+      };
+    };
+  };
+  justice_heat_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Persona heat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PersonaHeat'];
+        };
       };
     };
   };

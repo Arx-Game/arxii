@@ -9,6 +9,9 @@ class OfferKind(models.TextChoices):
     PERMIT = "permit", "Permit"
     MISSION = "mission", "Mission"
     LOAN = "loan", "Loan"
+    # #930 — the domain-running loop: dispatch a collection / invest in the domain.
+    COLLECTION = "collection", "Collection"
+    IMPROVEMENT = "improvement", "Improvement"
     # Future kinds: training/favors/marriage/attunement.
 
 

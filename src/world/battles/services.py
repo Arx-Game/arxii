@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.constants import (
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
@@ -20,6 +21,9 @@ from world.battles.constants import (
     BattleParticipantStatus,
     BattleSideRole,
     BattleUnitStatus,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
 from world.battles.exceptions import (
     BattleConcludedError,
@@ -96,17 +100,31 @@ def add_side(
 
 
 @transaction.atomic
-def add_place(*, battle: Battle, name: str) -> BattlePlace:
+def add_place(
+    *,
+    battle: Battle,
+    name: str,
+    terrain_type: str = TerrainType.OPEN,
+    movement_cost: int = 1,
+) -> BattlePlace:
     """Add a named front/zone to a battle.
 
     Args:
         battle: The ``Battle`` to add the place to.
         name: Human-readable name for the front (e.g. "The Main Gates").
+        terrain_type: A ``TerrainType`` value (#1711). Defaults to OPEN.
+        movement_cost: Authored cost for a future reposition action (#1712) to
+            consume (#1711). Defaults to 1.
 
     Returns:
         The newly created ``BattlePlace``.
     """
-    return BattlePlace.objects.create(battle=battle, name=name)
+    return BattlePlace.objects.create(
+        battle=battle,
+        name=name,
+        terrain_type=terrain_type,
+        movement_cost=movement_cost,
+    )
 
 
 @transaction.atomic
@@ -115,7 +133,11 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     battle: Battle,
     side: BattleSide,
     name: str,
-    unit_type: str,
+    descriptor: str = "",
+    composition: str = UnitComposition.IRREGULAR,
+    quality: str = UnitQuality.TRAINED,
+    commander: CharacterSheet | None = None,
+    summoned_by: CharacterSheet | None = None,
     strength: int = 100,
     place: BattlePlace | None = None,
 ) -> BattleUnit:
@@ -125,7 +147,12 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         battle: The owning ``Battle``.
         side: The ``BattleSide`` this unit belongs to.
         name: Display name for this unit (e.g. "Cavalry").
-        unit_type: Descriptive type tag (e.g. "cavalry", "zombies-on-nightmares").
+        descriptor: Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only.
+        composition: A ``UnitComposition`` value (#1711). Defaults to IRREGULAR.
+        quality: A ``UnitQuality`` value (#1711). Defaults to TRAINED.
+        commander: Optional commanding ``CharacterSheet`` (#1711).
+        summoned_by: Optional summoning ``CharacterSheet``, set by the military-summon
+            bridge (#1711).
         strength: Starting strength value (default 100).
         place: Optional ``BattlePlace`` this unit is stationed at.
 
@@ -136,11 +163,45 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         battle=battle,
         side=side,
         name=name,
-        unit_type=unit_type,
+        descriptor=descriptor,
+        composition=composition,
+        quality=quality,
+        commander=commander,
+        summoned_by=summoned_by,
         strength=strength,
         status=BattleUnitStatus.ACTIVE,
         place=place,
     )
+
+
+def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
+    """Set a battle side's tactical posture (#1711).
+
+    Args:
+        side: The ``BattleSide`` to update.
+        posture: A ``BattlePosture`` value.
+
+    Returns:
+        The updated ``BattleSide``.
+    """
+    side.posture = posture
+    side.save(update_fields=["posture"])
+    return side
+
+
+def assign_unit_commander(*, unit: BattleUnit, commander: CharacterSheet | None) -> BattleUnit:
+    """Assign (or clear, with ``commander=None``) a unit's commander (#1711).
+
+    Args:
+        unit: The ``BattleUnit`` to update.
+        commander: The commanding ``CharacterSheet``, or ``None`` to clear.
+
+    Returns:
+        The updated ``BattleUnit``.
+    """
+    unit.commander = commander
+    unit.save(update_fields=["commander"])
+    return unit
 
 
 @transaction.atomic
@@ -195,7 +256,11 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         next_number = prior.round_number + 1
     else:
         last = battle.rounds.order_by("-round_number").first()
-        next_number = (last.round_number + 1) if last is not None else 1
+        if last is None:
+            next_number = 1
+            activate_stakes_for_battle(battle)
+        else:
+            next_number = last.round_number + 1
 
     return BattleRound.objects.create(
         battle=battle,
@@ -303,10 +368,15 @@ def check_victory(*, battle: Battle) -> BattleOutcome | None:
 
 @transaction.atomic
 def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
-    """Set the battle's outcome and end the backing scene.
+    """Set the battle's outcome, end the backing scene, and resolve any linked
+    story beat's stakes contract.
 
-    Does NOT call ``complete_story`` — campaign propagation is deferred to #1716.
-    Idempotent: if the battle is already concluded, returns it unchanged.
+    Resolves every UNSATISFIED OUTCOME_TIER beat linked to the battle's scene
+    via resolve_battle_beats (#1785) — classifying battle.outcome through
+    BattleOutcomeMapping and completing the beat through the same
+    record_outcome_tier_completion seam combat/missions already use. Idempotent:
+    if the battle is already concluded, returns it unchanged (resolve_battle_beats
+    does not re-fire).
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -327,6 +397,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.is_active = False
     scene.date_finished = timezone.now()
     scene.save(update_fields=["is_active", "date_finished"])
+
+    resolve_battle_beats(battle)
 
     return battle
 

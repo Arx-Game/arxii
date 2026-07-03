@@ -35,12 +35,18 @@ def grant_deed_knowledge(
     deed: LegendEntry,
     personas: list[Persona],
     source: str,
+    room=None,
 ) -> int:
     """Idempotently grant knowledge of ``deed`` to ``personas``.
 
     The deed's own persona is skipped (the doer needs no row). Existing rows
     win (first vector to arrive keeps its provenance). Returns the number of
     rows created.
+
+    ``room`` is where the word landed (the scene's location); when given,
+    crime-tagged deeds mint pursuit heat there for the deed's persona (#1765).
+    Callers with no single meaningful location (e.g. mission-party grants,
+    whose criminal consequences ride the report flow instead) omit it.
     """
     candidate_ids = {p.pk for p in personas if p.pk != deed.persona_id}
     if not candidate_ids:
@@ -60,6 +66,13 @@ def grant_deed_knowledge(
     if not rows:
         return 0
     created = PersonaDeedKnowledge.objects.bulk_create(rows, ignore_conflicts=True)
+    if room is not None and created:
+        # #1765 — word of a crime reaching new ears is what mints pursuit heat.
+        # Lazy import: justice (specific) imports societies (general), never the
+        # reverse at module level.
+        from world.justice.services import accrue_for_deed_knowledge  # noqa: PLC0415
+
+        accrue_for_deed_knowledge(deed=deed, room=room, new_knower_count=len(created))
     return len(created)
 
 

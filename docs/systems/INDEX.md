@@ -730,6 +730,32 @@ blackmail loop, and the PersonaDiscovery subsumption are later slices.*
   Secret = self-serve hidden fact about a concrete entity
 - **Source:** `src/world/secrets/`
 - **Details:** [secrets.md](secrets.md)
+
+### Justice (#1765)
+Local law + persona pursuit heat: how actively local forces hunt a *persona* in an *area* —
+distinct from `SocietyReputation` (regard). Laws are per-area data rows resolving
+most-specific-wins up the `Area` tree; knowledge propagation is the accrual engine
+(hot where the deed is *known*, falloff emergent); jurisdiction scopes minting and
+reading to the enforcing society's dominion (ADR-0080 — sanctuary and cross-border
+immunity are the same mismatch rule). Masks (TEMPORARY personas) deliberately soak
+heat; identity-association copies it (`associate_heat` — the #1334 outing seam).
+
+- **Models:** `CrimeKind` (normalized vocabulary; **content rule: no sexual crimes,
+  ever**), `AreaLaw` (`heat_weight` posture + `exempts`), `DeedCrimeTag`
+  (→ `LegendEntry`), `PersonaHeat` (persona × area × enforcing society), `HeatSource`
+  (allegation provenance — false accusations are emergent, never flagged)
+- **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
+  `accrue_heat`, `accrue_for_deed_knowledge`, `heat_for`, `associate_heat`,
+  `tag_deed_crimes`, `heat_decay_tick` (daily cron)
+- **Writers:** deed-knowledge seam (`grant_deed_knowledge(room=…)`); mission report
+  CRIME_WATCH sink (`missions.integrations.crime_watch.flag_crime` + the
+  MOSTLY_ACCURATE dodge + masked-report association chance)
+- **Surfaces (self-only):** room-desc tier line + `heat` on the room-state payload;
+  safe-now relief line on movement; `sheet/crime` + web Crime tab over
+  `GET /api/justice/heat/` (tiers only, never raw values)
+- **Source:** `src/world/justice/`
+- **Details:** [justice.md](justice.md)
+
 ### Tidings / Public-reaction feed (#1450)
 The pull/browse vector of the public-reaction "contextual center" (#1446) — recent public events
 scoped to what a viewer's persona would have heard. **Modelless and greenfield-light:** there is no
@@ -1182,11 +1208,16 @@ register as additional kinds.
   `hire <name>` prefers a co-located Functionary, falling back to a global role lookup; staff place
   them with the `functionary place/remove` command (`commands/functionary.py`); they surface on
   `look` (`Room.return_appearance`).
-- **Constants:** `OfferKind` (PERMIT; future MISSION/LOAN/TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL)
+- **Constants:** `OfferKind` (PERMIT / MISSION / LOAN / COLLECTION / IMPROVEMENT (#930);
+  future TRAINING/POLITICAL_FAVOR/...), `DrawMode` (MENU, POOL). `NPCServiceOffer.ap_cost`
+  (#930) charges the resolving character before any effect dispatches
+  (`InsufficientAPError` rolls the grant back) — a generic knob on every kind.
 - **Effect dispatch:** `OFFER_EFFECT_HANDLERS: dict[str, Callable]` in
-  `world.npc_services.effects` — keyed on `OfferKind`. Plan 2 ships a PERMIT stub;
-  Plan 3 (#668) fills in real `BuildingPermit` ItemInstance creation. Mission migration
-  onto this dispatch is #686.
+  `world.npc_services.effects` — keyed on `OfferKind`: `issue_permit` (buildings),
+  MISSION (registered by `MissionsConfig.ready`), `grant_loan`, and the #930
+  domain-running pair `run_collection` / `run_improvement` (over
+  `currency.collect_org_income` / `improve_org_domain`; org resolved via the shared
+  `_resolve_authority_org` single-treasury-authority rule).
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
   `(pc_persona, npc_persona)`) is atomically accumulated by
   `adjust_npc_affection(pc_persona, npc_persona, delta=...)` via `F()`. Social action
@@ -1213,6 +1244,34 @@ register as additional kinds.
   `world.items.ItemInstance`, `world.societies.Organization`, `world.checks` (perform_check
   for non-final check-based actions), `core.mixins`.
 - **Source:** `src/world/npc_services/`
+
+### Currency & Org Economy (#923–#932, #930 active collection)
+Ledger money (`transfer` is the single audited mutation point), org treasuries/books, and
+the **active-collection income model** (ADR-0081): income never lands passively — each
+`OrgIncomeStream` accrues its gross into an uncapped `uncollected_pool` weekly, and money
+reaches the treasury only through a steward-summon collection dispatch whose Tax
+Collection check band decides how much of the gathered aggregate arrives (graft leaks off
+the *collected* amount; the catastrophic band loses the whole pool — collector-incident
+encounter seam, combat domain). Obligations/withholding ride collection declarations, so
+an idle org reaches stasis in both directions (loan interest still accrues — opted-in risk).
+
+- **Models:** `CharacterPurse`, `OrganizationTreasury`, `CurrencyTransfer` (audit),
+  `OrgIncomeStream` (`uncollected_pool`, optional `area` FK — authored anchor for a future
+  local order/crime difficulty modifier), `IncomeDeclaration` (actual-vs-declared),
+  `OrgEconomicsProfile` (`graft_pct`), `OrgObligation`, `DebtInstrument`, `Contract`,
+  `Business`, `CharacterEmployment`
+- **Key functions (`world/currency/services.py`):** `transfer`, `accrue_income_stream`
+  (weekly pool growth), `collect_org_income` (the dispatch: check → band pct → graft →
+  per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
+  bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
+  `settle_obligations`, `run_weekly_economy` (Sunday rollover phases)
+- **Checks (#930):** Tax Collection (presence + Organization + Stewardship) and Domain
+  Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
+- **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
+  graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,
+  ledger; per-line summon affordances drive the npc_services interaction dialog
+  (`frontend/src/org_books/`)
+- **Source:** `src/world/currency/`
 
 ### Predicates (shared rule engine)
 Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions

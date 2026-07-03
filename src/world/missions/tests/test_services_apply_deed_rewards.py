@@ -7,7 +7,7 @@ correct downstream by ``(kind, sink)``:
   * POST_CRON / LEGEND_POINTS → MissionRewardQueue row (applied=False)
   * POST_CRON / RESONANCE     → MissionRewardQueue row (applied=False)
   * PROPAGATION / RUMOR       → rumor_stub raises NotImplementedError
-  * PROPAGATION / CRIME_WATCH → crime_watch_stub raises NotImplementedError
+  * PROPAGATION / CRIME_WATCH → live crime_watch (#1765); logged skip w/o room
   * (*, BEAT)                 → beat_stub records (5b.3 will wire it)
   * Any other (kind, sink)    → MissionRewardRoutingError
 
@@ -110,7 +110,8 @@ class ApplyDeedRewardsStubCallsTests(TestCase):
 
 
 class ApplyDeedRewardsPropagationFailuresTests(TestCase):
-    """RUMOR/CRIME_WATCH stubs raise; the whole apply rolls back."""
+    """The RUMOR stub raises (whole apply rolls back); live CRIME_WATCH (#1765)
+    degrades to a logged skip when no room context reaches the router."""
 
     def setUp(self) -> None:
         money_stub.clear_calls()
@@ -128,15 +129,20 @@ class ApplyDeedRewardsPropagationFailuresTests(TestCase):
         with self.assertRaises(NotImplementedError):
             apply_deed_rewards(self.deed)
 
-    def test_propagation_crime_watch_raises_not_implemented(self) -> None:
+    def test_propagation_crime_watch_without_room_skips(self) -> None:
+        # CRIME_WATCH is live (#1765) but needs a report location; a caller
+        # that supplies none gets a logged skip, never a crash or a mint.
         MissionDeedRewardLineFactory(
             deed=self.deed,
             kind=DeedRewardKind.PROPAGATION,
             sink=DeedRewardSink.CRIME_WATCH,
             ref="c1",
         )
-        with self.assertRaises(NotImplementedError):
-            apply_deed_rewards(self.deed)
+        result = apply_deed_rewards(self.deed)
+        self.assertEqual(result.enqueued, ())
+        from world.justice.models import PersonaHeat
+
+        self.assertEqual(PersonaHeat.objects.count(), 0)
 
     def test_rumor_failure_rolls_back_prior_queue_rows(self) -> None:
         # An ordered apply: a POST_CRON line that would enqueue, then a RUMOR

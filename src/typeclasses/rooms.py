@@ -47,6 +47,12 @@ class Room(ObjectParent, DefaultRoom):
         names = [f.display_name for f in functionaries_in_room(get_room_profile(self))]
         if names:
             text = f"{text}\n|wHere you can speak with:|n {', '.join(names)}"
+        # #1765 — the looker's own pursuit heat here (self-only; None when SAFE).
+        from world.justice.display import room_heat_line
+
+        heat_line = room_heat_line(looker, self)
+        if heat_line:
+            text = f"{text}\n{heat_line}"
         return text
 
     @cached_property

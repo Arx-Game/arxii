@@ -113,6 +113,7 @@ treat those names as hints to confirm, not gospel.
 - [0070 — NPC ontology: Functionary, Standing, and Story NPCs as class-1..4](0070-npc-ontology-functionary-standing-story.md)
 - [0073 — Environmental vulnerabilities are ConditionDamageOverTime rows riding the peril pipeline](0073-environmental-vulnerabilities-are-dot-rows-riding-the-peril-pipeline.md)
 - [0074 — Battle Surrounded peril may override AFK-safety, narrowly and explicitly](0074-battle-peril-may-override-afk-safety-narrowly.md)
+- [0081 — Battle terrain lives on BattlePlace, not the room Position/PositionEdge graph](0081-battle-terrain-lives-on-battleplace.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
@@ -136,3 +137,5 @@ treat those names as hints to confirm, not gospel.
 - [0077 — Effective risk is priced relative to declared target level, not the raw declared tier](0077-effective-risk-is-priced-relative-to-target-level.md)
 - [0078 — Stakes are menu-first, calibrated by band, not freehand-authored per table](0078-menu-first-stakes-with-calibration-bands.md)
 - [0079 — Style discovery rides the clue→codex→RESEARCH pipeline, not a parallel unlock model](0079-style-discovery-rides-the-clue-research-pipeline.md)
+- [0080 — Heat jurisdiction is judged at the commit location, enforcement scoped to the dominant society](0080-heat-jurisdiction-judged-at-the-commit-location.md)
+- [0081 — Org income requires active collection; idle approaches stasis, never decay](0081-income-requires-collection.md)

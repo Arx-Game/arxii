@@ -115,9 +115,12 @@ SLUG=$(echo "$TITLE" \
   | sed 's/-$//')
 BRANCH="${TYPE}-${ISSUE}-${SLUG}"
 
-# 6. Create branch from origin/main
+# 6. Create branch from origin/main. Use `git branch` (not `git checkout -b`) so
+# the main checkout stays on `main`: the branch is meant to be checked out into
+# a worktree on the .claude/worktrees named volume by the using-git-worktrees
+# skill, not worked on in place on the slow 9p bind mount.
 git fetch origin main --quiet
-git checkout -b "$BRANCH" origin/main
+git branch "$BRANCH" origin/main
 
 # 7. Emit JSON (includes model recommendation from complexity:* label)
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")

@@ -46,7 +46,7 @@ _ERR_UNIMPLEMENTED_RULE = (
 def emit_terminal_renown_awards(
     instance: MissionInstance,
     route: MissionOptionRoute,
-    deed: MissionDeedRecord,  # noqa: ARG001 — kept for signature symmetry with emit_terminal_rewards.
+    deed: MissionDeedRecord,
 ) -> list[RenownAwardResult]:
     """Fire ``fire_renown_award`` for each MissionRenownAward on ``route``.
 
@@ -99,8 +99,41 @@ def emit_terminal_renown_awards(
             _fire_award(award, _resolve_participant_persona(participant), archetypes)
             for participant in participants
         )
+    # #1765 — criminality belongs to the RUN (user-ratified): tag every legend
+    # entry born of it BEFORE knowledge grants, so any later spread mints heat.
+    _tag_criminal_entries(deed, results)
     _grant_party_witness_knowledge(results, participants)
     return results
+
+
+def _tag_criminal_entries(deed: MissionDeedRecord, results: list[RenownAwardResult]) -> None:
+    """#1765 — declare each minted legend entry an account of the run's crimes.
+
+    A run whose terminal deed carries ``PROPAGATION/CRIME_WATCH`` reward lines
+    (``ref`` = CrimeKind slug; ``emit_terminal_rewards`` persists them just
+    before this runs) was a crime, and every participant's legend entry is an
+    account of it — so each participant soaks their own heat as word of their
+    part spreads (``accrue_for_deed_knowledge``). Unknown slugs are dropped
+    here silently; the report-time writer logs them loudly.
+    """
+    from world.justice.models import CrimeKind  # noqa: PLC0415
+    from world.justice.services import tag_deed_crimes  # noqa: PLC0415
+    from world.missions.constants import DeedRewardKind, DeedRewardSink  # noqa: PLC0415
+    from world.societies.models import LegendEntry  # noqa: PLC0415
+
+    refs = set(
+        deed.reward_lines.filter(
+            kind=DeedRewardKind.PROPAGATION, sink=DeedRewardSink.CRIME_WATCH
+        ).values_list("ref", flat=True)
+    )
+    if not refs:
+        return
+    kinds = list(CrimeKind.objects.filter(slug__in=refs))
+    if not kinds:
+        return
+    entry_ids = [r.legend_entry_id for r in results if r.legend_entry_id is not None]
+    for entry in LegendEntry.objects.filter(pk__in=entry_ids):
+        tag_deed_crimes(entry, kinds)
 
 
 def _grant_party_witness_knowledge(

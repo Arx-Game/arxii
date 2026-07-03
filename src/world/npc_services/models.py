@@ -282,6 +282,14 @@ class NPCServiceOffer(SharedMemoryModel):
             "re-selection until it elapses. Null = no cooldown."
         ),
     )
+    ap_cost = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Action points charged to the resolving character before the effect "
+            "dispatches (#930 — collection/improvement dispatches cost AP; the "
+            "generic knob is available to every kind). 0 = free."
+        ),
+    )
     check_type = models.ForeignKey(
         "checks.CheckType",
         null=True,

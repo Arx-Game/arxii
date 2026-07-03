@@ -77,6 +77,32 @@ GRAFT_DEFAULT_PCT = 10
 GRAFT_MAX_PCT = 75
 
 
+# ---------------------------------------------------------------------------
+# #930 — active income collection. All magnitudes PLACEHOLDER (tuning pass);
+# band weights are data here, never documented player-facing.
+# ---------------------------------------------------------------------------
+
+TAX_COLLECTION_CHECK_NAME = "Tax Collection"
+DOMAIN_INVESTMENT_CHECK_NAME = "Domain Investment"
+
+# Collection outcome bands: minimum success_level → percent of the gathered
+# pool that arrives (before graft). Descending; first floor <= level wins.
+# Below the last floor is catastrophe: nothing lands, the pool is gone (the
+# collector-incident encounter seam — combat domain follow-up).
+COLLECTION_BAND_PCTS: tuple[tuple[int, int], ...] = (
+    (2, 110),  # critical — goodwill bonus over the gathered aggregate
+    (1, 100),  # clean collection
+    (0, 85),  # skimmed — some of the money stolen en route
+    (-1, 35),  # waylaid — most of the money stolen
+)
+
+# Domain-improvement effects (PLACEHOLDER): a success raises every active
+# stream's gross by this percent AND cracks down on graft by this step;
+# a partial success only manages the graft crackdown.
+IMPROVEMENT_GROSS_PCT = 5
+IMPROVEMENT_GRAFT_STEP = 1
+
+
 class ContractFormality(models.TextChoices):
     """Enforcement tiers (#928): notarized contracts settle; handshakes are RP."""
 
