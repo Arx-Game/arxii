@@ -514,7 +514,8 @@
 - `get_room_profile(room_obj: 'ObjectDB') -> 'RoomProfile' — Get or create the RoomProfile for a room ObjectDB instance.`
 - `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' — Return all RoomProfiles in this area and everything beneath it.`
 - `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
-- `societies_for_scene(scene: 'Scene') -> 'list[Society]' — Resolve which societies' fashion is perceived in a scene's location.`
+- `societies_for_area(area: 'Area | None') -> 'list[Society]' — Nearest-first ancestor walk: dominant society wins, else realm societies.`
+- `societies_for_scene(scene: 'Scene') -> 'list[Society]' — Resolve which societies are relevant at a scene's location (#1464 walk fix).`
 - `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
 
 
@@ -2150,6 +2151,10 @@
   - recipe -> items.CraftingRecipe [FK]
   - consequence -> checks.Consequence [FK]
 
+### LabStationDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' — Attach ``facet`` to ``item_instance``.`
 - `consume_item_charges(*, item_instance: 'ItemInstance', amount: 'int' = 1) -> 'ItemInstance' — Spend ``amount`` charges atomically (row-locked). Logs ACTIVATED; at 0`
@@ -2939,6 +2944,7 @@
   - gift -> magic.Gift [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - effect_type -> magic.EffectType [FK] (nullable)
+  - consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
 **Pointed to by:**
   - capability_grants <- magic.TechniqueDraftCapabilityGrant
@@ -3316,6 +3322,7 @@
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
+- `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' — True if target satisfies every one of prereqs (all() semantics; empty = True).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
@@ -4805,8 +4812,8 @@
   - mission_awards <- missions.MissionRenownAward
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' — Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' — Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' — Sum the legend this character earned that was credited to covenants where they held ``role``.`

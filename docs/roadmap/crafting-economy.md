@@ -71,9 +71,43 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
   recipes + a cap ladder + a consequence pool.
 
 **Deferred to follow-up issues:**
-- Crafting-station durability and repair economy (#1234)
 - Item-creation pipeline (crafted items with stats, facets, fashion properties) — still future
-- Telnet crafting action
+- Telnet crafting action (attach-facet/attach-style — distinct from the #1234 `station`
+  install/upgrade/repair command, which manages the station, not the craft itself)
+
+### Crafting-station durability and repair economy (#1234) — DONE
+
+A LAB room feature gates and wears down under `run_crafting_recipe` attempts, with a
+coppers-only repair economy. Fully playable end-to-end (telnet + web).
+
+**What was built:**
+
+- **`LabStationDetails` model** (`world.items.crafting.models`) — per-Lab durability state,
+  OneToOne to `RoomFeatureInstance` (mirrors `SanctumDetails`'s shape); `durability` /
+  `max_durability` + `is_broken` property.
+- **LAB `RoomFeatureServiceStrategy`** (`world.items.crafting.station`) —
+  `handle_lab_progression` installs/upgrades the feature instance and (re)sets the
+  station's durability to the new level's max on both install and upgrade.
+- **Repair economy** — `repair_station_durability` (`world.items.crafting.station`), a
+  coppers-only sink through `currency.services.transfer` (no destination purse, #923);
+  cost scales `LAB_REPAIR_COPPER_PER_POINT_PER_LEVEL × level × points_restored`.
+- **Station gate/wear pipeline** — `CraftingRecipe.requires_station` (default True) gates
+  `run_crafting_recipe`: raises `CraftingStationRequired` / `CraftingStationBroken` before
+  affordability-staging, then wears the station by 1 durability after the roll,
+  unconditionally.
+- **`CraftingQuote.station_status`** — read-only station snapshot (`StationStatus`
+  dataclass) surfaced by `build_crafting_quote` when `recipe.requires_station`; narrows
+  `affordable` to False when the station is missing or broken.
+- **Two new Actions** (`actions/definitions/room_features.py`): `StartRoomFeatureProjectAction`
+  (`start_room_feature_project`) — generic install/upgrade project starter for any
+  PROJECT-mechanism `RoomFeatureKind`; `RepairLabStationAction` (`repair_lab_station`) —
+  spends coppers to restore durability.
+- **API** — `LabStationViewSet` at `/api/items/lab-stations/`
+  (`GET`, `POST .../install/`, `POST .../upgrade/`, `POST <id>/repair/`).
+- **Telnet** — `CmdLabStation` (`station`, `src/commands/crafting_station.py`):
+  `station`, `station install [level=<n>]`, `station upgrade level=<n>`,
+  `station repair points=<n>`.
+- **Frontend** — `LabStationStatusCard` wired into `AttachFacetDialog`.
 
 ## What's Needed for MVP
 - Material/resource models — types, sources, quantities, storage

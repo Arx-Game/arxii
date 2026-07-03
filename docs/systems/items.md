@@ -423,6 +423,49 @@ Exposed as read-only `GET` actions on the facet and style ViewSets:
 |-----------|-----------|
 | `CraftingNotConfigured` | No recipe for kind, or `check_type` is null |
 | `CraftingCostUnaffordable` | AP / Anima / materials insufficient |
+| `CraftingStationRequired` | `recipe.requires_station` is True and no active LAB station is installed in the crafter's room |
+| `CraftingStationBroken` | `recipe.requires_station` is True and the installed station is at 0 durability |
+
+### Crafting-Station Gate/Wear (#1234)
+
+`CraftingRecipe.requires_station` (BooleanField, default `True`) marks a recipe as
+physically bound to a LAB room feature. `run_crafting_recipe` (step 3, before
+affordability-staging) resolves the active LAB `RoomFeatureInstance` in the crafter's
+room; missing raises `CraftingStationRequired`, 0-durability raises
+`CraftingStationBroken`. After the roll (step 6), the resolved station's durability is
+decremented by 1, unconditionally — wear happens regardless of outcome.
+
+`LabStationDetails` (`world.items.crafting.models`) holds the per-Lab durability state
+(OneToOne to `RoomFeatureInstance`, mirrors `SanctumDetails`'s shape). The LAB
+`RoomFeatureServiceStrategy` handler (`world.items.crafting.station.handle_lab_progression`)
+installs/upgrades the feature instance and (re)sets durability to the new level's max on
+both install and upgrade — an upgrade project is a refurbishment, not just a bigger cap on
+old wear. `repair_station_durability` (same module) restores durability for coppers via
+`currency.services.transfer` (sink — no destination purse, #923); cost is
+`LAB_REPAIR_COPPER_PER_POINT_PER_LEVEL × level × points_restored`.
+
+`build_crafting_quote` surfaces a read-only `StationStatus` snapshot on
+`CraftingQuote.station_status` when `recipe.requires_station` is True, narrowing
+`affordable` to False when the station is missing or broken.
+
+**Actions** (`actions/definitions/room_features.py`): `StartRoomFeatureProjectAction`
+(key `start_room_feature_project`) — generic install/upgrade project starter for any
+PROJECT-mechanism `RoomFeatureKind` (LAB, Command Center, future kinds);
+`RepairLabStationAction` (key `repair_lab_station`) — spends coppers to restore a Lab
+station's durability. Both REGISTRY, `target_type=SELF`.
+
+**API endpoints** (`LabStationViewSet`, `world.items.views_station`):
+
+| Endpoint | Notes |
+|----------|-------|
+| `GET /api/items/lab-stations/` | List/detail `LabStationDetails` rows |
+| `POST /api/items/lab-stations/install/` | Dispatches `StartRoomFeatureProjectAction` |
+| `POST /api/items/lab-stations/upgrade/` | Dispatches `StartRoomFeatureProjectAction` |
+| `POST /api/items/lab-stations/<feature_instance_id>/repair/` | Dispatches `RepairLabStationAction` |
+
+Telnet: `CmdLabStation` (`station`, `src/commands/crafting_station.py`) — `station`
+(status hub), `station install [level=<n>]`, `station upgrade level=<n>`,
+`station repair points=<n>`.
 
 ---
 

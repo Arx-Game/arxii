@@ -1590,6 +1590,30 @@ drain the well by physically visiting and performing an absorb action.
 - **Source:** `src/world/magic/models/sanctum.py`,
   `src/world/magic/services/sanctum*.py`.
 
+### Lab (crafting-station economy — #1234)
+Second Room Feature kind (`RoomFeatureServiceStrategy.LAB`), registered by
+`world.items`. A per-Lab durability meter gates and wears down under crafting
+attempts, with a coppers-only repair economy.
+
+- **Models:** `LabStationDetails` (`world.items.crafting.models`) — per-kind
+  state, OneToOne to `RoomFeatureInstance` (mirrors `SanctumDetails`);
+  `durability` / `max_durability` + `is_broken` property.
+- **Key functions** (`world.items.crafting.station`):
+  `handle_lab_progression` (the LAB strategy — installs/upgrades the feature
+  instance, (re)setting durability to the new level's max on both), and
+  `repair_station_durability` (coppers-only repair via
+  `currency.services.transfer`, cost scales with level and points restored).
+- **Crafting integration:** `CraftingRecipe.requires_station` gates
+  `run_crafting_recipe` (raises `CraftingStationRequired` /
+  `CraftingStationBroken`) and wears the station by 1 durability per attempt
+  that reaches the roll; `CraftingQuote.station_status` surfaces a read-only
+  snapshot. See [items.md](items.md) for the full pipeline.
+- **TELNET+WEB:** `StartRoomFeatureProjectAction` / `RepairLabStationAction`
+  (`actions/definitions/room_features.py`); `CmdLabStation` (`station`,
+  `commands/crafting_station.py`) and `LabStationViewSet`
+  (`/api/items/lab-stations/`) converge on the same Actions.
+- **Source:** `src/world/items/crafting/station.py`.
+
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 

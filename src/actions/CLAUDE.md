@@ -171,7 +171,23 @@ They do not use the command system, dispatchers, or handlers.
   `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
   (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
   binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
-  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`).)
+  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`).
+  `room_features.py` (#1234) — two REGISTRY actions, both `target_type=SELF`,
+  `category="items"`: `StartRoomFeatureProjectAction` (key `"start_room_feature_project"`)
+  — generic install/upgrade project starter for any PROJECT-mechanism `RoomFeatureKind`
+  (LAB, Command Center, future kinds); three-way branch (no existing instance → fresh
+  install, gated on `install_mechanism`; existing instance of the same kind → upgrade,
+  level-gated; existing instance of a different kind → blocked, one-feature-per-room)
+  creates a `ROOM_FEATURE_PROGRESSION` `Project` + `RoomFeatureProgressionDetails` row —
+  funding/resolution reuse the existing generic Project machinery (`project/donate`,
+  `scan_active_projects`). `RepairLabStationAction` (`"repair_lab_station"`) — thin
+  wrapper over `world.items.crafting.station.repair_station_durability`; resolves the
+  active LAB `RoomFeatureInstance` for the actor's room, gates on the same
+  owner/tenant standing as install/upgrade (`can_modify_room_features`), and charges
+  the actor's purse in coppers. Both gated by `_resolve_active_persona` +
+  `can_modify_room_features`. Shared by telnet `CmdLabStation` (`station <subverb>`,
+  `src/commands/crafting_station.py`) and the web `LabStationViewSet`
+  (`/api/items/lab-stations/`).)
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager
