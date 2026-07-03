@@ -66,6 +66,18 @@ class BattleActionScope(models.TextChoices):
     SIDE = "side", "Side (army-wide)"
 
 
+class FortificationKind(models.TextChoices):
+    """Descriptive/authoring axis for a Fortification (#1713).
+
+    Purely descriptive plus a base-integrity lookup — BREACH/FORTIFY behave
+    identically regardless of kind in this MVP (see docs/adr/0083).
+    """
+
+    WALL = "wall", "Wall"
+    GATE = "gate", "Gate"
+    BATTLEMENT = "battlement", "Battlement"
+
+
 class BattleOutcome(models.TextChoices):
     UNRESOLVED = "unresolved", "Unresolved"
     ATTACKER_DECISIVE = "attacker_decisive", "Attacker — decisive"
@@ -143,3 +155,16 @@ BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER: dict[str, int] = {
 # category="stat" (already EQUIPMENT_RELEVANT_CATEGORIES) so covenant-role /
 # facet / mantle bonuses authored against it flow through the existing walk.
 BATTLE_COMMAND_TARGET_NAME = "battle_command"
+
+# Fortification (#1713) tuning. BASE_INTEGRITY is a starting ceiling per
+# FortificationKind before any persistent investment; FORTIFICATION_LEVEL_INTEGRITY_BONUS
+# is a flat per-level ladder bonus (mirrors UNIT_QUALITY_STRIKE_MODIFIER being a flat
+# ladder, not a multiplier) applied per Building.fortification_level. A fully-invested
+# (MAX_FORTIFICATION_LEVEL, see world.buildings.room_constants) WALL tops out at
+# 100 + 5*20 = 200 integrity — always breachable given enough BREACH rounds.
+BASE_INTEGRITY: dict[str, int] = {
+    FortificationKind.WALL: 100,
+    FortificationKind.BATTLEMENT: 80,
+    FortificationKind.GATE: 60,
+}
+FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20

@@ -21,6 +21,7 @@ from world.battles.constants import (
     BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
     TerrainType,
     UnitQuality,
 )
@@ -36,6 +37,7 @@ COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 TECHNIQUE_MODEL = "magic.Technique"
 COVENANT_MODEL = "covenants.Covenant"
+BUILDING_MODEL = "buildings.Building"
 
 
 class Battle(SharedMemoryModel):
@@ -199,6 +201,59 @@ class BattlePlace(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.battle.name} / {self.name}"
+
+
+class Fortification(SharedMemoryModel):
+    """A defensible structure (wall/gate/battlement) at a battle front (#1713).
+
+    A BattlePlace may have multiple Fortification rows — a front can have an
+    outer wall, a gate, and a battlement, each independently breachable
+    (ADR-0082's flagged siege reconsideration point, resolved in favor of
+    per-structure state — see docs/adr/0083). ``defending_side`` gates which
+    side may BREACH vs FORTIFY it (see ``declare_battle_action``).
+    """
+
+    place = models.ForeignKey(
+        BattlePlace,
+        on_delete=models.CASCADE,
+        related_name="fortifications",
+    )
+    defending_side = models.ForeignKey(
+        BattleSide,
+        on_delete=models.CASCADE,
+        related_name="fortifications",
+        help_text="The side this structure protects. BREACH requires the declaring "
+        "participant's side to differ from this; FORTIFY requires it to match (#1713).",
+    )
+    building = models.ForeignKey(
+        BUILDING_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="battle_fortifications",
+        help_text="Optional persistent Building this structure derives its integrity "
+        "ceiling from (#1713). None means an ad-hoc, non-persistent structure.",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=FortificationKind.choices,
+        default=FortificationKind.WALL,
+    )
+    integrity = models.PositiveSmallIntegerField(default=0)
+    max_integrity = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Snapshotted once at creation from BASE_INTEGRITY[kind] plus "
+        "building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS, if "
+        "building is set (#1713). See world.battles.services.create_fortification.",
+    )
+    breached = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["place", "kind", "id"]
+
+    def __str__(self) -> str:
+        state = "breached" if self.breached else f"{self.integrity}/{self.max_integrity}"
+        return f"{self.place.name} {self.get_kind_display()} ({state})"
 
 
 class BattleUnit(SharedMemoryModel):

@@ -6,6 +6,7 @@ from world.battles.constants import (
     BattleOutcome,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
     TerrainType,
     UnitQuality,
 )
@@ -14,6 +15,7 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
     BattleUnitFactory,
+    FortificationFactory,
 )
 from world.battles.models import (
     BattleUnit,
@@ -210,3 +212,31 @@ class TerrainPropertyEffectTests(TestCase):
             TerrainPropertyEffect.objects.create(
                 terrain_type=TerrainType.DIFFICULT, property=prop, modifier=5
             )
+
+
+class FortificationModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.place = BattlePlaceFactory()
+        cls.side = BattleSideFactory(battle=cls.place.battle)
+
+    def test_str_shows_integrity_when_not_breached(self):
+        fort = FortificationFactory(
+            place=self.place, defending_side=self.side, integrity=40, max_integrity=100
+        )
+        self.assertIn("40/100", str(fort))
+
+    def test_str_shows_breached_when_breached(self):
+        fort = FortificationFactory(
+            place=self.place, defending_side=self.side, integrity=0, breached=True
+        )
+        self.assertIn("breached", str(fort))
+
+    def test_multiple_fortifications_per_place(self):
+        FortificationFactory(
+            place=self.place, defending_side=self.side, kind=FortificationKind.WALL
+        )
+        FortificationFactory(
+            place=self.place, defending_side=self.side, kind=FortificationKind.GATE
+        )
+        self.assertEqual(self.place.fortifications.count(), 2)

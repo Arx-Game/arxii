@@ -12,6 +12,7 @@ from world.battles.constants import (
     BattleParticipantStatus,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
 )
 from world.battles.models import (
     Battle,
@@ -21,6 +22,7 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
+    Fortification,
 )
 from world.magic.factories import TechniqueFactory
 from world.scenes.constants import RoundStatus
@@ -52,6 +54,21 @@ class BattlePlaceFactory(factory_django.DjangoModelFactory):
 
     battle = factory.SubFactory(BattleFactory)
     name = factory.Sequence(lambda n: f"Place {n}")
+
+
+class FortificationFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Fortification
+
+    place = factory.SubFactory(BattlePlaceFactory)
+    defending_side = factory.SubFactory(
+        BattleSideFactory, battle=factory.SelfAttribute("..place.battle")
+    )
+    building = None
+    kind = FortificationKind.WALL
+    integrity = 100
+    max_integrity = 100
+    breached = False
 
 
 class BattleUnitFactory(factory_django.DjangoModelFactory):
