@@ -386,6 +386,17 @@ class DeclareBattleActionFortificationTests(TestCase):
                 target_fortification=self.fort,
             )
 
+    def test_fortify_already_breached_raises(self) -> None:
+        self.fort.breached = True
+        self.fort.save(update_fields=["breached"])
+        with self.assertRaises(FortificationAlreadyBreachedError):
+            declare_battle_action(
+                participant=self.defender_participant,
+                action_kind=BattleActionKind.FORTIFY,
+                technique=self.technique,
+                target_fortification=self.fort,
+            )
+
     def test_valid_breach_declares_successfully(self) -> None:
         declaration = declare_battle_action(
             participant=self.attacker_participant,
