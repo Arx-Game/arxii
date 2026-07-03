@@ -186,4 +186,14 @@ class Migration(migrations.Migration):
                 name="unique_terrain_property_effect",
             ),
         ),
+        migrations.AlterField(
+            model_name="battleunit",
+            name="descriptor",
+            field=models.CharField(
+                blank=True,
+                help_text="Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only "
+                "— properties/capabilities/quality below drive mechanics.",
+                max_length=80,
+            ),
+        ),
     ]

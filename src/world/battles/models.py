@@ -226,7 +226,7 @@ class BattleUnit(SharedMemoryModel):
         max_length=80,
         blank=True,
         help_text="Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only "
-        "— composition/quality below drive mechanics.",
+        "— properties/capabilities/quality below drive mechanics.",
     )
     properties = models.ManyToManyField(
         Property,
