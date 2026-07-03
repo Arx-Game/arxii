@@ -163,15 +163,17 @@ They do not use the command system, dispatchers, or handlers.
   auto-concludes via `check_victory` when a side crosses threshold),
   `ConcludeBattleAction` (`"conclude_battle"`, `target_type=AREA`, GM/staff; natural win →
   timer → DEFENDER_MARGINAL default), `DeclareBattleActionAction` (`"declare_battle_action"`,
-  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 7
+  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 8
   `BattleActionKind` values through the same generic `action_kind`/`target_unit`/
   `target_ally`/`scope`/`target_place`/`target_side` kwargs it always had — #1712 added
-  ROUT/RALLY/REPEL/HOLD with zero code changes to this action; all four new-kind
-  validation (command scope, `PlaceScopeRequiredError`) lives in
+  ROUT/RALLY/REPEL/HOLD and #1715 added SET_ENVIRONMENT with zero code changes to this
+  action; all new-kind validation (command scope, `PlaceScopeRequiredError`,
+  `InvalidEnvironmentScopeError`/`MissingEnvironmentTargetError`) lives in
   `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
   (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
   binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
-  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`).)
+  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`) — every `BattleActionKind`,
+  including SET_ENVIRONMENT, has a matching `battle declare` subverb.)
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager
