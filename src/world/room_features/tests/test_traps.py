@@ -89,6 +89,9 @@ class TrapModelTest(_TrapSceneMixin, TestCase):
     def test_room_profile_reverse_accessor(self) -> None:
         assert list(self.room_profile.traps.all()) == [self.trap]
 
+    def test_position_defaults_to_none(self) -> None:
+        assert self.trap.position is None
+
 
 class TrapEntryResolutionTest(_TrapSceneMixin, TestCase):
     def test_armed_undetected_trap_fires_on_failed_detection(self) -> None:
