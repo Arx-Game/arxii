@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("character_sheets", "0005_charactersheet_max_active_npc_missions"),
         ("classes", "0004_alter_characterclasslevel_level"),
-        ("progression", "0003_social_engagement_kudos_category"),
+        ("progression", "0002_initial"),
     ]
 
     operations = [

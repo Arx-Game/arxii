@@ -5,7 +5,8 @@ ADR: ci-schema-from-models). Mirrors the SQLite fast tier's approach
 (server/conf/sqlite_test_settings.py): disable every app's migrations and let
 `migrate --run-syncdb` create tables straight from models, then apply the
 standalone SQL files (range partition, composite FKs, materialized views) and
-the idempotent RunPython seeds that migrations would otherwise carry.
+the idempotent seed functions that replace the former RunPython seed
+migrations (ADR-0013 forbids data seeding in migrations).
 
 The SQL files + seeds run inside a single `transaction.atomic()` block, so the
 `_schema_already_built()` guard's skip/run semantics stay binary: idempotency
@@ -20,7 +21,6 @@ Usage (any checkout, any target DB):
 The target database must exist and should be empty (idempotent on re-run).
 """
 
-import importlib
 import os
 from pathlib import Path
 import sys
@@ -54,14 +54,6 @@ SQL_FILES = [
     "world/societies/sql/guise_legend_summary.sql",
 ]
 
-# (app_dir, seed function name). Resolved to a dotted migration module path by
-# globbing rather than hardcoding a migration number — migration file names can
-# be renumbered (e.g. #1801) without this script going stale.
-SEED_TARGETS = [
-    ("world/progression", "create_social_engagement_category"),
-    ("world/magic", "grant_accept_soul_tether_to_all_paths"),
-]
-
 # Columns on world.scenes.models.Interaction that real migration replay adds
 # *after* the partition rewrite (scenes/0024, scenes/0026) via plain AddField
 # — see POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py. The raw
@@ -83,26 +75,6 @@ class _DisableMigrations:
 
     def __getitem__(self, item: str) -> None:
         return None
-
-
-def _seed_modules() -> list[tuple[str, str]]:
-    """Resolve each (app_dir, func_name) pair to a dotted module path.
-
-    Globs the app's migrations directory for the file that defines the seed
-    function instead of hardcoding a migration number, since migration file
-    names can be renumbered independently of this script.
-    """
-    pairs = []
-    for app_dir, func_name in SEED_TARGETS:
-        for path in sorted((SRC_DIR / app_dir / "migrations").glob("*.py")):
-            if func_name in path.read_text():
-                dotted = f"{app_dir.replace('/', '.')}.migrations.{path.stem}"
-                pairs.append((dotted, func_name))
-                break
-        else:
-            msg = f"seed function {func_name} not found in {app_dir}/migrations"
-            raise SystemExit(msg)
-    return pairs
 
 
 def _schema_already_built(connection: "BaseDatabaseWrapper") -> bool:
@@ -156,10 +128,17 @@ def main() -> None:
                 schema_editor.add_field(model, field)
                 print(f"added post-partition column {model_name}.{field_name}")
 
-        for module_path, func_name in _seed_modules():
-            module = importlib.import_module(module_path)
-            getattr(module, func_name)(apps, None)
-            print(f"seeded {module_path}")
+        from world.magic.seeds_soul_tether import (  # noqa: PLC0415
+            grant_accept_soul_tether_to_all_paths,
+        )
+        from world.progression.seeds import (  # noqa: PLC0415
+            seed_social_engagement_kudos_category,
+        )
+
+        seed_social_engagement_kudos_category()
+        print("seeded world.progression.seeds.seed_social_engagement_kudos_category")
+        grant_accept_soul_tether_to_all_paths()
+        print("seeded world.magic.seeds_soul_tether.grant_accept_soul_tether_to_all_paths")
 
 
 if __name__ == "__main__":
