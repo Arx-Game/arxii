@@ -1,1 +1,1 @@
-0008_alter_battleactiondeclaration_action_kind
+0010_alter_battleplace_movement_cost

@@ -11,6 +11,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.battles.constants import (
+    DEFAULT_MORALE,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     BattleActionKind,
@@ -173,8 +174,17 @@ class BattlePlace(SharedMemoryModel):
     )
     movement_cost = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Authored cost for a future reposition action (#1712) to consume. "
-        "This field is data only — #1711 does not build a movement action.",
+        help_text="Authored cost for a future reposition/movement action — not yet "
+        "filed as an issue; #1712 explicitly did not build this. Data only.",
+    )
+    controlled_by = models.ForeignKey(
+        BattleSide,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="controlled_places",
+        help_text="Which side currently holds this front as an objective (#1712, "
+        "set by a successful HOLD declaration). None means uncontrolled/contested.",
     )
 
     class Meta:
@@ -245,6 +255,13 @@ class BattleUnit(SharedMemoryModel):
         help_text="Set when this unit was created via a military-grade summon (#1711).",
     )
     strength = models.PositiveSmallIntegerField(default=100)
+    morale = models.PositiveSmallIntegerField(
+        default=DEFAULT_MORALE,
+        help_text="Second resource alongside strength (#1712). status is always "
+        "derived from whichever resource crosses its own threshold first — see "
+        "world.battles.resolution._compute_unit_status. Unlike strength (starts at "
+        "its ceiling), morale starts well below it — sitting near MAX_MORALE is rare.",
+    )
     status = models.CharField(
         max_length=20,
         choices=BattleUnitStatus.choices,

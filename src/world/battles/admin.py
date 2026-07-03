@@ -33,12 +33,14 @@ class BattleAdmin(admin.ModelAdmin):
 class BattleSideAdmin(admin.ModelAdmin):
     list_display = ("battle", "role", "posture", "victory_points", "victory_threshold")
     list_filter = ("role", "posture")
+    search_fields = ("battle__name",)
 
 
 @admin.register(BattlePlace)
 class BattlePlaceAdmin(admin.ModelAdmin):
-    list_display = ("battle", "name", "terrain_type", "movement_cost")
+    list_display = ("battle", "name", "terrain_type", "movement_cost", "controlled_by")
     list_filter = ("terrain_type",)
+    autocomplete_fields = ("controlled_by",)
 
 
 @admin.register(BattleUnit)
@@ -50,6 +52,7 @@ class BattleUnitAdmin(admin.ModelAdmin):
         "quality",
         "commander",
         "strength",
+        "morale",
         "status",
     )
     list_filter = ("composition", "quality", "status")

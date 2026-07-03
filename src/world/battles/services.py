@@ -127,8 +127,9 @@ def add_place(
         battle: The ``Battle`` to add the place to.
         name: Human-readable name for the front (e.g. "The Main Gates").
         terrain_type: A ``TerrainType`` value (#1711). Defaults to OPEN.
-        movement_cost: Authored cost for a future reposition action (#1712) to
-            consume (#1711). Defaults to 1.
+        movement_cost: Authored cost for a future reposition/movement action —
+            not yet filed as an issue; #1712 explicitly did not build this
+            (#1711). Defaults to 1.
 
     Returns:
         The newly created ``BattlePlace``.
