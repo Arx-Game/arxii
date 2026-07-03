@@ -393,6 +393,13 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         help_text="Neutral descriptive tags on this technique (e.g. cursed), used by "
         "reactive trigger filters via the has_property op.",
     )
+    target_prerequisites = models.ManyToManyField(
+        "mechanics.Prerequisite",
+        related_name="gated_techniques",
+        blank=True,
+        help_text="Property-based targeting preconditions a target must satisfy "
+        "(ALL must pass) to be a legal target for this technique.",
+    )
 
     class Meta:
         verbose_name = "Technique"
@@ -444,6 +451,14 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         To invalidate: ``del instance.cached_removed_conditions``.
         """
         return list(self.removed_conditions.all())
+
+    @cached_property
+    def cached_target_prerequisites(self) -> list:
+        """Targeting preconditions for this technique. Supports Prefetch(to_attr=).
+
+        To invalidate: ``del instance.cached_target_prerequisites``.
+        """
+        return list(self.target_prerequisites.all())
 
     def has_property(self, name: str) -> bool:
         """Return True if this technique carries the named Property tag."""

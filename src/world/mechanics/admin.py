@@ -25,6 +25,7 @@ from world.mechanics.models import (
     Prerequisite,
     Property,
     PropertyCategory,
+    PropertyDamageModifier,
     SituationChallengeLink,
     SituationInstance,
     SituationTemplate,
@@ -138,6 +139,13 @@ class ApplicationAdmin(admin.ModelAdmin):
     list_filter = ["capability"]
     search_fields = ["name"]
     list_select_related = ["capability", "target_property", "required_effect_property"]
+
+
+@admin.register(PropertyDamageModifier)
+class PropertyDamageModifierAdmin(admin.ModelAdmin):
+    list_display = ["property", "damage_type", "modifier_value"]
+    list_filter = ["damage_type"]
+    list_select_related = ["property", "damage_type"]
 
 
 # ---------------------------------------------------------------------------

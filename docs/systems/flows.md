@@ -74,7 +74,7 @@ JSON shape, evaluated against the event payload:
 {"path": "attacker", "op": "==", "value": "self"}  # self-ref to handler owner
 ```
 
-Supported ops: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`. Logical combinators: `and`, `or`, `not`. Values prefixed with `self.` (or the literal `"self"` alone) resolve against the trigger's owner (`trigger.obj`).
+Supported ops: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, `has_capability`. Logical combinators: `and`, `or`, `not`. Values prefixed with `self.` (or the literal `"self"` alone) resolve against the trigger's owner (`trigger.obj`).
 
 ### Filter Idioms
 

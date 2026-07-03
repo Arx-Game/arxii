@@ -23,10 +23,20 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
-from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory, DamageTypeFactory
 from world.fatigue.constants import EffortLevel
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.magic.factories import (
+    EffectTypeFactory,
+    GiftFactory,
+    TechniqueDamageProfileFactory,
+    TechniqueFactory,
+)
 from world.magic.types.power_ledger import PowerLedger
+from world.mechanics.factories import (
+    ObjectPropertyFactory,
+    PropertyDamageModifierFactory,
+    PropertyFactory,
+)
 
 
 def _ledger(power: int) -> PowerLedger:
@@ -1094,3 +1104,49 @@ class CombatPullLedgerTests(TestCase):
         # ledger total == 0 + 8 == 8; budget = 8 × 1.0 = 8; scaled = 8 × 1.0 = 8
         self.assertEqual(result.power_ledger.total, 8)
         self.assertGreater(result.scaled_damage, 0)
+
+
+class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
+    """_profile_damage folds Property-driven damage bonuses into the budget (#1793)."""
+
+    def test_profile_damage_adds_property_bonus(self) -> None:
+        resolver = _build_resolver(base_power=0)
+        opponent = resolver.action.focused_opponent_target
+        fire = DamageTypeFactory(name="Fire-crtest")
+        flammable = PropertyFactory(name="flammable-crtest")
+        ObjectPropertyFactory(object=opponent.objectdb, property=flammable)
+        PropertyDamageModifierFactory(property=flammable, damage_type=fire, modifier_value=10)
+        profile = TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            damage_type=fire,
+            base_damage=5,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+
+        scaled, resolved_type = resolver._profile_damage(
+            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+        )
+
+        self.assertEqual(scaled, 15)  # base_damage(5) + property bonus(10)
+        self.assertEqual(resolved_type, fire)
+
+    def test_profile_damage_zero_bonus_when_no_property(self) -> None:
+        resolver = _build_resolver(base_power=0)
+        opponent = resolver.action.focused_opponent_target
+        fire = DamageTypeFactory(name="Fire-crtest-2")
+        profile = TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            damage_type=fire,
+            base_damage=5,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+
+        scaled, _resolved_type = resolver._profile_damage(
+            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+        )
+
+        self.assertEqual(scaled, 5)

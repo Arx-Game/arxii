@@ -255,6 +255,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind,
     source_character) -> list[AppliedConditionResult]` (`world/magic/services/condition_application.py`)
     — shared by both combat and standalone cast paths; extracted from combat's `_apply_conditions`.
+    `Technique.target_prerequisites` (#1793, M2M to `mechanics.Prerequisite`) — Property-gated
+    targeting precondition; enforced symmetrically in both cast paths — non-combat
+    (`validate_cast_target`/`resolve_targets`, `world/magic/services/targeting.py`) and combat
+    (`_check_combat_target_prerequisites`/`_filter_by_target_prerequisites` under
+    `resolve_combat_technique`, `world/combat/services.py`): SINGLE and SELF raise
+    `InvalidCastTarget` pre-flight (SELF checks the caster directly); AREA/FILTERED_GROUP get NO
+    pre-flight check and instead silently filter ineligible targets out of the resolved set.
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls
@@ -293,7 +300,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   journals (`JournalEntry.related_threads` M2M), combat (CombatPull,
   DamagePreApply for DAMAGE_TAKEN_REDUCTION), vitals
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
-  mechanics (Property via Ritual site_property),
+  mechanics (Property via Ritual site_property; Property-gated targeting via
+  `Technique.target_prerequisites`, #1793),
   items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
   flows (Ritual FLOW dispatch via FlowDefinition),
   covenants (`draft_validator_path` on Covenant Induction ritual → `assert_initiator_can_induct`)
@@ -1585,8 +1593,11 @@ drain the well by physically visiting and performing an absorb action.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793)
 - **Key Functions:**
+  - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
+    rows for a target's active `Property` set; folded into combat technique damage in
+    `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
   - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
     walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
     `EQUIPMENT_RELEVANT_CATEGORIES`
@@ -2291,7 +2302,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
   - `emit_event(event_name, payload, location, *, parent_stack=None)` (`flows/emit.py`) — **single unified dispatch path**. Walks `[location, *location.contents]`, calls `triggers_for(event_name)` on each owner, priority-sorts the combined list globally (descending), dispatches synchronously on one `FlowStack`, stops on `CANCEL_EVENT`. Used by service functions, typeclass hooks, and `EMIT_FLOW_EVENT` flow steps alike
   - `EventNames` (`flows/events/names.py`) — canonical string constants for the 18 MVP events
   - `PAYLOAD_FOR_EVENT` (`flows/events/payloads.py`) — event-name → payload dataclass map; PRE payloads are mutable, POST payloads frozen. AE payloads use `targets: list`
-  - `evaluate_filter(spec, payload, *, self_ref)` (`flows/filters/evaluator.py`) — JSON filter DSL: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, plus `and`/`or`/`not`. Bare `"self"` (and `self.<attr>`) resolves to the trigger's owner
+  - `evaluate_filter(spec, payload, *, self_ref)` (`flows/filters/evaluator.py`) — JSON filter DSL: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, `has_capability`, plus `and`/`or`/`not`. Bare `"self"` (and `self.<attr>`) resolves to the trigger's owner
   - **Filter idioms** (see `docs/systems/flows.md` for details): `{"path": "target", "op": "==", "value": "self"}` = self-only (replaces `scope=SELF`); `{"path": "target", "op": "!=", "value": "self"}` = bystander-only; no target filter = room-wide (replaces `scope=ROOM`/`ANY`)
   - `register_pending_prompt`, `resolve_pending_prompt`, `timeout_pending_prompt` (`flows/execution/prompts.py`) — Twisted Deferred-backed player prompts (no DB rows)
   - `classify_source(obj) -> DamageSource` (`world/combat/damage_source.py`) — discriminated union for damage attribution

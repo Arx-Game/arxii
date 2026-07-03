@@ -2,7 +2,9 @@
 
 from django.test import TestCase, tag
 
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import DamageTypeFactory
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionEffectFactory,
@@ -12,6 +14,9 @@ from world.mechanics.factories import (
     CharacterModifierFactory,
     ModifierSourceFactory,
     ModifierTargetFactory,
+    ObjectPropertyFactory,
+    PropertyDamageModifierFactory,
+    PropertyFactory,
 )
 from world.mechanics.models import CharacterModifier
 from world.mechanics.services import (
@@ -21,6 +26,7 @@ from world.mechanics.services import (
     get_modifier_breakdown,
     get_modifier_total,
     passive_facet_bonuses,
+    property_damage_bonus,
     update_distinction_rank,
 )
 
@@ -1006,3 +1012,49 @@ class ItemMundaneStatForTargetTests(TestCase):
         target = ModifierTargetFactory(name="SomethingElse")
         item = ItemInstanceFactory()
         self.assertEqual(item_mundane_stat_for_target(item, target), 0)
+
+
+class PropertyDamageBonusTest(TestCase):
+    def test_returns_zero_with_no_matching_property(self) -> None:
+        character = CharacterFactory()
+        fire = DamageTypeFactory(name="Fire-stest")
+        self.assertEqual(property_damage_bonus(character, fire), 0)
+
+    def test_specific_damage_type_modifier_applies(self) -> None:
+        character = CharacterFactory()
+        flammable = PropertyFactory(name="flammable-stest")
+        fire = DamageTypeFactory(name="Fire-stest-2")
+        ObjectPropertyFactory(object=character, property=flammable)
+        PropertyDamageModifierFactory(property=flammable, damage_type=fire, modifier_value=10)
+
+        self.assertEqual(property_damage_bonus(character, fire), 10)
+
+    def test_null_damage_type_modifier_applies_to_any_type(self) -> None:
+        character = CharacterFactory()
+        cursed = PropertyFactory(name="cursed-stest")
+        fire = DamageTypeFactory(name="Fire-stest-3")
+        ObjectPropertyFactory(object=character, property=cursed)
+        PropertyDamageModifierFactory(property=cursed, damage_type=None, modifier_value=5)
+
+        self.assertEqual(property_damage_bonus(character, fire), 5)
+
+    def test_multiple_modifiers_stack(self) -> None:
+        character = CharacterFactory()
+        flammable = PropertyFactory(name="flammable-stest-2")
+        cursed = PropertyFactory(name="cursed-stest-2")
+        fire = DamageTypeFactory(name="Fire-stest-4")
+        ObjectPropertyFactory(object=character, property=flammable)
+        ObjectPropertyFactory(object=character, property=cursed)
+        PropertyDamageModifierFactory(property=flammable, damage_type=fire, modifier_value=10)
+        PropertyDamageModifierFactory(property=cursed, damage_type=None, modifier_value=5)
+
+        self.assertEqual(property_damage_bonus(character, fire), 15)
+
+    def test_none_damage_type_argument_only_matches_null_rows(self) -> None:
+        character = CharacterFactory()
+        cursed = PropertyFactory(name="cursed-stest-3")
+        fire = DamageTypeFactory(name="Fire-stest-5")
+        ObjectPropertyFactory(object=character, property=cursed)
+        PropertyDamageModifierFactory(property=cursed, damage_type=fire, modifier_value=10)
+
+        self.assertEqual(property_damage_bonus(character, None), 0)

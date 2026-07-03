@@ -98,3 +98,21 @@ class FilterEvaluatorTests(TestCase):
         f = {"path": "attacker", "op": "has_property", "value": "anything"}
         with self.assertRaises(FilterPathError):
             evaluate_filter(f, payload, self_ref=None)
+
+    def test_has_capability(self) -> None:
+        payload = SimpleNamespace(
+            attacker=SimpleNamespace(has_capability=lambda name: name == "flight")
+        )
+        f = {"path": "attacker", "op": "has_capability", "value": "flight"}
+        self.assertTrue(evaluate_filter(f, payload, self_ref=None))
+
+    def test_has_capability_false(self) -> None:
+        payload = SimpleNamespace(attacker=SimpleNamespace(has_capability=lambda _name: False))
+        f = {"path": "attacker", "op": "has_capability", "value": "flight"}
+        self.assertFalse(evaluate_filter(f, payload, self_ref=None))
+
+    def test_has_capability_missing_method_raises(self) -> None:
+        payload = SimpleNamespace(attacker=SimpleNamespace())
+        f = {"path": "attacker", "op": "has_capability", "value": "anything"}
+        with self.assertRaises(FilterPathError):
+            evaluate_filter(f, payload, self_ref=None)

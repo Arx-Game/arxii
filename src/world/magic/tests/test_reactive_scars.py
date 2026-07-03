@@ -22,9 +22,9 @@ from flows.consts import FlowActionChoices
 from flows.emit import emit_event
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
-from world.conditions.factories import ReactiveConditionFactory
+from world.conditions.factories import CapabilityTypeFactory, ReactiveConditionFactory
 from world.magic.factories import TechniqueFactory
-from world.mechanics.factories import PropertyFactory
+from world.mechanics.factories import AerialPropertyFactory, ObjectPropertyFactory, PropertyFactory
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -304,6 +304,60 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
         self.assertFalse(stack.was_cancelled())
 
 
+class HasPropertyReadsObjectPropertyTest(TestCase):
+    """Character.has_property must also see runtime ObjectProperty attachments."""
+
+    def test_has_property_true_for_object_property(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        aerial = AerialPropertyFactory()
+        ObjectPropertyFactory(object=character, property=aerial)
+        self.assertTrue(character.has_property("aerial"))
+
+    def test_has_property_false_when_neither_source_matches(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        self.assertFalse(character.has_property("aerial"))
+
+    def test_has_property_still_true_for_persona_tag(self) -> None:
+        """Existing persona-tag path (Mage Sight etc.) is unaffected."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        abyssal = PropertyFactory(name="abyssal-htest")
+        sheet.primary_persona.properties.add(abyssal)
+        self.assertTrue(character.has_property("abyssal-htest"))
+
+
+class HasCapabilityCharacterMethodTest(TestCase):
+    """Character.has_capability reads get_effective_capability_value."""
+
+    def test_true_when_innate_baseline_positive(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        CapabilityTypeFactory(name="flight-htest", innate_baseline=1)
+        self.assertTrue(sheet.character.has_capability("flight-htest"))
+
+    def test_false_when_innate_baseline_zero(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        CapabilityTypeFactory(name="flight-htest-2", innate_baseline=0)
+        self.assertFalse(sheet.character.has_capability("flight-htest-2"))
+
+    def test_false_when_capability_type_unknown(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        self.assertFalse(sheet.character.has_capability("nonexistent-capability"))
+
+
 class PropertyTaggedTechniqueTest(TestCase):
     """Property-tagged technique — scar fires when technique carries a Property.
 
@@ -352,4 +406,101 @@ class PropertyTaggedTechniqueTest(TestCase):
         """A technique without any Property does not match has_property — passes through."""
         technique = TechniqueFactory(damage_profile=False)
         stack = self._emit(technique)
+        self.assertFalse(stack.was_cancelled())
+
+
+class TargetRuntimePropertyNegatesEffectTest(TestCase):
+    """A target's runtime ObjectProperty (e.g. 'aerial') can cancel an incoming effect.
+
+    Unlike PropertyTaggedTechniqueTest (which gates on the source technique's
+    static Property tag), this gates on the TARGET's own live state — no
+    SELF_FILTER, since the trigger is installed on the potential victim and
+    must fire whenever an incoming DAMAGE_PRE_APPLY names them as target.
+    """
+
+    def setUp(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("TrapRoom")
+        sheet = CharacterSheetFactory()
+        self.character = sheet.character
+        self.character.location = self.room
+
+        self.aerial = AerialPropertyFactory()
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={"path": "target", "op": "has_property", "value": "aerial"},
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+    def _emit(self):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="technique", ref=None),
+        )
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_aerial_target_cancels_the_trap(self) -> None:
+        ObjectPropertyFactory(object=self.character, property=self.aerial)
+        stack = self._emit()
+        self.assertTrue(stack.was_cancelled())
+
+    def test_grounded_target_does_not_cancel(self) -> None:
+        stack = self._emit()
+        self.assertFalse(stack.was_cancelled())
+
+
+class TargetCapabilityNegatesEffectTest(TestCase):
+    """A target's effective Capability (e.g. 'flight') can cancel an incoming effect.
+
+    Sibling proof to TargetRuntimePropertyNegatesEffectTest, but for the
+    has_capability DSL op (#1793) — a real ReactiveConditionFactory-built trigger
+    with {"op": "has_capability", ...} firing/cancelling via emit_event, against a
+    Character's real CapabilityType state (get_effective_capability_value). No
+    SELF_FILTER, since the trigger is installed on the potential victim and must
+    fire whenever an incoming DAMAGE_PRE_APPLY names them as target.
+    """
+
+    def setUp(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("CapabilityTrapRoom")
+        sheet = CharacterSheetFactory()
+        self.character = sheet.character
+        self.character.location = self.room
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "path": "target",
+                "op": "has_capability",
+                "value": "flight-rtest",
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+    def _emit(self):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="technique", ref=None),
+        )
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_flying_target_cancels_the_trap(self) -> None:
+        CapabilityTypeFactory(name="flight-rtest", innate_baseline=1)
+        stack = self._emit()
+        self.assertTrue(stack.was_cancelled())
+
+    def test_grounded_target_does_not_cancel(self) -> None:
+        CapabilityTypeFactory(name="flight-rtest", innate_baseline=0)
+        stack = self._emit()
         self.assertFalse(stack.was_cancelled())

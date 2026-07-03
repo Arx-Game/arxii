@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 
 from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
 from world.conditions.services import get_all_capability_values
@@ -42,7 +42,10 @@ from world.mechanics.models import (
     CharacterModifier,
     ModifierSource,
     ModifierTarget,
+    ObjectProperty,
+    Prerequisite,
     Property,
+    PropertyDamageModifier,
     TraitCapabilityDerivation,
 )
 from world.mechanics.types import (
@@ -58,6 +61,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.conditions.models import DamageType
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.mechanics.engagement import CharacterEngagement
@@ -1351,3 +1355,34 @@ def end_engagement(
         source_content_type=ContentType.objects.get_for_model(source),
         source_id=source.pk,
     ).delete()
+
+
+def property_damage_bonus(target: ObjectDB, damage_type: DamageType | None) -> int:
+    """Sum PropertyDamageModifier.modifier_value for target's active Properties.
+
+    Matches rows keyed on the specific damage_type plus rows with a null
+    damage_type (applies to all types). Returns 0 when target carries no
+    matching Property (may be negative when a modifier reduces damage).
+    """
+    property_ids = list(
+        ObjectProperty.objects.filter(object=target).values_list("property_id", flat=True)
+    )
+    if not property_ids:
+        return 0
+    modifiers = PropertyDamageModifier.objects.filter(property_id__in=property_ids).filter(
+        Q(damage_type=damage_type) | Q(damage_type__isnull=True)
+    )
+    return sum(m.modifier_value for m in modifiers)
+
+
+def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:
+    """True if target satisfies every one of prereqs (all() semantics; empty = True).
+
+    Shared by both cast paths' target-prerequisite checks (#1793 second-pass dedup):
+    magic's non-combat ``_target_meets_prerequisites``/``_check_target_prerequisites``
+    and combat's ``_check_combat_target_prerequisites``/
+    ``_filter_by_target_prerequisites`` (all in ``world/magic/services/targeting.py``
+    / ``world/combat/services.py`` respectively). For a SELF-relationship caller,
+    pass ``caster`` as both ``caster`` and ``target``.
+    """
+    return all(prereq.evaluate(caster, target, target.location).met for prereq in prereqs)
