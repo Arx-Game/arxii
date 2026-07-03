@@ -2168,13 +2168,14 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
   `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`, requires
   `technique_id`; forwards `action_kind`/`target_unit`/`target_ally`/`scope`/
-  `target_place`/`target_side` but not yet `target_fortification` — BREACH/FORTIFY are
-  service-layer-only in this PR, see [battles.md](battles.md#sieges-1713)) ·
+  `target_place`/`target_side`/`target_fortification` — all 9 `BattleActionKind` values,
+  including BREACH/FORTIFY, are reachable through this Action, see
+  [battles.md](battles.md#sieges-1713)) ·
   `challenge_champion_duel` (player, `target_type=AREA`, #1710)
-- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold ... with
-  <technique>|duel <front> vs <boss name>|round|resolve|conclude]` — `strike`/`rout`/`rally`
-  also accept `side` or `place <name>` scope tokens (#1710/#1712). No `breach`/`fortify`
-  subverb yet (#1713).
+- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold|breach|fortify
+  ... with <technique>|duel <front> vs <boss name>|round|resolve|conclude]` —
+  `strike`/`rout`/`rally` also accept `side` or `place <name>` scope tokens (#1710/#1712);
+  `breach`/`fortify` require `place <name> fortification <kind>` (#1713).
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
   `BattleActionKind` (9 values, #1713 adds BREACH/FORTIFY), `BattleActionScope` (#1710),
   `BattleOutcome`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711),
@@ -2217,9 +2218,10 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   siege-engine skirmish the way `open_champion_duel` binds a Champion challenge, without
   the Champion-role gate. `create_fortification` snapshots starting integrity from
   `Building.fortification_level`, itself raised via a persistent `FORTIFICATION_UPGRADE`
-  Project (`world.buildings.fortification_services`). See
-  [battles.md](battles.md#sieges-1713) for the full mechanism, including the scope note
-  on what isn't yet player-facing.
+  Project (`world.buildings.fortification_services`). BREACH/FORTIFY are reachable
+  through `DeclareBattleActionAction` and `CmdBattle`'s telnet grammar, the same as every
+  other `BattleActionKind` (#1713). See [battles.md](battles.md#sieges-1713) for the full
+  mechanism.
 - **Deferred follow-ups:** naval / aerial (#1714), battle writeup page (#1735).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`
   (including `test_siege.py`'s three E2E siege journeys, #1713) and

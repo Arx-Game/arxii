@@ -531,7 +531,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side` kwargs) for the current round. Does not yet forward `target_fortification` — BREACH/FORTIFY are not reachable through this Action (or telnet); see [Sieges (#1713)](#sieges-1713) scope note. |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 9 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action and the `battle declare breach\|fortify` telnet grammar (#1713). |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -837,16 +837,15 @@ snapshot-once-at-creation pattern `Building` itself uses for `target_size`/
 structure with no persistent investment behind it (`max_integrity` is just
 `BASE_INTEGRITY[kind]`).
 
-**Scope note:** BREACH/FORTIFY are fully wired at the model/service/resolution
-layer (validated in `declare_battle_action`, resolved in `resolve_battle_round`,
-covered by the `test_siege.py` E2E journeys below) but this PR does not extend
-`DeclareBattleActionAction` or `CmdBattle`'s telnet grammar with a
-`target_fortification` kwarg or a `breach`/`fortify` subverb — unlike
-STRIKE/ROUT/REPEL/HOLD, a siege declaration is currently only reachable by calling
-`declare_battle_action` directly (GM/scripted setup), not from a player's telnet
-session or the generic battle-declaration REST path. The same applies to
-`open_siege_engine_encounter`: it has no `ChallengeChampionDuelAction`-style Action
-or telnet counterpart yet.
+BREACH/FORTIFY are fully wired end to end: `DeclareBattleActionAction` forwards a
+`target_fortification` kwarg alongside the existing `action_kind`/`target_unit`/
+`target_ally`/`scope`/`target_place`/`target_side` kwargs, and `CmdBattle` exposes
+`battle declare breach place <name> fortification <kind> with <technique>` /
+`battle declare fortify place <name> fortification <kind> with <technique>` —
+the same `place <name>` disambiguator REPEL/HOLD use, plus a `fortification <kind>`
+token since a front may carry more than one structure and a `Fortification` has no
+name of its own (#1713). `open_siege_engine_encounter` remains the one exception:
+it has no `ChallengeChampionDuelAction`-style Action or telnet counterpart yet.
 
 ## Test Coverage
 
