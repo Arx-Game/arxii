@@ -15,11 +15,21 @@ default:
 
 # --- Testing -----------------------------------------------------------------
 
+# Internal: warn when tests run from the 9p-mounted main checkout — Python
+# imports over 9p add ~25s to every test invocation vs an ext4 worktree
+# under .claude/worktrees/ (the arxii-worktrees named volume).
+_fs-warn:
+    #!/usr/bin/env bash
+    if [ "$(findmnt -no FSTYPE -T . 2>/dev/null)" = "9p" ]; then
+        echo "WARNING: this checkout is on a 9p mount; test runs pay ~25s extra here." >&2
+        echo "         Prefer an ext4 worktree under .claude/worktrees/ (docs/devcontainer-setup.md)." >&2
+    fi
+
 # Run `arx test` with the given args. Thin pass-through; use when you
 # don't need to capture output to a file.
 #   just test flows --keepdb
 #   just test world.combat.tests.test_combat_service --keepdb -v 2
-test *args:
+test *args: _fs-warn
     uv run arx test {{args}}
 
 # Inner-loop SQLite tier — fast in-memory DB, excludes @tag("postgres")
@@ -33,7 +43,7 @@ test *args:
 #   just test-fast world.checks world.flows
 # For apps where the SQLite tier doesn't work (character_sheets, roster,
 # magic, scenes, codex, areas, societies) use `just test-parity` instead.
-test-fast *args:
+test-fast *args: _fs-warn
     #!/usr/bin/env bash
     set -euo pipefail
     N=$(echo "{{args}}" | wc -w)
@@ -46,7 +56,7 @@ test-fast *args:
 # Force --parallel on the SQLite fast tier, even for a single app.
 # Use when a single app has 100+ tests and serial is too slow.
 #   just test-fast-par world.conditions
-test-fast-par *args:
+test-fast-par *args: _fs-warn
     echo "yes" | uv run arx test --sqlite --parallel --exclude-tag postgres {{args}}
 
 # Derive the Postgres parity-tier test DB name (test_<dbname>) and its
@@ -131,7 +141,7 @@ _ensure-testdb rebuild="":
 #   just test-parity world.character_sheets
 #   just test-parity --rebuild world.character_sheets   # after a model change
 #   just test-parity                              # full suite
-test-parity *args:
+test-parity *args: _fs-warn
     #!/usr/bin/env bash
     set -euo pipefail
     REBUILD=""
@@ -159,7 +169,7 @@ test-parity *args:
 #
 #   just test-affected
 #   just test-affected -v 2             # extra args passed to arx test
-test-affected *args:
+test-affected *args: _fs-warn
     #!/usr/bin/env bash
     set -euo pipefail
     BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)
@@ -204,7 +214,7 @@ test-affected *args:
 # destroy-test-DB prompt.
 #   just regression
 #   just regression --rebuild
-regression *args:
+regression *args: _fs-warn
     #!/usr/bin/env bash
     set -euo pipefail
     REBUILD=""
