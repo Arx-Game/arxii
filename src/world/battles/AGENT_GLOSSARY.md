@@ -15,9 +15,10 @@ _Avoid_: team, faction (use "side"); stance, tactics mode (use "posture").
 
 **Battle Place**:
 A named front/zone within a `Battle` (e.g. "The Main Gates"). Not a room; battles are
-location-less (see ADR-0081). Carries a `TerrainType` (#1711) affecting composition
-matchups. Can be bound to a real `CombatEncounter` (`combat_encounter` FK) for a
-discrete tactical fight at that front — most commonly a Champion duel (#1710).
+location-less (see ADR-0081). Carries a `TerrainType` (#1711) affecting
+property/terrain-effect matchups (#1794). Can be bound to a real `CombatEncounter`
+(`combat_encounter` FK) for a discrete tactical fight at that front — most commonly a
+Champion duel (#1710).
 _Avoid_: front (descriptive only), zone, location.
 
 **Unit**:
