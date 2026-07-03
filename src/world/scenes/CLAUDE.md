@@ -59,8 +59,9 @@ the unified Persona identity system, and non-combat scene rounds.
   resolution instead of caching an outcome onto the declaration row.
 - **`SceneRoundParticipant`**: A character taking turns in a `SceneRound`.
 - **`PendingSuddenHarm`** (#1316): a one-shot out-of-combat damage payload held pending a
-  reactive Interpose beat. `target_sheet` (OneToOne `CharacterSheet` — one unresolved row per
-  target), `scene_round` FK (the bootstrapped DANGER round bound to resolve it), `amount`,
+  reactive Interpose beat. `target_sheet` (FK `CharacterSheet` — multiple unresolved rows may
+  exist per target at once, e.g. a single Consequence with two DEAL_DAMAGE effects against the
+  same target), `scene_round` FK (the bootstrapped DANGER round bound to resolve it), `amount`,
   `damage_type` (nullable FK `DamageType`), `source_description`. Created by
   `world.scenes.sudden_harm.arm_or_apply_sudden_harm` when a bystander is present and the harm
   clears `SceneRoundDefaultsConfig.sudden_harm_interpose_threshold`; resolved and deleted by

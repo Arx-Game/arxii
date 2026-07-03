@@ -383,23 +383,30 @@ class PersonaDisplayHelpersTest(TestCase):
 class PendingSuddenHarmModelTests(TestCase):
     """Tests for the PendingSuddenHarm model (#1316)."""
 
-    def test_create_and_one_per_target(self) -> None:
+    def test_create_and_multiple_per_target_allowed(self) -> None:
+        """target_sheet is a plain ForeignKey (not OneToOneField, #1316 whole-branch review
+        fix): multiple simultaneous unresolved pending harms on one target are valid — e.g. a
+        single Consequence with two DEAL_DAMAGE effects against the same target.
+        """
         sheet = CharacterSheetFactory()
         scene_round = SceneRoundFactory()
         damage_type = DamageTypeFactory()
-        PendingSuddenHarm.objects.create(
+        first = PendingSuddenHarm.objects.create(
             target_sheet=sheet,
             scene_round=scene_round,
             amount=15,
             damage_type=damage_type,
             source_description="a spring-loaded trap",
         )
-        with self.assertRaises(IntegrityError):
-            PendingSuddenHarm.objects.create(
-                target_sheet=sheet,
-                scene_round=scene_round,
-                amount=5,
-            )
+        second = PendingSuddenHarm.objects.create(
+            target_sheet=sheet,
+            scene_round=scene_round,
+            amount=5,
+        )
+        self.assertEqual(
+            set(PendingSuddenHarm.objects.filter(target_sheet=sheet).values_list("id", flat=True)),
+            {first.id, second.id},
+        )
 
     def test_damage_type_nullable(self) -> None:
         sheet = CharacterSheetFactory()

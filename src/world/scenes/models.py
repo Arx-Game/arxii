@@ -1441,14 +1441,16 @@ class PendingSuddenHarm(SharedMemoryModel):
     Created by ``world.scenes.sudden_harm.arm_or_apply_sudden_harm`` when a bystander is
     present and the harm clears ``SceneRoundDefaultsConfig.sudden_harm_interpose_threshold``.
     Resolved (and deleted) by ``world.scenes.sudden_harm.resolve_pending_interpose_harm`` at
-    the bound round's resolution. One unresolved row per target at a time.
+    the bound round's resolution. Multiple unresolved rows may exist per target at once (e.g.
+    a single Consequence with two DEAL_DAMAGE effects against the same target) — resolution
+    iterates and resolves each independently.
     """
 
-    target_sheet = models.OneToOneField(
+    target_sheet = models.ForeignKey(
         CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="pending_sudden_harm",
-        help_text="The character this pending harm targets; one unresolved row per target.",
+        help_text="The character this pending harm targets; multiple unresolved rows may exist.",
     )
     scene_round = models.ForeignKey(
         "scenes.SceneRound",

@@ -104,6 +104,32 @@ class ArmOrApplySuddenHarmTests(TestCase):
         self.assertLess(self.sheet.vitals.health, starting_health)
         self.assertFalse(PendingSuddenHarm.objects.filter(target_sheet=self.sheet).exists())
 
+    def test_two_qualifying_harms_on_same_target_both_deferred(self) -> None:
+        """Regression (#1316 whole-branch review): a single Consequence can carry two
+        DEAL_DAMAGE effects against the same target (e.g. physical + fire from one trap),
+        so arm_or_apply_sudden_harm can fire twice on the same target while the first
+        pending harm is still unresolved. target_sheet used to be a OneToOneField, so the
+        second PendingSuddenHarm.objects.create() raised an uncaught IntegrityError. Now a
+        plain ForeignKey, both calls must succeed and both rows must persist.
+        """
+        ensure_interpose_content()
+        self._place_bystander()
+        starting_health = self.sheet.vitals.health
+        config = get_scene_round_defaults_config()
+        above = config.sudden_harm_interpose_threshold + 5
+
+        arm_or_apply_sudden_harm(self.char, above, None, source_description="a hidden blade")
+        arm_or_apply_sudden_harm(self.char, above, None, source_description="a lick of flame")
+
+        self.sheet.vitals.refresh_from_db()
+        self.assertEqual(self.sheet.vitals.health, starting_health)
+        pending = PendingSuddenHarm.objects.filter(target_sheet=self.sheet).order_by("id")
+        self.assertEqual(pending.count(), 2)
+        self.assertEqual(
+            list(pending.values_list("source_description", flat=True)),
+            ["a hidden blade", "a lick of flame"],
+        )
+
     def test_interpose_template_not_seeded_falls_back_to_immediate_resolution(self) -> None:
         """Bystander present, above threshold, but the Interpose seed content is missing.
 
@@ -211,6 +237,63 @@ class ResolvePendingInterposeHarmTests(TestCase):
         ) as mocked:
             resolve_scene_round(self.rnd)
             self.assertTrue(mocked.called)
+
+        target_sheet.vitals.refresh_from_db()
+        self.assertEqual(target_sheet.vitals.health, 100)
+        self.assertFalse(PendingSuddenHarm.objects.filter(target_sheet=target_sheet).exists())
+
+    def test_single_declaration_blocks_multiple_pending_harms_same_target(self) -> None:
+        """Regression (#1316 whole-branch review): with two PendingSuddenHarm rows on the
+        same target in one round, a single declared Interpose is looked up fresh per
+        pending row (SceneActionDeclaration rows are never deleted by resolution — only
+        PendingSuddenHarm rows are) and so applies to BOTH, not just the first. This is
+        accepted, deliberate behavior (the guard is "ready to intercept incoming harm this
+        round," not single-use — consistent with there being no fatigue charge to
+        double-charge in the non-combat path), not something this fix changes.
+        """
+        from world.mechanics.constants import ResolutionType
+        from world.mechanics.types import ChallengeResolutionResult
+
+        target_sheet = CharacterSheetFactory()
+        self._place(target_sheet)
+        CharacterVitalsFactory(character_sheet=target_sheet, health=100, max_health=100)
+        target_participant = SceneRoundParticipantFactory(
+            scene_round=self.rnd, character_sheet=target_sheet
+        )
+
+        interposer_sheet = CharacterSheetFactory()
+        self._place(interposer_sheet)
+        interposer_participant = SceneRoundParticipantFactory(
+            scene_round=self.rnd, character_sheet=interposer_sheet
+        )
+
+        PendingSuddenHarm.objects.create(target_sheet=target_sheet, scene_round=self.rnd, amount=20)
+        PendingSuddenHarm.objects.create(target_sheet=target_sheet, scene_round=self.rnd, amount=30)
+        declare_interpose_scene(interposer_participant, target_participant)
+
+        def _dispatch_clean_block(  # noqa: PLR0913
+            actor, target_object, *, challenge_name, approach, error_msg, outcome_fn
+        ):
+            result = ChallengeResolutionResult(
+                challenge_instance_id=1,
+                challenge_name=challenge_name,
+                approach_name="telekinesis",
+                check_result=None,
+                consequence=None,
+                applied_effects=[],
+                resolution_type=ResolutionType.DESTROY,
+                challenge_deactivated=True,
+                display_consequences=[],
+            )
+            outcome_fn(result)
+            return result
+
+        with patch(
+            "world.mechanics.reactions.dispatch_capability_reaction",
+            side_effect=_dispatch_clean_block,
+        ) as mocked:
+            resolve_scene_round(self.rnd)
+            self.assertEqual(mocked.call_count, 2)
 
         target_sheet.vitals.refresh_from_db()
         self.assertEqual(target_sheet.vitals.health, 100)
