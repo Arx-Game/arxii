@@ -194,25 +194,14 @@ ratification. The `verify-against-code` skill carries the labeling procedure
 (`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]`), the ledger format, and the
 recurring-traps list. **Use it.**
 
-## Fold In, Don't File — REQUIRED for review-surfaced gaps
+## Fold In, Don't File
 
-**Trivial gaps never become an issue — not now, not later, no exceptions.**
-A missing test for code this PR just wrote, a one-line dedup, a small
-admin/serializer wiring nit, minor polish: fix it in the current branch/PR
-now, or drop it if it's not worth even that. These do not get filed as
-follow-ups under any justification — "it's low-risk," "it's out of scope for
-this task," "it was surfaced during review" are not blockers, they're
-description of exactly the stuff that gets fixed or dropped. Size/value, not
-verification status, is what disqualifies them — being real and
-code-verified doesn't make triviality worth tracking.
-
-File a follow-up only for something substantial enough to need its own PR:
-a genuinely separable system, a scope well beyond the current issue, or an
-open design question that needs a human call — and say what the blocker is
-in the issue body. This rule **overrides any "file follow-up now" step in a
-skill** (including `issue-to-merged-pr`'s PR-opening and post-merge-cleanup
-steps) — those steps describe the mechanism for the substantial-work case,
-not a license to file everything review surfaces.
+Trivial review-surfaced gaps (a missing test, a dedup, a wiring nit) get fixed in
+the current branch/PR now or dropped — never filed as a follow-up issue, no
+exceptions. File only for something substantial enough to need its own PR
+(separable system, scope beyond the current issue, a design question needing a
+human call), with the reason stated in the issue body. Overrides any skill step
+that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
 
 ## Database & Code Quality Invariants
 
