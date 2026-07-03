@@ -223,27 +223,31 @@ def apply_resolved_damage(
     (post-interpose resolution). Returns the actual amount dealt (0 if fully absorbed).
     """
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
-    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
-
-    effective = amount
-    if hasattr(target, "threads"):
-        effective = apply_damage_reduction_from_threads(target, effective)
-    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
-    # Closes the asymmetry where traps ignored a character's damage-type resistance.
-    effective = resolve_damage_type_resistance(target, effective, damage_type)
-    if effective <= 0:
-        return 0
-
-    vitals = target.sheet_data.vitals
-    vitals.health -= effective
-    vitals.save(update_fields=["health"])
-
-    process_damage_consequences(
-        character_sheet=target.sheet_data,
-        damage_dealt=effective,
-        damage_type=damage_type,
+    from world.magic.services import (  # noqa: PLC0415
+        apply_damage_reduction_from_threads,
+        coherence_cache_scope,
     )
-    return effective
+
+    with coherence_cache_scope():
+        effective = amount
+        if hasattr(target, "threads"):
+            effective = apply_damage_reduction_from_threads(target, effective)
+        # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+        # Closes the asymmetry where traps ignored a character's damage-type resistance.
+        effective = resolve_damage_type_resistance(target, effective, damage_type)
+        if effective <= 0:
+            return 0
+
+        vitals = target.sheet_data.vitals
+        vitals.health -= effective
+        vitals.save(update_fields=["health"])
+
+        process_damage_consequences(
+            character_sheet=target.sheet_data,
+            damage_dealt=effective,
+            damage_type=damage_type,
+        )
+        return effective
 
 
 def _deal_damage(

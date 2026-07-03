@@ -78,6 +78,9 @@ from world.magic.services.threads import (
     update_thread_narrative,
     weave_thread,
 )
+from world.mechanics.services import (
+    coherence_cache_scope,
+)
 
 __all__ = [
     # Re-exported private helpers (external callers exist)
@@ -92,6 +95,7 @@ __all__ = [
     "calculate_effective_anima_cost",
     # soulfray
     "calculate_soulfray_severity",
+    "coherence_cache_scope",
     "compute_anchor_cap",
     "compute_effective_cap",
     "compute_path_cap",
