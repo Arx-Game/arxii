@@ -14,6 +14,7 @@ from world.battles.constants import (
     BASE_INTEGRITY,
     FORTIFICATION_LEVEL_INTEGRITY_BONUS,
     BattleActionKind,
+    BattleOutcome,
     BattleSideRole,
     FortificationKind,
 )
@@ -127,7 +128,7 @@ class HoldTheWallsJourneyTests(TestCase):
 
         result = maybe_conclude_on_timer(battle=self.battle)
 
-        self.assertIn(result, ("defender_marginal", "defender_decisive"))
+        self.assertEqual(result, BattleOutcome.DEFENDER_MARGINAL)
         self.fort.refresh_from_db()
         self.assertFalse(self.fort.breached)
         self.battle.refresh_from_db()
