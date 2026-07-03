@@ -361,10 +361,10 @@ class GenericKudosOnAcceptTests(TestCase):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
         cls.action_template = ActionTemplateFactory()
-        # The social_engagement category is seeded by a RunPython migration
-        # (progression 0003), which the SQLite fast tier skips (#855) —
+        # The social_engagement category is seeded by world/progression/seeds.py
+        # (via tools/build_schema.py), which the SQLite fast tier skips (#855) —
         # get_or_create so the fast tier gets the row and the PG tier
-        # (where the migration already seeded it) doesn't collide.
+        # (where the seed function already seeded it) doesn't collide.
         KudosSourceCategory.objects.get_or_create(
             name="social_engagement",
             defaults={
@@ -718,8 +718,9 @@ class MultiTargetE2ETests(TestCase):
         cls.pc_b_persona, cls.pc_b_account = _make_pc_persona()
         cls.pc_c_persona, cls.pc_c_account = _make_pc_persona()
 
-        # The social_engagement category is seeded by a RunPython migration that
-        # the SQLite fast tier skips (#855).  Create it so kudos award doesn't crash.
+        # The social_engagement category is seeded by world/progression/seeds.py
+        # (via tools/build_schema.py), which the SQLite fast tier skips (#855).
+        # Create it so kudos award doesn't crash.
         KudosSourceCategory.objects.get_or_create(
             name="social_engagement",
             defaults={
@@ -1441,7 +1442,8 @@ class TestGradedAccrualOnAccept(TestCase):
         # Seed difficulty weights (idempotent get_or_create).
         seed_kudos_difficulty_weights()
 
-        # Seed social_engagement category — RunPython migration skipped on SQLite fast tier.
+        # Seed social_engagement category — world/progression/seeds.py (via
+        # tools/build_schema.py) is skipped on the SQLite fast tier.
         KudosSourceCategory.objects.get_or_create(
             name="social_engagement",
             defaults={
@@ -1620,8 +1622,9 @@ class TestNPCAndAreaFallbackDifficulty(TestCase):
         cls.npc_persona = PersonaFactory()
         cls.action_template = ActionTemplateFactory()
 
-        # The social_engagement category is seeded by a RunPython migration that the
-        # SQLite fast tier skips (#855); get_or_create so the fast tier gets the row.
+        # The social_engagement category is seeded by world/progression/seeds.py
+        # (via tools/build_schema.py), which the SQLite fast tier skips (#855);
+        # get_or_create so the fast tier gets the row.
         KudosSourceCategory.objects.get_or_create(
             name="social_engagement",
             defaults={

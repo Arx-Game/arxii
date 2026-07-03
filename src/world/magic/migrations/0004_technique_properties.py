@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0003_accept_soul_tether_placeholder_grants"),
+        ("magic", "0002_initial"),
         ("mechanics", "0002_initial"),
     ]
 

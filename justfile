@@ -49,24 +49,116 @@ test-fast *args:
 test-fast-par *args:
     echo "yes" | uv run arx test --sqlite --parallel --exclude-tag postgres {{args}}
 
-# CI-parity tier — runs the same Postgres path CI runs, in parallel.
+# Derive the Postgres parity-tier test DB name (test_<dbname>) and its
+# host's maintenance-DB URL from src/.env's own DATABASE_URL. A shell-exported
+# DATABASE_URL does NOT reach `arx` subcommands (setup_env() reloads
+# src/.env with override=True), so every recipe that needs the test DB name
+# re-derives it from the file instead of trusting the environment.
+# Only supports the plain documented form (postgres://user:pass@host:port/dbname)
+# — no query string, no surrounding quotes. Both would silently mis-derive the
+# DB name (query lands in it; quotes leak into it), so this validates the
+# derived name and fails loudly instead, rather than building a name Postgres
+# will accept but nothing else will match.
+#   just _testdb-url                 # prints "TESTDB=... MAINT_URL=..." (eval'd by callers)
+_testdb-url:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    DBURL=$(grep -E '^DATABASE_URL=' src/.env | head -1 | cut -d= -f2-)
+    DBNAME=${DBURL##*/}
+    PREFIX=${DBURL%/*}
+    if ! [[ "$DBNAME" =~ ^[A-Za-z0-9_]+$ ]]; then
+        echo "_testdb-url: src/.env's DATABASE_URL isn't in the supported form." >&2
+        echo "  DATABASE_URL=${DBURL}" >&2
+        echo "  Derived db name: '${DBNAME}' (must match ^[A-Za-z0-9_]+\$)" >&2
+        echo "  Supported form: postgres://user:pass@host:port/dbname" >&2
+        echo "  (no query string, no surrounding quotes)" >&2
+        exit 1
+    fi
+    echo "TESTDB=test_${DBNAME}"
+    echo "MAINT_URL=${PREFIX}/postgres"
+    echo "TESTDB_URL=${PREFIX}/test_${DBNAME}"
+
+# Build (or rebuild) the Postgres parity-tier test database straight from
+# current model state — no migration replay. Drops/recreates test_<dbname>
+# via psql against the host's `postgres` maintenance DB, then runs
+# tools/build_schema.py against it (syncdb + partition/matview SQL + seeds).
+# `test-parity`/`regression` call this automatically when the test DB is
+# missing, but re-run it by hand (or pass `--rebuild`) after a model change —
+# --keepdb reuses whatever schema is already there, it does not detect drift.
+#   just build-test-schema
+build-test-schema:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(just _testdb-url)"
+    echo "build-test-schema: rebuilding ${TESTDB}"
+    psql "$MAINT_URL" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"${TESTDB}\";"
+    psql "$MAINT_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${TESTDB}\";"
+    DATABASE_URL="$TESTDB_URL" uv run python tools/build_schema.py
+
+# Internal: build the test DB if it doesn't exist yet, if its schema isn't
+# actually complete, or if `rebuild` is non-empty. Shared by test-parity and
+# regression.
+#
+# Existence alone isn't enough: a bare `arx test`/`arx test --keepdb` run
+# (bypassing this recipe) can make Django itself create test_<dbname> via
+# plain syncdb — no partition, no composite FKs, no matviews, no seeds — and
+# with --keepdb that broken schema persists. So probe the same signal
+# build_schema.py itself uses for its idempotency guard (scenes_interaction
+# being partitioned, relkind='p') against the actual test DB, not just
+# pg_database existence, and rebuild if it's missing or wrong.
+_ensure-testdb rebuild="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(just _testdb-url)"
+    EXISTS=$(psql "$MAINT_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='${TESTDB}'")
+    SCHEMA_OK=""
+    if [ "$EXISTS" = "1" ]; then
+        SCHEMA_OK=$(psql "$TESTDB_URL" -tAc \
+            "SELECT 1 FROM pg_class WHERE relname='scenes_interaction' AND relkind='p'" \
+            2>/dev/null || echo "")
+    fi
+    if [ -n "{{rebuild}}" ] || [ "$EXISTS" != "1" ] || [ "$SCHEMA_OK" != "1" ]; then
+        just build-test-schema
+    fi
+
+# CI-parity tier — runs the same Postgres path CI runs, in parallel, against
+# a pre-built test DB (schema from current model state, no migration
+# replay). Builds the test DB automatically the first time; pass `--rebuild`
+# to force a rebuild after a model change. Always uses --keepdb — the test
+# DB's schema comes from `build-test-schema`, not Django's migration-driven
+# create_test_db.
 # Use before pushing, and for apps that can't run on the SQLite tier.
 #   just test-parity world.character_sheets
-#   just test-parity                              # full suite, ~30+ min
+#   just test-parity --rebuild world.character_sheets   # after a model change
+#   just test-parity                              # full suite
 test-parity *args:
-    echo "yes" | uv run arx test --parallel {{args}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REBUILD=""
+    ARGS=()
+    for tok in {{args}}; do
+        if [ "$tok" = "--rebuild" ]; then
+            REBUILD="1"
+        else
+            ARGS+=("$tok")
+        fi
+    done
+    just _ensure-testdb "$REBUILD"
+    echo "yes" | uv run arx test --keepdb --parallel "${ARGS[@]}"
 
 # Change-impact-aware regression: tests only the apps your branch
 # actually touches PLUS apps that import from them (catches the
 # "I changed missions, but a stories test uses MissionTemplateFactory"
 # case). Falls back to the full suite if any change lands outside
-# src/world/<app>/ scope (settings, server config, etc.).
+# src/world/<app>/ scope (settings, server config, etc.). Runs on the
+# Postgres parity tier — builds the test DB automatically the first time
+# (see `build-test-schema`), then always reuses it via --keepdb.
 #
 # Diffs against origin/main via merge-base. Run `git fetch origin`
 # first if you suspect your tracking branch is stale.
 #
 #   just test-affected
-#   just test-affected --keepdb         # extra args passed to arx test
+#   just test-affected -v 2             # extra args passed to arx test
 test-affected *args:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -81,7 +173,8 @@ test-affected *args:
     if [ -n "$OUTSIDE" ]; then
         echo "test-affected: changes outside src/world/<app>/ — running full regression:"
         echo "$OUTSIDE" | sed 's/^/  /'
-        echo "yes" | uv run arx test --parallel {{args}}
+        just _ensure-testdb ""
+        echo "yes" | uv run arx test --keepdb --parallel {{args}}
         exit 0
     fi
     CHANGED_APPS=$(echo "$CHANGED" | sed -E 's|^src/world/([^/]+)/.*|\1|' | sort -u)
@@ -95,19 +188,36 @@ test-affected *args:
     DOTTED=$(echo "$APPS" | sed 's|^|world.|' | tr '\n' ' ')
     COUNT=$(echo "$APPS" | wc -l)
     echo "test-affected: $COUNT app(s) — $(echo $APPS | tr '\n' ' ')"
+    just _ensure-testdb ""
     if [ "$COUNT" -gt 1 ]; then
-        echo "yes" | uv run arx test --parallel $DOTTED {{args}}
+        echo "yes" | uv run arx test --keepdb --parallel $DOTTED {{args}}
     else
-        echo "yes" | uv run arx test $DOTTED {{args}}
+        echo "yes" | uv run arx test --keepdb $DOTTED {{args}}
     fi
 
-# Run the full regression suite (no --keepdb, matches CI's fresh-DB behavior).
-# Uses --parallel (cpu_count workers) — local wall-clock is multiple-x faster
-# than serial; behavior matches CI in every other way (no --keepdb, full suite,
-# Postgres). Auto-confirms the destroy-test-DB prompt.
+# Run the full regression suite against a pre-built Postgres test DB (schema
+# from current model state, no migration replay) — matches CI's path exactly,
+# including CI's own --keepdb (CI builds the test DB once via
+# tools/build_schema.py, then reuses it across the run). Builds the test DB
+# automatically the first time; pass `--rebuild` to force a rebuild after a
+# model change. Uses --parallel (cpu_count workers). Auto-confirms the
+# destroy-test-DB prompt.
 #   just regression
-regression:
-    echo "yes" | uv run arx test --parallel
+#   just regression --rebuild
+regression *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REBUILD=""
+    ARGS=()
+    for tok in {{args}}; do
+        if [ "$tok" = "--rebuild" ]; then
+            REBUILD="1"
+        else
+            ARGS+=("$tok")
+        fi
+    done
+    just _ensure-testdb "$REBUILD"
+    echo "yes" | uv run arx test --keepdb --parallel "${ARGS[@]}"
 
 # --- Lint / format -----------------------------------------------------------
 

@@ -18,6 +18,15 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]
 
+# The PG-tier test database is pre-built by tools/build_schema.py (schema from
+# current model state + standalone SQL + seeds) and reused via --keepdb — CI
+# clones it with CREATE DATABASE ... TEMPLATE, local runs build it with
+# `just build-test-schema`. MIGRATE=False stops Django's create_test_db from
+# replaying the migration chain on top (12+ min of pure Python model-state
+# rendering; see ADR ci-schema-from-models). Migration-chain validity is
+# gated by `makemigrations --check` on PRs + the nightly full-replay workflow.
+DATABASES["default"].setdefault("TEST", {})["MIGRATE"] = False
+
 # Reduce logging verbosity during tests
 LOGGING["loggers"]["django.db.backends"]["level"] = "ERROR"
 LOGGING["loggers"]["evennia"]["level"] = "ERROR"
