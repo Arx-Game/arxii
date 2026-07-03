@@ -123,6 +123,17 @@ class ConnectBlueprintPositionsTests(TestCase):
         edge = connect_blueprint_positions(self.p1, self.p2)
         self.assertEqual(BlueprintEdge.objects.get(pk=edge.pk).blueprint_id, self.bp.pk)
 
+    def test_gating_challenge_template_defaults_to_none(self):
+        edge = connect_blueprint_positions(self.p1, self.p2)
+        self.assertIsNone(edge.gating_challenge_template_id)
+
+    def test_gating_challenge_template_is_set_when_passed(self):
+        from world.mechanics.factories import ChallengeTemplateFactory
+
+        template = ChallengeTemplateFactory()
+        edge = connect_blueprint_positions(self.p1, self.p2, gating_challenge_template=template)
+        self.assertEqual(edge.gating_challenge_template_id, template.pk)
+
 
 class RoundTripTests(TestCase):
     """Create blueprint → add 3 positions → connect → assert counts."""

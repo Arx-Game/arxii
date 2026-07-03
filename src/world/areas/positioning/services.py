@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.mechanics.models import ChallengeInstance
+    from world.mechanics.models import ChallengeInstance, ChallengeTemplate
 
 
 @dataclass(frozen=True)
@@ -128,13 +128,16 @@ def connect_blueprint_positions(
     b: BlueprintPosition,
     *,
     is_passable: bool = True,
+    gating_challenge_template: ChallengeTemplate | None = None,
 ) -> BlueprintEdge:
     """Create a traversable edge between two blueprint positions, ordered canonically.
 
     The smaller-pk position becomes position_a (canonical ordering), mirroring
     ``connect_positions``. Raises PositionError if a and b belong to different
     blueprints. Calls full_clean() before save so self-loop / canonical-order
-    constraints fire.
+    constraints fire. A non-null ``gating_challenge_template`` means
+    ``instantiate_blueprint`` mints a live ``ChallengeInstance`` from it when this
+    edge is cloned into a room.
     """
     if a.blueprint_id != b.blueprint_id:
         raise PositionError(_ERR_BLUEPRINT_CROSS)
@@ -145,6 +148,7 @@ def connect_blueprint_positions(
         position_a=a,
         position_b=b,
         is_passable=is_passable,
+        gating_challenge_template=gating_challenge_template,
     )
     edge.full_clean()
     edge.save()
