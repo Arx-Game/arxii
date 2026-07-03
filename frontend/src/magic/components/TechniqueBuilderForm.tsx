@@ -69,6 +69,12 @@ interface ConditionOption {
   name: string;
 }
 
+export interface ConsequencePoolOption {
+  id: number;
+  name: string;
+  description: string;
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -81,6 +87,7 @@ export interface TechniqueBuilderFormProps {
   capabilities: CapabilityType[];
   damageTypes: DamageType[];
   conditions: ConditionOption[];
+  consequencePools: ConsequencePoolOption[];
   characterId?: number;
   onSuccess?: () => void;
 }
@@ -173,6 +180,7 @@ export function TechniqueBuilderForm({
   capabilities,
   damageTypes,
   conditions,
+  consequencePools,
   characterId,
   onSuccess,
 }: TechniqueBuilderFormProps) {
@@ -187,6 +195,7 @@ export function TechniqueBuilderForm({
   const [intensity, setIntensity] = useState<number>(1);
   const [control, setControl] = useState<number>(1);
   const [animaCost, setAnimaCost] = useState<number>(1);
+  const [consequencePoolId, setConsequencePoolId] = useState<number | null>(null);
 
   // Payload rows
   const [capabilityGrants, setCapabilityGrants] = useState<CapabilityGrantRow[]>([]);
@@ -249,6 +258,7 @@ export function TechniqueBuilderForm({
             minimum_success_level: r.minimum_success_level,
             remove_all_stacks: r.remove_all_stacks,
           })),
+          consequence_pool_id: consequencePoolId,
           character_id: characterId,
         },
         {
@@ -272,6 +282,7 @@ export function TechniqueBuilderForm({
     intensity,
     control,
     animaCost,
+    consequencePoolId,
     capabilityGrants,
     damageProfiles,
     appliedConditions,
@@ -304,6 +315,7 @@ export function TechniqueBuilderForm({
         damage_profiles: damageProfiles,
         applied_conditions: appliedConditions,
         removed_conditions: removedConditions,
+        consequence_pool_id: consequencePoolId,
         character_id: characterId,
       },
       {
@@ -491,6 +503,28 @@ export function TechniqueBuilderForm({
               onChange={(e) => setAnimaCost(Number(e.target.value))}
               disabled={isPending}
             />
+          </div>
+
+          {/* Outcome flavor */}
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="tech-consequence-pool">Outcome Flavor</Label>
+            <Select
+              value={consequencePoolId != null ? String(consequencePoolId) : 'standard'}
+              onValueChange={(val) => setConsequencePoolId(val === 'standard' ? null : Number(val))}
+              disabled={isPending}
+            >
+              <SelectTrigger id="tech-consequence-pool">
+                <SelectValue placeholder="Standard" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">Standard</SelectItem>
+                {consequencePools.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

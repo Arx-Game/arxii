@@ -278,4 +278,5 @@ def draft_to_design(draft: TechniqueDraft) -> TechniqueDesignInput:
             )
             for row in draft.removed_conditions.all()
         ),
+        consequence_pool_id=draft.consequence_pool_id,
     )

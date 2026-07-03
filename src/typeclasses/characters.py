@@ -232,13 +232,17 @@ class Character(ObjectParent, DefaultCharacter):
         return bool(mine & other.active_covenant_ids())
 
     def has_property(self, name: str) -> bool:
-        """True if this character's primary persona carries the named Property tag.
+        """True if this character currently carries the named Property tag.
 
-        Used by the reactive-filter ``has_property`` op when the examined
-        *target* is a Character (e.g. Mage Sight scars).
+        Checks both the primary persona's authored identity tags (e.g.
+        masked-identity) and this character's runtime ObjectProperty
+        attachments (e.g. aerial) — the same Property catalog, two
+        attachment surfaces. Used by the reactive-filter ``has_property`` op.
         """
         from world.scenes.models import Persona
 
+        if self.object_properties.filter(property__name=name).exists():
+            return True
         sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return False
@@ -247,6 +251,26 @@ class Character(ObjectParent, DefaultCharacter):
         except Persona.DoesNotExist:
             return False
         return persona.properties.filter(name=name).exists()
+
+    def has_capability(self, name: str) -> bool:
+        """True if this character's effective value for the named Capability is > 0.
+
+        The capability-typed sibling of ``has_property`` for reactive-trigger
+        effect negation (e.g. "flying" modeled as an intrinsic Capability
+        rather than a runtime Property). Used by the reactive-filter
+        ``has_capability`` op.
+        """
+        from world.conditions.models import CapabilityType
+        from world.conditions.services import get_effective_capability_value
+
+        sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return False
+        try:
+            capability = CapabilityType.objects.get(name=name)
+        except CapabilityType.DoesNotExist:
+            return False
+        return get_effective_capability_value(sheet, capability) > 0
 
     def do_look(self, target):
         desc = self.at_look(target)

@@ -296,6 +296,36 @@ class CombatTechniqueResolver:
                     pull_bonus += eff.scaled_value
         return pull_bonus
 
+    def _filter_by_target_prerequisites(
+        self, technique: Technique, opponents: list[CombatOpponent]
+    ) -> list[CombatOpponent]:
+        """Silently drop opponents that fail technique.target_prerequisites.
+
+        AREA/FILTERED_GROUP only — these are enumerated independently of
+        _build_affected_targets/_check_combat_target_prerequisites (which now
+        skips AREA/FILTERED_GROUP entirely, deferring to this method, #1793
+        second-pass fix), so a target_prerequisites-gated technique would
+        otherwise land on every opponent regardless of eligibility. Mirrors
+        resolve_targets' silent AREA/FILTERED_GROUP filter
+        (world/magic/services/targeting.py) rather than raising — an AoE cast
+        is expected to skip ineligible targets, not block the whole cast
+        (ADR-0045).
+        """
+        from world.mechanics.services import prerequisites_met  # noqa: PLC0415
+
+        prereqs = technique.cached_target_prerequisites
+        if not prereqs:
+            return opponents
+        caster_od = self.participant.character_sheet.character
+        eligible = []
+        for opp in opponents:
+            target_od = opp.objectdb
+            if target_od is None:
+                continue  # can't evaluate a Property-based prerequisite without an ObjectDB
+            if prerequisites_met(prereqs, caster_od, target_od):
+                eligible.append(opp)
+        return eligible
+
     def _resolved_opponent_targets(self) -> list[CombatOpponent]:
         """Return the ordered list of CombatOpponents to act on for this action.
 
@@ -315,6 +345,12 @@ class CombatTechniqueResolver:
         after each preceding target's damage write.  AREA is the exception: it
         pre-filters to exclude DEFEATED so clients never need to enumerate the
         full list.
+
+        AREA and FILTERED_GROUP additionally run technique.target_prerequisites
+        through ``_filter_by_target_prerequisites`` (silent filter, #1793) — the
+        SINGLE/SELF branch does not, since that case is hard-gated pre-flight by
+        ``_check_combat_target_prerequisites`` in ``resolve_combat_technique``
+        before this method is ever reached for an AoE-independent enumeration.
         """
         from actions.constants import ActionTargetType  # noqa: PLC0415
 
@@ -327,13 +363,14 @@ class CombatTechniqueResolver:
         if target_type == ActionTargetType.AREA:
             # Enumerate ALL active (non-DEFEATED) opponents in the encounter.
             # One query; no join-table rows required.
-            return list(
+            opponents = list(
                 CombatOpponent.objects.filter(
                     encounter=self.participant.encounter,
                 )
                 .exclude(status=OpponentStatus.DEFEATED)
                 .order_by("pk")
             )
+            return self._filter_by_target_prerequisites(technique, opponents)
 
         if target_type == ActionTargetType.FILTERED_GROUP:
             join_opponents = list(
@@ -345,10 +382,12 @@ class CombatTechniqueResolver:
                 .order_by("pk")
             )
             if join_opponents:
-                return [row.opponent for row in join_opponents]
-            # Fallback: a direct caller that didn't write join rows
-            primary = self.action.focused_opponent_target
-            return [primary] if primary is not None else []
+                opponents = [row.opponent for row in join_opponents]
+            else:
+                # Fallback: a direct caller that didn't write join rows
+                primary = self.action.focused_opponent_target
+                opponents = [primary] if primary is not None else []
+            return self._filter_by_target_prerequisites(technique, opponents)
 
         # SINGLE / SELF: single target only
         primary = self.action.focused_opponent_target
@@ -373,7 +412,7 @@ class CombatTechniqueResolver:
         weapon_landed = False
         for profile in profiles:
             scaled, profile_damage_type = self._profile_damage(
-                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
+                profile, weapon, target, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
             )
             if scaled <= 0:
                 continue
@@ -446,10 +485,11 @@ class CombatTechniqueResolver:
             _wear_equipped_weapon(attacker)
         return results
 
-    def _profile_damage(
+    def _profile_damage(  # noqa: PLR0913
         self,
         profile: TechniqueDamageProfile,
         weapon: WeaponContribution | None,
+        target: CombatOpponent,
         *,
         sl: int,
         multiplier: Decimal,
@@ -458,9 +498,13 @@ class CombatTechniqueResolver:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
 
         Returns ``(0, None)`` when the profile's minimum_success_level exceeds
-        ``sl``; otherwise folds the equipped weapon's contribution into the
-        formula budget and applies the success-level multiplier.
+        ``sl``; otherwise folds the equipped weapon's contribution and the
+        target's Property-driven damage bonus (#1793) into the formula budget,
+        then applies the success-level multiplier. Budget is floored at 0
+        after the (possibly negative) property bonus is applied.
         """
+        from world.mechanics.services import property_damage_bonus  # noqa: PLC0415
+
         if sl < profile.minimum_success_level:
             return 0, None
         budget = profile.compute_damage_budget(
@@ -470,6 +514,7 @@ class CombatTechniqueResolver:
         budget, profile_damage_type = _weapon_augmented_budget(
             profile, budget, weapon, self.participant.character_sheet
         )
+        budget = max(0, budget + property_damage_bonus(target.objectdb, profile_damage_type))
         return int(budget * multiplier), profile_damage_type
 
     def _apply_conditions(
@@ -801,6 +846,58 @@ def _build_affected_targets(
     return targets
 
 
+def _check_combat_target_prerequisites(
+    technique: Technique, caster_od: ObjectDB, targets: list[ObjectDB]
+) -> None:
+    """Enforce technique.target_prerequisites against combat's explicit target list.
+
+    SINGLE is the only target_type that hard-blocks here: its target list
+    (from _build_affected_targets) is the real, complete target set for the
+    cast, so a failure hard-blocks the cast — mirroring the non-combat
+    SINGLE hard-block in validate_cast_target.
+
+    For target_type=SELF, the caster IS the target — but the real cast dispatcher
+    (``_target_spec_for_technique_action`` in ``actions/player_interface.py``) never
+    supplies an explicit opponent/ally target for a SELF technique, so
+    ``_build_affected_targets`` returns [] (see
+    ``test_affected_emitted_for_self_targeted_buff``). Check the caster directly in
+    that case rather than relying on targets being populated — mirrors Task 5's
+    non-combat SELF fix in ``world/magic/services/targeting.py``.
+
+    AREA/FILTERED_GROUP get NO pre-flight check at all: ``targets`` here is built
+    from ``action.focused_opponent_target``, a single FK that for an AoE dispatch
+    holds only the arbitrary "first" opponent from a client-supplied
+    ``focused_opponent_target_ids`` list (see
+    ``RoundContext._resolve_focused_targets``) — not a real single target, and not
+    the full AoE set. Hard-blocking the whole cast because THAT one arbitrary
+    opponent fails a prerequisite would wrongly kill a cast where other opponents
+    in the same AoE set legitimately pass. Defer entirely to
+    ``_filter_by_target_prerequisites``'s silent per-opponent filter downstream
+    (``_resolved_opponent_targets``, #1793 second-pass fix).
+    """
+    from actions.constants import ActionTargetType  # noqa: PLC0415
+    from world.magic.services.targeting import InvalidCastTarget  # noqa: PLC0415
+    from world.mechanics.services import prerequisites_met  # noqa: PLC0415
+
+    prereqs = technique.cached_target_prerequisites
+    if not prereqs:
+        return
+
+    if technique.target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+        return
+
+    msg = "Target does not meet this technique's targeting requirement."
+
+    if technique.target_type == ActionTargetType.SELF:
+        if not prerequisites_met(prereqs, caster_od, caster_od):
+            raise InvalidCastTarget(msg)
+        return
+
+    for target_od in targets:
+        if not prerequisites_met(prereqs, caster_od, target_od):
+            raise InvalidCastTarget(msg)
+
+
 def combatants_hostile_to(
     actor: CombatParticipant | CombatOpponent,
 ) -> dict[str, list]:
@@ -908,6 +1005,9 @@ def resolve_combat_technique(
     )
 
     targets = _build_affected_targets(participant, action)
+    _check_combat_target_prerequisites(
+        action.focused_action, participant.character_sheet.character, targets
+    )
 
     fury_res = run_fury_for_action(
         character=participant.character_sheet.character,

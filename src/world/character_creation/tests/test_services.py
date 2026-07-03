@@ -1110,6 +1110,43 @@ class FinalizeMagicDataCantripTests(TestCase):
         assert technique.name == "Flames of the Defiant"
         assert technique.description == "A revolutionary's fire."
 
+    def test_technique_uses_catalog_consequence_pool(self) -> None:
+        """finalize_magic_data assigns the chosen catalog pool's ActionTemplate."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterGift, Technique
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(
+            cantrip=self.cantrip, consequence_pool_id=chosen.consequence_pool_id
+        )
+
+        finalize_magic_data(draft, sheet)
+
+        gift = CharacterGift.objects.get(character=sheet).gift
+        technique = Technique.objects.get(gift=gift)
+        self.assertEqual(technique.action_template_id, chosen.pk)
+
+    def test_technique_falls_back_to_default_on_invalid_pool_id(self) -> None:
+        """A stale/invalid selected_consequence_pool_id degrades to the shared
+        default rather than crashing finalization (mirrors the resonance fallback)."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterGift, Technique
+        from world.magic.seeds_cast import get_standalone_cast_template
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(cantrip=self.cantrip, consequence_pool_id=999999)
+
+        finalize_magic_data(draft, sheet)
+
+        gift = CharacterGift.objects.get(character=sheet).gift
+        technique = Technique.objects.get(gift=gift)
+        self.assertEqual(technique.action_template_id, get_standalone_cast_template().pk)
+
     def test_no_gift_created_without_cantrip(self) -> None:
         """No Gift, CharacterGift, or Technique created when no cantrip is selected."""
         from world.character_creation.services import finalize_magic_data
@@ -1141,7 +1178,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         with self.assertRaises(Cantrip.DoesNotExist):
             finalize_magic_data(draft, sheet)
 
-    def _create_draft(
+    def _create_draft(  # noqa: PLR0913
         self,
         *,
         cantrip: Cantrip | None,
@@ -1149,6 +1186,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         custom_gift_name: str = "",
         custom_gift_description: str = "",
         glimpse_story: str = "",
+        consequence_pool_id: int | None = None,
     ) -> CharacterDraft:
         """Create a minimal draft with cantrip data for finalize_magic_data testing."""
         from evennia_extensions.factories import AccountFactory
@@ -1163,6 +1201,8 @@ class FinalizeMagicDataCantripTests(TestCase):
             draft_data["custom_gift_description"] = custom_gift_description
         if glimpse_story:
             draft_data["glimpse_story"] = glimpse_story
+        if consequence_pool_id is not None:
+            draft_data["selected_consequence_pool_id"] = consequence_pool_id
 
         return CharacterDraftFactory(
             account=AccountFactory(),

@@ -182,6 +182,19 @@ actions, backends, and service functions.
   combat service via its Action in `actions/definitions/combat_maneuvers.py`; `yield` reuses
   the existing `YieldAction`. `succor <ally>` always names a specific ally to shelter from
   environmental hazards this round (resolved at round-tick DoT application, not declaration).
+- **`battle.py`**: `CmdBattle` (`battle`, #1592/#1710/#1712) — the large-scale-battle
+  namespace. One `ArxCommand` routes a leading subverb (`battle declare
+  strike/support/rescue/rout/rally/repel/hold ... with <technique>` / `battle duel <front>
+  vs <boss name>` / `round` / `resolve` / `conclude`) to the four REGISTRY actions in
+  `actions/definitions/battles.py`, all via `Action().run()` directly. Bare `battle` prints
+  a status hub (battle name, side VP, front, current round). All 7 `declare` kinds share one
+  dispatch: `strike`/`rout` resolve a named unit on either side (ACTIVE only) or accept
+  `side`/`place <name>` for command-tier-gated SIDE/PLACE-scope fan-out (#1710); `rally`
+  mirrors that against the declarant's own side only, also matching ROUTED units (the point
+  of rallying); `support`/`rescue` name an ally; `repel`/`hold` are PLACE-scope only
+  (`place <name>` required). Subverbs are namespaced — not bare top-level keys — to avoid
+  exit/channel/alias collisions (mirrors `CmdCombat`/`CmdDuel`). No business logic in the
+  command.
 - **`duels.py`**: `CmdDuel` (`duel`, #1492) — the PC-vs-PC duel-lifecycle namespace. One command
   routes a leading subverb (`duel challenge <name>` / `accept [id]` / `decline [id]` /
   `withdraw [id]` / `risk`) to a REGISTRY `ActionRef` and dispatches through `dispatch_player_action` —

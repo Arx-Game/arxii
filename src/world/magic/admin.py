@@ -191,7 +191,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         "anima_cost",
     ]
     list_filter = ["style", "effect_type", "gift", "source_cantrip"]
-    filter_horizontal = ["restrictions"]
+    filter_horizontal = ["restrictions", "target_prerequisites"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]
     autocomplete_fields = ["gift", "style", "effect_type", "source_cantrip"]

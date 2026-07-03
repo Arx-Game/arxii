@@ -114,6 +114,7 @@ treat those names as hints to confirm, not gospel.
 - [0073 — Environmental vulnerabilities are ConditionDamageOverTime rows riding the peril pipeline](0073-environmental-vulnerabilities-are-dot-rows-riding-the-peril-pipeline.md)
 - [0074 — Battle Surrounded peril may override AFK-safety, narrowly and explicitly](0074-battle-peril-may-override-afk-safety-narrowly.md)
 - [0081 — Battle terrain lives on BattlePlace, not the room Position/PositionEdge graph](0081-battle-terrain-lives-on-battleplace.md)
+- [0082 — Battle morale derives status; the front itself is the objective; VP stays award-only](0082-battle-morale-derives-status-objective-lives-on-place.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
@@ -139,3 +140,4 @@ treat those names as hints to confirm, not gospel.
 - [0079 — Style discovery rides the clue→codex→RESEARCH pipeline, not a parallel unlock model](0079-style-discovery-rides-the-clue-research-pipeline.md)
 - [0080 — Heat jurisdiction is judged at the commit location, enforcement scoped to the dominant society](0080-heat-jurisdiction-judged-at-the-commit-location.md)
 - [0081 — Org income requires active collection; idle approaches stasis, never decay](0081-income-requires-collection.md)
+- [0082 — Scandal is a derived per-society judgment; reach forks at act birth](0082-scandal-reach-derived-at-act-birth.md)

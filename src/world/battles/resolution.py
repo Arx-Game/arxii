@@ -36,6 +36,7 @@ from world.battles.constants import (
     BATTLE_POSTURE_CHECK_MODIFIER,
     BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
     BATTLE_POSTURE_VP_MULTIPLIER,
+    ROUTED_MORALE_THRESHOLD,
     ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
@@ -349,22 +350,47 @@ class BattleRoundResult:
     casualties: list[int] = field(default_factory=list)
 
 
-def _scope_target_units(declaration: BattleActionDeclaration) -> list:
-    """Active BattleUnits affected by *declaration*, per its scope (#1710)."""
+def _compute_unit_status(strength: int, morale: int) -> str:
+    """Derive BattleUnitStatus from both resources — status is always a view, never
+    written independently of them (#1712). Mirrors the relationship strength alone
+    used to have with status before morale existed: DESTROYED requires strength==0
+    (physical destruction, morale collapse alone never kills a unit); ROUTED can be
+    triggered by either resource crossing its own threshold (a unit can break either
+    from being ground down or from its will collapsing).
+
+    A future Mindless/Fearless-style unit property (#1794, "Battle units:
+    Property/Capability holding") would skip the morale branch for immune units —
+    no such gate exists yet; this issue ships morale uniformly across all units.
+    """
+    if strength == 0:
+        return BattleUnitStatus.DESTROYED
+    if strength <= ROUTED_STRENGTH_THRESHOLD or morale <= ROUTED_MORALE_THRESHOLD:
+        return BattleUnitStatus.ROUTED
+    return BattleUnitStatus.ACTIVE
+
+
+def _scope_target_units(
+    declaration: BattleActionDeclaration, *, include_routed: bool = False
+) -> list:
+    """Active (optionally also ROUTED) BattleUnits affected by *declaration*, per its
+    scope (#1710). ``include_routed=True`` (RALLY, #1712) also includes ROUTED units
+    — RALLY's whole purpose is reaching units that have already broken; DESTROYED
+    units are never included (gone, not rallyable)."""
     from world.battles.constants import BattleActionScope, BattleUnitStatus  # noqa: PLC0415
     from world.battles.models import BattleUnit  # noqa: PLC0415
 
+    statuses = (
+        (BattleUnitStatus.ACTIVE, BattleUnitStatus.ROUTED)
+        if include_routed
+        else (BattleUnitStatus.ACTIVE,)
+    )
     if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
         return list(
-            BattleUnit.objects.filter(
-                side_id=declaration.target_side_id, status=BattleUnitStatus.ACTIVE
-            )
+            BattleUnit.objects.filter(side_id=declaration.target_side_id, status__in=statuses)
         )
     if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
         return list(
-            BattleUnit.objects.filter(
-                place_id=declaration.target_place_id, status=BattleUnitStatus.ACTIVE
-            )
+            BattleUnit.objects.filter(place_id=declaration.target_place_id, status__in=statuses)
         )
     return [declaration.target_unit] if declaration.target_unit is not None else []
 
@@ -392,6 +418,7 @@ def _resolve_strike_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
     success_level: int,
+    place_defense_bonus: dict[int, int] | None = None,
 ) -> None:
     """Apply STRIKE success: attrite the unit(s), award VP to the participant's side,
     scaled by the side's posture (#1711).
@@ -401,21 +428,29 @@ def _resolve_strike_success(
     awarded once per declaration regardless of scope breadth. Units on the
     declaring participant's own side are excluded — SIDE/PLACE scope fans out
     across a shared bucket that isn't itself side-aware, so STRIKE must never
-    attrite the caster's own units (friendly fire).
+    attrite the caster's own units (friendly fire). status is derived jointly
+    from strength and morale (#1712) — a unit already broken on morale can flip
+    to ROUTED from a hit too small to cross the strength threshold alone.
+
+    Reads ``place_defense_bonus`` (#1712, populated by any REPEL declared this
+    round at the unit's place) and subtracts it from the computed attrition
+    before applying, floored at 0.
     """
     units = _scope_target_units(declaration)
     units = [u for u in units if u.side_id != declaration.participant.side_id]
     if not units:
         return
 
+    defense_bonus_by_place = place_defense_bonus or {}
     attrition = success_level * STRIKE_ATTRITION_PER_LEVEL
     for unit in units:
-        unit.strength = max(0, unit.strength - attrition)
-        if unit.strength == 0:
-            unit.status = BattleUnitStatus.DESTROYED
+        bonus = defense_bonus_by_place.get(unit.place_id, 0)
+        net_attrition = max(0, attrition - bonus)
+        unit.strength = max(0, unit.strength - net_attrition)
+        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        if unit.status == BattleUnitStatus.DESTROYED:
             result.units_destroyed.append(unit.pk)
-        elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
-            unit.status = BattleUnitStatus.ROUTED
+        elif unit.status == BattleUnitStatus.ROUTED:
             result.units_routed.append(unit.pk)
         unit.save(update_fields=["strength", "status"])
 
@@ -436,6 +471,134 @@ def _resolve_support_success(
     the side's posture (#1711)."""
     side = declaration.participant.side
     vp_gain = round(SUPPORT_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_rout_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+) -> None:
+    """Apply ROUT success: damage the target unit(s)' morale, award VP (#1712).
+
+    Mirrors STRIKE's own-side exclusion and scope fan-out, but moves ``morale``
+    instead of ``strength`` — ROUT breaks a unit's will to fight without grinding
+    it down physically. Scales with success_level exactly like STRIKE's attrition.
+    Only reaches ACTIVE enemy units (default ``_scope_target_units`` filter) —
+    a unit that's already ROUTED has nothing further for ROUT to accomplish.
+    """
+    from world.battles.constants import ROUT_MORALE_PER_LEVEL, ROUT_VP_PER_LEVEL  # noqa: PLC0415
+
+    units = _scope_target_units(declaration)
+    units = [u for u in units if u.side_id != declaration.participant.side_id]
+    if not units:
+        return
+
+    morale_damage = success_level * ROUT_MORALE_PER_LEVEL
+    for unit in units:
+        unit.morale = max(0, unit.morale - morale_damage)
+        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        if unit.status == BattleUnitStatus.DESTROYED:
+            result.units_destroyed.append(unit.pk)
+        elif unit.status == BattleUnitStatus.ROUTED:
+            result.units_routed.append(unit.pk)
+        unit.save(update_fields=["morale", "status"])
+
+    side = declaration.participant.side
+    base_vp = success_level * ROUT_VP_PER_LEVEL
+    vp_gain = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_rally_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+) -> None:
+    """Apply RALLY success: restore the target unit(s)' morale, award flat VP (#1712).
+
+    Fans out across the declarant's own side only (mirrors RESCUE's own-side
+    filter), including ROUTED units (``include_routed=True`` — RALLY's whole
+    point). A unit whose status reads ROUTED purely from low ``strength`` stays
+    ROUTED even after a full morale restore — RALLY only recovers units that
+    broke from morale collapse, not ones ground down by attrition.
+    """
+    from world.battles.constants import (  # noqa: PLC0415
+        MAX_MORALE,
+        RALLY_MORALE_PER_LEVEL,
+        RALLY_VP,
+    )
+
+    units = _scope_target_units(declaration, include_routed=True)
+    units = [u for u in units if u.side_id == declaration.participant.side_id]
+    if not units:
+        return
+
+    morale_gain = success_level * RALLY_MORALE_PER_LEVEL
+    for unit in units:
+        unit.morale = min(MAX_MORALE, unit.morale + morale_gain)
+        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        unit.save(update_fields=["morale", "status"])
+
+    side = declaration.participant.side
+    vp_gain = round(RALLY_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_repel_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    place_defense_bonus: dict[int, int],
+) -> None:
+    """Apply REPEL success: raise the defense bonus at the target place for this
+    round, award flat VP (#1712). Requires scope=PLACE (enforced at declare time
+    by PlaceScopeRequiredError) — ``target_place`` is always set here.
+
+    ``resolve_battle_round`` resolves REPEL declarations before STRIKE so the
+    bonus is populated in time to reduce STRIKE's attrition against units at
+    this place in the same round.
+    """
+    from world.battles.constants import REPEL_DEFENSE_BONUS, REPEL_VP  # noqa: PLC0415
+
+    place = declaration.target_place
+    place_defense_bonus[place.pk] = place_defense_bonus.get(place.pk, 0) + REPEL_DEFENSE_BONUS
+
+    side = declaration.participant.side
+    vp_gain = round(REPEL_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_hold_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+) -> None:
+    """Apply HOLD success: capture or sustain control of the target place, award VP
+    (#1712). Requires scope=PLACE (enforced at declare time) — ``target_place`` is
+    always set here. Capturing (place uncontrolled or held by the enemy) awards
+    HOLD_CAPTURE_VP and flips control; sustaining (already held by the declarant's
+    side) awards the smaller HOLD_SUSTAIN_VP with no state change, so repeatedly
+    holding a front doesn't runaway-farm the capture bonus.
+    """
+    from world.battles.constants import HOLD_CAPTURE_VP, HOLD_SUSTAIN_VP  # noqa: PLC0415
+
+    place = declaration.target_place
+    side = declaration.participant.side
+
+    if place.controlled_by_id != side.pk:
+        place.controlled_by = side
+        place.save(update_fields=["controlled_by"])
+        vp_gain = round(HOLD_CAPTURE_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    else:
+        vp_gain = round(HOLD_SUSTAIN_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+
     side.victory_points += vp_gain
     side.save(update_fields=["victory_points"])
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
@@ -621,6 +784,37 @@ def _advance_surrounded_participants(
         advance_surrounded(sheet, battle=battle)
 
 
+def _dispatch_success_handler(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+    place_defense_bonus: dict[int, int],
+) -> None:
+    """Route a successful declaration to its action-kind-specific resolver (#1712).
+
+    Extracted from ``resolve_battle_round`` to keep that function's own branching
+    within the McCabe complexity budget — this is purely a dispatch table, kept
+    separate from round-level orchestration (declaration ordering, failure
+    handling, Surrounded advancement).
+    """
+    if declaration.action_kind == BattleActionKind.STRIKE:
+        _resolve_strike_success(declaration, result, success_level, place_defense_bonus)
+    elif declaration.action_kind == BattleActionKind.RESCUE:
+        _resolve_rescue_success(declaration)
+    elif declaration.action_kind == BattleActionKind.ROUT:
+        _resolve_rout_success(declaration, result, success_level)
+    elif declaration.action_kind == BattleActionKind.RALLY:
+        _resolve_rally_success(declaration, result, success_level)
+    elif declaration.action_kind == BattleActionKind.REPEL:
+        _resolve_repel_success(declaration, result, place_defense_bonus)
+    elif declaration.action_kind == BattleActionKind.HOLD:
+        _resolve_hold_success(declaration, result)
+    elif declaration.action_kind == BattleActionKind.SUPPORT:
+        _resolve_support_success(declaration, result)
+    else:
+        _resolve_support_success(declaration, result)
+
+
 @transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
@@ -646,22 +840,24 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "participant__character_sheet",
             "participant__side",
             "target_unit",
+            "target_place",
+            "target_side",
             "technique__action_template",
         )
     )
+    # REPEL must resolve before every other action kind this round (#1712) — its
+    # success populates place_defense_bonus in time for STRIKE to read it below.
+    # A stable sort preserves every other kind's relative (declaration) order.
+    declarations.sort(key=lambda d: 0 if d.action_kind == BattleActionKind.REPEL else 1)
 
+    place_defense_bonus: dict[int, int] = {}
     newly_surrounded_participant_ids: set[int] = set()
     for declaration in declarations:
         check_result = resolve_battle_technique(declaration=declaration)
         sl = check_result.success_level if check_result is not None else 0
 
         if sl > 0:
-            if declaration.action_kind == BattleActionKind.STRIKE:
-                _resolve_strike_success(declaration, result, sl)
-            elif declaration.action_kind == BattleActionKind.RESCUE:
-                _resolve_rescue_success(declaration)
-            else:
-                _resolve_support_success(declaration, result)
+            _dispatch_success_handler(declaration, result, sl, place_defense_bonus)
         elif _resolve_failure(declaration, result, sl):
             newly_surrounded_participant_ids.add(declaration.participant_id)
 

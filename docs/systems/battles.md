@@ -70,7 +70,8 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 | `name` | CharField(120) | Human-readable front name |
 | `combat_encounter` | FK → `combat.CombatEncounter` (null) | Bridge seam: a discrete tactical combat at this front |
 | `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0081 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
-| `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition action (#1712) to consume — data only, no movement action exists yet. |
+| `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition/movement action — not yet filed as an issue; #1712 explicitly did not build this. Data only. |
+| `controlled_by` | FK → `BattleSide` (null, `related_name="controlled_places"`) | Which side holds this front as an objective (#1712); set by a successful HOLD declaration. `None` means uncontrolled/contested. |
 
 **Constraint:** unique `(battle, name)`.
 
@@ -90,11 +91,17 @@ An abstract typed force (enemy or friendly) stationed at a front.
 | `commander` | FK → `character_sheets.CharacterSheet` (null, `related_name="commanded_battle_units"`) | Optional commander (#1711); their Battle Command modifier-walk bonus applies to participants fighting alongside this unit's side/place. |
 | `summoned_by` | FK → `character_sheets.CharacterSheet` (null, `related_name="summoned_battle_units"`) | Set when this unit was created via a military-grade summon (#1711, see `_summon_military_unit`). |
 | `strength` | PositiveSmallIntegerField | Default 100; decremented by STRIKE successes |
-| `status` | CharField | `BattleUnitStatus` — ACTIVE / ROUTED / DESTROYED |
+| `morale` | PositiveSmallIntegerField | Default `DEFAULT_MORALE` (70, #1712); second resource alongside strength — starts well below its ceiling, unlike strength. |
+| `status` | CharField | `BattleUnitStatus` — ACTIVE / ROUTED / DESTROYED; always a derived view, never written independently (see below) |
 
-Strength is decremented by `success_level × STRIKE_ATTRITION_PER_LEVEL` (10 per level).
-A unit at strength 0 becomes DESTROYED; strength ≤ 30 (`ROUTED_STRENGTH_THRESHOLD`) becomes
-ROUTED.
+`status` is derived jointly from `strength` and `morale` by
+`world.battles.resolution._compute_unit_status` (#1712) — every unit-status write
+(STRIKE resolution, champion-duel-outcome routs) goes through this shared function
+rather than writing `status` directly. DESTROYED requires `strength == 0` (physical
+destruction; morale collapse alone never kills a unit). ROUTED is triggered by
+either resource crossing its own threshold: `strength ≤ 30` (`ROUTED_STRENGTH_THRESHOLD`)
+or `morale ≤ 25` (`ROUTED_MORALE_THRESHOLD`). Strength is decremented by
+`success_level × STRIKE_ATTRITION_PER_LEVEL` (10 per level).
 
 ### `BattleRound`
 
@@ -131,7 +138,7 @@ A participant's declared action for one round.
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
 | `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
-| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) |
+| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target, or the Surrounded ally being rescued (RESCUE, #1733) |
 | `resolved` | BooleanField | False until the GM resolves the round |
@@ -222,6 +229,17 @@ Iterates all unresolved `BattleActionDeclaration` rows for the round and for eac
    - SUPPORT: adds `SUPPORT_VP` (3) to the participant's side.
    - RESCUE: clears the target ally's Surrounded condition (#1733, no VP awarded — see
      [Peril / Rescue](#peril--rescue-1733) below).
+   - ROUT: damages the target unit(s)' `morale` by `success_level × ROUT_MORALE_PER_LEVEL`
+     (excludes the caster's own side); awards `success_level × ROUT_VP_PER_LEVEL` VP.
+   - RALLY: restores the target unit(s)' `morale` by `success_level ×
+     RALLY_MORALE_PER_LEVEL` (own side only, reaches ROUTED units too); awards flat
+     `RALLY_VP`.
+   - REPEL: raises a same-round defense bonus at the target place (`REPEL_DEFENSE_BONUS`,
+     resolved before STRIKE within the round) reducing enemy STRIKE attrition there;
+     awards flat `REPEL_VP`. Requires `scope=PLACE`.
+   - HOLD: captures or sustains control of the target place (`BattlePlace.controlled_by`);
+     awards `HOLD_CAPTURE_VP` on capture, `HOLD_SUSTAIN_VP` on sustain. Requires
+     `scope=PLACE`.
 3. **On `success_level ≤ 0`:** debits PC health by `BASE_FAILURE_DAMAGE + abs(success_level)`;
    calls `process_damage_consequences(character_sheet, damage_dealt, damage_type=None, source_character=None)`
    (non-progressive; SQLite-safe); rolls the Surrounded entry pool if the participant is
@@ -356,6 +374,30 @@ Surrounded. Telnet: `battle declare rescue <ally> with <technique>` (`CmdBattle`
 every round the GM resolves regardless of whether they declared — a narrow, explicit
 exception to ADR-0004 scoped to peril only (see **ADR-0074**).
 
+## Battle-flow actions: Rout, Rally, Repel, Hold (#1712)
+
+Four more `BattleActionKind` values round out the round economy beyond STRIKE/SUPPORT/
+RESCUE. ROUT damages an enemy unit's `morale` the same way STRIKE damages `strength`
+(`success_level × ROUT_MORALE_PER_LEVEL`, own-side excluded, flat VP-per-level); RALLY is
+its mirror on the declarant's own side, restoring `morale` (including already-ROUTED
+units — reaching broken units back to fighting shape is the whole point) and awarding a
+flat `RALLY_VP`. REPEL and HOLD are PLACE-scope only (`PlaceScopeRequiredError` if declared
+with any other scope): REPEL raises a same-round defense bonus at the target front
+(`REPEL_DEFENSE_BONUS`) that reduces STRIKE attrition against units there, and — because
+the bonus must exist before STRIKE reads it — `resolve_battle_round` resolves every REPEL
+declaration first, ahead of every other action kind, with a stable sort preserving relative
+order otherwise. HOLD captures or sustains a front's `BattlePlace.controlled_by`: capturing
+an uncontrolled or enemy-held place awards the larger `HOLD_CAPTURE_VP` and flips control;
+sustaining a place the declarant's side already holds awards the smaller `HOLD_SUSTAIN_VP`
+with no state change, so repeatedly holding a front doesn't runaway-farm the capture bonus.
+
+All four kinds route their unit-status writes through the same
+`world.battles.resolution._compute_unit_status(strength, morale)` derivation STRIKE and the
+Champion-duel outcome already use (see the `BattleUnit` table above) — no action kind ever
+writes `status` directly, so ROUT dropping morale to zero and STRIKE dropping strength to
+30 can both independently flip a unit to ROUTED without either handler needing to know
+about the other's resource.
+
 ## Stakes / Beat Wiring (#1785)
 
 `world.battles.beat_wiring` wires a concluded `Battle` into the same
@@ -436,7 +478,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a STRIKE, SUPPORT, or RESCUE declaration (with `technique_id`) for the current round |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (any of the 7 `BattleActionKind` values, with `technique_id`) for the current round |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -454,27 +496,42 @@ Key: `battle`. Registered in the default cmdset. No business logic in the comman
 | `battle declare strike <unit> with <technique>` | Declare STRIKE against a named ACTIVE unit, casting a known technique |
 | `battle declare support <ally> with <technique>` | Declare SUPPORT for an allied participant, casting a known technique |
 | `battle declare rescue <ally> with <technique>` | Declare RESCUE for a Surrounded ally, casting a known technique (#1733) |
+| `battle declare rout <unit> with <technique>` | Declare ROUT against an ACTIVE enemy unit, damaging its `morale` (#1712) |
+| `battle declare rally <unit> with <technique>` | Declare RALLY on a unit on your own side (ACTIVE or ROUTED), restoring its `morale` (#1712) |
+| `battle declare repel place <name> with <technique>` | Declare REPEL at a front (PLACE-scope only), raising a same-round defense bonus there (#1712) |
+| `battle declare hold place <name> with <technique>` | Declare HOLD at a front (PLACE-scope only), capturing or sustaining `BattlePlace.controlled_by` (#1712) |
+| `battle duel <front> vs <boss name>` | Challenge a lethal Champion duel bound to a front (requires an engaged Champion role, #1710) |
 | `battle round` | GM: begin the next round |
 | `battle resolve` | GM: resolve the current round |
 | `battle conclude` | GM: force-conclude the battle |
 
-Unit names are resolved case-insensitively within the caller's active battle. Ally names
-are resolved by `character.db_key` case-insensitively. Technique names are resolved
-case-insensitively against the caller's known `CharacterTechnique` rows
-(`_resolve_technique`); an unknown name raises `CommandError`. `CommandError` is raised for
-bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
+`strike`/`rout`/`rally` also accept `side` or `place <name>` in place of a unit name
+(SIDE-scope requires an engaged SUPREME command tier; PLACE-scope requires engaged
+SUBORDINATE/SUPREME — see [Command Hierarchy & the
+Champion](#command-hierarchy--the-champion-1710) below). `strike`/`rout` target the
+opposing side by default; `rally`'s `side`/`place <name>` target the declarant's own side
+instead (rallying the enemy makes no sense). Unit names are resolved case-insensitively
+within the caller's active battle — STRIKE/ROUT match any side's ACTIVE units
+(`_resolve_unit`); RALLY matches only the declarant's own side, ACTIVE or ROUTED
+(`_resolve_own_unit`, #1712). Ally names are resolved by `character.db_key`
+case-insensitively. Technique names are resolved case-insensitively against the caller's
+known `CharacterTechnique` rows (`_resolve_technique`); an unknown name raises
+`CommandError`. `CommandError` is raised for bad usage; `_send(result)` routes the
+`ActionResult.message` back to the caller.
 
 ## Admin (`src/world/battles/admin.py`)
 
 New file (#1711) — the shipped spine (#1592) had zero admin exposure. Registers every
 battle model with a `ModelAdmin`: `Battle`, `BattleSide` (list-filtered on `role`/`posture`),
-`BattlePlace` (list-filtered on `terrain_type`), `BattleUnit` (list-filtered on
-`composition`/`quality`/`status`; `commander`/`summoned_by` as autocomplete fields),
-`BattleRound`, `BattleParticipant`, `BattleActionDeclaration`, and the two new authored
-catalogs `TechniqueCompositionAffinity` (list-filtered on `composition`; `technique` as an
-autocomplete field) and `TerrainCompositionEffect` (list-filtered on
-`terrain_type`/`composition`; no `technique` field), giving staff a CRUD surface to author
-the type-matchup and terrain-effect content the modifier stack reads.
+`BattlePlace` (list-filtered on `terrain_type`; `controlled_by` shown in `list_display` and
+as an autocomplete field, #1712), `BattleUnit` (`morale` shown alongside `strength` in
+`list_display`, #1712; list-filtered on `composition`/`quality`/`status`;
+`commander`/`summoned_by` as autocomplete fields), `BattleRound`, `BattleParticipant`,
+`BattleActionDeclaration`, and the two new authored catalogs `TechniqueCompositionAffinity`
+(list-filtered on `composition`; `technique` as an autocomplete field) and
+`TerrainCompositionEffect` (list-filtered on `terrain_type`/`composition`; no `technique`
+field), giving staff a CRUD surface to author the type-matchup and terrain-effect content
+the modifier stack reads.
 
 ## Enums / Constants (`src/world/battles/constants.py`)
 
@@ -483,7 +540,7 @@ the type-matchup and terrain-effect content the modifier stack reads.
 | `BattleSideRole` | TextChoices | ATTACKER / DEFENDER |
 | `BattleUnitStatus` | TextChoices | ACTIVE / ROUTED / DESTROYED |
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
-| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) |
+| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
 | `UnitComposition` | TextChoices | INFANTRY / CAVALRY / ARCHERS / SIEGE / FLYING / NAVAL / MAGICAL / IRREGULAR (#1711) |
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
@@ -499,6 +556,9 @@ the type-matchup and terrain-effect content the modifier stack reads.
 - `BASE_FAILURE_DAMAGE = 8`
 - `DECISIVE_MARGIN = 50`
 - `ROUTED_STRENGTH_THRESHOLD = 30`
+- `DEFAULT_MORALE = 70` — `BattleUnit.morale` starting value (#1712); unlike strength, morale starts well below its ceiling
+- `MAX_MORALE = 100`
+- `ROUTED_MORALE_THRESHOLD = 25` — the morale-axis counterpart to `ROUTED_STRENGTH_THRESHOLD` in `_compute_unit_status`
 - `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — entry-roll signal (#1733), isolated at a place
 - `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — entry-roll signal (#1733), unimpaired MOVEMENT capability
 - `UNIT_QUALITY_STRIKE_MODIFIER` — dict (#1711), flat attacker-facing STRIKE modifier per `UnitQuality`: MILITIA +10 … ELITE −20
@@ -508,6 +568,17 @@ the type-matchup and terrain-effect content the modifier stack reads.
 - `BATTLE_COMMAND_TARGET_NAME = "battle_command"` — idempotent-seed `ModifierTarget` name (#1711)
   for the commander-bonus walk, following the snake_case convention documented for
   stat-category modifier targets in `world/mechanics/CLAUDE.md`.
+- `ROUT_MORALE_PER_LEVEL = 15` — ROUT's morale damage per success level (#1712), mirrors
+  `STRIKE_ATTRITION_PER_LEVEL`'s scaling
+- `RALLY_MORALE_PER_LEVEL = 15` — RALLY's morale restoration per success level (#1712)
+- `ROUT_VP_PER_LEVEL = 4` — ROUT's VP award per success level (#1712)
+- `RALLY_VP = 3` — RALLY's flat VP award (#1712)
+- `REPEL_VP = 4` — REPEL's flat VP award (#1712)
+- `HOLD_CAPTURE_VP = 8` — HOLD's VP award for capturing an uncontrolled/enemy-held place (#1712)
+- `HOLD_SUSTAIN_VP = 3` — HOLD's smaller VP award for sustaining a place the side already
+  controls (#1712) — deliberately less than capture so holding a front doesn't runaway-farm VP
+- `REPEL_DEFENSE_BONUS = 15` — flat reduction applied to STRIKE attrition against units at a
+  place with a REPEL declared this round (#1712)
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -517,6 +588,18 @@ the type-matchup and terrain-effect content the modifier stack reads.
   - `NotAParticipantError` — character not enlisted in the battle
   - `CharacterDoesNotKnowTechniqueError` — participant declared a technique they don't know
   - `TechniqueNotBattleReadyError` — declared technique has no `action_template` (not castable)
+  - `NoCommandHierarchyError` — PLACE/SIDE-scope declaration (or Champion duel) on a side
+    with no covenant (#1710)
+  - `InsufficientCommandTierError` — participant lacks the engaged command tier their
+    declared scope requires (#1710)
+  - `MissingScopeTargetError` — PLACE scope with no `target_place`, or SIDE scope with no
+    `target_side` (#1710)
+  - `CannotStrikeOwnSideError` — STRIKE or ROUT, scope=SIDE, `target_side` is the caster's
+    own side (#1710; extended to ROUT in #1712's final review)
+  - `NotAChampionError` — challenger holds no engaged `is_champion_role` `CovenantRole`
+    (#1710)
+  - `PlaceAlreadyDuelingError` — `BattlePlace.combat_encounter` is already set (#1710)
+  - `PlaceScopeRequiredError` — REPEL/HOLD declared with a scope other than PLACE (#1712)
 
 ## Legend / Outcome Model and Stakes Wiring (#1785)
 
@@ -556,6 +639,16 @@ into every STRIKE check; Django admin for the whole app (`admin.py`, previously 
 and an opt-in `summon_ally(payload.military=True)` branch that creates a `BattleUnit`
 instead of a skirmish `CombatOpponent` (see [Integrates With](#integrates-with) below).
 
+**Built as a follow-up spine (battle-flow actions, #1712):** `BattleUnit.morale`, a second
+numeric resource alongside `strength` (default `DEFAULT_MORALE`, 70 — unlike strength,
+morale starts well below its ceiling); `status` is now always derived jointly from both via
+`_compute_unit_status` rather than from `strength` alone. Four new `BattleActionKind`
+values — ROUT/RALLY (unit-scale, move the morale axis) and REPEL/HOLD (PLACE-scope only,
+round-level defense bonus / front-control objective) — see
+[Battle-flow actions](#battle-flow-actions-rout-rally-repel-hold-1712) above.
+`BattlePlace.controlled_by` (nullable FK → `BattleSide`), set by a successful HOLD
+declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold ...`).
+
 **Deferred to follow-up issues:**
 
 | What | Issue |
@@ -589,9 +682,10 @@ exists for condition-restricted capacities, a different domain).
 `BattleActionDeclaration.scope` (`UNIT`/`PLACE`/`SIDE`) plus `target_place`/`target_side`
 gate army/unit-scale declarations: `world.battles.services._validate_command_scope`
 requires an engaged `SUBORDINATE`/`SUPREME` role for `PLACE`, `SUPREME` for `SIDE`, on
-the side's covenant. `world.battles.resolution._resolve_strike_success` and
-`_resolve_rescue_success` fan out across every active unit/participant at the scope
-target instead of a single one.
+the side's covenant. `world.battles.resolution._resolve_strike_success`,
+`_resolve_rescue_success`, `_resolve_rout_success`, and `_resolve_rally_success` (#1712)
+all fan out across every active unit/participant at the scope target instead of a
+single one.
 
 The Champion duel reuses `world.combat.duels.create_lethal_duel` unmodified —
 `world.battles.services.open_champion_duel` validates the challenger holds an engaged
@@ -607,7 +701,10 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
 - `src/world/battles/tests/test_constants.py` — enum smoke tests
 - `src/world/battles/tests/test_models.py` — model save + side/unit relationships;
   `BattleUnitTaxonomyTests` (composition/quality/commander/summoned_by/descriptor, #1711),
-  `TechniqueCompositionAffinityTests`, `TerrainCompositionEffectTests` (#1711)
+  `TechniqueCompositionAffinityTests`, `TerrainCompositionEffectTests` (#1711),
+  `BattleUnitMoraleTests` (`morale` defaults to `DEFAULT_MORALE`, overridable),
+  `BattlePlaceControlTests` (`controlled_by` defaults to `None`, `SET_NULL` on side
+  delete) (#1712)
 - `src/world/battles/tests/test_round_context.py` — `get_active_round_context` wiring
 - `src/world/battles/tests/test_services_setup.py` — create/enlist/begin-round lifecycle;
   `AddUnitTests`, `AddUnitTaxonomyTests` (`add_unit`'s new taxonomy kwargs, #1711),
@@ -626,7 +723,11 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
   `conclude_battle` (confirms `complete_story` is NOT called)
 - `src/world/battles/tests/test_actions.py` — each action's `run()` path; GM-gate rejection
 - `src/world/battles/tests/test_command.py` — telnet `battle declare strike <unit>` path,
-  including `test_declare_rescue_dispatches_rescue_action_kind` (#1733)
+  including `test_declare_rescue_dispatches_rescue_action_kind` (#1733);
+  `test_declare_rout_creates_declaration`, `test_declare_rally_targets_own_routed_unit`,
+  `test_declare_rally_rejects_enemy_side_unit_by_name`,
+  `test_declare_repel_place_creates_declaration`,
+  `test_declare_hold_without_place_scope_sends_usage` (#1712)
 - `src/integration_tests/pipeline/test_battle_telnet_e2e.py` — full GM-stages → PCs
   declare → GM resolves (check mocked) → unit attrition + PC damage → VP over threshold →
   GM concludes → `battle.is_concluded` and scene ended
@@ -656,6 +757,15 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
 - `src/world/battles/tests/test_resolution.py` (#1710) — SIDE-scope STRIKE fan-out
   across all units on a side; PLACE-scope RESCUE fan-out across all participants at
   a front
+- `src/world/battles/tests/test_resolution.py` (#1712) — `ComputeUnitStatusTests`
+  (`_compute_unit_status` DESTROYED-requires-zero-strength / ROUTED-from-either-axis
+  matrix); `PlaceScopeRequiredError` raised for REPEL/HOLD declared outside PLACE scope
+  (in `DeclareBattleActionTests`); `RoutResolutionTests` (morale damage, own-side
+  exclusion, flip-to-ROUTED), `RallyResolutionTests` (morale restoration, MAX_MORALE
+  clamp, own-side-only, cannot recover a unit ROUTED by low strength, PLACE-scope
+  reaches ROUTED units), `RepelResolutionTests` (defense bonus reduces same-round STRIKE
+  attrition at the target place), `HoldResolutionTests` (capture vs. sustain VP,
+  capturing from enemy control, end-to-end capture via `resolve_battle_round`)
 - `src/world/battles/tests/test_duel_wiring.py` (#1710) — Champion duel outcome
   auto-wiring: challenger victory routs the enemy unit at the bound place; a
   non-battle-bound encounter completion no-ops cleanly

@@ -51,3 +51,15 @@ _Avoid_: rank number, rank value.
 **Exiled**:
 A membership whose `exiled_at` is set. A new membership is a separate row; exiled history is retained for audit.
 _Avoid_: kicked, removed.
+
+**Scandal**:
+A per-society judgment, never a taxonomy: an act whose archetype dot-product against that society's principles falls below the scandal threshold (#1464). Derived at deed birth from the same vectors reputation uses; what one society finds scandalous another may celebrate.
+_Avoid_: scandal type, scandal category, outrage score
+
+**Containment**:
+The after-the-act half of concealment (#1464): a check of the actor's best social tool against the crowd size that routes a public scandalous act to a contained Secret instead of society awareness. Distinct from act-time concealment (Stealth/magic reducing who witnesses at all).
+_Avoid_: cover-up roll (informal), suppression (that's gossip heat)
+
+**Reach (act)**:
+Where knowledge of an act lands at birth — contained (a Secret) or the realm walk's societies — always derived from room privacy + containment + the fame of those involved, never authored per act (ADR-0082). Continental/world are escalation (gemit, common knowledge, legend), never minted.
+_Avoid_: stakeholders, audience list

@@ -18,6 +18,7 @@ from world.magic.views import (
     CharacterAuraViewSet,
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
+    ConsequencePoolCatalogViewSet,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
     EffectTypeViewSet,
@@ -62,6 +63,9 @@ router = DefaultRouter()
 # Note: affinities and resonances are now in mechanics app as ModifierTarget.
 router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
+router.register(
+    "consequence-pool-catalog", ConsequencePoolCatalogViewSet, basename="consequence-pool-catalog"
+)
 router.register("restrictions", RestrictionViewSet, basename="restriction")
 router.register("facets", FacetViewSet, basename="facet")
 

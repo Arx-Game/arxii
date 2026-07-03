@@ -9,6 +9,7 @@ import {
   canCreateCharacter,
   createDraft,
   getCGExplanations,
+  getConsequencePoolCatalog,
   createFamily,
   createFamilyMember,
   createGift,
@@ -95,6 +96,7 @@ export const characterCreationKeys = {
   resonanceAssociations: (category?: string) =>
     [...characterCreationKeys.all, 'resonance-associations', category] as const,
   techniques: (giftId?: number) => [...characterCreationKeys.all, 'techniques', giftId] as const,
+  consequencePoolCatalog: () => [...characterCreationKeys.all, 'consequence-pool-catalog'] as const,
   // Skills system keys
   skills: () => [...characterCreationKeys.all, 'skills'] as const,
   skillBudget: () => [...characterCreationKeys.all, 'skill-budget'] as const,
@@ -387,6 +389,13 @@ export function useResonanceAssociations(category?: string) {
   return useQuery({
     queryKey: characterCreationKeys.resonanceAssociations(category),
     queryFn: () => getResonanceAssociations(category),
+  });
+}
+
+export function useConsequencePoolCatalog() {
+  return useQuery({
+    queryKey: characterCreationKeys.consequencePoolCatalog(),
+    queryFn: getConsequencePoolCatalog,
   });
 }
 

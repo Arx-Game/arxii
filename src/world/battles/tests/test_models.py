@@ -120,6 +120,37 @@ class BattleUnitTaxonomyTests(TestCase):
         self.assertIsNone(unit.commander)
 
 
+class BattleUnitMoraleTests(TestCase):
+    def test_morale_defaults_to_default_morale_constant(self) -> None:
+        from world.battles.constants import DEFAULT_MORALE
+
+        unit = BattleUnitFactory()
+        self.assertEqual(unit.morale, DEFAULT_MORALE)
+
+    def test_morale_can_be_overridden(self) -> None:
+        unit = BattleUnitFactory(morale=10)
+        self.assertEqual(unit.morale, 10)
+
+
+class BattlePlaceControlTests(TestCase):
+    def test_controlled_by_defaults_to_none(self) -> None:
+        place = BattlePlaceFactory()
+        self.assertIsNone(place.controlled_by)
+
+    def test_controlled_by_can_be_set_and_set_null_on_side_delete(self) -> None:
+        from world.battles.models import BattlePlace
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        place = BattlePlaceFactory(battle=battle, controlled_by=side)
+        self.assertEqual(place.controlled_by_id, side.pk)
+
+        side.delete()
+        BattlePlace.flush_instance_cache()
+        place.refresh_from_db()
+        self.assertIsNone(place.controlled_by)
+
+
 class TechniqueCompositionAffinityTests(TestCase):
     def test_unique_per_technique_composition(self) -> None:
         technique = TechniqueFactory()

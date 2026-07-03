@@ -263,8 +263,12 @@ consequences (Secret)?"*
 Each adopts the same **back-reference** pattern as distinctions (the originating system holds the
 FK into `Secret`; `Secret` stays uniform):
 
-- **Action-anchored minting:** blackmail / murder / affair / crime mints a Secret + its evidence
-  clue(s) — "true because it happened."
+- **Action-anchored minting — BUILT for scandals (#1464, ADR-0082):** the scandal reach fork
+  (`world/societies/scandal.py::route_deed_reach`) mints a contained Secret at scene-deed birth
+  when a scandalous act stays private or the containment check holds — `ACTION_ANCHORED`
+  provenance, `legend_deed`+`scene` anchors, archetypes copied so a later `expose_secret` fires
+  the same reputation math the leak would have. Level scales with how badly the act reads
+  (PLACEHOLDER floors). Evidence clues remain a later slice.
 - **Deeds — BUILT (#1573):** a Secret cross-links to the act it's the truth behind via
   `legend_deed` / `mission_deed` (and `scene`) — one act, two tellings (public embellished deed
   vs. private true secret); earning the secret recontextualizes the legend. See *The act anchor*

@@ -5,10 +5,11 @@ from decimal import Decimal
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.factories import CapabilityTypeFactory, DamageTypeFactory
 from world.mechanics.factories import (
     ApplicationFactory,
     PropertyCategoryFactory,
+    PropertyDamageModifierFactory,
     PropertyFactory,
     TraitCapabilityDerivationFactory,
 )
@@ -16,6 +17,7 @@ from world.mechanics.models import (
     Application,
     Property,
     PropertyCategory,
+    PropertyDamageModifier,
     TraitCapabilityDerivation,
 )
 from world.traits.factories import TraitFactory
@@ -178,3 +180,24 @@ class TraitCapabilityDerivationTests(TestCase):
                 base_value=0,
                 trait_multiplier=Decimal("1.0"),
             )
+
+
+class PropertyDamageModifierTest(TestCase):
+    def test_create_with_specific_damage_type(self) -> None:
+        prop = PropertyFactory(name="flammable-mtest")
+        fire = DamageTypeFactory(name="Fire-mtest")
+        modifier = PropertyDamageModifierFactory(property=prop, damage_type=fire, modifier_value=10)
+        self.assertEqual(modifier.modifier_value, 10)
+        self.assertEqual(modifier.damage_type, fire)
+
+    def test_null_damage_type_means_all_types(self) -> None:
+        prop = PropertyFactory(name="cursed-mtest")
+        modifier = PropertyDamageModifierFactory(property=prop, damage_type=None, modifier_value=-5)
+        self.assertIsNone(modifier.damage_type)
+
+    def test_unique_per_property_and_damage_type(self) -> None:
+        prop = PropertyFactory(name="soaked-mtest")
+        fire = DamageTypeFactory(name="Fire-mtest-2")
+        PropertyDamageModifierFactory(property=prop, damage_type=fire, modifier_value=-20)
+        with self.assertRaises(IntegrityError):
+            PropertyDamageModifier.objects.create(property=prop, damage_type=fire, modifier_value=5)

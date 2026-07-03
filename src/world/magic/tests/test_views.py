@@ -547,3 +547,21 @@ class CantripViewSetTest(APITestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get("/api/character-creation/cantrips/?path_id=abc")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class ConsequencePoolCatalogViewSetTests(APITestCase):
+    def setUp(self):
+        self.account = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=self.account)
+
+    def test_list_returns_only_catalog_pools(self):
+        from actions.factories import ConsequencePoolFactory
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        ensure_technique_catalog_content()
+        ConsequencePoolFactory()  # stray pool, must not appear
+        resp = self.client.get("/api/magic/consequence-pool-catalog/")
+        self.assertEqual(resp.status_code, 200)
+        names = {row["name"] for row in resp.data}
+        self.assertEqual(len(resp.data), 2)
+        self.assertTrue(all("Technique Cast" in n for n in names))

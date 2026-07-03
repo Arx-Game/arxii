@@ -23,10 +23,20 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
-from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory, DamageTypeFactory
 from world.fatigue.constants import EffortLevel
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.magic.factories import (
+    EffectTypeFactory,
+    GiftFactory,
+    TechniqueDamageProfileFactory,
+    TechniqueFactory,
+)
 from world.magic.types.power_ledger import PowerLedger
+from world.mechanics.factories import (
+    ObjectPropertyFactory,
+    PropertyDamageModifierFactory,
+    PropertyFactory,
+)
 
 
 def _ledger(power: int) -> PowerLedger:
@@ -777,6 +787,57 @@ class NonAttackPCActionRoutingTests(TestCase):
         # outcome is returned cleanly (no exception)
         self.assertIsNotNone(outcome)
 
+    def test_catalog_pool_technique_uses_same_check_type_as_default(self) -> None:
+        """A technique whose action_template is a catalog entry resolves combat's
+        offense_check_type identically to one on the shared default template —
+        proves the catalog feature doesn't touch combat's check_type read."""
+        from world.combat.services import _resolve_pc_action
+        from world.combat.types import CombatTechniqueResolution
+        from world.magic.seeds_cast import (
+            ensure_technique_catalog_content,
+            get_standalone_cast_template,
+        )
+
+        catalog_templates = ensure_technique_catalog_content()
+        catalog_template = catalog_templates[0]
+
+        # Prove the catalog/base check_type-sharing invariant directly, not just
+        # that combat forwards whatever check_type the technique happens to carry.
+        base_template = get_standalone_cast_template()
+        self.assertEqual(catalog_template.check_type_id, base_template.check_type_id)
+
+        encounter = CombatEncounterFactory(round_number=1)
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        technique = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=EffectTypeFactory(name="Buff", base_power=None),
+            action_template=catalog_template,
+        )
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=None,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        fake_resolution = CombatTechniqueResolution(
+            check_result=MagicMock(success_level=2),
+            damage_results=[],
+            applied_conditions=[],
+            pull_flat_bonus=0,
+            scaled_damage=0,
+        )
+
+        with patch("world.combat.services.resolve_combat_technique") as mock_resolve:
+            mock_resolve.return_value = fake_resolution
+            _resolve_pc_action(participant=participant, action=action, offense_check_fn=None)
+
+        call_kwargs = mock_resolve.call_args.kwargs
+        self.assertIs(call_kwargs["offense_check_type"], catalog_template.check_type)
+
 
 class ApplyDamageWithProfilesTests(EvenniaTestCase):
     """Resolver iterates damage_profiles instead of reading effect_type.base_power."""
@@ -1043,3 +1104,49 @@ class CombatPullLedgerTests(TestCase):
         # ledger total == 0 + 8 == 8; budget = 8 × 1.0 = 8; scaled = 8 × 1.0 = 8
         self.assertEqual(result.power_ledger.total, 8)
         self.assertGreater(result.scaled_damage, 0)
+
+
+class CombatTechniqueResolverPropertyDamageBonusTest(TestCase):
+    """_profile_damage folds Property-driven damage bonuses into the budget (#1793)."""
+
+    def test_profile_damage_adds_property_bonus(self) -> None:
+        resolver = _build_resolver(base_power=0)
+        opponent = resolver.action.focused_opponent_target
+        fire = DamageTypeFactory(name="Fire-crtest")
+        flammable = PropertyFactory(name="flammable-crtest")
+        ObjectPropertyFactory(object=opponent.objectdb, property=flammable)
+        PropertyDamageModifierFactory(property=flammable, damage_type=fire, modifier_value=10)
+        profile = TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            damage_type=fire,
+            base_damage=5,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+
+        scaled, resolved_type = resolver._profile_damage(
+            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+        )
+
+        self.assertEqual(scaled, 15)  # base_damage(5) + property bonus(10)
+        self.assertEqual(resolved_type, fire)
+
+    def test_profile_damage_zero_bonus_when_no_property(self) -> None:
+        resolver = _build_resolver(base_power=0)
+        opponent = resolver.action.focused_opponent_target
+        fire = DamageTypeFactory(name="Fire-crtest-2")
+        profile = TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            damage_type=fire,
+            base_damage=5,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+
+        scaled, _resolved_type = resolver._profile_damage(
+            profile, None, opponent, sl=1, multiplier=Decimal(1), eff_intensity=0
+        )
+
+        self.assertEqual(scaled, 5)

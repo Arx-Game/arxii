@@ -97,6 +97,12 @@ def _seed_domain_dev() -> None:
     ensure_dev_domain()
 
 
+def _seed_stealth() -> None:
+    from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
+
+    seed_stealth_check_content()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -136,6 +142,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # so the books + scandal loops are walkable on a dev DB (#930/#1464). After
     # governance (its CheckTypes) and character_creation (the Arx realm).
     "domain_dev": _seed_domain_dev,
+    # Stealth: the act-time concealment skill + check (#1464). After "checks".
+    "stealth": _seed_stealth,
 }
 
 
@@ -214,4 +222,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "governance": [],
         # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
         "domain_dev": [],
+        # Stealth seeds skill/check rows counted under "checks" (#1464).
+        "stealth": [],
     }

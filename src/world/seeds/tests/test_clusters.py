@@ -23,6 +23,7 @@ class TestClusterRegistry(TestCase):
                 "justice",
                 "governance",
                 "domain_dev",
+                "stealth",
             },
         )
 

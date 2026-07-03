@@ -194,10 +194,42 @@ casting never hard-fails with "no template." The resolution chain:
 - **Graded consequence pool** — a single "Magic: Technique Cast" `ConsequencePool`
   (seeded by `seeds_cast.py`) routes graded outcomes (failure / partial success / success)
   through the shared consequence machinery. No per-technique pool is required.
+- **Consequence-pool catalog (#1320)** — a technique's author (web builder, telnet
+  `technique set consequence_pool=<id>`, or CG cantrip finalize) may pick a
+  "flavor" from a curated catalog instead of the shared graded pool. The catalog
+  is `ConsequencePool.objects.filter(parent=<base pool>)` — single-depth children
+  of the base pool seeded by `seeds_cast.ensure_technique_catalog_content()`. Each
+  catalog entry has its own `ActionTemplate` (same `check_type`/`pipeline`/
+  `target_type` as the shared template — only `consequence_pool` differs) so
+  combat's direct read of `technique.action_template.check_type` is unaffected by
+  which flavor was picked. Resolution: `technique_builder.resolve_cast_action_template()`.
 
-Follow-ups deferred to later issues: technique designer (players pick a consequence pool
-from a curated catalog), targeting model (targeting validity + AoE + per-technique target
-constraints + frontend target picker), and the optional resonance→aspect mapping.
+Follow-ups deferred to later issues: the optional resonance→aspect mapping. (The
+targeting model — targeting validity + AoE + per-technique target constraints +
+frontend target picker — was resolved in #1321; see "Targeting/hostility" below.)
+
+**Property-gated targeting precondition (#1793):** `Technique.target_prerequisites`
+(M2M to `mechanics.Prerequisite`) lets a technique require a target currently hold a
+Property at or above a threshold. Enforced symmetrically in both cast paths: non-combat
+(`validate_cast_target`/`resolve_targets`, `services/targeting.py`) and combat
+(`resolve_combat_technique`, `world/combat/services.py`). In both, SINGLE/SELF raise
+`InvalidCastTarget` pre-flight (SELF checks the caster directly, since a SELF cast
+conventionally supplies no explicit target); AREA/FILTERED_GROUP get NO pre-flight
+check at all and instead defer entirely to a silent per-target filter downstream
+(`resolve_targets` non-combat, `_filter_by_target_prerequisites` combat) — an AoE cast
+skips ineligible targets rather than hard-blocking the whole cast (ADR-0045). This is a
+precondition layered on the existing target-resolution machinery — it does not build the
+still-deferred general targeting model (AoE constraints, frontend target picker) noted above.
+
+`Technique.properties` (M2M to `mechanics.Property`) carries neutral descriptive tags
+on the technique itself (e.g. cursed) via `Technique.has_property(name)`; this is
+separate from `Character.has_property`, which checks a *character's* Property
+attachments (both the primary persona's authored identity tags and runtime
+`ObjectProperty` rows, #1793) and backs the `has_property` reactive-trigger DSL op.
+`Character.has_capability` is the capability-typed sibling — checks
+`get_effective_capability_value(sheet, capability_type) > 0` — and backs the new
+`has_capability` DSL op (both in `flows/filters/evaluator.py` /
+`typeclasses/characters.py`).
 
 ### Dispel / Cleanse (#1585)
 

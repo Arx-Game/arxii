@@ -10,6 +10,8 @@
  *   - capabilities: GET /api/conditions/capabilities/
  *   - damageTypes: GET /api/conditions/damage-types/
  *   - conditions: GET /api/conditions/templates/
+ *   - consequencePools: reused from useConsequencePoolCatalog
+ *     (GET /api/magic/consequence-pool-catalog/)
  *
  * isStaff is read from the Redux account store (same pattern as CharacterCreationPage).
  */
@@ -20,7 +22,11 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
 import { useAccount } from '@/store/hooks';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useTechniqueStyles, useEffectTypes } from '@/character-creation/queries';
+import {
+  useTechniqueStyles,
+  useEffectTypes,
+  useConsequencePoolCatalog,
+} from '@/character-creation/queries';
 import { getGifts } from '@/character-creation/api';
 import type { components } from '@/generated/api';
 import { useDamageTypes } from '@/conditions/queries';
@@ -83,6 +89,8 @@ export function TechniqueBuilderPage() {
     queryFn: getConditionTemplates,
     staleTime: 60_000,
   });
+  const { data: consequencePoolsData = [], isLoading: consequencePoolsLoading } =
+    useConsequencePoolCatalog();
 
   const isLoading =
     giftsLoading ||
@@ -90,7 +98,8 @@ export function TechniqueBuilderPage() {
     effectTypesLoading ||
     capabilitiesLoading ||
     damageTypesLoading ||
-    conditionsLoading;
+    conditionsLoading ||
+    consequencePoolsLoading;
 
   if (isLoading) {
     return (
@@ -135,6 +144,7 @@ export function TechniqueBuilderPage() {
         capabilities={capabilitiesData}
         damageTypes={damageTypesData}
         conditions={conditions}
+        consequencePools={consequencePoolsData}
         characterId={effectiveCharacterId}
         onSuccess={() => navigate('/threads')}
       />

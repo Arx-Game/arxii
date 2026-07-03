@@ -89,6 +89,7 @@ from world.magic.serializers import (
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    ConsequencePoolCatalogSerializer,
     CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
     DissolveSerializer,
@@ -188,6 +189,22 @@ class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EffectTypeSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
+
+
+class ConsequencePoolCatalogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only catalog of curated consequence-pool flavors a technique author
+    may select (children of the shared base 'Magic: Technique Cast' pool)."""
+
+    serializer_class = ConsequencePoolCatalogSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table
+
+    def get_queryset(self):
+        from world.magic.services.technique_builder import (  # noqa: PLC0415
+            get_technique_cast_catalog,
+        )
+
+        return get_technique_cast_catalog()
 
 
 class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):

@@ -255,6 +255,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind,
     source_character) -> list[AppliedConditionResult]` (`world/magic/services/condition_application.py`)
     — shared by both combat and standalone cast paths; extracted from combat's `_apply_conditions`.
+    `Technique.target_prerequisites` (#1793, M2M to `mechanics.Prerequisite`) — Property-gated
+    targeting precondition; enforced symmetrically in both cast paths — non-combat
+    (`validate_cast_target`/`resolve_targets`, `world/magic/services/targeting.py`) and combat
+    (`_check_combat_target_prerequisites`/`_filter_by_target_prerequisites` under
+    `resolve_combat_technique`, `world/combat/services.py`): SINGLE and SELF raise
+    `InvalidCastTarget` pre-flight (SELF checks the caster directly); AREA/FILTERED_GROUP get NO
+    pre-flight check and instead silently filter ineligible targets out of the resolved set.
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls
@@ -293,7 +300,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   journals (`JournalEntry.related_threads` M2M), combat (CombatPull,
   DamagePreApply for DAMAGE_TAKEN_REDUCTION), vitals
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
-  mechanics (Property via Ritual site_property),
+  mechanics (Property via Ritual site_property; Property-gated targeting via
+  `Technique.target_prerequisites`, #1793),
   items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
   flows (Ritual FLOW dispatch via FlowDefinition),
   covenants (`draft_validator_path` on Covenant Induction ritual → `assert_initiator_can_induct`)
@@ -625,7 +633,17 @@ Social structures, organizations, reputation, and legend tracking.
 - **DRF:** `OrganizationViewSet`, `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, and `/api/societies/offers/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), actions (shared `action.run()` / `dispatch_player_action()` seam)
+- **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
+  `route_deed_reach` runs at scene-deed birth (`create_solo_deed` /
+  `create_legend_event`, both now taking `archetypes=`): scandal = archetype
+  dot ≤ `SCANDAL_THRESHOLD` per society (`scandalous_societies`); private or
+  successfully-contained scandalous acts mint an act-anchored contained
+  `Secret` (blackmail material); public news/leaks set `societies_aware`,
+  fire `apply_archetype_society_reputation`, and scale `spread_multiplier`
+  by the involved personas' fame (`FAME_SPREAD_FACTORS`). Containment =
+  best-of Deception/Intimidation vs crowd size; Stealth (new skill, seeded)
+  is the act-time leg, wiring later. Untagged deeds skip the fork.
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 ### Goals
@@ -1575,8 +1593,11 @@ drain the well by physically visiting and performing an absorb action.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793)
 - **Key Functions:**
+  - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
+    rows for a target's active `Property` set; folded into combat technique damage in
+    `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
   - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
     walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
     `EQUIPMENT_RELEVANT_CATEGORIES`
@@ -2054,46 +2075,81 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 
 - **Models:** `Battle` (O2O Scene, `campaign_story` FK, `round_limit`, `outcome` / `concluded_at`;
   `is_concluded` property; `current_round` property), `BattleSide` (`role` ATTACKER/DEFENDER,
-  `covenant` FK → `covenants.Covenant` (nullable, #1710) fielding this side,
-  `victory_points`, `victory_threshold`; unique `(battle, role)`), `BattlePlace` (named front;
-  `combat_encounter` FK bridge seam), `BattleUnit` (`unit_type`, `strength`, `status`;
-  attrited by STRIKE successes), `BattleRound` (subclasses `AbstractRound`; partial unique
-  constraint: one active round per battle), `BattleParticipant` (`character_sheet` FK,
-  `side`, `place`, `status`; unique `(battle, character_sheet)`),
-  `BattleActionDeclaration` (`technique` FK required, `action_kind` STRIKE/SUPPORT/RESCUE,
-  `target_unit`, `target_ally`, `resolved`, `success_level`;
-  unique `(battle_round, participant)`); `Battle.afk_peril_override` (BooleanField,
-  default False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
+  `covenant` FK → `covenants.Covenant` (nullable, #1710) fielding this side, `posture`
+  (`BattlePosture`, #1711), `victory_points`, `victory_threshold`; unique `(battle, role)`),
+  `BattlePlace` (named front; `combat_encounter` FK bridge seam; `terrain_type`
+  (`TerrainType`, #1711); `movement_cost` (authored, no consuming action yet, #1711);
+  `controlled_by` FK → `BattleSide`, nullable, set by a successful HOLD declaration, #1712),
+  `BattleUnit` (`descriptor` free-text flavor tag — renamed from the spine's `unit_type`,
+  #1711; `composition` (`UnitComposition`) and `quality` (`UnitQuality`) drive mechanics,
+  #1711; `commander` / `summoned_by` FK → `character_sheets.CharacterSheet`, #1711;
+  `strength` attrited by STRIKE; `morale` — a second resource, starts well below its
+  ceiling, damaged by ROUT / restored by RALLY, #1712; `status` always DERIVED jointly from
+  `strength` + `morale` via `resolution._compute_unit_status`, never written directly),
+  `BattleRound` (subclasses `AbstractRound`; partial unique constraint: one active round per
+  battle), `BattleParticipant` (`character_sheet` FK, `side`, `place`, `status`; unique
+  `(battle, character_sheet)`), `BattleActionDeclaration` (`technique` FK required,
+  `action_kind` STRIKE/SUPPORT/RESCUE/ROUT/RALLY/REPEL/HOLD, `target_unit`, `target_ally`,
+  `scope` (`BattleActionScope` UNIT/PLACE/SIDE, #1710) + `target_place`/`target_side`,
+  `resolved`, `success_level`; unique `(battle_round, participant)`);
+  `TechniqueCompositionAffinity` / `TerrainCompositionEffect` (authored type-matchup /
+  terrain-effect catalogs, #1711); `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
+  tier for beat resolution, #1785); `Battle.afk_peril_override` (BooleanField, default
+  False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
 - **Key Services (`world.battles.services`):**
-  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`
+  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`,
+    `set_battle_side_posture` (#1711), `assign_unit_commander` (#1711)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
-    `declare_battle_action` (requires `technique`; update_or_create; raises
-    `RoundNotOpenError` / `CharacterDoesNotKnowTechniqueError` / `TechniqueNotBattleReadyError`)
+    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 7
+    `BattleActionKind` values; scope/command-tier validated for PLACE/SIDE, #1710;
+    REPEL/HOLD require scope=PLACE, #1712), `open_champion_duel` (binds a `BattlePlace` to a
+    lethal duel via `create_lethal_duel`, gated on an engaged `is_champion_role`, #1710)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
-    `conclude_battle` (sets outcome + ends scene; **no `complete_story` call** — #1716),
+    `conclude_battle` (sets outcome + ends scene; resolves any linked story beat's stakes
+    contract via `resolve_battle_beats`, #1785; still never calls `complete_story`),
     `maybe_conclude_on_timer` (timeout: defender holds unless attacker met threshold)
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
-  (routes through the real `use_technique` magic envelope, not a generic shared check);
-  STRIKE success attrites unit + awards VP; failure debits PC health +
-  `process_damage_consequences`. Returns
-  `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
+  (routes through the real `use_technique` magic envelope, not a generic shared check),
+  folding in the five-source modifier stack (composition affinity, terrain, unit quality,
+  commander bonus, posture, #1711); REPEL resolves before every other kind so its defense
+  bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
+  strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
+  RESCUE clears Surrounded; failure debits PC health + `process_damage_consequences`.
+  Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
   `BattleTechniqueResolver` is the `resolve_fn` passed to `use_technique`.
 - **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
   wired into `get_active_round_context` (after combat branch); `resolve_battle_round_context`
   finds the character's ACTIVE participant in an active-scene battle.
 - **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
   `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`, requires
-  `technique_id`)
-- **Telnet:** `battle [declare strike <unit> with <technique>|declare support <ally> with
-  <technique>|round|resolve|conclude]`
+  `technique_id`, covers all 7 `BattleActionKind` values) ·
+  `challenge_champion_duel` (player, `target_type=AREA`, #1710)
+- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold ... with
+  <technique>|duel <front> vs <boss name>|round|resolve|conclude]` — `strike`/`rout`/`rally`
+  also accept `side` or `place <name>` scope tokens (#1710/#1712)
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
-  `BattleActionKind`, `BattleOutcome`
+  `BattleActionKind` (7 values), `BattleActionScope` (#1710), `BattleOutcome`,
+  `UnitComposition`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711)
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
   `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
-  `TechniqueNotBattleReadyError`
-- **#1716 dependency:** `Battle.campaign_story` FK stores the parent Story; outcome →
-  campaign-stakes propagation + win-gated Legend is explicitly deferred to #1716.
+  `TechniqueNotBattleReadyError`, `NoCommandHierarchyError`, `InsufficientCommandTierError`,
+  `MissingScopeTargetError`, `CannotStrikeOwnSideError` (#1710; guards STRIKE and ROUT
+  since #1712), `NotAChampionError`,
+  `PlaceAlreadyDuelingError` (#1710), `PlaceScopeRequiredError` (#1712)
+- **Command Hierarchy & the Champion (#1710):** `CovenantRole.command_tier`
+  (NONE/SUBORDINATE/SUPREME) + `.is_champion_role`, settable only on `CovenantType.BATTLE`
+  roles; `BattleSide.covenant` links a side to the fielding War Covenant. PLACE/SIDE-scope
+  declarations fan out across every unit/participant at the scope target instead of a
+  single one. The Champion duel reuses `create_lethal_duel` unmodified, binding the
+  `CombatEncounter` to `BattlePlace.combat_encounter`; outcome feedback (rout/destroy the
+  loser's unit, VP bonus to the winner) is wired via `world.battles.duel_wiring`.
+- **Battle-flow actions (#1712):** `BattleUnit.morale` is a second numeric resource
+  alongside `strength` — `status` is always derived jointly from both. ROUT damages an
+  enemy unit's morale (own-side excluded); RALLY restores a friendly unit's morale
+  (including already-ROUTED units); REPEL/HOLD are PLACE-scope only — REPEL raises a
+  same-round STRIKE-defense bonus at a front, HOLD captures/sustains
+  `BattlePlace.controlled_by`. No action kind denies/subtracts VP from a side (award-only).
 - **Peril / Rescue (#1733):** isolated participants can be Surrounded — a staged,
   3-stage acute-peril `ConditionTemplate` (seeded by
   `world.vitals.factories.ensure_surrounded_content`) resolved through the same
@@ -2101,22 +2157,28 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   roll on isolated declaration failure (`_maybe_apply_surrounded`); per-round escalation
   tick gated on declaring-this-round or `Battle.afk_peril_override`
   (`_advance_surrounded_participants` / `advance_surrounded`); terminal stage routes to
-  an enemy-vs-pvp pool (`select_surrounded_terminal_pool`, ADR-0023-safe); a new
+  an enemy-vs-pvp pool (`select_surrounded_terminal_pool`, ADR-0023-safe); a
   `BattleActionKind.RESCUE` clears an ally's Surrounded condition
   (`_resolve_rescue_success`), declared via `battle declare rescue <ally> with
   <technique>`. See ADR-0074 for the AFK-safety exception.
-- **Deferred follow-ups:** battle writeup page (#1735), rich type-matchups (#1711),
-  naval / aerial / siege (#1713, #1714), campaign propagation (#1716).
+- **Deferred follow-ups:** naval / aerial / siege (#1713, #1714), battle writeup page
+  (#1735).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
-  E2E journey `src/integration_tests/pipeline/test_battle_telnet_e2e.py`
-- **Integrates with:** scenes (1:1 extension), character_sheets (participant FK), vitals
-  (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
+  E2E journeys `src/integration_tests/pipeline/test_battle_telnet_e2e.py`,
+  `test_battle_peril_rescue_e2e.py`
+- **Integrates with:** scenes (1:1 extension), character_sheets (participant/commander FK),
+  vitals (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
   conditions (the "Surrounded" staged `ConditionTemplate`, #1733), magic
   (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
-  → `use_technique`), checks (`perform_check` sourced from the cast technique's
-  `action_template.check_type`, via `use_technique`; `select_consequence` for the
-  Surrounded entry roll and resist checks, #1733), combat (`BattlePlace.combat_encounter`
-  bridge; shared `RoundStatus` / `AbstractRound`), stories (`campaign_story` FK → #1716),
+  → `use_technique`; `TechniqueCompositionAffinity.technique` FK; military-grade
+  `summon_ally(payload.military=True)`, #1711), checks (`perform_check` sourced from the
+  cast technique's `action_template.check_type`, via `use_technique`; `select_consequence`
+  for the Surrounded entry roll and resist checks, #1733), combat
+  (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710; shared
+  `RoundStatus` / `AbstractRound`), covenants (`BattleSide.covenant`;
+  `CovenantRole.command_tier`/`.is_champion_role`, #1710), stories (`campaign_story` FK,
+  informational; `world.battles.beat_wiring` resolves linked beats via campaign-stakes
+  propagation, #1785),
   actions (REGISTRY + `get_active_round_context` seam)
 - **Source:** `src/world/battles/`
 - **Details:** [battles.md](battles.md)
@@ -2240,7 +2302,7 @@ Database-driven game logic engine for complex branching sequences, plus the reac
   - `emit_event(event_name, payload, location, *, parent_stack=None)` (`flows/emit.py`) — **single unified dispatch path**. Walks `[location, *location.contents]`, calls `triggers_for(event_name)` on each owner, priority-sorts the combined list globally (descending), dispatches synchronously on one `FlowStack`, stops on `CANCEL_EVENT`. Used by service functions, typeclass hooks, and `EMIT_FLOW_EVENT` flow steps alike
   - `EventNames` (`flows/events/names.py`) — canonical string constants for the 18 MVP events
   - `PAYLOAD_FOR_EVENT` (`flows/events/payloads.py`) — event-name → payload dataclass map; PRE payloads are mutable, POST payloads frozen. AE payloads use `targets: list`
-  - `evaluate_filter(spec, payload, *, self_ref)` (`flows/filters/evaluator.py`) — JSON filter DSL: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, plus `and`/`or`/`not`. Bare `"self"` (and `self.<attr>`) resolves to the trigger's owner
+  - `evaluate_filter(spec, payload, *, self_ref)` (`flows/filters/evaluator.py`) — JSON filter DSL: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, `has_capability`, plus `and`/`or`/`not`. Bare `"self"` (and `self.<attr>`) resolves to the trigger's owner
   - **Filter idioms** (see `docs/systems/flows.md` for details): `{"path": "target", "op": "==", "value": "self"}` = self-only (replaces `scope=SELF`); `{"path": "target", "op": "!=", "value": "self"}` = bystander-only; no target filter = room-wide (replaces `scope=ROOM`/`ANY`)
   - `register_pending_prompt`, `resolve_pending_prompt`, `timeout_pending_prompt` (`flows/execution/prompts.py`) — Twisted Deferred-backed player prompts (no DB rows)
   - `classify_source(obj) -> DamageSource` (`world/combat/damage_source.py`) — discriminated union for damage attribution
