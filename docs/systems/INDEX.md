@@ -991,6 +991,30 @@ action consent flow, and a three-mode non-combat round framework.
     - `SuccorSceneAction` (`actions/definitions/rounds.py`, key `"scene_succor"`) — the REGISTRY
       dispatch surface wrapping `declare_succor_scene`; shared by telnet `scene succor <ally>`
       (`CmdScene`) and the web dispatcher.
+  - **Out-of-combat sudden-harm Interpose (#1316) — the non-combat sibling of combat's Interpose
+    maneuver, for one-shot ambush/trap damage rather than a recurring hazard tick:**
+    - `PendingSuddenHarm` (`models.py`) — one-shot damage payload held pending a reactive Interpose
+      beat: `target_sheet` (OneToOne `CharacterSheet`), `scene_round` FK, `amount`, `damage_type`
+      (nullable FK), `source_description`.
+    - `arm_or_apply_sudden_harm(target, amount, damage_type, *, source_description="")`
+      (`sudden_harm.py`) — called from `world.mechanics.effect_handlers._deal_damage`; applies
+      immediately via `apply_resolved_damage` below `sudden_harm_interpose_threshold` or with no
+      bystander present, else binds an Interpose `ChallengeInstance`, bootstraps a DANGER round
+      (`ensure_round_for_acute_condition`), and creates a `PendingSuddenHarm` row.
+    - `declare_interpose_scene(participant, ally)` (`round_services.py`) — writes/updates a
+      deferred `SceneActionDeclaration.interpose_target` for the current round; named-ally only
+      (mirrors `declare_succor_scene`'s #1744 narrowing).
+    - `resolve_pending_interpose_harm(scene_round)` (`sudden_harm.py`) — called from
+      `resolve_scene_round` right after the END tick; resolves each pending harm via the unchanged
+      `world.combat.services.dispatch_interpose` against this round's `interpose_target`
+      declaration (if any), applies the result via `apply_resolved_damage`, then cleans up the
+      `ChallengeInstance` and `PendingSuddenHarm` row. No declaration -> full harm lands (AFK-safe
+      default).
+    - `InterposeSceneAction` (`actions/definitions/rounds.py`, key `"scene_interpose"`) — the
+      REGISTRY dispatch surface wrapping `declare_interpose_scene`, registered and callable via
+      the web dispatcher (`Action().run()`); **unlike `SuccorSceneAction`, no telnet command
+      routes to it yet** — `commands/scene.py`'s `CmdScene` only handles `scene succor <ally>`, so
+      `scene interpose <ally>` is a follow-up wiring gap, not a missing feature.
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.

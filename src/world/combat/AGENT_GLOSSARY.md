@@ -21,7 +21,7 @@ The maneuver by which a PC concedes — in a duel the yielding PC loses immediat
 _Avoid_: surrender, forfeit, submit, defeat
 
 **Interpose**:
-The maneuver by which a PC stands ready to step in front of an attack aimed at an ally and intercept it (a clean block). It costs fatigue only on the round it actually fires; an armed-but-never-triggered interpose costs nothing.
+The maneuver by which a PC stands ready to step in front of an attack aimed at an ally and intercept it (a clean block). It costs fatigue only on the round it actually fires; an armed-but-never-triggered interpose costs nothing. See `world/scenes/AGENT_GLOSSARY.md`'s Sudden Harm entry for the out-of-combat sibling, which arms via a bootstrapped scene round instead of a `CombatRoundAction`.
 _Avoid_: block, guard, intercept, bodyguard
 
 **Succor**:
