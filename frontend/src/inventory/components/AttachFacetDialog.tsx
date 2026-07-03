@@ -29,6 +29,7 @@ import {
   useRemoveItemFacet,
 } from '../hooks/useItemFacets';
 import type { CraftingQuote } from '../api';
+import { LabStationStatusCard } from './LabStationStatusCard';
 
 // ---------------------------------------------------------------------------
 // Failure-risk consumption labels
@@ -96,6 +97,10 @@ function CraftingQuotePanel({ isLoading, quote }: CraftingQuotePanelProps) {
             .map((r) => r.label ?? CONSUMPTION_LABELS[r.cost_consumption] ?? r.cost_consumption)
             .join(', ')}
         </p>
+      )}
+
+      {quote.station_status && (
+        <LabStationStatusCard featureInstanceId={quote.station_status.feature_instance_id} />
       )}
     </div>
   );
