@@ -217,6 +217,21 @@ class AwayFromActorHandlerTests(TestCase):
         )
         self.assertFalse(result.applied)
 
+    def test_knockback_noop_when_defender_resists(self) -> None:
+        """A defender with the sure_footed Capability (#1793) is not moved."""
+        with patch.object(self.defender, "has_capability", return_value=True):
+            effect = ConsequenceEffectFactory(
+                consequence=self.consequence,
+                effect_type=EffectType.MOVE_TO_POSITION,
+                position_destination=PositionDestination.AWAY_FROM_ACTOR,
+                target=EffectTarget.TARGET,
+            )
+            result = apply_effect(
+                effect, ResolutionContext(character=self.attacker, target=self.defender)
+            )
+        self.assertFalse(result.applied)
+        self.assertEqual(position_of(self.defender).pk, self.defender_pos.pk)
+
     def test_knockback_two_effects_chain_two_hops(self) -> None:
         """Two AWAY_FROM_ACTOR rows on one Consequence chain into a 2-hop shove.
 

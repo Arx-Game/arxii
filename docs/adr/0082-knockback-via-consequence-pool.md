@@ -36,3 +36,7 @@ specific spot rather than the whole room.
 - PC-technique-authored knockback (the attacker side) remains out of scope —
   `Technique` has no on-hit-effect-pool equivalent to `ThreatPoolEntry`'s,
   and building one wasn't part of this issue.
+- Knockback resistance is gated by the `sure_footed` Capability, checked via
+  #1793's shared `Character.has_capability` API inside
+  `_resolve_away_from_actor` — no bespoke resistance field or lookup was
+  added.

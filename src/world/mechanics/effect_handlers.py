@@ -686,7 +686,9 @@ def _resolve_away_from_actor(
     """Resolve a knockback destination: a Position adjacent to the TARGET that
     is not itself adjacent to the actor (i.e. actually puts distance between
     them). Deterministic tie-break by lowest pk. Returns None if either side
-    lacks a Position or the target has no valid neighbor to be pushed into.
+    lacks a Position, the target has no valid neighbor to be pushed into, or
+    the target resists via the ``sure_footed`` Capability (#1793) — same
+    no-op semantics as every other early return here.
     """
     from world.areas.positioning.services import (  # noqa: PLC0415
         adjacent_open_positions,
@@ -694,6 +696,8 @@ def _resolve_away_from_actor(
     )
 
     target = _resolve_target(effect, context)
+    if target.has_capability("sure_footed"):
+        return None
     actor_pos = position_of(context.character)
     target_pos = position_of(target)
     if actor_pos is None or target_pos is None:
