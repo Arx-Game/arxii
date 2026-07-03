@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.test import TestCase, tag
+from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind, VitalBonusTarget
@@ -15,6 +16,8 @@ from world.magic.factories import (
 )
 from world.magic.models import ThreadSurvivabilityTuning
 from world.magic.services import (
+    apply_damage_reduction_from_threads,
+    coherence_cache_scope,
     get_thread_survivability_tuning,
     seed_thread_survivability_tuning,
     survivability_baseline,
@@ -432,4 +435,117 @@ class CoherenceAmplifierBaselineTests(TestCase):
             result,
             0,
             f"Lone wolf should have 0 baseline even when dressed, got {result}.",
+        )
+
+
+@tag("postgres")
+class CoherenceMemoizationTests(TestCase):
+    """Assert motif_coherence_bonus is memoized per (sheet, resonance) (#1267).
+
+    A character with N threads sharing K unique resonances should execute the
+    wardrobe walk (proxied by the StylePresentationEndorsement aggregate query)
+    exactly K times within a coherence_cache_scope — not 4*N times.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.items.constants import BodyRegion, EquipmentLayer
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemStyleFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+            StyleFactory,
+            TemplateSlotFactory,
+        )
+        from world.magic.factories import (
+            MotifFactory,
+            MotifResonanceFactory,
+            MotifResonanceStyleFactory,
+        )
+
+        seed_thread_survivability_tuning()
+
+        cls.quality = QualityTierFactory(name="MemoizCommon", stat_multiplier="1.00")
+        cls.resonance = ResonanceFactory()
+        cls.style_bound = StyleFactory(name="MemoizBound")
+
+        cls.char = CharacterFactory(db_key="MemoizChar")
+        cls.sheet = CharacterSheetFactory(character=cls.char, primary_persona=False)
+        # Three threads sharing ONE resonance → K=1 unique resonance.
+        for _ in range(3):
+            ThreadFactory(owner=cls.sheet, resonance=cls.resonance, level=10)
+
+        cls.motif = MotifFactory(character=cls.sheet)
+        cls.mr = MotifResonanceFactory(motif=cls.motif, resonance=cls.resonance)
+        MotifResonanceStyleFactory(motif_resonance=cls.mr, style=cls.style_bound)
+
+        template = ItemTemplateFactory(name="MemoizItem")
+        TemplateSlotFactory(
+            template=template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        cls.item = ItemInstanceFactory(template=template, quality_tier=cls.quality)
+        ItemStyleFactory(
+            item_instance=cls.item,
+            style=cls.style_bound,
+            attachment_quality_tier=cls.quality,
+        )
+        cls.equipped = EquippedItemFactory(
+            character=cls.char,
+            item_instance=cls.item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+    def _invalidate(self) -> None:
+        self.char.equipped_items.invalidate()
+
+    def test_walk_count_bounded_by_unique_resonances_within_scope(self) -> None:
+        """4 baseline calls (DR + 3 saves) for 3 threads sharing 1 resonance
+        execute the endorsement aggregate exactly once inside a scope."""
+        self._invalidate()
+        char = self.char
+
+        with coherence_cache_scope():
+            with CaptureQueriesContext(connection) as ctx:
+                # DR baseline
+                apply_damage_reduction_from_threads(char, 50)
+                # Three save baselines
+                survivability_save_baselines(char)
+
+        endorsement_queries = [
+            q for q in ctx.captured_queries if "StylePresentationEndorsement" in q["sql"]
+        ]
+        # 3 threads, 1 unique resonance → exactly 1 endorsement query expected.
+        self.assertEqual(
+            len(endorsement_queries),
+            1,
+            f"Expected 1 endorsement query for 1 unique resonance, got {len(endorsement_queries)}.",
+        )
+
+    def test_walk_count_without_scope_runs_once_per_call(self) -> None:
+        """Without coherence_cache_scope, the endorsement aggregate runs once
+        per survivability_baseline call (Layer 1 dedups within each call).
+        4 baseline calls → 4 queries for 1 unique resonance."""
+        self._invalidate()
+        char = self.char
+
+        with CaptureQueriesContext(connection) as ctx:
+            apply_damage_reduction_from_threads(char, 50)
+            survivability_save_baselines(char)
+
+        endorsement_queries = [
+            q for q in ctx.captured_queries if "StylePresentationEndorsement" in q["sql"]
+        ]
+        # 4 baseline calls (1 DR + 3 saves), each walks once (Layer 1 dedups
+        # within each call, but there's no cross-call cache).
+        self.assertEqual(
+            len(endorsement_queries),
+            4,
+            f"Expected 4 endorsement queries without scope (4 baseline calls), "
+            f"got {len(endorsement_queries)}.",
         )
