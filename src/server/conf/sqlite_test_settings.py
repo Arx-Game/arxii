@@ -18,8 +18,12 @@ Tests that genuinely require Postgres-specific features (materialized
 view *contents*, ``DISTINCT ON``, recursive CTEs, etc.) must be decorated
 with ``@django.test.tag("postgres")`` so the SQLite tier skips them
 cleanly. The Postgres parity tier (``arx test`` without ``--sqlite``
-locally, plus the existing CI shard matrix at ``ci.yml:46-76``) runs the
-real migration chain and the real refresh implementations.
+locally, plus the existing CI shard matrix at ``ci.yml:46-76``) runs
+against a test DB built from current model state by
+``tools/build_schema.py`` (see ``test_settings.py``'s ``MIGRATE=False``)
+and the real refresh implementations; migration-chain validity is
+gated separately by `makemigrations --check` and the nightly full-replay
+workflow.
 """
 
 import server.conf.test_settings as _base_test_settings
@@ -63,9 +67,12 @@ TEST_RUNNER = "server.conf.sqlite_test_runner.SqliteTestRunner"
 # the SQLite tier sidesteps the issue with no production-code impact.
 #
 # The PG tier (``arx test`` without ``--sqlite`` and the CI shard matrix
-# at ``ci.yml:46-76``) runs the FULL migration chain on every PR and
-# exercises every ALTER/RunSQL/RunPython operation, so the carve-out here
-# only affects the inner-loop fast tier.
+# at ``ci.yml:46-76``) runs against a test DB built from current model
+# state via ``tools/build_schema.py`` + ``MIGRATE=False`` (see
+# ``test_settings.py``) rather than replaying the migration chain, so the
+# carve-out here only affects the inner-loop fast tier's mechanism, not
+# migration-chain coverage — that's gated by `makemigrations --check` and
+# the nightly full-replay workflow.
 #
 # Caveat: ``RunPython`` data seeds (e.g.
 # ``world.progression.migrations.0002_social_engagement_kudos_category``)

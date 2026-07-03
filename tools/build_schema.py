@@ -55,6 +55,19 @@ SEED_TARGETS = [
     ("world/magic", "grant_accept_soul_tether_to_all_paths"),
 ]
 
+# Columns on world.scenes.models.Interaction that real migration replay adds
+# *after* the partition rewrite (scenes/0024, scenes/0026) via plain AddField
+# — see POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py. The raw
+# SQL in SQL_FILES rebuilds scenes_interaction from a frozen pre-partition
+# snapshot that deliberately omits them; with every migration disabled here,
+# the AddField migrations that would normally backfill them never run, so
+# they must be added explicitly. Keep this list in sync with
+# check_partition_sql_drift.py's POST_PARTITION_COLUMNS.
+POST_PARTITION_FIELDS = [
+    ("scenes", "Interaction", "fury_committed"),
+    ("scenes", "Interaction", "writer_account"),
+]
+
 
 class _DisableMigrations:
     """Sentinel: tells Django every app has no migrations."""
@@ -129,6 +142,13 @@ def main() -> None:
             for rel_path in SQL_FILES:
                 cursor.execute((SRC_DIR / rel_path).read_text())
                 print(f"applied {rel_path}")
+
+        with connection.schema_editor() as schema_editor:
+            for app_label, model_name, field_name in POST_PARTITION_FIELDS:
+                model = apps.get_model(app_label, model_name)
+                field = model._meta.get_field(field_name)  # noqa: SLF001
+                schema_editor.add_field(model, field)
+                print(f"added post-partition column {model_name}.{field_name}")
 
         for module_path, func_name in _seed_modules():
             module = importlib.import_module(module_path)
