@@ -10290,7 +10290,25 @@ paths:
   /api/items/lab-stations/:
     get:
       operationId: items_lab_stations_list
-      description: Status + install/upgrade/repair endpoints for Lab stations.
+      description: |-
+        Status + install/upgrade/repair endpoints for Lab stations.
+
+        ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+        whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+        repo's shared page-size-50 convention, already reused by
+        ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+        ``LabStationFilter`` lets callers scope the list to a single room.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: room_profile
+        schema:
+          type: number
       tags:
       - items
       security:
@@ -10300,14 +10318,19 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LabStationDetails'
+                $ref: '#/components/schemas/PaginatedLabStationDetailsList'
           description: ''
   /api/items/lab-stations/{feature_instance_id}/:
     get:
       operationId: items_lab_stations_retrieve
-      description: Status + install/upgrade/repair endpoints for Lab stations.
+      description: |-
+        Status + install/upgrade/repair endpoints for Lab stations.
+
+        ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+        whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+        repo's shared page-size-50 convention, already reused by
+        ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+        ``LabStationFilter`` lets callers scope the list to a single room.
       parameters:
       - in: path
         name: feature_instance_id
@@ -10329,7 +10352,14 @@ paths:
   /api/items/lab-stations/{feature_instance_id}/repair/:
     post:
       operationId: items_lab_stations_repair_create
-      description: Status + install/upgrade/repair endpoints for Lab stations.
+      description: |-
+        Status + install/upgrade/repair endpoints for Lab stations.
+
+        ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+        whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+        repo's shared page-size-50 convention, already reused by
+        ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+        ``LabStationFilter`` lets callers scope the list to a single room.
       parameters:
       - in: path
         name: feature_instance_id
@@ -10351,7 +10381,14 @@ paths:
   /api/items/lab-stations/install/:
     post:
       operationId: items_lab_stations_install_create
-      description: Status + install/upgrade/repair endpoints for Lab stations.
+      description: |-
+        Status + install/upgrade/repair endpoints for Lab stations.
+
+        ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+        whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+        repo's shared page-size-50 convention, already reused by
+        ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+        ``LabStationFilter`` lets callers scope the list to a single room.
       tags:
       - items
       security:
@@ -10366,7 +10403,14 @@ paths:
   /api/items/lab-stations/upgrade/:
     post:
       operationId: items_lab_stations_upgrade_create
-      description: Status + install/upgrade/repair endpoints for Lab stations.
+      description: |-
+        Status + install/upgrade/repair endpoints for Lab stations.
+
+        ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+        whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+        repo's shared page-size-50 convention, already reused by
+        ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+        ``LabStationFilter`` lets callers scope the list to a single room.
       tags:
       - items
       security:
@@ -39567,6 +39611,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KnownSecret'
+    PaginatedLabStationDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabStationDetails'
     PaginatedMissionCategoryList:
       type: object
       required:

@@ -6531,7 +6531,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
     get: operations['items_lab_stations_list'];
     put?: never;
     post?: never;
@@ -6548,7 +6556,15 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
     get: operations['items_lab_stations_retrieve'];
     put?: never;
     post?: never;
@@ -6567,7 +6583,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
     post: operations['items_lab_stations_repair_create'];
     delete?: never;
     options?: never;
@@ -6584,7 +6608,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
     post: operations['items_lab_stations_install_create'];
     delete?: never;
     options?: never;
@@ -6601,7 +6633,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
     post: operations['items_lab_stations_upgrade_create'];
     delete?: never;
     options?: never;
@@ -21841,6 +21881,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['KnownSecret'][];
+    };
+    PaginatedLabStationDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['LabStationDetails'][];
     };
     PaginatedMissionCategoryList: {
       /** @example 123 */
@@ -37624,7 +37679,11 @@ export interface operations {
   };
   items_lab_stations_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room_profile?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -37636,7 +37695,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['LabStationDetails'][];
+          'application/json': components['schemas']['PaginatedLabStationDetailsList'];
         };
       };
     };
