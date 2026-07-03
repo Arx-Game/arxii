@@ -304,7 +304,7 @@ def _summon_military_unit(*, payload: Any) -> None:
     properties = list(Property.objects.filter(name__in=property_names))
     capability_values = [
         (capability, capability_magnitudes[capability.name])
-        for capability in CapabilityType.objects.filter(name__in=capability_magnitudes)
+        for capability in CapabilityType.objects.filter(name__in=capability_magnitudes.keys())
     ]
 
     add_unit(

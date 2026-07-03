@@ -410,6 +410,12 @@ class CharacterSheetCapabilityPropertyProtocolTests(TestCase):
         ObjectPropertyFactory(object=sheet.character, property=prop)
         self.assertTrue(sheet.has_property(prop))
 
+    def test_has_property_true_via_persona_authored_property(self) -> None:
+        sheet = CharacterSheetFactory()
+        prop = PropertyFactory()
+        sheet.primary_persona.properties.add(prop)
+        self.assertTrue(sheet.has_property(prop))
+
     def test_has_property_false_when_absent(self) -> None:
         sheet = CharacterSheetFactory()
         prop = PropertyFactory()

@@ -196,4 +196,16 @@ class Migration(migrations.Migration):
                 max_length=80,
             ),
         ),
+        migrations.AlterField(
+            model_name="battleunit",
+            name="individual_count",
+            field=models.PositiveIntegerField(
+                blank=True,
+                help_text="Population data point mirroring CombatOpponent.swarm_count's "
+                "naming/shape (#1794) — null means 'not a swarm-style unit'. No swarm-math "
+                "resolution is wired against this field yet; that is left to #1714 "
+                "(naval/aerial units) or a future issue that needs it.",
+                null=True,
+            ),
+        ),
     ]

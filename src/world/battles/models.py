@@ -250,8 +250,8 @@ class BattleUnit(SharedMemoryModel):
         blank=True,
         help_text="Population data point mirroring CombatOpponent.swarm_count's "
         "naming/shape (#1794) — null means 'not a swarm-style unit'. No swarm-math "
-        "resolution is wired against this field yet; that is left to whichever of "
-        "#1712/#1714 needs it.",
+        "resolution is wired against this field yet; that is left to #1714 "
+        "(naval/aerial units) or a future issue that needs it.",
     )
     quality = models.CharField(
         max_length=20,
