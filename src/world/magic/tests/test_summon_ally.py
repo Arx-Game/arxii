@@ -129,6 +129,8 @@ class SummonAllyMilitaryBranchTests(TestCase):
         from world.battles.models import BattleUnit
         from world.battles.services import add_side, create_battle, enlist_participant
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import CapabilityTypeFactory
+        from world.mechanics.factories import PropertyFactory
 
         battle = create_battle(name="Military Summon Test Battle")
         side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
@@ -138,12 +140,16 @@ class SummonAllyMilitaryBranchTests(TestCase):
         pool = ThreatPoolFactory()
         ThreatPoolEntryFactory(pool=pool)
 
+        flying = PropertyFactory(name="flying")
+        flight_cap = CapabilityTypeFactory(name="flight")
+
         payload = SimpleNamespace(
             caster=sheet.character,
             threat_pool_id=pool.pk,
             military=True,
             max_health=200,
-            composition="magical",
+            properties=["flying"],
+            capabilities={"flight": 30},
         )
 
         before_units = BattleUnit.objects.filter(battle=battle).count()
@@ -160,7 +166,8 @@ class SummonAllyMilitaryBranchTests(TestCase):
         unit = BattleUnit.objects.filter(battle=battle).latest("pk")
         self.assertEqual(unit.side, side)
         self.assertEqual(unit.strength, 200)
-        self.assertEqual(unit.composition, "magical")
+        self.assertTrue(unit.has_property(flying))
+        self.assertEqual(unit.effective_capability(flight_cap), 30)
         self.assertEqual(unit.summoned_by, sheet)
 
     def test_military_summon_no_op_without_active_battle_participant(self) -> None:

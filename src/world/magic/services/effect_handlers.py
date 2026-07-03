@@ -191,8 +191,10 @@ def summon_ally(*, payload: Any) -> None:
     - ``payload.military``       – optional bool (default False, #1711). When True,
                                    routes to the BattleUnit branch instead of the
                                    skirmish CombatOpponent branch.
-    - ``payload.composition``    – optional str (#1711, military branch only); a
-                                   ``UnitComposition`` value. Defaults to IRREGULAR.
+    - ``payload.properties``     – optional list[str] (#1794, military branch only);
+                                   Property names to attach to the summoned unit.
+    - ``payload.capabilities``   – optional dict[str, int] (#1794, military branch
+                                   only); CapabilityType name -> authored magnitude.
     - ``payload.quality``        – optional str (#1711, military branch only); a
                                    ``UnitQuality`` value. Defaults to TRAINED.
 
@@ -206,8 +208,8 @@ def summon_ally(*, payload: Any) -> None:
     1. Finds the caster's active BattleParticipant; returns early if none (mirrors
        the skirmish no-op convention).
     2. Creates a BattleUnit via ``add_unit`` on the participant's side/place, with
-       strength from ``max_health``, composition/quality from the payload (or
-       defaults), summoned_by=caster sheet.
+       strength from ``max_health``, quality/properties/capabilities from the
+       payload (or defaults), summoned_by=caster sheet.
     """
     if getattr(payload, "military", False):  # noqa: GETATTR_LITERAL
         _summon_military_unit(payload=payload)
@@ -272,13 +274,11 @@ def _summon_military_unit(*, payload: Any) -> None:
     No-op (mirrors the skirmish path's convention) if the caster has no ACTIVE
     BattleParticipant.
     """
-    from world.battles.constants import (  # noqa: PLC0415
-        BattleParticipantStatus,
-        UnitComposition,
-        UnitQuality,
-    )
+    from world.battles.constants import BattleParticipantStatus, UnitQuality  # noqa: PLC0415
     from world.battles.models import BattleParticipant  # noqa: PLC0415
     from world.battles.services import add_unit  # noqa: PLC0415
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.mechanics.models import Property  # noqa: PLC0415
 
     participant = (
         BattleParticipant.objects.filter(
@@ -293,19 +293,30 @@ def _summon_military_unit(*, payload: Any) -> None:
 
     caster_sheet = participant.character_sheet
     max_health: int = getattr(payload, "max_health", 30)  # noqa: GETATTR_LITERAL
-    default_composition = UnitComposition.IRREGULAR
-    composition: str = getattr(payload, "composition", default_composition)  # noqa: GETATTR_LITERAL
     quality: str = getattr(payload, "quality", UnitQuality.TRAINED)  # noqa: GETATTR_LITERAL
+    property_names: list[str] = getattr(payload, "properties", [])  # noqa: GETATTR_LITERAL
+    capability_magnitudes: dict[str, int] = getattr(
+        payload,
+        "capabilities",  # noqa: GETATTR_LITERAL
+        {},
+    )
+
+    properties = list(Property.objects.filter(name__in=property_names))
+    capability_values = [
+        (capability, capability_magnitudes[capability.name])
+        for capability in CapabilityType.objects.filter(name__in=capability_magnitudes)
+    ]
 
     add_unit(
         battle=participant.battle,
         side=participant.side,
         name=f"{caster_sheet.character.db_key}'s Summon",
-        composition=composition,
         quality=quality,
         strength=max_health,
         place=participant.place,
         summoned_by=caster_sheet,
+        properties=properties,
+        capability_values=capability_values,
     )
 
 
