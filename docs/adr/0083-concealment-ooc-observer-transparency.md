@@ -24,4 +24,5 @@ from IC narrative text (a system banner, not a pose).
 Supersedes/clarifies: fills the TBD in `docs/roadmap/design-tenets.md`'s "Players are always aware..."
 tenet; corrects its illustrative example, which read as IC-flavored prose.
 
-> Status: accepted · Source: #1225 spec revision
+> Status: accepted · Source: #1225 spec revision · Related: ADR-0026 (the policy
+> tenet this elaborates with a concrete mechanism)

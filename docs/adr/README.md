@@ -79,7 +79,7 @@ treat those names as hints to confirm, not gospel.
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
 - [0024 — Consent gates behavior-altering effects, not benefit](0024-consent-gates-behavior-altering-effects.md)
 - [0025 — Never parse pose text for mechanics](0025-never-parse-pose-text-for-mechanics.md)
-- [0026 — The watched player is always OOC-aware](0026-the-watched-player-is-always-ooc-aware.md)
+- [0026 — The watched player is always OOC-aware](0026-the-watched-player-is-always-ooc-aware.md) (see also ADR-0083)
 - [0027 — Visibility = eligibility: one predicate, no locked options](0027-visibility-equals-eligibility.md)
 - [0028 — Web-first: not wired into React = not implemented](0028-web-first-not-wired-into-react-is-not-implemented.md)
 - [0029 — Named/public faces are always shown by name](0029-named-public-faces-are-always-shown-by-name.md)
@@ -119,7 +119,7 @@ treat those names as hints to confirm, not gospel.
 - [0082 — Battle morale derives status; the front itself is the objective; VP stays award-only](0082-battle-morale-derives-status-objective-lives-on-place.md)
 - [0083 — Siege structures are per-Fortification objectives; BREACH/FORTIFY are dedicated verbs](0083-siege-structures-are-per-fortification-objectives-with-dedicated-verbs.md)
 - [0083 — Out-of-combat sudden harm defers via the scene-round declare/resolve shape, not a pre-armed check](0083-out-of-combat-sudden-harm-defers-via-scene-round.md)
-- [0083 — Concealment carries an OOC-only, identity-free "someone is watching" guarantee, separate from IC detection](0083-concealment-ooc-observer-transparency.md)
+- [0083 — Concealment carries an OOC-only, identity-free "someone is watching" guarantee, separate from IC detection](0083-concealment-ooc-observer-transparency.md) (see also ADR-0026)
 - [0084 — Battle environment reads ambient weather via Battle.region, not the room graph](0084-battle-environment-reads-ambient-weather-via-battle-region.md)
 
 ### Gift & resonance economy
