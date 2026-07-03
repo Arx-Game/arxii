@@ -73,6 +73,22 @@ If the merge commit itself times out on pre-commit (ty/ruff over hundreds of fil
 
 **Sibling failure mode, same root cause:** adding migrations perturbs the global topological sort, which can expose an *existing* migration's missing cross-app dependency — e.g. a `RunSQL` step in one app's migration reading a column that another app's later migration adds, without an explicit dependency between them. The ordering held by luck before; any new migration can break it. Rule: a migration whose `RunSQL` reads another app's table/column must explicitly depend on the migration that creates it.
 
+### Vendored objects migration opens a real DB connection at import time
+
+`evennia/objects/migrations/0007_objectdb_db_account.py` (vendored, not
+git-tracked in this repo) calls `connection.cursor()` at **module-import
+time**, not inside its migration `RunPython`/`RunSQL` operations. Any code
+path that loads Django's migration graph — `MigrationLoader`,
+`makemigrations` (including `--check --dry-run`), `showmigrations`,
+`tools/check_missing_migrations.py` — imports every migration module on disk
+to build the dependency graph, which means it needs a **reachable** database
+even when the check is nominally offline/static. There's no way to make this
+check truly DB-free without patching Evennia's vendored migration; CI jobs
+that only run `ty`/`makemigrations --check` still need a `postgres:` service
+container for this reason (see the `ty` job in `.github/workflows/ci.yml` and
+the nightly migration-replay workflow). See ADR-0083 for how this interacts
+with the CI schema-from-models decision.
+
 ### Fuzzy/partial object search is broken on PostgreSQL
 
 Evennia's `ObjectDB.objects.get_objs_with_key_or_alias(exact=False)` (the path `caller.search(name)` takes when there's no exact match) builds a `\b`-anchored regex (`r"\bBo.*"` for "Bo") and queries `db_key__iregex`. **On PostgreSQL, `\b` is a literal backspace character (POSIX BRE/ERE), not a word boundary** — word boundaries are a PCRE/Python-`re` extension. So the regex never matches a real key like "Bob" on Postgres. On the SQLite tier, Evennia registers a Python `re`-based `REGEXP` function where `\b` IS a word boundary, so partial matching works there and the divergence is invisible until CI's Postgres shard runs.

@@ -1,0 +1,75 @@
+name: Nightly migration replay
+
+# Per-PR CI builds its schema straight from model state (tools/build_schema.py)
+# and never replays the migration chain — see ADR-0083 (docs/adr/0083-ci-schema-from-models.md).
+# This workflow is the ONLY place that still exercises a real, full
+# `arx manage migrate` from an empty database, catching migration-chain
+# breakage (bad dependencies, DDL that fails against a real Postgres, drift
+# between models and migrations) that the per-PR drift gate's static check
+# can miss. Runs nightly rather than per-PR because the replay itself costs
+# 12.5-14 minutes per shard-sized app set — see the ADR for the measurement.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-replay:
+    runs-on: ubuntu-latest
+    # Same manual `docker run` pattern as ci.yml's backend-shard job (the
+    # `services:` block can't pass a positional COMMAND to bump
+    # max_locks_per_transaction, which migrate's cumulative FK-constraint
+    # count needs headroom for).
+    env:
+      DEBUG: False
+      SECRET_KEY: test-secret-key-for-ci-only
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
+      CLOUDINARY_CLOUD_NAME: test-cloud
+      CLOUDINARY_API_KEY: test-key
+      CLOUDINARY_API_SECRET: test-secret
+      SENDGRID_API_KEY: test-sendgrid-key
+      DEFAULT_FROM_EMAIL: test@example.com
+      FACEBOOK_APP_ID: test-facebook-id
+      FACEBOOK_APP_SECRET: test-facebook-secret
+    steps:
+      - uses: actions/checkout@v6
+      - name: Start Postgres with max_locks_per_transaction bumped
+        run: |
+          docker run -d \
+            --name postgres-ci \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=arxii_test \
+            -e POSTGRES_INITDB_ARGS=--no-sync \
+            --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g \
+            -p 5432:5432 \
+            postgres:15 \
+            -c max_locks_per_transaction=512
+      - name: Wait for Postgres ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec postgres-ci pg_isready -U postgres -d arxii_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          docker logs postgres-ci
+          exit 1
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+      - run: uv sync
+      # Full replay: the whole point of this workflow. Runs every migration
+      # from every app's 0001 forward against a real empty Postgres.
+      - name: Replay the full migration chain
+        run: uv run arx manage migrate
+      # Drift gate — NOT `arx manage makemigrations --check --dry-run`. That
+      # command exits 1 on pre-existing phantom Evennia-library proxy-model
+      # changes (harmless, filtered only at write time by our custom
+      # makemigrations command). tools/check_missing_migrations.py scopes the
+      # check to first-party apps only, same as the per-PR `ty` job's gate.
+      - name: Check migrations match models
+        run: uv run python tools/check_missing_migrations.py

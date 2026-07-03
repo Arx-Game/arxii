@@ -1,3 +1,24 @@
+> **SUPERSEDED — do not execute.** This plan's premise was that squashing the
+> migration chain would meaningfully cut migration-replay wall-clock. Measurement
+> disproved that: replay cost is driven by op-count (~1,200 `AddField`-class
+> operations from cross-app FK cycles), not file count, so a squash doesn't help.
+> See ADR-0083 (`docs/adr/0083-ci-schema-from-models.md`): CI and test databases
+> now build schema directly from model state (`tools/build_schema.py`), and full
+> migration replay runs only in the nightly workflow
+> (`.github/workflows/nightly-migration-replay.yml`). The reset PR that would
+> have executed this plan (#1801) was closed. Retained below for historical
+> reference only — do not follow it.
+>
+> Also stale: the two RunPython seed migrations this plan describes preserving,
+> `world/magic/migrations/0003_accept_soul_tether_placeholder_grants.py` and
+> `world/progression/migrations/0003_social_engagement_kudos_category.py`, have
+> since been **deleted outright** (not preserved-and-renumbered) and replaced by
+> idempotent seed functions — `world/magic/seeds_soul_tether.py` and
+> `world/progression/seeds.py` respectively — invoked directly by
+> `tools/build_schema.py` (ADR-0013 forbids RunPython data seeding in
+> migrations). Every reference below to preserving those two migration files no
+> longer applies.
+
 # Migration nuke-and-rebuild playbook
 
 **Goal:** collapse the project's migration chain (currently 101 migrations across ~30 apps) into a single `0001_initial.py` per app, plus the small set of essential data migrations (materialized views, partitions, reference seeds, defensive dedupes). Net: ~100 → ~52 migrations (45 initials × 1 each + 7 preserved data migrations; could climb to ~55-60 if a few apps split into `0001_initial` + `0002_initial` from circular FKs). Inner-loop and CI gain back the migration-replay time as net wall-clock.
@@ -53,10 +74,10 @@ grep -rln "RunPython\|RunSQL" /workspaces/arxii/src/*/migrations /workspaces/arx
 | areas | `0002_create_areaclosure_view.py` | Materialized view via RunSQL | **PRESERVE** as new 0002 | Reads `areas/sql/areaclosure.sql`. Self-contained. Dep: `areas/0001_initial`. |
 | codex | `0003_create_subjectbreadcrumb_view.py` | Materialized view via RunSQL | **PRESERVE** as new 0002 | Reads `codex/sql/subjectbreadcrumb.sql`. Was `0003` because codex had `0002_initial` (split init). After nuke: dep on `codex/0001_initial`. |
 | combat | `0005_interaction_fk_composites.py` | Composite FK constraint via RunSQL | **PRESERVE** as new 0002 | **Cross-app dep.** Reads `combat/sql/interaction_fk_composites_*.sql`. Adds FK from combat tables to **partitioned** `scenes_interaction`. After nuke: deps `[("combat", "0001_initial"), ("scenes", "0002_partition_interaction")]` — partition MUST exist first. |
-| magic | `0003_accept_soul_tether_placeholder_grants.py` | Defensive idempotent grant | **PRESERVE** as new 0002 | NOT a one-time backfill — grants `accept_soul_tether` ritual to every Path so `reconcile_ritual_knowledge()` works for new characters. Idempotent (`get_or_create`); silently skips when ritual doesn't yet exist. Safe on fresh DBs. |
+| magic | `0003_accept_soul_tether_placeholder_grants.py` | Defensive idempotent grant | **DELETED — replaced by `world/magic/seeds_soul_tether.py`** | Historical: NOT a one-time backfill — grants `accept_soul_tether` ritual to every Path so `reconcile_ritual_knowledge()` works for new characters. Idempotent (`get_or_create`); silently skips when ritual doesn't yet exist. Safe on fresh DBs. Now runs as a seed function invoked by `tools/build_schema.py`, not a migration. |
 | missions | `0006_missiongiver_name_unique.py` | Dedupe RunPython + `AlterField unique=True` | **FOLD INTO 0001** | The `unique=True` is already declared on the model (`name = models.CharField(max_length=200, unique=True)`). New `0001_initial` picks it up directly. The dedupe RunPython is defensive against existing duplicates — fresh DB has none. Skip. |
 | missions | `0008_predicate_giver_name_to_id.py` (after PR #606 merges) | One-time JSON rewrite | **SKIP** | Walks existing `availability_rule` / `visibility_rule` / `requirements_override` JSONFields. On a fresh DB, all three fields default to `{}` — nothing to rewrite. |
-| progression | `0003_social_engagement_kudos_category.py` | Reference seed via RunPython | **PRESERVE** as new 0002 | `update_or_create` for the `social_engagement` KudosSourceCategory row. The seed is required: `SceneActionRequest` accept flow looks it up at runtime. After nuke: dep `progression/0001_initial`. |
+| progression | `0003_social_engagement_kudos_category.py` | Reference seed via RunPython | **DELETED — replaced by `world/progression/seeds.py`** | Historical: `update_or_create` for the `social_engagement` KudosSourceCategory row. The seed is required: `SceneActionRequest` accept flow looks it up at runtime. Now runs as a seed function invoked by `tools/build_schema.py`, not a migration. |
 | scenes | `0003_partition_interaction.py` | Range-partitions `scenes_interaction` table | **PRESERVE** as new 0002 | Reads `scenes/sql/partition_interaction_*.sql`. Was `0003` (scenes had `0002_initial` from split init). After nuke: dep `scenes/0001_initial`. **Critical: combat FK composite migration depends on this.** |
 | societies | `0002_create_legend_views.py` | 3 materialized views via RunSQL | **PRESERVE** as new 0002 | Reads `societies/sql/{character,guise,covenant}_legend_summary.sql`. The `managed=False` summary models (CharacterLegendSummary, PersonaLegendSummary, CovenantLegendSummary) end up in the new `0001_initial` as Django stubs — `makemigrations` picks them up but they don't generate DDL because `managed=False`. The view-creation SQL here is what actually populates them. |
 | vitals | `0003_migrate_status_to_life_state.py` | One-time data backfill | **SKIP** | Reads legacy `status` column, writes `life_state`. The `status` column is removed by the next migration. On a fresh DB, the new `0001_initial` creates `life_state` directly with no `status` column to migrate from. Already applied on every existing dev DB. |
