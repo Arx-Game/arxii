@@ -292,6 +292,50 @@ def register_detection(
         instance.detected_by.add(observer_sheet)
 
 
+def _register_unseen_observer_if_concealing(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    condition: ConditionTemplate,
+) -> None:
+    """OOC-notice hook (#1225): any conceals_from_perception condition, on apply,
+    registers an unseen-observer grant for the scene at target's location — generic
+    across every current and future concealing condition, no per-mechanism plumbing."""
+    if not condition.category.conceals_from_perception:
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import register_unseen_observer  # noqa: PLC0415
+
+    scene = get_active_scene(getattr(target, "location", None))  # noqa: GETATTR_LITERAL
+    if scene is None:
+        return
+    try:
+        sheet = target.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return
+    register_unseen_observer(scene, sheet, "concealment")
+
+
+def _clear_unseen_observer_if_concealing(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    condition: ConditionTemplate,
+) -> None:
+    """Inverse of _register_unseen_observer_if_concealing (#1225)."""
+    if not condition.category.conceals_from_perception:
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import clear_unseen_observer  # noqa: PLC0415
+
+    scene = get_active_scene(getattr(target, "location", None))  # noqa: GETATTR_LITERAL
+    if scene is None:
+        return
+    try:
+        sheet = target.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return
+    clear_unseen_observer(scene, sheet)
+
+
 def _active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # noqa: OBJECTDB_PARAM
     return target.condition_instances.filter(
         condition__category__conceals_from_perception=True,
@@ -757,6 +801,7 @@ def apply_condition(  # noqa: PLR0913
         _notify_stories_condition_applied(target, result.instance)
         _install_reactive_side_effects(target, condition, result.instance)
         _make_just_installed_triggers_live(target)
+        _register_unseen_observer_if_concealing(target, condition)
 
     if result.instance is not None and target_location is not None:
         emit_event(
@@ -1075,6 +1120,7 @@ def remove_condition(
             location=target_location,
         )
     _notify_stories_condition_expired(target, condition)
+    _clear_unseen_observer_if_concealing(target, condition)
     _resolve_deferred_death_on_expiry(target, condition)
     return True
 
@@ -1872,6 +1918,7 @@ def suppress_condition(
         )
     instance.save()
     _invalidate_condition_handler(target)
+    _clear_unseen_observer_if_concealing(target, condition)
     return True
 
 
@@ -1897,6 +1944,7 @@ def unsuppress_condition(
     instance.suppressed_until = None
     instance.save()
     _invalidate_condition_handler(target)
+    _register_unseen_observer_if_concealing(target, condition)
     return True
 
 

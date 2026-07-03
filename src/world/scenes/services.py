@@ -338,4 +338,6 @@ def _broadcast_unseen_observer_state(scene: Scene) -> None:
             account = obj.account
         except AttributeError:
             continue
+        if account is None:
+            continue
         account.msg(unseen_observer=((), {"present": present}))
