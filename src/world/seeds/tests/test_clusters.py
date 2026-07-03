@@ -25,6 +25,7 @@ class TestClusterRegistry(TestCase):
                 "scandal",
                 "domain_dev",
                 "stealth",
+                "perception",
             },
         )
 
