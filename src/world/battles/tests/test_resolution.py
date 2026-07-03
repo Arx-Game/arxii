@@ -18,6 +18,8 @@ from world.battles.constants import (
     BATTLE_POSTURE_VP_MULTIPLIER,
     RALLY_MORALE_PER_LEVEL,
     RALLY_VP,
+    REPEL_DEFENSE_BONUS,
+    REPEL_VP,
     ROUT_MORALE_PER_LEVEL,
     ROUT_VP_PER_LEVEL,
     STRIKE_ATTRITION_PER_LEVEL,
@@ -877,6 +879,97 @@ class RallyResolutionTests(TestCase):
 
         routed_unit.refresh_from_db()
         self.assertEqual(routed_unit.morale, 10 + 2 * RALLY_MORALE_PER_LEVEL)
+
+
+class RepelResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.defender_side)
+
+    def test_repel_success_raises_place_defense_bonus_and_awards_vp(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_repel_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.REPEL,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+        place_defense_bonus: dict[int, int] = {}
+
+        _resolve_repel_success(declaration, result, place_defense_bonus)
+
+        self.assertEqual(place_defense_bonus[self.place.pk], REPEL_DEFENSE_BONUS)
+        self.defender_side.refresh_from_db()
+        self.assertEqual(self.defender_side.victory_points, REPEL_VP)
+
+    def test_repel_declared_this_round_reduces_strike_attrition_same_round(self) -> None:
+        """End-to-end through resolve_battle_round: a REPEL at a place must resolve
+        before an enemy STRIKE against a unit there in the same round (#1712)."""
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        defender_unit = BattleUnitFactory(
+            battle=self.battle, side=self.defender_side, place=self.place, strength=100
+        )
+        attacker_participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        CharacterTechniqueFactory(
+            character=attacker_participant.character_sheet, technique=technique
+        )
+        CharacterAnimaFactory(character=self.participant.character_sheet.character)
+        CharacterAnimaFactory(character=attacker_participant.character_sheet.character)
+        battle_round = begin_battle_round(battle=self.battle)
+
+        # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
+        # self.participant a SUBORDINATE role on a covenant fielding self.defender_side
+        # so the authorization check in _validate_command_scope passes.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="repel-e2e-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.participant.character_sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.REPEL,
+            technique=technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        declare_battle_action(
+            participant=attacker_participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=technique,
+            target_unit=defender_unit,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(2)  # both declarations succeed
+            resolve_battle_round(battle_round=battle_round)
+
+        defender_unit.refresh_from_db()
+        expected_attrition = max(0, 2 * STRIKE_ATTRITION_PER_LEVEL - REPEL_DEFENSE_BONUS)
+        self.assertEqual(defender_unit.strength, 100 - expected_attrition)
 
 
 class ResolveBattleRoundFailureTests(TestCase):

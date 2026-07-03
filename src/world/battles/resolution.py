@@ -418,6 +418,7 @@ def _resolve_strike_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
     success_level: int,
+    place_defense_bonus: dict[int, int] | None = None,
 ) -> None:
     """Apply STRIKE success: attrite the unit(s), award VP to the participant's side,
     scaled by the side's posture (#1711).
@@ -430,15 +431,22 @@ def _resolve_strike_success(
     attrite the caster's own units (friendly fire). status is derived jointly
     from strength and morale (#1712) — a unit already broken on morale can flip
     to ROUTED from a hit too small to cross the strength threshold alone.
+
+    Reads ``place_defense_bonus`` (#1712, populated by any REPEL declared this
+    round at the unit's place) and subtracts it from the computed attrition
+    before applying, floored at 0.
     """
     units = _scope_target_units(declaration)
     units = [u for u in units if u.side_id != declaration.participant.side_id]
     if not units:
         return
 
+    defense_bonus_by_place = place_defense_bonus or {}
     attrition = success_level * STRIKE_ATTRITION_PER_LEVEL
     for unit in units:
-        unit.strength = max(0, unit.strength - attrition)
+        bonus = defense_bonus_by_place.get(unit.place_id, 0)
+        net_attrition = max(0, attrition - bonus)
+        unit.strength = max(0, unit.strength - net_attrition)
         unit.status = _compute_unit_status(unit.strength, unit.morale)
         if unit.status == BattleUnitStatus.DESTROYED:
             result.units_destroyed.append(unit.pk)
@@ -538,6 +546,31 @@ def _resolve_rally_success(
 
     side = declaration.participant.side
     vp_gain = round(RALLY_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_repel_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    place_defense_bonus: dict[int, int],
+) -> None:
+    """Apply REPEL success: raise the defense bonus at the target place for this
+    round, award flat VP (#1712). Requires scope=PLACE (enforced at declare time
+    by PlaceScopeRequiredError) — ``target_place`` is always set here.
+
+    ``resolve_battle_round`` resolves REPEL declarations before STRIKE so the
+    bonus is populated in time to reduce STRIKE's attrition against units at
+    this place in the same round.
+    """
+    from world.battles.constants import REPEL_DEFENSE_BONUS, REPEL_VP  # noqa: PLC0415
+
+    place = declaration.target_place
+    place_defense_bonus[place.pk] = place_defense_bonus.get(place.pk, 0) + REPEL_DEFENSE_BONUS
+
+    side = declaration.participant.side
+    vp_gain = round(REPEL_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
     side.victory_points += vp_gain
     side.save(update_fields=["victory_points"])
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
@@ -751,7 +784,12 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "technique__action_template",
         )
     )
+    # REPEL must resolve before every other action kind this round (#1712) — its
+    # success populates place_defense_bonus in time for STRIKE to read it below.
+    # A stable sort preserves every other kind's relative (declaration) order.
+    declarations.sort(key=lambda d: 0 if d.action_kind == BattleActionKind.REPEL else 1)
 
+    place_defense_bonus: dict[int, int] = {}
     newly_surrounded_participant_ids: set[int] = set()
     for declaration in declarations:
         check_result = resolve_battle_technique(declaration=declaration)
@@ -759,13 +797,15 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
 
         if sl > 0:
             if declaration.action_kind == BattleActionKind.STRIKE:
-                _resolve_strike_success(declaration, result, sl)
+                _resolve_strike_success(declaration, result, sl, place_defense_bonus)
             elif declaration.action_kind == BattleActionKind.RESCUE:
                 _resolve_rescue_success(declaration)
             elif declaration.action_kind == BattleActionKind.ROUT:
                 _resolve_rout_success(declaration, result, sl)
             elif declaration.action_kind == BattleActionKind.RALLY:
                 _resolve_rally_success(declaration, result, sl)
+            elif declaration.action_kind == BattleActionKind.REPEL:
+                _resolve_repel_success(declaration, result, place_defense_bonus)
             else:
                 _resolve_support_success(declaration, result)
         elif _resolve_failure(declaration, result, sl):
