@@ -28,6 +28,7 @@ from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 from world.scenes.round_models import AbstractRound
+from world.weather.models import WeatherType
 
 # Lazy model references extracted to constants to satisfy S1192.
 SCENE_MODEL = "scenes.Scene"
@@ -77,6 +78,31 @@ class Battle(SharedMemoryModel):
             "resolves regardless of whether they declared this round (narrow, explicit "
             "ADR-0004 exception scoped to peril only — see ADR-0074)."
         ),
+    )
+    region = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="battles",
+        help_text="Optional region anchor for ambient weather resolution (#1715). "
+        "Battles are otherwise location-less (ADR-0081) — this is additive, not a "
+        "return to room-graph coupling.",
+    )
+    weather_override = models.ForeignKey(
+        WeatherType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="overriding_battles",
+        help_text="Battle-wide cast-set weather (#1715); takes precedence over "
+        "ambient (via region) when present. Cleared at round-boundary expiry.",
+    )
+    weather_override_expires_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Absolute round number this battle's weather_override expires at "
+        "(#1715). Cleared alongside weather_override at round-boundary expiry.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -186,6 +212,22 @@ class BattlePlace(SharedMemoryModel):
         related_name="controlled_places",
         help_text="Which side currently holds this front as an objective (#1712, "
         "set by a successful HOLD declaration). None means uncontrolled/contested.",
+    )
+    weather_override = models.ForeignKey(
+        WeatherType,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="overriding_battle_places",
+        help_text="Local weather exception at this front (#1715) — beats the "
+        "Battle-level weather_override/ambient value here only (cover, wards, a "
+        "hostile local squall). Cleared at round-boundary expiry.",
+    )
+    weather_override_expires_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Absolute round number this place's weather_override expires at "
+        "(#1715). Cleared alongside weather_override at round-boundary expiry.",
     )
 
     class Meta:
