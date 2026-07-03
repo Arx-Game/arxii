@@ -326,18 +326,14 @@ def has_unseen_observers(scene: Scene) -> bool:
 
 
 def _broadcast_unseen_observer_state(scene: Scene) -> None:
-    """Send the identity-free OOC unseen-observer state to every account in the
-    scene's location — same delivery loop as broadcast_scene_message, deliberately a
-    separate payload key so it never rides the SceneAction lifecycle semantics."""
+    """Re-send room_state to every occupant of scene's location, so the
+    identity-free ``has_unseen_observer`` flag on the scene payload (#1225) is
+    fresh for everyone present — routes through the same, already-wired
+    ``room_state`` channel every login/move already uses (rather than a bespoke
+    payload key with no frontend consumer and no resend-on-reconnect), so a
+    player who reconnects or walks in while a grant is already active also
+    sees the current state without a separate re-sync mechanism."""
     location = scene.location
     if location is None:
         return
-    present = has_unseen_observers(scene)
-    for obj in location.contents:
-        try:
-            account = obj.account
-        except AttributeError:
-            continue
-        if account is None:
-            continue
-        account.msg(unseen_observer=((), {"present": present}))
+    location._broadcast_room_state()  # noqa: SLF001

@@ -113,12 +113,14 @@ const createSceneSummary = (
   id: number,
   name: string,
   description: string = '',
-  is_owner: boolean = false
+  is_owner: boolean = false,
+  has_unseen_observer: boolean = false
 ): SceneSummary => ({
   id,
   name,
   description,
   is_owner,
+  has_unseen_observer,
 });
 
 const createCommandSpec = (
@@ -933,6 +935,7 @@ describe('gameSlice', () => {
           name: 'The Grand Finale',
           description: 'Everything comes together in an epic conclusion',
           is_owner: true,
+          has_unseen_observer: false,
         };
 
         const result = reducer(

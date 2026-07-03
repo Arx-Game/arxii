@@ -41,12 +41,14 @@ describe('handleRoomStatePayload', () => {
     id: number,
     name: string,
     description: string = '',
-    is_owner: boolean = false
+    is_owner: boolean = false,
+    has_unseen_observer: boolean = false
   ): SceneSummary => ({
     id,
     name,
     description,
     is_owner,
+    has_unseen_observer,
   });
 
   describe('basic room state dispatch', () => {
@@ -262,6 +264,7 @@ describe('handleRoomStatePayload', () => {
         name: 'Full Scene',
         description: 'A complete scene with all fields',
         is_owner: true,
+        has_unseen_observer: false,
       };
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
@@ -280,6 +283,7 @@ describe('handleRoomStatePayload', () => {
           name: 'Full Scene',
           description: 'A complete scene with all fields',
           is_owner: true,
+          has_unseen_observer: false,
         },
       });
     });
@@ -553,6 +557,7 @@ describe('handleRoomStatePayload', () => {
         name: 'The Coronation',
         description: 'A grand ceremony is underway',
         is_owner: false,
+        has_unseen_observer: false,
       };
 
       const payload: RoomStatePayload = { room, characters: [], objects, exits, scene };
@@ -581,6 +586,7 @@ describe('handleRoomStatePayload', () => {
           name: 'The Coronation',
           description: 'A grand ceremony is underway',
           is_owner: false,
+          has_unseen_observer: false,
         },
       });
     });

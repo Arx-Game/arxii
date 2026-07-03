@@ -57,6 +57,7 @@ class SceneDataSerializer(serializers.Serializer):
     name = serializers.CharField()
     description = serializers.CharField(allow_blank=True)
     is_owner = serializers.BooleanField()
+    has_unseen_observer = serializers.BooleanField()
 
     def to_representation(self, instance):
         """Convert scene data to dict representation."""
@@ -99,11 +100,14 @@ class SceneDataSerializer(serializers.Serializer):
         except AttributeError:
             description = ""
 
+        from world.scenes.services import has_unseen_observers  # noqa: PLC0415
+
         return {
             "id": scene_id,
             "name": name,
             "description": description,
             "is_owner": is_owner,
+            "has_unseen_observer": has_unseen_observers(instance),
         }
 
 

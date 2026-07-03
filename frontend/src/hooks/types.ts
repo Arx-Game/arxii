@@ -107,6 +107,7 @@ export interface SceneSummary {
   name: string;
   description: string;
   is_owner: boolean;
+  has_unseen_observer: boolean;
 }
 
 export interface ScenePayload {
