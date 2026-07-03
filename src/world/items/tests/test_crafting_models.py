@@ -3,8 +3,13 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.items.crafting.constants import PARTIAL_FRACTION, CostConsumption, CraftingRecipeKind
-from world.items.crafting.models import CraftingRecipe, CraftingSkillCap
+from world.items.crafting.constants import (
+    LAB_BASE_DURABILITY_PER_LEVEL,
+    PARTIAL_FRACTION,
+    CostConsumption,
+    CraftingRecipeKind,
+)
+from world.items.crafting.models import CraftingRecipe, CraftingSkillCap, LabStationDetails
 from world.items.factories import (
     CraftingMaterialRequirementFactory,
     CraftingRecipeConsequenceFactory,
@@ -12,6 +17,7 @@ from world.items.factories import (
     CraftingSkillCapFactory,
     QualityTierFactory,
 )
+from world.room_features.factories import RoomFeatureInstanceFactory
 
 
 class CraftingRecipeModelTests(TestCase):
@@ -193,3 +199,31 @@ class CraftingRecipeConsequenceTests(TestCase):
         """consequence_rows reverse manager exists on CraftingRecipe."""
         row = CraftingRecipeConsequenceFactory()
         self.assertIn(row, row.recipe.consequence_rows.all())
+
+
+class LabStationDetailsTests(TestCase):
+    def test_is_broken_when_durability_zero(self) -> None:
+        instance = RoomFeatureInstanceFactory()
+        station = LabStationDetails.objects.create(
+            feature_instance=instance,
+            durability=0,
+            max_durability=LAB_BASE_DURABILITY_PER_LEVEL,
+        )
+        self.assertTrue(station.is_broken)
+
+    def test_is_not_broken_with_durability(self) -> None:
+        instance = RoomFeatureInstanceFactory()
+        station = LabStationDetails.objects.create(
+            feature_instance=instance,
+            durability=5,
+            max_durability=LAB_BASE_DURABILITY_PER_LEVEL,
+        )
+        self.assertFalse(station.is_broken)
+
+
+class CraftingRecipeRequiresStationTests(TestCase):
+    def test_defaults_to_true(self) -> None:
+        from world.items.factories import wire_enchanting_crafting
+
+        recipe = wire_enchanting_crafting()
+        self.assertTrue(recipe.requires_station)

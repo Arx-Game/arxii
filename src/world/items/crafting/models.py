@@ -13,6 +13,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
+from world.room_features.models import RoomFeatureInstance
 
 if TYPE_CHECKING:
     from world.items.models import QualityTier
@@ -81,6 +82,14 @@ class CraftingRecipe(SharedMemoryModel):
         choices=CostConsumption.choices,
         default=CostConsumption.FULL,
         help_text="How ingredient items are consumed by default on resolution.",
+    )
+    requires_station = models.BooleanField(
+        default=True,
+        help_text=(
+            "Whether this recipe requires an active, undamaged LAB station in the "
+            "crafter's room. Default True; future non-physical crafting kinds may "
+            "opt out without a schema change."
+        ),
     )
 
     class Meta:
@@ -223,3 +232,38 @@ class CraftingRecipeConsequence(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.recipe}: {self.consequence}"
+
+
+class LabStationDetails(SharedMemoryModel):
+    """Per-Lab durability state — the crafting-station economy (#1234).
+
+    OneToOne to RoomFeatureInstance (mirrors SanctumDetails' shape). Durability
+    wears by 1 on every crafting attempt that reaches the roll; a broken (durability
+    0) or missing station blocks crafting outright. Repaired via
+    ``repair_station_durability`` (world/items/crafting/station.py), a coppers-only
+    sink through ``currency.services.transfer``.
+    """
+
+    feature_instance = models.OneToOneField(
+        RoomFeatureInstance,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="lab_station_details",
+    )
+    durability = models.PositiveIntegerField(
+        help_text="Current wear-remaining before the station is broken.",
+    )
+    max_durability = models.PositiveIntegerField(
+        help_text="Durability ceiling for this station's current level.",
+    )
+
+    class Meta:
+        app_label = "items"
+
+    def __str__(self) -> str:
+        room_id = self.feature_instance.room_profile_id
+        return f"Lab station @ room {room_id}: {self.durability}/{self.max_durability}"
+
+    @property
+    def is_broken(self) -> bool:
+        return self.durability <= 0
