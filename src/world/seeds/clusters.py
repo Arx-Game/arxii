@@ -91,6 +91,12 @@ def _seed_governance() -> None:
     seed_governance_check_content()
 
 
+def _seed_domain_dev() -> None:
+    from world.seeds.domain_dev import ensure_dev_domain  # noqa: PLC0415
+
+    ensure_dev_domain()
+
+
 def _seed_stealth() -> None:
     from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
 
@@ -132,6 +138,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
     # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
     "governance": _seed_governance,
+    # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes
+    # so the books + scandal loops are walkable on a dev DB (#930/#1464). After
+    # governance (its CheckTypes) and character_creation (the Arx realm).
+    "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
 }
@@ -210,6 +220,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
         # "checks"); appears as a seeded cluster with no standalone content model (#930).
         "governance": [],
+        # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
+        "domain_dev": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],
     }
