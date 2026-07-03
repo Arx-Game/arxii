@@ -171,11 +171,14 @@ container this is usually a no-op or fast.
 Run tests to ensure the workspace starts clean:
 
 ```bash
-# Fast tier for local iteration (SQLite)
-uv run arx test --keepdb world.magic 2>/dev/null || uv run arx test world.magic
+# For PR work — only apps your branch touches + import dependents
+just test-affected
+
+# Or a single app if you know which one you'll be editing
+just test-fast world.magic
 
 # Or the full suite if a broad baseline is warranted
-uv run arx test
+just regression
 ```
 
 **If tests fail:** Report failures, ask whether to proceed or investigate.

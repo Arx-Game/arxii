@@ -24,15 +24,30 @@ test *args:
 
 # Inner-loop SQLite tier — fast in-memory DB, excludes @tag("postgres")
 # tests that don't work on SQLite. Auto-confirms the destroy-test-DB
-# prompt. Serial by default: --parallel REGRESSES small per-app suites
-# (per-worker DB-clone overhead > parallelism gain). See CLAUDE.md
-# "Running Tests" for the working/broken per-app set.
+# prompt. Auto-enables --parallel when multiple apps are passed (measured
+# ~35% faster on 300+ tests); stays serial for a single app/module to
+# avoid per-worker DB-clone overhead that regresses small suites.
+# Force parallel on a single large app with `just test-fast-par <app>`.
+# See CLAUDE.md "Running Tests" for the working/broken per-app set.
 #   just test-fast world.missions
 #   just test-fast world.checks world.flows
 # For apps where the SQLite tier doesn't work (character_sheets, roster,
 # magic, scenes, codex, areas, societies) use `just test-parity` instead.
 test-fast *args:
-    echo "yes" | uv run arx test --sqlite --exclude-tag postgres {{args}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    N=$(echo "{{args}}" | wc -w)
+    if [ "$N" -gt 1 ]; then
+        echo "yes" | uv run arx test --sqlite --parallel --exclude-tag postgres {{args}}
+    else
+        echo "yes" | uv run arx test --sqlite --exclude-tag postgres {{args}}
+    fi
+
+# Force --parallel on the SQLite fast tier, even for a single app.
+# Use when a single app has 100+ tests and serial is too slow.
+#   just test-fast-par world.conditions
+test-fast-par *args:
+    echo "yes" | uv run arx test --sqlite --parallel --exclude-tag postgres {{args}}
 
 # CI-parity tier — runs the same Postgres path CI runs, in parallel.
 # Use before pushing, and for apps that can't run on the SQLite tier.

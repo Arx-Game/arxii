@@ -263,6 +263,10 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
 `just regression`), which CI runs on every PR.
 
+**For PR work, prefer `just test-affected`** — it diffs against `origin/main`
+and runs only the apps your branch touches plus import dependents, so you don't
+waste time on unrelated suites. For a single app, use `just test-fast <app>`.
+
 Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
 fixing what CI catches. **CI is the full-regression gate** — run a local
 `just regression` only to reproduce a CI failure the fast tier doesn't surface. For
@@ -287,6 +291,7 @@ rule: see the `running-tests` skill.
   *in this PR*. A code change that leaves its docs stale is incomplete.
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
-- **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).
+- **Run the fast SQLite tier** for the apps you touched (`just test-affected`
+  or `just test-fast <app>`).
 - **Push and let CI gate regression** — CI runs the Postgres parity suite on every
   PR; monitor the PR and fix failures there.
