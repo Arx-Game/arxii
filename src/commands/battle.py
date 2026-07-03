@@ -13,6 +13,8 @@ Player subverbs:
     battle declare rally <unit> with <technique>
     battle declare repel place <name> with <technique>
     battle declare hold place <name> with <technique>
+    battle declare set_environment with <technique>
+    battle declare set_environment place <name> with <technique>
     battle duel <front> vs <boss name>
 
 GM subverbs:
@@ -49,6 +51,8 @@ class CmdBattle(ArxCommand):
         battle declare rally <unit> with <technique>
         battle declare repel place <name> with <technique>
         battle declare hold place <name> with <technique>
+        battle declare set_environment with <technique>
+        battle declare set_environment place <name> with <technique>
         battle duel <front> vs <boss name>
 
     Syntax (GM / staff):
@@ -70,8 +74,13 @@ class CmdBattle(ArxCommand):
     *your own* side, including one that's already ROUTED — that's the whole
     point of rallying it. ``repel``/``hold`` are PLACE-scope only, aimed at a
     front (``BattlePlace``) rather than a single unit or an entire side.
-    ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
-    front — requires an engaged Champion role for your side's covenant.
+    ``set_environment`` casts battlefield weather (#1715) — the technique
+    itself carries the weather type, so no separate weather argument is
+    needed; with no target it casts at BATTLE scope (whole-battle-wide,
+    requires an engaged SUPREME command_tier), or ``place <name>`` narrows it
+    to a PLACE-scope local exception at that front only. ``duel <front> vs
+    <boss name>`` opens a lethal Champion duel bound to that front — requires
+    an engaged Champion role for your side's covenant.
     """
 
     key = "battle"
@@ -266,6 +275,7 @@ class CmdBattle(ArxCommand):
                 " | battle declare rally <unit> with <technique>"
                 " | battle declare repel place <name> with <technique>"
                 " | battle declare hold place <name> with <technique>"
+                " | battle declare set_environment [place <name>] with <technique>"
             )
             raise CommandError(msg)
 
@@ -280,42 +290,43 @@ class CmdBattle(ArxCommand):
                 " | battle declare rally <unit> with <technique>"
                 " | battle declare repel place <name> with <technique>"
                 " | battle declare hold place <name> with <technique>"
+                " | battle declare set_environment [place <name>] with <technique>"
             )
             raise CommandError(msg)
         split_at = remainder.index("with")
         name = " ".join(remainder[:split_at]).strip()
         technique_name = " ".join(remainder[split_at + 1 :]).strip()
 
-        if kind == "strike":  # noqa: STRING_LITERAL
-            result = self._declare_strike(name, technique_name)
-        elif kind == "support":  # noqa: STRING_LITERAL
-            result = self._declare_ally_scoped(
-                BattleActionKind.SUPPORT, name, technique_name, verb="support"
-            )
-        elif kind == "rescue":  # noqa: STRING_LITERAL
-            result = self._declare_ally_scoped(
-                BattleActionKind.RESCUE, name, technique_name, verb="rescue"
-            )
-        elif kind == "rout":  # noqa: STRING_LITERAL
-            result = self._declare_rout(name, technique_name)
-        elif kind == "rally":  # noqa: STRING_LITERAL
-            result = self._declare_rally(name, technique_name)
-        elif kind == "repel":  # noqa: STRING_LITERAL
-            result = self._declare_place_scoped(
-                BattleActionKind.REPEL, name, technique_name, verb="repel"
-            )
-        elif kind == "hold":  # noqa: STRING_LITERAL
-            result = self._declare_place_scoped(
-                BattleActionKind.HOLD, name, technique_name, verb="hold"
-            )
-        else:
+        # Dispatch table keyed by subverb rather than an if/elif chain — keeps
+        # _declare's cyclomatic complexity flat as new declare kinds are added
+        # (#1715 added set_environment as the 8th).
+        handlers = {
+            "strike": self._declare_strike,
+            "support": lambda n, t: self._declare_ally_scoped(
+                BattleActionKind.SUPPORT, n, t, verb="support"
+            ),
+            "rescue": lambda n, t: self._declare_ally_scoped(
+                BattleActionKind.RESCUE, n, t, verb="rescue"
+            ),
+            "rout": self._declare_rout,
+            "rally": self._declare_rally,
+            "repel": lambda n, t: self._declare_place_scoped(
+                BattleActionKind.REPEL, n, t, verb="repel"
+            ),
+            "hold": lambda n, t: self._declare_place_scoped(
+                BattleActionKind.HOLD, n, t, verb="hold"
+            ),
+            "set_environment": self._declare_environment,
+        }
+        handler = handlers.get(kind)
+        if handler is None:
             msg = (
                 "Unknown declare subverb. Use 'strike', 'support', 'rescue', "
-                "'rout', 'rally', 'repel', or 'hold'."
+                "'rout', 'rally', 'repel', 'hold', or 'set_environment'."
             )
             raise CommandError(msg)
 
-        self._send(result)
+        self._send(handler(name, technique_name))
 
     def _declare_unit_scoped(
         self,
@@ -438,6 +449,52 @@ class CmdBattle(ArxCommand):
             scope=BattleActionScope.PLACE,
             target_place=place,
         )
+
+    def _declare_environment(self, name: str, technique_name: str) -> ActionResult:
+        """Resolve and dispatch a SET_ENVIRONMENT declaration (#1715).
+
+        Unlike REPEL/HOLD (PLACE-scope only, ``_declare_place_scoped``),
+        SET_ENVIRONMENT is valid at BATTLE scope too — the widest scope,
+        with no unit/place/side target at all. ``name`` is empty for a
+        battle-wide cast, or ``place <name>`` to narrow it to one front as a
+        local exception. The technique itself carries
+        ``target_weather_type`` — there is no separate weather-type
+        argument.
+        """
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+        from world.battles.constants import BattleActionKind, BattleActionScope  # noqa: PLC0415
+
+        participant = self._resolve_participant()
+        technique = self._resolve_technique(participant, technique_name)
+
+        if not name:
+            return DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.SET_ENVIRONMENT,
+                technique_id=technique.pk,
+                scope=BattleActionScope.BATTLE,
+            )
+
+        if name.lower().startswith("place "):  # noqa: STRING_LITERAL
+            from world.battles.models import BattlePlace  # noqa: PLC0415
+
+            place_name = name[len("place ") :].strip()
+            place = BattlePlace.objects.filter(
+                battle=participant.battle, name__iexact=place_name
+            ).first()
+            if place is None:
+                msg = f"No front named '{place_name}' in this battle."
+                raise CommandError(msg)
+            return DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.SET_ENVIRONMENT,
+                technique_id=technique.pk,
+                scope=BattleActionScope.PLACE,
+                target_place=place,
+            )
+
+        msg = "Usage: battle declare set_environment [place <name>] with <technique>"
+        raise CommandError(msg)
 
     def _declare_ally_scoped(
         self, action_kind: str, name: str, technique_name: str, *, verb: str
