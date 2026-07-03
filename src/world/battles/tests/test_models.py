@@ -7,7 +7,6 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     TerrainType,
-    UnitComposition,
     UnitQuality,
 )
 from world.battles.factories import (
@@ -18,13 +17,16 @@ from world.battles.factories import (
 )
 from world.battles.models import (
     BattleUnit,
-    TechniqueCompositionAffinity,
-    TerrainCompositionEffect,
+    BattleUnitCapability,
+    TechniquePropertyAffinity,
+    TerrainPropertyEffect,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory
 from world.magic.factories import TechniqueFactory
+from world.mechanics.factories import PropertyFactory
 
 
 class BattleModelTests(TestCase):
@@ -105,10 +107,12 @@ class BattleActionDeclarationTechniqueTests(TestCase):
 class BattleUnitTaxonomyTests(TestCase):
     def test_defaults(self) -> None:
         unit = BattleUnitFactory()
-        self.assertEqual(unit.composition, UnitComposition.IRREGULAR)
         self.assertEqual(unit.quality, UnitQuality.TRAINED)
         self.assertIsNone(unit.commander)
         self.assertIsNone(unit.summoned_by)
+        self.assertEqual(unit.properties.count(), 0)
+        self.assertEqual(unit.capabilities.count(), 0)
+        self.assertIsNone(unit.individual_count)
 
     def test_commander_set_null_on_character_sheet_delete(self) -> None:
         commander = CharacterSheetFactory()
@@ -118,6 +122,40 @@ class BattleUnitTaxonomyTests(TestCase):
         BattleUnit.flush_instance_cache()
         unit.refresh_from_db()
         self.assertIsNone(unit.commander)
+
+
+class BattleUnitPropertyCapabilityTests(TestCase):
+    """#1794: BattleUnit holds Property/CapabilityType directly."""
+
+    def test_has_property_true_when_attached(self) -> None:
+        unit = BattleUnitFactory()
+        prop = PropertyFactory()
+        unit.properties.add(prop)
+        self.assertTrue(unit.has_property(prop))
+
+    def test_has_property_false_when_absent(self) -> None:
+        unit = BattleUnitFactory()
+        prop = PropertyFactory()
+        self.assertFalse(unit.has_property(prop))
+
+    def test_effective_capability_returns_authored_magnitude(self) -> None:
+        """Two units holding the same capability at different magnitudes each
+        report their own distinct value (the Garalothe-vs-Blarg case — no
+        flattening to a presence bit)."""
+        dragon = BattleUnitFactory(name="Garalothe the Lightning Wing")
+        hedge_wizard = BattleUnitFactory(name="Blarg the Feckless")
+        flight = CapabilityTypeFactory(name="flight")
+
+        BattleUnitCapability.objects.create(unit=dragon, capability=flight, value=50)
+        BattleUnitCapability.objects.create(unit=hedge_wizard, capability=flight, value=1)
+
+        self.assertEqual(dragon.effective_capability(flight), 50)
+        self.assertEqual(hedge_wizard.effective_capability(flight), 1)
+
+    def test_effective_capability_zero_when_absent(self) -> None:
+        unit = BattleUnitFactory()
+        flight = CapabilityTypeFactory(name="flight")
+        self.assertEqual(unit.effective_capability(flight), 0)
 
 
 class BattleUnitMoraleTests(TestCase):
@@ -151,24 +189,24 @@ class BattlePlaceControlTests(TestCase):
         self.assertIsNone(place.controlled_by)
 
 
-class TechniqueCompositionAffinityTests(TestCase):
-    def test_unique_per_technique_composition(self) -> None:
+class TechniquePropertyAffinityTests(TestCase):
+    def test_unique_per_technique_property(self) -> None:
         technique = TechniqueFactory()
-        TechniqueCompositionAffinity.objects.create(
-            technique=technique, composition=UnitComposition.CAVALRY, modifier=15
-        )
+        prop = PropertyFactory()
+        TechniquePropertyAffinity.objects.create(technique=technique, property=prop, modifier=15)
         with self.assertRaises(IntegrityError):
-            TechniqueCompositionAffinity.objects.create(
-                technique=technique, composition=UnitComposition.CAVALRY, modifier=-5
+            TechniquePropertyAffinity.objects.create(
+                technique=technique, property=prop, modifier=-5
             )
 
 
-class TerrainCompositionEffectTests(TestCase):
-    def test_unique_per_terrain_composition(self) -> None:
-        TerrainCompositionEffect.objects.create(
-            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=15
+class TerrainPropertyEffectTests(TestCase):
+    def test_unique_per_terrain_property(self) -> None:
+        prop = PropertyFactory()
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=prop, modifier=15
         )
         with self.assertRaises(IntegrityError):
-            TerrainCompositionEffect.objects.create(
-                terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=5
+            TerrainPropertyEffect.objects.create(
+                terrain_type=TerrainType.DIFFICULT, property=prop, modifier=5
             )

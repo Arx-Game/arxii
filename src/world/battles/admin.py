@@ -17,8 +17,9 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
-    TechniqueCompositionAffinity,
-    TerrainCompositionEffect,
+    BattleUnitCapability,
+    TechniquePropertyAffinity,
+    TerrainPropertyEffect,
 )
 
 
@@ -43,21 +44,28 @@ class BattlePlaceAdmin(admin.ModelAdmin):
     autocomplete_fields = ("controlled_by",)
 
 
+class BattleUnitCapabilityInline(admin.TabularInline):
+    model = BattleUnitCapability
+    extra = 0
+    autocomplete_fields = ("capability",)
+
+
 @admin.register(BattleUnit)
 class BattleUnitAdmin(admin.ModelAdmin):
     list_display = (
         "battle",
         "name",
-        "composition",
         "quality",
         "commander",
         "strength",
         "morale",
         "status",
     )
-    list_filter = ("composition", "quality", "status")
+    list_filter = ("quality", "status")
     search_fields = ("name", "descriptor")
     autocomplete_fields = ("commander", "summoned_by")
+    filter_horizontal = ("properties",)
+    inlines = [BattleUnitCapabilityInline]
 
 
 @admin.register(BattleRound)
@@ -78,17 +86,18 @@ class BattleActionDeclarationAdmin(admin.ModelAdmin):
     list_filter = ("action_kind", "resolved")
 
 
-@admin.register(TechniqueCompositionAffinity)
-class TechniqueCompositionAffinityAdmin(admin.ModelAdmin):
-    list_display = ("technique", "composition", "modifier")
-    list_filter = ("composition",)
-    autocomplete_fields = ("technique",)
+@admin.register(TechniquePropertyAffinity)
+class TechniquePropertyAffinityAdmin(admin.ModelAdmin):
+    list_display = ("technique", "property", "modifier")
+    list_filter = ("property",)
+    autocomplete_fields = ("technique", "property")
 
 
-@admin.register(TerrainCompositionEffect)
-class TerrainCompositionEffectAdmin(admin.ModelAdmin):
-    list_display = ("terrain_type", "composition", "modifier")
-    list_filter = ("terrain_type", "composition")
+@admin.register(TerrainPropertyEffect)
+class TerrainPropertyEffectAdmin(admin.ModelAdmin):
+    list_display = ("terrain_type", "property", "modifier")
+    list_filter = ("terrain_type", "property")
+    autocomplete_fields = ("property",)
 
 
 @admin.register(BattleOutcomeMapping)
