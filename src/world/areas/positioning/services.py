@@ -221,11 +221,21 @@ def instantiate_blueprint(
         }
 
         # Reproduce the blueprint's edges in the live graph.
+        from world.mechanics.challenge_resolution import instantiate_challenge
+
         for edge in blueprint.edges.all():
+            gating_challenge = None
+            if edge.gating_challenge_template_id is not None:
+                gating_challenge = instantiate_challenge(
+                    edge.gating_challenge_template,
+                    location=room,
+                    target_object=room,
+                )
             connect_positions(
                 live_map[edge.position_a.name],
                 live_map[edge.position_b.name],
                 is_passable=edge.is_passable,
+                gating_challenge=gating_challenge,
             )
 
         return list(live_map.values())
