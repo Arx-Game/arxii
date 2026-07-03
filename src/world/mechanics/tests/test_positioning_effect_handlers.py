@@ -232,6 +232,33 @@ class AwayFromActorHandlerTests(TestCase):
         self.assertFalse(result.applied)
         self.assertEqual(position_of(self.defender).pk, self.defender_pos.pk)
 
+    def test_knockback_noop_when_only_neighbor_is_attacker_position(self) -> None:
+        """Defender's only open neighbor is the attacker's own position.
+
+        ``away`` (which already excludes actor_pos) is empty here, so the
+        handler falls back to ``neighbors`` -- which must ALSO exclude the
+        attacker's position, otherwise a knockback could shove the defender
+        onto the attacker (#1317 finding 3). With no other neighbor, there's
+        no valid destination: applied=False, defender stays put.
+        """
+        # Replace the room's positions with a dead-end pocket: defender_pos is
+        # connected ONLY to attacker_pos (no far_pos edge).
+        dead_end_defender = Position.objects.create(room=self.room, name="dead_end_defender")
+        place_in_position(self.defender, dead_end_defender)
+        connect_positions(self.attacker_pos, dead_end_defender)
+
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.MOVE_TO_POSITION,
+            position_destination=PositionDestination.AWAY_FROM_ACTOR,
+            target=EffectTarget.TARGET,
+        )
+        result = apply_effect(
+            effect, ResolutionContext(character=self.attacker, target=self.defender)
+        )
+        self.assertFalse(result.applied)
+        self.assertEqual(position_of(self.defender).pk, dead_end_defender.pk)
+
     def test_knockback_two_effects_chain_two_hops(self) -> None:
         """Two AWAY_FROM_ACTOR rows on one Consequence chain into a 2-hop shove.
 

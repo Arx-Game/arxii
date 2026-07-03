@@ -715,7 +715,9 @@ def _resolve_away_from_actor(
         for e in adjacent_open_positions(actor_pos)
     }
     away = [p for p in neighbors if p.pk not in actor_neighbor_ids and p.pk != actor_pos.pk]
-    candidates = away or neighbors
+    candidates = away or [p for p in neighbors if p.pk != actor_pos.pk]
+    if not candidates:
+        return None
     return min(candidates, key=lambda p: p.pk)
 
 

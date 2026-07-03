@@ -2929,8 +2929,13 @@ def apply_damage_to_participant(  # noqa: PLR0913
             permanent_wound_eligible=False,
         )
 
+    # Deliberate ordering: the on-hit pool (knockback/trap) resolves and may
+    # apply its own damage to vitals.health BEFORE the triggering hit's own
+    # `vitals.health -= effective_damage` below runs. Both writes land on the
+    # same idmapper-cached CharacterVitals instance, so the arithmetic still
+    # composes correctly regardless of order (e.g. 100 - 10 hit - 30 trap = 60).
     if on_hit_pool is not None:
-        _fire_on_hit_pool(participant, character, source, on_hit_pool)
+        _fire_on_hit_pool(character, source, on_hit_pool)
 
     # Use the (possibly interposed/modified) amount from the payload.
     # Coerce to int: the MODIFY_PAYLOAD multiply op (DEFEND halves amount by
@@ -3983,6 +3988,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
             npc_action.threat_entry.base_damage,
             damage_type=npc_action.threat_entry.damage_type,
             source=opponent,
+            on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
         )
     outcome.damage_results.append(dmg_result)
 
@@ -4936,7 +4942,6 @@ def _try_interpose(
 
 
 def _fire_on_hit_pool(
-    _participant: CombatParticipant,
     character: Character,
     source: object | None,
     pool: ConsequencePool,
