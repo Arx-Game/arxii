@@ -10287,6 +10287,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/CraftingQuote'
           description: ''
+  /api/items/lab-stations/:
+    get:
+      operationId: items_lab_stations_list
+      description: Status + install/upgrade/repair endpoints for Lab stations.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LabStationDetails'
+          description: ''
+  /api/items/lab-stations/{feature_instance_id}/:
+    get:
+      operationId: items_lab_stations_retrieve
+      description: Status + install/upgrade/repair endpoints for Lab stations.
+      parameters:
+      - in: path
+        name: feature_instance_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabStationDetails'
+          description: ''
+  /api/items/lab-stations/{feature_instance_id}/repair/:
+    post:
+      operationId: items_lab_stations_repair_create
+      description: Status + install/upgrade/repair endpoints for Lab stations.
+      parameters:
+      - in: path
+        name: feature_instance_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabStationDetails'
+          description: ''
+  /api/items/lab-stations/install/:
+    post:
+      operationId: items_lab_stations_install_create
+      description: Status + install/upgrade/repair endpoints for Lab stations.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabStationDetails'
+          description: ''
+  /api/items/lab-stations/upgrade/:
+    post:
+      operationId: items_lab_stations_upgrade_create
+      description: Status + install/upgrade/repair endpoints for Lab stations.
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabStationDetails'
+          description: ''
   /api/items/outfit-slots/:
     get:
       operationId: items_outfit_slots_list
@@ -29728,11 +29819,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CraftingQuoteRisk'
+        station_status:
+          allOf:
+          - $ref: '#/components/schemas/StationStatus'
+          nullable: true
       required:
       - affordable
       - costs
       - failure_risk
       - max_quality_tier
+      - station_status
     CraftingQuoteCost:
       type: object
       description: Resource cost breakdown within a crafting quote.
@@ -35388,6 +35484,30 @@ components:
       - level
       - provenance
       - subject
+    LabStationDetails:
+      type: object
+      description: Read-shape for LabStationDetails — status endpoint + write-endpoint
+        bodies.
+      properties:
+        durability:
+          type: integer
+          readOnly: true
+          description: Current wear-remaining before the station is broken.
+        max_durability:
+          type: integer
+          readOnly: true
+          description: Durability ceiling for this station's current level.
+        level:
+          type: integer
+          readOnly: true
+        is_broken:
+          type: boolean
+          readOnly: true
+      required:
+      - durability
+      - is_broken
+      - level
+      - max_durability
     LedgerRow:
       type: object
       properties:
@@ -49295,6 +49415,23 @@ components:
       required:
       - description
       - name
+    StationStatus:
+      type: object
+      description: LAB station snapshot within a crafting quote (#1234).
+      properties:
+        present:
+          type: boolean
+        durability:
+          type: integer
+        max_durability:
+          type: integer
+        is_broken:
+          type: boolean
+      required:
+      - durability
+      - is_broken
+      - max_durability
+      - present
     Status110Enum:
       enum:
       - submitted

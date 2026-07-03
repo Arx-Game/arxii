@@ -6524,6 +6524,91 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/lab-stations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    get: operations['items_lab_stations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/{feature_instance_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    get: operations['items_lab_stations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/{feature_instance_id}/repair/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    post: operations['items_lab_stations_repair_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/install/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    post: operations['items_lab_stations_install_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/upgrade/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Status + install/upgrade/repair endpoints for Lab stations. */
+    post: operations['items_lab_stations_upgrade_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/outfit-slots/': {
     parameters: {
       query?: never;
@@ -16873,6 +16958,7 @@ export interface components {
       affordable: boolean;
       max_quality_tier: components['schemas']['QualityTier'] | null;
       failure_risk: components['schemas']['CraftingQuoteRisk'][];
+      station_status: components['schemas']['StationStatus'] | null;
     };
     /** @description Resource cost breakdown within a crafting quote. */
     CraftingQuoteCost: {
@@ -19552,6 +19638,15 @@ export interface components {
       readonly anchored_to: {
         [key: string]: string;
       }[];
+    };
+    /** @description Read-shape for LabStationDetails — status endpoint + write-endpoint bodies. */
+    LabStationDetails: {
+      /** @description Current wear-remaining before the station is broken. */
+      readonly durability: number;
+      /** @description Durability ceiling for this station's current level. */
+      readonly max_durability: number;
+      readonly level: number;
+      readonly is_broken: boolean;
     };
     LedgerRow: {
       id: number;
@@ -27054,6 +27149,13 @@ export interface components {
        * @description Cloudinary URL for crest/flag image. Leave blank for gradient placeholder.
        */
       crest_image?: string | null;
+    };
+    /** @description LAB station snapshot within a crafting quote (#1234). */
+    StationStatus: {
+      present: boolean;
+      durability: number;
+      max_durability: number;
+      is_broken: boolean;
     };
     /**
      * @description * `submitted` - Submitted
@@ -37492,6 +37594,105 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CraftingQuote'];
+        };
+      };
+    };
+  };
+  items_lab_stations_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationDetails'][];
+        };
+      };
+    };
+  };
+  items_lab_stations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationDetails'];
+        };
+      };
+    };
+  };
+  items_lab_stations_repair_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationDetails'];
+        };
+      };
+    };
+  };
+  items_lab_stations_install_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationDetails'];
+        };
+      };
+    };
+  };
+  items_lab_stations_upgrade_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationDetails'];
         };
       };
     };
