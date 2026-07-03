@@ -7,6 +7,8 @@ Service layer for modifier aggregation, calculation, and management.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from contextlib import contextmanager
+import contextvars
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -65,6 +67,33 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.mechanics.engagement import CharacterEngagement
+
+
+# ---------------------------------------------------------------------------
+# Coherence memoization (#1267)
+# ---------------------------------------------------------------------------
+
+_coherence_cache: contextvars.ContextVar[dict[tuple[int, int], int] | None] = (
+    contextvars.ContextVar("motif_coherence_cache", default=None)
+)
+
+
+@contextmanager
+def coherence_cache_scope():
+    """Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).
+
+    Within this scope, ``motif_coherence_bonus`` results are cached by
+    ``(sheet.pk, resonance_id)`` so that repeated calls for the same
+    character+resonance — e.g. across ``survivability_baseline`` calls for DR +
+    wound/death/knockout saves in one damage event — pay the wardrobe walk
+    exactly once. The cache dies with the context manager: no invalidation
+    needed, no stale-read risk across events.
+    """
+    token = _coherence_cache.set({})
+    try:
+        yield
+    finally:
+        _coherence_cache.reset(token)
 
 
 def get_aesthetic_config() -> AestheticAxisConfig:
@@ -391,6 +420,23 @@ def motif_coherence_bonus(sheet: object, resonance_id: int) -> int:
 
     Returns:
         Integer bonus (truncated), or 0 if no binding or no matching worn styles.
+    """
+    cache = _coherence_cache.get()
+    if cache is not None:
+        key = (sheet.pk, resonance_id)
+        if key in cache:
+            return cache[key]
+    result = _compute_motif_coherence_bonus(sheet, resonance_id)
+    if cache is not None:
+        cache[(sheet.pk, resonance_id)] = result
+    return result
+
+
+def _compute_motif_coherence_bonus(sheet: object, resonance_id: int) -> int:
+    """Compute the per-resonance coherence bonus without caching (see ``motif_coherence_bonus``).
+
+    Computes coverage × quality × full-combo × perception-breadth for ``resonance_id``.
+    Returns 0 if no binding or no matching worn styles.
     """
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
