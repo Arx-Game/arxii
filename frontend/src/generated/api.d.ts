@@ -7336,6 +7336,46 @@ export interface paths {
     patch: operations['magic_character_resonances_partial_update'];
     trace?: never;
   };
+  '/api/magic/consequence-pool-catalog/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog of curated consequence-pool flavors a technique author
+     *     may select (children of the shared base 'Magic: Technique Cast' pool).
+     */
+    get: operations['magic_consequence_pool_catalog_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/consequence-pool-catalog/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only catalog of curated consequence-pool flavors a technique author
+     *     may select (children of the shared base 'Magic: Technique Cast' pool).
+     */
+    get: operations['magic_consequence_pool_catalog_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/dramatic-moment-tags/': {
     parameters: {
       query?: never;
@@ -16656,6 +16696,14 @@ export interface components {
       | 'affinity'
       | 'pull'
       | 'relationship';
+    /** @description Read-only serializer for the curated technique-cast consequence-pool catalog. */
+    ConsequencePoolCatalog: {
+      readonly id: number;
+      /** @description Human-readable pool name (e.g., 'Wild Magic Surge'). */
+      name: string;
+      /** @description GM authoring context for this pool. */
+      description?: string;
+    };
     ContributionRow: {
       id: number;
       persona_name: string;
@@ -38668,6 +38716,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterResonance'];
+        };
+      };
+    };
+  };
+  magic_consequence_pool_catalog_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ConsequencePoolCatalog'][];
+        };
+      };
+    };
+  };
+  magic_consequence_pool_catalog_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Consequence Pool. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ConsequencePoolCatalog'];
         };
       };
     };

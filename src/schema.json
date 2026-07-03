@@ -11668,6 +11668,49 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/magic/consequence-pool-catalog/:
+    get:
+      operationId: magic_consequence_pool_catalog_list
+      description: |-
+        Read-only catalog of curated consequence-pool flavors a technique author
+        may select (children of the shared base 'Magic: Technique Cast' pool).
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsequencePoolCatalog'
+          description: ''
+  /api/magic/consequence-pool-catalog/{id}/:
+    get:
+      operationId: magic_consequence_pool_catalog_retrieve
+      description: |-
+        Read-only catalog of curated consequence-pool flavors a technique author
+        may select (children of the shared base 'Magic: Technique Cast' pool).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Consequence Pool.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsequencePoolCatalog'
+          description: ''
   /api/magic/dramatic-moment-tags/:
     get:
       operationId: magic_dramatic_moment_tags_list
@@ -29291,6 +29334,24 @@ components:
         * `affinity` - Affinity
         * `pull` - Combat Pull
         * `relationship` - Relationship
+    ConsequencePoolCatalog:
+      type: object
+      description: Read-only serializer for the curated technique-cast consequence-pool
+        catalog.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          description: Human-readable pool name (e.g., 'Wild Magic Surge').
+          maxLength: 100
+        description:
+          type: string
+          description: GM authoring context for this pool.
+      required:
+      - id
+      - name
     ContributionRow:
       type: object
       properties:
