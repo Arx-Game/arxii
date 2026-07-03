@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 
 SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 
+# tools/ isn't a package (no __init__.py), so make it importable for the
+# sibling-module import below.
+TOOLS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(TOOLS_DIR))
+
+from check_partition_sql_drift import POST_PARTITION_COLUMNS  # noqa: E402
+
 # Ordered: the scenes partition rewrite must precede combat's composite FKs
 # (they reference the partitioned table); matviews only need base tables.
 #
@@ -61,11 +68,10 @@ SEED_TARGETS = [
 # SQL in SQL_FILES rebuilds scenes_interaction from a frozen pre-partition
 # snapshot that deliberately omits them; with every migration disabled here,
 # the AddField migrations that would normally backfill them never run, so
-# they must be added explicitly. Keep this list in sync with
-# check_partition_sql_drift.py's POST_PARTITION_COLUMNS.
+# they must be added explicitly. Derived from check_partition_sql_drift's
+# POST_PARTITION_COLUMNS (FK column names) so the two lists can't diverge.
 POST_PARTITION_FIELDS = [
-    ("scenes", "Interaction", "fury_committed"),
-    ("scenes", "Interaction", "writer_account"),
+    ("scenes", "Interaction", col.removesuffix("_id")) for col in sorted(POST_PARTITION_COLUMNS)
 ]
 
 
