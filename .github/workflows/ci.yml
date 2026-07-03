@@ -196,22 +196,24 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
-      # The default arxii_test DB MUST be migrated before `arx test`: Evennia's
-      # test runner calls evennia._init() in setup_test_environment(), which
-      # queries server_serverconfig on the DEFAULT connection before the test
-      # DB is built. An unmigrated default DB => "relation server_serverconfig
-      # does not exist". (See #990 — removing this step turned all shards red.)
-      - name: Run migrations
-        run: uv run arx manage migrate
-      # Build the test DB by CLONING the just-migrated default DB rather than
-      # letting Django replay all ~217 migrations a second time (~6.5 min/shard
-      # of pure waste). Postgres `CREATE DATABASE ... TEMPLATE` is a near-instant
-      # file copy; `arx test --keepdb` then reuses test_arxii_test (its migrate
-      # step is a no-op since django_migrations is already fully populated) and
-      # only clones it per parallel worker. The test DB name is Django's default
-      # `test_<NAME>` for DATABASES["default"] (NAME=arxii_test, no TEST override).
-      # We connect to the `postgres` maintenance DB so nothing is attached to the
-      # arxii_test template during the copy.
+      # Build the default DB's schema straight from model state — no migration
+      # replay (12.5-14 min of Python-side state rendering; see ADR
+      # ci-schema-from-models). Also satisfies #990: Evennia's test runner
+      # queries server_serverconfig on the DEFAULT connection, so the default
+      # DB must have tables before `arx test` runs. Migration-chain validity
+      # is gated by the makemigrations --check step (ty job) and the nightly
+      # migration-replay workflow, not per-shard.
+      - name: Build schema from model state
+        run: uv run python tools/build_schema.py
+      # Build the test DB by CLONING the just-built default DB rather than
+      # letting each parallel worker build its own schema from scratch.
+      # Postgres `CREATE DATABASE ... TEMPLATE` is a near-instant file copy;
+      # `arx test --keepdb` then reuses test_arxii_test (its schema is already
+      # fully populated) and only clones it per parallel worker. The test DB
+      # name is Django's default `test_<NAME>` for DATABASES["default"]
+      # (NAME=arxii_test, no TEST override). We connect to the `postgres`
+      # maintenance DB so nothing is attached to the arxii_test template
+      # during the copy.
       - name: Clone migrated DB into the test database
         run: |
           docker exec postgres-ci psql -U postgres -d postgres \
@@ -254,6 +256,25 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    # A reachable Postgres is required even for this static-analysis job:
+    # Django's migration loader imports every migration module on disk to
+    # build its dependency graph, and one Evennia-library migration
+    # (objects/0007_objectdb_db_account.py) opens a real DB cursor at module
+    # import time to probe for a legacy table. Trust auth, no schema needed —
+    # the probed table simply won't exist.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: unused
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
@@ -261,6 +282,23 @@ jobs:
           python-version: '3.13'
       - run: uv sync
       - run: uv run ty check
+      # Drift gate: fails when a local app's models have changed without a
+      # matching migration. Scoped to first-party apps so the phantom
+      # Evennia-library proxy-model changes that core_management's custom
+      # makemigrations filters only at write time can't trip this gate.
+      - name: Check migrations match models
+        env:
+          DEBUG: False
+          SECRET_KEY: test-secret-key-for-ci-only
+          DATABASE_URL: postgresql://postgres@localhost:5432/unused
+          CLOUDINARY_CLOUD_NAME: test-cloud
+          CLOUDINARY_API_KEY: test-key
+          CLOUDINARY_API_SECRET: test-secret
+          SENDGRID_API_KEY: test-sendgrid-key
+          DEFAULT_FROM_EMAIL: test@example.com
+          FACEBOOK_APP_ID: test-facebook-id
+          FACEBOOK_APP_SECRET: test-facebook-secret
+        run: uv run python tools/check_missing_migrations.py
 
   frontend-test:
     needs: changes
@@ -353,8 +391,13 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
-      - name: Run migrations
-        run: uv run arx manage migrate
+      # Build the default DB's schema straight from model state — no migration
+      # replay (12.5-14 min of Python-side state rendering; see ADR
+      # ci-schema-from-models). Migration-chain validity is gated by the
+      # makemigrations --check step (ty job) and the nightly migration-replay
+      # workflow, not here.
+      - name: Build schema from model state
+        run: uv run python tools/build_schema.py
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
         with:
           version: 9
