@@ -144,4 +144,47 @@ describe('LabStationStatusCard', () => {
     expect(mutate).toHaveBeenCalledWith({ restore_points: 5 }, expect.any(Object));
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('repaired'));
   });
+
+  it('calls the onRepaired callback on a successful repair (#1234 review finding)', async () => {
+    const user = userEvent.setup();
+    const mutate = makeRepairMock();
+    mutate.mockImplementation(
+      (
+        _vars: unknown,
+        callbacks: { onSuccess?: (r: unknown) => void; onError?: (e: unknown) => void }
+      ) => {
+        callbacks?.onSuccess?.({ durability: 20, max_durability: 20 });
+      }
+    );
+    mockStatus({ durability: 15, max_durability: 20, level: 1, is_broken: false });
+    const onRepaired = vi.fn();
+
+    renderWithProviders(
+      <LabStationStatusCard featureInstanceId={FEATURE_INSTANCE_ID} onRepaired={onRepaired} />
+    );
+
+    await user.click(screen.getByRole('button', { name: /repair/i }));
+
+    expect(onRepaired).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not blow up on repair success when onRepaired is not provided', async () => {
+    const user = userEvent.setup();
+    const mutate = makeRepairMock();
+    mutate.mockImplementation(
+      (
+        _vars: unknown,
+        callbacks: { onSuccess?: (r: unknown) => void; onError?: (e: unknown) => void }
+      ) => {
+        callbacks?.onSuccess?.({ durability: 20, max_durability: 20 });
+      }
+    );
+    mockStatus({ durability: 15, max_durability: 20, level: 1, is_broken: false });
+
+    renderWithProviders(<LabStationStatusCard featureInstanceId={FEATURE_INSTANCE_ID} />);
+
+    await user.click(screen.getByRole('button', { name: /repair/i }));
+
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('repaired'));
+  });
 });

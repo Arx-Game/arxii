@@ -10,7 +10,11 @@
  * durability bar accurate immediately after a repair, since
  * `useRepairLabStation` invalidates the `["lab-station", featureInstanceId]`
  * cache key but has no way to invalidate the (unrelated) crafting-quote
- * cache key.
+ * cache key on its own. That's what the optional `onRepaired` callback below
+ * is for (#1234 whole-branch review finding): `AttachFacetDialog` passes one
+ * in that invalidates its own `["crafting-quote", itemInstanceId, facetId]`
+ * query, so the "Attach" button's affordability check re-fetches instead of
+ * staying stale until the dialog is closed and reopened.
  *
  * Scope note: INSTALL/UPGRADE are intentionally not wired here. A
  * `roomProfileId` is in fact reachable anywhere in the tree via the existing
@@ -33,9 +37,16 @@ import { useLabStationStatus, useRepairLabStation } from '../hooks/useLabStation
 interface LabStationStatusCardProps {
   /** Resolved from `CraftingQuote.station_status.feature_instance_id`. Null/undefined = no station present. */
   featureInstanceId: number | null | undefined;
+  /**
+   * Called after a successful repair, in addition to this card's own status
+   * refetch. Lets a caller invalidate caches this card doesn't know about —
+   * `AttachFacetDialog` uses it to invalidate the crafting-quote cache so
+   * "Attach"'s affordability check picks up the restored durability.
+   */
+  onRepaired?: () => void;
 }
 
-export function LabStationStatusCard({ featureInstanceId }: LabStationStatusCardProps) {
+export function LabStationStatusCard({ featureInstanceId, onRepaired }: LabStationStatusCardProps) {
   const statusQuery = useLabStationStatus(featureInstanceId ?? undefined);
   const repairMutation = useRepairLabStation(featureInstanceId ?? -1);
 
@@ -69,6 +80,7 @@ export function LabStationStatusCard({ featureInstanceId }: LabStationStatusCard
       {
         onSuccess: () => {
           toast.success('Lab station repaired.');
+          onRepaired?.();
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : 'Failed to repair Lab station.');
