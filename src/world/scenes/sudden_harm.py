@@ -8,12 +8,16 @@ bootstrapped so they can ready Interpose before it resolves.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.conditions.models import DamageType
+
+
+logger = logging.getLogger(__name__)
 
 
 def _potential_interposer_present(
@@ -48,15 +52,27 @@ def _potential_interposer_present(
     return False
 
 
-def _bind_interpose_challenge(target: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
+def _bind_interpose_challenge(target: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
     """Bind the seeded Interpose ChallengeInstance to *target* (idempotent).
 
     Mirrors world.areas.positioning.plummet._create_catch_challenge_for's bind shape.
+    Returns True once bound, False if the Interpose ChallengeTemplate isn't seeded
+    (caller should degrade to immediate resolution rather than hold harm no Interpose
+    option can ever surface for).
     """
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
     from world.mechanics.models import ChallengeInstance, ChallengeTemplate  # noqa: PLC0415
 
-    template = ChallengeTemplate.objects.get(name=INTERPOSE_CHALLENGE_NAME)
+    try:
+        template = ChallengeTemplate.objects.get(name=INTERPOSE_CHALLENGE_NAME)
+    except ChallengeTemplate.DoesNotExist:
+        logger.warning(
+            "Interpose ChallengeTemplate not seeded; skipping challenge binding for sudden harm "
+            "on %s.",
+            target,
+        )
+        return False
+
     location = target.location
     ChallengeInstance.objects.get_or_create(
         template=template,
@@ -64,6 +80,7 @@ def _bind_interpose_challenge(target: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM
         is_active=True,
         defaults={"location": location, "is_revealed": True},
     )
+    return True
 
 
 def arm_or_apply_sudden_harm(
@@ -86,9 +103,18 @@ def arm_or_apply_sudden_harm(
     from world.scenes.models import get_scene_round_defaults_config  # noqa: PLC0415
     from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
 
+    def _resolve_immediately() -> None:
+        apply_resolved_damage(target, amount, damage_type)
+
     config = get_scene_round_defaults_config()
     if amount < config.sudden_harm_interpose_threshold or not _potential_interposer_present(target):
-        apply_resolved_damage(target, amount, damage_type)
+        _resolve_immediately()
+        return
+
+    if not _bind_interpose_challenge(target):
+        # Interpose ChallengeTemplate isn't seeded — holding the harm would leave a
+        # PendingSuddenHarm no Interpose option can ever surface for. Graceful degrade.
+        _resolve_immediately()
         return
 
     from world.scenes.models import PendingSuddenHarm  # noqa: PLC0415
@@ -97,7 +123,7 @@ def arm_or_apply_sudden_harm(
     if scene_round is None:
         # No room to hold a round in (shouldn't happen alongside a presence check that
         # itself requires a room, but degrade to immediate resolution defensively).
-        apply_resolved_damage(target, amount, damage_type)
+        _resolve_immediately()
         return
 
     PendingSuddenHarm.objects.create(
@@ -107,4 +133,3 @@ def arm_or_apply_sudden_harm(
         damage_type=damage_type,
         source_description=source_description,
     )
-    _bind_interpose_challenge(target)

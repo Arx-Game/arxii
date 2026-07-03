@@ -97,3 +97,24 @@ class ArmOrApplySuddenHarmTests(TestCase):
         self.sheet.vitals.refresh_from_db()
         self.assertLess(self.sheet.vitals.health, starting_health)
         self.assertFalse(PendingSuddenHarm.objects.filter(target_sheet=self.sheet).exists())
+
+    def test_interpose_template_not_seeded_falls_back_to_immediate_resolution(self) -> None:
+        """Bystander present, above threshold, but the Interpose seed content is missing.
+
+        Deliberately does NOT call ensure_interpose_content() (unlike
+        test_bystander_present_and_above_threshold_defers) so
+        ChallengeTemplate.objects.get(name=INTERPOSE_CHALLENGE_NAME) raises
+        DoesNotExist, exercising _bind_interpose_challenge's guard. Must degrade to
+        the same immediate-resolution path as the below-threshold/no-bystander
+        branches — no PendingSuddenHarm row, no propagated exception.
+        """
+        self._place_bystander()
+        starting_health = self.sheet.vitals.health
+        config = get_scene_round_defaults_config()
+        above = config.sudden_harm_interpose_threshold + 5
+
+        arm_or_apply_sudden_harm(self.char, above, None, source_description="a hidden blade")
+
+        self.sheet.vitals.refresh_from_db()
+        self.assertLess(self.sheet.vitals.health, starting_health)
+        self.assertFalse(PendingSuddenHarm.objects.filter(target_sheet=self.sheet).exists())
