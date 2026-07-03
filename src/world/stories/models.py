@@ -898,6 +898,30 @@ class Beat(SharedMemoryModel):
         blank=True,
         help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
     )
+    required_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For FACTION_STANDING_AT_LEAST predicates (society-level).",
+    )
+    required_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For FACTION_STANDING_AT_LEAST predicates (organization-level).",
+    )
+    required_standing = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "For FACTION_STANDING_AT_LEAST predicates — minimum raw "
+            "SocietyReputation/OrganizationReputation.value (-1000..1000)."
+        ),
+    )
 
     # Phase 5b.3: authoring-time side of the stories-missions seam. A Beat
     # MAY name a MissionTemplate it requires; the engine that walks this FK
@@ -1016,12 +1040,17 @@ class Beat(SharedMemoryModel):
         BeatPredicateType.CONDITION_HELD: ("required_condition_template",),
         BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
         BeatPredicateType.AGGREGATE_THRESHOLD: ("required_points",),
+        BeatPredicateType.FACTION_STANDING_AT_LEAST: ("required_standing",),
     }
 
     def _required_config_fields(self) -> tuple[str, ...]:
         """Return the set of config fields required for this beat's predicate_type.
 
         For STORY_AT_MILESTONE, the required fields depend on referenced_milestone_type.
+        For FACTION_STANDING_AT_LEAST, required_society/required_organization are an
+        XOR pair (exactly one, whichever is set) rather than unconditionally required —
+        include whichever one is populated so the "must be null elsewhere" check below
+        doesn't reject the one legitimately in use; the XOR itself is enforced in clean().
         All other types delegate to _REQUIRED_CONFIG.
         """
         if self.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
@@ -1031,6 +1060,13 @@ class Beat(SharedMemoryModel):
             if self.referenced_milestone_type == StoryMilestoneType.EPISODE_REACHED:
                 return (*base, "referenced_episode")
             # STORY_RESOLVED needs only the story reference.
+            return base
+        if self.predicate_type == BeatPredicateType.FACTION_STANDING_AT_LEAST:
+            base = self._REQUIRED_CONFIG[BeatPredicateType.FACTION_STANDING_AT_LEAST]
+            if self.required_society_id is not None:
+                base = (*base, "required_society")
+            if self.required_organization_id is not None:
+                base = (*base, "required_organization")
             return base
         return self._REQUIRED_CONFIG.get(self.predicate_type, ())
 
@@ -1052,11 +1088,24 @@ class Beat(SharedMemoryModel):
             "referenced_chapter",
             "referenced_episode",
             "required_points",
+            "required_society",
+            "required_organization",
+            "required_standing",
         }
         for field_name in all_config_fields - set(required):
             val = getattr(self, field_name)
             if val is not None and val != "":
                 errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."
+        if self.predicate_type == BeatPredicateType.FACTION_STANDING_AT_LEAST:
+            has_society = self.required_society_id is not None
+            has_org = self.required_organization_id is not None
+            if has_society == has_org:  # neither set, or both set
+                msg = (
+                    "Exactly one of required_society or required_organization "
+                    "must be set for FACTION_STANDING_AT_LEAST."
+                )
+                errors["required_society"] = msg
+                errors["required_organization"] = msg
         if errors:
             raise ValidationError(errors)
 
