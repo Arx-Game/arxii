@@ -64,9 +64,24 @@ class DisplayLineTests(TestCase):
         self._heat(_floor(HeatTier.HEAT_IS_ON))
         line = room_heat_line(self.character, self.city_room)
         self.assertIsNotNone(line)
-        self.assertIn("PLACEHOLDER", line)
+        self.assertIn("The heat is on", line)
+        # Default enforcer flavor renders until a society names its own.
+        self.assertIn("The Watch", line)
         payload = room_heat_payload(self.character, self.city_room)
         self.assertEqual(payload["tier"], HeatTier.HEAT_IS_ON.value)
+
+    def test_dangerous_line_names_the_local_enforcers(self) -> None:
+        """Apostate 2026-07-03: the line is specific to the area's law enforcement."""
+        from world.societies.models import Society
+
+        # Mutate through the identity-mapped instance (the deep-copied test
+        # fixture diverges from the cached row the jurisdiction walk returns).
+        crown = Society.objects.get(pk=self.crown.pk)
+        crown.enforcer_name = "The Honest"
+        crown.save(update_fields=["enforcer_name"])
+        self._heat(_floor(HeatTier.DANGEROUS))
+        line = room_heat_line(self.character, self.city_room)
+        self.assertIn("The Honest have been looking for you here", line)
 
     def test_sanctuary_renders_nothing_even_when_hot_outside(self) -> None:
         self._heat(_floor(HeatTier.EXTREME_HEAT))

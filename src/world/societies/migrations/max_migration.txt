@@ -1,1 +1,1 @@
-0018_organization_membership_lifecycle
+0019_society_enforcer_name

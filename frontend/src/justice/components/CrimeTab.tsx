@@ -59,7 +59,7 @@ export function CrimeTab({ viewerEntryId }: Props) {
   if (!rows || rows.length === 0) {
     return (
       <p className="py-8 text-center text-muted-foreground" data-testid="crime-empty-state">
-        No one is hunting you anywhere — as far as you know.
+        So far as you know, no one is hunting you anywhere.
       </p>
     );
   }

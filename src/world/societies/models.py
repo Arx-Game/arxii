@@ -75,6 +75,15 @@ class Society(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="societies",
     )
+    enforcer_name = models.CharField(
+        max_length=100,
+        default="The Watch",
+        help_text=(
+            "Admin-editable flavor: who hunts the wanted in this society's "
+            "dominion (heat surfaces render it — e.g. Luxen's 'The Honest'). "
+            "Phrase it as a collective plural: '<name> have been looking …'."
+        ),
+    )
 
     # Principle fields - all on a -5 to +5 scale
     mercy = models.IntegerField(
