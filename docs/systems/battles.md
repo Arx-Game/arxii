@@ -85,8 +85,10 @@ An abstract typed force (enemy or friendly) stationed at a front.
 | `side` | FK → `BattleSide` (`related_name="units"`) | |
 | `place` | FK → `BattlePlace` (null) | Optional front assignment |
 | `name` | CharField(120) | Display name (e.g. "Cavalry") |
-| `descriptor` | CharField(80), blank | Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only — `composition`/`quality` below drive mechanics. Renamed from the spine's `unit_type` (#1711). |
-| `composition` | CharField | `UnitComposition` — INFANTRY / CAVALRY / ARCHERS / SIEGE / FLYING / NAVAL / MAGICAL / IRREGULAR (#1711); default IRREGULAR. Drives type-matchup and terrain-effect lookups. |
+| `descriptor` | CharField(80), blank | Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only — `properties`/`capabilities`/`quality` below drive mechanics. Renamed from the spine's `unit_type` (#1711). |
+| `properties` | M2M → `mechanics.Property` (blank, `related_name="battle_units"`) | Descriptive tags this unit carries (flying, aquatic, metal-clad, etc.) — the same catalog characters use (#1794). Presence-only, no per-unit magnitude. Drives type-matchup and terrain-effect lookups (summed across every matching row, replacing #1711's single-select `composition`). |
+| `capabilities` | M2M → `conditions.CapabilityType` through `BattleUnitCapability` (blank, `related_name="battle_units"`) | What this unit can DO, at an authored per-unit magnitude (#1794) — e.g. two units can both hold FLYING at very different values. |
+| `individual_count` | PositiveIntegerField (null) | Population data point mirroring `CombatOpponent.swarm_count`'s naming/shape (#1794); `None` means "not a swarm-style unit". Data only — no swarm-math resolution wired against it yet. |
 | `quality` | CharField | `UnitQuality` — MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711); default TRAINED. Flat attacker-facing STRIKE-check modifier ladder, not a strength multiplier. |
 | `commander` | FK → `character_sheets.CharacterSheet` (null, `related_name="commanded_battle_units"`) | Optional commander (#1711); their Battle Command modifier-walk bonus applies to participants fighting alongside this unit's side/place. |
 | `summoned_by` | FK → `character_sheets.CharacterSheet` (null, `related_name="summoned_battle_units"`) | Set when this unit was created via a military-grade summon (#1711, see `_summon_military_unit`). |
@@ -102,6 +104,30 @@ destruction; morale collapse alone never kills a unit). ROUTED is triggered by
 either resource crossing its own threshold: `strength ≤ 30` (`ROUTED_STRENGTH_THRESHOLD`)
 or `morale ≤ 25` (`ROUTED_MORALE_THRESHOLD`). Strength is decremented by
 `success_level × STRIKE_ATTRITION_PER_LEVEL` (10 per level).
+
+**Property/Capability holding (#1794):** `BattleUnit.effective_capability(capability)`
+returns the authored magnitude from its own `BattleUnitCapability` rows (0 if absent),
+and `BattleUnit.has_property(prop)` checks its `properties` M2M — both conform to
+`world.mechanics.types.HasCapabilities`/`HasProperties`, the same `typing.Protocol`s
+`CharacterSheet.effective_capability`/`has_property` implement. No `isinstance`
+branching is needed anywhere a holder is read generically (e.g. the modifier stack
+below).
+
+### `BattleUnitCapability`
+
+Authored `(unit, capability) → magnitude` row (#1794) — the through model for
+`BattleUnit.capabilities`. Mirrors `mechanics.ObjectProperty`'s shape (one FK swapped:
+`BattleUnit` for `ObjectDB`, `CapabilityType` for `Property`). No source-tracking FKs —
+BattleUnit capabilities are static authored data, not subject to reactive
+conditions/challenges.
+
+| Field | Type | Notes |
+|---|---|---|
+| `unit` | FK → `BattleUnit` (`related_name="capability_values"`) | |
+| `capability` | FK → `conditions.CapabilityType` (PROTECT, `related_name="battle_unit_values"`) | |
+| `value` | PositiveIntegerField | Authored magnitude |
+
+**Constraint:** unique `(unit, capability)`.
 
 ### `BattleRound`
 
@@ -147,40 +173,45 @@ A participant's declared action for one round.
 **Constraint:** unique `(battle_round, participant)` — one declaration per participant
 per round. Participants may redeclare (the service uses `update_or_create`).
 
-### `TechniqueCompositionAffinity`
+### `TechniquePropertyAffinity`
 
-Authored `(technique, composition) → flat STRIKE-check modifier` row (#1711). Positive
-means the technique is especially effective against that composition; negative means
-weak against it.
+Authored `(technique, property) → flat STRIKE-check modifier` row (#1794, replacing
+#1711's `TechniqueCompositionAffinity`). Positive means the technique is especially
+effective against that property; negative means weak against it. Summed across every
+one of a unit's `properties` that has a matching row — a unit can carry several
+properties at once, unlike the old single-select `composition`.
 
 | Field | Type | Notes |
 |---|---|---|
-| `technique` | FK → `magic.Technique` (PROTECT, `related_name="battle_composition_affinities"`) | |
-| `composition` | CharField | `UnitComposition` value |
+| `technique` | FK → `magic.Technique` (PROTECT, `related_name="battle_property_affinities"`) | |
+| `property` | FK → `mechanics.Property` (PROTECT, `related_name="battle_technique_affinities"`) | |
 | `modifier` | SmallIntegerField | Signed flat check modifier |
 
-**Constraint:** unique `(technique, composition)`.
+**Constraint:** unique `(technique, property)`.
 
-Looked up by `BattleTechniqueResolver._composition_affinity_modifier` when a
-declaration's `target_unit.composition` matches a row; returns 0 (no effect) when no
-row matches — most techniques have no authored affinity.
+Looked up by `_property_affinity_modifier(technique, holder)` (`world.battles.resolution`)
+— sums every row matching one of `holder.has_property(...)`'s properties; returns 0 (no
+effect) when none match — most techniques have no authored affinity. `holder` conforms
+to `world.mechanics.types.HasProperties`.
 
-### `TerrainCompositionEffect`
+### `TerrainPropertyEffect`
 
-Authored `(terrain_type, composition) → flat attacker-facing STRIKE modifier` row
-(#1711). Positive means that composition is easier to strike in that terrain; negative
-means harder.
+Authored `(terrain_type, property) → flat attacker-facing STRIKE modifier` row (#1794,
+replacing #1711's `TerrainCompositionEffect`). Positive means a unit with that property
+is easier to strike in that terrain; negative means harder. Summed across every one of
+a unit's `properties` that has a matching row.
 
 | Field | Type | Notes |
 |---|---|---|
 | `terrain_type` | CharField | `TerrainType` value |
-| `composition` | CharField | `UnitComposition` value |
+| `property` | FK → `mechanics.Property` (PROTECT, `related_name="battle_terrain_effects"`) | |
 | `modifier` | SmallIntegerField | Signed flat check modifier |
 
-**Constraint:** unique `(terrain_type, composition)`.
+**Constraint:** unique `(terrain_type, property)`.
 
-Looked up by `BattleTechniqueResolver._terrain_effect_modifier` against the target
-unit's `place.terrain_type`; returns 0 when the unit has no place, or no row matches.
+Looked up by `_terrain_property_modifier(place, holder)` (`world.battles.resolution`)
+against the target unit's `place.terrain_type`, summed across matching properties;
+returns 0 when the unit has no place, or no row matches.
 
 ## Round Flow
 
@@ -263,8 +294,8 @@ BALANCED posture all contribute nothing:
 
 | Source | Helper | Authored / looked up |
 |---|---|---|
-| Composition affinity | `_composition_affinity_modifier(technique, unit.composition)` | `TechniqueCompositionAffinity` row keyed on `(technique, target_unit.composition)`; 0 if none |
-| Terrain effect | `_terrain_effect_modifier(unit.place, unit.composition)` | `TerrainCompositionEffect` row keyed on `(unit.place.terrain_type, unit.composition)`; 0 if the unit has no place or no row matches |
+| Property affinity | `_property_affinity_modifier(technique, unit)` | Sums every `TechniquePropertyAffinity` row matching one of `unit`'s `properties` (#1794); 0 if none match |
+| Terrain effect | `_terrain_property_modifier(unit.place, unit)` | Sums every `TerrainPropertyEffect` row matching one of `unit`'s `properties` for `unit.place.terrain_type` (#1794); 0 if the unit has no place or no row matches |
 | Unit quality | `_quality_modifier(unit.quality)` | `UNIT_QUALITY_STRIKE_MODIFIER` dict in `constants.py` — a flat ladder from MILITIA (+10, easier to hit) to ELITE (−20, harder to hit) |
 | Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place; 0 if none commanded |
 | Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
@@ -458,7 +489,7 @@ Multi-write operations use `@transaction.atomic`.
 | `create_battle` | `(*, name, campaign_story=None, round_limit=DEFAULT_ROUND_LIMIT) -> Battle` | Creates Battle + backing Scene |
 | `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD, covenant=None) -> BattleSide` | Adds a side, optionally fielded by a War Covenant (#1710) |
 | `add_place` | `(*, battle, name, terrain_type=TerrainType.OPEN, movement_cost=1) -> BattlePlace` | Adds a named front (#1711: `terrain_type`/`movement_cost` kwargs) |
-| `add_unit` | `(*, battle, side, name, descriptor="", composition=UnitComposition.IRREGULAR, quality=UnitQuality.TRAINED, commander=None, summoned_by=None, strength=100, place=None) -> BattleUnit` | Adds an abstract unit (#1711: `descriptor` replaces `unit_type`; adds `composition`/`quality`/`commander`/`summoned_by`) |
+| `add_unit` | `(*, battle, side, name, descriptor="", quality=UnitQuality.TRAINED, commander=None, summoned_by=None, strength=100, place=None, properties=(), capability_values=(), individual_count=None) -> BattleUnit` | Adds an abstract unit (#1711: `descriptor` replaces `unit_type`; adds `quality`/`commander`/`summoned_by`. #1794: `properties` — iterable of `Property` to attach; `capability_values` — iterable of `(CapabilityType, magnitude)` pairs, each becomes a `BattleUnitCapability` row; `individual_count` — optional population data point) |
 | `set_battle_side_posture` | `(*, side, posture) -> BattleSide` | Sets a side's `BattlePosture` (#1711) |
 | `assign_unit_commander` | `(*, unit, commander) -> BattleUnit` | Assigns (or clears, with `commander=None`) a unit's commander (#1711) |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |
@@ -525,13 +556,14 @@ New file (#1711) — the shipped spine (#1592) had zero admin exposure. Register
 battle model with a `ModelAdmin`: `Battle`, `BattleSide` (list-filtered on `role`/`posture`),
 `BattlePlace` (list-filtered on `terrain_type`; `controlled_by` shown in `list_display` and
 as an autocomplete field, #1712), `BattleUnit` (`morale` shown alongside `strength` in
-`list_display`, #1712; list-filtered on `composition`/`quality`/`status`;
-`commander`/`summoned_by` as autocomplete fields), `BattleRound`, `BattleParticipant`,
-`BattleActionDeclaration`, and the two new authored catalogs `TechniqueCompositionAffinity`
-(list-filtered on `composition`; `technique` as an autocomplete field) and
-`TerrainCompositionEffect` (list-filtered on `terrain_type`/`composition`; no `technique`
-field), giving staff a CRUD surface to author the type-matchup and terrain-effect content
-the modifier stack reads.
+`list_display`, #1712; list-filtered on `quality`/`status`; `commander`/`summoned_by` as
+autocomplete fields; `properties` via `filter_horizontal` and a `BattleUnitCapabilityInline`
+tabular inline for `BattleUnitCapability` rows, #1794), `BattleRound`, `BattleParticipant`,
+`BattleActionDeclaration`, and the two authored catalogs `TechniquePropertyAffinity`
+(list-filtered on `property`; `technique`/`property` as autocomplete fields, #1794) and
+`TerrainPropertyEffect` (list-filtered on `terrain_type`/`property`; `property` as an
+autocomplete field, #1794), giving staff a CRUD surface to author the type-matchup and
+terrain-effect content the modifier stack reads.
 
 ## Enums / Constants (`src/world/battles/constants.py`)
 
@@ -542,7 +574,6 @@ the modifier stack reads.
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
 | `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
-| `UnitComposition` | TextChoices | INFANTRY / CAVALRY / ARCHERS / SIEGE / FLYING / NAVAL / MAGICAL / IRREGULAR (#1711) |
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
 | `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
 | `BattlePosture` | TextChoices | BALANCED / AGGRESSIVE / DEFENSIVE (#1711) |
@@ -630,14 +661,27 @@ exactly as they would for any other cast. The generic `"Battle Action"` `CheckTy
 `BATTLE_CHECK_TYPE_NAME` / `get_battle_check_type()` seam has been removed entirely.
 
 **Built as a follow-up spine (resources, units, terrain & tactics, #1711):** unit
-composition/quality/commander taxonomy (`BattleUnit.composition`/`.quality`/`.commander`/
-`.summoned_by`, replacing `unit_type` with the narrative-only `descriptor`); front
-terrain (`BattlePlace.terrain_type`/`.movement_cost`); side tactical posture
-(`BattleSide.posture`); the two new authored catalogs `TechniqueCompositionAffinity` and
-`TerrainCompositionEffect`; the five-source [modifier stack](#modifier-stack-1711) folded
-into every STRIKE check; Django admin for the whole app (`admin.py`, previously absent);
-and an opt-in `summon_ally(payload.military=True)` branch that creates a `BattleUnit`
-instead of a skirmish `CombatOpponent` (see [Integrates With](#integrates-with) below).
+quality/commander taxonomy (`BattleUnit.quality`/`.commander`/`.summoned_by`, replacing
+`unit_type` with the narrative-only `descriptor`); front terrain
+(`BattlePlace.terrain_type`/`.movement_cost`); side tactical posture
+(`BattleSide.posture`); authored type-matchup/terrain-effect catalogs; the five-source
+[modifier stack](#modifier-stack-1711) folded into every STRIKE check; Django admin for
+the whole app (`admin.py`, previously absent); and an opt-in
+`summon_ally(payload.military=True)` branch that creates a `BattleUnit` instead of a
+skirmish `CombatOpponent` (see [Integrates With](#integrates-with) below).
+
+**Built as a follow-up spine (Property/Capability holding, #1794):** #1711's single-select
+`BattleUnit.composition` (`UnitComposition` enum) was replaced with `properties` (plain
+M2M → `mechanics.Property`, presence-only tags) and `capabilities` (M2M →
+`conditions.CapabilityType` through `BattleUnitCapability`, an authored per-unit
+magnitude) — a unit can now carry several properties/capabilities at once instead of one
+composition tag, and two units can hold the same capability at different values.
+`individual_count` (nullable, data-only) mirrors `CombatOpponent.swarm_count`'s naming.
+`TechniqueCompositionAffinity`/`TerrainCompositionEffect` were replaced by
+`TechniquePropertyAffinity`/`TerrainPropertyEffect`, both keyed on `Property` and summed
+across every matching property a unit carries. Two new `typing.Protocol`s,
+`HasProperties`/`HasCapabilities` (`world.mechanics.types`), let the modifier stack and
+`CharacterSheet` share the same duck-typed interface with no `isinstance` branching.
 
 **Built as a follow-up spine (battle-flow actions, #1712):** `BattleUnit.morale`, a second
 numeric resource alongside `strength` (default `DEFAULT_MORALE`, 70 — unlike strength,
@@ -700,14 +744,18 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
 
 - `src/world/battles/tests/test_constants.py` — enum smoke tests
 - `src/world/battles/tests/test_models.py` — model save + side/unit relationships;
-  `BattleUnitTaxonomyTests` (composition/quality/commander/summoned_by/descriptor, #1711),
-  `TechniqueCompositionAffinityTests`, `TerrainCompositionEffectTests` (#1711),
+  `BattleUnitTaxonomyTests` (quality/commander/summoned_by/descriptor, #1711),
+  `BattleUnitPropertyCapabilityTests` (`has_property`/`effective_capability`, including
+  two units holding the same capability at distinct authored magnitudes, #1794),
+  `TechniquePropertyAffinityTests`, `TerrainPropertyEffectTests` (#1794),
   `BattleUnitMoraleTests` (`morale` defaults to `DEFAULT_MORALE`, overridable),
   `BattlePlaceControlTests` (`controlled_by` defaults to `None`, `SET_NULL` on side
   delete) (#1712)
 - `src/world/battles/tests/test_round_context.py` — `get_active_round_context` wiring
 - `src/world/battles/tests/test_services_setup.py` — create/enlist/begin-round lifecycle;
-  `AddUnitTests`, `AddUnitTaxonomyTests` (`add_unit`'s new taxonomy kwargs, #1711),
+  `AddUnitTests`, `AddUnitTaxonomyTests` (`add_unit`'s taxonomy kwargs, #1711; the
+  `test_add_unit_accepts_properties_and_capability_values` case covers `add_unit`'s
+  `properties`/`capability_values`/`individual_count` kwargs, #1794),
   `AddPlaceTerrainTests` (`add_place`'s `terrain_type`/`movement_cost` kwargs, #1711),
   `SetBattleSidePostureTests`, `AssignUnitCommanderTests` (#1711)
 - `src/world/battles/tests/test_factories_seed.py` — `EnsureBattleCommandModifierTargetTests`
@@ -715,8 +763,9 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
 - `src/world/battles/tests/test_resolution.py` — `resolve_battle_technique` /
   `BattleTechniqueResolver` unit test; STRIKE success (unit attrition + VP) and failure
   (PC health debit) with `world.battles.resolution.perform_check` patched (the check inside
-  `use_technique`'s cast, not a bypass of it); `CompositionAffinityModifierTests`,
-  `TerrainEffectModifierTests`, `QualityModifierTests`, `CommanderBonusForSideAtPlaceTests`,
+  `use_technique`'s cast, not a bypass of it); `PropertyAffinityModifierTests`,
+  `TerrainPropertyModifierTests` (single-match and sums-across-multiple-properties cases,
+  #1794), `QualityModifierTests`, `CommanderBonusForSideAtPlaceTests`,
   `BattleTechniqueResolverModifierStackTests` (the full five-source stack), and
   `PostureVpScalingTests` (VP-gain and failure-damage posture scaling) (#1711)
 - `src/world/battles/tests/test_conclusion.py` — `check_victory` grading and
@@ -783,11 +832,18 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
   `apply_condition` / `remove_condition` (#1733)
 - **Magic** — `BattleActionDeclaration.technique` FK; `resolve_battle_technique` routes
   each declaration's cast through `world.magic.services.use_technique` (anima cost,
-  Soulfray, Audere / Audere Majora escalation all apply); `TechniqueCompositionAffinity.technique`
-  FK (#1711). `world.magic.services.effect_handlers.summon_ally` gained an opt-in
+  Soulfray, Audere / Audere Majora escalation all apply); `TechniquePropertyAffinity.technique`
+  FK (#1794). `world.magic.services.effect_handlers.summon_ally` gained an opt-in
   `payload.military` branch (`_summon_military_unit`, #1711) that creates a `BattleUnit` via
   `add_unit` in the caster's active `Battle` instead of a skirmish `CombatOpponent` — for
-  summons too potent for a discrete-encounter skirmish.
+  summons too potent for a discrete-encounter skirmish. `payload.properties`
+  (list[str] of `Property` names) / `payload.capabilities` (dict[str, int] of
+  `CapabilityType` name → magnitude) are read and forwarded to `add_unit`'s
+  `properties`/`capability_values` kwargs (#1794).
+- **Mechanics** — `world.mechanics.types.HasProperties`/`HasCapabilities` `Protocol`s
+  (#1794), implemented by both `BattleUnit` and `character_sheets.CharacterSheet` — the
+  modifier stack's `_property_affinity_modifier`/`_terrain_property_modifier` read either
+  kind of holder with no `isinstance` branching.
 - **Checks** — `perform_check`, sourced from the cast technique's
   `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`;
   the Surrounded entry roll and per-round resist checks are dispatched through

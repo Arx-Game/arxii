@@ -22,11 +22,17 @@ _Avoid_: front (descriptive only), zone, location.
 
 **Unit**:
 A `BattleUnit` — an abstract typed force (friendly or enemy) stationed at a place.
-Carries a `UnitComposition` (infantry/cavalry/archers/siege/flying/naval/magical/
-irregular, #1711) driving type-matchups and terrain effects, and a `UnitQuality` tier
-(militia through elite, #1711) — a flat check-difficulty modifier ladder, not a
-strength multiplier.
-_Avoid_: squad, regiment, mob.
+Carries `properties` (a plain M2M to the same `Property` catalog characters use — see
+`world/mechanics/AGENT_GLOSSARY.md`'s **Property** entry; presence-only tags like
+flying/aquatic/metal-clad, #1794) driving type-matchups and terrain effects, and
+`capabilities` (M2M to `CapabilityType` through `BattleUnitCapability`, an authored
+per-unit magnitude — two units can hold the same capability at very different values,
+#1794). Also carries a `UnitQuality` tier (militia through elite, #1711) — a flat
+check-difficulty modifier ladder, not a strength multiplier — and an `individual_count`
+(nullable population data point mirroring `CombatOpponent.swarm_count`, #1794; no
+swarm-math wired against it yet). Replaces the spine's single-select `UnitComposition`
+enum (#1711), which could only ever tag a unit with one composition.
+_Avoid_: squad, regiment, mob; composition (superseded term — use properties/capabilities).
 
 **Morale**:
 A `BattleUnit`'s second numeric resource (#1712), alongside `strength`. Unlike
@@ -72,8 +78,8 @@ side (#1712 considered and explicitly deferred a denial mechanic).
 
 **Descriptor**:
 A `BattleUnit`'s free-text flavor tag (e.g. "zombies-on-nightmares"); narrative only,
-never mechanical — `composition`/`quality` drive mechanics. Renamed from the spine's
-`unit_type` (#1711).
+never mechanical — `properties`/`capabilities`/`quality` drive mechanics. Renamed from
+the spine's `unit_type` (#1711).
 
 **Commander (unit)**:
 The `CharacterSheet` assigned to `BattleUnit.commander` (#1711); their Battle Command
@@ -84,12 +90,15 @@ _Avoid_: leader (reserved — `Covenant.leader` is a distinct, COURT-only concep
 general.
 
 **Type-matchup**:
-A `TechniqueCompositionAffinity` row (#1711): a technique's authored effectiveness
-against a specific `UnitComposition`.
+A `TechniquePropertyAffinity` row (#1794, replacing #1711's
+`TechniqueCompositionAffinity`): a technique's authored effectiveness against a specific
+`Property`. Summed across every property a target unit carries, rather than matched
+against one composition tag.
 
 **Terrain effect**:
-A `TerrainCompositionEffect` row (#1711): a `BattlePlace`'s `TerrainType`'s authored
-effect on a specific `UnitComposition`'s ease-of-strike.
+A `TerrainPropertyEffect` row (#1794, replacing #1711's `TerrainCompositionEffect`): a
+`BattlePlace`'s `TerrainType`'s authored effect on a specific `Property`'s
+ease-of-strike. Summed across every property a target unit carries.
 
 **Military summon**:
 A `summon_ally` cast with `payload.military=True` (#1711): creates a `BattleUnit`
