@@ -246,8 +246,22 @@ before opening a PR" into a dispatch to a sub-skill (e.g.
 checkpoint — that manufactures a gate the skill doesn't have.
 
 Compose the PR body's substitution values (summary, follow-ups, sync
-summary). For each deferred follow-up identified during implementation,
-call `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
+summary).
+
+**Trivial findings never get filed — fix now or drop, no exceptions**
+(CLAUDE.md "Fold In, Don't File"). This applies to task-review and
+whole-branch-review findings the same as PR-comment findings — a missing
+test for code this PR just wrote, a one-line dedup, an admin/serializer
+wiring nit: **fixed here, or dropped**, never deferred to an issue. Being
+correctly verified against code does not make something worth tracking —
+only substantial, separable scope does. Before opening the PR, loop back
+and address (or consciously drop) these findings directly.
+
+Only file a follow-up for something that genuinely needs its own PR — a
+separable system, scope well beyond this issue, or an open design question
+needing a human call — and say what the blocker is in the issue body.
+For each such follow-up, call
+`scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before
 opening the PR) and collect the issue numbers.
 
 **Before filing each follow-up, run the `verify-against-code` pass on its
@@ -397,8 +411,10 @@ Return to CI watch.
 Run `scripts/post-merge-cleanup.sh <branch> <pr-N>`. Read the JSON:
 - For any `linked_issue_actions` entry with `action: "needs-attention"`,
   post a comment on that issue explaining what merged.
-- For review-driven follow-ups identified during the PR-comment phase,
-  file them now with `scripts/file-followup.sh`.
+- For review-driven gaps identified during the PR-comment phase: the merge
+  already happened, so "fix it now" means a fast-follow commit if trivial;
+  file with `scripts/file-followup.sh` only for a genuine, stated blocker
+  (CLAUDE.md "Fold In, Don't File" — the same default as Step 5).
 
 #### Takeaway evaluation (post-merge)
 

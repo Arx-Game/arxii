@@ -194,6 +194,15 @@ ratification. The `verify-against-code` skill carries the labeling procedure
 (`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]`), the ledger format, and the
 recurring-traps list. **Use it.**
 
+## Fold In, Don't File
+
+Trivial review-surfaced gaps (a missing test, a dedup, a wiring nit) get fixed in
+the current branch/PR now or dropped — never filed as a follow-up issue, no
+exceptions. File only for something substantial enough to need its own PR
+(separable system, scope beyond the current issue, a design question needing a
+human call), with the reason stated in the issue body. Overrides any skill step
+that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
+
 ## Database & Code Quality Invariants
 
 Database design:
