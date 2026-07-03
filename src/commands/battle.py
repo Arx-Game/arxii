@@ -254,8 +254,7 @@ class CmdBattle(ArxCommand):
             lines.append("No active round.")
         self.msg("\n".join(lines))
 
-    def _declare(self, rest: list[str]) -> None:  # noqa: C901
-        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+    def _declare(self, rest: list[str]) -> None:
         from world.battles.constants import BattleActionKind  # noqa: PLC0415
 
         if not rest:
@@ -290,30 +289,12 @@ class CmdBattle(ArxCommand):
         if kind == "strike":  # noqa: STRING_LITERAL
             result = self._declare_strike(name, technique_name)
         elif kind == "support":  # noqa: STRING_LITERAL
-            if not name:
-                msg = "Support which ally? (battle declare support <ally> with <technique>)"
-                raise CommandError(msg)
-            participant = self._resolve_participant()
-            ally = self._resolve_ally(participant, name)
-            technique = self._resolve_technique(participant, technique_name)
-            result = DeclareBattleActionAction().run(
-                self.caller,
-                action_kind=BattleActionKind.SUPPORT,
-                technique_id=technique.pk,
-                target_ally=ally,
+            result = self._declare_ally_scoped(
+                BattleActionKind.SUPPORT, name, technique_name, verb="support"
             )
         elif kind == "rescue":  # noqa: STRING_LITERAL
-            if not name:
-                msg = "Rescue which ally? (battle declare rescue <ally> with <technique>)"
-                raise CommandError(msg)
-            participant = self._resolve_participant()
-            ally = self._resolve_ally(participant, name)
-            technique = self._resolve_technique(participant, technique_name)
-            result = DeclareBattleActionAction().run(
-                self.caller,
-                action_kind=BattleActionKind.RESCUE,
-                technique_id=technique.pk,
-                target_ally=ally,
+            result = self._declare_ally_scoped(
+                BattleActionKind.RESCUE, name, technique_name, verb="rescue"
             )
         elif kind == "rout":  # noqa: STRING_LITERAL
             result = self._declare_rout(name, technique_name)
@@ -456,6 +437,25 @@ class CmdBattle(ArxCommand):
             technique_id=technique.pk,
             scope=BattleActionScope.PLACE,
             target_place=place,
+        )
+
+    def _declare_ally_scoped(
+        self, action_kind: str, name: str, technique_name: str, *, verb: str
+    ) -> ActionResult:
+        """Resolve and dispatch an ally-scoped declaration (SUPPORT/RESCUE)."""
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+
+        if not name:
+            msg = f"{verb.capitalize()} which ally? (battle declare {verb} <ally> with <technique>)"
+            raise CommandError(msg)
+        participant = self._resolve_participant()
+        ally = self._resolve_ally(participant, name)
+        technique = self._resolve_technique(participant, technique_name)
+        return DeclareBattleActionAction().run(
+            self.caller,
+            action_kind=action_kind,
+            technique_id=technique.pk,
+            target_ally=ally,
         )
 
     def _begin_round(self) -> None:
