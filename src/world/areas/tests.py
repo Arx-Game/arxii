@@ -514,6 +514,37 @@ class SocietiesForSceneTests(TestCase):
         assert set(result) == {self.society_a, self.society_b}
         assert self.society_other not in result
 
+    def test_walk_resolves_realm_from_ancestor(self):
+        """#1464 walk fix: a Building-level room under a realm-bearing kingdom resolves."""
+        kingdom = AreaFactory(
+            name="Walk Kingdom", level=AreaLevel.KINGDOM, realm=self.realm, dominant_society=None
+        )
+        city = AreaFactory(name="Walk City", level=AreaLevel.CITY, parent=kingdom, realm=None)
+        hall = AreaFactory(name="Walk Hall", level=AreaLevel.BUILDING, parent=city, realm=None)
+        room = _make_room_in_area(hall)
+        scene = SceneFactory(location=room)
+
+        result = societies_for_scene(scene)
+
+        assert set(result) == {self.society_a, self.society_b}
+
+    def test_walk_nearest_dominant_society_wins(self):
+        """A dominant society on a nearer ancestor beats a deeper ancestor's realm."""
+        kingdom = AreaFactory(name="Dominion Kingdom", level=AreaLevel.KINGDOM, realm=self.realm)
+        hall = AreaFactory(
+            name="Guild Hall",
+            level=AreaLevel.BUILDING,
+            parent=kingdom,
+            realm=None,
+            dominant_society=self.society_b,
+        )
+        room = _make_room_in_area(hall)
+        scene = SceneFactory(location=room)
+
+        result = societies_for_scene(scene)
+
+        assert result == [self.society_b]
+
     def test_no_area_returns_empty(self):
         room_obj = ObjectDB.objects.create(
             db_key="Placeless Room",

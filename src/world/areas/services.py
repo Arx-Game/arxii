@@ -176,12 +176,17 @@ def get_room_profile(room_obj: ObjectDB) -> RoomProfile:
 
 
 def societies_for_scene(scene: Scene) -> list[Society]:
-    """Resolve which societies' fashion is perceived in a scene's location.
+    """Resolve which societies are relevant at a scene's location (#1464 walk fix).
 
-    Permissive by default: ANY society sharing the location's area's realm is
-    relevant. If the area names an explicit ``dominant_society``, only that one
-    is relevant. Returns ``[]`` when the location, its RoomProfile, its area, or
-    the area's realm cannot be resolved.
+    Permissive by default: ANY society sharing the nearest resolvable realm is
+    relevant; a ``dominant_society`` on any ancestor (nearest-first) overrides.
+    ``realm``/``dominant_society`` are set high in the tree (Kingdom/Region), so
+    the walk climbs the parent chain from the room's immediate area — a room in
+    a Building-level area no longer resolves to nobody. Parent-FK walk
+    (identity-map cheap, no ``AreaClosure`` dependency — the #1765 jurisdiction
+    idiom, so it behaves identically on the SQLite tier). Returns ``[]`` when
+    the location, its RoomProfile, its area, or any realm cannot be resolved.
+    Callers: fashion perception (checks), scandal reach minting (#1464).
     """
     location = getattr(scene, "location", None)  # noqa: GETATTR_LITERAL
     if location is None:
@@ -193,14 +198,23 @@ def societies_for_scene(scene: Scene) -> list[Society]:
     if profile is None:
         return []
 
-    area = profile.area
-    if area is None:
-        return []
+    return societies_for_area(profile.area)
 
-    if area.dominant_society_id is not None:
-        return [area.dominant_society]
 
-    if area.realm_id is None:
-        return []
+def societies_for_area(area: Area | None) -> list[Society]:
+    """Nearest-first ancestor walk: dominant society wins, else realm societies.
 
-    return list(Society.objects.filter(realm_id=area.realm_id))
+    Cycle-safe; the first node carrying ``dominant_society`` short-circuits to
+    exactly that society, else the first node carrying ``realm`` yields every
+    society of that realm.
+    """
+    seen: set[int] = set()
+    node = area
+    while node is not None and node.pk not in seen:
+        if node.dominant_society_id is not None:
+            return [node.dominant_society]
+        if node.realm_id is not None:
+            return list(Society.objects.filter(realm_id=node.realm_id))
+        seen.add(node.pk)
+        node = node.parent
+    return []
