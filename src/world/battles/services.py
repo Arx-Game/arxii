@@ -662,3 +662,56 @@ def open_champion_duel(
     battle_place.save(update_fields=["combat_encounter"])
     install_champion_duel_trigger(enc)
     return enc
+
+
+@transaction.atomic
+def open_siege_engine_encounter(
+    *,
+    battle_place: BattlePlace,
+    participant: BattleParticipant,
+    opponent_kwargs: dict,
+    tier: str = OpponentTier.ELITE,
+) -> CombatEncounter:
+    """Bind *battle_place* to a discrete siege-engine skirmish (#1713).
+
+    Reuses the same BattlePlace.combat_encounter bridge and create_lethal_duel
+    call as open_champion_duel, but without the Champion-role requirement — a
+    siege-engine skirmish (sabotaging a ram's crew, defending a tower) is an
+    ordinary discrete fight, not a Champion-only duel. Siege engines themselves
+    are BattleUnit(composition=SIEGE) rows, not a separate model (#1713 Decision 3)
+    — this function only opens the discrete-combat bridge for a skirmish over one.
+    The distinction from open_champion_duel is about who may open the duel, not
+    the opponent's tier: create_lethal_duel only accepts significant-NPC tiers
+    (ELITE/BOSS/HERO_KILLER) regardless of which function calls it, so this
+    function keeps create_lethal_duel's own bare default rather than overriding
+    it downward.
+
+    Args:
+        battle_place: The front the skirmish is bound to. Must have no existing
+            combat_encounter.
+        participant: The BattleParticipant initiating the skirmish.
+        opponent_kwargs: Forwarded to add_opponent via create_lethal_duel.
+        tier: Opponent tier; must be a significant-NPC tier accepted by
+            create_lethal_duel (ELITE/BOSS/HERO_KILLER). Defaults to ELITE.
+
+    Raises:
+        PlaceAlreadyDuelingError: If battle_place.combat_encounter is already set.
+
+    Returns:
+        The newly created CombatEncounter.
+    """
+    from world.combat.duels import create_lethal_duel  # noqa: PLC0415
+
+    if battle_place.combat_encounter_id is not None:
+        raise PlaceAlreadyDuelingError
+
+    room = battle_place.battle.scene.location
+    enc = create_lethal_duel(
+        participant.character_sheet,
+        opponent_kwargs,
+        room,
+        tier=tier,
+    )
+    battle_place.combat_encounter = enc
+    battle_place.save(update_fields=["combat_encounter"])
+    return enc

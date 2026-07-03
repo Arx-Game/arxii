@@ -31,7 +31,7 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
 )
-from world.battles.services import open_champion_duel
+from world.battles.services import open_champion_duel, open_siege_engine_encounter
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterType, RiskLevel
 from world.combat.factories import ThreatPoolFactory
@@ -363,6 +363,62 @@ class OpenChampionDuelTests(TestCase):
                 opponent_kwargs={
                     "name": "Warlord's Champion",
                     "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+
+class OpenSiegeEngineEncounterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.side = BattleSideFactory(battle=cls.battle)
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        self.room = create_object(
+            "typeclasses.rooms.Room", key="Siege Engine Skirmish Room", nohome=True
+        )
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+        self.sheet = CharacterSheetFactory()
+        self.participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=self.sheet, place=self.place
+        )
+
+    def test_opens_encounter_and_binds_place(self) -> None:
+        enc = open_siege_engine_encounter(
+            battle_place=self.place,
+            participant=self.participant,
+            opponent_kwargs={
+                "name": "Ram crew",
+                "max_health": 30,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.combat_encounter_id, enc.pk)
+        self.assertEqual(enc.encounter_type, EncounterType.DUEL)
+        self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+
+    def test_raises_if_place_already_dueling(self) -> None:
+        open_siege_engine_encounter(
+            battle_place=self.place,
+            participant=self.participant,
+            opponent_kwargs={
+                "name": "Ram crew",
+                "max_health": 30,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        with self.assertRaises(PlaceAlreadyDuelingError):
+            open_siege_engine_encounter(
+                battle_place=self.place,
+                participant=self.participant,
+                opponent_kwargs={
+                    "name": "Second ram crew",
+                    "max_health": 30,
                     "threat_pool": self.threat_pool,
                 },
             )
