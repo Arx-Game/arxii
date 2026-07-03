@@ -170,7 +170,6 @@ def ensure_technique_catalog_content():
     Returns the list of catalog ActionTemplate rows (created or pre-existing),
     in `_CATALOG_POOLS` order.
     """
-    from actions.constants import ActionTargetType, Pipeline  # noqa: PLC0415
     from actions.models import (  # noqa: PLC0415
         ActionTemplate,
         ConsequencePool,
@@ -225,8 +224,8 @@ def ensure_technique_catalog_content():
                 "check_type": check_type,
                 "consequence_pool": pool,
                 "category": "magic",
-                "pipeline": Pipeline.SINGLE,
-                "target_type": ActionTargetType.SELF,
+                "pipeline": base_template.pipeline,
+                "target_type": base_template.target_type,
                 "description": (
                     f"Standalone resolution spec for casting a technique ({flavor['name']} flavor)."
                 ),

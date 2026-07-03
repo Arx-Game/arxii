@@ -32,10 +32,12 @@ class TechniqueCastCatalogSeedTests(TestCase):
     def test_seeds_catalog_pools_as_children_of_base(self):
         templates = ensure_technique_catalog_content()
         base_pool = get_standalone_cast_pool()
+        base_template = get_standalone_cast_template()
         self.assertEqual(len(templates), 2)
-        base_check_type_id = base_pool.action_templates.first().check_type_id
         for template in templates:
-            self.assertEqual(template.check_type_id, base_check_type_id)
+            self.assertEqual(template.check_type_id, base_template.check_type_id)
+            self.assertEqual(template.pipeline, base_template.pipeline)
+            self.assertEqual(template.target_type, base_template.target_type)
             self.assertEqual(template.consequence_pool.parent_id, base_pool.pk)
 
     def test_idempotent_no_duplicate_rows(self):
