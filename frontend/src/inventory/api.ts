@@ -16,10 +16,12 @@ import type {
   CreateOutfitSlotPayload,
   EquippedItem,
   EquipmentLayer,
+  InstallLabStationPayload,
   ItemInstance,
   Outfit,
   OutfitSlot,
   PaginatedResponse,
+  RepairLabStationPayload,
   UpdateOutfitPayload,
   UseItemResult,
 } from './types';
@@ -28,6 +30,8 @@ type ItemFacetRead = components['schemas']['ItemFacetRead'];
 type QualityTier = components['schemas']['QualityTier'];
 type FacetCraftResult = components['schemas']['FacetCraftResult'];
 export type CraftingQuote = components['schemas']['CraftingQuote'];
+export type StationStatus = components['schemas']['StationStatus'];
+export type LabStationDetails = components['schemas']['LabStationDetails'];
 
 const BASE_URL = '/api/items';
 
@@ -252,5 +256,49 @@ export async function getCraftingQuote(
     `${BASE_URL}/item-facets/quote/?item_instance=${itemInstanceId}&facet=${facetId}`
   );
   if (!res.ok) throw new Error(await readError(res, 'Failed to load crafting quote'));
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Lab stations (#1234)
+// ---------------------------------------------------------------------------
+
+export async function getLabStationStatus(featureInstanceId: number): Promise<LabStationDetails> {
+  const res = await apiFetch(`${BASE_URL}/lab-stations/${featureInstanceId}/`);
+  if (!res.ok) throw new Error(await readError(res, 'Failed to load Lab station status'));
+  return res.json();
+}
+
+export async function installLabStation(
+  payload: InstallLabStationPayload
+): Promise<LabStationDetails> {
+  const res = await apiFetch(`${BASE_URL}/lab-stations/install/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res, 'Failed to install Lab station'));
+  return res.json();
+}
+
+export async function upgradeLabStation(
+  payload: InstallLabStationPayload
+): Promise<LabStationDetails> {
+  const res = await apiFetch(`${BASE_URL}/lab-stations/upgrade/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res, 'Failed to upgrade Lab station'));
+  return res.json();
+}
+
+export async function repairLabStation(
+  featureInstanceId: number,
+  payload: RepairLabStationPayload
+): Promise<LabStationDetails> {
+  const res = await apiFetch(`${BASE_URL}/lab-stations/${featureInstanceId}/repair/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readError(res, 'Failed to repair Lab station'));
   return res.json();
 }
