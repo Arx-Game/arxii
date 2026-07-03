@@ -3,8 +3,8 @@
 import contextlib
 
 from django.test import TestCase
-from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
 from world.classes.factories import PathFactory
 from world.classes.models import CharacterClassLevel, PathStage
 from world.conditions.factories import ConditionInstanceFactory
@@ -435,7 +435,7 @@ class EndAuderaMajoraTests(TestCase):
 
     def setUp(self) -> None:
         _audere, self.majora_template = wire_audere_power_multipliers()
-        self.character = ObjectDB.objects.create(db_key="end_majora_char")
+        self.character = CharacterFactory(db_key="end_majora_char")
 
     def test_removes_condition(self) -> None:
         ConditionInstanceFactory(

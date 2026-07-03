@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence, ConsequenceEffect
     from world.checks.types import ResolutionContext
+    from world.conditions.models import DamageType
     from world.magic.models import Affinity, Resonance
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,42 @@ def _remove_property(
     )
 
 
+def apply_resolved_damage(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    amount: int,
+    damage_type: "DamageType | None",
+) -> int:
+    """Apply a resolved (post-interpose, if any) damage amount to *target*'s health.
+
+    Shared tail of the non-combat damage pipeline: thread-DR, damage-type resistance,
+    vitals debit, survivability consequences. Used both by the immediate path (no
+    reactive beat needed) and by ``world.scenes.sudden_harm.resolve_pending_interpose_harm``
+    (post-interpose resolution). Returns the actual amount dealt (0 if fully absorbed).
+    """
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
+    effective = amount
+    if hasattr(target, "threads"):
+        effective = apply_damage_reduction_from_threads(target, effective)
+    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+    # Closes the asymmetry where traps ignored a character's damage-type resistance.
+    effective = resolve_damage_type_resistance(target, effective, damage_type)
+    if effective <= 0:
+        return 0
+
+    vitals = target.sheet_data.vitals
+    vitals.health -= effective
+    vitals.save(update_fields=["health"])
+
+    process_damage_consequences(
+        character_sheet=target.sheet_data,
+        damage_dealt=effective,
+        damage_type=damage_type,
+    )
+    return effective
+
+
 def _deal_damage(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -232,7 +269,7 @@ def _deal_damage(
         )
 
     try:
-        vitals = target.sheet_data.vitals
+        _ = target.sheet_data.vitals
     except (AttributeError, ObjectDoesNotExist):
         return AppliedEffect(
             effect_type=EffectType.DEAL_DAMAGE,
@@ -241,36 +278,15 @@ def _deal_damage(
             skip_reason="Target has no CharacterVitals",
         )
 
-    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
-    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
-
-    damage_amount = effect.damage_amount
-    if hasattr(target, "threads"):
-        damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
-    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
-    # Closes the asymmetry where traps ignored a character's damage-type resistance.
-    damage_amount = resolve_damage_type_resistance(target, damage_amount, effect.damage_type)
-    if damage_amount <= 0:
-        return AppliedEffect(
-            effect_type=EffectType.DEAL_DAMAGE,
-            description="Damage fully absorbed by thread survivability",
-            applied=False,
-            skip_reason="Reduced to zero",
-        )
-
-    vitals.health -= damage_amount
-    vitals.save(update_fields=["health"])
-
-    process_damage_consequences(
-        character_sheet=target.sheet_data,
-        damage_dealt=damage_amount,
-        damage_type=effect.damage_type,
-    )
+    from world.scenes.sudden_harm import arm_or_apply_sudden_harm  # noqa: PLC0415
 
     damage_type_name = effect.damage_type.name if effect.damage_type else "untyped"
+    arm_or_apply_sudden_harm(target, effect.damage_amount, effect.damage_type)
     return AppliedEffect(
         effect_type=EffectType.DEAL_DAMAGE,
-        description=f"Dealt {damage_amount} {damage_type_name} damage",
+        description=(
+            f"Dealt (or held pending Interpose) {effect.damage_amount} {damage_type_name} damage"
+        ),
         applied=True,
     )
 

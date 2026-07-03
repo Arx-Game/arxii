@@ -151,7 +151,7 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 |-------|---------|--------------------------|
 | `PositionBlueprint` | GM-authored reusable terrain layout | `name` (unique), `description` |
 | `BlueprintPosition` | Position node template inside a blueprint | `blueprint` FK; name unique per blueprint |
-| `BlueprintEdge` | Edge template inside a blueprint | `blueprint` FK; `position_a` / `position_b` FK → `BlueprintPosition` (canonical pk order); `is_passable` |
+| `BlueprintEdge` | Edge template inside a blueprint | `blueprint` FK; `position_a` / `position_b` FK → `BlueprintPosition` (canonical pk order); `is_passable`; `gating_challenge_template` FK → `mechanics.ChallengeTemplate` (nullable, `on_delete=PROTECT`) |
 
 **Room profile link** (in `evennia_extensions.RoomProfile`):
 
@@ -176,14 +176,14 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 |----------|---------|
 | `create_blueprint(name, *, description)` | Create a `PositionBlueprint` |
 | `add_blueprint_position(blueprint, name, *, kind, description)` | Create a `BlueprintPosition` |
-| `connect_blueprint_positions(a, b, *, is_passable)` | Create a `BlueprintEdge` (raises `PositionError` for cross-blueprint) |
+| `connect_blueprint_positions(a, b, *, is_passable, gating_challenge_template)` | Create a `BlueprintEdge` (raises `PositionError` for cross-blueprint) |
 | `remove_blueprint(blueprint)` | Delete blueprint and its positions/edges (cascade) |
 
 *Staging:*
 
 | Function | Summary |
 |----------|---------|
-| `instantiate_blueprint(blueprint, room, *, replace=False)` | Clone a blueprint's position graph into a room (returns new `Position` list). Raises `PositionError` if already staged and `replace=False`; raises `PositionError` if occupied when `replace=True`. Runs atomically. |
+| `instantiate_blueprint(blueprint, room, *, replace=False)` | Clone a blueprint's position graph into a room (returns new `Position` list). For each gated `BlueprintEdge` (`gating_challenge_template` set), mints a live `ChallengeInstance` via `instantiate_challenge` (`world.mechanics.challenge_resolution`) and sets it on the cloned `PositionEdge.gating_challenge`. Raises `PositionError` if already staged and `replace=False`; raises `PositionError` if occupied when `replace=True`. Runs atomically. |
 
 *Query:*
 
@@ -404,12 +404,13 @@ using `PERSONAL` resolution mode cross the gate for themselves only (the
 `gating_challenge` matches the active `ChallengeInstance`.  Gated edges appear as locked
 entries in the player's move list until the gating challenge is resolved.
 
+Blueprint-authored gated edges work the same way as hand-authored ones:
+`BlueprintEdge.gating_challenge_template` + `instantiate_challenge` mint the live
+`ChallengeInstance` on staging, so an instantiated blueprint's gated edges block
+`move_to_position` identically to a gate authored directly on a room's `Position` graph.
+
 ### Deferred (follow-up required)
 
-- **Gated blueprint edges:** `BlueprintEdge` has no `gating_challenge` analogue; when a
-  blueprint is instantiated the `instantiate_blueprint` service skips gating. Full
-  gated-edge instantiation requires the absent `instantiate_situation()` service (which
-  mints `ChallengeInstance`s). Tracked as a follow-up to #1017.
 - **Reactive fall catch + multi-round plummet (built — #1228):** `EventName.FELL` is consumed
   by `begin_plummet` (`plummet.py`), which ensures the STRICT danger round, applies `Plummeting`, and
   binds the catch challenge to the faller (Task 5); `advance_plummet` walks the descent down

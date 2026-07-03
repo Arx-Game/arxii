@@ -73,6 +73,7 @@ treat those names as hints to confirm, not gospel.
 - [0021 — main uses a GitHub merge queue + single-leaf migration guard](0021-main-uses-a-merge-queue.md)
 - [0022 — Staff config & game-tuning tooling is admin-hosted, not React](0022-staff-tooling-is-admin-hosted.md)
 - [0083 — CI/test databases build schema from model state; migration replay runs nightly only](0083-ci-schema-from-models.md)
+- [0084 — SQLite fast tier restores a cached schema template instead of rebuilding per run](0084-sqlite-test-schema-template-cache.md)
 
 ### Game-design tenets
 - [0023 — PvP is structurally non-lethal](0023-pvp-is-structurally-non-lethal.md)
@@ -117,6 +118,7 @@ treat those names as hints to confirm, not gospel.
 - [0081 — Battle terrain lives on BattlePlace, not the room Position/PositionEdge graph](0081-battle-terrain-lives-on-battleplace.md)
 - [0082 — Battle morale derives status; the front itself is the objective; VP stays award-only](0082-battle-morale-derives-status-objective-lives-on-place.md)
 - [0083 — Siege structures are per-Fortification objectives; BREACH/FORTIFY are dedicated verbs](0083-siege-structures-are-per-fortification-objectives-with-dedicated-verbs.md)
+- [0083 — Out-of-combat sudden harm defers via the scene-round declare/resolve shape, not a pre-armed check](0083-out-of-combat-sudden-harm-defers-via-scene-round.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

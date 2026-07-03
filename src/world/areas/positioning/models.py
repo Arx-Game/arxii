@@ -173,7 +173,10 @@ class BlueprintEdge(PositionEdgeBase):
 
     Stored canonically (position_a_id < position_b_id). Mirrors ``PositionEdge``
     but targets blueprint nodes; the same-room check is replaced by a
-    same-blueprint check.
+    same-blueprint check. A non-null ``gating_challenge_template`` means
+    ``instantiate_blueprint`` mints a live ``ChallengeInstance`` from it and
+    gates the cloned ``PositionEdge`` (see ``instantiate_challenge`` in
+    ``world.mechanics.challenge_resolution``).
     """
 
     blueprint = models.ForeignKey(PositionBlueprint, on_delete=models.CASCADE, related_name="edges")
@@ -182,6 +185,13 @@ class BlueprintEdge(PositionEdgeBase):
     )
     position_b = models.ForeignKey(
         BlueprintPosition, on_delete=models.CASCADE, related_name="edges_as_b"
+    )
+    gating_challenge_template = models.ForeignKey(
+        "mechanics.ChallengeTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
     )
 
     class Meta:

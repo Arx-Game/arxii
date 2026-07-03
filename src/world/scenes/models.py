@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 INTERACTION_MODEL = "scenes.Interaction"
 PLAYER_DATA_MODEL = "evennia_extensions.PlayerData"
+SCENE_ROUND_PARTICIPANT_MODEL = "scenes.SceneRoundParticipant"
 
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
@@ -1302,6 +1303,13 @@ class SceneRoundDefaultsConfig(SharedMemoryModel):
             " their fate resolves."
         ),
     )
+    sudden_harm_interpose_threshold = models.PositiveIntegerField(
+        default=10,
+        help_text=(
+            "Minimum out-of-combat sudden-harm amount that justifies holding for a"
+            " reactive Interpose beat (#1316); below this, harm applies immediately."
+        ),
+    )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "accounts.AccountDB",
@@ -1365,7 +1373,7 @@ class SceneActionDeclaration(SharedMemoryModel):
     )
     round_number = models.PositiveIntegerField()
     participant = models.ForeignKey(
-        "scenes.SceneRoundParticipant",
+        SCENE_ROUND_PARTICIPANT_MODEL,
         on_delete=models.CASCADE,
         related_name="action_declarations",
     )
@@ -1391,7 +1399,7 @@ class SceneActionDeclaration(SharedMemoryModel):
         related_name="targeted_scene_declarations",
     )
     succor_target = models.ForeignKey(
-        "scenes.SceneRoundParticipant",
+        SCENE_ROUND_PARTICIPANT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1402,6 +1410,14 @@ class SceneActionDeclaration(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Cached graded outcome of this round's Succor resolution (#1744).",
+    )
+    interpose_target = models.ForeignKey(
+        SCENE_ROUND_PARTICIPANT_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interpose_declarations",
+        help_text="The participant this declaration guards, when maneuver is Interpose (#1316).",
     )
     is_immediate = models.BooleanField(
         default=False,
@@ -1418,6 +1434,54 @@ class SceneActionDeclaration(SharedMemoryModel):
     def __str__(self) -> str:
         kind = "pass" if self.is_pass else "challenge"
         return f"SceneActionDeclaration({self.participant_id}, r{self.round_number}, {kind})"
+
+
+class PendingSuddenHarm(SharedMemoryModel):
+    """A one-shot out-of-combat damage payload held pending a reactive Interpose beat (#1316).
+
+    Created by ``world.scenes.sudden_harm.arm_or_apply_sudden_harm`` when a bystander is
+    present and the harm clears ``SceneRoundDefaultsConfig.sudden_harm_interpose_threshold``.
+    Resolved (and deleted) by ``world.scenes.sudden_harm.resolve_pending_interpose_harm`` at
+    the bound round's resolution. Multiple unresolved rows may exist per target at once (e.g.
+    a single Consequence with two DEAL_DAMAGE effects against the same target) — resolution
+    iterates and resolves each independently.
+    """
+
+    target_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_sudden_harm",
+        help_text="The character this pending harm targets; multiple unresolved rows may exist.",
+    )
+    scene_round = models.ForeignKey(
+        "scenes.SceneRound",
+        on_delete=models.CASCADE,
+        related_name="pending_sudden_harms",
+        help_text="The round bound to resolve this harm.",
+    )
+    amount = models.PositiveIntegerField(
+        help_text="The raw pending damage amount, before any interpose mitigation.",
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="pending_sudden_harm_entries",
+        help_text="The damage type, if typed (null = untyped).",
+    )
+    source_description = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Freeform narration of what caused the harm.",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this pending harm was created.",
+    )
+
+    def __str__(self) -> str:
+        return f"PendingSuddenHarm({self.amount} on {self.target_sheet_id})"
 
 
 # Import place_models, action_models, and reaction_models for Django model discovery
