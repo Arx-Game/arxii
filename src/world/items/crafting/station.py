@@ -8,11 +8,15 @@ from typing import TYPE_CHECKING
 
 from django.utils import timezone
 
-from world.items.crafting.constants import LAB_BASE_DURABILITY_PER_LEVEL
+from world.items.crafting.constants import (
+    LAB_BASE_DURABILITY_PER_LEVEL,
+    LAB_REPAIR_COPPER_PER_POINT_PER_LEVEL,
+)
 from world.items.crafting.models import LabStationDetails
 
 if TYPE_CHECKING:
     from world.checks.types import CheckOutcome
+    from world.currency.models import CharacterPurse
     from world.projects.models import Project
 
 
@@ -72,3 +76,31 @@ def handle_lab_progression(
         station.max_durability = new_max
         station.durability = new_max
         station.save(update_fields=["max_durability", "durability"])
+
+
+def repair_station_durability(
+    *, station: LabStationDetails, restore_points: int, payer_purse: CharacterPurse
+) -> LabStationDetails:
+    """Restore up to ``restore_points`` of durability for coppers (#1234).
+
+    Clamps the restored amount to the station's actual deficit, charges
+    ``LAB_REPAIR_COPPER_PER_POINT_PER_LEVEL * level * points_restored`` coppers
+    via ``currency.services.transfer`` (sink — no destination, money leaves the
+    economy per #923). Raises ``django.core.exceptions.ValidationError`` (from
+    ``transfer``) on insufficient funds; durability is unchanged in that case
+    since the charge happens before the durability write.
+    """
+    from world.currency.services import transfer  # noqa: PLC0415
+
+    deficit = station.max_durability - station.durability
+    points = min(restore_points, deficit)
+    if points <= 0:
+        return station
+
+    level = station.feature_instance.level
+    cost = LAB_REPAIR_COPPER_PER_POINT_PER_LEVEL * level * points
+    transfer(amount=cost, reason="Lab station repair", from_purse=payer_purse, to_purse=None)
+
+    station.durability += points
+    station.save(update_fields=["durability"])
+    return station
