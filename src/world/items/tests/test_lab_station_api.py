@@ -176,3 +176,86 @@ class LabStationRepairTests(LabStationApiTestCase):
     def test_status_endpoint_unknown_station_returns_404(self) -> None:
         response = self.client.get("/api/items/lab-stations/999999/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class LabStationActorResolutionTests(LabStationApiTestCase):
+    """Alt-guard coverage for ``LabStationViewSet._resolve_actor`` (review finding).
+
+    An account may have more than one simultaneously-active character (alts).
+    ``_resolve_actor`` must not silently guess which one is acting via
+    ``RosterEntry.objects.for_account(...).first()`` — it now delegates to the
+    shared ``world.magic.services.auth._resolve_actor_sheet`` alt-guard, which
+    raises rather than picking arbitrarily when more than one active tenure exists.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # A second, simultaneously-active character on the SAME account — no
+        # standing over cls.room_profile (no LocationOwnership row for it).
+        cls.alt_char = CharacterFactory(db_key="lab_station_api_owner_alt_char")
+        cls.alt_sheet = CharacterSheetFactory(character=cls.alt_char)
+        alt_entry = RosterEntryFactory(character_sheet=cls.alt_sheet)
+        RosterTenureFactory(
+            roster_entry=alt_entry,
+            player_data=cls.owner.player_data,
+        )
+
+    def test_install_with_multiple_active_tenures_and_no_actor_sheet_id_fails_safe(self) -> None:
+        """No ``actor_sheet_id`` + 2 active tenures on the account → 400, never guesses."""
+        response = self.client.post(
+            "/api/items/lab-stations/install/",
+            {"room_profile_id": self.room_profile.pk, "target_level": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("actor_sheet_id", str(response.data))
+        self.assertFalse(Project.objects.exists())
+
+    def test_install_with_explicit_actor_sheet_id_for_standing_character_succeeds(self) -> None:
+        """Explicit ``actor_sheet_id`` naming the standing character → 201."""
+        response = self.client.post(
+            "/api/items/lab-stations/install/",
+            {
+                "room_profile_id": self.room_profile.pk,
+                "target_level": 1,
+                "actor_sheet_id": self.owner_sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_install_with_explicit_actor_sheet_id_for_non_standing_alt_returns_400(self) -> None:
+        """Explicit ``actor_sheet_id`` naming the non-standing alt → 400, not a guess."""
+        response = self.client.post(
+            "/api/items/lab-stations/install/",
+            {
+                "room_profile_id": self.room_profile.pk,
+                "target_level": 1,
+                "actor_sheet_id": self.alt_sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertIn("standing", str(response.data).lower())
+
+
+class LabStationNoActiveCharacterTests(TestCase):
+    """No-active-tenure guard — previously zero test coverage (review finding).
+
+    One route (install) is enough to cover the shared ``_resolve_actor`` guard;
+    all three write routes call the same method.
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory(username="lab_station_api_no_tenure")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def test_install_with_no_active_character_returns_403(self) -> None:
+        response = self.client.post(
+            "/api/items/lab-stations/install/",
+            {"room_profile_id": 1, "target_level": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)

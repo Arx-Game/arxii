@@ -6,10 +6,8 @@ actions/definitions/room_features.py.
 from __future__ import annotations
 
 from http import HTTPMethod
-from typing import cast
 
 from django.shortcuts import get_object_or_404
-from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -24,9 +22,8 @@ from world.items.serializers_station import (
     LabStationInstallSerializer,
     LabStationRepairSerializer,
 )
+from world.magic.services.auth import _resolve_actor_sheet
 from world.room_features.seeds import ensure_lab_kind
-
-NO_ACTIVE_CHARACTER_DETAIL = "No active character."
 
 
 class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -38,14 +35,26 @@ class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = "feature_instance_id"
     lookup_value_regex = r"\d+"
 
-    def _resolve_actor(self, request: Request) -> ObjectDB | None:
-        """Mirrors world.magic.views_sanctum.SanctumViewSet._resolve_actor."""
-        from world.roster.models import RosterEntry  # noqa: PLC0415
+    def _resolve_actor(self, request: Request) -> ObjectDB:
+        """Resolve the acting character via the shared alt-guard helper.
 
-        entry = RosterEntry.objects.for_account(cast(AccountDB, request.user)).first()
-        if entry is None:
-            return None
-        return entry.character_sheet.character
+        Mirrors ``FashionPresentationViewSet.create`` / ``FashionJudgementViewSet.create``
+        (``world/items/views.py``) — delegates to
+        ``world.magic.services.auth._resolve_actor_sheet`` rather than picking an
+        arbitrary active tenure via ``RosterEntry.objects.for_account(...).first()``.
+        An account with more than one simultaneously-active character (alts) could
+        otherwise resolve to a character with no standing over the target room,
+        producing a spurious 400 even when another of the account's active
+        characters does have standing.
+
+        Zero active tenures raises ``PermissionDenied`` (403); multiple active
+        tenures without an explicit ``actor_sheet_id`` in the POST body raises
+        ``ValidationError`` (400) rather than silently guessing. Both propagate
+        to DRF's default exception handling — same as the ``views.py`` usages,
+        no local catch here.
+        """
+        sheet = _resolve_actor_sheet(request, body_key="actor_sheet_id")
+        return sheet.character
 
     def _dispatch_install_or_upgrade(self, request: Request) -> Response:
         """Shared body for the ``install`` and ``upgrade`` routes.
@@ -61,10 +70,6 @@ class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = LabStationInstallSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
-        if actor is None:
-            return Response(
-                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
-            )
         room_profile = get_object_or_404(
             RoomProfile, pk=serializer.validated_data["room_profile_id"]
         )
@@ -92,10 +97,6 @@ class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = LabStationRepairSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
-        if actor is None:
-            return Response(
-                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
-            )
         room_profile = station.feature_instance.room_profile
         result = RepairLabStationAction().run(
             actor=actor,
