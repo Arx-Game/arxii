@@ -783,10 +783,18 @@ class NonAttackPCActionRoutingTests(TestCase):
         proves the catalog feature doesn't touch combat's check_type read."""
         from world.combat.services import _resolve_pc_action
         from world.combat.types import CombatTechniqueResolution
-        from world.magic.seeds_cast import ensure_technique_catalog_content
+        from world.magic.seeds_cast import (
+            ensure_technique_catalog_content,
+            get_standalone_cast_template,
+        )
 
         catalog_templates = ensure_technique_catalog_content()
         catalog_template = catalog_templates[0]
+
+        # Prove the catalog/base check_type-sharing invariant directly, not just
+        # that combat forwards whatever check_type the technique happens to carry.
+        base_template = get_standalone_cast_template()
+        self.assertEqual(catalog_template.check_type_id, base_template.check_type_id)
 
         encounter = CombatEncounterFactory(round_number=1)
         sheet = CharacterSheetFactory()
