@@ -168,12 +168,27 @@ class FacetQuoteTests(CraftingApiTestCase):
         self.assertIn("affordable", response.data)
         self.assertIn("max_quality_tier", response.data)
         self.assertIn("failure_risk", response.data)
+        self.assertIn("station_status", response.data)
         costs = response.data["costs"]
         self.assertIn("action_points", costs)
         self.assertIn("action_points_have", costs)
         self.assertIn("anima", costs)
         self.assertIn("anima_have", costs)
         self.assertIn("materials", costs)
+
+    def test_quote_response_includes_station_status_when_present(self) -> None:
+        """Quote's station_status reflects the room's active (unbroken) LAB station."""
+        response = self.client.get(
+            "/api/items/item-facets/quote/",
+            {"item_instance": self.item.pk, "facet": self.facet.pk},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        station_status = response.data["station_status"]
+        self.assertIsNotNone(station_status)
+        self.assertTrue(station_status["present"])
+        self.assertEqual(station_status["durability"], 20)
+        self.assertEqual(station_status["max_durability"], 20)
+        self.assertFalse(station_status["is_broken"])
 
 
 class FacetCraftResultConsumedTests(CraftingApiTestCase):
@@ -247,3 +262,55 @@ class StyleQuoteTests(CraftingApiTestCase):
             {"item_instance": self.style_item_instance.pk, "style": self.style.pk},
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class CraftingQuoteSerializerStationStatusTests(TestCase):
+    """Direct serializer round-trip for ``station_status`` (#1234).
+
+    ``CraftingQuote.station_status`` is ``None`` when the recipe doesn't
+    require a station (``build_crafting_quote`` only ever populates it under
+    ``recipe.requires_station``) — the API test fixtures above always wire a
+    recipe with ``requires_station=True``, so the null case is only reachable
+    by constructing the dataclass directly here.
+    """
+
+    def test_station_status_round_trips_when_populated(self) -> None:
+        from world.items.crafting.services import (
+            CraftingQuote,
+            CraftingQuoteCost,
+            StationStatus,
+        )
+        from world.items.serializers import CraftingQuoteSerializer
+
+        quote = CraftingQuote(
+            costs=CraftingQuoteCost(
+                action_points=0, action_points_have=0, anima=0, anima_have=0, materials=()
+            ),
+            affordable=True,
+            max_quality_tier=None,
+            failure_risk=(),
+            station_status=StationStatus(
+                present=True, durability=15, max_durability=20, is_broken=False
+            ),
+        )
+        data = CraftingQuoteSerializer(quote).data
+        self.assertEqual(
+            data["station_status"],
+            {"present": True, "durability": 15, "max_durability": 20, "is_broken": False},
+        )
+
+    def test_station_status_round_trips_when_none(self) -> None:
+        from world.items.crafting.services import CraftingQuote, CraftingQuoteCost
+        from world.items.serializers import CraftingQuoteSerializer
+
+        quote = CraftingQuote(
+            costs=CraftingQuoteCost(
+                action_points=0, action_points_have=0, anima=0, anima_have=0, materials=()
+            ),
+            affordable=True,
+            max_quality_tier=None,
+            failure_risk=(),
+            station_status=None,
+        )
+        data = CraftingQuoteSerializer(quote).data
+        self.assertIsNone(data["station_status"])
