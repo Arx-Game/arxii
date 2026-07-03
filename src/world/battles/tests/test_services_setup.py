@@ -10,12 +10,15 @@ from django.test import TestCase
 from evennia import create_object
 
 from world.battles.constants import (
+    BASE_INTEGRITY,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    FORTIFICATION_LEVEL_INTEGRITY_BONUS,
     BattleOutcome,
     BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
     TerrainType,
     UnitQuality,
 )
@@ -31,7 +34,12 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
 )
-from world.battles.services import open_champion_duel, open_siege_engine_encounter
+from world.battles.services import (
+    create_fortification,
+    open_champion_duel,
+    open_siege_engine_encounter,
+)
+from world.buildings.factories import BuildingFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterType, RiskLevel
 from world.combat.factories import ThreatPoolFactory
@@ -531,3 +539,34 @@ class AssignUnitCommanderTests(TestCase):
 
         unit.refresh_from_db()
         self.assertIsNone(unit.commander)
+
+
+class CreateFortificationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.side = BattleSideFactory(battle=cls.battle)
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+
+    def test_no_building_uses_base_integrity_only(self):
+        fort = create_fortification(
+            place=self.place, defending_side=self.side, kind=FortificationKind.WALL
+        )
+        self.assertEqual(fort.max_integrity, BASE_INTEGRITY[FortificationKind.WALL])
+        self.assertEqual(fort.integrity, fort.max_integrity)
+
+    def test_building_level_adds_flat_bonus(self):
+        building = BuildingFactory(fortification_level=2)
+        fort = create_fortification(
+            place=self.place,
+            defending_side=self.side,
+            kind=FortificationKind.GATE,
+            building=building,
+        )
+        expected = BASE_INTEGRITY[FortificationKind.GATE] + 2 * FORTIFICATION_LEVEL_INTEGRITY_BONUS
+        self.assertEqual(fort.max_integrity, expected)
+
+    def test_zero_level_building_matches_no_building(self):
+        building = BuildingFactory(fortification_level=0)
+        fort = create_fortification(place=self.place, defending_side=self.side, building=building)
+        self.assertEqual(fort.max_integrity, BASE_INTEGRITY[FortificationKind.WALL])

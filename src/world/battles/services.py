@@ -15,15 +15,18 @@ from django.utils import timezone
 
 from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.constants import (
+    BASE_INTEGRITY,
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    FORTIFICATION_LEVEL_INTEGRITY_BONUS,
     BattleActionKind,
     BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
     TerrainType,
     UnitQuality,
 )
@@ -60,6 +63,7 @@ from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from world.buildings.models import Building
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.covenants.models import Covenant
@@ -207,6 +211,46 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         for capability, value in capability_values
     )
     return unit
+
+
+@transaction.atomic
+def create_fortification(
+    *,
+    place: BattlePlace,
+    defending_side: BattleSide,
+    kind: str = FortificationKind.WALL,
+    building: Building | None = None,
+) -> Fortification:
+    """Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).
+
+    max_integrity is computed once, at creation, from BASE_INTEGRITY[kind] plus
+    building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS if a
+    persistent building is provided — mirroring how Building itself snapshots
+    target_size/target_grandeur once from its founding Project. A Fortification
+    with no building (building=None) is an ad-hoc structure with no persistent
+    investment behind it; max_integrity is just BASE_INTEGRITY[kind].
+
+    Args:
+        place: The BattlePlace this structure defends.
+        defending_side: The BattleSide this structure protects (gates BREACH/
+            FORTIFY ownership — see declare_battle_action).
+        kind: A FortificationKind value. Defaults to WALL.
+        building: Optional persistent Building this structure's integrity
+            ceiling derives from.
+
+    Returns:
+        The newly created Fortification, with integrity == max_integrity.
+    """
+    level = building.fortification_level if building is not None else 0
+    max_integrity = BASE_INTEGRITY[kind] + level * FORTIFICATION_LEVEL_INTEGRITY_BONUS
+    return Fortification.objects.create(
+        place=place,
+        defending_side=defending_side,
+        building=building,
+        kind=kind,
+        integrity=max_integrity,
+        max_integrity=max_integrity,
+    )
 
 
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
