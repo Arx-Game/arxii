@@ -32,6 +32,35 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _validate_reactive_declaration(
+    participant: SceneRoundParticipant,
+    ally: SceneRoundParticipant,
+    *,
+    label: str,
+    self_target_message: str,
+) -> None:
+    """Shared guard chain for declare_succor_scene/declare_interpose_scene.
+
+    Raises ``ValueError`` with an action-specific message on the first violated
+    precondition: cross-round mismatch, self-targeting, an inactive caller, or an
+    inactive ally — in that order. ``label`` (``"Succor"``/``"Interpose"``) names the
+    maneuver in the target-related messages; ``self_target_message`` carries the
+    "Cannot X yourself"/"Cannot X for yourself" wording, which differs between the
+    two callers (kept as a caller-supplied string rather than derived from ``label``).
+    """
+    if participant.scene_round_id != ally.scene_round_id:
+        msg = f"{label} target must be in the same scene round."
+        raise ValueError(msg)
+    if ally.pk == participant.pk:
+        raise ValueError(self_target_message)
+    if participant.status != SceneRoundParticipantStatus.ACTIVE:
+        msg = f"Cannot {label.lower()}: you are not an active participant in this round."
+        raise ValueError(msg)
+    if ally.status != SceneRoundParticipantStatus.ACTIVE:
+        msg = f"{label} target must be an active participant in this round."
+        raise ValueError(msg)
+
+
 def declare_succor_scene(
     participant: SceneRoundParticipant,
     ally: SceneRoundParticipant,
@@ -41,18 +70,9 @@ def declare_succor_scene(
     Always names a specific ally (see world.combat.services.declare_succor's
     docstring for why). Writable during an open STRICT declaration window only.
     """
-    if participant.scene_round_id != ally.scene_round_id:
-        msg = "Succor target must be in the same scene round."
-        raise ValueError(msg)
-    if ally.pk == participant.pk:
-        msg = "Cannot succor yourself."
-        raise ValueError(msg)
-    if participant.status != SceneRoundParticipantStatus.ACTIVE:
-        msg = "Cannot succor: you are not an active participant in this round."
-        raise ValueError(msg)
-    if ally.status != SceneRoundParticipantStatus.ACTIVE:
-        msg = "Succor target must be an active participant in this round."
-        raise ValueError(msg)
+    _validate_reactive_declaration(
+        participant, ally, label="Succor", self_target_message="Cannot succor yourself."
+    )
 
     scene_round = participant.scene_round
     declaration, _ = SceneActionDeclaration.objects.update_or_create(
@@ -80,18 +100,12 @@ def declare_interpose_scene(
     Named-ally only (mirrors declare_succor_scene's #1744 narrowing — see that function's
     docstring rationale). Writable during an open STRICT declaration window only.
     """
-    if participant.scene_round_id != ally.scene_round_id:
-        msg = "Interpose target must be in the same scene round."
-        raise ValueError(msg)
-    if ally.pk == participant.pk:
-        msg = "Cannot interpose for yourself."
-        raise ValueError(msg)
-    if participant.status != SceneRoundParticipantStatus.ACTIVE:
-        msg = "Cannot interpose: you are not an active participant in this round."
-        raise ValueError(msg)
-    if ally.status != SceneRoundParticipantStatus.ACTIVE:
-        msg = "Interpose target must be an active participant in this round."
-        raise ValueError(msg)
+    _validate_reactive_declaration(
+        participant,
+        ally,
+        label="Interpose",
+        self_target_message="Cannot interpose for yourself.",
+    )
 
     scene_round = participant.scene_round
     declaration, _ = SceneActionDeclaration.objects.update_or_create(

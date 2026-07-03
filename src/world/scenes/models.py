@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 INTERACTION_MODEL = "scenes.Interaction"
 PLAYER_DATA_MODEL = "evennia_extensions.PlayerData"
+SCENE_ROUND_PARTICIPANT_MODEL = "scenes.SceneRoundParticipant"
 
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
@@ -1372,7 +1373,7 @@ class SceneActionDeclaration(SharedMemoryModel):
     )
     round_number = models.PositiveIntegerField()
     participant = models.ForeignKey(
-        "scenes.SceneRoundParticipant",
+        SCENE_ROUND_PARTICIPANT_MODEL,
         on_delete=models.CASCADE,
         related_name="action_declarations",
     )
@@ -1398,7 +1399,7 @@ class SceneActionDeclaration(SharedMemoryModel):
         related_name="targeted_scene_declarations",
     )
     succor_target = models.ForeignKey(
-        "scenes.SceneRoundParticipant",
+        SCENE_ROUND_PARTICIPANT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1411,7 +1412,7 @@ class SceneActionDeclaration(SharedMemoryModel):
         help_text="Cached graded outcome of this round's Succor resolution (#1744).",
     )
     interpose_target = models.ForeignKey(
-        "scenes.SceneRoundParticipant",
+        SCENE_ROUND_PARTICIPANT_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

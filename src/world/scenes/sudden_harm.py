@@ -31,26 +31,16 @@ def _potential_interposer_present(
     Mirrors world.areas.positioning.plummet._potential_catcher_present's shape — sudden
     harm has no "hostile source to exclude" concept the way bleed-out/abandonment does
     (a trap has no attacker), so the simpler catcher-presence check is the right fit.
+    Thin wrapper over the shared ``conscious_bystander_present`` core (#1813).
     """
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+    from world.vitals.services import conscious_bystander_present  # noqa: PLC0415
 
-    from world.vitals.services import can_act  # noqa: PLC0415
-
-    room = target.location
-    if room is None:
-        return False
-    for obj in room.contents:
-        if obj.id == target.id or (
-            exclude_character_id is not None and obj.id == exclude_character_id
-        ):
-            continue
-        try:
-            sheet = obj.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            continue
-        if can_act(sheet):
-            return True
-    return False
+    exclude_ids = (
+        frozenset({exclude_character_id}) if exclude_character_id is not None else frozenset()
+    )
+    return conscious_bystander_present(
+        target.location, subject_id=target.id, exclude_ids=exclude_ids
+    )
 
 
 def _bind_interpose_challenge(target: ObjectDB) -> bool:  # noqa: OBJECTDB_PARAM
