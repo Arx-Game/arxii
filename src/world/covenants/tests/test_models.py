@@ -6,9 +6,14 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.covenants.constants import CovenantType, RoleArchetype
-from world.covenants.factories import CovenantRoleFactory
+from world.covenants.constants import CommandTier, CovenantType, RoleArchetype
+from world.covenants.factories import (
+    CovenantFactory,
+    CovenantRankFactory,
+    CovenantRoleFactory,
+)
 from world.covenants.models import (
+    CharacterCovenantRole,
     Covenant,
     CovenantRank,
     CovenantRiteParticipant,
@@ -82,6 +87,35 @@ class CovenantRoleTests(TestCase):
         """CovenantRole must NOT have an is_leadership field after #1027."""
         role = CovenantRole()
         self.assertFalse(hasattr(role, "is_leadership"))
+
+    def test_command_tier_defaults_to_none(self) -> None:
+        role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        self.assertEqual(role.command_tier, CommandTier.NONE)
+        self.assertFalse(role.is_champion_role)
+
+    def test_command_tier_requires_battle_covenant_type(self) -> None:
+        role = CovenantRoleFactory.build(
+            covenant_type=CovenantType.DURANCE,
+            command_tier=CommandTier.SUPREME,
+        )
+        with self.assertRaises(ValidationError):
+            role.full_clean()
+
+    def test_champion_role_requires_battle_covenant_type(self) -> None:
+        role = CovenantRoleFactory.build(
+            covenant_type=CovenantType.DURANCE,
+            is_champion_role=True,
+        )
+        with self.assertRaises(ValidationError):
+            role.full_clean()
+
+    def test_command_tier_allowed_on_battle_covenant(self) -> None:
+        role = CovenantRoleFactory.build(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="test-supreme-commander",
+        )
+        role.full_clean()  # must not raise
 
 
 class GearArchetypeCompatibilityTests(TestCase):
@@ -565,3 +599,57 @@ class CharacterCovenantRoleRankTests(TestCase):
         )
         # Should not raise ValidationError for the rank field.
         ccr.full_clean()
+
+
+class CommandTierExclusivityTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        cls.supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="supreme-commander",
+        )
+        cls.rank = CovenantRankFactory(covenant=cls.covenant)
+        cls.sheet_a = CharacterSheetFactory()
+        cls.sheet_b = CharacterSheetFactory()
+
+    def test_second_engaged_supreme_in_same_covenant_rejected(self) -> None:
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet_a,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=True,
+        )
+        second = CharacterCovenantRole(
+            character_sheet=self.sheet_b,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=True,
+        )
+        with self.assertRaises(ValidationError):
+            second.full_clean()
+
+    def test_subordinate_tier_is_not_exclusive(self) -> None:
+        subordinate_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="subordinate-commander",
+        )
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet_a,
+            covenant_role=subordinate_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=True,
+        )
+        second = CharacterCovenantRole(
+            character_sheet=self.sheet_b,
+            covenant_role=subordinate_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=True,
+        )
+        second.full_clean()  # must not raise

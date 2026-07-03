@@ -6,6 +6,7 @@ from actions.base import Action
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
+    ChallengeChampionDuelAction,
     ConcludeBattleAction,
     DeclareBattleActionAction,
     ResolveBattleRoundAction,
@@ -397,6 +398,7 @@ _ALL_ACTIONS: list[Action] = [
     ResolveBattleRoundAction(),
     ConcludeBattleAction(),
     DeclareBattleActionAction(),
+    ChallengeChampionDuelAction(),
     SignatureSetAction(),
     SignatureClearAction(),
     SignatureListAction(),

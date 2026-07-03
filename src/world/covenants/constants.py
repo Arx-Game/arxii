@@ -28,6 +28,17 @@ class RoleArchetype(models.TextChoices):
     CROWN = "crown", "Crown"  # Support
 
 
+class CommandTier(models.TextChoices):
+    """Battle-command hierarchy tier for a CovenantRole (#1710).
+
+    Meaningful only for CovenantType.BATTLE roles — see CovenantRole.clean().
+    """
+
+    NONE = "none", "No command tier"
+    SUBORDINATE = "subordinate", "Subordinate Commander"
+    SUPREME = "supreme", "Supreme Commander"
+
+
 class BattleBinding(models.TextChoices):
     """How a Battle covenant is bound to its cause (Slice E).
 

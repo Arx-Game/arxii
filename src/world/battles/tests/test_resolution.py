@@ -20,23 +20,42 @@ from world.battles.constants import (
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
     BattleActionKind,
+    BattleActionScope,
     BattlePosture,
     BattleSideRole,
     TerrainType,
     UnitComposition,
     UnitQuality,
 )
-from world.battles.factories import BattlePlaceFactory
+from world.battles.exceptions import (
+    CannotStrikeOwnSideError,
+    InsufficientCommandTierError,
+    MissingScopeTargetError,
+    NoCommandHierarchyError,
+)
+from world.battles.factories import (
+    BattleFactory,
+    BattleParticipantFactory,
+    BattlePlaceFactory,
+    BattleRoundFactory,
+    BattleSideFactory,
+    BattleUnitFactory,
+)
 from world.battles.models import TechniqueCompositionAffinity, TerrainCompositionEffect
 from world.battles.services import (
     add_place,
     add_side,
     add_unit,
     begin_battle_round,
+    declare_battle_action,
     enlist_participant,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.types import CheckResult
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -226,6 +245,134 @@ class DeclareBattleActionTests(TestCase):
             )
 
 
+class ScopePermissionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.battle = BattleFactory()
+        cls.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        cls.side = BattleSideFactory(battle=cls.battle, covenant=cls.covenant)
+        cls.no_covenant_side = BattleSideFactory(battle=cls.battle, role=BattleSideRole.DEFENDER)
+        cls.rank = CovenantRankFactory(covenant=cls.covenant)
+        cls.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        cls.supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="scope-test-supreme",
+        )
+
+    def _enlist(self, side):
+        sheet = CharacterSheetFactory()
+        CharacterTechniqueFactory(character=sheet, technique=self.technique)
+        participant = BattleParticipantFactory(battle=self.battle, side=side, character_sheet=sheet)
+        BattleRoundFactory(battle=self.battle, status=RoundStatus.DECLARING)
+        return participant, sheet
+
+    def test_side_scope_requires_supreme_command(self) -> None:
+        participant, _sheet = self._enlist(self.side)
+        with self.assertRaises(InsufficientCommandTierError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+    def test_side_scope_allowed_for_engaged_supreme_commander(self) -> None:
+        participant, sheet = self._enlist(self.side)
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=sheet,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        # Target the enemy side, not the commander's own side (#1710 Finding 2:
+        # STRIKE against target_side == participant's own side is rejected).
+        decl = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            scope=BattleActionScope.SIDE,
+            target_side=self.no_covenant_side,
+        )
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+
+    def test_side_scope_rejected_with_no_covenant_on_side(self) -> None:
+        participant, _sheet = self._enlist(self.no_covenant_side)
+        with self.assertRaises(NoCommandHierarchyError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.no_covenant_side,
+            )
+
+    def test_unit_scope_unaffected_by_command_tier(self) -> None:
+        participant, _sheet = self._enlist(self.side)
+        unit = BattleUnitFactory(battle=self.battle, side=self.side)
+        decl = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+        self.assertEqual(decl.scope, BattleActionScope.UNIT)
+
+    def _enlist_with_engaged_supreme_command(self, side):
+        """Enlist a participant on *side* holding an engaged SUPREME command tier.
+
+        Isolates the missing-target / own-side checks below from the separate
+        command-tier check (_validate_command_scope), which is covered by the
+        tests above.
+        """
+        participant, sheet = self._enlist(side)
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=sheet,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        return participant
+
+    def test_side_scope_missing_target_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(MissingScopeTargetError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=None,
+            )
+
+    def test_place_scope_missing_target_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(MissingScopeTargetError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.PLACE,
+                target_place=None,
+            )
+
+    def test_side_scope_strike_own_side_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(CannotStrikeOwnSideError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+
 class ResolveBattleRoundSuccessTests(TestCase):
     """STRIKE success: unit strength drops, side VP increases, no PC damage."""
 
@@ -312,6 +459,58 @@ class ResolveBattleRoundSuccessTests(TestCase):
         declare.refresh_from_db()
         self.assertTrue(declare.resolved)
         self.assertGreater(declare.success_level, 0)
+
+    def test_side_scope_strike_attrites_every_unit_on_target_side(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_strike_success
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        unit_a = BattleUnitFactory(battle=battle, side=side, strength=100)
+        unit_b = BattleUnitFactory(battle=battle, side=side, strength=100)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            action_kind=BattleActionKind.STRIKE,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_strike_success(declaration, result, success_level=2)
+
+        unit_a.refresh_from_db()
+        unit_b.refresh_from_db()
+        self.assertEqual(unit_a.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
+        self.assertEqual(unit_b.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
+
+    def test_side_scope_strike_excludes_casters_own_side_unit(self) -> None:
+        """STRIKE at SIDE/PLACE scope must never attrite the caster's own side (#1710).
+
+        Defensive regression: even if a declaration is (mis)constructed with
+        target_side equal to the declaring participant's own side, the resolver
+        must filter that unit out rather than attrite it (friendly fire).
+        """
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_strike_success
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        own_unit = BattleUnitFactory(battle=battle, side=side, strength=100)
+        participant = BattleParticipantFactory(battle=battle, side=side)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_strike_success(declaration, result, success_level=2)
+
+        own_unit.refresh_from_db()
+        self.assertEqual(own_unit.strength, 100)
+        self.assertNotIn(side.pk, result.vp_awarded)
 
 
 class ResolveBattleRoundSupportTests(TestCase):
@@ -804,6 +1003,104 @@ class RescueResolutionTests(TestCase):
 
         assert not get_active_conditions(
             victim_sheet.character, condition=self.content["condition"]
+        ).exists()
+
+    def test_place_scope_rescue_clears_surrounded_for_every_ally_at_place(self) -> None:
+        from world.battles.factories import (
+            BattleActionDeclarationFactory,
+            BattlePlaceFactory,
+        )
+        from world.battles.resolution import _resolve_rescue_success
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        ally_a = BattleParticipantFactory(battle=battle, side=side, place=place)
+        ally_b = BattleParticipantFactory(battle=battle, side=side, place=place)
+        # The declaring (rescuing) participant must be on the SAME side as the allies
+        # it rescues — _resolve_rescue_success (#1710 friendly-fire fix) restricts
+        # scope fan-out to declaration.participant.side_id.
+        rescuer = BattleParticipantFactory(battle=battle, side=side, place=place)
+        # ConditionInstanceFactory direct creation, not apply_condition — apply_condition
+        # routes through _build_bulk_context's PG-only DISTINCT ON query for progressive
+        # conditions (Surrounded is progressive) and errors on the SQLite fast tier (same
+        # trap noted above for test_successful_rescue_clears_surrounded).
+        ConditionInstanceFactory(
+            target=ally_a.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        ConditionInstanceFactory(
+            target=ally_b.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        _resolve_rescue_success(declaration)
+
+        assert not get_active_conditions(
+            ally_a.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+        assert not get_active_conditions(
+            ally_b.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+
+    def test_place_scope_rescue_excludes_enemy_participant_at_place(self) -> None:
+        """RESCUE at PLACE scope must never clear Surrounded from an enemy (#1710).
+
+        A shared front (BattlePlace) can hold both sides' participants. The
+        rescuer's own-side ally should be cleared; an enemy participant Surrounded
+        at the same place must be left alone (clearing it would help the enemy).
+        """
+        from world.battles.factories import (
+            BattleActionDeclarationFactory,
+            BattlePlaceFactory,
+        )
+        from world.battles.resolution import _resolve_rescue_success
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        friendly_side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        enemy_side = BattleSideFactory(battle=battle, role=BattleSideRole.ATTACKER)
+        ally = BattleParticipantFactory(battle=battle, side=friendly_side, place=place)
+        rescuer = BattleParticipantFactory(battle=battle, side=friendly_side, place=place)
+        enemy = BattleParticipantFactory(battle=battle, side=enemy_side, place=place)
+        ConditionInstanceFactory(
+            target=ally.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        ConditionInstanceFactory(
+            target=enemy.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        _resolve_rescue_success(declaration)
+
+        assert not get_active_conditions(
+            ally.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+        assert get_active_conditions(
+            enemy.character_sheet.character, condition=self.content["condition"]
         ).exists()
 
 

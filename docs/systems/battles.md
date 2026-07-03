@@ -53,6 +53,7 @@ One side in a battle (attacker or defender) with its victory-point tally.
 |---|---|---|
 | `battle` | FK → `Battle` (`related_name="sides"`) | |
 | `role` | CharField | `BattleSideRole` — ATTACKER / DEFENDER |
+| `covenant` | FK → `covenants.Covenant` (null, `related_name="battle_sides"`) | Optional War Covenant fielding this side (#1710) |
 | `victory_points` | PositiveIntegerField | Accumulates each round |
 | `victory_threshold` | PositiveIntegerField | Default 100; how many VP to win |
 | `posture` | CharField | `BattlePosture` — BALANCED / AGGRESSIVE / DEFENSIVE (#1711); trades VP-gain speed against check difficulty and failure damage — see [Modifier Stack (#1711)](#modifier-stack-1711) |
@@ -413,14 +414,15 @@ Multi-write operations use `@transaction.atomic`.
 | Service | Signature | Effect |
 |---|---|---|
 | `create_battle` | `(*, name, campaign_story=None, round_limit=DEFAULT_ROUND_LIMIT) -> Battle` | Creates Battle + backing Scene |
-| `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD) -> BattleSide` | Adds a side |
+| `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD, covenant=None) -> BattleSide` | Adds a side, optionally fielded by a War Covenant (#1710) |
 | `add_place` | `(*, battle, name, terrain_type=TerrainType.OPEN, movement_cost=1) -> BattlePlace` | Adds a named front (#1711: `terrain_type`/`movement_cost` kwargs) |
 | `add_unit` | `(*, battle, side, name, descriptor="", composition=UnitComposition.IRREGULAR, quality=UnitQuality.TRAINED, commander=None, summoned_by=None, strength=100, place=None) -> BattleUnit` | Adds an abstract unit (#1711: `descriptor` replaces `unit_type`; adds `composition`/`quality`/`commander`/`summoned_by`) |
 | `set_battle_side_posture` | `(*, side, posture) -> BattleSide` | Sets a side's `BattlePosture` (#1711) |
 | `assign_unit_commander` | `(*, unit, commander) -> BattleUnit` | Assigns (or clears, with `commander=None`) a unit's commander (#1711) |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |
 | `begin_battle_round` | `(*, battle) -> BattleRound` | Closes prior round (→ COMPLETED) and opens a new DECLARING round. Raises `BattleConcludedError` if already concluded. |
-| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`. |
+| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None, scope=BattleActionScope.UNIT, target_place=None, target_side=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. `scope`/`target_place`/`target_side` gate army/unit-scale declarations against command tier (#1710). Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`, `NoCommandHierarchyError`/`InsufficientCommandTierError`/`MissingScopeTargetError`/`CannotStrikeOwnSideError` for scope violations. |
+| `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
 | `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
@@ -559,15 +561,46 @@ instead of a skirmish `CombatOpponent` (see [Integrates With](#integrates-with) 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Command hierarchy, Champion duels | #1710 |
-| Sieges | #1713 |
-| Naval / aerial variants | #1714 |
+| Naval / aerial / siege variants | #1713, #1714 |
 
 Peril / rescue and the AFK knob are no longer deferred — see
 [Peril / Rescue (#1733)](#peril--rescue-1733) below. Rich unit type-matchups and terrain
 effects are no longer deferred — see [Modifier Stack (#1711)](#modifier-stack-1711) above.
 Campaign propagation (battle outcome → Story + win-gated Legend) is no longer deferred — see
-[Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below.
+[Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below. Command hierarchy and the
+Champion are no longer deferred — see
+[Command Hierarchy & the Champion (#1710)](#command-hierarchy--the-champion-1710) below.
+
+## Command Hierarchy & the Champion (#1710)
+
+`CovenantRole.command_tier` (`NONE`/`SUBORDINATE`/`SUPREME`) and `.is_champion_role`
+(bool) are settable only on `CovenantType.BATTLE` roles (`CovenantRole.clean()`).
+Exclusivity — at most one engaged Supreme Commander and one engaged Champion per
+covenant — is enforced in `CharacterCovenantRole.clean()` and
+`world.covenants.services.set_engaged_membership`, structurally identical to the
+existing character-scoped "one engaged role per covenant_type" check.
+
+`BattleSide.covenant` (nullable FK -> `covenants.Covenant`) links a side to the War
+Covenant fielding it; a side with no covenant has no command hierarchy. Command
+permission is checked directly against `CharacterCovenantRole`/`command_tier` — not
+routed through the `CapabilityType`/`ThreadPullEffect` engaged-gating mechanism (that
+exists for condition-restricted capacities, a different domain).
+
+`BattleActionDeclaration.scope` (`UNIT`/`PLACE`/`SIDE`) plus `target_place`/`target_side`
+gate army/unit-scale declarations: `world.battles.services._validate_command_scope`
+requires an engaged `SUBORDINATE`/`SUPREME` role for `PLACE`, `SUPREME` for `SIDE`, on
+the side's covenant. `world.battles.resolution._resolve_strike_success` and
+`_resolve_rescue_success` fan out across every active unit/participant at the scope
+target instead of a single one.
+
+The Champion duel reuses `world.combat.duels.create_lethal_duel` unmodified —
+`world.battles.services.open_champion_duel` validates the challenger holds an engaged
+`is_champion_role` `CovenantRole`, then binds the resulting `CombatEncounter` to the
+`BattlePlace.combat_encounter` bridge seam (the first real caller of that seam since
+#1592). Outcome feedback (rout/destroy the losing side's unit at that front, VP bonus
+to the winner) is wired via `world.battles.duel_wiring`, mirroring
+`world.combat.beat_wiring`'s `ENCOUNTER_COMPLETED` `TriggerDefinition` pattern exactly
+— no new event type.
 
 ## Test Coverage
 
@@ -620,6 +653,12 @@ Campaign propagation (battle outcome → Story + win-gated Legend) is no longer 
   model constraints, `classify_battle_conclusion_outcome`, `activate_stakes_for_battle`
   wiring + `scale_by_party_level=False`, `conclude_battle` → beat/stake resolution
   integration
+- `src/world/battles/tests/test_resolution.py` (#1710) — SIDE-scope STRIKE fan-out
+  across all units on a side; PLACE-scope RESCUE fan-out across all participants at
+  a front
+- `src/world/battles/tests/test_duel_wiring.py` (#1710) — Champion duel outcome
+  auto-wiring: challenger victory routs the enemy unit at the bound place; a
+  non-battle-bound encounter completion no-ops cleanly
 
 ## Integrates With
 
@@ -644,8 +683,11 @@ Campaign propagation (battle outcome → Story + win-gated Legend) is no longer 
   the Surrounded entry roll and per-round resist checks are dispatched through
   `world.checks.consequence_resolution.select_consequence` against authored
   `ConsequencePool` rows (#1733)
-- **Combat** — `BattlePlace.combat_encounter` bridge seam (for discrete tactical fights
-  at a front); `RoundStatus` and `AbstractRound` shared from `world.scenes`
+- **Combat** — `BattlePlace.combat_encounter` bridge seam, now wired for Champion duels
+  (`open_champion_duel`, #1710); `RoundStatus` and `AbstractRound` shared from
+  `world.scenes`
+- **Covenants** — `BattleSide.covenant` FK; `CovenantRole.command_tier`/
+  `.is_champion_role` gate SIDE/PLACE-scope declarations and Champion duels (#1710)
 - **Stories** — `Battle.campaign_story` FK (informational; not used for beat
   resolution); `world.battles.beat_wiring` resolves linked `Beat`s via
   `Scene → EpisodeScene → Episode` (#1785)

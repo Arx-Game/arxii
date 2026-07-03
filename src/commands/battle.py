@@ -5,8 +5,11 @@ One ``battle`` command routes a leading subverb to the battle lifecycle actions.
 Player subverbs:
     battle              — show caller's current battle status
     battle declare strike <unit> with <technique>
+    battle declare strike side with <technique>
+    battle declare strike place <name> with <technique>
     battle declare support <char> with <technique>
     battle declare rescue <ally> with <technique>
+    battle duel <front> vs <boss name>
 
 GM subverbs:
     battle round        — begin the next round (DECLARING)
@@ -34,8 +37,11 @@ class CmdBattle(ArxCommand):
     Syntax (player):
         battle
         battle declare strike <unit> with <technique>
+        battle declare strike side with <technique>
+        battle declare strike place <name> with <technique>
         battle declare support <ally> with <technique>
         battle declare rescue <ally> with <technique>
+        battle duel <front> vs <boss name>
 
     Syntax (GM / staff):
         battle round
@@ -46,7 +52,14 @@ class CmdBattle(ArxCommand):
     ``strike`` (matched within the active battle) or a character name for
     ``support``/``rescue``, plus the technique you know to cast with
     ``with <technique>``. ``rescue`` clears a Surrounded ally's peril instead
-    of awarding victory points.
+    of awarding victory points. ``strike side`` declares an army-wide SIDE-scope
+    strike against the opposing side (command-hierarchy fan-out across every
+    active enemy unit) instead of a single unit — requires an engaged SUPREME
+    command_tier on your own side's covenant. ``strike place <name>`` is the
+    same fan-out narrowed to one front (``BattlePlace``) — requires an engaged
+    SUBORDINATE or SUPREME command_tier. ``duel <front> vs <boss name>`` opens
+    a lethal Champion duel bound to that front — requires an engaged Champion
+    role for your side's covenant.
     """
 
     key = "battle"
@@ -79,10 +92,12 @@ class CmdBattle(ArxCommand):
             self._resolve_round()
         elif first == "conclude":  # noqa: STRING_LITERAL
             self._conclude()
+        elif first == "duel":  # noqa: STRING_LITERAL
+            self._challenge_duel(rest)
         else:
             msg = (
                 "Usage: battle [declare strike <unit>|declare support <char>"
-                "|declare rescue <ally>|round|resolve|conclude]"
+                "|declare rescue <ally>|duel <front> vs <boss name>|round|resolve|conclude]"
             )
             raise CommandError(msg)
 
@@ -233,21 +248,7 @@ class CmdBattle(ArxCommand):
         technique_name = " ".join(remainder[split_at + 1 :]).strip()
 
         if kind == "strike":  # noqa: STRING_LITERAL
-            if not name:
-                msg = (
-                    "Declare strike against which unit?"
-                    " (battle declare strike <unit> with <technique>)"
-                )
-                raise CommandError(msg)
-            participant = self._resolve_participant()
-            unit = self._resolve_unit(participant, name)
-            technique = self._resolve_technique(participant, technique_name)
-            result = DeclareBattleActionAction().run(
-                self.caller,
-                action_kind=BattleActionKind.STRIKE,
-                technique_id=technique.pk,
-                target_unit=unit,
-            )
+            result = self._declare_strike(name, technique_name)
         elif kind == "support":  # noqa: STRING_LITERAL
             if not name:
                 msg = "Support which ally? (battle declare support <ally> with <technique>)"
@@ -280,6 +281,63 @@ class CmdBattle(ArxCommand):
 
         self._send(result)
 
+    def _declare_strike(self, name: str, technique_name: str) -> ActionResult:
+        """Resolve and dispatch a ``strike`` declaration: unit, side, or place target.
+
+        ``name`` is the token(s) between ``strike`` and ``with`` — either a unit
+        name, the literal ``side`` (army-wide SIDE scope against the opposing
+        side), or ``place <name>`` (front-wide PLACE scope).
+        """
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+        from world.battles.constants import BattleActionKind, BattleActionScope  # noqa: PLC0415
+
+        if not name:
+            msg = (
+                "Declare strike against which unit? (battle declare strike <unit> with <technique>)"
+            )
+            raise CommandError(msg)
+        participant = self._resolve_participant()
+        technique = self._resolve_technique(participant, technique_name)
+
+        if name.lower() == "side":  # noqa: STRING_LITERAL
+            enemy_side = participant.battle.sides.exclude(pk=participant.side_id).first()
+            if enemy_side is None:
+                msg = "There is no opposing side to strike."
+                raise CommandError(msg)
+            return DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.STRIKE,
+                technique_id=technique.pk,
+                scope=BattleActionScope.SIDE,
+                target_side=enemy_side,
+            )
+
+        if name.lower().startswith("place "):  # noqa: STRING_LITERAL
+            from world.battles.models import BattlePlace  # noqa: PLC0415
+
+            place_name = name[len("place ") :].strip()
+            place = BattlePlace.objects.filter(
+                battle=participant.battle, name__iexact=place_name
+            ).first()
+            if place is None:
+                msg = f"No front named '{place_name}' in this battle."
+                raise CommandError(msg)
+            return DeclareBattleActionAction().run(
+                self.caller,
+                action_kind=BattleActionKind.STRIKE,
+                technique_id=technique.pk,
+                scope=BattleActionScope.PLACE,
+                target_place=place,
+            )
+
+        unit = self._resolve_unit(participant, name)
+        return DeclareBattleActionAction().run(
+            self.caller,
+            action_kind=BattleActionKind.STRIKE,
+            technique_id=technique.pk,
+            target_unit=unit,
+        )
+
     def _begin_round(self) -> None:
         from actions.definitions.battles import BeginBattleRoundAction  # noqa: PLC0415
 
@@ -296,4 +354,32 @@ class CmdBattle(ArxCommand):
         from actions.definitions.battles import ConcludeBattleAction  # noqa: PLC0415
 
         result = ConcludeBattleAction().run(self.caller)
+        self._send(result)
+
+    def _challenge_duel(self, rest: list[str]) -> None:
+        from actions.definitions.battles import ChallengeChampionDuelAction  # noqa: PLC0415
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        if not rest:
+            msg = "Usage: battle duel <front> vs <boss name>"
+            raise CommandError(msg)
+        participant = self._resolve_participant()
+        if "vs" not in rest:  # noqa: STRING_LITERAL
+            msg = "Usage: battle duel <front> vs <boss name>"
+            raise CommandError(msg)
+        split_at = rest.index("vs")
+        place_name = " ".join(rest[:split_at]).strip()
+        boss_name = " ".join(rest[split_at + 1 :]).strip()
+        place = BattlePlace.objects.filter(
+            battle=participant.battle, name__iexact=place_name
+        ).first()
+        if place is None:
+            msg = f"No front named '{place_name}' in this battle."
+            raise CommandError(msg)
+
+        result = ChallengeChampionDuelAction().run(
+            self.caller,
+            battle_place_id=place.pk,
+            opponent_kwargs={"name": boss_name, "max_health": 300, "threat_pool": None},
+        )
         self._send(result)

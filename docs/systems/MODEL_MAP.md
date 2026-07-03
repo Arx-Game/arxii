@@ -533,9 +533,11 @@
 ### BattleSide
 **Foreign Keys:**
   - battle -> battles.Battle [FK]
+  - covenant -> covenants.Covenant [FK] (nullable)
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
+  - scoped_declarations <- battles.BattleActionDeclaration
 
 ### BattlePlace
 **Foreign Keys:**
@@ -544,6 +546,7 @@
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
+  - scoped_declarations <- battles.BattleActionDeclaration
 
 ### BattleUnit
 **Foreign Keys:**
@@ -578,6 +581,8 @@
   - technique -> magic.Technique [FK]
   - target_unit -> battles.BattleUnit [FK] (nullable)
   - target_ally -> battles.BattleParticipant [FK] (nullable)
+  - target_place -> battles.BattlePlace [FK] (nullable)
+  - target_side -> battles.BattleSide [FK] (nullable)
 
 ### TechniqueCompositionAffinity
 **Foreign Keys:**
@@ -585,18 +590,25 @@
 
 ### TerrainCompositionEffect
 
+### BattleOutcomeMapping
+**Foreign Keys:**
+  - check_outcome -> traits.CheckOutcome [FK] (nullable)
+
 ### Service Functions
+- `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
 - `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1) -> 'BattlePlace' — Add a named front/zone to a battle.`
-- `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
+- `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100, covenant: 'Covenant | None' = None) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
 - `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', composition: 'str' = UnitComposition.IRREGULAR, quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' — Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
-- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
+- `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome, end the backing scene, and resolve any linked`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
+- `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
+- `resolve_battle_beats(battle: 'Battle') -> 'None' — Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' — Set a battle side's tactical posture (#1711).`
 
 
@@ -1622,6 +1634,7 @@
   - rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
+  - battle_sides <- battles.BattleSide
 
 ### CovenantRole
 **Foreign Keys:**
@@ -5117,6 +5130,7 @@
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping
+  - battle_outcome_mappings <- battles.BattleOutcomeMapping
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
 

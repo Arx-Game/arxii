@@ -7,6 +7,7 @@ begin_battle_round, and the BattleError exception hierarchy.
 from __future__ import annotations
 
 from django.test import TestCase
+from evennia import create_object
 
 from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
@@ -19,9 +20,26 @@ from world.battles.constants import (
     UnitComposition,
     UnitQuality,
 )
-from world.battles.exceptions import BattleConcludedError
-from world.battles.factories import BattleFactory
+from world.battles.exceptions import (
+    BattleConcludedError,
+    NoCommandHierarchyError,
+    NotAChampionError,
+    PlaceAlreadyDuelingError,
+)
+from world.battles.factories import (
+    BattleFactory,
+    BattleParticipantFactory,
+    BattlePlaceFactory,
+    BattleSideFactory,
+)
+from world.battles.services import open_champion_duel
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import EncounterType, RiskLevel
+from world.combat.factories import ThreatPoolFactory
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.scenes.constants import RoundStatus
 
 
@@ -81,6 +99,14 @@ class AddSideTests(TestCase):
         add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
 
         self.assertEqual(self.battle.sides.count(), 2)
+
+    def test_add_side_accepts_covenant(self) -> None:
+        from world.battles.services import add_side, create_battle
+
+        battle = create_battle(name="Siege of Thornwall")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER, covenant=covenant)
+        self.assertEqual(side.covenant_id, covenant.pk)
 
 
 class AddPlaceTests(TestCase):
@@ -234,6 +260,113 @@ class BeginBattleRoundTests(TestCase):
         self.battle.refresh_from_db()
 
         self.assertEqual(self.battle.current_round.pk, round1.pk)
+
+
+class OpenChampionDuelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        cls.side = BattleSideFactory(battle=cls.battle, covenant=cls.covenant)
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+        cls.rank = CovenantRankFactory(covenant=cls.covenant)
+        cls.champion_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            is_champion_role=True,
+            slug="champion-svc-test",
+        )
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        self.room = create_object("typeclasses.rooms.Room", key="Champion Duel Room", nohome=True)
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+        self.sheet = CharacterSheetFactory()
+        self.participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=self.sheet, place=self.place
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant_role=self.champion_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+    def test_open_champion_duel_binds_place_to_new_encounter(self):
+        enc = open_champion_duel(
+            battle_place=self.place,
+            challenger_participant=self.participant,
+            opponent_kwargs={
+                "name": "Warlord's Champion",
+                "max_health": 300,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.combat_encounter_id, enc.pk)
+        self.assertEqual(enc.encounter_type, EncounterType.DUEL)
+        self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+
+    def test_open_champion_duel_rejects_non_champion(self) -> None:
+        other_sheet = CharacterSheetFactory()
+        other_participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=other_sheet, place=self.place
+        )
+        with self.assertRaises(NotAChampionError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=other_participant,
+                opponent_kwargs={
+                    "name": "Warlord's Champion",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+    def test_open_champion_duel_rejects_place_already_dueling(self) -> None:
+        open_champion_duel(
+            battle_place=self.place,
+            challenger_participant=self.participant,
+            opponent_kwargs={
+                "name": "Warlord's Champion",
+                "max_health": 300,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        with self.assertRaises(PlaceAlreadyDuelingError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=self.participant,
+                opponent_kwargs={
+                    "name": "Second Boss",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+    def test_open_champion_duel_rejects_side_with_no_covenant(self) -> None:
+        no_covenant_side = BattleSideFactory(
+            battle=self.battle, role=BattleSideRole.DEFENDER, covenant=None
+        )
+        other_sheet = CharacterSheetFactory()
+        other_participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=no_covenant_side,
+            character_sheet=other_sheet,
+            place=self.place,
+        )
+        with self.assertRaises(NoCommandHierarchyError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=other_participant,
+                opponent_kwargs={
+                    "name": "Warlord's Champion",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
 
 
 class AddUnitTaxonomyTests(TestCase):

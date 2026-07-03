@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
@@ -9,6 +10,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import (
     DEFAULT_FOUNDER_RANK_NAME,
     DEFAULT_MEMBER_RANK_NAME,
+    CommandTier,
     CovenantType,
 )
 from world.covenants.exceptions import (
@@ -471,6 +473,35 @@ class SetEngagedMembershipTests(TestCase):
         m_durance.refresh_from_db()
         self.assertTrue(m_battle.engaged)
         self.assertTrue(m_durance.engaged)
+
+    def test_set_engaged_membership_rejects_second_supreme_same_covenant(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="supreme-commander-svc",
+        )
+        rank = CovenantRankFactory(covenant=covenant)
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        existing = CharacterCovenantRole.objects.create(
+            character_sheet=sheet_a,
+            covenant_role=supreme_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=existing)
+
+        challenger = CharacterCovenantRole.objects.create(
+            character_sheet=sheet_b,
+            covenant_role=supreme_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        with self.assertRaises(ValidationError):
+            set_engaged_membership(membership=challenger)
 
 
 class ClearEngagedMembershipTests(TestCase):

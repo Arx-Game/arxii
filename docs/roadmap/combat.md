@@ -38,9 +38,9 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   abstract unit attrition + VP accumulation, `BattleRoundContext` seam, GM + player REGISTRY
   actions, `CmdBattle` telnet namespace, E2E `test_battle_telnet_e2e.py`. Peril/rescue +
   AFK override shipped (#1733). Resources/units/terrain/tactics + type-matchups shipped
-  (#1711). Deferred: command hierarchy + Champion duels (#1710), battle-flow actions
-  (#1712), sieges (#1713), naval/aerial (#1714), battle writeup page (#1735),
-  campaign-stakes propagation + win-gated Legend (#1716).
+  (#1711). Command hierarchy + the Champion shipped (#1710). Campaign-stakes propagation
+  + win-gated Legend shipped (#1785). Deferred: battle-flow actions (#1712), sieges
+  (#1713), naval/aerial (#1714), battle writeup page (#1735).
 - Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
 
 ## Reserved term: "clash"

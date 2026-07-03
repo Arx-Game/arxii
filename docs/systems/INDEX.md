@@ -2040,6 +2040,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 
 - **Models:** `Battle` (O2O Scene, `campaign_story` FK, `round_limit`, `outcome` / `concluded_at`;
   `is_concluded` property; `current_round` property), `BattleSide` (`role` ATTACKER/DEFENDER,
+  `covenant` FK → `covenants.Covenant` (nullable, #1710) fielding this side,
   `victory_points`, `victory_threshold`; unique `(battle, role)`), `BattlePlace` (named front;
   `combat_encounter` FK bridge seam), `BattleUnit` (`unit_type`, `strength`, `status`;
   attrited by STRIKE successes), `BattleRound` (subclasses `AbstractRound`; partial unique
@@ -2091,8 +2092,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (`_resolve_rescue_success`), declared via `battle declare rescue <ally> with
   <technique>`. See ADR-0074 for the AFK-safety exception.
 - **Deferred follow-ups:** battle writeup page (#1735), rich type-matchups (#1711),
-  command hierarchy / naval / aerial / siege (#1710, #1713, #1714), campaign propagation
-  (#1716).
+  naval / aerial / siege (#1713, #1714), campaign propagation (#1716).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
   E2E journey `src/integration_tests/pipeline/test_battle_telnet_e2e.py`
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant FK), vitals

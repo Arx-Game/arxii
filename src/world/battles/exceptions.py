@@ -51,3 +51,50 @@ class TechniqueNotBattleReadyError(BattleError):
         user_message: str = "That technique cannot be used in battle (no action template).",
     ) -> None:
         super().__init__(user_message)
+
+
+class NoCommandHierarchyError(BattleError):
+    """Raised when a PLACE/SIDE-scope declaration targets a side with no covenant."""
+
+    def __init__(self, user_message: str = "This side has no command hierarchy.") -> None:
+        super().__init__(user_message)
+
+
+class InsufficientCommandTierError(BattleError):
+    """Raised when a participant lacks the command tier their declared scope requires."""
+
+    def __init__(
+        self,
+        user_message: str = "You don't hold the command authority for that scope.",
+    ) -> None:
+        super().__init__(user_message)
+
+
+class MissingScopeTargetError(BattleError):
+    """Raised when a PLACE/SIDE-scope declaration has no matching target set."""
+
+    def __init__(
+        self, user_message: str = "That declaration needs a target for its scope."
+    ) -> None:
+        super().__init__(user_message)
+
+
+class CannotStrikeOwnSideError(BattleError):
+    """Raised when a STRIKE declaration's target_side is the caster's own side."""
+
+    def __init__(self, user_message: str = "You cannot strike your own side.") -> None:
+        super().__init__(user_message)
+
+
+class NotAChampionError(BattleError):
+    """Raised when a non-Champion participant attempts to open a Champion duel."""
+
+    def __init__(self, user_message: str = "You do not hold an engaged Champion role.") -> None:
+        super().__init__(user_message)
+
+
+class PlaceAlreadyDuelingError(BattleError):
+    """Raised when a BattlePlace already has a bound CombatEncounter."""
+
+    def __init__(self, user_message: str = "A duel is already underway at this front.") -> None:
+        super().__init__(user_message)

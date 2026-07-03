@@ -20,6 +20,7 @@ from world.covenants.constants import (
     MENTOR_BOND_BAND_WIDTH,
     MENTOR_BOND_MAX_SIDEKICKS,
     BattleBinding,
+    CommandTier,
     CovenantType,
     MentorBondAdjusted,
     RoleArchetype,
@@ -253,6 +254,22 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
         related_name="sub_roles",
         help_text="Null for primary roles. Set for sub-roles.",
     )
+    command_tier = models.CharField(
+        max_length=20,
+        choices=CommandTier.choices,
+        default=CommandTier.NONE,
+        help_text=(
+            "Battle-command hierarchy tier (#1710). Only settable on "
+            "CovenantType.BATTLE roles — see clean()."
+        ),
+    )
+    is_champion_role = models.BooleanField(
+        default=False,
+        help_text=(
+            "True if holding this role lets a character issue/answer a single-combat "
+            "duel for the covenant (#1710). Only settable on CovenantType.BATTLE roles."
+        ),
+    )
 
     @cached_property
     def cached_sub_roles(self) -> list:
@@ -366,6 +383,20 @@ class CovenantRole(AbstractSpecializedVariant, SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        if self.covenant_type != CovenantType.BATTLE:
+            if self.command_tier != CommandTier.NONE:
+                raise ValidationError(
+                    {"command_tier": "command_tier is only settable on Battle covenant roles."}
+                )
+            if self.is_champion_role:
+                raise ValidationError(
+                    {
+                        "is_champion_role": (
+                            "is_champion_role is only settable on Battle covenant roles."
+                        )
+                    }
+                )
+
         has_parent = self.parent_role_id is not None
         has_resonance = self.resonance_id is not None
 
@@ -471,6 +502,12 @@ class CharacterCovenantRole(SharedMemoryModel):
     Thread pulls. At most one engaged active row per (character_sheet,
     covenant.covenant_type) is enforced by clean() and the service layer
     (a partial-index WHERE on a joined column is not expressible in Postgres).
+
+    Covenant-scoped exclusivity (BATTLE only): at most one engaged active row
+    per covenant may hold a SUPREME-tier ``covenant_role.command_tier``, and
+    at most one may hold ``covenant_role.is_champion_role=True``. Also
+    enforced by clean() and the service layer (set_engaged_membership) for
+    the same reason.
     """
 
     character_sheet = models.ForeignKey(
@@ -543,6 +580,45 @@ class CharacterCovenantRole(SharedMemoryModel):
                         ),
                     }
                 )
+            if self.covenant_role.command_tier == CommandTier.SUPREME:
+                other_supreme = (
+                    CharacterCovenantRole.objects.filter(
+                        covenant=self.covenant,
+                        covenant_role__command_tier=CommandTier.SUPREME,
+                        engaged=True,
+                        left_at__isnull=True,
+                    )
+                    .exclude(pk=self.pk)
+                    .exists()
+                )
+                if other_supreme:
+                    raise ValidationError(
+                        {
+                            "engaged": (
+                                "Another engaged Supreme Commander already exists for this "
+                                "covenant."
+                            ),
+                        }
+                    )
+            if self.covenant_role.is_champion_role:
+                other_champion = (
+                    CharacterCovenantRole.objects.filter(
+                        covenant=self.covenant,
+                        covenant_role__is_champion_role=True,
+                        engaged=True,
+                        left_at__isnull=True,
+                    )
+                    .exclude(pk=self.pk)
+                    .exists()
+                )
+                if other_champion:
+                    raise ValidationError(
+                        {
+                            "engaged": (
+                                "Another engaged Champion already exists for this covenant."
+                            ),
+                        }
+                    )
 
     def __str__(self) -> str:
         state = "active" if self.left_at is None else "ended"
