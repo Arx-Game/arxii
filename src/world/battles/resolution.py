@@ -933,11 +933,14 @@ def _dispatch_success_handler(
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
 
-    For each unresolved declaration, casts its declared technique through
-    ``resolve_battle_technique`` (the real magic envelope) and routes
-    success / failure to the appropriate sub-handlers. Before marking the
-    round complete, ticks every ACTIVE Surrounded participant's peril once
-    via ``_advance_surrounded_participants`` (#1733) — gated by declaration
+    Before any declaration resolves, clears any battle- or place-level
+    weather override whose ``weather_override_expires_round`` has passed
+    (round-boundary weather expiry, #1715). For each unresolved declaration,
+    casts its declared technique through ``resolve_battle_technique`` (the
+    real magic envelope) and routes success / failure to the appropriate
+    sub-handlers. Before marking the round complete, ticks every ACTIVE
+    Surrounded participant's peril once via
+    ``_advance_surrounded_participants`` (#1733) — gated by declaration
     this round or ``battle.afk_peril_override``. Sets
     ``battle_round.status = COMPLETED`` at the end.
 

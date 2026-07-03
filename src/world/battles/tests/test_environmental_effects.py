@@ -525,11 +525,21 @@ class RoundBoundaryExpiryTests(TestCase):
         covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
         side_a.covenant = covenant
         side_a.save()
+        # striker is created *before* caster, so it has the lower pk.
+        # BattleActionDeclaration.Meta.ordering sorts by (battle_round,
+        # participant) — i.e. by participant pk — so without this ordering,
+        # the unsorted queryset would already put STRIKE (lower pk) ahead of
+        # SET_ENVIRONMENT (higher pk), the same order the resolution sort is
+        # meant to enforce. Only resolve_battle_round's explicit
+        # SET_ENVIRONMENT-first `.sort(...)` — not incidental pk/insertion
+        # order — can make the assertion below pass (Task 8 review finding;
+        # same bug class as #1712 final review Finding 2, which motivated the
+        # analogous ordering in RepelResolutionTests).
+        striker = BattleParticipantFactory(battle=self.battle, side=side_a)
         caster = BattleParticipantFactory(battle=self.battle, side=side_a)
         _grant_command_tier(
             participant=caster, side=side_a, covenant=covenant, tier=CommandTier.SUPREME
         )
-        striker = BattleParticipantFactory(battle=self.battle, side=side_a)
         place = BattlePlaceFactory(battle=self.battle)
         target_unit = BattleUnitFactory(battle=self.battle, side=side_b, place=place)
         prop = PropertyFactory()
