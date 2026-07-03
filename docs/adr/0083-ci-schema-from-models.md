@@ -13,26 +13,30 @@ without a matching migration still fails fast, without paying for full replay on
 **Why:** measured 12.5-14 minutes per backend shard spent on migration replay, roughly 99% of it
 Python-side migration-state re-rendering rather than real DDL — each `AddField`-class operation
 costs about 0.5-0.6s regardless of what it actually does to the schema, and cross-app FK cycles
-push the total op count across the chain to roughly 1,200. Squashing the migration chain
-(the approach `docs/architecture/migration-nuke-and-rebuild-plan.md` proposed) doesn't fix
-this: op count, not file count, drives the cost, and a squash only reduces file count.
+alone add up to roughly 1,200 of these AddField/AlterField/AddIndex-class operations within the
+chain's ~1,860-1,940 total. Squashing the migration chain (the approach
+`docs/architecture/migration-nuke-and-rebuild-plan.md` proposed) doesn't fix this: a direct
+squash/reset measurement (PR #1801) cut the chain from 507 files to 123 but only trimmed the op
+count from ~1,940 to ~1,860, with migrate time unchanged to slightly worse — the cross-app FK
+cycles force the same AddField wiring regardless of how many files it's spread across, so op
+count barely moves.
 
-**Rejected:** (a) squash/reset chains — measured directly against this cost and found no
-meaningful wall-clock improvement, since the op count survives a squash; the reset PR (#1801)
-was closed for this reason. (b) CI schema caching keyed on migration-file hashes — this repo
-edits migrations in place under some workflows (see `docs/evennia-quirks.md`'s
-migration-number-collision entry), so a same-named-but-edited migration silently invalidates
-nothing and the cache goes stale undetected; a merge-queue history reset also forces a full
-rebuild regardless, since the cache key changes every time. (c) merging all apps into one
-mega-app — high development churn on a single giant app, and Evennia's own vendored migration
-chain remains in the replay path either way.
-
+**Rejected:** (a) squash/reset chains — measured directly (above) and found no meaningful
+wall-clock improvement since the op count survives a squash; PR #1801 was closed for this
+reason. (b) CI schema caching keyed on migration-file hashes — GitHub Actions' `restore-keys`
+fallback means an exact-key cache miss (e.g. any PR that adds a migration file, changing the
+aggregate hash) falls back to the nearest prior partial-match cache, which holds a schema built
+from an earlier version of a same-named-but-since-edited migration; Django's migration recorder
+sees that name as already applied and silently skips the edited version, so the cache goes stale
+undetected, and a merge-queue history reset forces a full rebuild regardless since the cache key
+changes every time. (c) merging all apps into one mega-app — high development churn on a single
+giant app, and Evennia's own vendored migration chain remains in the replay path either way.
 **Trade-offs:** per-PR CI no longer exercises real migration replay — the nightly workflow
-covers that instead, which is an acceptable gap pre-production given ADR-0013's no-data-migration
-rule (there is no production data at risk if replay silently regresses between nightly runs).
-The drift gate needs a reachable Postgres even though it is nominally a static check: the
-vendored `evennia/objects/migrations/0007_objectdb_db_account.py` calls `connection.cursor()`
-at module-import time, so any code path that loads the migration graph — `MigrationLoader`,
+covers that instead, an acceptable gap pre-production given ADR-0013's no-data-migration rule
+(no production data at risk if replay silently regresses between nightly runs). The drift gate
+needs a reachable Postgres even though it is nominally a static check: the vendored
+`evennia/objects/migrations/0007_objectdb_db_account.py` calls `connection.cursor()` at
+module-import time, so any code path that loads the migration graph — `MigrationLoader`,
 `makemigrations --check`, `showmigrations` — needs a live DB connection even for what looks like
 an offline check (see `docs/evennia-quirks.md`). At production launch, migration validation must
 move into the deploy pipeline itself (restore the latest prod backup to staging, migrate,
