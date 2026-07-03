@@ -23,7 +23,12 @@ Command reference for working on Arx II. The load-bearing *rules* live in
 - `arx build` — Build docker images (runs `make build`)
 
 For the full test-tier model (SQLite fast tier vs Postgres parity, `just`
-recipes, `--keepdb`), see the `running-tests` skill.
+recipes, `--keepdb`), see the `running-tests` skill. `just build-test-schema`
+builds the Postgres parity-tier test DB straight from current model state (no
+migration replay); `just test-parity` and `just regression` build it
+automatically the first time and reuse it via `--keepdb` on every run after —
+pass `--rebuild` to either (e.g. `just test-parity --rebuild world.vitals`) to
+force a rebuild after a model change.
 
 ## Server Management
 
