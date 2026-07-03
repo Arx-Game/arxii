@@ -898,6 +898,30 @@ class Beat(SharedMemoryModel):
         blank=True,
         help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
     )
+    required_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For FACTION_STANDING_AT_LEAST predicates (society-level).",
+    )
+    required_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For FACTION_STANDING_AT_LEAST predicates (organization-level).",
+    )
+    required_standing = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "For FACTION_STANDING_AT_LEAST predicates — minimum raw "
+            "SocietyReputation/OrganizationReputation.value (-1000..1000)."
+        ),
+    )
 
     # Phase 5b.3: authoring-time side of the stories-missions seam. A Beat
     # MAY name a MissionTemplate it requires; the engine that walks this FK
@@ -1016,12 +1040,17 @@ class Beat(SharedMemoryModel):
         BeatPredicateType.CONDITION_HELD: ("required_condition_template",),
         BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
         BeatPredicateType.AGGREGATE_THRESHOLD: ("required_points",),
+        BeatPredicateType.FACTION_STANDING_AT_LEAST: ("required_standing",),
     }
 
     def _required_config_fields(self) -> tuple[str, ...]:
         """Return the set of config fields required for this beat's predicate_type.
 
         For STORY_AT_MILESTONE, the required fields depend on referenced_milestone_type.
+        For FACTION_STANDING_AT_LEAST, required_society/required_organization are an
+        XOR pair (exactly one, whichever is set) rather than unconditionally required —
+        include whichever one is populated so the "must be null elsewhere" check below
+        doesn't reject the one legitimately in use; the XOR itself is enforced in clean().
         All other types delegate to _REQUIRED_CONFIG.
         """
         if self.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
@@ -1031,6 +1060,13 @@ class Beat(SharedMemoryModel):
             if self.referenced_milestone_type == StoryMilestoneType.EPISODE_REACHED:
                 return (*base, "referenced_episode")
             # STORY_RESOLVED needs only the story reference.
+            return base
+        if self.predicate_type == BeatPredicateType.FACTION_STANDING_AT_LEAST:
+            base = self._REQUIRED_CONFIG[BeatPredicateType.FACTION_STANDING_AT_LEAST]
+            if self.required_society_id is not None:
+                base = (*base, "required_society")
+            if self.required_organization_id is not None:
+                base = (*base, "required_organization")
             return base
         return self._REQUIRED_CONFIG.get(self.predicate_type, ())
 
@@ -1052,11 +1088,24 @@ class Beat(SharedMemoryModel):
             "referenced_chapter",
             "referenced_episode",
             "required_points",
+            "required_society",
+            "required_organization",
+            "required_standing",
         }
         for field_name in all_config_fields - set(required):
             val = getattr(self, field_name)
             if val is not None and val != "":
                 errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."
+        if self.predicate_type == BeatPredicateType.FACTION_STANDING_AT_LEAST:
+            has_society = self.required_society_id is not None
+            has_org = self.required_organization_id is not None
+            if has_society == has_org:  # neither set, or both set
+                msg = (
+                    "Exactly one of required_society or required_organization "
+                    "must be set for FACTION_STANDING_AT_LEAST."
+                )
+                errors["required_society"] = msg
+                errors["required_organization"] = msg
         if errors:
             raise ValidationError(errors)
 
@@ -2082,6 +2131,20 @@ class StakeResolution(SharedMemoryModel):
 
     stake = models.ForeignKey("stories.Stake", on_delete=models.CASCADE, related_name="resolutions")
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
+    outcome_key = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text=(
+            "Short designer-authored slug naming this branch within its "
+            "column's polarity (#1760) — e.g. 'destroyed', 'captured', "
+            "'given_to_allies'. Blank = the column's single default branch "
+            "(backward compatible with pre-#1760 content). column stays the "
+            "coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/"
+            "machine-grading rule keys off; outcome_key is a finer dimension "
+            "within it, not a replacement axis."
+        ),
+    )
     consequence_pool = models.ForeignKey(
         CONSEQUENCE_POOL_MODEL,
         null=True,
@@ -2111,11 +2174,16 @@ class StakeResolution(SharedMemoryModel):
         default=False,
         help_text="On fire, soft-forfeit the stake's subject_item (ITEM stakes only).",
     )
-    npc_affection_delta = models.SmallIntegerField(
+    subject_standing_delta = models.SmallIntegerField(
         default=0,
         help_text=(
-            "On fire, adjust NPCStanding between the stake's subject_sheet's "
-            "primary persona and each participant persona (NPC_FATE/FACTION)."
+            "On fire, adjust standing between the stake's subject and each "
+            "participant persona (#1760). NPC_FATE: adjusts NPCStanding via "
+            "subject_sheet's primary persona (unchanged pre-#1760 behavior). "
+            "FACTION: adjusts SocietyReputation or OrganizationReputation "
+            "(whichever of subject_society/subject_organization is set) — "
+            "previously a dead FK (subject_society/subject_organization were "
+            "never read); this is the fix."
         ),
     )
     sets_subject_lifecycle = models.CharField(
@@ -2128,12 +2196,28 @@ class StakeResolution(SharedMemoryModel):
             "and only when the subject sheet is not player-held (pillar 12)."
         ),
     )
+    machine_match_lifecycle_state = models.CharField(
+        max_length=10,
+        choices=LifecycleState.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "On automatic (machine) grading, if the stake's subject_sheet's "
+            "actual lifecycle_state equals this value, THIS branch is "
+            "selected over the column's plain default (#1760 — generalizes "
+            "the old is-dead-only override to the full LifecycleState "
+            "ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only "
+            "— blank means no machine-match, resolve via the plain column "
+            "default or a GM's Constrained Pick."
+        ),
+    )
 
     class Meta:
-        ordering = ["stake", "column"]
+        ordering = ["stake", "column", "outcome_key"]
         constraints = [
             models.UniqueConstraint(
-                fields=["stake", "column"], name="unique_resolution_per_stake_column"
+                fields=["stake", "column", "outcome_key"],
+                name="unique_resolution_per_stake_column_outcome_key",
             )
         ]
 
@@ -2151,13 +2235,15 @@ class StakeResolution(SharedMemoryModel):
         for problem in stake_resolution_payload_problems(
             stake=self.stake,
             forfeits_subject_item=self.forfeits_subject_item,
-            npc_affection_delta=self.npc_affection_delta,
+            subject_standing_delta=self.subject_standing_delta,
             sets_subject_lifecycle=self.sets_subject_lifecycle,
+            machine_match_lifecycle_state=self.machine_match_lifecycle_state,
         ):
             raise ValidationError({problem.field: problem.message})
 
     def __str__(self) -> str:
-        return f"StakeResolution({self.stake_id}:{self.column})"
+        suffix = f"/{self.outcome_key}" if self.outcome_key else ""
+        return f"StakeResolution({self.stake_id}:{self.column}{suffix})"
 
 
 class StakeRewardLine(SharedMemoryModel):

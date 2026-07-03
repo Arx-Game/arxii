@@ -63,6 +63,7 @@ class BeatPredicateType(models.TextChoices):
     STORY_AT_MILESTONE = "story_at_milestone", "Referenced story at milestone"
     AGGREGATE_THRESHOLD = "aggregate_threshold", "Aggregate threshold reached"
     OUTCOME_TIER = "outcome_tier", "Outcome tier (machine-graded)"
+    FACTION_STANDING_AT_LEAST = "faction_standing_at_least", "Faction standing at least"
 
 
 class StoryMilestoneType(models.TextChoices):

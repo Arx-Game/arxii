@@ -236,6 +236,15 @@ On conflict (exit 4):
 
 ### 5. Push & open PR
 
+**This step runs automatically once implementation + task/whole-branch review
+are clean — it is not a separate phase requiring a fresh user request or
+re-invocation.** The only human-only gate anywhere in this skill is
+`spec:approved` (Phase 2); PR-opening, CI-watch, and CI-fix are one
+continuous run from there. Do not write a stopping instruction like "stop
+before opening a PR" into a dispatch to a sub-skill (e.g.
+`subagent-driven-development`) unless the user explicitly asked for that
+checkpoint — that manufactures a gate the skill doesn't have.
+
 Compose the PR body's substitution values (summary, follow-ups, sync
 summary). For each deferred follow-up identified during implementation,
 call `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before

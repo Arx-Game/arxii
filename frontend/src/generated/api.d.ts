@@ -15196,6 +15196,12 @@ export interface components {
       referenced_episode?: number | null;
       /** @description For AGGREGATE_THRESHOLD predicates — total contribution points required. */
       required_points?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates (society-level). */
+      required_society?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
+      required_organization?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      required_standing?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
@@ -15306,6 +15312,12 @@ export interface components {
       referenced_episode?: number | null;
       /** @description For AGGREGATE_THRESHOLD predicates — total contribution points required. */
       required_points?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates (society-level). */
+      required_society?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
+      required_organization?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      required_standing?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
@@ -19527,6 +19539,15 @@ export interface components {
       /** @description Shows through normal clothing? Required True at tier 4+. */
       is_visible_at_rest?: boolean;
     };
+    /**
+     * @description * `ALIVE` - Alive
+     *     * `CAPTURED` - Captured / Unknown
+     *     * `COMA` - Coma
+     *     * `RETIRED` - Retired
+     *     * `DEAD` - Dead
+     * @enum {string}
+     */
+    MachineMatchLifecycleStateEnum: 'ALIVE' | 'CAPTURED' | 'COMA' | 'RETIRED' | 'DEAD';
     /** @description Validate input for creating a training allocation. */
     ManageTrainingAddRequest: {
       skill_id?: number | null;
@@ -23030,6 +23051,12 @@ export interface components {
       referenced_episode?: number | null;
       /** @description For AGGREGATE_THRESHOLD predicates — total contribution points required. */
       required_points?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates (society-level). */
+      required_society?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates (organization-level). */
+      required_organization?: number | null;
+      /** @description For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value (-1000..1000). */
+      required_standing?: number | null;
       /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
       agm_eligible?: boolean;
       /**
@@ -23848,6 +23875,11 @@ export interface components {
     PatchedStakeResolutionRequest: {
       stake?: number;
       column?: components['schemas']['ColumnEnum'];
+      /**
+       * @description Short designer-authored slug naming this branch within its column's polarity (#1760) — e.g. 'destroyed', 'captured', 'given_to_allies'. Blank = the column's single default branch (backward compatible with pre-#1760 content). column stays the coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/machine-grading rule keys off; outcome_key is a finer dimension within it, not a replacement axis.
+       * @default
+       */
+      outcome_key: string;
       /** @description Pool to fire when this column resolves (tier-aware). */
       consequence_pool?: number | null;
       /**
@@ -23866,8 +23898,8 @@ export interface components {
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
       forfeits_subject_item?: boolean;
-      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
-      npc_affection_delta?: number;
+      /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
+      subject_standing_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -23879,6 +23911,18 @@ export interface components {
        */
       sets_subject_lifecycle?:
         | components['schemas']['SetsSubjectLifecycleEnum']
+        | components['schemas']['BlankEnum'];
+      /**
+       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+       *
+       *     * `ALIVE` - Alive
+       *     * `CAPTURED` - Captured / Unknown
+       *     * `COMA` - Coma
+       *     * `RETIRED` - Retired
+       *     * `DEAD` - Dead
+       */
+      machine_match_lifecycle_state?:
+        | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
     };
     /**
@@ -24850,6 +24894,7 @@ export interface components {
      *     * `story_at_milestone` - Referenced story at milestone
      *     * `aggregate_threshold` - Aggregate threshold reached
      *     * `outcome_tier` - Outcome tier (machine-graded)
+     *     * `faction_standing_at_least` - Faction standing at least
      * @enum {string}
      */
     PredicateTypeEnum:
@@ -24860,7 +24905,8 @@ export interface components {
       | 'codex_entry_unlocked'
       | 'story_at_milestone'
       | 'aggregate_threshold'
-      | 'outcome_tier';
+      | 'outcome_tier'
+      | 'faction_standing_at_least';
     /**
      * @description * `public` - Public
      *     * `private` - Private
@@ -26699,6 +26745,11 @@ export interface components {
       readonly id: number;
       stake: number;
       column: components['schemas']['ColumnEnum'];
+      /**
+       * @description Short designer-authored slug naming this branch within its column's polarity (#1760) — e.g. 'destroyed', 'captured', 'given_to_allies'. Blank = the column's single default branch (backward compatible with pre-#1760 content). column stays the coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/machine-grading rule keys off; outcome_key is a finer dimension within it, not a replacement axis.
+       * @default
+       */
+      outcome_key: string;
       /** @description Pool to fire when this column resolves (tier-aware). */
       consequence_pool?: number | null;
       /**
@@ -26717,8 +26768,8 @@ export interface components {
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
       forfeits_subject_item?: boolean;
-      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
-      npc_affection_delta?: number;
+      /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
+      subject_standing_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -26730,6 +26781,18 @@ export interface components {
        */
       sets_subject_lifecycle?:
         | components['schemas']['SetsSubjectLifecycleEnum']
+        | components['schemas']['BlankEnum'];
+      /**
+       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+       *
+       *     * `ALIVE` - Alive
+       *     * `CAPTURED` - Captured / Unknown
+       *     * `COMA` - Coma
+       *     * `RETIRED` - Retired
+       *     * `DEAD` - Dead
+       */
+      machine_match_lifecycle_state?:
+        | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
       readonly reward_lines: components['schemas']['StakeRewardLine'][];
     };
@@ -26747,6 +26810,11 @@ export interface components {
     StakeResolutionRequest: {
       stake: number;
       column: components['schemas']['ColumnEnum'];
+      /**
+       * @description Short designer-authored slug naming this branch within its column's polarity (#1760) — e.g. 'destroyed', 'captured', 'given_to_allies'. Blank = the column's single default branch (backward compatible with pre-#1760 content). column stays the coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/machine-grading rule keys off; outcome_key is a finer dimension within it, not a replacement axis.
+       * @default
+       */
+      outcome_key: string;
       /** @description Pool to fire when this column resolves (tier-aware). */
       consequence_pool?: number | null;
       /**
@@ -26765,8 +26833,8 @@ export interface components {
       narrative_summary?: string;
       /** @description On fire, soft-forfeit the stake's subject_item (ITEM stakes only). */
       forfeits_subject_item?: boolean;
-      /** @description On fire, adjust NPCStanding between the stake's subject_sheet's primary persona and each participant persona (NPC_FATE/FACTION). */
-      npc_affection_delta?: number;
+      /** @description On fire, adjust standing between the stake's subject and each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet's primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation or OrganizationReputation (whichever of subject_society/subject_organization is set) — previously a dead FK (subject_society/subject_organization were never read); this is the fix. */
+      subject_standing_delta?: number;
       /**
        * @description On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
        *
@@ -26778,6 +26846,18 @@ export interface components {
        */
       sets_subject_lifecycle?:
         | components['schemas']['SetsSubjectLifecycleEnum']
+        | components['schemas']['BlankEnum'];
+      /**
+       * @description On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+       *
+       *     * `ALIVE` - Alive
+       *     * `CAPTURED` - Captured / Unknown
+       *     * `COMA` - Coma
+       *     * `RETIRED` - Retired
+       *     * `DEAD` - Dead
+       */
+      machine_match_lifecycle_state?:
+        | components['schemas']['MachineMatchLifecycleStateEnum']
         | components['schemas']['BlankEnum'];
     };
     /**

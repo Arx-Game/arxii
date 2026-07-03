@@ -168,14 +168,22 @@ class MachineGradingTests(EvenniaTestCase):
         self.assertFalse(StakeOutcome.objects.filter(stake=stake).exists())
 
     def test_npc_fate_dead_subject_grades_loss_even_on_beat_success(self):
-        """Pillar 11: the vitals write IS the grade for NPC_FATE stakes."""
+        """Pillar 11 (#1760: generalized to the LifecycleState ladder — the
+        old implicit is-dead override is gone; reproducing it now requires an
+        explicitly authored machine_match_lifecycle_state=DEAD branch)."""
         _sheet, beat, progress = _character_story_beat()
         npc_sheet = CharacterSheetFactory()
         CharacterVitalsFactory(character_sheet=npc_sheet, life_state=CharacterLifeState.DEAD)
+        npc_sheet.lifecycle_state = LifecycleState.DEAD
+        npc_sheet.save(update_fields=["lifecycle_state"])
         npc_stake = StakeFactory(
             beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
         )
-        npc_loss = StakeResolutionFactory(stake=npc_stake, column=StakeResolutionColumn.LOSS)
+        npc_loss = StakeResolutionFactory(
+            stake=npc_stake,
+            column=StakeResolutionColumn.LOSS,
+            machine_match_lifecycle_state=LifecycleState.DEAD,
+        )
         StakeResolutionFactory(stake=npc_stake, column=StakeResolutionColumn.WIN)
         other_stake = StakeFactory(beat=beat)
         other_win = StakeResolutionFactory(stake=other_stake, column=StakeResolutionColumn.WIN)
@@ -190,6 +198,40 @@ class MachineGradingTests(EvenniaTestCase):
         other_outcome = StakeOutcome.objects.get(stake=other_stake)
         self.assertEqual(other_outcome.column, StakeResolutionColumn.WIN)
         self.assertEqual(other_outcome.resolution_id, other_win.pk)
+
+    def test_captured_lifecycle_state_selects_matching_branch_over_default(self) -> None:
+        """A NPC_FATE stake whose subject is CAPTURED fires the branch whose
+        machine_match_lifecycle_state=CAPTURED, not the plain LOSS default."""
+        subject = CharacterSheetFactory()
+        subject.lifecycle_state = LifecycleState.CAPTURED
+        subject.save(update_fields=["lifecycle_state"])
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=subject
+        )
+        captured_branch = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="captured",
+            machine_match_lifecycle_state=LifecycleState.CAPTURED,
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="",
+        )
+
+        story = beat.episode.chapter.story
+        sheet = CharacterSheetFactory()
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.SUCCESS,
+        )
+
+        outcome = StakeOutcome.objects.get(stake=stake)
+        self.assertEqual(outcome.resolution_id, captured_branch.pk)
 
     def test_withdrawal_fires_authored_branch_and_pends_the_rest(self):
         _sheet, beat, progress = _character_story_beat()
@@ -369,6 +411,50 @@ class GMPickTests(EvenniaTestCase):
         self.assertEqual(other_outcome.method, StakeOutcomeMethod.MACHINE)
         self.assertEqual(other_outcome.resolution_id, other_loss.pk)
 
+    def test_gm_pick_selects_the_specific_outcome_key_branch(self) -> None:
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        destroyed = StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="captured",
+        )
+        # resolve_stake_by_gm_pick is a service-level call with no beat-
+        # completion precondition (that gate lives in ResolveStakeInputSerializer,
+        # covered separately in Step 4's serializer test) — calling it directly
+        # against an UNSATISFIED beat is deliberate here.
+        gm = GMProfileFactory()
+        outcome = resolve_stake_by_gm_pick(
+            stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+            gm_profile=gm,
+        )
+        self.assertEqual(outcome.resolution_id, destroyed.pk)
+
+    def test_gm_pick_rejects_unauthored_outcome_key_under_authored_column(self) -> None:
+        """A column with ONE authored outcome_key doesn't authorize picking another."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(beat=beat)
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+        )
+        gm = GMProfileFactory()
+        with self.assertRaises(ValueError):
+            resolve_stake_by_gm_pick(
+                stake,
+                column=StakeResolutionColumn.LOSS,
+                outcome_key="captured",
+                gm_profile=gm,
+            )
+
 
 class ResolveStakeEndpointTests(APITestCase):
     """POST /api/stakes/{id}/resolve/ — the constrained-pick endpoint."""
@@ -404,6 +490,22 @@ class ResolveStakeEndpointTests(APITestCase):
         resp = self.client.post(
             self._url(self.stake),
             {"column": StakeResolutionColumn.LOSS},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("constrained", str(resp.data))
+
+    def test_unauthored_outcome_key_rejected_under_authored_column(self):
+        """A LOSS column authored only as "destroyed" rejects a "captured" pick."""
+        StakeResolutionFactory(
+            stake=self.stake,
+            column=StakeResolutionColumn.LOSS,
+            outcome_key="destroyed",
+        )
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            self._url(self.stake),
+            {"column": StakeResolutionColumn.LOSS, "outcome_key": "captured"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -498,9 +600,29 @@ class NoFiatSerializerTests(APITestCase):
 
     def test_affection_delta_requires_npc_or_faction_subject(self):
         stake = StakeFactory(beat=self.beat)  # CUSTOM, no subject_sheet
-        resp = self._post_resolution(stake, npc_affection_delta=-2)
+        resp = self._post_resolution(stake, subject_standing_delta=-2)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("npc_affection_delta", str(resp.data))
+        self.assertIn("subject_standing_delta", str(resp.data))
+
+    def test_machine_match_lifecycle_state_rejected_on_non_npc_fate(self):
+        """machine_match_lifecycle_state is NPC_FATE-only (#1760), symmetric with
+        sets_subject_lifecycle's existing pillar-12 guard — a FACTION/ITEM/CUSTOM
+        stake would otherwise silently never match anything.
+        """
+        stake = StakeFactory(beat=self.beat)  # CUSTOM, no subject_sheet
+        resp = self._post_resolution(stake, machine_match_lifecycle_state=LifecycleState.DEAD)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("machine_match_lifecycle_state", str(resp.data))
+
+    def test_machine_match_lifecycle_state_allowed_on_npc_fate(self):
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            subject_sheet=npc_sheet,
+        )
+        resp = self._post_resolution(stake, machine_match_lifecycle_state=LifecycleState.DEAD)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
 
 class WriterTests(EvenniaTestCase):
@@ -535,7 +657,7 @@ class WriterTests(EvenniaTestCase):
             beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
         )
         StakeResolutionFactory(
-            stake=stake, column=StakeResolutionColumn.LOSS, npc_affection_delta=-3
+            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-3
         )
 
         record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
@@ -544,6 +666,33 @@ class WriterTests(EvenniaTestCase):
             persona=sheet.primary_persona, npc_persona=npc_sheet.primary_persona
         )
         self.assertEqual(standing.affection, -3)
+
+    def test_faction_subject_society_resolution_bumps_society_reputation(self) -> None:
+        from world.societies.factories import SocietyFactory
+        from world.societies.models import SocietyReputation
+
+        society = SocietyFactory()
+        pc_sheet = CharacterSheetFactory()  # post_generation hook auto-creates a PRIMARY persona
+        persona = pc_sheet.primary_persona  # PersonaType.PRIMARY -> is_established_or_primary=True
+
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        stake = StakeFactory(
+            beat=beat,
+            subject_kind=StakeSubjectKind.FACTION,
+            subject_society=society,
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.WIN,
+            subject_standing_delta=50,
+        )
+        story = beat.episode.chapter.story
+        progress = StoryProgressFactory(story=story, character_sheet=pc_sheet)
+
+        record_gm_marked_outcome(progress=progress, beat=beat, outcome=BeatOutcome.SUCCESS)
+
+        rep = SocietyReputation.objects.get(persona=persona, society=society)
+        self.assertEqual(rep.value, 50)
 
     def test_lifecycle_write_on_unheld_npc(self):
         _sheet, beat, progress = _character_story_beat()
@@ -718,14 +867,14 @@ class GroupScopeGMPickTests(EvenniaTestCase):
         self.assertTrue(LegendEvent.objects.exists())
 
     def test_group_pick_affection_delta_reaches_participants(self):
-        """The same participant list feeds the npc_affection_delta writer."""
+        """The same participant list feeds the subject_standing_delta writer."""
         stake = _group_story_pending_staked_beat()
         npc_sheet = CharacterSheetFactory()
         stake.subject_kind = StakeSubjectKind.NPC_FATE
         stake.subject_sheet = npc_sheet
         stake.save(update_fields=["subject_kind", "subject_sheet"])
         loss = StakeResolutionFactory(
-            stake=stake, column=StakeResolutionColumn.LOSS, npc_affection_delta=-2
+            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-2
         )
         self.assertIsNotNone(loss)
         persona = CharacterSheetFactory().primary_persona

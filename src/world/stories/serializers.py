@@ -942,6 +942,9 @@ class BeatSerializer(serializers.ModelSerializer):
             "referenced_chapter",
             "referenced_episode",
             "required_points",
+            "required_society",
+            "required_organization",
+            "required_standing",
             # AGM / scheduling
             "agm_eligible",
             "deadline",
@@ -1006,6 +1009,9 @@ class BeatSerializer(serializers.ModelSerializer):
                 "referenced_chapter",
                 "referenced_episode",
                 "required_points",
+                "required_society",
+                "required_organization",
+                "required_standing",
                 "kind",
                 "advances",
                 "risk",
@@ -2397,6 +2403,7 @@ class ResolveStakeInputSerializer(serializers.Serializer):
     """
 
     column = serializers.ChoiceField(choices=StakeResolutionColumn.choices)
+    outcome_key = serializers.CharField(required=False, allow_blank=True, default="")
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
     participants = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -2430,13 +2437,15 @@ class ResolveStakeInputSerializer(serializers.Serializer):
                 {"non_field_errors": "This stake has already been resolved."}
             )
 
-        authored = set(stake.resolutions.values_list("column", flat=True))
-        if attrs["column"] not in authored:
+        authored = set(stake.resolutions.values_list("column", "outcome_key"))
+        pick = (attrs["column"], attrs.get("outcome_key", ""))
+        if pick not in authored:
+            branches = sorted(authored) or "none authored"
             raise serializers.ValidationError(
                 {
                     "column": (
-                        "A GM pick is constrained to the stake's authored resolution "
-                        f"columns ({sorted(authored) or 'none authored'}) — never free "
+                        "A GM pick is constrained to the stake's authored "
+                        f"(column, outcome_key) branches ({branches}) — never free "
                         "composition. Author the branch first."
                     )
                 }
@@ -2736,12 +2745,14 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "id",
             "stake",
             "column",
+            "outcome_key",
             "consequence_pool",
             "escalates_to_risk",
             "narrative_summary",
             "forfeits_subject_item",
-            "npc_affection_delta",
+            "subject_standing_delta",
             "sets_subject_lifecycle",
+            "machine_match_lifecycle_state",
             "reward_lines",
         ]
         read_only_fields = ["id"]
@@ -2821,8 +2832,9 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
         problems = stake_resolution_payload_problems(
             stake=stake,
             forfeits_subject_item=merged("forfeits_subject_item", default=False),
-            npc_affection_delta=merged("npc_affection_delta", default=0),
+            subject_standing_delta=merged("subject_standing_delta", default=0),
             sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
+            machine_match_lifecycle_state=merged("machine_match_lifecycle_state", default=""),
         )
         if problems:
             raise serializers.ValidationError({p.field: p.message for p in problems})

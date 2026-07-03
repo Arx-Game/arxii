@@ -755,7 +755,9 @@ def _members_for_beat(
                     continue
 
 
-def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
+def _evaluate_predicate(  # noqa: PLR0911 — match dispatch, each case a distinct predicate type
+    beat: Beat, progress: StoryProgress
+) -> BeatOutcome:
     """Dispatch on beat.predicate_type and return the current outcome.
 
     Returns UNSATISFIED when the predicate is not yet met or the type is
@@ -779,6 +781,8 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
             return _evaluate_codex_entry_unlocked(beat, sheet)
         case BeatPredicateType.STORY_AT_MILESTONE:
             return _evaluate_story_at_milestone(beat)
+        case BeatPredicateType.FACTION_STANDING_AT_LEAST:
+            return _evaluate_faction_standing_at_least(beat, sheet)
         case _:
             # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
             return BeatOutcome.UNSATISFIED
@@ -793,6 +797,42 @@ def _evaluate_character_level(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
     if _character_level(sheet) >= required:
         return BeatOutcome.SUCCESS
     return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_faction_standing_at_least(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """Evaluate a FACTION_STANDING_AT_LEAST predicate (#1760).
+
+    Reads the sheet's primary persona's reputation with the beat's required
+    society or organization (exactly one is set, enforced by Beat.clean) and
+    compares the raw stored value against required_standing. No standing row
+    means reputation is implicitly 0 (so required_standing <= 0 passes).
+    """
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if beat.required_standing is None:
+        return BeatOutcome.UNSATISFIED
+    try:
+        persona = sheet.primary_persona
+    except Persona.DoesNotExist:
+        return BeatOutcome.UNSATISFIED
+
+    if beat.required_society_id is not None:
+        from world.societies.models import SocietyReputation  # noqa: PLC0415
+
+        row = SocietyReputation.objects.filter(
+            persona=persona, society_id=beat.required_society_id
+        ).first()
+    elif beat.required_organization_id is not None:
+        from world.societies.models import OrganizationReputation  # noqa: PLC0415
+
+        row = OrganizationReputation.objects.filter(
+            persona=persona, organization_id=beat.required_organization_id
+        ).first()
+    else:
+        return BeatOutcome.UNSATISFIED
+
+    value = row.value if row is not None else 0
+    return BeatOutcome.SUCCESS if value >= beat.required_standing else BeatOutcome.UNSATISFIED
 
 
 def _evaluate_achievement_held(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:

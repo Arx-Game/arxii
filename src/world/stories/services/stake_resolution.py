@@ -42,6 +42,11 @@ _PILLAR_12_LIFECYCLE_MSG = (
     "route into peril via escalates_to_risk + consequence pools instead)."
 )
 
+_MACHINE_MATCH_LIFECYCLE_MSG = (
+    "machine_match_lifecycle_state is only allowed for NPC_FATE stakes — it "
+    "would otherwise never match anything (#1760)."
+)
+
 
 def sheet_is_player_held(sheet: CharacterSheet) -> bool:
     """Whether a character sheet is currently held by a player (pillar 12 gate).
@@ -61,8 +66,9 @@ def stake_resolution_payload_problems(
     *,
     stake: Stake,
     forfeits_subject_item: bool,
-    npc_affection_delta: int,
+    subject_standing_delta: int,
     sets_subject_lifecycle: str,
+    machine_match_lifecycle_state: str = "",
 ) -> list[StakePayloadProblem]:
     """Validate a StakeResolution's writer payloads against its stake (pillar 12).
 
@@ -81,6 +87,14 @@ def stake_resolution_payload_problems(
             StakePayloadProblem(field="sets_subject_lifecycle", message=_PILLAR_12_LIFECYCLE_MSG)
         )
 
+    if machine_match_lifecycle_state and stake.subject_kind != StakeSubjectKind.NPC_FATE:
+        problems.append(
+            StakePayloadProblem(
+                field="machine_match_lifecycle_state",
+                message=_MACHINE_MATCH_LIFECYCLE_MSG,
+            )
+        )
+
     if forfeits_subject_item and (
         stake.subject_kind != StakeSubjectKind.ITEM or stake.subject_item_id is None
     ):
@@ -91,19 +105,22 @@ def stake_resolution_payload_problems(
             )
         )
 
-    if npc_affection_delta != 0 and (
-        stake.subject_kind not in (StakeSubjectKind.NPC_FATE, StakeSubjectKind.FACTION)
-        or stake.subject_sheet_id is None
-    ):
-        problems.append(
-            StakePayloadProblem(
-                field="npc_affection_delta",
-                message=(
-                    "npc_affection_delta requires an NPC_FATE or FACTION stake "
-                    "with subject_sheet set."
-                ),
-            )
+    if subject_standing_delta != 0:
+        npc_ok = stake.subject_kind == StakeSubjectKind.NPC_FATE and stake.subject_sheet_id
+        faction_ok = stake.subject_kind == StakeSubjectKind.FACTION and (
+            stake.subject_society_id or stake.subject_organization_id
         )
+        if not (npc_ok or faction_ok):
+            problems.append(
+                StakePayloadProblem(
+                    field="subject_standing_delta",
+                    message=(
+                        "subject_standing_delta requires an NPC_FATE stake with "
+                        "subject_sheet set, or a FACTION stake with subject_society "
+                        "or subject_organization set."
+                    ),
+                )
+            )
 
     return problems
 
@@ -203,7 +220,15 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
             column = StakeResolutionColumn.WITHDRAWAL
         else:
             column = _machine_column_for_stake(stake, outcome)
-            resolution = _branch_for_column(stake, column)
+            resolution = _branch_for_column(
+                stake, column, prefer_lifecycle_state=_subject_lifecycle_state(stake)
+            )
+            if resolution is not None:
+                # A lifecycle-state match may have selected a branch on the
+                # OTHER column (#1760 — e.g. a DEAD/CAPTURED override firing
+                # LOSS on a beat-level SUCCESS); record the branch's actual
+                # column, not the outcome-derived default.
+                column = resolution.column
         outcomes.append(
             _fire_branch_and_record(
                 stake=stake,
@@ -220,38 +245,65 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     return outcomes
 
 
-def _machine_column_for_stake(stake: Stake, outcome: BeatOutcome) -> StakeResolutionColumn:
-    """Map the beat outcome to this stake's column, with data-driven overrides.
+def _machine_column_for_stake(
+    stake: Stake,  # noqa: ARG001
+    outcome: BeatOutcome,
+) -> StakeResolutionColumn:
+    """Map the beat outcome to this stake's column (the polarity default).
 
-    Pillar 11 (machine grading where the data exists): an NPC_FATE stake whose
-    subject sheet's vitals read DEAD is a LOSS regardless of the beat's column —
-    combat already wrote the truth into CharacterVitals.
+    The specific branch within that polarity is selected separately by
+    _branch_for_column's lifecycle-state match (#1760); this function only
+    picks WIN vs LOSS. ``stake`` is unused now that the old is-dead override
+    moved into _branch_for_column, but kept in the signature — callers pass
+    it uniformly with the withdrawal/GM-pick branch lookups.
     """
-    column = (
-        StakeResolutionColumn.WIN if outcome == BeatOutcome.SUCCESS else StakeResolutionColumn.LOSS
-    )
-    if (
-        stake.subject_kind == StakeSubjectKind.NPC_FATE
-        and stake.subject_sheet_id is not None
-        and _subject_is_dead(stake.subject_sheet)
-    ):
-        return StakeResolutionColumn.LOSS
-    return column
+    if outcome == BeatOutcome.SUCCESS:
+        return StakeResolutionColumn.WIN
+    return StakeResolutionColumn.LOSS
 
 
-def _subject_is_dead(sheet: CharacterSheet) -> bool:
-    """Whether the subject's vitals mortality marker reads DEAD."""
-    from world.vitals.services import is_dead  # noqa: PLC0415
+def _subject_lifecycle_state(stake: Stake) -> str | None:
+    """The stake's NPC_FATE subject's current lifecycle_state, or None.
 
-    return is_dead(sheet)
+    None when the stake isn't NPC_FATE or has no resolvable subject sheet —
+    callers treat None as "no machine-match signal available."
+    """
+    if stake.subject_kind != StakeSubjectKind.NPC_FATE or stake.subject_sheet_id is None:
+        return None
+    return stake.subject_sheet.lifecycle_state
 
 
-def _branch_for_column(stake: Stake, column: str) -> StakeResolution | None:
-    """The stake's authored resolution for ``column``, from the prefetch when present."""
+def _branch_for_column(
+    stake: Stake, column: str, *, prefer_lifecycle_state: str | None = None
+) -> StakeResolution | None:
+    """The stake's authored resolution for `column`, from the prefetch when present.
+
+    #1760: when prefer_lifecycle_state is set, a branch whose
+    machine_match_lifecycle_state equals it wins over the column's plain
+    (outcome_key="") default — and over the outcome-derived column itself,
+    searched across ALL of the stake's authored branches (not just `column`).
+    This generalizes the old is-dead-only override (which forced LOSS
+    regardless of the beat's WIN/LOSS polarity) to the full LifecycleState
+    ladder: an authored branch's own column wins when its
+    machine_match_lifecycle_state matches the subject's actual state, same as
+    a dead NPC always graded LOSS even on a beat-level SUCCESS. Falls back to
+    the plain default within `column` when no branch matches — preserves
+    pre-#1760 single-branch-per-column content unchanged.
+    """
     resolutions = getattr(stake, "prefetched_resolutions", None)  # noqa: GETATTR_LITERAL
     if resolutions is None:
         resolutions = list(stake.resolutions.all())
-    return next((r for r in resolutions if r.column == column), None)
+    if prefer_lifecycle_state:
+        matched = next(
+            (r for r in resolutions if r.machine_match_lifecycle_state == prefer_lifecycle_state),
+            None,
+        )
+        if matched is not None:
+            return matched
+    candidates = [r for r in resolutions if r.column == column]
+    return next((r for r in candidates if r.outcome_key == ""), None) or next(
+        iter(candidates), None
+    )
 
 
 def _fire_branch_and_record(  # noqa: PLR0913
@@ -333,6 +385,7 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     stake: Stake,
     *,
     column: str,
+    outcome_key: str = "",
     gm_profile: GMProfile | None,
     gm_notes: str = "",
     participants: list[Persona] | None = None,
@@ -351,10 +404,13 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     GROUP scope uses ``participants`` (required when the picked branch's pool
     carries LEGEND_AWARD); CHARACTER scope credits the progress's primary
     persona plus ``extra_participants``; GLOBAL takes none. The same list
-    feeds the branch's npc_affection_delta writer.
+    feeds the branch's subject_standing_delta writer.
 
     Defensive guards only (ResolveStakeInputSerializer validates for API
     callers): the stake must be unresolved and the column must be authored.
+    ``outcome_key`` narrows the pick to one specific named branch within
+    ``column`` (#1760) — blank picks the column's plain default branch,
+    matching pre-#1760 authoring.
     """
     from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
 
@@ -366,11 +422,12 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
             "ResolveStakeInputSerializer should have rejected this."
         )
         raise ValueError(msg)
-    resolution = stake.resolutions.filter(column=column).first()
+    resolution = stake.resolutions.filter(column=column, outcome_key=outcome_key).first()
     if resolution is None:
         msg = (
-            f"Stake {stake.pk} has no authored resolution for column {column!r}; "
-            "a GM pick is constrained to authored columns."
+            f"Stake {stake.pk} has no authored resolution for column {column!r} "
+            f"outcome_key {outcome_key!r}; a GM pick is constrained to authored "
+            "branches."
         )
         raise ValueError(msg)
 
@@ -446,8 +503,8 @@ def _apply_branch_writers(
         _write_subject_lifecycle(resolution, stake)
     if resolution.forfeits_subject_item:
         _write_item_forfeit(resolution, stake)
-    if resolution.npc_affection_delta != 0:
-        _write_npc_affection(resolution, stake, participants)
+    if resolution.subject_standing_delta != 0:
+        _write_subject_standing(resolution, stake, participants)
 
 
 def _write_subject_lifecycle(resolution: StakeResolution, stake: Stake) -> None:
@@ -592,7 +649,7 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
-    # Persona -> CharacterSheet is the _write_npc_affection bridge in reverse
+    # Persona -> CharacterSheet is the _write_npc_standing bridge in reverse
     # (Persona.character_sheet is a non-null FK).
     sheet = participant.character_sheet
     if line.sink == StakeRewardSink.MONEY:
@@ -620,7 +677,27 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
     )
 
 
-def _write_npc_affection(
+def _write_subject_standing(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+) -> None:
+    """Adjust standing between the stake's subject and each participant (#1760).
+
+    Dispatches on subject_kind: NPC_FATE writes NPCStanding via
+    subject_sheet's primary persona (unchanged). FACTION writes
+    SocietyReputation or OrganizationReputation via the participant's OWN
+    persona (a society/org doesn't have a "primary persona" to be the other
+    side of a pairwise standing row — reputation is persona-to-faction, not
+    persona-to-persona).
+    """
+    if stake.subject_kind == StakeSubjectKind.NPC_FATE:
+        _write_npc_standing(resolution, stake, participants)
+    elif stake.subject_kind == StakeSubjectKind.FACTION:
+        _write_faction_standing(resolution, stake, participants)
+
+
+def _write_npc_standing(
     resolution: StakeResolution,
     stake: Stake,
     participants: list[Persona] | None,
@@ -632,10 +709,10 @@ def _write_npc_affection(
     sheet = stake.subject_sheet
     if sheet is None:
         logger.warning(
-            "StakeResolution %s: npc_affection_delta=%s but stake %s has no "
+            "StakeResolution %s: subject_standing_delta=%s but stake %s has no "
             "subject_sheet; skipping.",
             resolution.pk,
-            resolution.npc_affection_delta,
+            resolution.subject_standing_delta,
             stake.pk,
         )
         return
@@ -643,19 +720,61 @@ def _write_npc_affection(
         npc_persona = sheet.primary_persona
     except Persona.DoesNotExist:
         logger.warning(
-            "StakeResolution %s: subject sheet %s has no primary persona; "
-            "skipping affection delta.",
+            "StakeResolution %s: subject sheet %s has no primary persona; skipping standing delta.",
             resolution.pk,
             sheet.pk,
         )
         return
     if not participants:
         logger.warning(
-            "StakeResolution %s: npc_affection_delta=%s but no participants "
+            "StakeResolution %s: subject_standing_delta=%s but no participants "
             "resolved for the completion; skipping.",
             resolution.pk,
-            resolution.npc_affection_delta,
+            resolution.subject_standing_delta,
         )
         return
     for participant in participants:
-        adjust_npc_affection(participant, npc_persona, delta=resolution.npc_affection_delta)
+        adjust_npc_affection(participant, npc_persona, delta=resolution.subject_standing_delta)
+
+
+def _write_faction_standing(
+    resolution: StakeResolution,
+    stake: Stake,
+    participants: list[Persona] | None,
+) -> None:
+    """Adjust SocietyReputation/OrganizationReputation for each participant (#1760).
+
+    Exactly one of subject_society/subject_organization is set per the
+    payload validation gate — checks society first, matching how Stake's own
+    FACTION-kind serializer validation orders the pair.
+    """
+    from world.societies.renown import (  # noqa: PLC0415
+        bump_organization_reputation,
+        bump_society_reputation,
+    )
+
+    if not participants:
+        logger.warning(
+            "StakeResolution %s: subject_standing_delta=%s but no participants "
+            "resolved for the completion; skipping.",
+            resolution.pk,
+            resolution.subject_standing_delta,
+        )
+        return
+    if stake.subject_society_id is not None:
+        for participant in participants:
+            bump_society_reputation(
+                participant, stake.subject_society, resolution.subject_standing_delta
+            )
+    elif stake.subject_organization_id is not None:
+        for participant in participants:
+            bump_organization_reputation(
+                participant, stake.subject_organization, resolution.subject_standing_delta
+            )
+    else:
+        logger.warning(
+            "StakeResolution %s: FACTION stake %s has neither subject_society "
+            "nor subject_organization set; skipping.",
+            resolution.pk,
+            stake.pk,
+        )

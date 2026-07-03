@@ -73,6 +73,9 @@ Reputation is normally driven by deeds (`fire_renown_award`). Two **public appli
   archetype dot-product against each society's principles; one delta per society.
 - `bump_organization_reputation(persona, organization, delta)` — the relational channel: a direct
   clamped `OrganizationReputation` hit, independent of the org's philosophy.
+- `bump_society_reputation(persona, society, delta)` — the relational channel for Society,
+  symmetric with `bump_organization_reputation`: a direct clamped `SocietyReputation` hit,
+  independent of the society's principles (#1760).
 
 ## Organization Types
 

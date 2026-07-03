@@ -281,3 +281,42 @@ class BeatTests(TestCase):
         )
         # Should not raise.
         beat.full_clean()
+
+    # --- FACTION_STANDING_AT_LEAST invariants ---
+
+    def test_faction_standing_predicate_requires_exactly_one_of_society_org(self) -> None:
+        from world.societies.factories import SocietyFactory
+
+        episode = EpisodeFactory()
+        society = SocietyFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_society=society,
+            required_standing=100,
+        )
+        beat.full_clean()  # must not raise: exactly one of society/org set
+
+    def test_faction_standing_predicate_rejects_neither_society_nor_org(self) -> None:
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_standing=100,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_faction_standing_predicate_rejects_both_society_and_org(self) -> None:
+        from world.societies.factories import OrganizationFactory, SocietyFactory
+
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_society=SocietyFactory(),
+            required_organization=OrganizationFactory(),
+            required_standing=100,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()

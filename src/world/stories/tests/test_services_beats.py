@@ -38,6 +38,7 @@ from world.stories.factories import (
 )
 from world.stories.models import AggregateBeatContribution, BeatCompletion
 from world.stories.services.beats import (
+    _evaluate_predicate,
     evaluate_auto_beats,
     expire_overdue_beats,
     record_aggregate_contribution,
@@ -679,6 +680,45 @@ class EvaluateAutoBeatsStoryMilestoneTests(EvenniaTestCase):
 
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+
+class EvaluateFactionStandingAtLeastTests(EvenniaTestCase):
+    """Tests for FACTION_STANDING_AT_LEAST predicate evaluation (#1760)."""
+
+    def test_faction_standing_at_least_success_when_reputation_meets_threshold(self) -> None:
+        from world.societies.factories import SocietyFactory
+        from world.societies.models import SocietyReputation
+
+        society = SocietyFactory()
+        sheet = CharacterSheetFactory()  # post_generation hook auto-creates a PRIMARY persona
+        persona = sheet.primary_persona
+        SocietyReputation.objects.create(persona=persona, society=society, value=200)
+
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_society=society,
+            required_standing=100,
+        )
+        story = beat.episode.chapter.story
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+
+        self.assertEqual(_evaluate_predicate(beat, progress), BeatOutcome.SUCCESS)
+
+    def test_faction_standing_at_least_unsatisfied_below_threshold(self) -> None:
+        from world.societies.factories import SocietyFactory
+
+        society = SocietyFactory()
+        sheet = CharacterSheetFactory()
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            required_society=society,
+            required_standing=100,
+        )
+        story = beat.episode.chapter.story
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+
+        # No SocietyReputation row at all — implicit 0, below the 100 threshold.
+        self.assertEqual(_evaluate_predicate(beat, progress), BeatOutcome.UNSATISFIED)
 
 
 class RecordGmMarkedOutcomeTests(EvenniaTestCase):

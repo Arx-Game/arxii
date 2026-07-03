@@ -33,7 +33,7 @@ Which kind of subject a Story progresses for — `StoryScope`: UNASSIGNED (the d
 _Avoid_: level, reach, audience.
 
 **Stake**:
-One named wager on a Beat's stakes contract (`Stake` model, #1770) — what is actually at risk (a character, an NPC, a location, a faction relationship, an item, a campaign track, or a custom subject), authored with a `player_summary` shown to players at opt-in and a `severity` (`StakeSeverity`, SETBACK..REMOVAL) denormalized from a `StakeTemplate` at creation. Distinct from `Beat.risk` (the tier-level declaration a Stake concretizes) and from a `StakeResolution` (what happens to the Stake on a given outcome).
+One named wager on a Beat's stakes contract (`Stake` model, #1770) — what is actually at risk (a character, an NPC, a location, a faction relationship, an item, a campaign track, or a custom subject), authored with a `player_summary` shown to players at opt-in and a `severity` (`StakeSeverity`, SETBACK..REMOVAL) denormalized from a `StakeTemplate` at creation. Distinct from `Beat.risk` (the tier-level declaration a Stake concretizes) and from a `StakeResolution` (what happens to the Stake on a given outcome — identified together by `column` + `Outcome Key`, not `column` alone since #1760).
 _Avoid_: wager, bet, consequence (use Stake for the thing at risk, StakeResolution for what happens to it).
 
 **Stakes Contract**:
@@ -63,6 +63,10 @@ _Avoid_: stake result, stake completion.
 **Constrained Pick**:
 The GM's resolution move on a pending stake (`resolve_stake_by_gm_pick`, `POST /api/stakes/{id}/resolve/`): choosing one of the stake's *authored* resolution columns — never composing a consequence freehand at resolution time. The picked branch fires exactly like the machine path (pool + writers); the StakeOutcome records `GM_PICK`, the GM, and notes. One pick per stake.
 _Avoid_: GM override, fiat resolution (pillar 12 forbids fiat; the pick is bounded by authorship).
+
+**Outcome Key**:
+The `StakeResolution.outcome_key` slug (#1760) — an open, designer-authored vocabulary naming *which* branch a resolution is, within one Stake's one `StakeResolutionColumn`. Lets a stake author multiple named branches sharing a polarity (e.g. two distinct LOSS branches, `"destroyed"` and `"captured"`); blank is the column's single plain/default branch and is what every pre-#1760 `StakeResolution` row carries (backward compatible). `column` + `Outcome Key` together — not `column` alone — identify one authored branch (unique `(stake, column, outcome_key)`); a GM's Constrained Pick names both.
+_Avoid_: sub-branch, variant (reserve "branch" for the `StakeResolution` row itself; Outcome Key is the naming dimension that distinguishes branches sharing a column).
 
 **Withdrawal Column**:
 The `StakeResolutionColumn.WITHDRAWAL` branch — what happens to a Stake when the party walks away from the wager instead of winning or losing it. Fired machine-side when a combat encounter ends FLED/ABANDONED (`withdrawal=True` through `record_outcome_tier_completion`); stakes without an authored WITHDRAWAL branch pend with the beat's PENDING_GM_REVIEW for a Constrained Pick. The beat itself still awaits GM adjudication.

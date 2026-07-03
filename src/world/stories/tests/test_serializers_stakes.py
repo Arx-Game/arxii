@@ -241,6 +241,66 @@ class StakeResolutionLockTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
 
+class StakeResolutionFieldExposureTests(APITestCase):
+    """outcome_key and machine_match_lifecycle_state must round-trip via the API.
+
+    Both fields (#1760) were added to the StakeResolution model but never
+    added to StakeResolutionSerializer.Meta.fields, so authoring them via the
+    API was silently a no-op. This proves they're now reachable.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        cls.staff = AccountFactory(is_staff=True)
+        cls.story = StoryFactory(owners=[cls.staff])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(episode=cls.episode, risk=RenownRisk.LOW, target_level=2)
+        cls.npc_sheet = CharacterSheetFactory()
+        cls.stake = StakeFactory(
+            beat=cls.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            subject_sheet=cls.npc_sheet,
+            severity=StakeSeverity.GRAVE,
+            subject_label="The NPC's fate",
+        )
+
+    def test_outcome_key_round_trips_through_create(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stakeresolution-list"),
+            {
+                "stake": self.stake.pk,
+                "column": "loss",
+                "outcome_key": "destroyed",
+                "narrative_summary": "It is destroyed.",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["outcome_key"], "destroyed")
+
+    def test_machine_match_lifecycle_state_round_trips_through_create(self):
+        from world.character_sheets.types import LifecycleState
+
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            reverse("stakeresolution-list"),
+            {
+                "stake": self.stake.pk,
+                "column": "loss",
+                "machine_match_lifecycle_state": LifecycleState.DEAD,
+                "narrative_summary": "It matches the dead state.",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["machine_match_lifecycle_state"], LifecycleState.DEAD)
+
+
 # ---------------------------------------------------------------------------
 # #1770 PR1 review: create-path ownership enforcement (serializer-layer).
 #

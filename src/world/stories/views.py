@@ -3033,6 +3033,7 @@ class StakeViewSet(viewsets.ModelViewSet):
             outcome = resolve_stake_by_gm_pick(
                 stake,
                 column=ser.validated_data["column"],
+                outcome_key=ser.validated_data.get("outcome_key", ""),
                 gm_profile=gm_profile,
                 gm_notes=ser.validated_data["gm_notes"],
                 participants=ser.validated_data.get("participants") or None,

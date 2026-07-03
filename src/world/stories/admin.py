@@ -563,7 +563,14 @@ class StakeTemplateAdmin(admin.ModelAdmin):
 class StakeResolutionInline(admin.TabularInline):
     model = StakeResolution
     extra = 0
-    fields = ("column", "consequence_pool", "escalates_to_risk", "narrative_summary")
+    fields = (
+        "column",
+        "outcome_key",
+        "consequence_pool",
+        "escalates_to_risk",
+        "narrative_summary",
+        "machine_match_lifecycle_state",
+    )
 
 
 @admin.register(Stake)
