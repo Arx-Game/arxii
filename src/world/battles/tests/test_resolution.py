@@ -249,6 +249,65 @@ class DeclareBattleActionTests(TestCase):
                 target_unit=self.unit,
             )
 
+    def test_repel_requires_place_scope(self) -> None:
+        from world.battles.exceptions import PlaceScopeRequiredError
+        from world.battles.services import declare_battle_action
+
+        with self.assertRaises(PlaceScopeRequiredError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.REPEL,
+                technique=self.technique,
+            )
+
+    def test_hold_requires_place_scope(self) -> None:
+        from world.battles.exceptions import PlaceScopeRequiredError
+        from world.battles.services import declare_battle_action
+
+        with self.assertRaises(PlaceScopeRequiredError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.HOLD,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+    def test_repel_with_place_scope_and_target_succeeds(self) -> None:
+        from world.battles.services import declare_battle_action
+
+        # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
+        # self.participant a SUBORDINATE role on a covenant fielding self.side
+        # so the authorization check in _validate_command_scope passes.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.side.covenant = covenant
+        self.side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="repel-place-scope-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        place = BattlePlaceFactory(battle=self.battle)
+        decl = declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.REPEL,
+            technique=self.technique,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.REPEL)
+        self.assertEqual(decl.target_place_id, place.pk)
+
 
 class ScopePermissionTests(TestCase):
     @classmethod

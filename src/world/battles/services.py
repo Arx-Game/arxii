@@ -36,6 +36,7 @@ from world.battles.exceptions import (
     NoCommandHierarchyError,
     NotAChampionError,
     PlaceAlreadyDuelingError,
+    PlaceScopeRequiredError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -333,6 +334,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
             None, or scope is SIDE and ``target_side`` is None.
         CannotStrikeOwnSideError: If ``action_kind`` is STRIKE, scope is SIDE,
             and ``target_side`` is the participant's own side.
+        PlaceScopeRequiredError: If action_kind is REPEL or HOLD and scope is not PLACE.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -352,6 +354,12 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
 
     if not technique.action_template_id:
         raise TechniqueNotBattleReadyError
+
+    if (
+        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD)
+        and scope != BattleActionScope.PLACE
+    ):
+        raise PlaceScopeRequiredError
 
     if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE):
         _validate_command_scope(participant=participant, scope=scope)
