@@ -42,6 +42,11 @@ _PILLAR_12_LIFECYCLE_MSG = (
     "route into peril via escalates_to_risk + consequence pools instead)."
 )
 
+_MACHINE_MATCH_LIFECYCLE_MSG = (
+    "machine_match_lifecycle_state is only allowed for NPC_FATE stakes — it "
+    "would otherwise never match anything (#1760)."
+)
+
 
 def sheet_is_player_held(sheet: CharacterSheet) -> bool:
     """Whether a character sheet is currently held by a player (pillar 12 gate).
@@ -63,6 +68,7 @@ def stake_resolution_payload_problems(
     forfeits_subject_item: bool,
     subject_standing_delta: int,
     sets_subject_lifecycle: str,
+    machine_match_lifecycle_state: str = "",
 ) -> list[StakePayloadProblem]:
     """Validate a StakeResolution's writer payloads against its stake (pillar 12).
 
@@ -79,6 +85,14 @@ def stake_resolution_payload_problems(
     ):
         problems.append(
             StakePayloadProblem(field="sets_subject_lifecycle", message=_PILLAR_12_LIFECYCLE_MSG)
+        )
+
+    if machine_match_lifecycle_state and stake.subject_kind != StakeSubjectKind.NPC_FATE:
+        problems.append(
+            StakePayloadProblem(
+                field="machine_match_lifecycle_state",
+                message=_MACHINE_MATCH_LIFECYCLE_MSG,
+            )
         )
 
     if forfeits_subject_item and (
@@ -635,7 +649,7 @@ def _deliver_reward_line(line: StakeRewardLine, participant: Persona, stake: Sta
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
-    # Persona -> CharacterSheet is the _write_npc_affection bridge in reverse
+    # Persona -> CharacterSheet is the _write_npc_standing bridge in reverse
     # (Persona.character_sheet is a non-null FK).
     sheet = participant.character_sheet
     if line.sink == StakeRewardSink.MONEY:

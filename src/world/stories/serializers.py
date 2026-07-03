@@ -942,6 +942,9 @@ class BeatSerializer(serializers.ModelSerializer):
             "referenced_chapter",
             "referenced_episode",
             "required_points",
+            "required_society",
+            "required_organization",
+            "required_standing",
             # AGM / scheduling
             "agm_eligible",
             "deadline",
@@ -1006,6 +1009,9 @@ class BeatSerializer(serializers.ModelSerializer):
                 "referenced_chapter",
                 "referenced_episode",
                 "required_points",
+                "required_society",
+                "required_organization",
+                "required_standing",
                 "kind",
                 "advances",
                 "risk",
@@ -2739,12 +2745,14 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             "id",
             "stake",
             "column",
+            "outcome_key",
             "consequence_pool",
             "escalates_to_risk",
             "narrative_summary",
             "forfeits_subject_item",
             "subject_standing_delta",
             "sets_subject_lifecycle",
+            "machine_match_lifecycle_state",
             "reward_lines",
         ]
         read_only_fields = ["id"]
@@ -2826,6 +2834,7 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
             forfeits_subject_item=merged("forfeits_subject_item", default=False),
             subject_standing_delta=merged("subject_standing_delta", default=0),
             sets_subject_lifecycle=merged("sets_subject_lifecycle", default=""),
+            machine_match_lifecycle_state=merged("machine_match_lifecycle_state", default=""),
         )
         if problems:
             raise serializers.ValidationError({p.field: p.message for p in problems})

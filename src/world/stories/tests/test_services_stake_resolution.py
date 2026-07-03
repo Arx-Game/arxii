@@ -604,6 +604,26 @@ class NoFiatSerializerTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("subject_standing_delta", str(resp.data))
 
+    def test_machine_match_lifecycle_state_rejected_on_non_npc_fate(self):
+        """machine_match_lifecycle_state is NPC_FATE-only (#1760), symmetric with
+        sets_subject_lifecycle's existing pillar-12 guard — a FACTION/ITEM/CUSTOM
+        stake would otherwise silently never match anything.
+        """
+        stake = StakeFactory(beat=self.beat)  # CUSTOM, no subject_sheet
+        resp = self._post_resolution(stake, machine_match_lifecycle_state=LifecycleState.DEAD)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("machine_match_lifecycle_state", str(resp.data))
+
+    def test_machine_match_lifecycle_state_allowed_on_npc_fate(self):
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=self.beat,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            subject_sheet=npc_sheet,
+        )
+        resp = self._post_resolution(stake, machine_match_lifecycle_state=LifecycleState.DEAD)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
 
 class WriterTests(EvenniaTestCase):
     """World-state writers applied when a branch fires."""

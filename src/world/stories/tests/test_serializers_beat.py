@@ -63,6 +63,9 @@ class BeatSerializerFieldsTest(APITestCase):
             "referenced_chapter",
             "referenced_episode",
             "required_points",
+            "required_society",
+            "required_organization",
+            "required_standing",
             "agm_eligible",
             "deadline",
             "created_at",
@@ -126,6 +129,22 @@ class BeatSerializerCreateValidationTest(APITestCase):
         response = self._post_beat(data)
         assert response.status_code == status.HTTP_201_CREATED
 
+    def test_faction_standing_beat_with_required_society_creates_successfully(self):
+        """FACTION_STANDING_AT_LEAST beat with required_society/required_standing
+        is accepted (#1760 — these fields must be reachable through the API).
+        """
+        from world.societies.factories import SocietyFactory
+
+        data = {
+            **self._base_beat_data(),
+            "predicate_type": BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            "required_society": SocietyFactory().pk,
+            "required_standing": 100,
+        }
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data["required_standing"] == 100
+
     # ---------- missing required config -------------------------------------
 
     @suppress_permission_errors
@@ -146,6 +165,27 @@ class BeatSerializerCreateValidationTest(APITestCase):
             **self._base_beat_data(),
             "predicate_type": BeatPredicateType.AGGREGATE_THRESHOLD,
             # required_points intentionally omitted
+        }
+        response = self._post_beat(data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @suppress_permission_errors
+    def test_faction_standing_without_required_standing_rejected(self):
+        """FACTION_STANDING_AT_LEAST without required_standing returns 400.
+
+        Proves the serializer's Beat.clean() mirror was extended to include
+        the new predicate-config fields (#1760) — before the fix, the
+        serializer's merged-state mirror didn't know about required_society/
+        required_organization/required_standing at all, so this predicate
+        type couldn't be validated correctly through the API.
+        """
+        from world.societies.factories import SocietyFactory
+
+        data = {
+            **self._base_beat_data(),
+            "predicate_type": BeatPredicateType.FACTION_STANDING_AT_LEAST,
+            "required_society": SocietyFactory().pk,
+            # required_standing intentionally omitted
         }
         response = self._post_beat(data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
