@@ -44,3 +44,25 @@ class SearchActionTests(TestCase):
 
         assert result.success
         assert "nothing" in result.message.lower()
+
+    def test_search_detects_a_concealed_character(self) -> None:
+        from world.conditions.factories import (
+            ConditionCategoryFactory,
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+        from world.conditions.services import can_perceive
+
+        target_roster = RosterEntryFactory()
+        target = target_roster.character_sheet.character
+        target.move_to(self.room, quiet=True)
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        tmpl = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=target, condition=tmpl)
+
+        self.assertFalse(can_perceive(self.actor, target))
+
+        with force_check_outcome(self.success):
+            SearchAction().execute(self.actor)
+
+        self.assertTrue(can_perceive(self.actor, target))
