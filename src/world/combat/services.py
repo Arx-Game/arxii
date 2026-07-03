@@ -801,6 +801,47 @@ def _build_affected_targets(
     return targets
 
 
+def _check_combat_target_prerequisites(
+    technique: Technique, caster_od: ObjectDB, targets: list[ObjectDB]
+) -> None:
+    """Enforce technique.target_prerequisites against combat's explicit target list.
+
+    Combat targets (opponent/ally, from _build_affected_targets) are explicit,
+    not AoE-expanded, so a failure here hard-blocks the cast — mirroring the
+    non-combat SINGLE/SELF hard-block in validate_cast_target.
+
+    For target_type=SELF, the caster IS the target — but the real cast dispatcher
+    (``_target_spec_for_technique_action`` in ``actions/player_interface.py``) never
+    supplies an explicit opponent/ally target for a SELF technique, so
+    ``_build_affected_targets`` returns [] (see
+    ``test_affected_emitted_for_self_targeted_buff``). Check the caster directly in
+    that case rather than relying on targets being populated — mirrors Task 5's
+    non-combat SELF fix in ``world/magic/services/targeting.py``.
+    """
+    from actions.constants import ActionTargetType  # noqa: PLC0415
+    from world.magic.services.targeting import InvalidCastTarget  # noqa: PLC0415
+
+    prereqs = technique.cached_target_prerequisites
+    if not prereqs:
+        return
+    msg = "Target does not meet this technique's targeting requirement."
+
+    if technique.target_type == ActionTargetType.SELF:
+        met = all(
+            prereq.evaluate(caster_od, caster_od, caster_od.location).met for prereq in prereqs
+        )
+        if not met:
+            raise InvalidCastTarget(msg)
+        return
+
+    for target_od in targets:
+        met = all(
+            prereq.evaluate(caster_od, target_od, target_od.location).met for prereq in prereqs
+        )
+        if not met:
+            raise InvalidCastTarget(msg)
+
+
 def combatants_hostile_to(
     actor: CombatParticipant | CombatOpponent,
 ) -> dict[str, list]:
@@ -908,6 +949,9 @@ def resolve_combat_technique(
     )
 
     targets = _build_affected_targets(participant, action)
+    _check_combat_target_prerequisites(
+        action.focused_action, participant.character_sheet.character, targets
+    )
 
     fury_res = run_fury_for_action(
         character=participant.character_sheet.character,

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from actions.constants import ActionTargetType
 from flows.constants import EventName
 from flows.events.payloads import TechniqueCastPayload, TechniquePreCastPayload
 from world.character_sheets.factories import CharacterSheetFactory
@@ -35,7 +36,14 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
-from world.mechanics.factories import CharacterEngagementFactory
+from world.magic.services.targeting import InvalidCastTarget
+from world.mechanics.constants import PropertyHolder
+from world.mechanics.factories import (
+    AerialPropertyFactory,
+    CharacterEngagementFactory,
+    ObjectPropertyFactory,
+    PrerequisiteFactory,
+)
 from world.scenes.constants import RoundStatus
 from world.vitals.models import CharacterVitals
 
@@ -527,3 +535,102 @@ class IdentityIntensityModifierRaisesCombatDamageTest(TestCase):
             damage_base,
             f"Expected boosted damage ({damage_boosted}) > base damage ({damage_base}).",
         )
+
+
+class CombatTargetPrerequisitesTest(TestCase):
+    """resolve_combat_technique enforces Technique.target_prerequisites (#1793)."""
+
+    def test_resolve_combat_technique_raises_when_target_missing_property(self) -> None:
+        participant, action, _opponent, _anima, technique, _room = _setup_pc_attacking_mook()
+        prereq = PrerequisiteFactory(
+            property=AerialPropertyFactory(), property_holder=PropertyHolder.TARGET
+        )
+        technique.target_prerequisites.add(prereq)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            with self.assertRaises(InvalidCastTarget):
+                resolve_combat_technique(
+                    participant=participant,
+                    action=action,
+                    fatigue_category=ActionCategory.PHYSICAL,
+                    offense_check_type=MagicMock(),
+                    offense_check_fn=None,
+                )
+
+    def test_resolve_combat_technique_passes_when_target_meets_property(self) -> None:
+        participant, action, opponent, _anima, technique, _room = _setup_pc_attacking_mook()
+        prereq = PrerequisiteFactory(
+            property=AerialPropertyFactory(), property_holder=PropertyHolder.TARGET
+        )
+        technique.target_prerequisites.add(prereq)
+        ObjectPropertyFactory(object=opponent.objectdb, property=prereq.property)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=ActionCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )  # does not raise
+
+    def test_resolve_combat_technique_self_type_raises_when_caster_missing_property(
+        self,
+    ) -> None:
+        """target_type=SELF techniques never populate focused_opponent/ally_target — the
+        real cast dispatcher's ``_target_spec_for_technique_action``
+        (``actions/player_interface.py``) returns no target picker for SELF techniques,
+        and ``test_affected_emitted_for_self_targeted_buff`` documents that
+        ``_build_affected_targets`` returns [] for exactly this shape. This mirrors
+        Task 5's non-combat SELF gap: the prerequisite must still be checked against
+        the caster directly, not skipped because the target list is empty."""
+        participant, action, _opponent, _anima, technique, _room = _setup_pc_attacking_mook()
+        technique.target_type = ActionTargetType.SELF
+        technique.save()
+        action.focused_opponent_target = None
+        action.save()
+
+        prereq = PrerequisiteFactory(
+            property=AerialPropertyFactory(), property_holder=PropertyHolder.TARGET
+        )
+        technique.target_prerequisites.add(prereq)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            with self.assertRaises(InvalidCastTarget):
+                resolve_combat_technique(
+                    participant=participant,
+                    action=action,
+                    fatigue_category=ActionCategory.PHYSICAL,
+                    offense_check_type=MagicMock(),
+                    offense_check_fn=None,
+                )
+
+    def test_resolve_combat_technique_self_type_passes_when_caster_meets_property(
+        self,
+    ) -> None:
+        participant, action, _opponent, _anima, technique, _room = _setup_pc_attacking_mook()
+        technique.target_type = ActionTargetType.SELF
+        technique.save()
+        action.focused_opponent_target = None
+        action.save()
+
+        prereq = PrerequisiteFactory(
+            property=AerialPropertyFactory(), property_holder=PropertyHolder.TARGET
+        )
+        technique.target_prerequisites.add(prereq)
+        ObjectPropertyFactory(
+            object=participant.character_sheet.character, property=prereq.property
+        )
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=ActionCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )  # does not raise
