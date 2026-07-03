@@ -194,6 +194,20 @@ ratification. The `verify-against-code` skill carries the labeling procedure
 (`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]`), the ledger format, and the
 recurring-traps list. **Use it.**
 
+## Fold In, Don't File — REQUIRED for review-surfaced gaps
+
+**Default disposition for any gap surfaced during task review, whole-branch
+review, or PR review is to fix it in the current branch/PR now — not to file a
+follow-up issue.** This applies whether the gap is a missing test, a small
+dedup, a scoping/wiring gap, or similar in-scope polish. File a follow-up only
+when there is a real, stated blocker: a genuinely separable system, a scope
+that spans well beyond the current issue, or an open design question that
+needs a human call. When filing is warranted, say what the blocker is in the
+issue body — "surfaced during review" is not itself a blocker. This rule
+**overrides any "file follow-up now" step in a skill** (including
+`issue-to-merged-pr`'s PR-opening and post-merge-cleanup steps) — those steps
+describe the mechanism for the exception case, not the default.
+
 ## Database & Code Quality Invariants
 
 Database design:
