@@ -51,19 +51,23 @@ class BattleActionKind(models.TextChoices):
     RALLY = "rally", "Rally an ally"
     REPEL = "repel", "Repel an attack"
     HOLD = "hold", "Hold or seize an objective"
+    SET_ENVIRONMENT = "set_environment", "Set battlefield weather"
 
 
 class BattleActionScope(models.TextChoices):
     """Targeting breadth of a battle-round declaration (#1710).
 
     UNIT is the pre-existing default (a single BattleUnit/BattleParticipant).
-    PLACE/SIDE require the declaring participant to hold the matching
+    PLACE/SIDE/BATTLE require the declaring participant to hold the matching
     command_tier — see world.battles.services.declare_battle_action.
+    BATTLE is the widest scope (#1715) — no unit/place/side target, affects
+    the whole Battle; gated at the same SUPREME tier as SIDE.
     """
 
     UNIT = "unit", "Unit"
     PLACE = "place", "Place (front-wide)"
     SIDE = "side", "Side (army-wide)"
+    BATTLE = "battle", "Battle (whole-battle-wide)"
 
 
 class BattleOutcome(models.TextChoices):
@@ -143,3 +147,10 @@ BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER: dict[str, int] = {
 # category="stat" (already EQUIPMENT_RELEVANT_CATEGORIES) so covenant-role /
 # facet / mantle bonuses authored against it flow through the existing walk.
 BATTLE_COMMAND_TARGET_NAME = "battle_command"
+
+# SET_ENVIRONMENT tuning (#1715). Duration is always >= 2 rounds since
+# success_level >= 1 on any success branch — "stronger cast holds longer"
+# (user story 6) can never silently round down to zero effective rounds.
+# Flat VP like REPEL/HOLD — SET_ENVIRONMENT doesn't move a numeric resource.
+SET_ENVIRONMENT_BASE_ROUNDS = 1
+SET_ENVIRONMENT_VP = 4
