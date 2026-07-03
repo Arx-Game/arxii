@@ -19,6 +19,9 @@ from world.character_sheets.factories import (
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.types import MaritalStatus
 from world.classes.factories import CharacterClassLevelFactory
+from world.conditions.factories import CapabilityTypeFactory
+from world.conditions.services import get_effective_capability_value
+from world.mechanics.factories import ObjectPropertyFactory, PropertyFactory
 
 
 class CharacterSheetModelTests(TestCase):
@@ -388,3 +391,32 @@ class CachedActiveConditionTemplatesTests(TestCase):
 
         # Now the cache reflects the mutation.
         self.assertIn(template, sheet.cached_active_condition_templates)
+
+
+class CharacterSheetCapabilityPropertyProtocolTests(TestCase):
+    """CharacterSheet conforms to HasCapabilities/HasProperties (#1794)."""
+
+    def test_effective_capability_matches_get_effective_capability_value(self) -> None:
+        sheet = CharacterSheetFactory()
+        capability = CapabilityTypeFactory(innate_baseline=3)
+        self.assertEqual(
+            sheet.effective_capability(capability),
+            get_effective_capability_value(sheet, capability),
+        )
+
+    def test_has_property_true_via_object_property(self) -> None:
+        sheet = CharacterSheetFactory()
+        prop = PropertyFactory()
+        ObjectPropertyFactory(object=sheet.character, property=prop)
+        self.assertTrue(sheet.has_property(prop))
+
+    def test_has_property_true_via_persona_authored_property(self) -> None:
+        sheet = CharacterSheetFactory()
+        prop = PropertyFactory()
+        sheet.primary_persona.properties.add(prop)
+        self.assertTrue(sheet.has_property(prop))
+
+    def test_has_property_false_when_absent(self) -> None:
+        sheet = CharacterSheetFactory()
+        prop = PropertyFactory()
+        self.assertFalse(sheet.has_property(prop))

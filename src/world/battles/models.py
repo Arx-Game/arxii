@@ -22,9 +22,10 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     TerrainType,
-    UnitComposition,
     UnitQuality,
 )
+from world.conditions.models import CapabilityType
+from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 from world.scenes.round_models import AbstractRound
 
@@ -225,12 +226,32 @@ class BattleUnit(SharedMemoryModel):
         max_length=80,
         blank=True,
         help_text="Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only "
-        "— composition/quality below drive mechanics.",
+        "— properties/capabilities/quality below drive mechanics.",
     )
-    composition = models.CharField(
-        max_length=20,
-        choices=UnitComposition.choices,
-        default=UnitComposition.IRREGULAR,
+    properties = models.ManyToManyField(
+        Property,
+        blank=True,
+        related_name="battle_units",
+        help_text="Descriptive tags this unit carries (flying, aquatic, metal-clad, "
+        "etc.) — the same catalog characters use (#1794). Presence-only, no per-unit "
+        "magnitude (matches how Property is consumed everywhere else).",
+    )
+    capabilities = models.ManyToManyField(
+        CapabilityType,
+        through="BattleUnitCapability",
+        blank=True,
+        related_name="battle_units",
+        help_text="What this unit can DO, at an authored per-unit magnitude via "
+        "BattleUnitCapability (#1794) — e.g. two units can both hold FLYING at "
+        "very different values.",
+    )
+    individual_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Population data point mirroring CombatOpponent.swarm_count's "
+        "naming/shape (#1794) — null means 'not a swarm-style unit'. No swarm-math "
+        "resolution is wired against this field yet; that is left to #1714 "
+        "(naval/aerial units) or a future issue that needs it.",
     )
     quality = models.CharField(
         max_length=20,
@@ -272,7 +293,58 @@ class BattleUnit(SharedMemoryModel):
         ordering = ["battle", "side", "name"]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.composition}) [{self.get_status_display()}]"
+        return f"{self.name} [{self.get_status_display()}]"
+
+    def effective_capability(self, capability: CapabilityType) -> int:
+        """Authored magnitude for this unit's hold on ``capability``, 0 if absent.
+
+        Conforms to world.mechanics.types.HasCapabilities alongside
+        CharacterSheet (#1794).
+        """
+        row = self.capability_values.filter(capability=capability).first()
+        return row.value if row is not None else 0
+
+    def has_property(self, prop: Property) -> bool:
+        """True if this unit carries ``prop``.
+
+        Conforms to world.mechanics.types.HasProperties alongside
+        CharacterSheet (#1794).
+        """
+        return self.properties.filter(pk=prop.pk).exists()
+
+
+class BattleUnitCapability(SharedMemoryModel):
+    """Authored (unit, capability) -> magnitude row (#1794).
+
+    Mirrors ObjectProperty's shape (object/property/value,
+    world/mechanics/models.py:589-618) one FK swapped: BattleUnit for ObjectDB,
+    CapabilityType for Property. No source-tracking FKs — BattleUnit capabilities
+    are static authored data, not subject to reactive conditions/challenges.
+    """
+
+    unit = models.ForeignKey(
+        BattleUnit,
+        on_delete=models.CASCADE,
+        related_name="capability_values",
+    )
+    capability = models.ForeignKey(
+        CapabilityType,
+        on_delete=models.PROTECT,
+        related_name="battle_unit_values",
+    )
+    value = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["unit", "capability"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["unit", "capability"],
+                name="unique_battle_unit_capability",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.unit.name} {self.capability.name}: {self.value}"
 
 
 class BattleRound(AbstractRound):
@@ -429,60 +501,67 @@ class BattleActionDeclaration(SharedMemoryModel):
         )
 
 
-class TechniqueCompositionAffinity(SharedMemoryModel):
-    """Authored (technique, composition) -> flat STRIKE-check modifier (#1711).
+class TechniquePropertyAffinity(SharedMemoryModel):
+    """Authored (technique, property) -> flat STRIKE-check modifier (#1794).
 
-    Positive = the technique is especially effective against that composition;
-    negative = weak against it. Looked up by BattleTechniqueResolver when the
-    declaration's target_unit.composition matches a row.
+    Positive = the technique is especially effective against that property;
+    negative = weak against it. Summed across every one of a unit's properties
+    that has a matching row — replaces #1711's TechniqueCompositionAffinity,
+    which could only ever match a unit's single composition tag.
     """
 
     technique = models.ForeignKey(
         TECHNIQUE_MODEL,
         on_delete=models.PROTECT,
-        related_name="battle_composition_affinities",
+        related_name="battle_property_affinities",
     )
-    composition = models.CharField(max_length=20, choices=UnitComposition.choices)
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.PROTECT,
+        related_name="battle_technique_affinities",
+    )
     modifier = models.SmallIntegerField()
 
     class Meta:
-        ordering = ["technique", "composition"]
+        ordering = ["technique", "property"]
         constraints = [
             models.UniqueConstraint(
-                fields=["technique", "composition"],
-                name="unique_technique_composition_affinity",
+                fields=["technique", "property"],
+                name="unique_technique_property_affinity",
             )
         ]
 
     def __str__(self) -> str:
-        return f"{self.technique.name} vs {self.get_composition_display()}: {self.modifier:+d}"
+        return f"{self.technique.name} vs {self.property.name}: {self.modifier:+d}"
 
 
-class TerrainCompositionEffect(SharedMemoryModel):
-    """Authored (terrain_type, composition) -> flat attacker-facing STRIKE modifier (#1711).
+class TerrainPropertyEffect(SharedMemoryModel):
+    """Authored (terrain_type, property) -> flat attacker-facing STRIKE modifier (#1794).
 
-    Positive = that composition is easier to strike in that terrain; negative = harder.
-    Looked up by BattleTechniqueResolver against the target unit's place.terrain_type.
+    Positive = a unit with that property is easier to strike in that terrain;
+    negative = harder. Summed across every one of a unit's properties that has
+    a matching row — replaces #1711's TerrainCompositionEffect.
     """
 
     terrain_type = models.CharField(max_length=20, choices=TerrainType.choices)
-    composition = models.CharField(max_length=20, choices=UnitComposition.choices)
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.PROTECT,
+        related_name="battle_terrain_effects",
+    )
     modifier = models.SmallIntegerField()
 
     class Meta:
-        ordering = ["terrain_type", "composition"]
+        ordering = ["terrain_type", "property"]
         constraints = [
             models.UniqueConstraint(
-                fields=["terrain_type", "composition"],
-                name="unique_terrain_composition_effect",
+                fields=["terrain_type", "property"],
+                name="unique_terrain_property_effect",
             )
         ]
 
     def __str__(self) -> str:
-        return (
-            f"{self.get_terrain_type_display()} vs {self.get_composition_display()}: "
-            f"{self.modifier:+d}"
-        )
+        return f"{self.get_terrain_type_display()} vs {self.property.name}: {self.modifier:+d}"
 
 
 class BattleOutcomeMapping(SharedMemoryModel):

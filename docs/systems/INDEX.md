@@ -2087,23 +2087,33 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (`TerrainType`, #1711); `movement_cost` (authored, no consuming action yet, #1711);
   `controlled_by` FK → `BattleSide`, nullable, set by a successful HOLD declaration, #1712),
   `BattleUnit` (`descriptor` free-text flavor tag — renamed from the spine's `unit_type`,
-  #1711; `composition` (`UnitComposition`) and `quality` (`UnitQuality`) drive mechanics,
-  #1711; `commander` / `summoned_by` FK → `character_sheets.CharacterSheet`, #1711;
-  `strength` attrited by STRIKE; `morale` — a second resource, starts well below its
-  ceiling, damaged by ROUT / restored by RALLY, #1712; `status` always DERIVED jointly from
-  `strength` + `morale` via `resolution._compute_unit_status`, never written directly),
+  #1711; `properties` (M2M → `mechanics.Property`, presence-only tags) and `capabilities`
+  (M2M → `conditions.CapabilityType` through `BattleUnitCapability`, authored per-unit
+  magnitude) replace #1711's single-select `composition`/`UnitComposition`, #1794;
+  `individual_count` (nullable, data-only, mirrors `CombatOpponent.swarm_count`'s naming,
+  #1794); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
+  → `character_sheets.CharacterSheet`, #1711; `strength` attrited by STRIKE; `morale` — a
+  second resource, starts well below its ceiling, damaged by ROUT / restored by RALLY,
+  #1712; `status` always DERIVED jointly from `strength` + `morale` via
+  `resolution._compute_unit_status`, never written directly; `effective_capability`/
+  `has_property` conform to `mechanics.types.HasCapabilities`/`HasProperties`, #1794),
+  `BattleUnitCapability` (authored `(unit, capability) → magnitude` through row, #1794;
+  unique `(unit, capability)`),
   `BattleRound` (subclasses `AbstractRound`; partial unique constraint: one active round per
   battle), `BattleParticipant` (`character_sheet` FK, `side`, `place`, `status`; unique
   `(battle, character_sheet)`), `BattleActionDeclaration` (`technique` FK required,
   `action_kind` STRIKE/SUPPORT/RESCUE/ROUT/RALLY/REPEL/HOLD, `target_unit`, `target_ally`,
   `scope` (`BattleActionScope` UNIT/PLACE/SIDE, #1710) + `target_place`/`target_side`,
   `resolved`, `success_level`; unique `(battle_round, participant)`);
-  `TechniqueCompositionAffinity` / `TerrainCompositionEffect` (authored type-matchup /
-  terrain-effect catalogs, #1711); `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
+  `TechniquePropertyAffinity` / `TerrainPropertyEffect` (authored type-matchup /
+  terrain-effect catalogs keyed on `Property`, summed across a unit's matching properties,
+  #1794, replacing #1711's `TechniqueCompositionAffinity`/`TerrainCompositionEffect`);
+  `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
   tier for beat resolution, #1785); `Battle.afk_peril_override` (BooleanField, default
   False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
 - **Key Services (`world.battles.services`):**
-  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`,
+  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit` (`properties`/
+    `capability_values`/`individual_count` kwargs, #1794), `enlist_participant`,
     `set_battle_side_posture` (#1711), `assign_unit_commander` (#1711)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
     `declare_battle_action` (requires `technique`; update_or_create; now dispatches 7
@@ -2117,8 +2127,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
   (routes through the real `use_technique` magic envelope, not a generic shared check),
-  folding in the five-source modifier stack (composition affinity, terrain, unit quality,
-  commander bonus, posture, #1711); REPEL resolves before every other kind so its defense
+  folding in the five-source modifier stack (Property affinity, terrain, unit quality,
+  commander bonus, posture — #1711/#1794); REPEL resolves before every other kind so its defense
   bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
   strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
   RESCUE clears Surrounded; failure debits PC health + `process_damage_consequences`.
@@ -2136,7 +2146,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   also accept `side` or `place <name>` scope tokens (#1710/#1712)
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
   `BattleActionKind` (7 values), `BattleActionScope` (#1710), `BattleOutcome`,
-  `UnitComposition`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711)
+  `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711)
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
   `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
   `TechniqueNotBattleReadyError`, `NoCommandHierarchyError`, `InsufficientCommandTierError`,
@@ -2174,10 +2184,13 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `test_battle_peril_rescue_e2e.py`
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant/commander FK),
   vitals (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
-  conditions (the "Surrounded" staged `ConditionTemplate`, #1733), magic
+  conditions (the "Surrounded" staged `ConditionTemplate`, #1733; `CapabilityType` via
+  `BattleUnit.capabilities`/`BattleUnitCapability`, #1794), magic
   (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
-  → `use_technique`; `TechniqueCompositionAffinity.technique` FK; military-grade
-  `summon_ally(payload.military=True)`, #1711), checks (`perform_check` sourced from the
+  → `use_technique`; `TechniquePropertyAffinity.technique` FK, #1794; military-grade
+  `summon_ally(payload.military=True)` now reading `payload.properties`/
+  `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
+  `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from the
   cast technique's `action_template.check_type`, via `use_technique`; `select_consequence`
   for the Surrounded entry roll and resist checks, #1733), combat
   (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710; shared

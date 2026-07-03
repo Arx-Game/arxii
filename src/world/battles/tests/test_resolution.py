@@ -31,7 +31,6 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     TerrainType,
-    UnitComposition,
     UnitQuality,
 )
 from world.battles.exceptions import (
@@ -48,7 +47,7 @@ from world.battles.factories import (
     BattleSideFactory,
     BattleUnitFactory,
 )
-from world.battles.models import TechniqueCompositionAffinity, TerrainCompositionEffect
+from world.battles.models import TechniquePropertyAffinity, TerrainPropertyEffect
 from world.battles.services import (
     add_place,
     add_side,
@@ -68,6 +67,7 @@ from world.magic.factories import (
     CharacterTechniqueFactory,
     TechniqueFactory,
 )
+from world.mechanics.factories import PropertyFactory
 from world.scenes.constants import RoundStatus
 from world.vitals.factories import CharacterVitalsFactory, ensure_surrounded_content
 
@@ -1679,37 +1679,73 @@ class RescueResolutionTests(TestCase):
         ).exists()
 
 
-class CompositionAffinityModifierTests(TestCase):
-    def test_returns_zero_when_no_row(self) -> None:
-        from world.battles.resolution import _composition_affinity_modifier
+class PropertyAffinityModifierTests(TestCase):
+    def test_returns_zero_when_no_match(self) -> None:
+        from world.battles.resolution import _property_affinity_modifier
 
         technique = TechniqueFactory()
-        self.assertEqual(_composition_affinity_modifier(technique, UnitComposition.CAVALRY), 0)
+        unit = BattleUnitFactory()
+        self.assertEqual(_property_affinity_modifier(technique, unit), 0)
 
     def test_returns_authored_modifier(self) -> None:
-        from world.battles.resolution import _composition_affinity_modifier
+        from world.battles.resolution import _property_affinity_modifier
 
         technique = TechniqueFactory()
-        TechniqueCompositionAffinity.objects.create(
-            technique=technique, composition=UnitComposition.CAVALRY, modifier=15
+        unit = BattleUnitFactory()
+        flying = PropertyFactory(name="flying")
+        unit.properties.add(flying)
+        TechniquePropertyAffinity.objects.create(technique=technique, property=flying, modifier=15)
+        self.assertEqual(_property_affinity_modifier(technique, unit), 15)
+
+    def test_sums_across_multiple_matching_properties(self) -> None:
+        from world.battles.resolution import _property_affinity_modifier
+
+        technique = TechniqueFactory()
+        unit = BattleUnitFactory()
+        flying = PropertyFactory(name="flying")
+        metal_clad = PropertyFactory(name="metal-clad")
+        unit.properties.set([flying, metal_clad])
+        TechniquePropertyAffinity.objects.create(technique=technique, property=flying, modifier=15)
+        TechniquePropertyAffinity.objects.create(
+            technique=technique, property=metal_clad, modifier=-5
         )
-        self.assertEqual(_composition_affinity_modifier(technique, UnitComposition.CAVALRY), 15)
+        self.assertEqual(_property_affinity_modifier(technique, unit), 10)
 
 
-class TerrainEffectModifierTests(TestCase):
+class TerrainPropertyModifierTests(TestCase):
     def test_returns_zero_when_no_place(self) -> None:
-        from world.battles.resolution import _terrain_effect_modifier
+        from world.battles.resolution import _terrain_property_modifier
 
-        self.assertEqual(_terrain_effect_modifier(None, UnitComposition.CAVALRY), 0)
+        unit = BattleUnitFactory()
+        self.assertEqual(_terrain_property_modifier(None, unit), 0)
 
     def test_returns_authored_modifier(self) -> None:
-        from world.battles.resolution import _terrain_effect_modifier
+        from world.battles.resolution import _terrain_property_modifier
 
         place = BattlePlaceFactory(terrain_type=TerrainType.DIFFICULT)
-        TerrainCompositionEffect.objects.create(
-            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=20
+        unit = BattleUnitFactory()
+        aquatic = PropertyFactory(name="aquatic")
+        unit.properties.add(aquatic)
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=aquatic, modifier=20
         )
-        self.assertEqual(_terrain_effect_modifier(place, UnitComposition.CAVALRY), 20)
+        self.assertEqual(_terrain_property_modifier(place, unit), 20)
+
+    def test_sums_across_multiple_matching_properties(self) -> None:
+        from world.battles.resolution import _terrain_property_modifier
+
+        place = BattlePlaceFactory(terrain_type=TerrainType.DIFFICULT)
+        unit = BattleUnitFactory()
+        aquatic = PropertyFactory(name="aquatic")
+        heavily_armored = PropertyFactory(name="heavily-armored")
+        unit.properties.set([aquatic, heavily_armored])
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=aquatic, modifier=20
+        )
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=heavily_armored, modifier=-8
+        )
+        self.assertEqual(_terrain_property_modifier(place, unit), 12)
 
 
 class QualityModifierTests(TestCase):
@@ -1770,7 +1806,7 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
         CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
 
-    def test_sums_composition_terrain_quality_posture_into_extra_modifiers(self) -> None:
+    def test_sums_property_terrain_quality_posture_into_extra_modifiers(self) -> None:
         from world.battles.resolution import BattleTechniqueResolver
         from world.battles.services import (
             add_place,
@@ -1782,6 +1818,7 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
             enlist_participant,
             set_battle_side_posture,
         )
+        from world.mechanics.factories import PropertyFactory
 
         battle = create_battle(name="Full Stack Test")
         attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
@@ -1789,19 +1826,20 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
         set_battle_side_posture(side=attacker, posture=BattlePosture.AGGRESSIVE)
 
         place = add_place(battle=battle, name="The Marsh", terrain_type=TerrainType.DIFFICULT)
+        flying = PropertyFactory(name="flying")
         unit = add_unit(
             battle=battle,
             side=defender,
             name="Heavy Cavalry",
-            composition=UnitComposition.CAVALRY,
             quality=UnitQuality.ELITE,
             place=place,
+            properties=[flying],
         )
-        TechniqueCompositionAffinity.objects.create(
-            technique=self.technique, composition=UnitComposition.CAVALRY, modifier=10
+        TechniquePropertyAffinity.objects.create(
+            technique=self.technique, property=flying, modifier=10
         )
-        TerrainCompositionEffect.objects.create(
-            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=20
+        TerrainPropertyEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, property=flying, modifier=20
         )
 
         participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=attacker)
@@ -1817,9 +1855,9 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
             character=self.sheet.character, technique=self.technique, declaration=declaration
         )
         fake_result = _success_result()
-        # Expected: composition(+10) + terrain(+20) + quality(ELITE=-20)
-        #   + posture(AGGRESSIVE=-5) + commander(0, none assigned) + incoming(0) = 5
-        expected_total = 10 + 20 + (-20) + (-5) + 0 + 0
+        # Expected: property(+10) + terrain(+20) + quality(ELITE=-20)
+        #   + posture(AGGRESSIVE=-5) + commander(0, none assigned) = 5
+        expected_total = 10 + 20 + (-20) + (-5) + 0
         with patch(
             "world.battles.resolution.perform_check", return_value=fake_result
         ) as mock_check:
@@ -1832,11 +1870,11 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
     def test_includes_nonzero_commander_bonus_in_extra_modifiers(self) -> None:
         """A commander assigned to a unit on the acting participant's own side/place
         contributes a nonzero commander term into extra_modifiers (final-review
-        finding: the composition/terrain/quality/posture full-stack test above
+        finding: the property/terrain/quality/posture full-stack test above
         always has commander=0 since no commander is ever assigned there).
 
-        Composition/terrain/quality are isolated to 0 by using a ``target_unit``
-        with no authored ``TechniqueCompositionAffinity``/``TerrainCompositionEffect``
+        Property/terrain/quality are isolated to 0 by using a ``target_unit``
+        with no authored ``TechniquePropertyAffinity``/``TerrainPropertyEffect``
         rows, default TRAINED quality, and default BALANCED posture — so the
         commander term is the only nonzero contributor and is exactly the patched
         ``get_modifier_total`` return value.
@@ -1876,7 +1914,7 @@ class BattleTechniqueResolverModifierStackTests(TestCase):
             character=self.sheet.character, technique=self.technique, declaration=declaration
         )
         fake_result = _success_result()
-        # composition(0, no authored row) + terrain(0, OPEN default, no row)
+        # property(0, no authored row) + terrain(0, OPEN default, no row)
         #   + quality(TRAINED=0) + posture(BALANCED=0) + commander(8) = 8
         expected_total = 8
         # See CommanderBonusForSideAtPlaceTests.test_returns_max_across_commanders:

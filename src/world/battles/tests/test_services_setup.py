@@ -17,7 +17,6 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     TerrainType,
-    UnitComposition,
     UnitQuality,
 )
 from world.battles.exceptions import (
@@ -370,7 +369,7 @@ class OpenChampionDuelTests(TestCase):
 
 
 class AddUnitTaxonomyTests(TestCase):
-    def test_add_unit_accepts_composition_quality_commander(self) -> None:
+    def test_add_unit_accepts_quality_commander(self) -> None:
         from world.battles.services import add_side, add_unit, create_battle
 
         battle = create_battle(name="Taxonomy Setup Test")
@@ -382,26 +381,34 @@ class AddUnitTaxonomyTests(TestCase):
             side=side,
             name="Iron Cavalry",
             descriptor="armored knights",
-            composition=UnitComposition.CAVALRY,
             quality=UnitQuality.ELITE,
             commander=commander,
         )
 
         self.assertEqual(unit.descriptor, "armored knights")
-        self.assertEqual(unit.composition, UnitComposition.CAVALRY)
         self.assertEqual(unit.quality, UnitQuality.ELITE)
         self.assertEqual(unit.commander, commander)
 
-    def test_add_unit_defaults_when_taxonomy_omitted(self) -> None:
+    def test_add_unit_accepts_properties_and_capability_values(self) -> None:
         from world.battles.services import add_side, add_unit, create_battle
+        from world.conditions.factories import CapabilityTypeFactory
+        from world.mechanics.factories import PropertyFactory
 
-        battle = create_battle(name="Taxonomy Default Test")
+        battle = create_battle(name="Property Setup Test")
         side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
-        unit = add_unit(battle=battle, side=side, name="Rabble")
+        flying = PropertyFactory(name="flying")
+        flight_cap = CapabilityTypeFactory(name="flight")
 
-        self.assertEqual(unit.composition, UnitComposition.IRREGULAR)
-        self.assertEqual(unit.quality, UnitQuality.TRAINED)
-        self.assertIsNone(unit.commander)
+        unit = add_unit(
+            battle=battle,
+            side=side,
+            name="Wyvern Rider",
+            properties=[flying],
+            capability_values=[(flight_cap, 25)],
+        )
+
+        self.assertTrue(unit.has_property(flying))
+        self.assertEqual(unit.effective_capability(flight_cap), 25)
 
 
 class AddPlaceTerrainTests(TestCase):
