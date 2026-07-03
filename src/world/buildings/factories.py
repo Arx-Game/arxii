@@ -9,6 +9,7 @@ from world.buildings.models import (
     BuildingKind,
     BuildingMaterial,
     BuildingPermitDetails,
+    FortificationUpgradeDetails,
     MaterialLoreEffect,
 )
 
@@ -97,3 +98,13 @@ class BuildingConstructionDetailsFactory(DjangoModelFactory):
     target_size = 5
     target_grandeur = 5
     constructed_by_persona = factory.SubFactory(_PERSONA_FACTORY)
+
+
+class FortificationUpgradeDetailsFactory(DjangoModelFactory):
+    class Meta:
+        model = FortificationUpgradeDetails
+
+    project = factory.SubFactory("world.projects.factories.ProjectFactory")
+    building = factory.SubFactory(BuildingFactory)
+    target_level = 1
+    applied_at = None

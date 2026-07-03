@@ -1,12 +1,15 @@
 """Tests for the buildings models."""
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
+from world.buildings import room_constants
 from world.buildings.factories import (
     BuildingFactory,
     BuildingKindFactory,
     BuildingMaterialFactory,
     BuildingPermitDetailsFactory,
+    FortificationUpgradeDetailsFactory,
     MaterialLoreEffectFactory,
 )
 
@@ -108,3 +111,17 @@ class BuildingPermitDetailsModelTests(TestCase):
         # ``item_instance__holder_character_sheet=`` like the services tests do.
         permit = BuildingPermitDetailsFactory()
         self.assertIsNotNone(permit.item_instance)
+
+
+class FortificationUpgradeDetailsModelTests(TestCase):
+    def test_str_shows_target_level(self):
+        details = FortificationUpgradeDetailsFactory(target_level=3)
+        self.assertIn("level 3", str(details))
+
+    def test_target_level_above_max_fails_validation(self):
+        details = FortificationUpgradeDetailsFactory.build(
+            target_level=room_constants.MAX_FORTIFICATION_LEVEL + 1
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            details.full_clean()
+        self.assertIn("target_level", ctx.exception.message_dict)

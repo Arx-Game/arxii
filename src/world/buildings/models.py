@@ -23,10 +23,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.buildings import room_constants
 from world.locations.constants import StatKey
 
 # Cross-app FK string constants. Django resolves these lazily at app-ready
@@ -525,6 +526,47 @@ class BuildingExtensionDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Extension +{self.added_budget} units for building {self.building_id}"
+
+
+class FortificationUpgradeDetails(SharedMemoryModel):
+    """Per-(FORTIFICATION_UPGRADE Project) details payload (#1713).
+
+    Mirrors BuildingExtensionDetails, but uses monotonic max-set semantics on
+    completion (world.buildings.fortification_services.complete_fortification_upgrade)
+    rather than an additive delta — target_level (not a delta) is the natural
+    authoring unit for a level, and a naive overwrite could regress the level if a
+    lower-target Project happens to complete after a higher one already did.
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="fortification_upgrade_details",
+        primary_key=True,
+    )
+    building = models.ForeignKey(
+        "buildings.Building",
+        on_delete=models.CASCADE,
+        related_name="fortification_upgrade_details",
+    )
+    target_level = models.PositiveSmallIntegerField(
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(room_constants.MAX_FORTIFICATION_LEVEL),
+        ],
+        help_text="Fortification level this upgrade targets on completion.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the level was applied; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Fortification upgrade details"
+
+    def __str__(self) -> str:
+        return f"Fortification upgrade -> level {self.target_level} for building {self.building_id}"
 
 
 class InteriorDesignDetails(SharedMemoryModel):
