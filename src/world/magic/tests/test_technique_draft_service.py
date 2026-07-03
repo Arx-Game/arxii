@@ -299,6 +299,17 @@ class DraftToDesignTests(TestCase):
         remove_draft_removed_condition(row.pk)
         assert draft.removed_conditions.count() == 0
 
+    def test_consequence_pool_maps_into_design(self) -> None:
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+        draft = self._make_complete_draft()
+        draft.consequence_pool_id = chosen.consequence_pool_id
+        draft.save(update_fields=["consequence_pool"])
+        design = draft_to_design(draft)
+        self.assertEqual(design.consequence_pool_id, chosen.consequence_pool_id)
+
     def test_raises_incomplete_all_required_missing(self) -> None:
         """Blank draft (no name, no FK knobs, no tier) raises TechniqueDraftIncomplete."""
         draft = TechniqueDraft.objects.create(character=CharacterSheetFactory())

@@ -103,6 +103,17 @@ class TechniqueDraft(SharedMemoryModel):
         related_name="technique_drafts",
         help_text="Restrictions applied for power bonuses.",
     )
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Curated consequence-pool flavor for the resulting technique's "
+            "standalone casts. Null = shared default."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
