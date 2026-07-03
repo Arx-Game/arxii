@@ -59,7 +59,8 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionInstance
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
-    from world.mechanics.types import HasProperties
+    from world.mechanics.types import HasCapabilities, HasProperties
+    from world.weather.models import WeatherType
 
 
 def _is_isolated(participant: BattleParticipant) -> bool:
@@ -128,6 +129,64 @@ def _terrain_property_modifier(place: BattlePlace | None, holder: HasProperties)
         "property"
     )
     return sum(row.modifier for row in rows if holder.has_property(row.property))
+
+
+def effective_weather(place: BattlePlace | None) -> WeatherType | None:
+    """Two-tier weather resolution (#1715): local place override -> battle
+    override -> ambient (via Battle.region) -> None.
+
+    Returns None when place is None (the unit has no place assigned) as well
+    as when no tier resolves to a value.
+    """
+    from world.weather.services import get_effective_weather  # noqa: PLC0415
+
+    if place is None:
+        return None
+    if place.weather_override is not None:
+        return place.weather_override
+    battle = place.battle
+    if battle.weather_override is not None:
+        return battle.weather_override
+    if battle.region is not None:
+        state = get_effective_weather(battle.region)
+        return state.weather_type if state is not None else None
+    return None
+
+
+def _weather_property_modifier(place: BattlePlace | None, holder: HasProperties) -> int:
+    """Sum every WeatherTypePropertyEffect row matching one of holder's properties (#1715).
+
+    Returns 0 when there's no effective weather at place, or no row matches.
+    """
+    from world.battles.models import WeatherTypePropertyEffect  # noqa: PLC0415
+
+    weather_type = effective_weather(place)
+    if weather_type is None:
+        return 0
+    rows = WeatherTypePropertyEffect.objects.filter(weather_type=weather_type).select_related(
+        "property"
+    )
+    return sum(row.modifier for row in rows if holder.has_property(row.property))
+
+
+def _weather_capability_modifier(place: BattlePlace | None, holder: HasCapabilities) -> int:
+    """Sum every WeatherTypeCapabilityChallenge row where holder's capability magnitude
+    is strictly below the authored threshold (#1715) — the first absence/threshold-based
+    battle modifier in the codebase (everything else is presence- or >=-threshold based).
+
+    Returns 0 when there's no effective weather at place, or no row applies.
+    """
+    from world.battles.models import WeatherTypeCapabilityChallenge  # noqa: PLC0415
+
+    weather_type = effective_weather(place)
+    if weather_type is None:
+        return 0
+    rows = WeatherTypeCapabilityChallenge.objects.filter(weather_type=weather_type).select_related(
+        "capability"
+    )
+    return sum(
+        row.modifier for row in rows if holder.effective_capability(row.capability) < row.threshold
+    )
 
 
 def _quality_modifier(quality: str) -> int:
@@ -253,9 +312,9 @@ class BattleTechniqueResolution:
 class BattleTechniqueResolver:
     """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
     own check, folding in the full battle modifier stack (Property affinity,
-    terrain, unit quality, commander bonus, posture — #1711/#1794). Battle has no
-    damage-profile/condition application of its own — that stays in
-    ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
+    terrain, weather property/capability, unit quality, commander bonus, posture —
+    #1711/#1794/#1715). Battle has no damage-profile/condition application of its
+    own — that stays in ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
     """
 
     character: ObjectDB
@@ -275,7 +334,7 @@ class BattleTechniqueResolver:
         return BattleTechniqueResolution(check_result=check_result)
 
     def _battle_modifier_stack(self) -> int:
-        """Sum every modifier source relevant to this declaration (#1711/#1794)."""
+        """Sum every modifier source relevant to this declaration (#1711/#1794/#1715)."""
         participant = self.declaration.participant
         unit = self.declaration.target_unit
 
@@ -283,11 +342,23 @@ class BattleTechniqueResolver:
             _property_affinity_modifier(self.technique, unit) if unit is not None else 0
         )
         terrain = _terrain_property_modifier(unit.place, unit) if unit is not None else 0
+        weather_property = _weather_property_modifier(unit.place, unit) if unit is not None else 0
+        weather_capability = (
+            _weather_capability_modifier(unit.place, unit) if unit is not None else 0
+        )
         quality = _quality_modifier(unit.quality) if unit is not None else 0
         commander = commander_bonus_for_side_at_place(participant.side, participant.place)
         posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
 
-        return property_affinity + terrain + quality + commander + posture
+        return (
+            property_affinity
+            + terrain
+            + weather_property
+            + weather_capability
+            + quality
+            + commander
+            + posture
+        )
 
 
 def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckResult | None:

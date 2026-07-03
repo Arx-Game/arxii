@@ -18,11 +18,27 @@ from world.battles.constants import (
     BattleActionKind,
     BattleActionScope,
 )
-from world.battles.factories import BattleFactory, BattlePlaceFactory
+
+# NEW imports for this task only — BattleFactory, BattlePlaceFactory, AreaFactory,
+# WeatherTypeFactory were already imported by Task 2; CapabilityTypeFactory,
+# PropertyFactory already imported by Task 4. Do not re-import them.
+from world.battles.factories import (
+    BattleFactory,
+    BattlePlaceFactory,
+    BattleSideFactory,
+    BattleUnitFactory,
+    WeatherTypeCapabilityChallengeFactory,
+    WeatherTypePropertyEffectFactory,
+)
+from world.battles.resolution import (
+    _weather_capability_modifier,
+    _weather_property_modifier,
+    effective_weather,
+)
 from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import TechniqueFactory
 from world.mechanics.factories import PropertyFactory
-from world.weather.factories import WeatherTypeFactory
+from world.weather.factories import RegionWeatherStateFactory, WeatherTypeFactory
 
 # NOTE for every subsequent task in this plan: this file's imports are added
 # INCREMENTALLY, one task at a time, each import appearing exactly once at
@@ -135,3 +151,98 @@ class WeatherEffectModelsTests(TestCase):
             WeatherTypeCapabilityChallenge.objects.create(
                 weather_type=weather_type, capability=capability, threshold=2, modifier=-10
             )
+
+
+class EffectiveWeatherTests(TestCase):
+    def test_place_override_wins_over_everything(self) -> None:
+        area = AreaFactory()
+        ambient = WeatherTypeFactory()
+        battle_cast = WeatherTypeFactory()
+        local = WeatherTypeFactory()
+        RegionWeatherStateFactory(area=area, weather_type=ambient)
+        battle = BattleFactory(region=area, weather_override=battle_cast)
+        place = BattlePlaceFactory(battle=battle, weather_override=local)
+
+        self.assertEqual(effective_weather(place), local)
+
+    def test_battle_override_wins_when_no_place_override(self) -> None:
+        area = AreaFactory()
+        ambient = WeatherTypeFactory()
+        battle_cast = WeatherTypeFactory()
+        RegionWeatherStateFactory(area=area, weather_type=ambient)
+        battle = BattleFactory(region=area, weather_override=battle_cast)
+        place = BattlePlaceFactory(battle=battle)
+
+        self.assertEqual(effective_weather(place), battle_cast)
+
+    def test_ambient_wins_when_no_overrides(self) -> None:
+        area = AreaFactory()
+        ambient = WeatherTypeFactory()
+        RegionWeatherStateFactory(area=area, weather_type=ambient)
+        battle = BattleFactory(region=area)
+        place = BattlePlaceFactory(battle=battle)
+
+        self.assertEqual(effective_weather(place), ambient)
+
+    def test_none_when_no_overrides_and_no_region(self) -> None:
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+
+        self.assertIsNone(effective_weather(place))
+
+    def test_none_when_place_is_none(self) -> None:
+        self.assertIsNone(effective_weather(None))
+
+
+class WeatherModifierTests(TestCase):
+    def test_weather_property_modifier_sums_matching_rows(self) -> None:
+        weather_type = WeatherTypeFactory()
+        battle = BattleFactory(weather_override=weather_type)
+        place = BattlePlaceFactory(battle=battle)
+        side = BattleSideFactory(battle=battle)
+        unit = BattleUnitFactory(battle=battle, side=side, place=place)
+        prop = PropertyFactory()
+        unit.properties.add(prop)
+        WeatherTypePropertyEffectFactory(weather_type=weather_type, property=prop, modifier=15)
+
+        self.assertEqual(_weather_property_modifier(place, unit), 15)
+
+    def test_weather_property_modifier_zero_when_no_weather(self) -> None:
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        side = BattleSideFactory(battle=battle)
+        unit = BattleUnitFactory(battle=battle, side=side, place=place)
+
+        self.assertEqual(_weather_property_modifier(place, unit), 0)
+
+    def test_weather_capability_modifier_applies_below_threshold(self) -> None:
+        from world.battles.models import BattleUnitCapability
+
+        weather_type = WeatherTypeFactory()
+        battle = BattleFactory(weather_override=weather_type)
+        place = BattlePlaceFactory(battle=battle)
+        side = BattleSideFactory(battle=battle)
+        unit = BattleUnitFactory(battle=battle, side=side, place=place)
+        capability = CapabilityTypeFactory()
+        BattleUnitCapability.objects.create(unit=unit, capability=capability, value=0)
+        WeatherTypeCapabilityChallengeFactory(
+            weather_type=weather_type, capability=capability, threshold=1, modifier=-20
+        )
+
+        self.assertEqual(_weather_capability_modifier(place, unit), -20)
+
+    def test_weather_capability_modifier_zero_when_at_or_above_threshold(self) -> None:
+        from world.battles.models import BattleUnitCapability
+
+        weather_type = WeatherTypeFactory()
+        battle = BattleFactory(weather_override=weather_type)
+        place = BattlePlaceFactory(battle=battle)
+        side = BattleSideFactory(battle=battle)
+        unit = BattleUnitFactory(battle=battle, side=side, place=place)
+        capability = CapabilityTypeFactory()
+        BattleUnitCapability.objects.create(unit=unit, capability=capability, value=1)
+        WeatherTypeCapabilityChallengeFactory(
+            weather_type=weather_type, capability=capability, threshold=1, modifier=-20
+        )
+
+        self.assertEqual(_weather_capability_modifier(place, unit), 0)
