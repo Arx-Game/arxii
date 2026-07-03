@@ -91,9 +91,12 @@ with the CI schema-from-models decision.
 
 ### A new standalone-SQL migration must be mirrored into `tools/build_schema.py`
 
-Per-PR CI and local `just test-parity`/`just test-fast` build their schema from current model
-state (`tools/build_schema.py`), not migration replay (ADR-0083) — see the note above on the
-vendored `objects` migration for how that decision interacts with the drift gate. `build_schema.py`
+Per-PR CI and the local PG parity tier (`just test-parity`) build their schema from current
+model state via `tools/build_schema.py`, not migration replay (ADR-0083); the SQLite fast tier
+(`just test-fast`) builds from model state too (Django syncdb) but never runs `build_schema.py`,
+so it never has these SQL-defined objects at all — its PG-only helpers are no-op'd instead. See
+the note above on the vendored `objects` migration for how ADR-0083 interacts with the drift
+gate. `build_schema.py`
 applies exactly the standalone SQL files listed in its `SQL_FILES` constant (the partition
 rewrite, composite FKs, materialized views) plus the idempotent seed functions; it does not
 replay migrations, so it has no way to discover a new standalone SQL artifact on its own.
