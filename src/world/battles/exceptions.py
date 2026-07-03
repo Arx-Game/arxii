@@ -98,3 +98,12 @@ class PlaceAlreadyDuelingError(BattleError):
 
     def __init__(self, user_message: str = "A duel is already underway at this front.") -> None:
         super().__init__(user_message)
+
+
+class PlaceScopeRequiredError(BattleError):
+    """Raised when REPEL/HOLD is declared with a scope other than PLACE (#1712)."""
+
+    def __init__(
+        self, user_message: str = "That action can only be declared at a front (place scope)."
+    ) -> None:
+        super().__init__(user_message)
