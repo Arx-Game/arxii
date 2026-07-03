@@ -28,6 +28,15 @@ const STATION_DETAILS = {
   is_broken: false,
 };
 
+// install/upgrade only start a Project — they return {project_id}, not a
+// LabStationDetails row (see world/items/serializers_station.py
+// RoomFeatureProjectStartResultSerializer).
+const PROJECT_START_RESULT = { project_id: 42 };
+
+// repair returns only the two durability fields, not the full
+// LabStationDetails shape (LabStationRepairResultSerializer).
+const REPAIR_RESULT = { durability: 15, max_durability: 20 };
+
 describe('useLabStationStatus', () => {
   it('loads station status for a given feature instance id', async () => {
     const qc = new QueryClient();
@@ -58,7 +67,7 @@ describe('useInstallLabStation', () => {
   it('installs a station and invalidates the lab-station root key on success', async () => {
     const qc = new QueryClient();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    vi.mocked(api.installLabStation).mockResolvedValue(STATION_DETAILS);
+    vi.mocked(api.installLabStation).mockResolvedValue(PROJECT_START_RESULT);
 
     const { result } = renderHook(() => useInstallLabStation(), {
       wrapper: createWrapper(qc),
@@ -77,7 +86,7 @@ describe('useRepairLabStation', () => {
   it('repairs a station and invalidates that station status query on success', async () => {
     const qc = new QueryClient();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    vi.mocked(api.repairLabStation).mockResolvedValue(STATION_DETAILS);
+    vi.mocked(api.repairLabStation).mockResolvedValue(REPAIR_RESULT);
 
     const { result } = renderHook(() => useRepairLabStation(7), {
       wrapper: createWrapper(qc),

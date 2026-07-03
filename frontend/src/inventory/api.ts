@@ -32,6 +32,14 @@ type FacetCraftResult = components['schemas']['FacetCraftResult'];
 export type CraftingQuote = components['schemas']['CraftingQuote'];
 export type StationStatus = components['schemas']['StationStatus'];
 export type LabStationDetails = components['schemas']['LabStationDetails'];
+// install/upgrade only ever start a Project — they do NOT synchronously
+// create a LabStationDetails row (level/is_broken/durability don't exist on
+// this response). repair returns just the two durability fields, no
+// level/is_broken. Both are now correctly modeled server-side via
+// @extend_schema on LabStationViewSet (world/items/views_station.py), so
+// these are the real generated shapes, not hand-typed workarounds.
+export type RoomFeatureProjectStartResult = components['schemas']['RoomFeatureProjectStartResult'];
+export type LabStationRepairResult = components['schemas']['LabStationRepairResult'];
 
 const BASE_URL = '/api/items';
 
@@ -271,7 +279,7 @@ export async function getLabStationStatus(featureInstanceId: number): Promise<La
 
 export async function installLabStation(
   payload: InstallLabStationPayload
-): Promise<LabStationDetails> {
+): Promise<RoomFeatureProjectStartResult> {
   const res = await apiFetch(`${BASE_URL}/lab-stations/install/`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -282,7 +290,7 @@ export async function installLabStation(
 
 export async function upgradeLabStation(
   payload: InstallLabStationPayload
-): Promise<LabStationDetails> {
+): Promise<RoomFeatureProjectStartResult> {
   const res = await apiFetch(`${BASE_URL}/lab-stations/upgrade/`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -294,7 +302,7 @@ export async function upgradeLabStation(
 export async function repairLabStation(
   featureInstanceId: number,
   payload: RepairLabStationPayload
-): Promise<LabStationDetails> {
+): Promise<LabStationRepairResult> {
   const res = await apiFetch(`${BASE_URL}/lab-stations/${featureInstanceId}/repair/`, {
     method: 'POST',
     body: JSON.stringify(payload),

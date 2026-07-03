@@ -8,6 +8,7 @@ from __future__ import annotations
 from http import HTTPMethod
 
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from evennia.objects.models import ObjectDB
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -20,7 +21,9 @@ from world.items.crafting.models import LabStationDetails
 from world.items.serializers_station import (
     LabStationDetailsSerializer,
     LabStationInstallSerializer,
+    LabStationRepairResultSerializer,
     LabStationRepairSerializer,
+    RoomFeatureProjectStartResultSerializer,
 )
 from world.magic.services.auth import _resolve_actor_sheet
 from world.room_features.seeds import ensure_lab_kind
@@ -81,16 +84,22 @@ class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(result.data, status=status.HTTP_201_CREATED)
+        return Response(
+            RoomFeatureProjectStartResultSerializer(result.data).data,
+            status=status.HTTP_201_CREATED,
+        )
 
+    @extend_schema(responses={201: RoomFeatureProjectStartResultSerializer})
     @action(detail=False, methods=[HTTPMethod.POST], url_path="install")
     def install(self, request: Request) -> Response:
         return self._dispatch_install_or_upgrade(request)
 
+    @extend_schema(responses={201: RoomFeatureProjectStartResultSerializer})
     @action(detail=False, methods=[HTTPMethod.POST], url_path="upgrade")
     def upgrade(self, request: Request) -> Response:
         return self._dispatch_install_or_upgrade(request)
 
+    @extend_schema(responses={200: LabStationRepairResultSerializer})
     @action(detail=True, methods=[HTTPMethod.POST], url_path="repair")
     def repair(self, request: Request, feature_instance_id: str | None = None) -> Response:
         station = self.get_object()
@@ -105,4 +114,7 @@ class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(result.data, status=status.HTTP_200_OK)
+        return Response(
+            LabStationRepairResultSerializer(result.data).data,
+            status=status.HTTP_200_OK,
+        )

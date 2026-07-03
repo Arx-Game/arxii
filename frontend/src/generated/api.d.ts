@@ -19648,6 +19648,18 @@ export interface components {
       readonly level: number;
       readonly is_broken: boolean;
     };
+    /**
+     * @description Response shape for ``repair``.
+     *
+     *     Only the two durability fields ``RepairLabStationAction.execute()``
+     *     actually returns (``actions/definitions/room_features.py``) —
+     *     ``level``/``is_broken`` are NOT part of this response, unlike the
+     *     ``GET`` status endpoint (``LabStationDetailsSerializer``).
+     */
+    LabStationRepairResult: {
+      durability: number;
+      max_durability: number;
+    };
     LedgerRow: {
       id: number;
       amount: number;
@@ -25765,6 +25777,17 @@ export interface components {
       axes: components['schemas']['ExposureAxis'][];
       fixtures: components['schemas']['PlacedFixture'][];
       fixture_kinds: components['schemas']['FixtureKind'][];
+    };
+    /**
+     * @description Response shape for ``install``/``upgrade``.
+     *
+     *     Both routes only ever start a ``Project`` — they do NOT synchronously
+     *     create a ``LabStationDetails`` row, so the response is just the new
+     *     project's pk. Matches ``StartRoomFeatureProjectAction.execute()``'s
+     *     ``ActionResult.data`` (``actions/definitions/room_features.py``).
+     */
+    RoomFeatureProjectStartResult: {
+      project_id: number;
     };
     /** @description The shared room-size unit ladder. */
     RoomSizeTier: {
@@ -37654,7 +37677,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['LabStationDetails'];
+          'application/json': components['schemas']['LabStationRepairResult'];
         };
       };
     };
@@ -37668,12 +37691,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['LabStationDetails'];
+          'application/json': components['schemas']['RoomFeatureProjectStartResult'];
         };
       };
     };
@@ -37687,12 +37710,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['LabStationDetails'];
+          'application/json': components['schemas']['RoomFeatureProjectStartResult'];
         };
       };
     };

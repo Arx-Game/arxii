@@ -31,3 +31,28 @@ class LabStationInstallSerializer(serializers.Serializer):
 
 class LabStationRepairSerializer(serializers.Serializer):
     restore_points = serializers.IntegerField(min_value=1)
+
+
+class RoomFeatureProjectStartResultSerializer(serializers.Serializer):
+    """Response shape for ``install``/``upgrade``.
+
+    Both routes only ever start a ``Project`` — they do NOT synchronously
+    create a ``LabStationDetails`` row, so the response is just the new
+    project's pk. Matches ``StartRoomFeatureProjectAction.execute()``'s
+    ``ActionResult.data`` (``actions/definitions/room_features.py``).
+    """
+
+    project_id = serializers.IntegerField()
+
+
+class LabStationRepairResultSerializer(serializers.Serializer):
+    """Response shape for ``repair``.
+
+    Only the two durability fields ``RepairLabStationAction.execute()``
+    actually returns (``actions/definitions/room_features.py``) —
+    ``level``/``is_broken`` are NOT part of this response, unlike the
+    ``GET`` status endpoint (``LabStationDetailsSerializer``).
+    """
+
+    durability = serializers.IntegerField()
+    max_durability = serializers.IntegerField()

@@ -10346,7 +10346,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LabStationDetails'
+                $ref: '#/components/schemas/LabStationRepairResult'
           description: ''
   /api/items/lab-stations/install/:
     post:
@@ -10357,11 +10357,11 @@ paths:
       security:
       - cookieAuth: []
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LabStationDetails'
+                $ref: '#/components/schemas/RoomFeatureProjectStartResult'
           description: ''
   /api/items/lab-stations/upgrade/:
     post:
@@ -10372,11 +10372,11 @@ paths:
       security:
       - cookieAuth: []
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LabStationDetails'
+                $ref: '#/components/schemas/RoomFeatureProjectStartResult'
           description: ''
   /api/items/outfit-slots/:
     get:
@@ -35508,6 +35508,23 @@ components:
       - is_broken
       - level
       - max_durability
+    LabStationRepairResult:
+      type: object
+      description: |-
+        Response shape for ``repair``.
+
+        Only the two durability fields ``RepairLabStationAction.execute()``
+        actually returns (``actions/definitions/room_features.py``) —
+        ``level``/``is_broken`` are NOT part of this response, unlike the
+        ``GET`` status endpoint (``LabStationDetailsSerializer``).
+      properties:
+        durability:
+          type: integer
+        max_durability:
+          type: integer
+      required:
+      - durability
+      - max_durability
     LedgerRow:
       type: object
       properties:
@@ -46604,6 +46621,20 @@ components:
       - fixtures
       - level
       - points
+    RoomFeatureProjectStartResult:
+      type: object
+      description: |-
+        Response shape for ``install``/``upgrade``.
+
+        Both routes only ever start a ``Project`` — they do NOT synchronously
+        create a ``LabStationDetails`` row, so the response is just the new
+        project's pk. Matches ``StartRoomFeatureProjectAction.execute()``'s
+        ``ActionResult.data`` (``actions/definitions/room_features.py``).
+      properties:
+        project_id:
+          type: integer
+      required:
+      - project_id
     RoomSizeTier:
       type: object
       description: The shared room-size unit ladder.
