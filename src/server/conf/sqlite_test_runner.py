@@ -54,6 +54,7 @@ import tempfile
 import time
 import types
 from typing import Any
+from urllib.parse import quote
 
 from django.db import DEFAULT_DB_ALIAS
 
@@ -107,9 +108,10 @@ def _schema_fingerprint() -> str:
     labels. Auto-created M2M through-tables are excluded — their schema is
     fully determined by the owning ``ManyToManyField``, which is hashed. A
     false mismatch merely rebuilds the template; a false match would need
-    two genuinely different schemas to hash equal, which the
-    canonicalizations in ``_stable_repr`` cannot cause (callables hash by
-    module-qualified name).
+    two genuinely different schemas to hash equal. The known residual
+    collapses in ``_stable_repr`` (``functools.partial``/bound-method/
+    same-scope-lambda kwargs) can't get there: callable field kwargs are
+    Python-side and never influence the emitted DDL.
     """
     import django  # noqa: PLC0415
     from django.apps import apps  # noqa: PLC0415
@@ -163,7 +165,10 @@ def _restore_sqlite_from_template(alias: str, template: Path) -> None:
 
     connection = connections[alias]
     connection.ensure_connection()
-    source = sqlite3.connect(f"file:{template}?mode=ro", uri=True)
+    # Percent-encode the path: SQLite parses the URI form, so a raw '#' in a
+    # worktree path would truncate it (dropping mode=ro) and '%HH' sequences
+    # would be decoded, both silently defeating the read-only guard.
+    source = sqlite3.connect(f"file:{quote(str(template))}?mode=ro", uri=True)
     try:
         source.backup(connection.connection)
     finally:
@@ -204,16 +209,25 @@ def _prune_schema_cache() -> None:
     dump (the ``except BaseException`` cleanup never ran) orphans its tmp
     file, and nothing else would ever remove it.
     """
-    entries = sorted(
-        SCHEMA_CACHE_DIR.glob("schema-*.sqlite3"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    for stale in entries[_SCHEMA_CACHE_KEEP:]:
+
+    def snapshot(pattern: str) -> list[tuple[Path, float]]:
+        # A concurrent run's prune can unlink an entry between glob and
+        # stat; skip those instead of crashing a run whose schema already
+        # built fine.
+        entries = []
+        for path in SCHEMA_CACHE_DIR.glob(pattern):
+            try:
+                entries.append((path, path.stat().st_mtime))
+            except FileNotFoundError:
+                continue
+        return entries
+
+    templates = sorted(snapshot("schema-*.sqlite3"), key=lambda entry: entry[1], reverse=True)
+    for stale, _mtime in templates[_SCHEMA_CACHE_KEEP:]:
         stale.unlink(missing_ok=True)
     cutoff = time.time() - 3600
-    for orphan in SCHEMA_CACHE_DIR.glob("*.sqlite3.tmp"):
-        if orphan.stat().st_mtime < cutoff:
+    for orphan, mtime in snapshot("*.sqlite3.tmp"):
+        if mtime < cutoff:
             orphan.unlink(missing_ok=True)
 
 
