@@ -31,6 +31,9 @@ from world.battles.exceptions import (
     BattleConcludedError,
     CannotStrikeOwnSideError,
     CharacterDoesNotKnowTechniqueError,
+    FortificationAlreadyBreachedError,
+    FortificationOwnershipMismatchError,
+    FortificationTargetRequiredError,
     InsufficientCommandTierError,
     MissingScopeTargetError,
     NoCommandHierarchyError,
@@ -49,6 +52,7 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
     BattleUnitCapability,
+    Fortification,
 )
 from world.combat.constants import OpponentTier
 from world.conditions.models import CapabilityType
@@ -316,6 +320,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
     scope: str = BattleActionScope.UNIT,
     target_place: BattlePlace | None = None,
     target_side: BattleSide | None = None,
+    target_fortification: Fortification | None = None,
 ) -> BattleActionDeclaration:
     """Record or update the participant's action declaration for the current round.
 
@@ -335,6 +340,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
             covenant.
         target_place: The ``BattlePlace`` affected (scope=PLACE).
         target_side: The ``BattleSide`` affected (scope=SIDE).
+        target_fortification: The ``Fortification`` being BREACHed/FORTIFYed (#1713).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
@@ -350,6 +356,11 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
         CannotStrikeOwnSideError: If ``action_kind`` is STRIKE or ROUT, scope is SIDE,
             and ``target_side`` is the participant's own side.
         PlaceScopeRequiredError: If action_kind is REPEL or HOLD and scope is not PLACE.
+        FortificationTargetRequiredError: If action_kind is BREACH/FORTIFY and
+            target_fortification is None.
+        FortificationAlreadyBreachedError: If target_fortification.breached is True.
+        FortificationOwnershipMismatchError: If BREACH targets your own side's
+            fortification, or FORTIFY targets the enemy's.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -392,6 +403,13 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
     ):
         raise CannotStrikeOwnSideError
 
+    if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
+        _validate_fortification_target(
+            participant=participant,
+            action_kind=action_kind,
+            target_fortification=target_fortification,
+        )
+
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
         participant=participant,
@@ -403,6 +421,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
             "scope": scope,
             "target_place": target_place,
             "target_side": target_side,
+            "target_fortification": target_fortification,
             "resolved": False,
         },
     )
@@ -437,6 +456,28 @@ def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> No
     ).exists()
     if not has_tier:
         raise InsufficientCommandTierError
+
+
+def _validate_fortification_target(
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    target_fortification: Fortification | None,
+) -> None:
+    """Raise unless *target_fortification* is a valid BREACH/FORTIFY target (#1713).
+
+    BREACH must target the enemy's structure; FORTIFY must target your own.
+    Either way the target must be set and not already breached.
+    """
+    if target_fortification is None:
+        raise FortificationTargetRequiredError
+    if target_fortification.breached:
+        raise FortificationAlreadyBreachedError
+    is_own_structure = target_fortification.defending_side_id == participant.side_id
+    if action_kind == BattleActionKind.BREACH and is_own_structure:
+        raise FortificationOwnershipMismatchError
+    if action_kind == BattleActionKind.FORTIFY and not is_own_structure:
+        raise FortificationOwnershipMismatchError
 
 
 # ---------------------------------------------------------------------------

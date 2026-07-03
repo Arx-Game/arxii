@@ -35,6 +35,9 @@ from world.battles.constants import (
 )
 from world.battles.exceptions import (
     CannotStrikeOwnSideError,
+    FortificationAlreadyBreachedError,
+    FortificationOwnershipMismatchError,
+    FortificationTargetRequiredError,
     InsufficientCommandTierError,
     MissingScopeTargetError,
     NoCommandHierarchyError,
@@ -46,6 +49,7 @@ from world.battles.factories import (
     BattleRoundFactory,
     BattleSideFactory,
     BattleUnitFactory,
+    FortificationFactory,
 )
 from world.battles.models import TechniquePropertyAffinity, TerrainPropertyEffect
 from world.battles.services import (
@@ -309,6 +313,98 @@ class DeclareBattleActionTests(TestCase):
         )
         self.assertEqual(decl.action_kind, BattleActionKind.REPEL)
         self.assertEqual(decl.target_place_id, place.pk)
+
+
+class DeclareBattleActionFortificationTests(TestCase):
+    """BREACH/FORTIFY target validation on declare_battle_action (#1713)."""
+
+    def setUp(self) -> None:
+        from actions.factories import ActionTemplateFactory
+        from world.battles.services import create_battle
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        self.battle = create_battle(name="Fortification Declaration Test Battle")
+        self.attacker_side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.attacker_sheet = CharacterSheetFactory()
+        self.defender_sheet = CharacterSheetFactory()
+        self.attacker_participant = enlist_participant(
+            battle=self.battle, character_sheet=self.attacker_sheet, side=self.attacker_side
+        )
+        self.defender_participant = enlist_participant(
+            battle=self.battle, character_sheet=self.defender_sheet, side=self.defender_side
+        )
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.fort = FortificationFactory(place=self.place, defending_side=self.defender_side)
+        self.battle_round = begin_battle_round(battle=self.battle)
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.attacker_sheet, technique=self.technique)
+        CharacterTechniqueFactory(character=self.defender_sheet, technique=self.technique)
+
+    def test_breach_requires_target_fortification(self) -> None:
+        with self.assertRaises(FortificationTargetRequiredError):
+            declare_battle_action(
+                participant=self.attacker_participant,
+                action_kind=BattleActionKind.BREACH,
+                technique=self.technique,
+            )
+
+    def test_fortify_requires_target_fortification(self) -> None:
+        with self.assertRaises(FortificationTargetRequiredError):
+            declare_battle_action(
+                participant=self.defender_participant,
+                action_kind=BattleActionKind.FORTIFY,
+                technique=self.technique,
+            )
+
+    def test_breach_own_fortification_raises(self) -> None:
+        with self.assertRaises(FortificationOwnershipMismatchError):
+            declare_battle_action(
+                participant=self.defender_participant,
+                action_kind=BattleActionKind.BREACH,
+                technique=self.technique,
+                target_fortification=self.fort,
+            )
+
+    def test_fortify_enemy_fortification_raises(self) -> None:
+        with self.assertRaises(FortificationOwnershipMismatchError):
+            declare_battle_action(
+                participant=self.attacker_participant,
+                action_kind=BattleActionKind.FORTIFY,
+                technique=self.technique,
+                target_fortification=self.fort,
+            )
+
+    def test_breach_already_breached_raises(self) -> None:
+        self.fort.breached = True
+        self.fort.save(update_fields=["breached"])
+        with self.assertRaises(FortificationAlreadyBreachedError):
+            declare_battle_action(
+                participant=self.attacker_participant,
+                action_kind=BattleActionKind.BREACH,
+                technique=self.technique,
+                target_fortification=self.fort,
+            )
+
+    def test_valid_breach_declares_successfully(self) -> None:
+        declaration = declare_battle_action(
+            participant=self.attacker_participant,
+            action_kind=BattleActionKind.BREACH,
+            technique=self.technique,
+            target_fortification=self.fort,
+        )
+        self.assertEqual(declaration.action_kind, BattleActionKind.BREACH)
+        self.assertEqual(declaration.target_fortification_id, self.fort.pk)
+
+    def test_valid_fortify_declares_successfully(self) -> None:
+        declaration = declare_battle_action(
+            participant=self.defender_participant,
+            action_kind=BattleActionKind.FORTIFY,
+            technique=self.technique,
+            target_fortification=self.fort,
+        )
+        self.assertEqual(declaration.action_kind, BattleActionKind.FORTIFY)
+        self.assertEqual(declaration.target_fortification_id, self.fort.pk)
 
 
 class ScopePermissionTests(TestCase):
