@@ -61,8 +61,11 @@ from server.conf.test_runner import TimedEvenniaTestRunner
 SCHEMA_CACHE_DIR = Path(__file__).resolve().parents[2] / ".test_schema_cache"
 
 # How many fingerprint files to keep before pruning the oldest (branch
-# switching produces a handful of live fingerprints; more than this is churn).
-_SCHEMA_CACHE_KEEP = 3
+# switching produces a handful of live fingerprints; more than this is
+# churn). A fingerprint mismatch is always safe — it just rebuilds and
+# re-caches (~15s) — so occasional spurious misses cost time, not
+# correctness; keeping a few extra templates absorbs them.
+_SCHEMA_CACHE_KEEP = 5
 
 # CPython object reprs embed memory addresses ("<function now at 0x7f...>");
 # strip them so field kwargs containing callables hash stably across runs.
