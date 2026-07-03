@@ -13,6 +13,7 @@ from actions.constants import ActionTargetType
 from world.conditions.services import is_untargetable
 from world.magic.models.techniques import ConditionTargetKind, Technique
 from world.magic.services.hostility import is_technique_hostile
+from world.mechanics.services import prerequisites_met
 from world.scenes.models import Persona, Scene
 
 
@@ -64,7 +65,7 @@ def _target_meets_prerequisites(technique: Technique, caster_od, persona: Person
     if not prereqs:
         return True
     target_od = persona.character_sheet.character
-    return all(prereq.evaluate(caster_od, target_od, target_od.location).met for prereq in prereqs)
+    return prerequisites_met(prereqs, caster_od, target_od)
 
 
 def _check_target_prerequisites(

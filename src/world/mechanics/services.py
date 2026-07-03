@@ -43,6 +43,7 @@ from world.mechanics.models import (
     ModifierSource,
     ModifierTarget,
     ObjectProperty,
+    Prerequisite,
     Property,
     PropertyDamageModifier,
     TraitCapabilityDerivation,
@@ -1372,3 +1373,16 @@ def property_damage_bonus(target: ObjectDB, damage_type: DamageType | None) -> i
         Q(damage_type=damage_type) | Q(damage_type__isnull=True)
     )
     return sum(m.modifier_value for m in modifiers)
+
+
+def prerequisites_met(prereqs: Iterable[Prerequisite], caster: ObjectDB, target: ObjectDB) -> bool:
+    """True if target satisfies every one of prereqs (all() semantics; empty = True).
+
+    Shared by both cast paths' target-prerequisite checks (#1793 second-pass dedup):
+    magic's non-combat ``_target_meets_prerequisites``/``_check_target_prerequisites``
+    and combat's ``_check_combat_target_prerequisites``/
+    ``_filter_by_target_prerequisites`` (all in ``world/magic/services/targeting.py``
+    / ``world/combat/services.py`` respectively). For a SELF-relationship caller,
+    pass ``caster`` as both ``caster`` and ``target``.
+    """
+    return all(prereq.evaluate(caster, target, target.location).met for prereq in prereqs)

@@ -302,13 +302,17 @@ class CombatTechniqueResolver:
         """Silently drop opponents that fail technique.target_prerequisites.
 
         AREA/FILTERED_GROUP only — these are enumerated independently of
-        _build_affected_targets/_check_combat_target_prerequisites, so a
-        target_prerequisites-gated technique would otherwise land on every
-        opponent regardless of eligibility. Mirrors resolve_targets' silent
-        AREA/FILTERED_GROUP filter (world/magic/services/targeting.py) rather
-        than raising — an AoE cast is expected to skip ineligible targets, not
-        block the whole cast (ADR-0045).
+        _build_affected_targets/_check_combat_target_prerequisites (which now
+        skips AREA/FILTERED_GROUP entirely, deferring to this method, #1793
+        second-pass fix), so a target_prerequisites-gated technique would
+        otherwise land on every opponent regardless of eligibility. Mirrors
+        resolve_targets' silent AREA/FILTERED_GROUP filter
+        (world/magic/services/targeting.py) rather than raising — an AoE cast
+        is expected to skip ineligible targets, not block the whole cast
+        (ADR-0045).
         """
+        from world.mechanics.services import prerequisites_met  # noqa: PLC0415
+
         prereqs = technique.cached_target_prerequisites
         if not prereqs:
             return opponents
@@ -318,9 +322,7 @@ class CombatTechniqueResolver:
             target_od = opp.objectdb
             if target_od is None:
                 continue  # can't evaluate a Property-based prerequisite without an ObjectDB
-            if all(
-                prereq.evaluate(caster_od, target_od, target_od.location).met for prereq in prereqs
-            ):
+            if prerequisites_met(prereqs, caster_od, target_od):
                 eligible.append(opp)
         return eligible
 
@@ -849,9 +851,10 @@ def _check_combat_target_prerequisites(
 ) -> None:
     """Enforce technique.target_prerequisites against combat's explicit target list.
 
-    Combat targets (opponent/ally, from _build_affected_targets) are explicit,
-    not AoE-expanded, so a failure here hard-blocks the cast — mirroring the
-    non-combat SINGLE/SELF hard-block in validate_cast_target.
+    SINGLE is the only target_type that hard-blocks here: its target list
+    (from _build_affected_targets) is the real, complete target set for the
+    cast, so a failure hard-blocks the cast — mirroring the non-combat
+    SINGLE hard-block in validate_cast_target.
 
     For target_type=SELF, the caster IS the target — but the real cast dispatcher
     (``_target_spec_for_technique_action`` in ``actions/player_interface.py``) never
@@ -860,28 +863,38 @@ def _check_combat_target_prerequisites(
     ``test_affected_emitted_for_self_targeted_buff``). Check the caster directly in
     that case rather than relying on targets being populated — mirrors Task 5's
     non-combat SELF fix in ``world/magic/services/targeting.py``.
+
+    AREA/FILTERED_GROUP get NO pre-flight check at all: ``targets`` here is built
+    from ``action.focused_opponent_target``, a single FK that for an AoE dispatch
+    holds only the arbitrary "first" opponent from a client-supplied
+    ``focused_opponent_target_ids`` list (see
+    ``RoundContext._resolve_focused_targets``) — not a real single target, and not
+    the full AoE set. Hard-blocking the whole cast because THAT one arbitrary
+    opponent fails a prerequisite would wrongly kill a cast where other opponents
+    in the same AoE set legitimately pass. Defer entirely to
+    ``_filter_by_target_prerequisites``'s silent per-opponent filter downstream
+    (``_resolved_opponent_targets``, #1793 second-pass fix).
     """
     from actions.constants import ActionTargetType  # noqa: PLC0415
     from world.magic.services.targeting import InvalidCastTarget  # noqa: PLC0415
+    from world.mechanics.services import prerequisites_met  # noqa: PLC0415
 
     prereqs = technique.cached_target_prerequisites
     if not prereqs:
         return
+
+    if technique.target_type in (ActionTargetType.AREA, ActionTargetType.FILTERED_GROUP):
+        return
+
     msg = "Target does not meet this technique's targeting requirement."
 
     if technique.target_type == ActionTargetType.SELF:
-        met = all(
-            prereq.evaluate(caster_od, caster_od, caster_od.location).met for prereq in prereqs
-        )
-        if not met:
+        if not prerequisites_met(prereqs, caster_od, caster_od):
             raise InvalidCastTarget(msg)
         return
 
     for target_od in targets:
-        met = all(
-            prereq.evaluate(caster_od, target_od, target_od.location).met for prereq in prereqs
-        )
-        if not met:
+        if not prerequisites_met(prereqs, caster_od, target_od):
             raise InvalidCastTarget(msg)
 
 
