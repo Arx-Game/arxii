@@ -85,14 +85,46 @@ def _containment_difficulty(witness_count: int) -> int:
     return CONTAINMENT_BASE_DIFFICULTY + CONTAINMENT_DIFFICULTY_PER_WITNESS * witness_count
 
 
-def _run_containment_check(character, witness_count: int) -> bool:
+def _witnesses_are_own_household(actor_persona, witnesses) -> bool:
+    """Every witness shares an organization with the actor (and there is at least one).
+
+    The trusted-servants case: containment among your own people is command,
+    not deception (Apostate 2026-07-03).
+    """
+    if not witnesses:
+        return False
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    actor_orgs = set(
+        OrganizationMembership.objects.filter(
+            persona=actor_persona, left_at__isnull=True, exiled_at__isnull=True
+        ).values_list("organization_id", flat=True)
+    )
+    if not actor_orgs:
+        return False
+    for witness in witnesses:
+        if witness.pk == actor_persona.pk:
+            continue
+        witness_orgs = set(
+            OrganizationMembership.objects.filter(
+                persona=witness, left_at__isnull=True, exiled_at__isnull=True
+            ).values_list("organization_id", flat=True)
+        )
+        if not (witness_orgs & actor_orgs):
+            return False
+    return True
+
+
+def _run_containment_check(character, witness_count: int, *, household: bool = False) -> bool:
     """The hush-it-up roll: the actor's best social tool against the crowd size.
 
-    Auto-picks between the Deception (charm + Persuasion + Manipulation) and
-    Intimidation (presence + Persuasion + Intimidation) compositions by which
-    stat the character is stronger in — "a range of skills based on character
-    capability" (Apostate); the interactive approach-fanned surface is a later
-    slice. Unseeded worlds fail closed (nothing to roll → the scandal leaks).
+    Own-household witnesses → Household Command (presence + Leadership +
+    Stewardship — you are obeyed, not believed; Apostate 2026-07-03).
+    Otherwise auto-picks between Con (charm + Persuasion + Manipulation) and
+    Intimidation (presence + Persuasion + Intimidation) by the stronger stat —
+    "a range of skills based on character capability"; the interactive
+    approach-fanned surface is a later slice. Unseeded worlds fail closed
+    (nothing to roll → the scandal leaks).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
@@ -100,11 +132,14 @@ def _run_containment_check(character, witness_count: int) -> bool:
     handler = character.traits  # ObjectDB typeclass extension (checks/services idiom)
     charm = handler.get_trait_value("charm")
     presence = handler.get_trait_value("presence")
-    preferred = "Deception" if charm >= presence else "Intimidation"
+    if household:
+        preferred = "Household Command"
+    else:
+        preferred = "Con" if charm >= presence else "Intimidation"
     check_type = (
         CheckType.objects.filter(name__iexact=preferred).first()
         or CheckType.objects.filter(name__iexact="Intimidation").first()
-        or CheckType.objects.filter(name__iexact="Deception").first()
+        or CheckType.objects.filter(name__iexact="Con").first()
     )
     if check_type is None:
         return False
@@ -195,7 +230,9 @@ def route_deed_reach(
 
     if scandal_dots:
         contained = not is_public or _run_containment_check(
-            actor_persona.character_sheet.character, len(witnesses)
+            actor_persona.character_sheet.character,
+            len(witnesses),
+            household=_witnesses_are_own_household(actor_persona, witnesses),
         )
         if contained:
             worst = min(scandal_dots.values())

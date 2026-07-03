@@ -15,8 +15,8 @@ Styles (Apostate's design):
   reporter who has the Persuasion skill.
 - **Mostly-accurate** — a check to report around the truth (#1765): success dodges the criminal
   consequences (heat + the society sting) a CRIME_WATCH line would mint; failure applies them.
-  Never grants the fame/prestige swing either way. PROVISIONAL: rides the same Persuasion check
-  as Embellished until the specialized-check foundation (#1688) lands.
+  Never grants the fame/prestige swing either way. Rides **Con** (charm + Persuasion +
+  Manipulation — ratified 2026-07-03).
 
 Reporting a masked deed barefaced (the run was accepted under a different persona than the one
 reporting) risks the *association chance* (#1765): a failed check copies the mask's pursuit heat
@@ -170,22 +170,25 @@ def _run_embellish_check(reporter: ObjectDB, functionary: Functionary) -> bool:
 def _run_consequence_dodge_check(reporter: ObjectDB, functionary: Functionary) -> bool:
     """The mostly-accurate check: report around the truth to dodge the criminal fallout (#1765).
 
-    PROVISIONAL check choice (flagged on the issue): rides the same Persuasion check +
-    Manipulation specialization + giver-standing difficulty as Embellished until the
-    specialized-check foundation (#1688) provides a better-fitting gate. Unlike Embellished
-    there is no skill gate — anyone may try to talk around the truth; the dice decide.
+    Ratified (Apostate 2026-07-03): rides **Con** (charm + Persuasion +
+    Manipulation — talking someone into a curated version of events) against
+    the giver-standing difficulty. Unlike Embellished there is no skill gate —
+    anyone may try to talk around the truth; the dice decide. Unseeded worlds
+    fail closed (falls back to the bare Persuasion check when Con is absent).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
 
-    check_type = CheckType.objects.filter(name__iexact="Persuasion").first()
+    check_type = (
+        CheckType.objects.filter(name__iexact="Con").first()
+        or CheckType.objects.filter(name__iexact="Persuasion").first()
+    )
     if check_type is None:
         return False  # unseeded world: the dodge simply fails, consequences apply.
     result = perform_check(
         reporter,
         check_type,
         target_difficulty=_embellish_difficulty(functionary),
-        specialization=_manipulation_specialization(reporter),
     )
     return result.outcome is not None and result.outcome.success_level >= 0
 
@@ -199,8 +202,10 @@ def _apply_masked_deed_association(
     another (the face taking the renown), a failed check copies the mask's pursuit heat onto
     the reporting persona via :func:`world.justice.services.associate_heat` — the same seam
     the #1334 secrets-outing writer uses later. Success means nobody made the connection.
-    PROVISIONAL check choice, same basis as the dodge check. Unseeded worlds fail harsh
-    (association happens without a roll) — consistent with the dodge failing closed.
+    Ratified (Apostate 2026-07-03): **Deceive** (presence + Persuasion + Manipulation) —
+    fooling people in the moment is the disguise-adjacent frame; the full crafted-disguise
+    quality/identification loop is the appearance epic's later scope. Unseeded worlds fail
+    harsh (association happens without a roll) — consistent with the dodge failing closed.
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
@@ -214,13 +219,15 @@ def _apply_masked_deed_association(
     reporting_persona = active_persona_for_sheet(sheet)
     if reporting_persona is None or reporting_persona.pk == mask.pk:
         return
-    check_type = CheckType.objects.filter(name__iexact="Persuasion").first()
+    check_type = (
+        CheckType.objects.filter(name__iexact="Deceive").first()
+        or CheckType.objects.filter(name__iexact="Persuasion").first()
+    )
     if check_type is not None:
         result = perform_check(
             reporter,
             check_type,
             target_difficulty=_embellish_difficulty(functionary),
-            specialization=_manipulation_specialization(reporter),
         )
         if result.outcome is not None and result.outcome.success_level >= 0:
             return  # slipped away clean — nobody connected the faces.

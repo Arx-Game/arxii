@@ -641,7 +641,8 @@ Social structures, organizations, reputation, and legend tracking.
   `Secret` (blackmail material); public news/leaks set `societies_aware`,
   fire `apply_archetype_society_reputation`, and scale `spread_multiplier`
   by the involved personas' fame (`FAME_SPREAD_FACTORS`). Containment =
-  best-of Deception/Intimidation vs crowd size; Stealth (new skill, seeded)
+  Household Command for own-household witnesses, else best-of Con/Intimidation
+  by stat (ruled 2026-07-03); Stealth (new skill, seeded)
   is the act-time leg, wiring later. Untagged deeds skip the fork.
 - **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
@@ -1283,7 +1284,7 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
   bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
   `settle_obligations`, `run_weekly_economy` (Sunday rollover phases)
-- **Checks (#930):** Tax Collection (presence + Organization + Stewardship) and Domain
+- **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
   graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,

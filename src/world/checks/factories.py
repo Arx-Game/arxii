@@ -105,7 +105,7 @@ class ConsequenceEffectFactory(DjangoModelFactory):
 _SOCIAL_CHECK_TYPES = [
     ("Intimidation", "Coercing through force of presence, threats, or physical dominance.", 0),
     ("Persuasion", "Convincing through reasoned argument, charm, and social grace.", 1),
-    ("Deception", "Misleading through misdirection, half-truths, or outright lies.", 2),
+    ("Deceive", "Misleading through misdirection, half-truths, or outright lies.", 2),
     ("Seduction", "Beguiling through charm, allure, and romantic suggestion.", 3),
     ("Performance", "Captivating an audience through music, oration, or storytelling.", 4),
     ("Presence", "Commanding attention through sheer force of personality.", 5),
@@ -117,8 +117,8 @@ _SOCIAL_TRAIT_WEIGHTS = [
     ("Intimidation", "strength", "0.50"),
     ("Persuasion", "charm", "1.00"),
     ("Persuasion", "intellect", "0.50"),
-    ("Deception", "wits", "1.00"),
-    ("Deception", "charm", "0.50"),
+    ("Deceive", "wits", "1.00"),
+    ("Deceive", "charm", "0.50"),
     ("Seduction", "charm", "1.00"),
     ("Seduction", "presence", "0.50"),
     ("Performance", "presence", "1.00"),
@@ -131,7 +131,7 @@ _SOCIAL_TRAIT_WEIGHTS = [
 _SOCIAL_ACTION_TEMPLATES = [
     ("Intimidate", "Intimidation", "single", "skull"),
     ("Persuade", "Persuasion", "single", "handshake"),
-    ("Deceive", "Deception", "single", "mask"),
+    ("Deceive", "Deceive", "single", "mask"),
     ("Flirt", "Seduction", "single", "heart"),
     ("Perform", "Performance", "area", "music"),
     ("Entrance", "Presence", "area", "sparkles"),

@@ -18,7 +18,7 @@ class GovernanceCheckSeedTests(TestCase):
     def test_seeds_both_skills_with_their_specs(self) -> None:
         for skill_name, spec_name in (
             ("Scholarship", "Economics"),
-            ("Organization", "Stewardship"),
+            ("Leadership", "Stewardship"),
         ):
             skill = Skill.objects.get(trait__name=skill_name)
             self.assertEqual(skill.trait.trait_type, TraitType.SKILL)
@@ -29,7 +29,7 @@ class GovernanceCheckSeedTests(TestCase):
         trait_names = set(
             CheckTypeTrait.objects.filter(check_type=check).values_list("trait__name", flat=True)
         )
-        self.assertEqual(trait_names, {"presence", "Organization"})
+        self.assertEqual(trait_names, {"presence", "Leadership"})
         spec = CheckTypeSpecialization.objects.get(check_type=check)
         self.assertEqual(spec.specialization.name, "Stewardship")
 
