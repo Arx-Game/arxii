@@ -14,7 +14,6 @@ underlying services are already unit-tested in
 from __future__ import annotations
 
 from django.test import TestCase
-from evennia.utils.idmapper.models import flush_cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -31,32 +30,25 @@ from world.roster.factories import PlayerDataFactory, RosterEntryFactory, Roster
 class LabStationApiTestCase(TestCase):
     """Base test-case: owner account/character/sheet with standing over a room."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        # Multi-app CI shard runs can hand back a contaminated idmapper cache
-        # entry for an Evennia-typeclassed object from an earlier app's tests,
-        # which then fails to deepcopy per-test (DbHolder is un-deepcopyable).
-        # See docs' known-test-failures reference for this exact symptom.
-        flush_cache()
-        cls.owner = AccountFactory(username="lab_station_api_owner")
-        cls.owner_char = CharacterFactory(db_key="lab_station_api_owner_char")
-        cls.owner_sheet = CharacterSheetFactory(character=cls.owner_char)
-        owner_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
+    def setUp(self) -> None:
+        self.owner = AccountFactory(username="lab_station_api_owner")
+        self.owner_char = CharacterFactory(db_key="lab_station_api_owner_char")
+        self.owner_sheet = CharacterSheetFactory(character=self.owner_char)
+        owner_entry = RosterEntryFactory(character_sheet=self.owner_sheet)
         RosterTenureFactory(
             roster_entry=owner_entry,
-            player_data=PlayerDataFactory(account=cls.owner),
+            player_data=PlayerDataFactory(account=self.owner),
         )
 
-        cls.room_profile = RoomProfileFactory()
-        cls.owner_char.location = cls.room_profile.objectdb
-        cls.owner_char.save()
+        self.room_profile = RoomProfileFactory()
+        self.owner_char.location = self.room_profile.objectdb
+        self.owner_char.save()
         LocationOwnershipFactory(
             on_room=True,
-            room_profile=cls.room_profile,
-            holder_persona=cls.owner_sheet.primary_persona,
+            room_profile=self.room_profile,
+            holder_persona=self.owner_sheet.primary_persona,
         )
 
-    def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(user=self.owner)
 
@@ -96,15 +88,14 @@ class LabStationInstallTests(LabStationApiTestCase):
 class LabStationUpgradeTests(LabStationApiTestCase):
     """POST /api/items/lab-stations/upgrade/ — a real, separate route from install."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
-        cls.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
-        cls.instance = RoomFeatureInstanceFactory(
-            room_profile=cls.room_profile, feature_kind=cls.kind, level=1
+    def setUp(self) -> None:
+        super().setUp()
+        self.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        self.instance = RoomFeatureInstanceFactory(
+            room_profile=self.room_profile, feature_kind=self.kind, level=1
         )
         LabStationDetails.objects.create(
-            feature_instance=cls.instance, durability=20, max_durability=20
+            feature_instance=self.instance, durability=20, max_durability=20
         )
 
     def test_upgrade_creates_project_at_higher_level(self) -> None:
@@ -128,29 +119,21 @@ class LabStationUpgradeTests(LabStationApiTestCase):
 class LabStationRepairTests(LabStationApiTestCase):
     """POST /api/items/lab-stations/<id>/repair/ + GET .../<id>/ status."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
-        cls.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
-        cls.instance = RoomFeatureInstanceFactory(
-            room_profile=cls.room_profile, feature_kind=cls.kind, level=2
-        )
-        cls.station = LabStationDetails.objects.create(
-            feature_instance=cls.instance, durability=10, max_durability=40
-        )
-
     def setUp(self) -> None:
         super().setUp()
+        self.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        self.instance = RoomFeatureInstanceFactory(
+            room_profile=self.room_profile, feature_kind=self.kind, level=2
+        )
+        self.station = LabStationDetails.objects.create(
+            feature_instance=self.instance, durability=10, max_durability=40
+        )
+
         from world.currency.services import get_or_create_purse
 
         purse = get_or_create_purse(self.owner_sheet)
         purse.balance = 10_000
         purse.save(update_fields=["balance"])
-        # setUpTestData's self.station is a class-level shared object; a prior
-        # test's refresh_from_db() would otherwise leak its mutated in-memory
-        # durability into this test even though the DB itself rolls back
-        # between tests (Django TestCase per-test transaction wrapping).
-        self.station.refresh_from_db()
 
     def test_repair_endpoint(self) -> None:
         response = self.client.post(
@@ -192,25 +175,24 @@ class LabStationListTests(LabStationApiTestCase):
     ``LabStationDetails`` row in the game unbounded to any authenticated user.
     """
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
-        cls.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
-        cls.instance = RoomFeatureInstanceFactory(
-            room_profile=cls.room_profile, feature_kind=cls.kind, level=1
+    def setUp(self) -> None:
+        super().setUp()
+        self.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        self.instance = RoomFeatureInstanceFactory(
+            room_profile=self.room_profile, feature_kind=self.kind, level=1
         )
-        cls.station = LabStationDetails.objects.create(
-            feature_instance=cls.instance, durability=20, max_durability=20
+        self.station = LabStationDetails.objects.create(
+            feature_instance=self.instance, durability=20, max_durability=20
         )
-        cls.other_room = RoomProfileFactory()
-        cls.other_kind = RoomFeatureKindFactory(
+        self.other_room = RoomProfileFactory()
+        self.other_kind = RoomFeatureKindFactory(
             service_strategy=RoomFeatureServiceStrategy.COMMAND_CENTER
         )
-        cls.other_instance = RoomFeatureInstanceFactory(
-            room_profile=cls.other_room, feature_kind=cls.other_kind, level=1
+        self.other_instance = RoomFeatureInstanceFactory(
+            room_profile=self.other_room, feature_kind=self.other_kind, level=1
         )
-        cls.other_station = LabStationDetails.objects.create(
-            feature_instance=cls.other_instance, durability=5, max_durability=20
+        self.other_station = LabStationDetails.objects.create(
+            feature_instance=self.other_instance, durability=5, max_durability=20
         )
 
     def test_list_is_paginated(self) -> None:
@@ -245,17 +227,16 @@ class LabStationActorResolutionTests(LabStationApiTestCase):
     raises rather than picking arbitrarily when more than one active tenure exists.
     """
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
+    def setUp(self) -> None:
+        super().setUp()
         # A second, simultaneously-active character on the SAME account — no
-        # standing over cls.room_profile (no LocationOwnership row for it).
-        cls.alt_char = CharacterFactory(db_key="lab_station_api_owner_alt_char")
-        cls.alt_sheet = CharacterSheetFactory(character=cls.alt_char)
-        alt_entry = RosterEntryFactory(character_sheet=cls.alt_sheet)
+        # standing over self.room_profile (no LocationOwnership row for it).
+        self.alt_char = CharacterFactory(db_key="lab_station_api_owner_alt_char")
+        self.alt_sheet = CharacterSheetFactory(character=self.alt_char)
+        alt_entry = RosterEntryFactory(character_sheet=self.alt_sheet)
         RosterTenureFactory(
             roster_entry=alt_entry,
-            player_data=cls.owner.player_data,
+            player_data=self.owner.player_data,
         )
 
     def test_install_with_multiple_active_tenures_and_no_actor_sheet_id_fails_safe(self) -> None:

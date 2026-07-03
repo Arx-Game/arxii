@@ -9,7 +9,6 @@ Covers:
 """
 
 from django.test import TestCase
-from evennia.utils.idmapper.models import flush_cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -28,55 +27,48 @@ from world.traits.models import Trait
 class CraftingApiTestCase(TestCase):
     """Base test-case: wires enchanting crafting and sets up an owner + their item."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        # Multi-app CI shard runs can hand back a contaminated idmapper cache
-        # entry for an Evennia-typeclassed object from an earlier app's tests,
-        # which then fails to deepcopy per-test (DbHolder is un-deepcopyable).
-        # See docs' known-test-failures reference for this exact symptom.
-        flush_cache()
+    def setUp(self) -> None:
         # Wire both crafting recipes with skill caps + consequence pool.
-        cls.facet_recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.facet_recipe = wire_enchanting_crafting(base_difficulty=0)
         # Fetch the style recipe for later assertions.
         from world.items.crafting.constants import CraftingRecipeKind
         from world.items.crafting.models import CraftingRecipe
 
-        cls.style_recipe = CraftingRecipe.objects.get(kind=CraftingRecipeKind.STYLE_ATTACH)
+        self.style_recipe = CraftingRecipe.objects.get(kind=CraftingRecipeKind.STYLE_ATTACH)
 
         # Owner account → character → sheet, wired via an active tenure.
-        cls.owner = AccountFactory(username="quote_api_owner")
-        cls.owner_char = CharacterFactory(db_key="quote_api_owner_char")
-        cls.owner_sheet = CharacterSheetFactory(character=cls.owner_char)
-        owner_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
+        self.owner = AccountFactory(username="quote_api_owner")
+        self.owner_char = CharacterFactory(db_key="quote_api_owner_char")
+        self.owner_sheet = CharacterSheetFactory(character=self.owner_char)
+        owner_entry = RosterEntryFactory(character_sheet=self.owner_sheet)
         RosterTenureFactory(
             roster_entry=owner_entry,
-            player_data=PlayerDataFactory(account=cls.owner),
+            player_data=PlayerDataFactory(account=self.owner),
         )
         # Give the owner an Enchanting trait value in the mid-tier band (>=40, <80 → Fine cap).
-        cls.enchanting_trait = Trait.objects.get(name="Enchanting")
+        self.enchanting_trait = Trait.objects.get(name="Enchanting")
         CharacterTraitValueFactory(
-            character=cls.owner_char,
-            trait=cls.enchanting_trait,
+            character=self.owner_char,
+            trait=self.enchanting_trait,
             value=50,  # band: Fine cap (min_skill=40 → Fine tier)
         )
 
         # Non-owner account.
-        cls.non_owner = AccountFactory(username="quote_api_nonowner")
-        cls.non_owner_char = CharacterFactory(db_key="quote_api_nonowner_char")
-        cls.non_owner_sheet = CharacterSheetFactory(character=cls.non_owner_char)
-        non_entry = RosterEntryFactory(character_sheet=cls.non_owner_sheet)
+        self.non_owner = AccountFactory(username="quote_api_nonowner")
+        self.non_owner_char = CharacterFactory(db_key="quote_api_nonowner_char")
+        self.non_owner_sheet = CharacterSheetFactory(character=self.non_owner_char)
+        non_entry = RosterEntryFactory(character_sheet=self.non_owner_sheet)
         RosterTenureFactory(
             roster_entry=non_entry,
-            player_data=PlayerDataFactory(account=cls.non_owner),
+            player_data=PlayerDataFactory(account=self.non_owner),
         )
 
         # Items.
-        cls.template = ItemTemplateFactory(name="QuoteApiTemplate", facet_capacity=3)
-        cls.item = ItemInstanceFactory(
-            template=cls.template, holder_character_sheet=cls.owner_sheet
+        self.template = ItemTemplateFactory(name="QuoteApiTemplate", facet_capacity=3)
+        self.item = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.owner_sheet
         )
 
-    def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(user=self.owner)
 
@@ -84,24 +76,23 @@ class CraftingApiTestCase(TestCase):
 class FacetQuoteTests(CraftingApiTestCase):
     """Tests for GET /api/items/item-facets/quote/."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
+    def setUp(self) -> None:
+        super().setUp()
         from evennia_extensions.factories import RoomProfileFactory
         from world.items.crafting.models import LabStationDetails
         from world.magic.factories import FacetFactory
         from world.room_features.constants import RoomFeatureServiceStrategy
         from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 
-        cls.facet = FacetFactory(name="QuoteApiFacet")
+        self.facet = FacetFactory(name="QuoteApiFacet")
         # facet_recipe.requires_station defaults True (#1234) — the quote endpoint
         # narrows affordable=False without an active LAB station in the room.
         room_profile = RoomProfileFactory()
-        cls.owner_char.location = room_profile.objectdb
-        cls.owner_char.save()
+        self.owner_char.location = room_profile.objectdb
+        self.owner_char.save()
         kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
         instance = RoomFeatureInstanceFactory(room_profile=room_profile, feature_kind=kind, level=1)
-        cls.lab_feature_instance = instance
+        self.lab_feature_instance = instance
         LabStationDetails.objects.create(
             feature_instance=instance, durability=20, max_durability=20
         )
@@ -202,22 +193,21 @@ class FacetQuoteTests(CraftingApiTestCase):
 class FacetCraftResultConsumedTests(CraftingApiTestCase):
     """Tests that craft result includes consumed + consequence_label."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
+    def setUp(self) -> None:
+        super().setUp()
         from evennia_extensions.factories import RoomProfileFactory
         from world.items.factories import install_full_lab_station
         from world.magic.factories import FacetFactory
 
-        cls.facet = FacetFactory(name="ConsumedFacet")
-        cls.item_for_craft = ItemInstanceFactory(
-            template=cls.template, holder_character_sheet=cls.owner_sheet
+        self.facet = FacetFactory(name="ConsumedFacet")
+        self.item_for_craft = ItemInstanceFactory(
+            template=self.template, holder_character_sheet=self.owner_sheet
         )
         # requires_station defaults True (#1234) — install a Lab station in the
         # crafter's room so the pre-existing API test can still craft.
         room_profile = RoomProfileFactory()
-        cls.owner_char.location = room_profile.objectdb
-        cls.owner_char.save()
+        self.owner_char.location = room_profile.objectdb
+        self.owner_char.save()
         install_full_lab_station(room_profile)
 
     def test_facet_craft_result_includes_consumed_and_consequence_label(self) -> None:
@@ -241,15 +231,14 @@ class FacetCraftResultConsumedTests(CraftingApiTestCase):
 class StyleQuoteTests(CraftingApiTestCase):
     """Tests for GET /api/items/item-styles/quote/."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        super().setUpTestData()
+    def setUp(self) -> None:
+        super().setUp()
         from world.items.factories import StyleFactory
 
-        cls.style = StyleFactory(name="QuoteApiStyle")
-        cls.style_item = ItemTemplateFactory(name="StyleQuoteTemplate", style_capacity=3)
-        cls.style_item_instance = ItemInstanceFactory(
-            template=cls.style_item, holder_character_sheet=cls.owner_sheet
+        self.style = StyleFactory(name="QuoteApiStyle")
+        self.style_item = ItemTemplateFactory(name="StyleQuoteTemplate", style_capacity=3)
+        self.style_item_instance = ItemInstanceFactory(
+            template=self.style_item, holder_character_sheet=self.owner_sheet
         )
 
     def test_style_quote_returns_capped_max_quality_tier(self) -> None:
