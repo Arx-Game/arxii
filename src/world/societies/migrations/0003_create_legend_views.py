@@ -1,10 +1,8 @@
 """Create materialized views for legend summaries (character/guise/covenant).
 
-Ported from main's original 0002 + the RunSQL portion of 0003 after the
-2026-05-24 migration rebuild. The managed=False models
-(CharacterLegendSummary, PersonaLegendSummary, CovenantLegendSummary) live
-in 0001_initial as Django stubs; this migration runs the SQL that creates
-the actual materialized views in the DB.
+The managed=False models (CharacterLegendSummary, PersonaLegendSummary,
+CovenantLegendSummary) live in earlier migrations as Django stubs; this
+migration runs the SQL that creates the actual materialized views in the DB.
 """
 
 from pathlib import Path

@@ -17,12 +17,10 @@ SRC_DIR = PROJECT_ROOT / "src"
 # These are typically essential system configurations, not seed data
 ALLOWED_MIGRATIONS: set[str] = {
     # System configuration: KudosSourceCategory lookup table for social_engagement.
-    # Re-numbered 0003 after the 2026-05-24 migration rebuild.
     "world/progression/migrations/0003_social_engagement_kudos_category.py",
     # Data migration: placeholder PathRitualGrants for accept_soul_tether
     # preserve visibility while CharacterRitualKnowledge gating is in effect.
-    # Re-numbered 0003 after the 2026-05-24 migration rebuild.
-    "world/magic/migrations/0003_accept_soul_tether_placeholder_grants.py",
+    "world/magic/migrations/0005_accept_soul_tether_placeholder_grants.py",
 }
 
 # Patterns that suggest seed data in migrations

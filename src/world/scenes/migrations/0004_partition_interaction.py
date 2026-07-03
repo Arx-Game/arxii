@@ -1,6 +1,5 @@
 """Convert scenes_interaction to a range-partitioned table (monthly on timestamp).
 
-Ported from main's original 0002 after the 2026-05-24 migration rebuild.
 SQL lives in scenes/sql/partition_interaction_forward.sql and
 scenes/sql/partition_interaction_reverse.sql so it survives any future
 migration churn.

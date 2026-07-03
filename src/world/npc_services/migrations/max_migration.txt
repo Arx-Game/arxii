@@ -1,1 +1,1 @@
-0008_npcserviceoffer_ap_cost_alter_npcserviceoffer_kind
+0002_initial

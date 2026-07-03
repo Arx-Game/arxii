@@ -55,7 +55,7 @@ REVERSE_SQL = SRC_DIR / "world/scenes/sql/partition_interaction_reverse.sql"
 # These columns are subtracted from the model-column set before comparing to the
 # SQL, so the hook still catches drift for every OTHER column. Adding an entry
 # here is a deliberate "this column is post-partition by construction" assertion.
-POST_PARTITION_COLUMNS = {"fury_committed_id", "writer_account_id"}
+POST_PARTITION_COLUMNS: set[str] = set()
 
 
 def _setup_django() -> None:

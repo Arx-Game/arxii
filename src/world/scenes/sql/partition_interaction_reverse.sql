@@ -19,11 +19,8 @@ CREATE TABLE scenes_interaction (
     pose_kind        varchar(16) NOT NULL DEFAULT 'standard',
     vote_count            integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
     strain_committed      integer NOT NULL DEFAULT 0 CHECK (strain_committed >= 0),
-    -- NOTE: fury_committed_id is intentionally absent here -- see the matching
-    -- note in partition_interaction_forward.sql. It is a post-partition column
-    -- (FK to magic.FuryTier, added by scenes/0024). On reverse, the column was
-    -- already dropped before this migration runs back, so re-adding it is not
-    -- this SQL's job. See POST_PARTITION_COLUMNS in check_partition_sql_drift.py
+    fury_committed_id     bigint,
+    writer_account_id     bigint,
     "timestamp"           timestamptz NOT NULL,
     persona_id            bigint NOT NULL REFERENCES scenes_persona (id)
         ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED,
@@ -35,8 +32,8 @@ CREATE TABLE scenes_interaction (
 
 -- 3. Copy data — explicit column list (drift-checked vs. the CREATE TABLE above)
 INSERT INTO scenes_interaction
-    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id)
-    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, "timestamp", persona_id, scene_id, place_id
+    (id, content, mode, visibility, pose_kind, vote_count, strain_committed, fury_committed_id, writer_account_id, "timestamp", persona_id, scene_id, place_id)
+    SELECT id, content, mode, visibility, pose_kind, vote_count, strain_committed, fury_committed_id, writer_account_id, "timestamp", persona_id, scene_id, place_id
     FROM scenes_interaction_partitioned;
 
 -- 4. Drop partitioned table

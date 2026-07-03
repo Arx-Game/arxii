@@ -1,6 +1,5 @@
 """Seed the social_engagement KudosSourceCategory used by SceneActionRequest accepts.
 
-Ported from main's original 0002 after the 2026-05-24 migration rebuild.
 Reference-data seed — fresh deploys need this row to exist before any
 scene-action-accept flow runs. Idempotent via update_or_create.
 """
