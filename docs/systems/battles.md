@@ -90,11 +90,17 @@ An abstract typed force (enemy or friendly) stationed at a front.
 | `commander` | FK → `character_sheets.CharacterSheet` (null, `related_name="commanded_battle_units"`) | Optional commander (#1711); their Battle Command modifier-walk bonus applies to participants fighting alongside this unit's side/place. |
 | `summoned_by` | FK → `character_sheets.CharacterSheet` (null, `related_name="summoned_battle_units"`) | Set when this unit was created via a military-grade summon (#1711, see `_summon_military_unit`). |
 | `strength` | PositiveSmallIntegerField | Default 100; decremented by STRIKE successes |
-| `status` | CharField | `BattleUnitStatus` — ACTIVE / ROUTED / DESTROYED |
+| `morale` | PositiveSmallIntegerField | Default `DEFAULT_MORALE` (70, #1712); second resource alongside strength — starts well below its ceiling, unlike strength. |
+| `status` | CharField | `BattleUnitStatus` — ACTIVE / ROUTED / DESTROYED; always a derived view, never written independently (see below) |
 
-Strength is decremented by `success_level × STRIKE_ATTRITION_PER_LEVEL` (10 per level).
-A unit at strength 0 becomes DESTROYED; strength ≤ 30 (`ROUTED_STRENGTH_THRESHOLD`) becomes
-ROUTED.
+`status` is derived jointly from `strength` and `morale` by
+`world.battles.resolution._compute_unit_status` (#1712) — every unit-status write
+(STRIKE resolution, champion-duel-outcome routs) goes through this shared function
+rather than writing `status` directly. DESTROYED requires `strength == 0` (physical
+destruction; morale collapse alone never kills a unit). ROUTED is triggered by
+either resource crossing its own threshold: `strength ≤ 30` (`ROUTED_STRENGTH_THRESHOLD`)
+or `morale ≤ 25` (`ROUTED_MORALE_THRESHOLD`). Strength is decremented by
+`success_level × STRIKE_ATTRITION_PER_LEVEL` (10 per level).
 
 ### `BattleRound`
 
@@ -499,6 +505,9 @@ the type-matchup and terrain-effect content the modifier stack reads.
 - `BASE_FAILURE_DAMAGE = 8`
 - `DECISIVE_MARGIN = 50`
 - `ROUTED_STRENGTH_THRESHOLD = 30`
+- `DEFAULT_MORALE = 70` — `BattleUnit.morale` starting value (#1712); unlike strength, morale starts well below its ceiling
+- `MAX_MORALE = 100`
+- `ROUTED_MORALE_THRESHOLD = 25` — the morale-axis counterpart to `ROUTED_STRENGTH_THRESHOLD` in `_compute_unit_status`
 - `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — entry-roll signal (#1733), isolated at a place
 - `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — entry-roll signal (#1733), unimpaired MOVEMENT capability
 - `UNIT_QUALITY_STRIKE_MODIFIER` — dict (#1711), flat attacker-facing STRIKE modifier per `UnitQuality`: MILITIA +10 … ELITE −20

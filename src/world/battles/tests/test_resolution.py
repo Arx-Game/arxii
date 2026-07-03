@@ -23,6 +23,7 @@ from world.battles.constants import (
     BattleActionScope,
     BattlePosture,
     BattleSideRole,
+    BattleUnitStatus,
     TerrainType,
     UnitComposition,
     UnitQuality,
@@ -373,6 +374,37 @@ class ScopePermissionTests(TestCase):
             )
 
 
+class ComputeUnitStatusTests(TestCase):
+    def test_destroyed_only_from_zero_strength(self) -> None:
+        from world.battles.constants import BattleUnitStatus
+        from world.battles.resolution import _compute_unit_status
+
+        self.assertEqual(_compute_unit_status(0, 100), BattleUnitStatus.DESTROYED)
+        # Zero morale never destroys — it routs, since strength is still nonzero.
+        self.assertEqual(_compute_unit_status(50, 0), BattleUnitStatus.ROUTED)
+
+    def test_routed_from_either_axis(self) -> None:
+        from world.battles.constants import (
+            ROUTED_MORALE_THRESHOLD,
+            ROUTED_STRENGTH_THRESHOLD,
+            BattleUnitStatus,
+        )
+        from world.battles.resolution import _compute_unit_status
+
+        self.assertEqual(
+            _compute_unit_status(ROUTED_STRENGTH_THRESHOLD, 100), BattleUnitStatus.ROUTED
+        )
+        self.assertEqual(
+            _compute_unit_status(100, ROUTED_MORALE_THRESHOLD), BattleUnitStatus.ROUTED
+        )
+
+    def test_active_when_both_axes_healthy(self) -> None:
+        from world.battles.constants import BattleUnitStatus
+        from world.battles.resolution import _compute_unit_status
+
+        self.assertEqual(_compute_unit_status(100, 100), BattleUnitStatus.ACTIVE)
+
+
 class ResolveBattleRoundSuccessTests(TestCase):
     """STRIKE success: unit strength drops, side VP increases, no PC damage."""
 
@@ -511,6 +543,29 @@ class ResolveBattleRoundSuccessTests(TestCase):
         own_unit.refresh_from_db()
         self.assertEqual(own_unit.strength, 100)
         self.assertNotIn(side.pk, result.vp_awarded)
+
+    def test_strike_success_still_routes_when_morale_already_low(self) -> None:
+        """A unit already broken on morale (from a prior ROUT, say) should flip to
+        ROUTED from a STRIKE hit too small to cross the strength threshold alone."""
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        self.unit.morale = 20  # already below ROUTED_MORALE_THRESHOLD (25)
+        self.unit.save(update_fields=["morale"])
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=self.unit,
+        )
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(1)  # small hit: 10 attrition, strength 90
+            resolve_battle_round(battle_round=self.battle_round)
+
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.strength, 90)  # well above ROUTED_STRENGTH_THRESHOLD
+        self.assertEqual(self.unit.status, BattleUnitStatus.ROUTED)  # but morale forces it
 
 
 class ResolveBattleRoundSupportTests(TestCase):

@@ -36,6 +36,7 @@ from world.battles.constants import (
     BATTLE_POSTURE_CHECK_MODIFIER,
     BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
     BATTLE_POSTURE_VP_MULTIPLIER,
+    ROUTED_MORALE_THRESHOLD,
     ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
@@ -349,6 +350,25 @@ class BattleRoundResult:
     casualties: list[int] = field(default_factory=list)
 
 
+def _compute_unit_status(strength: int, morale: int) -> str:
+    """Derive BattleUnitStatus from both resources — status is always a view, never
+    written independently of them (#1712). Mirrors the relationship strength alone
+    used to have with status before morale existed: DESTROYED requires strength==0
+    (physical destruction, morale collapse alone never kills a unit); ROUTED can be
+    triggered by either resource crossing its own threshold (a unit can break either
+    from being ground down or from its will collapsing).
+
+    A future Mindless/Fearless-style unit property (#1794, "Battle units:
+    Property/Capability holding") would skip the morale branch for immune units —
+    no such gate exists yet; this issue ships morale uniformly across all units.
+    """
+    if strength == 0:
+        return BattleUnitStatus.DESTROYED
+    if strength <= ROUTED_STRENGTH_THRESHOLD or morale <= ROUTED_MORALE_THRESHOLD:
+        return BattleUnitStatus.ROUTED
+    return BattleUnitStatus.ACTIVE
+
+
 def _scope_target_units(declaration: BattleActionDeclaration) -> list:
     """Active BattleUnits affected by *declaration*, per its scope (#1710)."""
     from world.battles.constants import BattleActionScope, BattleUnitStatus  # noqa: PLC0415
@@ -401,7 +421,9 @@ def _resolve_strike_success(
     awarded once per declaration regardless of scope breadth. Units on the
     declaring participant's own side are excluded — SIDE/PLACE scope fans out
     across a shared bucket that isn't itself side-aware, so STRIKE must never
-    attrite the caster's own units (friendly fire).
+    attrite the caster's own units (friendly fire). status is derived jointly
+    from strength and morale (#1712) — a unit already broken on morale can flip
+    to ROUTED from a hit too small to cross the strength threshold alone.
     """
     units = _scope_target_units(declaration)
     units = [u for u in units if u.side_id != declaration.participant.side_id]
@@ -411,11 +433,10 @@ def _resolve_strike_success(
     attrition = success_level * STRIKE_ATTRITION_PER_LEVEL
     for unit in units:
         unit.strength = max(0, unit.strength - attrition)
-        if unit.strength == 0:
-            unit.status = BattleUnitStatus.DESTROYED
+        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        if unit.status == BattleUnitStatus.DESTROYED:
             result.units_destroyed.append(unit.pk)
-        elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
-            unit.status = BattleUnitStatus.ROUTED
+        elif unit.status == BattleUnitStatus.ROUTED:
             result.units_routed.append(unit.pk)
         unit.save(update_fields=["strength", "status"])
 
