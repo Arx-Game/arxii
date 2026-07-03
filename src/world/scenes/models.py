@@ -1448,21 +1448,34 @@ class PendingSuddenHarm(SharedMemoryModel):
         CHARACTER_SHEET_MODEL,
         on_delete=models.CASCADE,
         related_name="pending_sudden_harm",
+        help_text="The character this pending harm targets; one unresolved row per target.",
     )
     scene_round = models.ForeignKey(
         "scenes.SceneRound",
         on_delete=models.CASCADE,
         related_name="pending_sudden_harms",
+        help_text="The round bound to resolve this harm.",
     )
-    amount = models.PositiveIntegerField()
+    amount = models.PositiveIntegerField(
+        help_text="The raw pending damage amount, before any interpose mitigation.",
+    )
     damage_type = models.ForeignKey(
         "conditions.DamageType",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
+        related_name="pending_sudden_harm_entries",
+        help_text="The damage type, if typed (null = untyped).",
     )
-    source_description = models.CharField(max_length=200, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    source_description = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Freeform narration of what caused the harm.",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this pending harm was created.",
+    )
 
     def __str__(self) -> str:
         return f"PendingSuddenHarm({self.amount} on {self.target_sheet_id})"
