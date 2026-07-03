@@ -1,4 +1,4 @@
-"""Trap resolution services (#1051, #520 Phase 6).
+"""Trap resolution services (#1051, #520 Phase 6, #1317).
 
 Entry resolution is called directly from the movement hook
 (``Character.at_post_move``) — mirroring mission ROOM_TRIGGER dispatch (#729) —
@@ -11,6 +11,14 @@ roll's outcome tier selects the consequence to apply, so a success tier (no
 consequence authored) means the entrant spotted and avoided the trap, while a
 failure tier fires the authored damage through the standard effect-handler path
 (``apply_resolution`` -> ``_deal_damage`` -> ``process_damage_consequences``).
+
+A trap may optionally be anchored to a specific ``Position`` (#1317) rather than
+covering the whole room — used for hazards a knockback can land a target on/into.
+Room-wide traps (``position=None``) behave exactly as before this addition;
+position-scoped traps additionally require the entrant to actually occupy that
+Position, whether they walked there (``check_room_traps_on_entry``, which derives
+the entrant's landing Position) or were knocked there
+(``check_traps_at_position``, called with the already-known landing Position).
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 
 from world.checks.consequence_resolution import (
     apply_resolution,
@@ -30,18 +39,24 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
+    from world.areas.positioning.models import Position
     from world.checks.models import CheckType
     from world.checks.types import PendingResolution
     from world.room_features.models import Trap
 
 
 def check_room_traps_on_entry(character: Character, room: ObjectDB) -> None:
-    """Resolve every armed, not-yet-resolved trap in ``room`` against ``character``.
+    """Resolve every armed, not-yet-resolved trap relevant to ``character``'s
+    entry into ``room``.
 
     Best-effort entry point for the movement hook: a target with no
     ``room_profile`` (e.g. not a real room) or no sheet, and a room with no
-    armed traps, are all no-ops.
+    armed traps, are all no-ops. Derives the entrant's landing Position (if
+    any) so position-scoped traps anchored there are included alongside
+    room-wide ones.
     """
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+
     try:
         profile = room.room_profile
     except (AttributeError, ObjectDoesNotExist):
@@ -51,7 +66,40 @@ def check_room_traps_on_entry(character: Character, room: ObjectDB) -> None:
     except (AttributeError, ObjectDoesNotExist):
         return
 
-    armed_traps = list(profile.traps.filter(is_armed=True).exclude(detected_by=sheet))
+    landing_position = position_of(character)
+    _resolve_relevant_traps(character, profile, sheet, landing_position)
+
+
+def check_traps_at_position(character: Character, position: Position) -> None:
+    """Resolve every armed, not-yet-resolved trap relevant to ``character``
+    occupying ``position`` — room-wide traps plus any trap anchored to this
+    exact Position.
+
+    Called after a forced position change (e.g. a knockback, #1317) that
+    doesn't route through the room-entry movement hook. Best-effort: a
+    position whose room has no ``room_profile``, or a character with no
+    sheet, are no-ops (same tolerance as ``check_room_traps_on_entry``).
+    """
+    try:
+        profile = position.room.room_profile
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    try:
+        sheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return
+
+    _resolve_relevant_traps(character, profile, sheet, position)
+
+
+def _resolve_relevant_traps(character, profile, sheet, position) -> None:
+    """Shared filter: room-wide traps (position=None) plus the trap anchored
+    to ``position`` (if any), excluding traps already resolved for ``sheet``.
+    """
+    query = Q(position__isnull=True)
+    if position is not None:
+        query |= Q(position=position)
+    armed_traps = list(profile.traps.filter(query, is_armed=True).exclude(detected_by=sheet))
     for trap in armed_traps:
         resolve_trap_on_character(trap, character)
 

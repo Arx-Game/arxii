@@ -16,6 +16,8 @@ from django.test import TestCase
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from actions.registry import get_action
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+from world.areas.positioning.factories import PositionFactory
+from world.areas.positioning.services import place_in_position
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import (
@@ -33,7 +35,7 @@ from world.magic.services import (
 )
 from world.mechanics.effect_handlers import apply_effect
 from world.room_features.factories import TrapFactory
-from world.room_features.trap_services import check_room_traps_on_entry
+from world.room_features.trap_services import check_room_traps_on_entry, check_traps_at_position
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
 
@@ -162,6 +164,63 @@ class TrapMoveIntegrationTest(_TrapSceneMixin, TestCase):
             self.character.move_to(self.room, quiet=True)
 
         assert self._health() == 70
+
+
+class PositionScopedTrapTest(_TrapSceneMixin, TestCase):
+    """Trap.position scoping (#1317): a position-anchored trap only fires there."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.character.location = self.room
+        self.character.save()
+        self.spike_position = PositionFactory(room=self.room, name="spike_pit")
+        self.other_position = PositionFactory(room=self.room, name="safe_spot")
+        self.trap.position = self.spike_position
+        self.trap.save(update_fields=["position"])
+
+    def test_position_scoped_trap_fires_at_its_own_position(self) -> None:
+        place_in_position(self.character, self.spike_position)
+        with force_check_outcome(self.failure_outcome):
+            check_traps_at_position(self.character, self.spike_position)
+
+        assert self._health() == 70
+        assert self.sheet in self.trap.detected_by.all()
+
+    def test_position_scoped_trap_does_not_fire_elsewhere(self) -> None:
+        place_in_position(self.character, self.other_position)
+        with force_check_outcome(self.failure_outcome):
+            check_traps_at_position(self.character, self.other_position)
+
+        assert self._health() == 100
+        assert self.sheet not in self.trap.detected_by.all()
+
+    def test_room_wide_trap_still_fires_via_check_traps_at_position(self) -> None:
+        """A trap with position=None (room-wide) still fires no matter which
+        Position within the room is checked — unchanged pre-#1317 semantics,
+        now reachable via the position-aware entry point too."""
+        self.trap.position = None
+        self.trap.save(update_fields=["position"])
+        place_in_position(self.character, self.other_position)
+        with force_check_outcome(self.failure_outcome):
+            check_traps_at_position(self.character, self.other_position)
+
+        assert self._health() == 70
+
+    def test_room_entry_still_finds_position_scoped_trap_when_landing_there(self) -> None:
+        """check_room_traps_on_entry derives the entrant's landing Position and
+        now also checks position-scoped traps anchored there."""
+        place_in_position(self.character, self.spike_position)
+        with force_check_outcome(self.failure_outcome):
+            check_room_traps_on_entry(self.character, self.room)
+
+        assert self._health() == 70
+
+    def test_room_entry_does_not_fire_position_scoped_trap_elsewhere(self) -> None:
+        place_in_position(self.character, self.other_position)
+        with force_check_outcome(self.failure_outcome):
+            check_room_traps_on_entry(self.character, self.room)
+
+        assert self._health() == 100
 
 
 class DealDamageThreadReductionTest(TestCase):
