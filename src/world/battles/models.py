@@ -504,7 +504,7 @@ class BattleActionDeclaration(SharedMemoryModel):
         max_length=10,
         choices=BattleActionScope.choices,
         default=BattleActionScope.UNIT,
-        help_text="Targeting breadth (#1710) — UNIT/PLACE/SIDE.",
+        help_text="Targeting breadth (#1710) — UNIT/PLACE/SIDE/BATTLE.",
     )
     target_place = models.ForeignKey(
         BattlePlace,

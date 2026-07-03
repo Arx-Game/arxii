@@ -19,12 +19,24 @@ from world.battles.constants import (
     BattleActionScope,
 )
 
+# NEW imports for this task only — BattleFactory, BattleSideFactory,
+# TechniqueFactory, ActionTemplateFactory, WeatherTypeFactory, BattleActionKind,
+# BattleActionScope were already imported by Tasks 1-3. CharacterTechniqueFactory
+# is new here and is reused (without re-import) by every later task.
+from world.battles.exceptions import (
+    InvalidEnvironmentScopeError,
+    MissingEnvironmentTargetError,
+    NoCommandHierarchyError,
+)
+
 # NEW imports for this task only — BattleFactory, BattlePlaceFactory, AreaFactory,
 # WeatherTypeFactory were already imported by Task 2; CapabilityTypeFactory,
 # PropertyFactory already imported by Task 4. Do not re-import them.
 from world.battles.factories import (
     BattleFactory,
+    BattleParticipantFactory,
     BattlePlaceFactory,
+    BattleRoundFactory,
     BattleSideFactory,
     BattleUnitFactory,
     WeatherTypeCapabilityChallengeFactory,
@@ -35,9 +47,11 @@ from world.battles.resolution import (
     _weather_property_modifier,
     effective_weather,
 )
+from world.battles.services import declare_battle_action
 from world.conditions.factories import CapabilityTypeFactory
-from world.magic.factories import TechniqueFactory
+from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.mechanics.factories import PropertyFactory
+from world.scenes.constants import RoundStatus
 from world.weather.factories import RegionWeatherStateFactory, WeatherTypeFactory
 
 # NOTE for every subsequent task in this plan: this file's imports are added
@@ -246,3 +260,62 @@ class WeatherModifierTests(TestCase):
         )
 
         self.assertEqual(_weather_capability_modifier(place, unit), 0)
+
+
+class DeclareEnvironmentValidationTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+        BattleRoundFactory(battle=self.battle, status=RoundStatus.DECLARING)
+
+    def test_unit_scope_rejected_for_set_environment(self) -> None:
+        technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=WeatherTypeFactory()
+        )
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        with self.assertRaises(InvalidEnvironmentScopeError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.SET_ENVIRONMENT,
+                technique=technique,
+                scope=BattleActionScope.UNIT,
+            )
+
+    def test_side_scope_rejected_for_set_environment(self) -> None:
+        technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=WeatherTypeFactory()
+        )
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        with self.assertRaises(InvalidEnvironmentScopeError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.SET_ENVIRONMENT,
+                technique=technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+    def test_missing_target_weather_type_rejected(self) -> None:
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        with self.assertRaises(MissingEnvironmentTargetError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.SET_ENVIRONMENT,
+                technique=technique,
+                scope=BattleActionScope.BATTLE,
+            )
+
+    def test_battle_scope_requires_command_hierarchy(self) -> None:
+        technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=WeatherTypeFactory()
+        )
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        with self.assertRaises(NoCommandHierarchyError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.SET_ENVIRONMENT,
+                technique=technique,
+                scope=BattleActionScope.BATTLE,
+            )

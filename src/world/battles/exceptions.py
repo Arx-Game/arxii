@@ -107,3 +107,24 @@ class PlaceScopeRequiredError(BattleError):
         self, user_message: str = "That action can only be declared at a front (place scope)."
     ) -> None:
         super().__init__(user_message)
+
+
+class InvalidEnvironmentScopeError(BattleError):
+    """Raised when SET_ENVIRONMENT is declared with a scope other than BATTLE or
+    PLACE (#1715)."""
+
+    def __init__(
+        self,
+        user_message: str = "That action can only be declared battle-wide or at a front.",
+    ) -> None:
+        super().__init__(user_message)
+
+
+class MissingEnvironmentTargetError(BattleError):
+    """Raised when SET_ENVIRONMENT's technique has no target_weather_type set (#1715)."""
+
+    def __init__(
+        self,
+        user_message: str = "That technique has no weather it can conjure.",
+    ) -> None:
+        super().__init__(user_message)
