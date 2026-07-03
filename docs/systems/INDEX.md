@@ -255,6 +255,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind,
     source_character) -> list[AppliedConditionResult]` (`world/magic/services/condition_application.py`)
     — shared by both combat and standalone cast paths; extracted from combat's `_apply_conditions`.
+    `Technique.target_prerequisites` (#1793, M2M to `mechanics.Prerequisite`) — Property-gated
+    targeting precondition; enforced in `validate_cast_target`/`resolve_targets` (non-combat,
+    raises `InvalidCastTarget` for SINGLE/SELF, silently filters AREA/FILTERED_GROUP) and in
+    `resolve_combat_technique` (`world/combat/services.py`, combat — always raises).
   - Dramatic moment tagging (#1139):
     `create_dramatic_moment_tag(*, character_sheet, moment_type, tagged_by, scene, interaction=None) -> DramaticMomentTag`
     — validates resonance claim + per-scene cap; atomically creates tag, calls
@@ -293,7 +297,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   journals (`JournalEntry.related_threads` M2M), combat (CombatPull,
   DamagePreApply for DAMAGE_TAKEN_REDUCTION), vitals
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
-  mechanics (Property via Ritual site_property),
+  mechanics (Property via Ritual site_property; Property-gated targeting via
+  `Technique.target_prerequisites`, #1793),
   items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
   flows (Ritual FLOW dispatch via FlowDefinition),
   covenants (`draft_validator_path` on Covenant Induction ritual → `assert_initiator_can_induct`)
@@ -1575,8 +1580,11 @@ drain the well by physically visiting and performing an absorb action.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793)
 - **Key Functions:**
+  - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
+    rows for a target's active `Property` set; folded into combat technique damage in
+    `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
   - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
     walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
     `EQUIPMENT_RELEVANT_CATEGORIES`

@@ -199,6 +199,24 @@ Follow-ups deferred to later issues: technique designer (players pick a conseque
 from a curated catalog), targeting model (targeting validity + AoE + per-technique target
 constraints + frontend target picker), and the optional resonance→aspect mapping.
 
+**Property-gated targeting precondition (#1793):** `Technique.target_prerequisites`
+(M2M to `mechanics.Prerequisite`) lets a technique require a target currently hold a
+Property at or above a threshold. Enforced in `validate_cast_target`/`resolve_targets`
+(`services/targeting.py`) for non-combat casts and in `resolve_combat_technique`
+(`world/combat/services.py`) for combat. This is a precondition layered on the
+existing target-resolution machinery — it does not build the still-deferred general
+targeting model (AoE constraints, frontend target picker) noted above.
+
+`Technique.properties` (M2M to `mechanics.Property`) carries neutral descriptive tags
+on the technique itself (e.g. cursed) via `Technique.has_property(name)`; this is
+separate from `Character.has_property`, which checks a *character's* Property
+attachments (both the primary persona's authored identity tags and runtime
+`ObjectProperty` rows, #1793) and backs the `has_property` reactive-trigger DSL op.
+`Character.has_capability` is the capability-typed sibling — checks
+`get_effective_capability_value(sheet, capability_type) > 0` — and backs the new
+`has_capability` DSL op (both in `flows/filters/evaluator.py` /
+`typeclasses/characters.py`).
+
 ### Dispel / Cleanse (#1585)
 
 A technique carrying `TechniqueRemovedCondition` rows strips matching conditions from the

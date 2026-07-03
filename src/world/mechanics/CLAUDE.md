@@ -26,6 +26,7 @@ Service functions for modifier operations:
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
 - **`delete_distinction_modifiers(char_distinction)`**: Clean up when distinction is removed.
 - **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
+- **`property_damage_bonus(target, damage_type)`**: Sum `PropertyDamageModifier` values for a target's active `Property` rows (see below).
 
 ## Models
 
@@ -68,6 +69,14 @@ Per-character modifier values with source tracking. Sources are responsible for 
 **target FK**: Stored directly on CharacterModifier for efficient queries (e.g., `CharacterModifier.objects.filter(target__name="strength")`). Set from `source.modifier_target` at creation time.
 **Stacking**: All modifiers stack (sum values for a given target).
 **Display**: Hide modifiers with value 0.
+
+### PropertyDamageModifier (#1793)
+
+Defines how a target's `Property` modifies damage of a given `DamageType` (or all
+types when `damage_type` is null). Read via `property_damage_bonus(target, damage_type)`
+in `services.py`, folded into combat technique damage in
+`CombatTechniqueResolver._profile_damage` (`world/combat/services.py`). Mirrors
+`ConditionResistanceModifier`'s shape but keyed on `Property` instead of `Condition`.
 
 ## Integration Points
 

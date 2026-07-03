@@ -141,6 +141,7 @@
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
+  - property_damage_modifiers <- mechanics.PropertyDamageModifier
   - consequence_effects <- checks.ConsequenceEffect
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
@@ -1359,6 +1360,7 @@
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
   - modifier_target <- mechanics.ModifierTarget
+  - property_damage_modifiers <- mechanics.PropertyDamageModifier
   - consequence_effects <- checks.ConsequenceEffect
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
@@ -2396,6 +2398,7 @@
   - restrictions -> magic.Restriction [M2M]
   - applied_conditions -> conditions.ConditionTemplate [M2M]
   - properties -> mechanics.Property [M2M]
+  - target_prerequisites -> mechanics.Prerequisite [M2M]
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
   - capability_grants <- magic.TechniqueCapabilityGrant
@@ -3124,6 +3127,7 @@
 **Foreign Keys:**
   - property -> mechanics.Property [FK]
 **Pointed to by:**
+  - gated_techniques <- magic.Technique
   - technique_grants <- magic.TechniqueCapabilityGrant
   - technique_variant_grants <- magic.TechniqueVariantCapabilityGrant
   - capability_types <- conditions.CapabilityType
@@ -3145,6 +3149,7 @@
   - prerequisites <- mechanics.Prerequisite
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty
+  - damage_modifiers <- mechanics.PropertyDamageModifier
   - applications <- mechanics.Application
   - required_by_applications <- mechanics.Application
   - challenge_templates <- mechanics.ChallengeTemplate
@@ -3164,6 +3169,11 @@
   - property -> mechanics.Property [FK]
   - source_condition -> conditions.ConditionInstance [FK] (nullable)
   - source_challenge -> mechanics.ChallengeInstance [FK] (nullable)
+
+### PropertyDamageModifier
+**Foreign Keys:**
+  - property -> mechanics.Property [FK]
+  - damage_type -> conditions.DamageType [FK] (nullable)
 
 ### Application
 **Foreign Keys:**
@@ -3305,6 +3315,7 @@
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
+- `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
