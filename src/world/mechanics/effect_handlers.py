@@ -278,19 +278,15 @@ def _deal_damage(
             skip_reason="Target has no CharacterVitals",
         )
 
-    damage_amount = apply_resolved_damage(target, effect.damage_amount, effect.damage_type)
-    if damage_amount <= 0:
-        return AppliedEffect(
-            effect_type=EffectType.DEAL_DAMAGE,
-            description="Damage fully absorbed by thread survivability",
-            applied=False,
-            skip_reason="Reduced to zero",
-        )
+    from world.scenes.sudden_harm import arm_or_apply_sudden_harm  # noqa: PLC0415
 
     damage_type_name = effect.damage_type.name if effect.damage_type else "untyped"
+    arm_or_apply_sudden_harm(target, effect.damage_amount, effect.damage_type)
     return AppliedEffect(
         effect_type=EffectType.DEAL_DAMAGE,
-        description=f"Dealt {damage_amount} {damage_type_name} damage",
+        description=(
+            f"Dealt (or held pending Interpose) {effect.damage_amount} {damage_type_name} damage"
+        ),
         applied=True,
     )
 
