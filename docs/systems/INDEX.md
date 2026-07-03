@@ -1790,7 +1790,11 @@ crafting framework and check-driven facet/style attachment.
 - **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — action-layer entry
   point routing both telnet and web through prerequisites + `use_item`. kwargs: `item` (held
   instance), optional `target` (validated by `OnUseTargetPrerequisite` against
-  `on_use_target_kind`). Visibility gate is a same-location MVP proxy; no perception system yet.
+  `on_use_target_kind`). Visibility gate routes through the `can_perceive` seam (#1225): same-location
+  plus the `Concealed`-condition producer contract (`ConditionCategory.conceals_from_perception`,
+  per-observer detection via `ConditionInstance.detected_by`) — see ADR-0083 for the OOC
+  unseen-observer transparency guarantee this composes with. Stealth witness-reduction (#1464) and
+  disguise-piercing (forms) remain deferred automated producers of concealment/detection.
   Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `StyleAlreadyAttached`,
   `StyleCapacityExceeded`, `SlotConflict`, `SlotIncompatible`, `ItemNotUsable`,
