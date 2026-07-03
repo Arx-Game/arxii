@@ -407,3 +407,49 @@ class PropertyTaggedTechniqueTest(TestCase):
         technique = TechniqueFactory(damage_profile=False)
         stack = self._emit(technique)
         self.assertFalse(stack.was_cancelled())
+
+
+class TargetRuntimePropertyNegatesEffectTest(TestCase):
+    """A target's runtime ObjectProperty (e.g. 'aerial') can cancel an incoming effect.
+
+    Unlike PropertyTaggedTechniqueTest (which gates on the source technique's
+    static Property tag), this gates on the TARGET's own live state — no
+    SELF_FILTER, since the trigger is installed on the potential victim and
+    must fire whenever an incoming DAMAGE_PRE_APPLY names them as target.
+    """
+
+    def setUp(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("TrapRoom")
+        sheet = CharacterSheetFactory()
+        self.character = sheet.character
+        self.character.location = self.room
+
+        self.aerial = AerialPropertyFactory()
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={"path": "target", "op": "has_property", "value": "aerial"},
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+    def _emit(self):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="technique", ref=None),
+        )
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_aerial_target_cancels_the_trap(self) -> None:
+        ObjectPropertyFactory(object=self.character, property=self.aerial)
+        stack = self._emit()
+        self.assertTrue(stack.was_cancelled())
+
+    def test_grounded_target_does_not_cancel(self) -> None:
+        stack = self._emit()
+        self.assertFalse(stack.was_cancelled())
