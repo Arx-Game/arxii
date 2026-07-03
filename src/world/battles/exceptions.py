@@ -109,6 +109,32 @@ class PlaceScopeRequiredError(BattleError):
         super().__init__(user_message)
 
 
+class FortificationTargetRequiredError(BattleError):
+    """Raised when BREACH/FORTIFY is declared without a target_fortification (#1713)."""
+
+    def __init__(self, user_message: str = "That action needs a target fortification.") -> None:
+        super().__init__(user_message)
+
+
+class FortificationOwnershipMismatchError(BattleError):
+    """Raised when BREACH targets your own side's Fortification, or FORTIFY targets
+    the enemy's (#1713). Mirrors CannotStrikeOwnSideError's shape."""
+
+    def __init__(
+        self,
+        user_message: str = "You cannot BREACH your own side's fortification or "
+        "FORTIFY the enemy's.",
+    ) -> None:
+        super().__init__(user_message)
+
+
+class FortificationAlreadyBreachedError(BattleError):
+    """Raised when BREACH/FORTIFY targets a Fortification that is already breached (#1713)."""
+
+    def __init__(self, user_message: str = "That fortification has already been breached.") -> None:
+        super().__init__(user_message)
+
+
 class InvalidEnvironmentScopeError(BattleError):
     """Raised when SET_ENVIRONMENT is declared with a scope other than BATTLE or
     PLACE (#1715)."""

@@ -105,7 +105,8 @@ class WireEnchantingTests(TestCase):
 
 class CraftAttachFacetTests(TestCase):
     def setUp(self) -> None:
-        from world.items.factories import wire_enchanting_crafting
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.factories import install_full_lab_station, wire_enchanting_crafting
         from world.magic.factories import FacetFactory
         from world.traits.models import Trait
 
@@ -118,6 +119,12 @@ class CraftAttachFacetTests(TestCase):
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing pipeline tests can still craft.
+        room_profile = RoomProfileFactory()
+        self.sheet.character.location = room_profile.objectdb
+        self.sheet.character.save()
+        install_full_lab_station(room_profile)
         template = ItemTemplateFactory(facet_capacity=3)
         self.item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
         self.facet = FacetFactory()

@@ -157,23 +157,40 @@ They do not use the command system, dispatchers, or handlers.
   (resolves `RoomProfile` from an Evennia location). Shared by telnet `CmdSanctum` and the
   web `SanctumViewSet` (`world/magic/views_sanctum.py`), which now dispatches all 7 ops
   through `Action().run(actor=request.user.puppet, ...)` (#1497).
-  `battles.py` (#1592/#1710/#1712) — four REGISTRY actions, all `category="battle"`:
+  `battles.py` (#1592/#1710/#1712/#1713) — four REGISTRY actions, all `category="battle"`:
   `BeginBattleRoundAction` (key `"begin_battle_round"`, `target_type=AREA`, GM/staff),
   `ResolveBattleRoundAction` (`"resolve_battle_round"`, `target_type=AREA`, GM/staff;
   auto-concludes via `check_victory` when a side crosses threshold),
   `ConcludeBattleAction` (`"conclude_battle"`, `target_type=AREA`, GM/staff; natural win →
   timer → DEFENDER_MARGINAL default), `DeclareBattleActionAction` (`"declare_battle_action"`,
-  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 8
+  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 10
   `BattleActionKind` values through the same generic `action_kind`/`target_unit`/
-  `target_ally`/`scope`/`target_place`/`target_side` kwargs it always had — #1712 added
-  ROUT/RALLY/REPEL/HOLD and #1715 added SET_ENVIRONMENT with zero code changes to this
-  action; all new-kind validation (command scope, `PlaceScopeRequiredError`,
-  `InvalidEnvironmentScopeError`/`MissingEnvironmentTargetError`) lives in
+  `target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs it
+  always had — #1712 added ROUT/RALLY/REPEL/HOLD, #1713 added BREACH/FORTIFY, and #1715
+  added SET_ENVIRONMENT, all with zero new Action classes; all new-kind validation
+  (command scope, `PlaceScopeRequiredError`, the #1713 Fortification target/ownership
+  checks, `InvalidEnvironmentScopeError`/`MissingEnvironmentTargetError`) lives in
   `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
   (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
   binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
   `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`) — every `BattleActionKind`,
-  including SET_ENVIRONMENT, has a matching `battle declare` subverb.)
+  including SET_ENVIRONMENT, has a matching `battle declare` subverb.
+  `room_features.py` (#1234) — two REGISTRY actions, both `target_type=SELF`,
+  `category="items"`: `StartRoomFeatureProjectAction` (key `"start_room_feature_project"`)
+  — generic install/upgrade project starter for any PROJECT-mechanism `RoomFeatureKind`
+  (LAB, Command Center, future kinds); three-way branch (no existing instance → fresh
+  install, gated on `install_mechanism`; existing instance of the same kind → upgrade,
+  level-gated; existing instance of a different kind → blocked, one-feature-per-room)
+  creates a `ROOM_FEATURE_PROGRESSION` `Project` + `RoomFeatureProgressionDetails` row —
+  funding/resolution reuse the existing generic Project machinery (`project/donate`,
+  `scan_active_projects`). `RepairLabStationAction` (`"repair_lab_station"`) — thin
+  wrapper over `world.items.crafting.station.repair_station_durability`; resolves the
+  active LAB `RoomFeatureInstance` for the actor's room, gates on the same
+  owner/tenant standing as install/upgrade (`can_modify_room_features`), and charges
+  the actor's purse in coppers. Both gated by `_resolve_active_persona` +
+  `can_modify_room_features`. Shared by telnet `CmdLabStation` (`station <subverb>`,
+  `src/commands/crafting_station.py`) and the web `LabStationViewSet`
+  (`/api/items/lab-stations/`).)
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager

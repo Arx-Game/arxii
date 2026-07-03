@@ -34,3 +34,10 @@ UNFINISHED_ROOM_DESC = "An unfinished room."  # PLACEHOLDER
 # PLACEHOLDER — economy pass tunes. Contribution progress divides money by 100
 # (projects.services), so threshold-per-unit 100 ≈ 10,000 money per budget unit.
 EXTENSION_THRESHOLD_PER_UNIT = 100
+
+# Fortification investment (#1713). Bounded ladder — see BASE_INTEGRITY/
+# FORTIFICATION_LEVEL_INTEGRITY_BONUS in world.battles.constants for why an
+# uncapped level would make a structure unbreachable. PLACEHOLDER threshold
+# pending the economy pass (mirrors EXTENSION_THRESHOLD_PER_UNIT above).
+MAX_FORTIFICATION_LEVEL = 5
+FORTIFICATION_UPGRADE_THRESHOLD_PER_LEVEL = 150

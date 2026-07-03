@@ -358,6 +358,74 @@ class CmdBattleDeclareTests(TestCase):
         feedback = self.player_char.msg.call_args[0][0]
         self.assertIn("Usage", feedback)
 
+    def test_declare_fortify_creates_declaration(self) -> None:
+        from world.battles.factories import FortificationFactory
+
+        place = BattlePlaceFactory(battle=self.battle, name="East Wall")
+        fort = FortificationFactory(place=place, defending_side=self.defender_side, kind="wall")
+
+        cmd = CmdBattle()
+        _run(
+            cmd,
+            self.player_char,
+            "declare fortify place East Wall fortification wall with Lance Thrust",
+        )
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.FORTIFY)
+        self.assertEqual(decl.target_fortification_id, fort.pk)
+
+    def test_declare_breach_creates_declaration(self) -> None:
+        from world.battles.factories import FortificationFactory
+
+        place = BattlePlaceFactory(battle=self.battle, name="Siege Gate")
+        # BREACH targets the enemy's structure — attacker_side, not the
+        # defender participant's own side (#1713 ownership check).
+        fort = FortificationFactory(place=place, defending_side=self.attacker_side, kind="gate")
+
+        cmd = CmdBattle()
+        _run(
+            cmd,
+            self.player_char,
+            "declare breach place Siege Gate fortification gate with Lance Thrust",
+        )
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.BREACH)
+        self.assertEqual(decl.target_fortification_id, fort.pk)
+
+    def test_declare_breach_without_fortification_token_sends_usage(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare breach place East Wall with Lance Thrust")
+
+        self.assertFalse(
+            BattleActionDeclaration.objects.filter(battle_round=self.battle_round).exists()
+        )
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("Usage", feedback)
+
+    def test_declare_breach_unknown_fortification_sends_error(self) -> None:
+        BattlePlaceFactory(battle=self.battle, name="Empty Yard")
+
+        cmd = CmdBattle()
+        _run(
+            cmd,
+            self.player_char,
+            "declare breach place Empty Yard fortification wall with Lance Thrust",
+        )
+
+        self.assertFalse(
+            BattleActionDeclaration.objects.filter(battle_round=self.battle_round).exists()
+        )
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("wall", feedback.lower())
+
 
 class CmdBattleDuelTests(TestCase):
     """CmdBattle `duel` subverb dispatches ChallengeChampionDuelAction."""

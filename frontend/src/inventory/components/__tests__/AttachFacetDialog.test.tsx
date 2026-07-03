@@ -4,6 +4,7 @@
 
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { AttachFacetDialog } from '../AttachFacetDialog';
@@ -17,10 +18,23 @@ vi.mock('../../hooks/useItemFacets', () => ({
   useCraftAttachFacet: vi.fn(),
   useRemoveItemFacet: vi.fn(),
   useCraftingQuote: vi.fn(),
+  // Real (non-mocked) key-builder — plain data, matches the module's actual
+  // shape so `AttachFacetDialog`'s cache-invalidation call builds a real key.
+  itemFacetKeys: {
+    all: ['item-facets'],
+    list: (itemInstanceId: number) => ['item-facets', itemInstanceId],
+    qualityTiers: ['quality-tiers'],
+    quote: (itemInstanceId: number, facetId: number) => ['crafting-quote', itemInstanceId, facetId],
+  },
 }));
 
 vi.mock('@/character-creation/queries', () => ({
   useFacets: vi.fn(),
+}));
+
+vi.mock('../../hooks/useLabStation', () => ({
+  useLabStationStatus: vi.fn(),
+  useRepairLabStation: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -32,6 +46,7 @@ vi.mock('sonner', () => ({
 
 import * as itemFacetsHooks from '../../hooks/useItemFacets';
 import * as characterCreationQueries from '@/character-creation/queries';
+import * as labStationHooks from '../../hooks/useLabStation';
 import { toast } from 'sonner';
 
 // ---------------------------------------------------------------------------
@@ -84,6 +99,29 @@ function makeRemoveMock() {
   return mutate;
 }
 
+function makeRepairMock() {
+  const mutate = vi.fn();
+  vi.mocked(labStationHooks.useRepairLabStation).mockReturnValue({
+    mutate,
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+    isIdle: true,
+    error: null,
+    data: undefined,
+    variables: undefined,
+    status: 'idle',
+    reset: vi.fn(),
+    context: undefined,
+    failureCount: 0,
+    failureReason: null,
+    isPaused: false,
+    submittedAt: 0,
+  } as unknown as ReturnType<typeof labStationHooks.useRepairLabStation>);
+  return mutate;
+}
+
 function setupDefaultMocks() {
   // No existing facets on the item by default.
   vi.mocked(itemFacetsHooks.useItemFacets).mockReturnValue({
@@ -110,6 +148,17 @@ function setupDefaultMocks() {
     isError: false,
     error: null,
   } as unknown as ReturnType<typeof characterCreationQueries.useFacets>);
+
+  // LabStationStatusCard's hooks — only exercised when a quote's
+  // station_status is present; default to an empty/idle shape so tests that
+  // don't care about stations don't need to configure these.
+  vi.mocked(labStationHooks.useLabStationStatus).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof labStationHooks.useLabStationStatus>);
+  makeRepairMock();
 
   // No quote loaded by default (no facet selected yet).
   vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
@@ -467,5 +516,168 @@ describe('AttachFacetDialog', () => {
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Lost 2 AP and 10 Anima'));
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // Station status (#1234): LabStationStatusCard wiring inside CraftingQuotePanel
+  // -------------------------------------------------------------------------
+  it('renders a broken-station message when quote.station_status.is_broken is true', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    makeCraftMock();
+    makeRemoveMock();
+
+    vi.mocked(labStationHooks.useLabStationStatus).mockReturnValue({
+      data: { durability: 0, max_durability: 20, level: 1, is_broken: true },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof labStationHooks.useLabStationStatus>);
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: false,
+        costs: {
+          action_points: 0,
+          action_points_have: 0,
+          anima: 0,
+          anima_have: 0,
+          materials: [],
+        },
+        max_quality_tier: null,
+        failure_risk: [],
+        station_status: {
+          present: true,
+          durability: 0,
+          max_durability: 20,
+          is_broken: true,
+          feature_instance_id: 5,
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+
+    const stationCard = screen.getByTestId('lab-station-status-card');
+    expect(stationCard).toHaveTextContent('(broken)');
+  });
+
+  it('renders "no Lab station" messaging when quote.station_status.present is false', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    makeCraftMock();
+    makeRemoveMock();
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: false,
+        costs: {
+          action_points: 0,
+          action_points_have: 0,
+          anima: 0,
+          anima_have: 0,
+          materials: [],
+        },
+        max_quality_tier: null,
+        failure_risk: [],
+        station_status: {
+          present: false,
+          durability: 0,
+          max_durability: 0,
+          is_broken: true,
+          feature_instance_id: null,
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+
+    expect(screen.getByText(/no lab station in this room/i)).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Repair invalidates the crafting-quote cache (#1234 whole-branch review
+  // finding) — repairing from LabStationStatusCard previously left the
+  // "Attach" button reading a stale ["crafting-quote", ...] query until the
+  // dialog was closed and reopened.
+  // -------------------------------------------------------------------------
+  it('invalidates the crafting-quote cache when the Lab station is repaired', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    makeCraftMock();
+    makeRemoveMock();
+    const repairMutate = makeRepairMock();
+    repairMutate.mockImplementation(
+      (
+        _vars: unknown,
+        callbacks: { onSuccess?: (r: unknown) => void; onError?: (e: unknown) => void }
+      ) => {
+        callbacks?.onSuccess?.({ durability: 20, max_durability: 20 });
+      }
+    );
+
+    vi.mocked(labStationHooks.useLabStationStatus).mockReturnValue({
+      data: { durability: 15, max_durability: 20, level: 1, is_broken: false },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof labStationHooks.useLabStationStatus>);
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: true,
+        costs: {
+          action_points: 0,
+          action_points_have: 0,
+          anima: 0,
+          anima_have: 0,
+          materials: [],
+        },
+        max_quality_tier: null,
+        failure_risk: [],
+        station_status: {
+          present: true,
+          durability: 15,
+          max_durability: 20,
+          is_broken: false,
+          feature_instance_id: 5,
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    const invalidateSpy = vi
+      .spyOn(QueryClient.prototype, 'invalidateQueries')
+      .mockResolvedValue(undefined);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByText('Spider'));
+
+    await user.click(screen.getByRole('button', { name: /repair/i }));
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ['crafting-quote', ITEM_INSTANCE_ID, 7] })
+    );
+
+    invalidateSpy.mockRestore();
   });
 });

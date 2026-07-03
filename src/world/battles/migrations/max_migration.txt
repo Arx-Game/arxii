@@ -1,1 +1,1 @@
-0015_alter_battleactiondeclaration_scope
+0017_alter_battleactiondeclaration_action_kind

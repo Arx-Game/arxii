@@ -117,6 +117,7 @@ treat those names as hints to confirm, not gospel.
 - [0074 — Battle Surrounded peril may override AFK-safety, narrowly and explicitly](0074-battle-peril-may-override-afk-safety-narrowly.md)
 - [0081 — Battle terrain lives on BattlePlace, not the room Position/PositionEdge graph](0081-battle-terrain-lives-on-battleplace.md)
 - [0082 — Battle morale derives status; the front itself is the objective; VP stays award-only](0082-battle-morale-derives-status-objective-lives-on-place.md)
+- [0083 — Siege structures are per-Fortification objectives; BREACH/FORTIFY are dedicated verbs](0083-siege-structures-are-per-fortification-objectives-with-dedicated-verbs.md)
 - [0083 — Out-of-combat sudden harm defers via the scene-round declare/resolve shape, not a pre-armed check](0083-out-of-combat-sudden-harm-defers-via-scene-round.md)
 - [0084 — Battle environment reads ambient weather via Battle.region, not the room graph](0084-battle-environment-reads-ambient-weather-via-battle-region.md)
 

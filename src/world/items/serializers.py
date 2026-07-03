@@ -236,6 +236,16 @@ class CraftingQuoteRiskSerializer(serializers.Serializer):
     label = serializers.CharField(allow_null=True)
 
 
+class StationStatusSerializer(serializers.Serializer):
+    """LAB station snapshot within a crafting quote (#1234)."""
+
+    present = serializers.BooleanField()
+    durability = serializers.IntegerField()
+    max_durability = serializers.IntegerField()
+    is_broken = serializers.BooleanField()
+    feature_instance_id = serializers.IntegerField(allow_null=True)
+
+
 class CraftingQuoteSerializer(serializers.Serializer):
     """Read-only quote: costs, affordability, max quality tier, failure risks."""
 
@@ -243,6 +253,7 @@ class CraftingQuoteSerializer(serializers.Serializer):
     affordable = serializers.BooleanField()
     max_quality_tier = QualityTierSerializer(allow_null=True)
     failure_risk = CraftingQuoteRiskSerializer(many=True)
+    station_status = StationStatusSerializer(allow_null=True)
 
 
 class EquippedItemReadSerializer(serializers.ModelSerializer):

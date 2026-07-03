@@ -6524,6 +6524,131 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/lab-stations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
+    get: operations['items_lab_stations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/{feature_instance_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
+    get: operations['items_lab_stations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/{feature_instance_id}/repair/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
+    post: operations['items_lab_stations_repair_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/install/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
+    post: operations['items_lab_stations_install_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/lab-stations/upgrade/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Status + install/upgrade/repair endpoints for Lab stations.
+     *
+     *     ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+     *     whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+     *     repo's shared page-size-50 convention, already reused by
+     *     ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+     *     ``LabStationFilter`` lets callers scope the list to a single room.
+     */
+    post: operations['items_lab_stations_upgrade_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/outfit-slots/': {
     parameters: {
       query?: never;
@@ -16873,6 +16998,7 @@ export interface components {
       affordable: boolean;
       max_quality_tier: components['schemas']['QualityTier'] | null;
       failure_risk: components['schemas']['CraftingQuoteRisk'][];
+      station_status: components['schemas']['StationStatus'] | null;
     };
     /** @description Resource cost breakdown within a crafting quote. */
     CraftingQuoteCost: {
@@ -19553,6 +19679,27 @@ export interface components {
         [key: string]: string;
       }[];
     };
+    /** @description Read-shape for LabStationDetails — status endpoint + write-endpoint bodies. */
+    LabStationDetails: {
+      /** @description Current wear-remaining before the station is broken. */
+      readonly durability: number;
+      /** @description Durability ceiling for this station's current level. */
+      readonly max_durability: number;
+      readonly level: number;
+      readonly is_broken: boolean;
+    };
+    /**
+     * @description Response shape for ``repair``.
+     *
+     *     Only the two durability fields ``RepairLabStationAction.execute()``
+     *     actually returns (``actions/definitions/room_features.py``) —
+     *     ``level``/``is_broken`` are NOT part of this response, unlike the
+     *     ``GET`` status endpoint (``LabStationDetailsSerializer``).
+     */
+    LabStationRepairResult: {
+      durability: number;
+      max_durability: number;
+    };
     LedgerRow: {
       id: number;
       amount: number;
@@ -21734,6 +21881,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['KnownSecret'][];
+    };
+    PaginatedLabStationDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['LabStationDetails'][];
     };
     PaginatedMissionCategoryList: {
       /** @example 123 */
@@ -25671,6 +25833,17 @@ export interface components {
       fixtures: components['schemas']['PlacedFixture'][];
       fixture_kinds: components['schemas']['FixtureKind'][];
     };
+    /**
+     * @description Response shape for ``install``/``upgrade``.
+     *
+     *     Both routes only ever start a ``Project`` — they do NOT synchronously
+     *     create a ``LabStationDetails`` row, so the response is just the new
+     *     project's pk. Matches ``StartRoomFeatureProjectAction.execute()``'s
+     *     ``ActionResult.data`` (``actions/definitions/room_features.py``).
+     */
+    RoomFeatureProjectStartResult: {
+      project_id: number;
+    };
     /** @description The shared room-size unit ladder. */
     RoomSizeTier: {
       readonly id: number;
@@ -27054,6 +27227,14 @@ export interface components {
        * @description Cloudinary URL for crest/flag image. Leave blank for gradient placeholder.
        */
       crest_image?: string | null;
+    };
+    /** @description LAB station snapshot within a crafting quote (#1234). */
+    StationStatus: {
+      present: boolean;
+      durability: number;
+      max_durability: number;
+      is_broken: boolean;
+      feature_instance_id: number | null;
     };
     /**
      * @description * `submitted` - Submitted
@@ -37492,6 +37673,109 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CraftingQuote'];
+        };
+      };
+    };
+  };
+  items_lab_stations_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room_profile?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedLabStationDetailsList'];
+        };
+      };
+    };
+  };
+  items_lab_stations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationDetails'];
+        };
+      };
+    };
+  };
+  items_lab_stations_repair_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        feature_instance_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LabStationRepairResult'];
+        };
+      };
+    };
+  };
+  items_lab_stations_install_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomFeatureProjectStartResult'];
+        };
+      };
+    };
+  };
+  items_lab_stations_upgrade_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomFeatureProjectStartResult'];
         };
       };
     };

@@ -93,11 +93,42 @@ or sustains control of a `BattlePlace` (see **Front control** below).
 holds a front as an objective. `None` means uncontrolled/contested. Set by a
 successful HOLD declaration.
 
+**Fortification**:
+A `Fortification` — a defensible structure (wall/gate/battlement) at a
+`BattlePlace` (#1713). A front may carry several at once, each independently
+breachable via its own `integrity`/`max_integrity` — see ADR-0083 for why this
+is per-structure state rather than a single shared value on `BattlePlace`
+itself (mirroring `BattleUnit.strength`). `defending_side` gates which side may
+BREACH (must differ) vs FORTIFY (must match) it. `breached` is terminal — once
+set, the structure can no longer be targeted by either verb.
+_Avoid_: wall (too narrow — a `Fortification` may be a gate or battlement),
+objective (reserved for the front-control sense, see **Front control** above).
+
+**Breach** (verb):
+The `BattleActionKind.BREACH` declaration (#1713) — attrites a target
+`Fortification`'s `integrity`, awarding VP; sets `breached=True` at 0. Must
+target the enemy's structure (`FortificationOwnershipMismatchError` otherwise).
+
+**Fortify** (verb):
+The `BattleActionKind.FORTIFY` declaration (#1713) — restores a target
+`Fortification`'s `integrity` (capped at `max_integrity`), awarding flat VP.
+Must target your own side's structure. Distinct from **Front control**'s HOLD —
+FORTIFY repairs a structure's integrity, HOLD captures/sustains a front.
+
+**Fortification level**:
+`world.buildings.Building.fortification_level` (#1713, cross-app) — a
+persistent, player-built defense investment raised via a `FORTIFICATION_UPGRADE`
+Project, snapshotted once into a new `Fortification`'s `max_integrity` by
+`create_fortification`. Distinct from the battle-scoped `Fortification` model
+above: this is the durable investment that seeds a `Fortification`'s starting
+ceiling, not the per-battle structure itself. See `world.buildings`'s own
+glossary entry for the buildings-side detail.
+
 **Victory Points**:
 `BattleSide.victory_points` — the accumulating score each side races toward
 its `victory_threshold`. Award-only in every existing action kind (STRIKE,
-SUPPORT, ROUT, RALLY, REPEL, HOLD) — no action denies/subtracts VP from a
-side (#1712 considered and explicitly deferred a denial mechanic).
+SUPPORT, ROUT, RALLY, REPEL, HOLD, BREACH, FORTIFY) — no action denies/subtracts
+VP from a side (#1712 considered and explicitly deferred a denial mechanic).
 
 **Descriptor**:
 A `BattleUnit`'s free-text flavor tag (e.g. "zombies-on-nightmares"); narrative only,

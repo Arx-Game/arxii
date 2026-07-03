@@ -13,6 +13,8 @@ Player subverbs:
     battle declare rally <unit> with <technique>
     battle declare repel place <name> with <technique>
     battle declare hold place <name> with <technique>
+    battle declare breach place <name> fortification <kind> with <technique>
+    battle declare fortify place <name> fortification <kind> with <technique>
     battle declare set_environment with <technique>
     battle declare set_environment place <name> with <technique>
     battle duel <front> vs <boss name>
@@ -33,6 +35,8 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from actions.types import ActionResult
     from world.battles.models import BattleParticipant, BattleUnit
 
@@ -51,6 +55,8 @@ class CmdBattle(ArxCommand):
         battle declare rally <unit> with <technique>
         battle declare repel place <name> with <technique>
         battle declare hold place <name> with <technique>
+        battle declare breach place <name> fortification <kind> with <technique>
+        battle declare fortify place <name> fortification <kind> with <technique>
         battle declare set_environment with <technique>
         battle declare set_environment place <name> with <technique>
         battle duel <front> vs <boss name>
@@ -74,13 +80,17 @@ class CmdBattle(ArxCommand):
     *your own* side, including one that's already ROUTED — that's the whole
     point of rallying it. ``repel``/``hold`` are PLACE-scope only, aimed at a
     front (``BattlePlace``) rather than a single unit or an entire side.
+    ``breach``/``fortify`` target a specific ``Fortification`` at a front by
+    kind (``wall``/``gate``/``battlement``) — ``place <name> fortification
+    <kind>`` — since a front may carry more than one structure and a
+    Fortification has no name of its own.
     ``set_environment`` casts battlefield weather (#1715) — the technique
     itself carries the weather type, so no separate weather argument is
     needed; with no target it casts at BATTLE scope (whole-battle-wide,
     requires an engaged SUPREME command_tier), or ``place <name>`` narrows it
-    to a PLACE-scope local exception at that front only. ``duel <front> vs
-    <boss name>`` opens a lethal Champion duel bound to that front — requires
-    an engaged Champion role for your side's covenant.
+    to a PLACE-scope local exception at that front only.
+    ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
+    front — requires an engaged Champion role for your side's covenant.
     """
 
     key = "battle"
@@ -275,6 +285,8 @@ class CmdBattle(ArxCommand):
                 " | battle declare rally <unit> with <technique>"
                 " | battle declare repel place <name> with <technique>"
                 " | battle declare hold place <name> with <technique>"
+                " | battle declare breach place <name> fortification <kind> with <technique>"
+                " | battle declare fortify place <name> fortification <kind> with <technique>"
                 " | battle declare set_environment [place <name>] with <technique>"
             )
             raise CommandError(msg)
@@ -290,6 +302,8 @@ class CmdBattle(ArxCommand):
                 " | battle declare rally <unit> with <technique>"
                 " | battle declare repel place <name> with <technique>"
                 " | battle declare hold place <name> with <technique>"
+                " | battle declare breach place <name> fortification <kind> with <technique>"
+                " | battle declare fortify place <name> fortification <kind> with <technique>"
                 " | battle declare set_environment [place <name>] with <technique>"
             )
             raise CommandError(msg)
@@ -299,8 +313,8 @@ class CmdBattle(ArxCommand):
 
         # Dispatch table keyed by subverb rather than an if/elif chain — keeps
         # _declare's cyclomatic complexity flat as new declare kinds are added
-        # (#1715 added set_environment as the 8th).
-        handlers = {
+        # (#1713 added breach/fortify, #1715 added set_environment).
+        handlers: dict[str, Callable[[str, str], ActionResult]] = {
             "strike": self._declare_strike,
             "support": lambda n, t: self._declare_ally_scoped(
                 BattleActionKind.SUPPORT, n, t, verb="support"
@@ -316,13 +330,20 @@ class CmdBattle(ArxCommand):
             "hold": lambda n, t: self._declare_place_scoped(
                 BattleActionKind.HOLD, n, t, verb="hold"
             ),
+            "breach": lambda n, t: self._declare_fortification_scoped(
+                BattleActionKind.BREACH, n, t, verb="breach"
+            ),
+            "fortify": lambda n, t: self._declare_fortification_scoped(
+                BattleActionKind.FORTIFY, n, t, verb="fortify"
+            ),
             "set_environment": self._declare_environment,
         }
         handler = handlers.get(kind)
         if handler is None:
             msg = (
                 "Unknown declare subverb. Use 'strike', 'support', 'rescue', "
-                "'rout', 'rally', 'repel', 'hold', or 'set_environment'."
+                "'rout', 'rally', 'repel', 'hold', 'breach', 'fortify', "
+                "or 'set_environment'."
             )
             raise CommandError(msg)
 
@@ -448,6 +469,57 @@ class CmdBattle(ArxCommand):
             technique_id=technique.pk,
             scope=BattleActionScope.PLACE,
             target_place=place,
+        )
+
+    def _declare_fortification_scoped(
+        self, action_kind: str, name: str, technique_name: str, *, verb: str
+    ) -> ActionResult:
+        """Resolve and dispatch a Fortification-scoped declaration (BREACH/FORTIFY, #1713).
+
+        Grammar: ``place <front name> fortification <wall|gate|battlement>``. The
+        extra ``fortification <kind>`` token (rather than reusing bare
+        ``place <name>`` like REPEL/HOLD) is needed because a front name may
+        contain spaces and a BattlePlace can carry multiple Fortification rows
+        (#1713) — kind is the only free-form-ish disambiguator available, since
+        Fortification has no name field of its own.
+        """
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+        from world.battles.models import BattlePlace, Fortification  # noqa: PLC0415
+
+        usage = (
+            f"Usage: battle declare {verb} place <name> fortification "
+            f"<wall|gate|battlement> with <technique>"
+        )
+        if not name.lower().startswith("place "):  # noqa: STRING_LITERAL
+            raise CommandError(usage)
+        remainder = name[len("place ") :]
+        if " fortification " not in remainder:  # noqa: STRING_LITERAL
+            raise CommandError(usage)
+        place_name, kind_token = remainder.split(" fortification ", 1)
+        place_name = place_name.strip()
+        kind_token = kind_token.strip()
+        if not place_name or not kind_token:
+            raise CommandError(usage)
+
+        participant = self._resolve_participant()
+        technique = self._resolve_technique(participant, technique_name)
+        place = BattlePlace.objects.filter(
+            battle=participant.battle, name__iexact=place_name
+        ).first()
+        if place is None:
+            msg = f"No front named '{place_name}' in this battle."
+            raise CommandError(msg)
+        fort = Fortification.objects.filter(
+            place=place, kind__iexact=kind_token, breached=False
+        ).first()
+        if fort is None:
+            msg = f"No standing {kind_token} fortification at '{place_name}'."
+            raise CommandError(msg)
+        return DeclareBattleActionAction().run(
+            self.caller,
+            action_kind=action_kind,
+            technique_id=technique.pk,
+            target_fortification=fort,
         )
 
     def _declare_environment(self, name: str, technique_name: str) -> ActionResult:

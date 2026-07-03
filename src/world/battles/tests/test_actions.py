@@ -434,6 +434,45 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         self.assertEqual(decl.scope, BattleActionScope.SIDE)
         self.assertEqual(decl.target_side_id, self.attacker_side.pk)
 
+    def test_declare_battle_action_passes_through_target_fortification_fortify(self) -> None:
+        from world.battles.factories import BattlePlaceFactory, FortificationFactory
+
+        place = BattlePlaceFactory(battle=self.battle)
+        fort = FortificationFactory(place=place, defending_side=self.defender_side)
+
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.FORTIFY,
+            technique_id=self.technique.pk,
+            target_fortification=fort,
+        )
+
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(pk=result.data["declaration_id"])
+        self.assertEqual(decl.action_kind, BattleActionKind.FORTIFY)
+        self.assertEqual(decl.target_fortification_id, fort.pk)
+
+    def test_declare_battle_action_passes_through_target_fortification_breach(self) -> None:
+        from world.battles.factories import BattlePlaceFactory, FortificationFactory
+
+        place = BattlePlaceFactory(battle=self.battle)
+        # The participant is on defender_side; a BREACH target must belong to the
+        # *enemy* side (attacker_side) — FORTIFY requires the participant's own
+        # side, BREACH requires the opposing side (#1713 ownership check).
+        fort = FortificationFactory(place=place, defending_side=self.attacker_side)
+
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.BREACH,
+            technique_id=self.technique.pk,
+            target_fortification=fort,
+        )
+
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(pk=result.data["declaration_id"])
+        self.assertEqual(decl.action_kind, BattleActionKind.BREACH)
+        self.assertEqual(decl.target_fortification_id, fort.pk)
+
 
 class ChallengeChampionDuelActionTests(BattleActionTestBase):
     """ChallengeChampionDuelAction opens a lethal duel bound to a BattlePlace."""

@@ -142,6 +142,24 @@ class NoChargesRemaining(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That item has no uses left."})
 
 
+class CraftingStationRequired(ItemError):
+    """Raised when a recipe requiring a station has none active in the room (#1234)."""
+
+    user_message = "This crafting requires an installed workspace here."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"This crafting requires an installed workspace here."},
+    )
+
+
+class CraftingStationBroken(ItemError):
+    """Raised when the room's station is too worn (durability 0) to use (#1234)."""
+
+    user_message = "The station here is too worn to use — it needs repair first."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"The station here is too worn to use — it needs repair first."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Inventory action errors (pick_up, drop, give, equip, etc.)
 # ---------------------------------------------------------------------------

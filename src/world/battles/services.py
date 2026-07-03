@@ -15,15 +15,18 @@ from django.utils import timezone
 
 from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.constants import (
+    BASE_INTEGRITY,
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    FORTIFICATION_LEVEL_INTEGRITY_BONUS,
     BattleActionKind,
     BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
     TerrainType,
     UnitQuality,
 )
@@ -31,6 +34,9 @@ from world.battles.exceptions import (
     BattleConcludedError,
     CannotStrikeOwnSideError,
     CharacterDoesNotKnowTechniqueError,
+    FortificationAlreadyBreachedError,
+    FortificationOwnershipMismatchError,
+    FortificationTargetRequiredError,
     InsufficientCommandTierError,
     InvalidEnvironmentScopeError,
     MissingEnvironmentTargetError,
@@ -51,6 +57,7 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
     BattleUnitCapability,
+    Fortification,
 )
 from world.combat.constants import OpponentTier
 from world.conditions.models import CapabilityType
@@ -58,6 +65,7 @@ from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
+    from world.buildings.models import Building
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.covenants.models import Covenant
@@ -207,6 +215,46 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     return unit
 
 
+@transaction.atomic
+def create_fortification(
+    *,
+    place: BattlePlace,
+    defending_side: BattleSide,
+    kind: str = FortificationKind.WALL,
+    building: Building | None = None,
+) -> Fortification:
+    """Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).
+
+    max_integrity is computed once, at creation, from BASE_INTEGRITY[kind] plus
+    building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS if a
+    persistent building is provided — mirroring how Building itself snapshots
+    target_size/target_grandeur once from its founding Project. A Fortification
+    with no building (building=None) is an ad-hoc structure with no persistent
+    investment behind it; max_integrity is just BASE_INTEGRITY[kind].
+
+    Args:
+        place: The BattlePlace this structure defends.
+        defending_side: The BattleSide this structure protects (gates BREACH/
+            FORTIFY ownership — see declare_battle_action).
+        kind: A FortificationKind value. Defaults to WALL.
+        building: Optional persistent Building this structure's integrity
+            ceiling derives from.
+
+    Returns:
+        The newly created Fortification, with integrity == max_integrity.
+    """
+    level = building.fortification_level if building is not None else 0
+    max_integrity = BASE_INTEGRITY[kind] + level * FORTIFICATION_LEVEL_INTEGRITY_BONUS
+    return Fortification.objects.create(
+        place=place,
+        defending_side=defending_side,
+        building=building,
+        kind=kind,
+        integrity=max_integrity,
+        max_integrity=max_integrity,
+    )
+
+
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
     """Set a battle side's tactical posture (#1711).
 
@@ -318,6 +366,7 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
     scope: str = BattleActionScope.UNIT,
     target_place: BattlePlace | None = None,
     target_side: BattleSide | None = None,
+    target_fortification: Fortification | None = None,
 ) -> BattleActionDeclaration:
     """Record or update the participant's action declaration for the current round.
 
@@ -337,6 +386,7 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
             covenant.
         target_place: The ``BattlePlace`` affected (scope=PLACE).
         target_side: The ``BattleSide`` affected (scope=SIDE).
+        target_fortification: The ``Fortification`` being BREACHed/FORTIFYed (#1713).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
@@ -352,6 +402,11 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
         CannotStrikeOwnSideError: If ``action_kind`` is STRIKE or ROUT, scope is SIDE,
             and ``target_side`` is the participant's own side.
         PlaceScopeRequiredError: If action_kind is REPEL or HOLD and scope is not PLACE.
+        FortificationTargetRequiredError: If action_kind is BREACH/FORTIFY and
+            target_fortification is None.
+        FortificationAlreadyBreachedError: If target_fortification.breached is True.
+        FortificationOwnershipMismatchError: If BREACH targets your own side's
+            fortification, or FORTIFY targets the enemy's.
         InvalidEnvironmentScopeError: If action_kind is SET_ENVIRONMENT and scope is
             not BATTLE or PLACE.
         MissingEnvironmentTargetError: If action_kind is SET_ENVIRONMENT and
@@ -404,6 +459,13 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
     ):
         raise CannotStrikeOwnSideError
 
+    if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
+        _validate_fortification_target(
+            participant=participant,
+            action_kind=action_kind,
+            target_fortification=target_fortification,
+        )
+
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
         participant=participant,
@@ -415,6 +477,7 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
             "scope": scope,
             "target_place": target_place,
             "target_side": target_side,
+            "target_fortification": target_fortification,
             "resolved": False,
         },
     )
@@ -450,6 +513,28 @@ def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> No
     ).exists()
     if not has_tier:
         raise InsufficientCommandTierError
+
+
+def _validate_fortification_target(
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    target_fortification: Fortification | None,
+) -> None:
+    """Raise unless *target_fortification* is a valid BREACH/FORTIFY target (#1713).
+
+    BREACH must target the enemy's structure; FORTIFY must target your own.
+    Either way the target must be set and not already breached.
+    """
+    if target_fortification is None:
+        raise FortificationTargetRequiredError
+    if target_fortification.breached:
+        raise FortificationAlreadyBreachedError
+    is_own_structure = target_fortification.defending_side_id == participant.side_id
+    if action_kind == BattleActionKind.BREACH and is_own_structure:
+        raise FortificationOwnershipMismatchError
+    if action_kind == BattleActionKind.FORTIFY and not is_own_structure:
+        raise FortificationOwnershipMismatchError
 
 
 # ---------------------------------------------------------------------------
@@ -633,4 +718,59 @@ def open_champion_duel(
     battle_place.combat_encounter = enc
     battle_place.save(update_fields=["combat_encounter"])
     install_champion_duel_trigger(enc)
+    return enc
+
+
+@transaction.atomic
+def open_siege_engine_encounter(
+    *,
+    battle_place: BattlePlace,
+    participant: BattleParticipant,
+    opponent_kwargs: dict,
+    tier: str = OpponentTier.ELITE,
+) -> CombatEncounter:
+    """Bind *battle_place* to a discrete siege-engine skirmish (#1713).
+
+    Reuses the same BattlePlace.combat_encounter bridge and create_lethal_duel
+    call as open_champion_duel, but without the Champion-role requirement — a
+    siege-engine skirmish (sabotaging a ram's crew, defending a tower) is an
+    ordinary discrete fight, not a Champion-only duel. Siege engines themselves
+    are ordinary BattleUnit rows, not a separate model (#1713 Decision 3) —
+    content authors differentiate one via the #1794 properties/capabilities
+    taxonomy, not a dedicated composition/kind field. This function only opens
+    the discrete-combat bridge for a skirmish over one.
+    The distinction from open_champion_duel is about who may open the duel, not
+    the opponent's tier: create_lethal_duel only accepts significant-NPC tiers
+    (ELITE/BOSS/HERO_KILLER) regardless of which function calls it, so this
+    function keeps create_lethal_duel's own bare default rather than overriding
+    it downward.
+
+    Args:
+        battle_place: The front the skirmish is bound to. Must have no existing
+            combat_encounter.
+        participant: The BattleParticipant initiating the skirmish.
+        opponent_kwargs: Forwarded to add_opponent via create_lethal_duel.
+        tier: Opponent tier; must be a significant-NPC tier accepted by
+            create_lethal_duel (ELITE/BOSS/HERO_KILLER). Defaults to ELITE.
+
+    Raises:
+        PlaceAlreadyDuelingError: If battle_place.combat_encounter is already set.
+
+    Returns:
+        The newly created CombatEncounter.
+    """
+    from world.combat.duels import create_lethal_duel  # noqa: PLC0415
+
+    if battle_place.combat_encounter_id is not None:
+        raise PlaceAlreadyDuelingError
+
+    room = battle_place.battle.scene.location
+    enc = create_lethal_duel(
+        participant.character_sheet,
+        opponent_kwargs,
+        room,
+        tier=tier,
+    )
+    battle_place.combat_encounter = enc
+    battle_place.save(update_fields=["combat_encounter"])
     return enc

@@ -30,6 +30,8 @@ from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
     CraftingCostUnaffordable,
     CraftingNotConfigured,
+    CraftingStationBroken,
+    CraftingStationRequired,
     FacetAlreadyAttached,
     FacetCapacityExceeded,
     ItemError,
@@ -366,6 +368,8 @@ class ItemFacetViewSet(viewsets.ViewSet):
             FacetCapacityExceeded,
             CraftingNotConfigured,
             CraftingCostUnaffordable,
+            CraftingStationRequired,
+            CraftingStationBroken,
         ) as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         status_code = 201 if result.attached else 200
@@ -1362,6 +1366,8 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
             StyleCapacityExceeded,
             CraftingNotConfigured,
             CraftingCostUnaffordable,
+            CraftingStationRequired,
+            CraftingStationBroken,
         ) as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         status_code = 201 if result.attached else 200
