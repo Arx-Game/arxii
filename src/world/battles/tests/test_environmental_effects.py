@@ -7,6 +7,7 @@ front only. See world.battles.resolution.effective_weather.
 
 from __future__ import annotations
 
+from django.db import IntegrityError
 from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
@@ -18,7 +19,9 @@ from world.battles.constants import (
     BattleActionScope,
 )
 from world.battles.factories import BattleFactory, BattlePlaceFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import TechniqueFactory
+from world.mechanics.factories import PropertyFactory
 from world.weather.factories import WeatherTypeFactory
 
 # NOTE for every subsequent task in this plan: this file's imports are added
@@ -83,3 +86,52 @@ class TechniqueTargetWeatherTypeTests(TestCase):
     def test_technique_target_weather_type_defaults_to_none(self) -> None:
         technique = TechniqueFactory(action_template=ActionTemplateFactory())
         self.assertIsNone(technique.target_weather_type_id)
+
+
+class WeatherEffectModelsTests(TestCase):
+    def test_weather_type_property_effect_creation(self) -> None:
+        from world.battles.models import WeatherTypePropertyEffect
+
+        weather_type = WeatherTypeFactory()
+        prop = PropertyFactory()
+        row = WeatherTypePropertyEffect.objects.create(
+            weather_type=weather_type, property=prop, modifier=15
+        )
+        self.assertEqual(row.modifier, 15)
+
+    def test_weather_type_property_effect_unique_per_pair(self) -> None:
+        from world.battles.models import WeatherTypePropertyEffect
+
+        weather_type = WeatherTypeFactory()
+        prop = PropertyFactory()
+        WeatherTypePropertyEffect.objects.create(
+            weather_type=weather_type, property=prop, modifier=15
+        )
+        with self.assertRaises(IntegrityError):
+            WeatherTypePropertyEffect.objects.create(
+                weather_type=weather_type, property=prop, modifier=-5
+            )
+
+    def test_weather_type_capability_challenge_creation(self) -> None:
+        from world.battles.models import WeatherTypeCapabilityChallenge
+
+        weather_type = WeatherTypeFactory()
+        capability = CapabilityTypeFactory()
+        row = WeatherTypeCapabilityChallenge.objects.create(
+            weather_type=weather_type, capability=capability, threshold=1, modifier=-20
+        )
+        self.assertEqual(row.threshold, 1)
+        self.assertEqual(row.modifier, -20)
+
+    def test_weather_type_capability_challenge_unique_per_pair(self) -> None:
+        from world.battles.models import WeatherTypeCapabilityChallenge
+
+        weather_type = WeatherTypeFactory()
+        capability = CapabilityTypeFactory()
+        WeatherTypeCapabilityChallenge.objects.create(
+            weather_type=weather_type, capability=capability, threshold=1, modifier=-20
+        )
+        with self.assertRaises(IntegrityError):
+            WeatherTypeCapabilityChallenge.objects.create(
+                weather_type=weather_type, capability=capability, threshold=2, modifier=-10
+            )

@@ -21,6 +21,8 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
+    WeatherTypeCapabilityChallenge,
+    WeatherTypePropertyEffect,
 )
 from world.magic.factories import TechniqueFactory
 from world.scenes.constants import RoundStatus
@@ -99,6 +101,25 @@ class BattleActionDeclarationFactory(factory_django.DjangoModelFactory):
     scope = BattleActionScope.UNIT
     resolved = False
     success_level = 0
+
+
+class WeatherTypePropertyEffectFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = WeatherTypePropertyEffect
+
+    weather_type = factory.SubFactory("world.weather.factories.WeatherTypeFactory")
+    property = factory.SubFactory("world.mechanics.factories.PropertyFactory")
+    modifier = 10
+
+
+class WeatherTypeCapabilityChallengeFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = WeatherTypeCapabilityChallenge
+
+    weather_type = factory.SubFactory("world.weather.factories.WeatherTypeFactory")
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    threshold = 1
+    modifier = -10
 
 
 _PAYLOAD_PARAM = "@payload"

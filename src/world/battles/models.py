@@ -606,6 +606,82 @@ class TerrainPropertyEffect(SharedMemoryModel):
         return f"{self.get_terrain_type_display()} vs {self.property.name}: {self.modifier:+d}"
 
 
+class WeatherTypePropertyEffect(SharedMemoryModel):
+    """Authored (weather_type, property) -> flat check modifier (#1715).
+
+    Positive = a unit with that property is easier to strike/affected under
+    that weather; negative = harder. Summed across every one of a unit's
+    properties that has a matching row — mirrors TerrainPropertyEffect, but
+    keyed on the place's *effective* weather (resolution.effective_weather)
+    rather than its static terrain_type.
+    """
+
+    weather_type = models.ForeignKey(
+        WeatherType,
+        on_delete=models.CASCADE,
+        related_name="battle_property_effects",
+    )
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.PROTECT,
+        related_name="battle_weather_effects",
+    )
+    modifier = models.SmallIntegerField()
+
+    class Meta:
+        ordering = ["weather_type", "property"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["weather_type", "property"],
+                name="unique_weather_type_property_effect",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.weather_type.name} vs {self.property.name}: {self.modifier:+d}"
+
+
+class WeatherTypeCapabilityChallenge(SharedMemoryModel):
+    """Authored (weather_type, capability, threshold) -> flat modifier (#1715).
+
+    Applies when a unit's effective_capability(capability) is strictly below
+    threshold — e.g. a unit with no/low FLIGHT capability is penalized under
+    Stormy weather. The first absence/threshold-based battle modifier in the
+    codebase (everything else is presence- or >=-threshold based).
+    """
+
+    weather_type = models.ForeignKey(
+        WeatherType,
+        on_delete=models.CASCADE,
+        related_name="battle_capability_challenges",
+    )
+    capability = models.ForeignKey(
+        CapabilityType,
+        on_delete=models.PROTECT,
+        related_name="battle_weather_challenges",
+    )
+    threshold = models.PositiveIntegerField(
+        help_text="Modifier applies when the unit's effective_capability for this "
+        "capability is strictly below this value.",
+    )
+    modifier = models.SmallIntegerField()
+
+    class Meta:
+        ordering = ["weather_type", "capability"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["weather_type", "capability"],
+                name="unique_weather_type_capability_challenge",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.weather_type.name} vs {self.capability.name} "
+            f"< {self.threshold}: {self.modifier:+d}"
+        )
+
+
 class BattleOutcomeMapping(SharedMemoryModel):
     """Designer-tunable map from a Battle's graded outcome to a CheckOutcome tier.
 
