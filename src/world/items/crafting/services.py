@@ -116,6 +116,16 @@ class CraftingQuoteRisk:
 
 
 @dataclass(frozen=True)
+class StationStatus:
+    """Read-only snapshot of the crafter's room's LAB station, for the quote (#1234)."""
+
+    present: bool
+    durability: int
+    max_durability: int
+    is_broken: bool
+
+
+@dataclass(frozen=True)
 class CraftingQuote:
     """Read-only snapshot of what a crafting attempt would cost and what quality it could yield."""
 
@@ -124,6 +134,7 @@ class CraftingQuote:
     max_quality_tier: QualityTier | None
     # tuple (not list) so the frozen snapshot is genuinely immutable (#1243).
     failure_risk: tuple[CraftingQuoteRisk, ...] = ()
+    station_status: StationStatus | None = None
 
 
 def build_crafting_quote(
@@ -143,6 +154,9 @@ def build_crafting_quote(
     * ``affordable``: True iff all cost vectors are satisfied.
     * ``max_quality_tier``: Skill-capped ceiling quality tier (None if uncapped).
     * ``failure_risk``: Consequence pool rows mapped to risk summaries.
+    * ``station_status``: LAB station snapshot (#1234) when ``recipe.requires_station``
+      is True (None otherwise). ``affordable`` is narrowed to False when the
+      station is missing or broken.
 
     Args:
         kind: Which recipe to quote for.
@@ -218,6 +232,25 @@ def build_crafting_quote(
         skill = crafter_character.traits.get_trait_value(recipe.skill_trait.name)
         max_quality_tier = CraftingSkillCap.for_skill(recipe, skill)
 
+    # 6.5. Station status (#1234) ---
+    station_status: StationStatus | None = None
+    if recipe.requires_station:
+        station = _resolve_active_lab_station(crafter_character)
+        if station is None:
+            station_status = StationStatus(
+                present=False, durability=0, max_durability=0, is_broken=True
+            )
+            affordable = False
+        else:
+            station_status = StationStatus(
+                present=True,
+                durability=station.durability,
+                max_durability=station.max_durability,
+                is_broken=station.is_broken,
+            )
+            if station.is_broken:
+                affordable = False
+
     # 7. Failure risk from consequence pool ---
     consequence_rows = list(
         recipe.consequence_rows.all().select_related("consequence", "consequence__outcome_tier")
@@ -244,6 +277,7 @@ def build_crafting_quote(
         affordable=affordable,
         max_quality_tier=max_quality_tier,
         failure_risk=tuple(failure_risk),
+        station_status=station_status,
     )
 
 

@@ -232,6 +232,10 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         mat_tpl_2 = ItemTemplateFactory(name="BCQMat2")
         self.recipe.action_point_cost = 2
         self.recipe.anima_cost = 1
+        # This test pins the consequence/cap/material query budget, not the
+        # station-status budget (#1234) — station status is covered separately
+        # by CraftingQuoteStationStatusTests below.
+        self.recipe.requires_station = False
         self.recipe.save()
         CraftingMaterialRequirement.objects.filter(recipe=self.recipe).delete()
         CraftingMaterialRequirementFactory(recipe=self.recipe, item_template=mat_tpl_1, quantity=1)
@@ -297,3 +301,84 @@ class BuildCraftingQuoteQueryCountTests(TestCase):
         self.assertTrue(quote.affordable)
         self.assertIsNotNone(quote.max_quality_tier)
         self.assertGreaterEqual(len(quote.failure_risk), 2)
+
+
+class CraftingQuoteStationStatusTests(TestCase):
+    """``build_crafting_quote``'s read-only ``station_status`` field (#1234)."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.crafting.models import LabStationDetails
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+
+        self.recipe = wire_enchanting_crafting()
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        room_profile = RoomProfileFactory()
+        self.character.location = room_profile.objectdb
+        self.character.save()
+        kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        instance = RoomFeatureInstanceFactory(room_profile=room_profile, feature_kind=kind, level=1)
+        self.station = LabStationDetails.objects.create(
+            feature_instance=instance, durability=3, max_durability=20
+        )
+
+    def test_station_status_present_and_not_affordable_when_broken(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+
+        self.station.durability = 0
+        self.station.save(update_fields=["durability"])
+        quote = build_crafting_quote(
+            kind=CraftingRecipeKind.FACET_ATTACH,
+            crafter_character=self.character,
+            crafter_character_sheet=self.sheet,
+            target=None,
+        )
+        self.assertIsNotNone(quote.station_status)
+        self.assertTrue(quote.station_status.present)
+        self.assertTrue(quote.station_status.is_broken)
+        self.assertFalse(quote.affordable)
+
+    def test_station_status_reports_present_and_not_broken_when_healthy(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+
+        quote = build_crafting_quote(
+            kind=CraftingRecipeKind.FACET_ATTACH,
+            crafter_character=self.character,
+            crafter_character_sheet=self.sheet,
+            target=None,
+        )
+        self.assertIsNotNone(quote.station_status)
+        self.assertTrue(quote.station_status.present)
+        self.assertFalse(quote.station_status.is_broken)
+        self.assertEqual(quote.station_status.durability, 3)
+        self.assertEqual(quote.station_status.max_durability, 20)
+
+    def test_station_status_missing_and_not_affordable_when_no_station_in_room(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+
+        self.station.delete()
+        quote = build_crafting_quote(
+            kind=CraftingRecipeKind.FACET_ATTACH,
+            crafter_character=self.character,
+            crafter_character_sheet=self.sheet,
+            target=None,
+        )
+        self.assertIsNotNone(quote.station_status)
+        self.assertFalse(quote.station_status.present)
+        self.assertTrue(quote.station_status.is_broken)
+        self.assertFalse(quote.affordable)
+
+    def test_station_status_none_when_recipe_does_not_require_one(self) -> None:
+        from world.items.crafting.constants import CraftingRecipeKind
+
+        self.recipe.requires_station = False
+        self.recipe.save(update_fields=["requires_station"])
+        quote = build_crafting_quote(
+            kind=CraftingRecipeKind.FACET_ATTACH,
+            crafter_character=self.character,
+            crafter_character_sheet=self.sheet,
+            target=None,
+        )
+        self.assertIsNone(quote.station_status)

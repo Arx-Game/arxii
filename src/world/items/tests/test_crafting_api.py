@@ -81,9 +81,23 @@ class FacetQuoteTests(CraftingApiTestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.crafting.models import LabStationDetails
         from world.magic.factories import FacetFactory
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
 
         cls.facet = FacetFactory(name="QuoteApiFacet")
+        # facet_recipe.requires_station defaults True (#1234) — the quote endpoint
+        # narrows affordable=False without an active LAB station in the room.
+        room_profile = RoomProfileFactory()
+        cls.owner_char.location = room_profile.objectdb
+        cls.owner_char.save()
+        kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        instance = RoomFeatureInstanceFactory(room_profile=room_profile, feature_kind=kind, level=1)
+        LabStationDetails.objects.create(
+            feature_instance=instance, durability=20, max_durability=20
+        )
 
     def test_quote_returns_capped_max_quality_tier(self) -> None:
         """Quote endpoint returns the skill-capped max_quality_tier for the owner."""
