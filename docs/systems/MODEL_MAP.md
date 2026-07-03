@@ -4902,6 +4902,8 @@
   - referenced_story -> stories.Story [FK] (nullable)
   - referenced_chapter -> stories.Chapter [FK] (nullable)
   - referenced_episode -> stories.Episode [FK] (nullable)
+  - required_society -> societies.Society [FK] (nullable)
+  - required_organization -> societies.Organization [FK] (nullable)
   - required_mission -> missions.MissionTemplate [FK] (nullable)
   - success_consequences -> actions.ConsequencePool [FK] (nullable)
   - failure_consequences -> actions.ConsequencePool [FK] (nullable)
@@ -4914,6 +4916,7 @@
   - assistant_claims <- stories.AssistantGMClaim
   - stakes <- stories.Stake
   - stake_activations <- stories.StakeContractActivation
+  - resolving_encounters <- combat.CombatEncounter
 
 ### EpisodeProgressionRequirement
 **Foreign Keys:**

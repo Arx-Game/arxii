@@ -1004,6 +1004,7 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
 
 - **Models:** `Story` (incl. `summary` — player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
+- **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **GM↔player visibility contract:** `description`/`consequences` are GM/staff-only; `summary` is player-facing ("The Story So Far"), blanked while node `maturity == PITCH`. Enforced server-side in two places: the three Detail serializers' `to_representation` (via `_gm_text_gate`, default-deny when no request) **and** `serialize_story_log` (per-beat internals gated to privileged roles). No dedicated `pitch` field by design — `description`=GM pitch, `summary`=player recap
 - **Reactivity entry points (Phase 3):** `stories.services.reactivity.on_character_level_changed` / `on_achievement_earned` / `on_condition_applied` / `on_condition_expired` / `on_codex_entry_unlocked` / `on_story_advanced`
 - **Key Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `record_aggregate_contribution`, `get_eligible_transitions`, `resolve_episode` (reconciles ProgressStatus on advance; distinguishes routing-block from authoring frontier), `create_character_progress` / `create_group_progress` / `create_global_progress` (reject UNASSIGNED scope), `services.frontier.resolve_frontier` / `set_progress_status`, `services.maturity.promote_episode_maturity`, `services.dashboards.compute_story_status_line`, `catch_up_character_stories` (called from `Character.at_post_puppet`)
@@ -1028,11 +1029,16 @@ and paying authored win-reward lines through an anti-farming activation gate
   (menu-first catalog, `min_risk`/`max_risk` band), `Stake` (beat FK
   `related_name="stakes"`; typed subject FKs + `subject_label`; `player_summary`),
   `StakeResolution` (stake FK `related_name="resolutions"`; `column`
-  WIN/LOSS/WITHDRAWAL; `consequence_pool`; `escalates_to_risk`; PR2 writer
-  payloads `forfeits_subject_item` / `subject_standing_delta` (dispatch by
-  `subject_kind` — `NPC_FATE` writes `NPCStanding`, `FACTION` writes
-  `SocietyReputation`/`OrganizationReputation`, #1760) /
-  `sets_subject_lifecycle` — pillar-12 validated), `StakeRewardLine` (PR3;
+  WIN/LOSS/WITHDRAWAL; `outcome_key` (#1760 — designer slug naming a branch
+  within `column`'s polarity, blank = plain default; unique
+  `(stake, column, outcome_key)`); `consequence_pool`; `escalates_to_risk`;
+  PR2 writer payloads `forfeits_subject_item` / `subject_standing_delta`
+  (dispatch by `subject_kind` — `NPC_FATE` writes `NPCStanding`, `FACTION`
+  writes `SocietyReputation`/`OrganizationReputation`, #1760) /
+  `sets_subject_lifecycle` — pillar-12 validated; `machine_match_lifecycle_state`
+  (#1760 — generalizes the old NPC-vitals DEAD-only override to the full
+  `LifecycleState` ladder; a match wins over the beat-derived column, even
+  crossing WIN/LOSS polarity)), `StakeRewardLine` (PR3;
   resolution FK `related_name="reward_lines"`; `sink` MONEY/RESONANCE; `amount`
   per-participant money-equivalent scalar; `resonance` required iff
   sink=RESONANCE), `StakeContractActivation`
@@ -1055,7 +1061,8 @@ and paying authored win-reward lines through an anti-farming activation gate
 - **Key Services (`world.stories.services.stake_resolution`, PR2):**
   `resolve_stakes_for_completion` (completion-tail machine grading; NPC-vitals
   DEAD → LOSS override; withdrawal branch firing; idempotent audit rows),
-  `resolve_stake_by_gm_pick` (constrained pick; `POST /api/stakes/{id}/resolve/`),
+  `resolve_stake_by_gm_pick` (constrained pick by `(column, outcome_key)` pair,
+  #1760; `POST /api/stakes/{id}/resolve/`),
   `stake_resolution_payload_problems` + `sheet_is_player_held` (pillar-12
   no-fiat validation), `_apply_stake_rewards` (PR3 — WIN payout per line ×
   participant, gated on a ready effective-risk-bearing activation; sinks:
@@ -1864,7 +1871,12 @@ These two axes are orthogonal — never re-merge them.
 Turn-based combat engine: encounter lifecycle, NPC threat patterns, damage resolution,
 reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 
-- **Models (key):** `CombatEncounter`, `CombatParticipant`, `CombatOpponent`,
+- **Models (key):** `CombatEncounter` (`story_beat` FK → `stories.Beat`,
+  nullable, #1760 — when set, `encounter_completed_beat_handler` resolves
+  ONLY this one beat with this encounter's graded outcome instead of every
+  UNSATISFIED `OUTCOME_TIER` beat linked to the scene; fixes multiple beats
+  sharing a scene all getting stamped with the same encounter's outcome;
+  unset = legacy find-all-on-scene behavior, unchanged), `CombatParticipant`, `CombatOpponent`,
   `CombatRoundAction` (`maneuver` field — FLEE / COVER / YIELD / INTERPOSE / SUCCOR; plus the
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454),
