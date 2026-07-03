@@ -373,7 +373,7 @@ class CombatTechniqueResolver:
         weapon_landed = False
         for profile in profiles:
             scaled, profile_damage_type = self._profile_damage(
-                profile, weapon, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
+                profile, weapon, target, sl=sl, multiplier=multiplier, eff_intensity=eff_intensity
             )
             if scaled <= 0:
                 continue
@@ -446,10 +446,11 @@ class CombatTechniqueResolver:
             _wear_equipped_weapon(attacker)
         return results
 
-    def _profile_damage(
+    def _profile_damage(  # noqa: PLR0913
         self,
         profile: TechniqueDamageProfile,
         weapon: WeaponContribution | None,
+        target: CombatOpponent,
         *,
         sl: int,
         multiplier: Decimal,
@@ -458,9 +459,13 @@ class CombatTechniqueResolver:
         """Scaled damage + effective damage_type for one profile (0 if it skips).
 
         Returns ``(0, None)`` when the profile's minimum_success_level exceeds
-        ``sl``; otherwise folds the equipped weapon's contribution into the
-        formula budget and applies the success-level multiplier.
+        ``sl``; otherwise folds the equipped weapon's contribution and the
+        target's Property-driven damage bonus (#1793) into the formula budget,
+        then applies the success-level multiplier. Budget is floored at 0
+        after the (possibly negative) property bonus is applied.
         """
+        from world.mechanics.services import property_damage_bonus  # noqa: PLC0415
+
         if sl < profile.minimum_success_level:
             return 0, None
         budget = profile.compute_damage_budget(
@@ -470,6 +475,7 @@ class CombatTechniqueResolver:
         budget, profile_damage_type = _weapon_augmented_budget(
             profile, budget, weapon, self.participant.character_sheet
         )
+        budget = max(0, budget + property_damage_bonus(target.objectdb, profile_damage_type))
         return int(budget * multiplier), profile_damage_type
 
     def _apply_conditions(
