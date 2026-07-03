@@ -960,10 +960,33 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "technique__target_weather_type",
         )
     )
-    # REPEL must resolve before every other action kind this round (#1712) — its
-    # success populates place_defense_bonus in time for STRIKE to read it below.
-    # A stable sort preserves every other kind's relative (declaration) order.
-    declarations.sort(key=lambda d: 0 if d.action_kind == BattleActionKind.REPEL else 1)
+    # Round-boundary weather expiry (#1715) — clear before any declaration
+    # resolves, including this round's own SET_ENVIRONMENT casts (a fresh cast's
+    # expires_round is always round_number + at least 2, so it can never be
+    # cleared by this same check in the round it's cast).
+    battle = battle_round.battle
+    if (
+        battle.weather_override_expires_round is not None
+        and battle.weather_override_expires_round < battle_round.round_number
+    ):
+        battle.weather_override = None
+        battle.weather_override_expires_round = None
+        battle.save(update_fields=["weather_override", "weather_override_expires_round"])
+
+    for place in battle.places.filter(weather_override_expires_round__lt=battle_round.round_number):
+        place.weather_override = None
+        place.weather_override_expires_round = None
+        place.save(update_fields=["weather_override", "weather_override_expires_round"])
+
+    # REPEL and SET_ENVIRONMENT must resolve before every other action kind this
+    # round (#1712/#1715) — REPEL's success populates place_defense_bonus, and
+    # SET_ENVIRONMENT's success sets weather, both in time for STRIKE to read
+    # them below. A stable sort preserves every other kind's relative order.
+    declarations.sort(
+        key=lambda d: 0
+        if d.action_kind in (BattleActionKind.REPEL, BattleActionKind.SET_ENVIRONMENT)
+        else 1
+    )
 
     place_defense_bonus: dict[int, int] = {}
     newly_surrounded_participant_ids: set[int] = set()

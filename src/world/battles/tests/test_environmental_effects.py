@@ -17,11 +17,16 @@ from django.test import TestCase
 
 from actions.factories import ActionTemplateFactory
 from world.areas.factories import AreaFactory
+
+# NEW import for Task 8 only — BattleSideRole; SET_ENVIRONMENT_BASE_ROUNDS,
+# SET_ENVIRONMENT_VP, BattleActionKind, BattleActionScope were already imported
+# by Tasks 1-3. Do not re-import them.
 from world.battles.constants import (
     SET_ENVIRONMENT_BASE_ROUNDS,
     SET_ENVIRONMENT_VP,
     BattleActionKind,
     BattleActionScope,
+    BattleSideRole,
 )
 
 # NEW imports for this task only — BattleFactory, BattleSideFactory,
@@ -456,3 +461,117 @@ class SetEnvironmentSuccessTests(TestCase):
         # inclusive per the round-boundary-expiry rule in Task 8 — at least 2
         # rounds beyond the casting round itself.
         self.assertGreaterEqual(self.battle.weather_override_expires_round - 1, 2)
+
+
+class RoundBoundaryExpiryTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.weather_type = WeatherTypeFactory()
+
+    def test_battle_override_clears_after_its_final_active_round(self) -> None:
+        self.battle.weather_override = self.weather_type
+        self.battle.weather_override_expires_round = 5
+        self.battle.save()
+        battle_round = BattleRoundFactory(
+            battle=self.battle, round_number=5, status=RoundStatus.DECLARING
+        )
+
+        resolve_battle_round(battle_round=battle_round)
+
+        self.battle.refresh_from_db()
+        # Still active THROUGH round 5 (the expiry round itself) — not cleared yet.
+        self.assertEqual(self.battle.weather_override_id, self.weather_type.pk)
+
+    def test_battle_override_clears_entering_round_after_expiry(self) -> None:
+        self.battle.weather_override = self.weather_type
+        self.battle.weather_override_expires_round = 5
+        self.battle.save()
+        battle_round = BattleRoundFactory(
+            battle=self.battle, round_number=6, status=RoundStatus.DECLARING
+        )
+
+        resolve_battle_round(battle_round=battle_round)
+
+        self.battle.refresh_from_db()
+        self.assertIsNone(self.battle.weather_override_id)
+        self.assertIsNone(self.battle.weather_override_expires_round)
+
+    def test_place_override_clears_independently_of_battle_tier(self) -> None:
+        place = BattlePlaceFactory(
+            battle=self.battle,
+            weather_override=self.weather_type,
+            weather_override_expires_round=3,
+        )
+        other_weather = WeatherTypeFactory()
+        self.battle.weather_override = other_weather
+        self.battle.weather_override_expires_round = 99  # battle tier still active
+        self.battle.save()
+        battle_round = BattleRoundFactory(
+            battle=self.battle, round_number=4, status=RoundStatus.DECLARING
+        )
+
+        resolve_battle_round(battle_round=battle_round)
+
+        place.refresh_from_db()
+        self.battle.refresh_from_db()
+        self.assertIsNone(place.weather_override_id)
+        self.assertEqual(self.battle.weather_override_id, other_weather.pk)
+
+    def test_set_environment_resolves_before_strike_in_same_round(self) -> None:
+        """A BATTLE-scoped SET_ENVIRONMENT cast is visible to a STRIKE at any
+        place resolved in the very same round (same-round-first, like REPEL)."""
+        side_a = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        side_b = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        side_a.covenant = covenant
+        side_a.save()
+        caster = BattleParticipantFactory(battle=self.battle, side=side_a)
+        _grant_command_tier(
+            participant=caster, side=side_a, covenant=covenant, tier=CommandTier.SUPREME
+        )
+        striker = BattleParticipantFactory(battle=self.battle, side=side_a)
+        place = BattlePlaceFactory(battle=self.battle)
+        target_unit = BattleUnitFactory(battle=self.battle, side=side_b, place=place)
+        prop = PropertyFactory()
+        target_unit.properties.add(prop)
+        env_technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=self.weather_type
+        )
+        strike_technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        WeatherTypePropertyEffectFactory(weather_type=self.weather_type, property=prop, modifier=15)
+        for participant, technique in (
+            (caster, env_technique),
+            (striker, strike_technique),
+        ):
+            CharacterTechniqueFactory(character=participant.character_sheet, technique=technique)
+            CharacterAnimaFactory(character=participant.character_sheet.character)
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=striker,
+            action_kind=BattleActionKind.STRIKE,
+            technique=strike_technique,
+            target_unit=target_unit,
+        )
+        declare_battle_action(
+            participant=caster,
+            action_kind=BattleActionKind.SET_ENVIRONMENT,
+            technique=env_technique,
+            scope=BattleActionScope.BATTLE,
+        )
+
+        captured_modifiers: list[int] = []
+
+        def _capture(character, check_type, extra_modifiers=0):
+            captured_modifiers.append(extra_modifiers)
+            return _success_result(2)
+
+        with patch("world.battles.resolution.perform_check", side_effect=_capture):
+            resolve_battle_round(battle_round=battle_round)
+
+        # SET_ENVIRONMENT resolves first (same-round-first sort): its own check
+        # has no target_unit, so every unit-keyed modifier term is 0 for it.
+        # STRIKE resolves second, same round, and must see the +15
+        # weather-property modifier now that the battle-wide override is set.
+        self.assertEqual(len(captured_modifiers), 2)
+        self.assertEqual(captured_modifiers[0], 0)
+        self.assertEqual(captured_modifiers[1], 15)
