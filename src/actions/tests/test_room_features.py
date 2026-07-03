@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.utils import timezone
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -112,3 +113,58 @@ class StartRoomFeatureProjectActionTests(TestCase):
         )
         self.assertFalse(result.success)
         self.assertIn("cannot be installed via a project", result.message)
+
+
+class RepairLabStationActionTests(TestCase):
+    def setUp(self) -> None:
+        from actions.definitions.room_features import RepairLabStationAction
+        from world.currency.services import get_or_create_purse
+        from world.items.crafting.models import LabStationDetails
+
+        self.action_cls = RepairLabStationAction
+        self.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        self.sheet = CharacterSheetFactory()
+        self.character = self.sheet.character
+        self.room_profile = RoomProfileFactory()
+        self.character.location = self.room_profile.objectdb
+        self.character.save()
+        LocationOwnershipFactory(
+            on_room=True,
+            room_profile=self.room_profile,
+            holder_persona=self.sheet.primary_persona,
+        )
+        instance = RoomFeatureInstanceFactory(
+            room_profile=self.room_profile, feature_kind=self.kind, level=1
+        )
+        self.station = LabStationDetails.objects.create(
+            feature_instance=instance, durability=5, max_durability=20
+        )
+        self.purse = get_or_create_purse(self.sheet)
+        self.purse.balance = 10_000
+        self.purse.save(update_fields=["balance"])
+
+    def test_repairs_station(self) -> None:
+        result = self.action_cls().run(
+            actor=self.character, room_profile=self.room_profile, restore_points=10
+        )
+        self.assertTrue(result.success, result.message)
+        self.station.refresh_from_db()
+        self.assertEqual(self.station.durability, 15)
+
+    def test_no_station_in_room_fails_cleanly(self) -> None:
+        self.station.feature_instance.delete()
+        result = self.action_cls().run(
+            actor=self.character, room_profile=self.room_profile, restore_points=10
+        )
+        self.assertFalse(result.success)
+
+    def test_rejected_without_standing(self) -> None:
+        from world.locations.models import LocationOwnership
+
+        ownership = LocationOwnership.objects.get(room_profile=self.room_profile)
+        ownership.ended_at = timezone.now()
+        ownership.save()
+        result = self.action_cls().run(
+            actor=self.character, room_profile=self.room_profile, restore_points=10
+        )
+        self.assertFalse(result.success)
