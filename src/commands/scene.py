@@ -5,6 +5,7 @@ Thin telnet face of scene-lifecycle Actions:
     ``scene finish``                     — FinishSceneAction
     ``scene round <mode> [knobs]``       — SetRoundModeAction
     ``scene succor <ally>``              — SuccorSceneAction (#1744)
+    ``scene interpose <ally>``           — InterposeSceneAction (#1316)
     ``scene`` / ``scene status``         — one-line status read-out (no action)
     ``scene <unknown>``                  — usage message
 
@@ -30,6 +31,7 @@ _USAGE = (
     "  scene finish                      — finish the active scene\n"
     "  scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]\n"
     "  scene succor <ally>               — shelter an ally from a hazard this round\n"
+    "  scene interpose <ally>            — guard an ally from sudden non-combat harm this round\n"
     "  scene / scene status              — show active scene + round status"
 )
 
@@ -71,6 +73,9 @@ class CmdScene(ArxCommand):
     **Shelter an ally:**
         ``scene succor <ally>`` — shelter an ally from an environmental hazard this round.
 
+    **Guard an ally:**
+        ``scene interpose <ally>`` — guard an ally from sudden non-combat harm this round.
+
     **Show scene status:**
         ``scene`` or ``scene status``
     """
@@ -95,6 +100,8 @@ class CmdScene(ArxCommand):
             self._handle_round(rest)
         elif first == "succor":  # noqa: STRING_LITERAL
             self._handle_succor(rest)
+        elif first == "interpose":  # noqa: STRING_LITERAL
+            self._handle_interpose(rest)
         else:
             self.msg(_USAGE)
 
@@ -144,6 +151,18 @@ class CmdScene(ArxCommand):
             self.msg("Usage: scene succor <ally>.")
             return
         result = SuccorSceneAction().run(actor=self.caller, ally_name=ally_name)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_interpose(self, rest: str) -> None:
+        """Dispatch InterposeSceneAction, forwarding the named ally."""
+        from actions.definitions.rounds import InterposeSceneAction  # noqa: PLC0415
+
+        ally_name = rest.strip()
+        if not ally_name:
+            self.msg("Usage: scene interpose <ally>.")
+            return
+        result = InterposeSceneAction().run(actor=self.caller, ally_name=ally_name)
         if result.message:
             self.msg(result.message)
 

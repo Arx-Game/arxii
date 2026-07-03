@@ -90,6 +90,28 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
         super().__init__(*args, **kwargs)
         self.test_timings = []
 
+    def setup_databases(self, **kwargs):
+        """Create test databases without Evennia's per-app ``gc.collect()`` storm.
+
+        Evennia connects ``idmapper.flush_cache`` (which ends in a full
+        ``gc.collect()``) to ``post_migrate``, and Django emits that signal
+        once per installed app during test-DB creation — 90+ apps here, at
+        ~0.4s per collect, so the signal handler alone adds ~30s to every
+        test invocation. A brand-new test DB has no stale idmapper state to
+        flush per-app, so disconnect the handler for the duration and run a
+        single flush at the end to preserve the post-migrate semantics.
+        """
+        from django.db.models.signals import post_migrate
+        from evennia.utils.idmapper.models import flush_cache
+
+        was_connected = post_migrate.disconnect(flush_cache)
+        try:
+            return super().setup_databases(**kwargs)
+        finally:
+            if was_connected:
+                post_migrate.connect(flush_cache)
+            flush_cache()
+
     def setup_test_environment(self, **kwargs):
         """Set up test environment with timing notification."""
         super().setup_test_environment(**kwargs)

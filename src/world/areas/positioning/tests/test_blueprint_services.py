@@ -123,6 +123,17 @@ class ConnectBlueprintPositionsTests(TestCase):
         edge = connect_blueprint_positions(self.p1, self.p2)
         self.assertEqual(BlueprintEdge.objects.get(pk=edge.pk).blueprint_id, self.bp.pk)
 
+    def test_gating_challenge_template_defaults_to_none(self):
+        edge = connect_blueprint_positions(self.p1, self.p2)
+        self.assertIsNone(edge.gating_challenge_template_id)
+
+    def test_gating_challenge_template_is_set_when_passed(self):
+        from world.mechanics.factories import ChallengeTemplateFactory
+
+        template = ChallengeTemplateFactory()
+        edge = connect_blueprint_positions(self.p1, self.p2, gating_challenge_template=template)
+        self.assertEqual(edge.gating_challenge_template_id, template.pk)
+
 
 class RoundTripTests(TestCase):
     """Create blueprint → add 3 positions → connect → assert counts."""
@@ -225,3 +236,96 @@ class InstantiateBlueprintTests(TestCase):
         instantiate_blueprint(self.bp, self.room)
         instantiate_blueprint(self.bp, self.room, replace=True)
         self.assertEqual(PositionEdge.objects.filter(position_a__room=self.room).count(), 1)
+
+
+class InstantiateBlueprintGatedEdgeTests(TestCase):
+    """instantiate_blueprint must mint a live ChallengeInstance for gated edges."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        from world.mechanics.factories import ChallengeTemplateFactory
+
+        self.room = create_object("typeclasses.rooms.Room", key="GatedTestRoom", nohome=True)
+        self.template = ChallengeTemplateFactory()
+        self.bp = create_blueprint("Chasm")
+        self.near = add_blueprint_position(self.bp, "Near Side")
+        self.far = add_blueprint_position(self.bp, "Far Side")
+        self.overlook = add_blueprint_position(self.bp, "Overlook")
+        connect_blueprint_positions(self.near, self.far, gating_challenge_template=self.template)
+        # Ungated edge in the same blueprint — regression guard for Task 4's change.
+        connect_blueprint_positions(self.near, self.overlook)
+
+    def test_cloned_edge_has_live_gating_challenge(self):
+        from world.areas.positioning.services import edge_between
+
+        instantiate_blueprint(self.bp, self.room)
+        near_live = Position.objects.get(room=self.room, name="Near Side")
+        far_live = Position.objects.get(room=self.room, name="Far Side")
+        live_edge = edge_between(near_live, far_live)
+
+        self.assertIsNotNone(live_edge)
+        self.assertIsNotNone(live_edge.gating_challenge_id)
+        self.assertTrue(live_edge.gating_challenge.is_active)
+        self.assertEqual(live_edge.gating_challenge.template_id, self.template.pk)
+        self.assertEqual(live_edge.gating_challenge.location_id, self.room.pk)
+
+    def test_two_rooms_get_independent_challenge_instances(self):
+        from evennia import create_object
+
+        from world.areas.positioning.services import edge_between
+
+        room2 = create_object("typeclasses.rooms.Room", key="GatedTestRoom2", nohome=True)
+        instantiate_blueprint(self.bp, self.room)
+        instantiate_blueprint(self.bp, room2)
+
+        edge1 = edge_between(
+            Position.objects.get(room=self.room, name="Near Side"),
+            Position.objects.get(room=self.room, name="Far Side"),
+        )
+        edge2 = edge_between(
+            Position.objects.get(room=room2, name="Near Side"),
+            Position.objects.get(room=room2, name="Far Side"),
+        )
+        self.assertNotEqual(edge1.gating_challenge_id, edge2.gating_challenge_id)
+
+    def test_ungated_edge_in_same_blueprint_stays_ungated(self):
+        """Regression guard: gating one edge must not gate its sibling edge."""
+        from world.areas.positioning.services import edge_between
+
+        instantiate_blueprint(self.bp, self.room)
+        near_live = Position.objects.get(room=self.room, name="Near Side")
+        overlook_live = Position.objects.get(room=self.room, name="Overlook")
+        ungated_live_edge = edge_between(near_live, overlook_live)
+
+        self.assertIsNotNone(ungated_live_edge)
+        self.assertIsNone(ungated_live_edge.gating_challenge_id)
+
+    def test_replace_deactivates_orphaned_gating_challenge_instance(self):
+        """Restaging a gated blueprint must not leave the old ChallengeInstance active.
+
+        The cascade-delete of the old Position/PositionEdge rows does not touch
+        ChallengeInstance (the FK points PositionEdge -> ChallengeInstance, not the
+        other way), so instantiate_blueprint must explicitly deactivate it first.
+        """
+        from world.areas.positioning.services import edge_between
+        from world.mechanics.models import ChallengeInstance
+
+        instantiate_blueprint(self.bp, self.room)
+        near_live = Position.objects.get(room=self.room, name="Near Side")
+        far_live = Position.objects.get(room=self.room, name="Far Side")
+        old_edge = edge_between(near_live, far_live)
+        old_challenge_pk = old_edge.gating_challenge_id
+        self.assertIsNotNone(old_challenge_pk)
+
+        instantiate_blueprint(self.bp, self.room, replace=True)
+
+        old_challenge = ChallengeInstance.objects.get(pk=old_challenge_pk)
+        self.assertFalse(old_challenge.is_active)
+
+        new_near_live = Position.objects.get(room=self.room, name="Near Side")
+        new_far_live = Position.objects.get(room=self.room, name="Far Side")
+        new_edge = edge_between(new_near_live, new_far_live)
+        self.assertIsNotNone(new_edge.gating_challenge_id)
+        self.assertNotEqual(new_edge.gating_challenge_id, old_challenge_pk)
+        self.assertTrue(new_edge.gating_challenge.is_active)

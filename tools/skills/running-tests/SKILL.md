@@ -22,12 +22,20 @@ Write focused unit tests only when logic is genuinely fiddly and wouldn't be obs
 
 Production runs Postgres exclusively. Tests run in TWO tiers:
 
-1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: a typical app runs in 1-15s vs 5-30s on PG.
+1. **Fast tier — SQLite in-memory.** `just test-fast <app>` / `arx test --sqlite <app>`. Schema built from current model state with NO migration replay (`MIGRATION_MODULES = DisableMigrations()` in `server.conf.sqlite_test_settings`), and cached: `SqliteTestRunner` saves the built test DB to `src/.test_schema_cache/` keyed by a model-state fingerprint and restores it on later runs, so only the first run after a model change pays the schema build (~15s extra). Tests decorated with `@tag("postgres")` are auto-skipped. Inner-loop speed: ~6-10s of fixed per-invocation overhead (imports, discovery, cached-schema restore) plus the tests themselves. `ARX_SCHEMA_CACHE=0` bypasses the cache if you suspect it.
 2. **Parity tier — Postgres.** `just test-parity <app>` / `arx test` (no flag — PG is the default). Uses the same schema-from-models build CI uses: the test DB is pre-built by `tools/build_schema.py` (via `just build-test-schema`) and reused across runs with `--keepdb`, not rebuilt from migration replay per run. Migration replay only happens in the nightly `nightly-migration-replay.yml` workflow (ADR-0083). Building the test DB once (`just build-test-schema`, or automatically on the first `just test-parity`/`just regression` run) takes seconds, not the 10+ minutes the old migration-replay path cost — parity runs are fast locally afterward. Go through `just test-parity <app>` / `just regression` (or `build-test-schema --rebuild` after a model change), not bare `arx test`/`arx test --keepdb` — only the `just` recipes probe that the pre-built schema (partition, matviews, seeds) is actually complete before reusing it; a bare Django-created test DB is syncdb-only and missing all three. CI's 6-shard matrix (`.github/workflows/ci.yml`) runs every PR on this tier.
 
 ### Local testing rule
 
 **Use the SQLite fast tier (`just test-fast`) for the inner loop.** For PG-only apps (magic, scenes, etc.), or before pushing, run `just test-parity <app>` — the pre-built test DB makes this fast locally now, not the multi-minute rebuild the old migration-replay path required. Always go through the `just` recipes (`test-parity`/`regression`/`build-test-schema`) rather than bare `arx test`/`arx test --keepdb` against Postgres, so the schema-completeness probe runs before reuse.
+
+### Per-invocation overhead dominates — batch, don't narrow
+
+Most of a fast-tier run's wall time is **fixed per-invocation cost** (interpreter + Django/Evennia imports, test discovery, schema restore), not test execution — 109 tests execute in ~3s inside a ~10s invocation. Two consequences:
+
+- **Batch apps into one invocation.** `just test-fast app1 app2 app3` pays the overhead once (and auto-enables `--parallel`); three separate runs pay it three times.
+- **Don't narrow the selection to save time.** Running one module instead of the whole app saves almost nothing — select by what you want to *see*, not for speed.
+- **Run from an ext4 worktree.** The 9p-mounted main checkout adds ~25s of import stat-storm per invocation; the `just` test recipes warn when you're on 9p. Worktrees under `.claude/worktrees/` don't pay it.
 
 ### Working app set for `--sqlite`
 

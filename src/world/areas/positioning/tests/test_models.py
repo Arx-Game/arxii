@@ -144,3 +144,19 @@ class ElevationAnchorTests(TestCase):
     def test_elevation_anchor_nullable_for_ground(self) -> None:
         ground = Position.objects.create(room=self.room, name="floor", kind=PositionKind.PRIMARY)
         self.assertIsNone(ground.elevation_anchor_id)
+
+
+class BlueprintEdgeGatingTemplateTests(TestCase):
+    def test_gating_challenge_template_defaults_to_none(self) -> None:
+        from world.areas.positioning.factories import BlueprintEdgeFactory
+
+        edge = BlueprintEdgeFactory()
+        self.assertIsNone(edge.gating_challenge_template_id)
+
+    def test_gating_challenge_template_can_be_set(self) -> None:
+        from world.areas.positioning.factories import BlueprintEdgeFactory
+        from world.mechanics.factories import ChallengeTemplateFactory
+
+        template = ChallengeTemplateFactory()
+        edge = BlueprintEdgeFactory(gating_challenge_template=template)
+        self.assertEqual(edge.gating_challenge_template_id, template.pk)

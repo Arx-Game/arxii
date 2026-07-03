@@ -250,6 +250,46 @@ def tavern_blueprint() -> PositionBlueprint:
     return bp
 
 
+def rope_bridge_blueprint() -> PositionBlueprint:
+    """Return the canonical Rope Bridge blueprint, creating it if needed.
+
+    A worked gated-layout sample: two positions connected by a single
+    BlueprintEdge whose gating_challenge_template carries a resolvable
+    ChallengeApproach, so instantiate_blueprint produces a crossable
+    (not just dangling) gated live edge. Doubles as an integration-test
+    fixture and staff seed data, mirroring tavern_blueprint()::
+
+        bp = rope_bridge_blueprint()
+        positions = instantiate_blueprint(bp, some_room)
+
+    Layout::
+
+        Near Side --(gated: Cross the Rope Bridge)-- Far Side
+    """
+    from world.areas.positioning.services import (
+        add_blueprint_position,
+        connect_blueprint_positions,
+        create_blueprint,
+    )
+    from world.mechanics.factories import ChallengeApproachFactory, ChallengeTemplateFactory
+
+    try:
+        return PositionBlueprint.objects.get(name="Rope Bridge Crossing")
+    except PositionBlueprint.DoesNotExist:
+        pass
+
+    bp = create_blueprint(
+        "Rope Bridge Crossing",
+        description="A frayed rope bridge spanning a chasm.",
+    )
+    near_side = add_blueprint_position(bp, "Near Side", kind=PositionKind.PRIMARY)
+    far_side = add_blueprint_position(bp, "Far Side")
+    template = ChallengeTemplateFactory(name="Cross the Rope Bridge")
+    ChallengeApproachFactory(challenge_template=template)
+    connect_blueprint_positions(near_side, far_side, gating_challenge_template=template)
+    return bp
+
+
 # ---------------------------------------------------------------------------
 # FELL → plummet trigger seed (#1228, Task 5)
 # ---------------------------------------------------------------------------

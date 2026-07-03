@@ -461,8 +461,20 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   previously skipped `_install_reactive_side_effects`); passive conditions applied in
   bulk now register their reactive triggers correctly.
 
-  **What remains open (tracked as follow-ups):** INTERPOSE via an ambush / out-of-combat
-  attack; knockback / hazard interposition; frontend declaration UI for INTERPOSE.
+  **Out-of-combat sudden harm (#1316, built):** a bystander can now ready an Interpose block
+  against a one-shot ambush/trap attack outside combat. `world.mechanics.effect_handlers._deal_damage`
+  routes all non-combat damage through `world.scenes.sudden_harm.arm_or_apply_sudden_harm`, which
+  holds significant damage (`PendingSuddenHarm`, gated by `SceneRoundDefaultsConfig.
+  sudden_harm_interpose_threshold`) and bootstraps a STRICT DANGER scene round
+  (`ensure_round_for_acute_condition`) when a bystander is present, giving them a genuine
+  declare-then-resolve window (`declare_interpose_scene` → `InterposeSceneAction`, key
+  `"scene_interpose"`) before the harm lands — reusing the unchanged `dispatch_interpose` combat
+  service via `resolve_pending_interpose_harm`. See ADR-0083. `InterposeSceneAction` is registered,
+  web-dispatchable, and reachable via telnet (`scene interpose <ally>`, `commands/scene.py`,
+  mirroring `scene succor <ally>`).
+
+  **What remains open (tracked as follow-ups):** knockback / hazard interposition (#1317, separate);
+  frontend declaration UI for INTERPOSE (both the in-combat and out-of-combat forms).
 
 **Phase 1 (complete):** Foundation models and core services
 - CombatEncounter, CombatOpponent, CombatParticipant, BossPhase models

@@ -15,7 +15,11 @@ from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
-from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
+from world.scenes.factories import (
+    SceneFactory,
+    SceneOwnerParticipationFactory,
+    SceneRoundParticipantFactory,
+)
 from world.scenes.models import Scene, SceneRound
 
 # ---------------------------------------------------------------------------
@@ -196,6 +200,50 @@ class CmdSceneRoundTests(TestCase):
         _run_cmd(self.caller, "round strict lock=off")
         self.rnd.refresh_from_db()
         self.assertFalse(self.rnd.per_target_repeat_lock)
+
+
+# ---------------------------------------------------------------------------
+# scene interpose
+# ---------------------------------------------------------------------------
+
+
+class CmdSceneInterposeTests(TestCase):
+    """``scene interpose <ally>`` dispatches InterposeSceneAction (#1316)."""
+
+    def setUp(self):
+        self.room = _make_room("InterposeRoom")
+        self.caller, self.account = _create_pc_with_account("Interposer", location=self.room)
+        self.caller.msg = MagicMock()
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.account)
+        self.rnd = SceneRound.objects.create(
+            room=self.room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            start_reason=SceneRoundStartReason.OPT_IN,
+            mode=SceneRoundMode.STRICT,
+            scene=self.scene,
+        )
+        SceneRoundParticipantFactory(scene_round=self.rnd, character_sheet=self.caller.sheet_data)
+        self.ally, _ally_account = _create_pc_with_account("ProtectedAlly", location=self.room)
+        SceneRoundParticipantFactory(scene_round=self.rnd, character_sheet=self.ally.sheet_data)
+
+    def test_interpose_dispatches_and_messages_caller(self):
+        """A named ally present in the round is accepted; caller gets a result message."""
+        messages = _run_cmd(self.caller, f"interpose {self.ally.db_key}")
+        self.assertTrue(messages, "Expected at least one message after scene interpose")
+        self.assertTrue(
+            any("shelter" in m.lower() or "guard" in m.lower() for m in messages),
+            f"Expected a success message; got: {messages}",
+        )
+
+    def test_interpose_missing_ally_shows_usage(self):
+        """``scene interpose`` with no ally name shows the usage message."""
+        messages = _run_cmd(self.caller, "interpose")
+        self.assertTrue(
+            any("usage: scene interpose" in m.lower() for m in messages),
+            f"Expected usage message; got: {messages}",
+        )
 
 
 # ---------------------------------------------------------------------------

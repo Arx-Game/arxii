@@ -22,12 +22,13 @@ from world.areas.positioning.models import (
     PositionBlueprint,
     PositionEdge,
 )
+from world.mechanics.models import ChallengeInstance
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.mechanics.models import ChallengeInstance
+    from world.mechanics.models import ChallengeTemplate
 
 
 @dataclass(frozen=True)
@@ -128,13 +129,16 @@ def connect_blueprint_positions(
     b: BlueprintPosition,
     *,
     is_passable: bool = True,
+    gating_challenge_template: ChallengeTemplate | None = None,
 ) -> BlueprintEdge:
     """Create a traversable edge between two blueprint positions, ordered canonically.
 
     The smaller-pk position becomes position_a (canonical ordering), mirroring
     ``connect_positions``. Raises PositionError if a and b belong to different
     blueprints. Calls full_clean() before save so self-loop / canonical-order
-    constraints fire.
+    constraints fire. A non-null ``gating_challenge_template`` means
+    ``instantiate_blueprint`` mints a live ``ChallengeInstance`` from it when this
+    edge is cloned into a room.
     """
     if a.blueprint_id != b.blueprint_id:
         raise PositionError(_ERR_BLUEPRINT_CROSS)
@@ -145,6 +149,7 @@ def connect_blueprint_positions(
         position_a=a,
         position_b=b,
         is_passable=is_passable,
+        gating_challenge_template=gating_challenge_template,
     )
     edge.full_clean()
     edge.save()
@@ -165,6 +170,12 @@ def instantiate_blueprint(
     """Clone a blueprint's position graph into a room, returning the created Positions.
 
     Wraps the entire operation in a transaction so a mid-way failure rolls back cleanly.
+
+    A blueprint edge with a ``gating_challenge_template`` mints a live
+    ``ChallengeInstance`` when cloned. Restaging with ``replace=True`` deactivates
+    (``is_active=False``) any such ``ChallengeInstance`` left behind by the room's
+    prior staging — the cascade-delete below removes the old ``PositionEdge`` rows
+    but does not touch the ``ChallengeInstance`` they pointed to.
 
     Args:
         blueprint: The PositionBlueprint to clone.
@@ -192,6 +203,21 @@ def instantiate_blueprint(
             if ObjectPosition.objects.filter(position__room=room).exists():
                 msg = "Cannot restage an occupied room."
                 raise PositionError(msg)
+            # Deactivate any gating ChallengeInstance the old edges pointed to — the
+            # cascade-delete below removes the PositionEdge rows but does not touch
+            # ChallengeInstance (the FK points the other way), which would otherwise
+            # dangle as still-active with nothing referencing it.
+            stale_challenge_ids = list(
+                PositionEdge.objects.filter(
+                    position_a__room=room, gating_challenge__isnull=False
+                ).values_list("gating_challenge_id", flat=True)
+            )
+            if stale_challenge_ids:
+                ChallengeInstance.objects.filter(pk__in=stale_challenge_ids).update(is_active=False)
+                # Bulk .update() writes the DB row directly, bypassing per-instance
+                # .save() — the idmapper identity map never sees it, so any cached
+                # ChallengeInstance for these pks would still report is_active=True.
+                ChallengeInstance.flush_instance_cache()
             # Cascade deletes PositionEdges and ObjectPositions via FK on_delete=CASCADE.
             Position.objects.filter(room=room).delete()
 
@@ -217,11 +243,21 @@ def instantiate_blueprint(
         }
 
         # Reproduce the blueprint's edges in the live graph.
+        from world.mechanics.challenge_resolution import instantiate_challenge
+
         for edge in blueprint.edges.all():
+            gating_challenge = None
+            if edge.gating_challenge_template_id is not None:
+                gating_challenge = instantiate_challenge(
+                    edge.gating_challenge_template,
+                    location=room,
+                    target_object=room,
+                )
             connect_positions(
                 live_map[edge.position_a.name],
                 live_map[edge.position_b.name],
                 is_passable=edge.is_passable,
+                gating_challenge=gating_challenge,
             )
 
         return list(live_map.values())

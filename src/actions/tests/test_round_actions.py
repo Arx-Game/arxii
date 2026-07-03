@@ -298,6 +298,76 @@ class PassRoundActionTests(TestCase):
         self.assertTrue(deferred.get().is_pass)
 
 
+class InterposeSceneActionTests(TestCase):
+    """scene_interpose declares Interpose for a named ally via declare_interpose_scene (#1316)."""
+
+    def setUp(self) -> None:
+        self.room, self.actor, self.sheet = _make_actor("InterposeGuard")
+        from world.scenes.constants import SceneRoundStartReason
+
+        self.ally_actor = CharacterFactory(db_key="InterposeAlly", location=self.room)
+        self.ally_sheet = CharacterSheetFactory(character=self.ally_actor)
+
+        self.round = SceneRound.objects.create(
+            room=self.room,
+            status=RoundStatus.DECLARING,
+            round_number=1,
+            start_reason=SceneRoundStartReason.OPT_IN,
+        )
+        self.participant = SceneRoundParticipant.objects.create(
+            scene_round=self.round,
+            character_sheet=self.sheet,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        )
+        self.ally_participant = SceneRoundParticipant.objects.create(
+            scene_round=self.round,
+            character_sheet=self.ally_sheet,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        )
+
+    def test_declares_interpose_for_named_ally(self) -> None:
+        from actions.definitions.rounds import InterposeSceneAction
+
+        result = InterposeSceneAction().execute(actor=self.actor, ally_name="InterposeAlly")
+
+        self.assertTrue(result.success, result.message)
+        decl = SceneActionDeclaration.objects.get(
+            scene_round=self.round,
+            round_number=1,
+            participant=self.participant,
+        )
+        self.assertEqual(decl.interpose_target_id, self.ally_participant.pk)
+
+    def test_requires_ally_name(self) -> None:
+        from actions.definitions.rounds import InterposeSceneAction
+
+        result = InterposeSceneAction().execute(actor=self.actor, ally_name=None)
+
+        self.assertFalse(result.success)
+
+    def test_no_active_round_returns_failure(self) -> None:
+        from actions.definitions.rounds import InterposeSceneAction
+
+        self.round.status = RoundStatus.COMPLETED
+        self.round.save()
+
+        result = InterposeSceneAction().execute(actor=self.actor, ally_name="InterposeAlly")
+
+        self.assertFalse(result.success)
+
+    def test_unknown_ally_name_returns_failure(self) -> None:
+        from actions.definitions.rounds import InterposeSceneAction
+
+        result = InterposeSceneAction().execute(actor=self.actor, ally_name="Nobody")
+
+        self.assertFalse(result.success)
+
+    def test_interpose_scene_action_registered(self) -> None:
+        from actions.registry import get_action
+
+        self.assertIsNotNone(get_action("scene_interpose"))
+
+
 class ForceResolveRoundActionTests(TestCase):
     """force_resolve_round resolves a DECLARING round even when partially declared."""
 
