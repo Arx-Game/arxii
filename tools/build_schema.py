@@ -33,6 +33,10 @@ SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 
 # Ordered: the scenes partition rewrite must precede combat's composite FKs
 # (they reference the partitioned table); matviews only need base tables.
+#
+# society_prestige_ranking.sql is deliberately excluded: societies.0012 drops
+# that matview (the SocietyPrestigeRanking model was deleted). The file stays
+# in-repo only because historical migrations 0008/0010 still read it at replay.
 SQL_FILES = [
     "world/scenes/sql/partition_interaction_forward.sql",
     "world/combat/sql/interaction_fk_composites_forward.sql",
@@ -41,7 +45,6 @@ SQL_FILES = [
     "world/societies/sql/character_legend_summary.sql",
     "world/societies/sql/covenant_legend_summary.sql",
     "world/societies/sql/guise_legend_summary.sql",
-    "world/societies/sql/society_prestige_ranking.sql",
 ]
 
 # (app_dir, seed function name). Resolved to a dotted migration module path by
