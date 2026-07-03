@@ -2491,6 +2491,7 @@ class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
                     "name": "chosen_covenant_role",
                     "type": "covenant_role_picker",
                     "depends_on": "covenant_type",
+                    "emits_reference": "COVENANT_ROLE",
                     "required": True,
                 },
             ],
