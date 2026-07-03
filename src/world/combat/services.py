@@ -3974,34 +3974,39 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
     if is_dead(target_participant.character_sheet):
         return
 
-    if defense_check_type is not None:
-        defense = resolve_npc_attack(
-            npc_action,
-            target_participant,
-            defense_check_type,
-            perform_check_fn=defense_check_fn,
-        )
-        dmg_result = defense.damage_result
-    else:
-        dmg_result = apply_damage_to_participant(
-            target_participant,
-            npc_action.threat_entry.base_damage,
-            damage_type=npc_action.threat_entry.damage_type,
-            source=opponent,
-            on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
-        )
-    outcome.damage_results.append(dmg_result)
-
-    # Survivability pipeline — knockout, death, wound checks
+    # Survivability pipeline — knockout, death, wound checks.
+    # coherence_cache_scope memoizes motif_coherence_bonus per (sheet, resonance)
+    # so DR (inside apply_damage_to_participant / resolve_npc_attack) + the three
+    # save baselines (inside process_damage_consequences) share one wardrobe walk (#1267).
+    from world.magic.services import coherence_cache_scope  # noqa: PLC0415
     from world.vitals.services import process_damage_consequences  # noqa: PLC0415
 
-    consequence = process_damage_consequences(
-        character_sheet=target_participant.character_sheet,
-        damage_dealt=dmg_result.damage_dealt,
-        damage_type=npc_action.threat_entry.damage_type,
-        combat_interaction_factory=get_npc_action_interaction,
-        source_character=opponent.objectdb,
-    )
+    with coherence_cache_scope():
+        if defense_check_type is not None:
+            defense = resolve_npc_attack(
+                npc_action,
+                target_participant,
+                defense_check_type,
+                perform_check_fn=defense_check_fn,
+            )
+            dmg_result = defense.damage_result
+        else:
+            dmg_result = apply_damage_to_participant(
+                target_participant,
+                npc_action.threat_entry.base_damage,
+                damage_type=npc_action.threat_entry.damage_type,
+                source=opponent,
+                on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
+            )
+        outcome.damage_results.append(dmg_result)
+
+        consequence = process_damage_consequences(
+            character_sheet=target_participant.character_sheet,
+            damage_dealt=dmg_result.damage_dealt,
+            damage_type=npc_action.threat_entry.damage_type,
+            combat_interaction_factory=get_npc_action_interaction,
+            source_character=opponent.objectdb,
+        )
     outcome.damage_consequences.append(consequence)
 
     # Collect condition applications for bulk apply

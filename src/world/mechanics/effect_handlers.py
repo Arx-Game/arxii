@@ -242,30 +242,34 @@ def _deal_damage(
         )
 
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
-    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+    from world.magic.services import (  # noqa: PLC0415
+        apply_damage_reduction_from_threads,
+        coherence_cache_scope,
+    )
 
     damage_amount = effect.damage_amount
-    if hasattr(target, "threads"):
-        damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
-    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
-    # Closes the asymmetry where traps ignored a character's damage-type resistance.
-    damage_amount = resolve_damage_type_resistance(target, damage_amount, effect.damage_type)
-    if damage_amount <= 0:
-        return AppliedEffect(
-            effect_type=EffectType.DEAL_DAMAGE,
-            description="Damage fully absorbed by thread survivability",
-            applied=False,
-            skip_reason="Reduced to zero",
+    with coherence_cache_scope():
+        if hasattr(target, "threads"):
+            damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
+        # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+        # Closes the asymmetry where traps ignored a character's damage-type resistance.
+        damage_amount = resolve_damage_type_resistance(target, damage_amount, effect.damage_type)
+        if damage_amount <= 0:
+            return AppliedEffect(
+                effect_type=EffectType.DEAL_DAMAGE,
+                description="Damage fully absorbed by thread survivability",
+                applied=False,
+                skip_reason="Reduced to zero",
+            )
+
+        vitals.health -= damage_amount
+        vitals.save(update_fields=["health"])
+
+        process_damage_consequences(
+            character_sheet=target.sheet_data,
+            damage_dealt=damage_amount,
+            damage_type=effect.damage_type,
         )
-
-    vitals.health -= damage_amount
-    vitals.save(update_fields=["health"])
-
-    process_damage_consequences(
-        character_sheet=target.sheet_data,
-        damage_dealt=damage_amount,
-        damage_type=effect.damage_type,
-    )
 
     damage_type_name = effect.damage_type.name if effect.damage_type else "untyped"
     return AppliedEffect(

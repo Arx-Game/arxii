@@ -1142,7 +1142,10 @@ def _apply_round_tick_damage(
         return
     from actions.round_context import get_active_round_context  # noqa: PLC0415
     from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
-    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+    from world.magic.services import (  # noqa: PLC0415
+        apply_damage_reduction_from_threads,
+        coherence_cache_scope,
+    )
 
     round_ctx = get_active_round_context(sheet)
 
@@ -1158,23 +1161,26 @@ def _apply_round_tick_damage(
             covered_amount = int(amount * multiplier)
             if covered_amount <= 0:
                 continue
-        effective = (
-            apply_damage_reduction_from_threads(target, covered_amount)
-            if hasattr(target, "threads")
-            else covered_amount
-        )
-        # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
-        # Closes the asymmetry where DoT damage (poison, burning) ignored resistance.
-        effective = resolve_damage_type_resistance(target, effective, damage_type)
-        if effective <= 0:
-            continue
-        vitals.health -= effective
-        vitals.save(update_fields=["health"])
-        process_damage_consequences(
-            character_sheet=target.sheet_data,
-            damage_dealt=effective,
-            damage_type=damage_type,
-        )
+        # coherence_cache_scope memoizes motif_coherence_bonus per (sheet, resonance)
+        # so DR + the three save baselines share one wardrobe walk (#1267).
+        with coherence_cache_scope():
+            effective = (
+                apply_damage_reduction_from_threads(target, covered_amount)
+                if hasattr(target, "threads")
+                else covered_amount
+            )
+            # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+            # Closes the asymmetry where DoT damage (poison, burning) ignored resistance.
+            effective = resolve_damage_type_resistance(target, effective, damage_type)
+            if effective <= 0:
+                continue
+            vitals.health -= effective
+            vitals.save(update_fields=["health"])
+            process_damage_consequences(
+                character_sheet=target.sheet_data,
+                damage_dealt=effective,
+                damage_type=damage_type,
+            )
 
 
 def tick_round_for_targets(
