@@ -780,13 +780,16 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
     #1316) are excluded from both the generic challenge-resolution sweep and the delete
     below, for the same reason (#1744 bugfix, extended to Interpose): each is resolved
     reactively by a reader that runs AFTER this function — Succor by
-    ``SceneRoundContext.get_cover_for`` (called from the END tick), Interpose by
-    ``resolve_pending_interpose_harm`` (Task 5) — which caches its result on the same
-    row. Deleting them here would both crash the generic sweep (which unconditionally
-    dereferences ``challenge_instance.location``) and erase the cache before it can ever
-    be read. They are naturally scoped by ``(scene_round, round_number, participant)`` —
-    round_number advances every round, so a leftover row from a past round is simply
-    never matched again by the current-round filter; no extra cleanup is needed.
+    ``SceneRoundContext.get_cover_for`` (called from the END tick), which caches its
+    graded outcome onto the declaration's ``succor_resolution`` field; Interpose by
+    ``resolve_pending_interpose_harm``, which reads ``interpose_target`` fresh each time
+    and caches nothing back onto the row (it resolves and deletes the bound
+    ``PendingSuddenHarm`` instead). Deleting either declaration here would crash the
+    generic sweep (which unconditionally dereferences ``challenge_instance.location``),
+    and for Succor would additionally erase the cache before it can ever be read. They
+    are naturally scoped by ``(scene_round, round_number, participant)`` — round_number
+    advances every round, so a leftover row from a past round is simply never matched
+    again by the current-round filter; no extra cleanup is needed.
     """
     from world.scenes.interaction_services import broadcast_scene_outcome  # noqa: PLC0415
 
