@@ -244,6 +244,19 @@ class ThreatPoolEntry(SharedMemoryModel):
             "cannot trigger or assist clashes."
         ),
     )
+    on_hit_consequence_pool = models.ForeignKey(
+        CONSEQUENCE_POOL_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Consequence pool fired unconditionally (no roll) whenever this attack "
+            "lands with damage > 0 surviving Interpose. Distinct from clash_resolution_pool "
+            "(clash-specific) — this fires on every successful hit. A MOVE_TO_POSITION/"
+            "AWAY_FROM_ACTOR effect here is how a GM authors 'this attack knocks back.'"
+        ),
+    )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
 

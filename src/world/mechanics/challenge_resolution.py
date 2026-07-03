@@ -18,6 +18,7 @@ from world.checks.types import PendingResolution, ResolutionContext
 from world.mechanics.constants import ResolutionType
 from world.mechanics.models import (
     ApproachConsequence,
+    ChallengeInstance,
     ChallengeTemplateConsequence,
     CharacterChallengeRecord,
     ObjectProperty,
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.mechanics.models import (
         ChallengeApproach,
-        ChallengeInstance,
         ChallengeTemplate,
     )
     from world.mechanics.types import CapabilitySource
@@ -43,6 +43,26 @@ _ERR_NOT_ACTIVE = "Challenge is not active."
 _ERR_NOT_REVEALED = "Challenge has not been revealed."
 _ERR_ALREADY_RESOLVED = "Character has already resolved this challenge."
 _ERR_WRONG_APPROACH = "Approach does not belong to this challenge's template."
+
+
+def instantiate_challenge(
+    template: ChallengeTemplate,
+    *,
+    location: ObjectDB,
+    target_object: ObjectDB,
+) -> ChallengeInstance:
+    """Mint a bare, active ChallengeInstance from a template.
+
+    No SituationInstance involved — mirrors the direct-mint pattern
+    ``positioning/plummet.py`` uses for the "Catch the Faller" challenge.
+    """
+    return ChallengeInstance.objects.create(
+        template=template,
+        location=location,
+        target_object=target_object,
+        is_active=True,
+        is_revealed=True,
+    )
 
 
 def resolve_challenge(

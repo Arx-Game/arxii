@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionInstance
     from world.magic.models import Technique
     from world.magic.types.power_ledger import PowerLedger
+    from world.mechanics.types import HasProperties
 
 
 def _is_isolated(participant: BattleParticipant) -> bool:
@@ -102,32 +103,31 @@ def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
     return get_effective_capability_value(character_sheet, movement) > 0
 
 
-def _composition_affinity_modifier(technique: Technique, composition: str) -> int:
-    """Flat STRIKE-check modifier from an authored technique-vs-composition row (#1711).
+def _property_affinity_modifier(technique: Technique, holder: HasProperties) -> int:
+    """Sum every TechniquePropertyAffinity row matching one of holder's properties (#1794).
 
-    Returns 0 when no TechniqueCompositionAffinity row matches — most techniques
-    have no authored affinity, and that's the expected common case.
+    Returns 0 when no row matches — most techniques have no authored affinity,
+    and that's the expected common case.
     """
-    from world.battles.models import TechniqueCompositionAffinity  # noqa: PLC0415
+    from world.battles.models import TechniquePropertyAffinity  # noqa: PLC0415
 
-    row = TechniqueCompositionAffinity.objects.filter(
-        technique=technique, composition=composition
-    ).first()
-    return row.modifier if row is not None else 0
+    rows = TechniquePropertyAffinity.objects.filter(technique=technique).select_related("property")
+    return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
-def _terrain_effect_modifier(place: BattlePlace | None, composition: str) -> int:
-    """Flat attacker-facing STRIKE modifier from an authored terrain-vs-composition
-    row (#1711). Returns 0 when the unit has no place, or no row matches.
+def _terrain_property_modifier(place: BattlePlace | None, holder: HasProperties) -> int:
+    """Sum every TerrainPropertyEffect row matching one of holder's properties (#1794).
+
+    Returns 0 when the unit has no place, or no row matches.
     """
-    from world.battles.models import TerrainCompositionEffect  # noqa: PLC0415
+    from world.battles.models import TerrainPropertyEffect  # noqa: PLC0415
 
     if place is None:
         return 0
-    row = TerrainCompositionEffect.objects.filter(
-        terrain_type=place.terrain_type, composition=composition
-    ).first()
-    return row.modifier if row is not None else 0
+    rows = TerrainPropertyEffect.objects.filter(terrain_type=place.terrain_type).select_related(
+        "property"
+    )
+    return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
 def _quality_modifier(quality: str) -> int:
@@ -252,8 +252,8 @@ class BattleTechniqueResolution:
 @dataclass
 class BattleTechniqueResolver:
     """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
-    own check, folding in the full battle modifier stack (composition affinity,
-    terrain, unit quality, commander bonus, posture — #1711). Battle has no
+    own check, folding in the full battle modifier stack (Property affinity,
+    terrain, unit quality, commander bonus, posture — #1711/#1794). Battle has no
     damage-profile/condition application of its own — that stays in
     ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
     """
@@ -275,21 +275,19 @@ class BattleTechniqueResolver:
         return BattleTechniqueResolution(check_result=check_result)
 
     def _battle_modifier_stack(self) -> int:
-        """Sum every #1711 modifier source relevant to this declaration."""
+        """Sum every modifier source relevant to this declaration (#1711/#1794)."""
         participant = self.declaration.participant
         unit = self.declaration.target_unit
 
-        composition = (
-            _composition_affinity_modifier(self.technique, unit.composition)
-            if unit is not None
-            else 0
+        property_affinity = (
+            _property_affinity_modifier(self.technique, unit) if unit is not None else 0
         )
-        terrain = _terrain_effect_modifier(unit.place, unit.composition) if unit is not None else 0
+        terrain = _terrain_property_modifier(unit.place, unit) if unit is not None else 0
         quality = _quality_modifier(unit.quality) if unit is not None else 0
         commander = commander_bonus_for_side_at_place(participant.side, participant.place)
         posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
 
-        return composition + terrain + quality + commander + posture
+        return property_affinity + terrain + quality + commander + posture
 
 
 def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckResult | None:

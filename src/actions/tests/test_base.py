@@ -194,6 +194,7 @@ class ActionRegistryTests(TestCase):
             "force_resolve_round",
             "set_round_mode",
             "scene_succor",
+            "scene_interpose",
             "intimidate",
             "persuade",
             "deceive",

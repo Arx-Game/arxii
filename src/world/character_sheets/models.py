@@ -17,9 +17,10 @@ if TYPE_CHECKING:
     from world.achievements.handlers import StatHandler
     from world.achievements.models import Achievement
     from world.classes.models import CharacterClassLevel
-    from world.conditions.models import ConditionTemplate
+    from world.conditions.models import CapabilityType, ConditionTemplate
     from world.items.handlers import CharacterSheetOutfitsHandler
     from world.magic.models.affinity import Resonance
+    from world.mechanics.models import Property
     from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
@@ -966,6 +967,37 @@ class CharacterSheet(SharedMemoryModel):
     def display_to_staff(self) -> str:
         """Delegate to primary_persona.display_to_staff()."""
         return self.primary_persona.display_to_staff()
+
+    def effective_capability(self, capability: CapabilityType) -> int:
+        """Authored magnitude for this character's hold on ``capability``.
+
+        Direct passthrough — get_effective_capability_value already takes a
+        CharacterSheet + CapabilityType instance. Exists so CharacterSheet
+        conforms to world.mechanics.types.HasCapabilities alongside BattleUnit.
+        """
+        from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
+
+        return get_effective_capability_value(self, capability)
+
+    def has_property(self, prop: Property) -> bool:
+        """True if this character carries ``prop`` via runtime attachment or
+        persona-authored identity tags.
+
+        Instance-keyed sibling of Character.has_property (name-keyed,
+        typeclasses/characters.py:234-253) — same two attachment surfaces, no
+        redundant name lookup since the caller already has the Property
+        instance. Exists so CharacterSheet conforms to
+        world.mechanics.types.HasProperties alongside BattleUnit.
+        """
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        if self.character.object_properties.filter(property=prop).exists():
+            return True
+        try:
+            persona = self.primary_persona
+        except Persona.DoesNotExist:
+            return False
+        return persona.properties.filter(pk=prop.pk).exists()
 
     class Meta:
         verbose_name = "Character Sheet"

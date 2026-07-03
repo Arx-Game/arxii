@@ -53,6 +53,8 @@ pip-log.txt
 .tox
 nosetests.xml
 .ruff_cache/
+# SQLite-tier schema-template cache (see server/conf/sqlite_test_runner.py)
+.test_schema_cache/
 
 # Translations
 *.mo

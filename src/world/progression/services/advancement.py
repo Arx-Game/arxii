@@ -60,13 +60,14 @@ def apply_class_level_advance(sheet: CharacterSheet, *, level_after: int) -> Non
         cl.level = level_after
         cl.save(update_fields=["level"])
     sheet.invalidate_class_level_cache()
-    # Recompute max_health so level-derived base scales immediately. Guard with hasattr
-    # because bare ObjectDB fixtures (used by some tests / non-PC NPCs) don't carry
-    # the threads or combat_pulls handlers that recompute_max_health_with_threads needs.
-    if hasattr(sheet.character, "threads"):
-        from world.magic.services.threads import recompute_max_health_with_threads
+    # Recompute max_health so level-derived base scales immediately. Every character
+    # with a CharacterSheet is a real typeclassed Character (via create_character_with_sheet
+    # / CharacterFactory), so the threads + combat_pulls handlers always exist. The
+    # former hasattr guard was a workaround for bare-ObjectDB test fixtures, which have
+    # since been migrated to CharacterFactory (#1367).
+    from world.magic.services.threads import recompute_max_health_with_threads
 
-        recompute_max_health_with_threads(sheet)
+    recompute_max_health_with_threads(sheet)
 
 
 def cross_into_path(sheet: CharacterSheet, path: Path) -> PathMagicGrantResult:

@@ -2852,6 +2852,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
     damage_type: DamageType | None = None,
     source: object | None = None,
     source_sheet: CharacterSheet | None = None,
+    on_hit_pool: ConsequencePool | None = None,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
@@ -2927,6 +2928,14 @@ def apply_damage_to_participant(  # noqa: PLR0913
             death_eligible=False,
             permanent_wound_eligible=False,
         )
+
+    # Deliberate ordering: the on-hit pool (knockback/trap) resolves and may
+    # apply its own damage to vitals.health BEFORE the triggering hit's own
+    # `vitals.health -= effective_damage` below runs. Both writes land on the
+    # same idmapper-cached CharacterVitals instance, so the arithmetic still
+    # composes correctly regardless of order (e.g. 100 - 10 hit - 30 trap = 60).
+    if on_hit_pool is not None:
+        _fire_on_hit_pool(character, source, on_hit_pool)
 
     # Use the (possibly interposed/modified) amount from the payload.
     # Coerce to int: the MODIFY_PAYLOAD multiply op (DEFEND halves amount by
@@ -3522,6 +3531,7 @@ def resolve_npc_attack(
         final_damage,
         damage_type=opponent_action.threat_entry.damage_type,
         source=opponent_action.opponent,
+        on_hit_pool=opponent_action.threat_entry.on_hit_consequence_pool,
     )
 
     return DefenseResult(
@@ -3978,6 +3988,7 @@ def _resolve_npc_action_on_target(  # noqa: PLR0913 - per-target resolution need
             npc_action.threat_entry.base_damage,
             damage_type=npc_action.threat_entry.damage_type,
             source=opponent,
+            on_hit_pool=npc_action.threat_entry.on_hit_consequence_pool,
         )
     outcome.damage_results.append(dmg_result)
 
@@ -4928,6 +4939,39 @@ def _try_interpose(
             INTERPOSE_BASE_FATIGUE_COST,
             action.effort_level,
         )
+
+
+def _fire_on_hit_pool(
+    character: Character,
+    source: object | None,
+    pool: ConsequencePool,
+) -> None:
+    """Fire an attack's on-hit consequence pool (e.g. knockback) against the
+    defender, then re-check the defender's landing position for hazards.
+
+    Deterministic — no roll — since the attack's own hit already landed.
+    ``source`` is expected to be the attacking ``CombatOpponent`` (the only
+    caller wiring ``on_hit_pool`` today is ``resolve_npc_attack``, which
+    passes ``source=opponent_action.opponent``); if it isn't a
+    ``CombatOpponent`` with a placed ``objectdb``, there's no attacker
+    Position to compute "away from actor" against, so this is a no-op.
+    """
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.checks.consequence_resolution import apply_pool_deterministically  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.room_features.trap_services import check_traps_at_position  # noqa: PLC0415
+
+    if not isinstance(source, CombatOpponent) or source.objectdb_id is None:
+        return
+
+    apply_pool_deterministically(
+        pool=pool,
+        context=ResolutionContext(character=source.objectdb, target=character),
+    )
+
+    landing_position = position_of(character)
+    if landing_position is not None:
+        check_traps_at_position(character, landing_position)
 
 
 def _bind_interpose_challenges_any_ally(

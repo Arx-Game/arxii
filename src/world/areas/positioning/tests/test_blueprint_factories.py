@@ -145,3 +145,42 @@ class TavernBlueprintTests(TestCase):
 
         bp2 = tavern_blueprint()
         self.assertEqual(self.blueprint.pk, bp2.pk)
+
+
+class RopeBridgeBlueprintTests(TestCase):
+    """Integration test: rope_bridge_blueprint() → instantiate_blueprint() → gated crossing."""
+
+    def setUp(self):
+        from evennia import create_object
+
+        from world.areas.positioning.factories import rope_bridge_blueprint
+        from world.areas.positioning.services import instantiate_blueprint
+
+        self.room = create_object("typeclasses.rooms.Room", key="TestRopeBridge", nohome=True)
+        self.blueprint = rope_bridge_blueprint()
+        self.positions = instantiate_blueprint(self.blueprint, self.room)
+
+    def test_blueprint_has_two_positions(self):
+        self.assertEqual(self.blueprint.positions.count(), 2)
+
+    def test_blueprint_edge_is_gated(self):
+        edge = self.blueprint.edges.get()
+        self.assertIsNotNone(edge.gating_challenge_template_id)
+
+    def test_gated_template_has_a_resolvable_approach(self):
+        edge = self.blueprint.edges.get()
+        self.assertTrue(edge.gating_challenge_template.approaches.exists())
+
+    def test_instantiate_produces_live_gated_edge(self):
+        from world.areas.positioning.services import edge_between
+
+        near, far = sorted(self.positions, key=lambda p: p.name)
+        live_edge = edge_between(near, far)
+        self.assertIsNotNone(live_edge.gating_challenge_id)
+        self.assertTrue(live_edge.gating_challenge.is_active)
+
+    def test_rope_bridge_blueprint_is_idempotent(self):
+        from world.areas.positioning.factories import rope_bridge_blueprint
+
+        bp2 = rope_bridge_blueprint()
+        self.assertEqual(self.blueprint.pk, bp2.pk)

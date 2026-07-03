@@ -20,17 +20,6 @@ class BattleParticipantStatus(models.TextChoices):
     INCAPACITATED = "incapacitated", "Incapacitated"
 
 
-class UnitComposition(models.TextChoices):
-    INFANTRY = "infantry", "Infantry"
-    CAVALRY = "cavalry", "Cavalry"
-    ARCHERS = "archers", "Archers"
-    SIEGE = "siege", "Siege"
-    FLYING = "flying", "Flying"
-    NAVAL = "naval", "Naval"
-    MAGICAL = "magical", "Magical"
-    IRREGULAR = "irregular", "Irregular"
-
-
 class UnitQuality(models.TextChoices):
     MILITIA = "militia", "Militia"
     LEVY = "levy", "Levy"

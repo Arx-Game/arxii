@@ -83,14 +83,18 @@ participant-fields form:
   sent in `participant_kwargs`; instead it becomes an entry in the `references` array
   (`{ kind: emits_reference, ref_<kind>_id: value }`). Currently wired kinds:
   `COVENANT_ROLE → ref_covenant_role_id`, `COVENANT → ref_covenant_id`.
-- **`depends_on` path resolution** — `CovenantRolePickerField` declares
-  `depends_on: "session.target_covenant.covenant_type"`. The dialog resolves this by:
-  1. Reading the `COVENANT`-kind entry from `session.session_references` (primary path).
-  2. Falling back to `session_kwargs.target_covenant` for older sessions.
-  3. Fetching `GET /api/covenants/covenants/{id}/` to get `covenant_type`.
-  4. Injecting the resolved value into `formValues` under the full
-     `"session.target_covenant.covenant_type"` key — so `CovenantRolePickerField`
-     reads it via `formValues[field.depends_on]` with no changes to the field component.
+- **`depends_on` path resolution** — `CovenantRolePickerField` declares a
+  `depends_on` key that the dialog resolves and injects into `formValues` so the
+  picker can read it via `formValues[field.depends_on]`. Two strategies:
+  1. **Session-reference path (induction):**
+     `depends_on: "session.target_covenant.covenant_type"`. The dialog reads the
+     `COVENANT`-kind entry from `session.session_references` (falling back to
+     `session_kwargs.target_covenant` for older sessions), fetches
+     `GET /api/covenants/covenants/{id}/` to get `covenant_type`, and injects it
+     under the full path key.
+  2. **Bare session-kwargs key (formation):** `depends_on: "covenant_type"`. The
+     dialog injects all string/number values from `session.session_kwargs` under
+     their bare keys — so the picker finds `covenant_type` directly, no fetch.
 
 ### `RitualField` descriptors (extended)
 
@@ -109,8 +113,9 @@ The `participant_fields` schema lives in `input_schema.participant_fields` on th
 
 - `frontend/src/rituals/__tests__/RitualSessionPages.test.tsx` — component tests for
   `RitualSessionResponseDialog` covering: role-picker rendering from `participantFieldsSchema`,
-  `emits_reference` → `references` conversion on accept, and `candidate_only` field hiding
-  for the initiator.
+  `emits_reference` → `references` conversion on accept (induction + formation),
+  `candidate_only` field hiding for the initiator (induction only), and bare
+  session-kwargs `depends_on` resolution (formation).
 
 ## Common Gotchas
 

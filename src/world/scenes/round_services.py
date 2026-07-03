@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from world.scenes.constants import (
@@ -31,6 +32,35 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _validate_reactive_declaration(
+    participant: SceneRoundParticipant,
+    ally: SceneRoundParticipant,
+    *,
+    label: str,
+    self_target_message: str,
+) -> None:
+    """Shared guard chain for declare_succor_scene/declare_interpose_scene.
+
+    Raises ``ValueError`` with an action-specific message on the first violated
+    precondition: cross-round mismatch, self-targeting, an inactive caller, or an
+    inactive ally — in that order. ``label`` (``"Succor"``/``"Interpose"``) names the
+    maneuver in the target-related messages; ``self_target_message`` carries the
+    "Cannot X yourself"/"Cannot X for yourself" wording, which differs between the
+    two callers (kept as a caller-supplied string rather than derived from ``label``).
+    """
+    if participant.scene_round_id != ally.scene_round_id:
+        msg = f"{label} target must be in the same scene round."
+        raise ValueError(msg)
+    if ally.pk == participant.pk:
+        raise ValueError(self_target_message)
+    if participant.status != SceneRoundParticipantStatus.ACTIVE:
+        msg = f"Cannot {label.lower()}: you are not an active participant in this round."
+        raise ValueError(msg)
+    if ally.status != SceneRoundParticipantStatus.ACTIVE:
+        msg = f"{label} target must be an active participant in this round."
+        raise ValueError(msg)
+
+
 def declare_succor_scene(
     participant: SceneRoundParticipant,
     ally: SceneRoundParticipant,
@@ -40,18 +70,9 @@ def declare_succor_scene(
     Always names a specific ally (see world.combat.services.declare_succor's
     docstring for why). Writable during an open STRICT declaration window only.
     """
-    if participant.scene_round_id != ally.scene_round_id:
-        msg = "Succor target must be in the same scene round."
-        raise ValueError(msg)
-    if ally.pk == participant.pk:
-        msg = "Cannot succor yourself."
-        raise ValueError(msg)
-    if participant.status != SceneRoundParticipantStatus.ACTIVE:
-        msg = "Cannot succor: you are not an active participant in this round."
-        raise ValueError(msg)
-    if ally.status != SceneRoundParticipantStatus.ACTIVE:
-        msg = "Succor target must be an active participant in this round."
-        raise ValueError(msg)
+    _validate_reactive_declaration(
+        participant, ally, label="Succor", self_target_message="Cannot succor yourself."
+    )
 
     scene_round = participant.scene_round
     declaration, _ = SceneActionDeclaration.objects.update_or_create(
@@ -62,6 +83,38 @@ def declare_succor_scene(
         defaults={
             "succor_target": ally,
             "succor_resolution": None,
+            "is_pass": False,
+            "challenge_instance": None,
+            "challenge_approach": None,
+        },
+    )
+    return declaration
+
+
+def declare_interpose_scene(
+    participant: SceneRoundParticipant,
+    ally: SceneRoundParticipant,
+) -> SceneActionDeclaration:
+    """Declare Interpose for a scene round — the non-combat sibling of declare_interpose (#1316).
+
+    Named-ally only (mirrors declare_succor_scene's #1744 narrowing — see that function's
+    docstring rationale). Writable during an open STRICT declaration window only.
+    """
+    _validate_reactive_declaration(
+        participant,
+        ally,
+        label="Interpose",
+        self_target_message="Cannot interpose for yourself.",
+    )
+
+    scene_round = participant.scene_round
+    declaration, _ = SceneActionDeclaration.objects.update_or_create(
+        scene_round=scene_round,
+        round_number=scene_round.round_number,
+        participant=participant,
+        is_immediate=False,
+        defaults={
+            "interpose_target": ally,
             "is_pass": False,
             "challenge_instance": None,
             "challenge_approach": None,
@@ -612,6 +665,10 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
         targets.append(sheet.character)
     tick_round_for_targets(targets, timing="end")
 
+    from world.scenes.sudden_harm import resolve_pending_interpose_harm  # noqa: PLC0415
+
+    resolve_pending_interpose_harm(rnd)
+
     # Advance plummet for victims whose bleed-out is held but who are also falling.
     # They were excluded from the main tick above to keep their bleed-out held, but
     # gravity does not pause for an abandoned round — their descent must still advance
@@ -733,16 +790,20 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
     then delete the round's CHALLENGE bridge rows. Pass rows resolve to nothing.
 
     Succor declarations (``challenge_instance is None``; identified instead by
-    ``succor_target``) are excluded from both the generic challenge-resolution sweep
-    and the delete below (#1744 bugfix): they are resolved reactively by
-    ``SceneRoundContext.get_cover_for`` (called from the END tick, AFTER this
-    function runs), which caches its result on the same row's ``succor_resolution``
-    field. Deleting them here would both crash the generic sweep (which
-    unconditionally dereferences ``challenge_instance.location``) and erase the
-    cache before it can ever be read. They are naturally scoped by
-    ``(scene_round, round_number, participant)`` — round_number advances every
-    round, so a leftover Succor row from a past round is simply never matched
-    again by ``get_cover_for``'s current-round filter; no extra cleanup is needed.
+    ``succor_target``) and Interpose declarations (identified by ``interpose_target``,
+    #1316) are excluded from both the generic challenge-resolution sweep and the delete
+    below, for the same reason (#1744 bugfix, extended to Interpose): each is resolved
+    reactively by a reader that runs AFTER this function — Succor by
+    ``SceneRoundContext.get_cover_for`` (called from the END tick), which caches its
+    graded outcome onto the declaration's ``succor_resolution`` field; Interpose by
+    ``resolve_pending_interpose_harm``, which reads ``interpose_target`` fresh each time
+    and caches nothing back onto the row (it resolves and deletes the bound
+    ``PendingSuddenHarm`` instead). Deleting either declaration here would crash the
+    generic sweep (which unconditionally dereferences ``challenge_instance.location``),
+    and for Succor would additionally erase the cache before it can ever be read. They
+    are naturally scoped by ``(scene_round, round_number, participant)`` — round_number
+    advances every round, so a leftover row from a past round is simply never matched
+    again by the current-round filter; no extra cleanup is needed.
     """
     from world.scenes.interaction_services import broadcast_scene_outcome  # noqa: PLC0415
 
@@ -779,5 +840,5 @@ def _resolve_scene_declarations(scene_round: SceneRound) -> None:
         ),
     )
     scene_round.action_declarations.filter(round_number=scene_round.round_number).exclude(
-        succor_target__isnull=False
+        Q(succor_target__isnull=False) | Q(interpose_target__isnull=False)
     ).delete()

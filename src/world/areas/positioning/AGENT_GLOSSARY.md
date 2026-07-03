@@ -15,3 +15,6 @@ _Avoid_: flight layer, sky layer, air zone
 **Plummet**:
 The escalating fall that begins when an entity enters a CHASM position and the FELL event fires: it ensures a danger SceneRound, applies the staged "Plummeting" condition to the faller, and instantiates a "Catch the Faller" challenge, descending each round until caught or resolved.
 _Avoid_: fall, drop, falling
+
+**Knockback** (combat term, not positioning-owned):
+See `world/combat/AGENT_GLOSSARY.md` — positioning provides the `AWAY_FROM_ACTOR` destination primitive; combat owns the term and authoring surface.

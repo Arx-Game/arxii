@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _SOCIAL_ACTION_TEMPLATES = [
     ("Intimidate", "Intimidation", "single", "skull", 0),
     ("Persuade", "Persuasion", "single", "handshake", 0),
-    ("Deceive", "Deception", "single", "mask", 0),
+    ("Deceive", "Deceive", "single", "mask", 0),
     ("Flirt", "Seduction", "single", "heart", 0),
     ("Seduce", "Seduction", "single", "flame", 1),
     ("Perform", "Performance", "area", "music", 0),

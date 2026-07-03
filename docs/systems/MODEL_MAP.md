@@ -124,6 +124,8 @@
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
   - combat_pull_grants <- combat.CombatPullResolvedEffect
+  - battle_units <- battles.BattleUnit
+  - battle_unit_values <- battles.BattleUnitCapability
 
 ### DamageType
 **Foreign Keys:**
@@ -474,6 +476,7 @@
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
+  - traps <- room_features.Trap
 
 ### PositionEdge
 **Foreign Keys:**
@@ -514,7 +517,8 @@
 - `get_room_profile(room_obj: 'ObjectDB') -> 'RoomProfile' — Get or create the RoomProfile for a room ObjectDB instance.`
 - `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' — Return all RoomProfiles in this area and everything beneath it.`
 - `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
-- `societies_for_scene(scene: 'Scene') -> 'list[Society]' — Resolve which societies' fashion is perceived in a scene's location.`
+- `societies_for_area(area: 'Area | None') -> 'list[Society]' — Nearest-first ancestor walk: dominant society wins, else realm societies.`
+- `societies_for_scene(scene: 'Scene') -> 'list[Society]' — Resolve which societies are relevant at a scene's location (#1464 walk fix).`
 - `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
 
 
@@ -558,8 +562,16 @@
   - place -> battles.BattlePlace [FK] (nullable)
   - commander -> character_sheets.CharacterSheet [FK] (nullable)
   - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
+  - properties -> mechanics.Property [M2M]
+  - capabilities -> conditions.CapabilityType [M2M]
 **Pointed to by:**
+  - capability_values <- battles.BattleUnitCapability
   - declarations <- battles.BattleActionDeclaration
+
+### BattleUnitCapability
+**Foreign Keys:**
+  - unit -> battles.BattleUnit [FK]
+  - capability -> conditions.CapabilityType [FK]
 
 ### BattleRound
 **Foreign Keys:**
@@ -587,11 +599,14 @@
   - target_place -> battles.BattlePlace [FK] (nullable)
   - target_side -> battles.BattleSide [FK] (nullable)
 
-### TechniqueCompositionAffinity
+### TechniquePropertyAffinity
 **Foreign Keys:**
   - technique -> magic.Technique [FK]
+  - property -> mechanics.Property [FK]
 
-### TerrainCompositionEffect
+### TerrainPropertyEffect
+**Foreign Keys:**
+  - property -> mechanics.Property [FK]
 
 ### BattleOutcomeMapping
 **Foreign Keys:**
@@ -601,7 +616,7 @@
 - `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
 - `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1) -> 'BattlePlace' — Add a named front/zone to a battle.`
 - `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100, covenant: 'Covenant | None' = None) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
-- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', composition: 'str' = UnitComposition.IRREGULAR, quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
+- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, place: 'BattlePlace | None' = None, properties: 'Iterable[Property]' = (), capability_values: 'Iterable[tuple[CapabilityType, int]]' = (), individual_count: 'int | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
 - `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' — Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
@@ -1345,6 +1360,8 @@
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
   - combat_pull_grants <- combat.CombatPullResolvedEffect
+  - battle_units <- battles.BattleUnit
+  - battle_unit_values <- battles.BattleUnitCapability
 
 ### DamageType
 **Foreign Keys:**
@@ -2420,7 +2437,7 @@
   - alternate_self_grants <- forms.AlternateSelf
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
-  - battle_composition_affinities <- battles.TechniqueCompositionAffinity
+  - battle_property_affinities <- battles.TechniquePropertyAffinity
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
@@ -2939,6 +2956,7 @@
   - gift -> magic.Gift [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - effect_type -> magic.EffectType [FK] (nullable)
+  - consequence_pool -> actions.ConsequencePool [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
 **Pointed to by:**
   - capability_grants <- magic.TechniqueDraftCapabilityGrant
@@ -3159,6 +3177,9 @@
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_effects <- checks.ConsequenceEffect
   - threat_pool_entries <- combat.ThreatPoolEntry
+  - battle_units <- battles.BattleUnit
+  - battle_technique_affinities <- battles.TechniquePropertyAffinity
+  - battle_terrain_effects <- battles.TerrainPropertyEffect
 
 ### ChallengeTemplateProperty
 **Foreign Keys:**
@@ -3316,6 +3337,7 @@
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
+- `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' — True if target satisfies every one of prereqs (all() semantics; empty = True).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
@@ -4805,8 +4827,8 @@
   - mission_awards <- missions.MissionRenownAward
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' — Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' — Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' — Sum the legend this character earned that was credited to covenants where they held ``role``.`

@@ -33,7 +33,7 @@ class ScandalForkTestCase(TestCase):
         cls.kingdom = AreaFactory(level=AreaLevel.KINGDOM, realm=cls.realm)
         cls.vile = PhilosophicalArchetypeFactory(name="Vile Conduct", mercy_delta=-2)
         cls.noble = PhilosophicalArchetypeFactory(name="Noble Conduct", mercy_delta=2)
-        CheckTypeFactory(name="Deception")
+        CheckTypeFactory(name="Con")
         CheckTypeFactory(name="Intimidation")
 
     def _scene(self, *, public: bool):
@@ -118,3 +118,46 @@ class ScandalForkTestCase(TestCase):
         entry.refresh_from_db()
         # default multiplier 9 × celebrity factor 3 (PLACEHOLDER map).
         self.assertEqual(entry.spread_multiplier, 27)
+
+
+class HouseholdContainmentTests(ScandalForkTestCase):
+    """Own-household witnesses route containment through Household Command."""
+
+    def test_household_witnesses_use_command_check(self):
+        from unittest.mock import patch
+
+        from world.societies.factories import (
+            OrganizationFactory,
+            OrganizationMembershipFactory,
+        )
+
+        CheckTypeFactory(name="Household Command")
+        persona = self._persona()
+        house = OrganizationFactory(name="House Hushly")
+        OrganizationMembershipFactory(persona=persona, organization=house, rank=1)
+        witness = self._persona()
+        OrganizationMembershipFactory(persona=witness, organization=house, rank=3)
+
+        captured = {}
+        from world.checks import services as check_services
+
+        real_perform = check_services.perform_check
+
+        def spy(character, check_type, **kwargs):
+            captured["check"] = check_type.name
+            return real_perform(character, check_type, **kwargs)
+
+        outcome = CheckOutcomeFactory(name="hh_contain", success_level=1)
+        scene = self._scene(public=True)
+        # Force the witness list: patch scene_witness_personas to our pair.
+        with (
+            patch(
+                "world.societies.knowledge_services.scene_witness_personas",
+                return_value=[witness],
+            ),
+            patch("world.checks.services.perform_check", side_effect=spy),
+            force_check_outcome(outcome),
+        ):
+            entry = self._mint(scene, [self.vile], persona=persona)
+        self.assertEqual(captured.get("check"), "Household Command")
+        self.assertTrue(Secret.objects.filter(legend_deed=entry).exists())

@@ -78,11 +78,13 @@ class ReportHeatTestCase(TestCase):
         return self.sheet.primary_persona
 
     def _seed_persuasion_check(self) -> None:
-        # The dodge/association helpers look the CheckType up before calling
-        # perform_check (which the tests mock) — without it they fail closed.
+        # The dodge/association helpers look the CheckTypes up before calling
+        # perform_check (which the tests mock) — without them they fail closed.
+        # Ratified names (2026-07-03): dodge → Con, association → Deceive.
         from world.checks.factories import CheckTypeFactory
 
-        CheckTypeFactory(name="Persuasion")
+        CheckTypeFactory(name="Con")
+        CheckTypeFactory(name="Deceive")
 
     @patch(_DELIVER)
     def test_accurate_report_mints_heat_and_reputation_sting(self, mock_deliver) -> None:  # noqa: ARG002

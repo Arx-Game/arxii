@@ -675,4 +675,108 @@ describe('RitualSessionResponseDialog', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.queryByText('Covenant Role')).not.toBeInTheDocument();
   });
+
+  // ---------------------------------------------------------------------------
+  // Formation accept: covenant_role_picker renders for ALL participants (no applies_to gate)
+  // and depends_on: "covenant_type" resolves from session_kwargs (no fetch).
+  // ---------------------------------------------------------------------------
+
+  /**
+   * participant_fields schema for a covenant formation ritual:
+   * - chosen_covenant_role: covenant_role_picker
+   *   emits_reference: "COVENANT_ROLE"
+   *   depends_on: "covenant_type"  (bare session-kwargs key, NOT a session-reference path)
+   *   required: true
+   *   (NO applies_to — all founders need a role, including the initiator)
+   */
+  const formationParticipantFieldsSchema: RitualInputSchema = {
+    fields: [
+      {
+        name: 'chosen_covenant_role',
+        label: 'Covenant Role',
+        type: 'covenant_role_picker',
+        emits_reference: 'COVENANT_ROLE',
+        depends_on: 'covenant_type',
+        required: true,
+      },
+    ],
+  };
+
+  // Formation session: covenant_type lives in session_kwargs (drafted by the initiator).
+  const formationSession: RitualSessionDetail = {
+    ...sampleSessionDetail,
+    id: 2,
+    session_kwargs: {
+      name: 'The Iron Pact',
+      covenant_type: 'durance',
+      sworn_objective: 'Defend the realm',
+    },
+  };
+
+  it('renders role picker for the initiator (no applies_to gate) and resolves covenant_type from session_kwargs', async () => {
+    // Stub apiFetch for roles list only (no covenant detail fetch needed —
+    // depends_on resolves from session_kwargs directly).
+    vi.mocked(apiFetch).mockImplementation((url: string) => {
+      if (url.includes('/api/covenants/roles/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ id: 12, name: 'Warden', covenant_type: 'durance' }],
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+
+    const acceptMutate = vi.fn();
+    mockUseAcceptRitualSession.mockReturnValue({ ...idleMutation, mutate: acceptMutate });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RitualSessionResponseDialog
+            session={formationSession}
+            // participantId 99 IS the initiator — FORMATION must still show the picker.
+            participantId={99}
+            open={true}
+            onOpenChange={vi.fn()}
+            participantFieldsSchema={formationParticipantFieldsSchema}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // Assertion 1: the role picker renders for the initiator (no applies_to gate).
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+
+    // Wait for roles to load (driven by covenant_type from session_kwargs).
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).not.toBeDisabled();
+    });
+
+    // Drive the Radix Select: open and pick 'Warden'.
+    await userEvent.click(screen.getByRole('combobox'));
+    await userEvent.click(await screen.findByText('Warden'));
+
+    // Click Accept.
+    await waitFor(() => {
+      expect(screen.getByTestId('accept-button')).not.toBeDisabled();
+    });
+    await userEvent.click(screen.getByTestId('accept-button'));
+
+    // Assertion 2: accept mutation was called with the COVENANT_ROLE reference.
+    await waitFor(() => {
+      expect(acceptMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 2,
+          body: expect.objectContaining({
+            references: [{ kind: 'COVENANT_ROLE', ref_covenant_role_id: 12 }],
+          }),
+        }),
+        expect.anything()
+      );
+    });
+  });
 });

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.captivity.constants import CaptivityStatus
 from world.captivity.models import Captivity
 from world.captivity.services import capture_character
@@ -14,6 +14,7 @@ from world.character_sheets.types import LifecycleState
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
+from world.combat.interpose_content import ensure_interpose_content
 from world.conditions.factories import ConditionTemplateFactory, DamageTypeFactory
 from world.conditions.models import ConditionInstance
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
@@ -26,7 +27,9 @@ from world.missions.factories import (
 from world.missions.models import MissionInstance
 from world.missions.services.run import grant_rescue_mission
 from world.scenes.factories import SceneFactory
+from world.scenes.models import PendingSuddenHarm
 from world.societies.factories import OrganizationFactory
+from world.vitals.factories import CharacterVitalsFactory
 from world.vitals.models import CharacterVitals
 
 
@@ -158,6 +161,39 @@ class DealDamageHandlerTests(TestCase):
         context = ResolutionContext(character=char_no_sheet)
         result = apply_effect(effect, context)
         assert result.applied is False
+
+    def test_defers_when_bystander_present(self) -> None:
+        """A conscious bystander present holds the harm for a reactive Interpose beat.
+
+        Above SceneRoundDefaultsConfig.sudden_harm_interpose_threshold (default 10),
+        with a bystander present, _deal_damage must NOT drop health immediately —
+        it defers via arm_or_apply_sudden_harm (#1316).
+        """
+        ensure_interpose_content()
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.character.db_location = room
+        self.character.save(update_fields=["db_location"])
+
+        bystander = CharacterFactory(db_key="bystander")
+        bystander_sheet = CharacterSheetFactory(character=bystander)
+        CharacterVitalsFactory(character_sheet=bystander_sheet)
+        bystander.db_location = room
+        bystander.save(update_fields=["db_location"])
+
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.DEAL_DAMAGE,
+            damage_amount=15,
+            damage_type=self.damage_type,
+        )
+        context = ResolutionContext(character=self.character)
+        with patch("world.mechanics.effect_handlers.process_damage_consequences", autospec=True):
+            result = apply_effect(effect, context)
+
+        self.vitals.refresh_from_db()
+        assert self.vitals.health == 100
+        assert result.applied is True
+        assert PendingSuddenHarm.objects.filter(target_sheet=self.sheet).exists()
 
 
 def _captive_loop_template(name: str):

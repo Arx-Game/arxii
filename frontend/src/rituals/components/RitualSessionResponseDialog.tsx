@@ -14,16 +14,21 @@
  * Decline button and a plain Accept button (no form) are shown.
  *
  * --- depends_on path resolution ---
- * CovenantRolePickerField has `depends_on: "session.target_covenant.covenant_type"`.
- * We resolve this path by:
- *   1. Reading the COVENANT-kind entry from session.session_references (the primary path for
- *      induction sessions). Falls back to extracting target_covenant from session_kwargs for
- *      older sessions that stored it there.
- *   2. Fetching GET /api/covenants/covenants/{id}/ to get covenant_type.
- *   3. Injecting the resolved value into formValues under the full depends_on key
- *      "session.target_covenant.covenant_type" before passing to RitualForm.
- * CovenantRolePickerField reads formValues[field.depends_on] — the key is the full path
- * string, so no changes are needed to CovenantRolePickerField itself.
+ * Two strategies, tried together:
+ *
+ *  1. Session-reference path (induction): CovenantRolePickerField declares
+ *     `depends_on: "session.target_covenant.covenant_type"`. We resolve this by:
+ *     a. Reading the COVENANT-kind entry from session.session_references (falls
+ *        back to extracting target_covenant from session_kwargs for older sessions).
+ *     b. Fetching GET /api/covenants/covenants/{id}/ to get covenant_type.
+ *     c. Injecting the resolved value into formValues under the full depends_on key.
+ *
+ *  2. Bare session-kwargs key (formation): CovenantRolePickerField declares
+ *     `depends_on: "covenant_type"`. We inject all string/number session_kwargs
+ *     under their bare keys, so the picker finds the value directly — no fetch.
+ *
+ * CovenantRolePickerField reads formValues[field.depends_on]; the key matches the
+ * depends_on string, so no changes are needed to CovenantRolePickerField itself.
  *
  * --- applies_to gating ---
  * Fields with applies_to === "candidate_only" are hidden from the initiator. The
@@ -128,6 +133,28 @@ function useTargetCovenantType(session: RitualSessionDetail): string | null {
   return data?.covenant_type ?? null;
 }
 
+/**
+ * Extract session_kwargs as a flat record suitable for depends_on resolution.
+ *
+ * FORMATION's chosen_covenant_role field uses depends_on: "covenant_type" — a
+ * bare key into session_kwargs. By injecting all session kwargs under their
+ * bare keys, CovenantRolePickerField finds the value via formValues[field.depends_on].
+ *
+ * Only string and number values are injected; nested objects/arrays are skipped
+ * (no current depends_on key references them).
+ */
+function extractSessionKwargsForDependsOn(sessionKwargs: unknown): Record<string, string | number> {
+  const result: Record<string, string | number> = {};
+  if (typeof sessionKwargs !== 'object' || sessionKwargs === null) return result;
+  const kw = sessionKwargs as Record<string, unknown>;
+  for (const [k, v] of Object.entries(kw)) {
+    if (typeof v === 'string' || typeof v === 'number') {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Module-level constants
 // ---------------------------------------------------------------------------
@@ -171,20 +198,30 @@ export function RitualSessionResponseDialog({
   const acceptMutation = useAcceptRitualSession();
   const declineMutation = useDeclineRitualSession();
 
-  // Resolve depends_on path "session.target_covenant.covenant_type".
-  // We fetch the target covenant's type and inject it into formValues under the full
-  // depends_on key. CovenantRolePickerField reads formValues[field.depends_on] which
-  // is the full string "session.target_covenant.covenant_type" — so the key must match.
+  // Resolve depends_on paths.
+  //
+  // Two resolution strategies, tried in order:
+  //  1. Session-reference path (induction): "session.target_covenant.covenant_type"
+  //     — fetch the COVENANT referenced at session level and read its covenant_type.
+  //  2. Bare session-kwargs key (formation): "covenant_type"
+  //     — read the value directly from session.session_kwargs.
+  //
+  // CovenantRolePickerField reads formValues[field.depends_on]; we inject the
+  // resolved value under that key so the picker can find it.
   const targetCovenantType = useTargetCovenantType(session);
 
   /**
-   * Build the formValues passed to RitualForm, injecting the resolved covenant_type
-   * under the full depends_on path key so CovenantRolePickerField can read it.
+   * Build the formValues passed to RitualForm, injecting resolved depends_on
+   * values so dependent fields (e.g. CovenantRolePickerField) can read them.
    */
   const formValuesWithResolved: Record<string, string | number | null> = {
     ...participantValues,
-    // Inject resolved path value so CovenantRolePickerField finds it via:
-    //   formValues[field.depends_on]  where depends_on = "session.target_covenant.covenant_type"
+    // Session-kwargs values: inject every session kwarg under its bare key so
+    // fields with depends_on pointing at a session kwarg (e.g. "covenant_type"
+    // in FORMATION) resolve without a separate fetch.
+    ...extractSessionKwargsForDependsOn(session.session_kwargs),
+    // Session-reference path (induction): the resolved covenant_type from the
+    // COVENANT session-reference, injected under the full path key.
     'session.target_covenant.covenant_type': targetCovenantType,
   };
 

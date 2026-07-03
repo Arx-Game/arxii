@@ -298,7 +298,7 @@ CHALLENGE_DEFS: list[tuple[str, str, int, str, list[str], list[tuple[str, str, s
         [
             ("Cow", "Cow", "Intimidation"),
             ("Convince", "Convince", "Persuasion"),
-            ("Bluff", "Bluff", "Deception"),
+            ("Bluff", "Bluff", "Deceive"),
             ("Seduce", "Seduce", "Seduction"),
         ],
     ),

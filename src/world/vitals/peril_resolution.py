@@ -122,26 +122,20 @@ def potential_rescuer_present(
     ``exclude_character_id`` omits one further character from the rescuer set —
     used by the solo-departure path (``Room.at_object_leave`` fires while the
     mover is still in ``room.contents``, so the departing character must not be
-    counted as a remaining rescuer).
+    counted as a remaining rescuer). Thin wrapper over the shared
+    ``conscious_bystander_present`` core (#1813); the hostile-source exclusion is
+    resolved here (not moved into the shared helper) since it is specific to acute
+    peril's involved-party classification.
     """
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+    from world.vitals.services import conscious_bystander_present  # noqa: PLC0415
 
-    from world.vitals.services import can_act  # noqa: PLC0415
-
-    victim_id = victim_sheet.character_id
     source_ids = _acute_peril_source_ids(victim_sheet)
-    for obj in room.contents:
-        try:
-            sheet = obj.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            continue
-        if sheet.character_id == victim_id or sheet.character_id in source_ids:
-            continue
-        if exclude_character_id is not None and sheet.character_id == exclude_character_id:
-            continue
-        if can_act(sheet):
-            return True
-    return False
+    exclude_ids = frozenset(
+        source_ids | ({exclude_character_id} if exclude_character_id is not None else set())
+    )
+    return conscious_bystander_present(
+        room, subject_id=victim_sheet.character_id, exclude_ids=exclude_ids
+    )
 
 
 def mark_abandoned(victim_sheet: "CharacterSheet", scene_round: "SceneRound") -> None:

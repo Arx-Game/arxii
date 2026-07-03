@@ -566,7 +566,8 @@ effects for graph mutation and flight).
   **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM
 - **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
   `PositionDestination` in `world/checks/constants.py`
-  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED) — governs `MOVE_TO_POSITION` effect destination
+  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED / AWAY_FROM_ACTOR) — governs `MOVE_TO_POSITION`
+  effect destination; AWAY_FROM_ACTOR is combat's knockback primitive (#1317)
 - **Seed factory:** `AerialPropertyFactory` (`world/mechanics/factories.py`) — get-or-create
   factory for the `"aerial"` `Property` tag used to track airborne objects
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
@@ -583,7 +584,9 @@ effects for graph mutation and flight).
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
   `dispatch_catch` → `resolve_catch` (`plummet.py`) — STRICT danger round (#1466) + `Plummeting` +
   per-round descent/impact + capability-gated bystander catch
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
+- **Gated blueprint edges (built — #1216):** `BlueprintEdge.gating_challenge_template` →
+  `instantiate_blueprint` mints a live `ChallengeInstance` via `instantiate_challenge`
+  (`world.mechanics.challenge_resolution`) on staging.
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),
@@ -641,7 +644,8 @@ Social structures, organizations, reputation, and legend tracking.
   `Secret` (blackmail material); public news/leaks set `societies_aware`,
   fire `apply_archetype_society_reputation`, and scale `spread_multiplier`
   by the involved personas' fame (`FAME_SPREAD_FACTORS`). Containment =
-  best-of Deception/Intimidation vs crowd size; Stealth (new skill, seeded)
+  Household Command for own-household witnesses, else best-of Con/Intimidation
+  by stat (ruled 2026-07-03); Stealth (new skill, seeded)
   is the act-time leg, wiring later. Untagged deeds skip the fork.
 - **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
@@ -990,6 +994,29 @@ action consent flow, and a three-mode non-combat round framework.
     - `SuccorSceneAction` (`actions/definitions/rounds.py`, key `"scene_succor"`) — the REGISTRY
       dispatch surface wrapping `declare_succor_scene`; shared by telnet `scene succor <ally>`
       (`CmdScene`) and the web dispatcher.
+  - **Out-of-combat sudden-harm Interpose (#1316) — the non-combat sibling of combat's Interpose
+    maneuver, for one-shot ambush/trap damage rather than a recurring hazard tick:**
+    - `PendingSuddenHarm` (`models.py`) — one-shot damage payload held pending a reactive Interpose
+      beat: `target_sheet` (OneToOne `CharacterSheet`), `scene_round` FK, `amount`, `damage_type`
+      (nullable FK), `source_description`.
+    - `arm_or_apply_sudden_harm(target, amount, damage_type, *, source_description="")`
+      (`sudden_harm.py`) — called from `world.mechanics.effect_handlers._deal_damage`; applies
+      immediately via `apply_resolved_damage` below `sudden_harm_interpose_threshold` or with no
+      bystander present, else binds an Interpose `ChallengeInstance`, bootstraps a DANGER round
+      (`ensure_round_for_acute_condition`), and creates a `PendingSuddenHarm` row.
+    - `declare_interpose_scene(participant, ally)` (`round_services.py`) — writes/updates a
+      deferred `SceneActionDeclaration.interpose_target` for the current round; named-ally only
+      (mirrors `declare_succor_scene`'s #1744 narrowing).
+    - `resolve_pending_interpose_harm(scene_round)` (`sudden_harm.py`) — called from
+      `resolve_scene_round` right after the END tick; resolves each pending harm via the unchanged
+      `world.combat.services.dispatch_interpose` against this round's `interpose_target`
+      declaration (if any), applies the result via `apply_resolved_damage`, then cleans up the
+      `ChallengeInstance` and `PendingSuddenHarm` row. No declaration -> full harm lands (AFK-safe
+      default).
+    - `InterposeSceneAction` (`actions/definitions/rounds.py`, key `"scene_interpose"`) — the
+      REGISTRY dispatch surface wrapping `declare_interpose_scene`, registered and callable via
+      the web dispatcher (`Action().run()`) and telnet (`scene interpose <ally>`,
+      `commands/scene.py`'s `CmdScene`, mirroring `scene succor <ally>`).
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.
@@ -1283,7 +1310,7 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   per-stream proportional landing), `improve_org_domain` (Domain Investment check → gross
   bump + graft crackdown), `process_income_stream(stream, amount)` (landing path),
   `settle_obligations`, `run_weekly_economy` (Sunday rollover phases)
-- **Checks (#930):** Tax Collection (presence + Organization + Stewardship) and Domain
+- **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Books surface:** `GET /api/currency/org-books/{org}/` (`OrgBooksViewSet`) — treasury,
   graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,
@@ -1514,6 +1541,11 @@ registering a service strategy + per-kind details model.
 - **Tests:** `src/world/room_features/tests/`. SANCTUM install and
   upgrade are exercised end-to-end via the SanctumDetails layer below.
 - **Source:** `src/world/room_features/`
+- **Traps** (`world.room_features.models.Trap`, #1051/#520 Phase 6, position-scoped #1317):
+  a room-anchored (or, optionally, `Position`-anchored) hazard resolved through the shared
+  check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
+  `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
+  since a room may hold several.
 
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
@@ -2081,23 +2113,33 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (`TerrainType`, #1711); `movement_cost` (authored, no consuming action yet, #1711);
   `controlled_by` FK → `BattleSide`, nullable, set by a successful HOLD declaration, #1712),
   `BattleUnit` (`descriptor` free-text flavor tag — renamed from the spine's `unit_type`,
-  #1711; `composition` (`UnitComposition`) and `quality` (`UnitQuality`) drive mechanics,
-  #1711; `commander` / `summoned_by` FK → `character_sheets.CharacterSheet`, #1711;
-  `strength` attrited by STRIKE; `morale` — a second resource, starts well below its
-  ceiling, damaged by ROUT / restored by RALLY, #1712; `status` always DERIVED jointly from
-  `strength` + `morale` via `resolution._compute_unit_status`, never written directly),
+  #1711; `properties` (M2M → `mechanics.Property`, presence-only tags) and `capabilities`
+  (M2M → `conditions.CapabilityType` through `BattleUnitCapability`, authored per-unit
+  magnitude) replace #1711's single-select `composition`/`UnitComposition`, #1794;
+  `individual_count` (nullable, data-only, mirrors `CombatOpponent.swarm_count`'s naming,
+  #1794); `quality` (`UnitQuality`) drives mechanics, #1711; `commander` / `summoned_by` FK
+  → `character_sheets.CharacterSheet`, #1711; `strength` attrited by STRIKE; `morale` — a
+  second resource, starts well below its ceiling, damaged by ROUT / restored by RALLY,
+  #1712; `status` always DERIVED jointly from `strength` + `morale` via
+  `resolution._compute_unit_status`, never written directly; `effective_capability`/
+  `has_property` conform to `mechanics.types.HasCapabilities`/`HasProperties`, #1794),
+  `BattleUnitCapability` (authored `(unit, capability) → magnitude` through row, #1794;
+  unique `(unit, capability)`),
   `BattleRound` (subclasses `AbstractRound`; partial unique constraint: one active round per
   battle), `BattleParticipant` (`character_sheet` FK, `side`, `place`, `status`; unique
   `(battle, character_sheet)`), `BattleActionDeclaration` (`technique` FK required,
   `action_kind` STRIKE/SUPPORT/RESCUE/ROUT/RALLY/REPEL/HOLD, `target_unit`, `target_ally`,
   `scope` (`BattleActionScope` UNIT/PLACE/SIDE, #1710) + `target_place`/`target_side`,
   `resolved`, `success_level`; unique `(battle_round, participant)`);
-  `TechniqueCompositionAffinity` / `TerrainCompositionEffect` (authored type-matchup /
-  terrain-effect catalogs, #1711); `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
+  `TechniquePropertyAffinity` / `TerrainPropertyEffect` (authored type-matchup /
+  terrain-effect catalogs keyed on `Property`, summed across a unit's matching properties,
+  #1794, replacing #1711's `TechniqueCompositionAffinity`/`TerrainCompositionEffect`);
+  `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
   tier for beat resolution, #1785); `Battle.afk_peril_override` (BooleanField, default
   False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
 - **Key Services (`world.battles.services`):**
-  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit`, `enlist_participant`,
+  - Setup: `create_battle`, `add_side`, `add_place`, `add_unit` (`properties`/
+    `capability_values`/`individual_count` kwargs, #1794), `enlist_participant`,
     `set_battle_side_posture` (#1711), `assign_unit_commander` (#1711)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
     `declare_battle_action` (requires `technique`; update_or_create; now dispatches 7
@@ -2111,8 +2153,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Resolution (`world.battles.resolution`):** `resolve_battle_round(battle_round)` →
   `BattleRoundResult` — casts each declaration's `technique` via `resolve_battle_technique`
   (routes through the real `use_technique` magic envelope, not a generic shared check),
-  folding in the five-source modifier stack (composition affinity, terrain, unit quality,
-  commander bonus, posture, #1711); REPEL resolves before every other kind so its defense
+  folding in the five-source modifier stack (Property affinity, terrain, unit quality,
+  commander bonus, posture — #1711/#1794); REPEL resolves before every other kind so its defense
   bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
   strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
   RESCUE clears Surrounded; failure debits PC health + `process_damage_consequences`.
@@ -2130,7 +2172,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   also accept `side` or `place <name>` scope tokens (#1710/#1712)
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
   `BattleActionKind` (7 values), `BattleActionScope` (#1710), `BattleOutcome`,
-  `UnitComposition`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711)
+  `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711)
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
   `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
   `TechniqueNotBattleReadyError`, `NoCommandHierarchyError`, `InsufficientCommandTierError`,
@@ -2168,10 +2210,13 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `test_battle_peril_rescue_e2e.py`
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant/commander FK),
   vitals (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
-  conditions (the "Surrounded" staged `ConditionTemplate`, #1733), magic
+  conditions (the "Surrounded" staged `ConditionTemplate`, #1733; `CapabilityType` via
+  `BattleUnit.capabilities`/`BattleUnitCapability`, #1794), magic
   (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
-  → `use_technique`; `TechniqueCompositionAffinity.technique` FK; military-grade
-  `summon_ally(payload.military=True)`, #1711), checks (`perform_check` sourced from the
+  → `use_technique`; `TechniquePropertyAffinity.technique` FK, #1794; military-grade
+  `summon_ally(payload.military=True)` now reading `payload.properties`/
+  `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
+  `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from the
   cast technique's `action_template.check_type`, via `use_technique`; `select_consequence`
   for the Surrounded entry roll and resist checks, #1733), combat
   (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710; shared

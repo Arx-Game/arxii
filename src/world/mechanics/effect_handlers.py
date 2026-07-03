@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence, ConsequenceEffect
     from world.checks.types import ResolutionContext
+    from world.conditions.models import DamageType
     from world.magic.models import Affinity, Resonance
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,42 @@ def _remove_property(
     )
 
 
+def apply_resolved_damage(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    amount: int,
+    damage_type: "DamageType | None",
+) -> int:
+    """Apply a resolved (post-interpose, if any) damage amount to *target*'s health.
+
+    Shared tail of the non-combat damage pipeline: thread-DR, damage-type resistance,
+    vitals debit, survivability consequences. Used both by the immediate path (no
+    reactive beat needed) and by ``world.scenes.sudden_harm.resolve_pending_interpose_harm``
+    (post-interpose resolution). Returns the actual amount dealt (0 if fully absorbed).
+    """
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
+    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
+
+    effective = amount
+    if hasattr(target, "threads"):
+        effective = apply_damage_reduction_from_threads(target, effective)
+    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
+    # Closes the asymmetry where traps ignored a character's damage-type resistance.
+    effective = resolve_damage_type_resistance(target, effective, damage_type)
+    if effective <= 0:
+        return 0
+
+    vitals = target.sheet_data.vitals
+    vitals.health -= effective
+    vitals.save(update_fields=["health"])
+
+    process_damage_consequences(
+        character_sheet=target.sheet_data,
+        damage_dealt=effective,
+        damage_type=damage_type,
+    )
+    return effective
+
+
 def _deal_damage(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -232,7 +269,7 @@ def _deal_damage(
         )
 
     try:
-        vitals = target.sheet_data.vitals
+        _ = target.sheet_data.vitals
     except (AttributeError, ObjectDoesNotExist):
         return AppliedEffect(
             effect_type=EffectType.DEAL_DAMAGE,
@@ -241,36 +278,15 @@ def _deal_damage(
             skip_reason="Target has no CharacterVitals",
         )
 
-    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
-    from world.magic.services import apply_damage_reduction_from_threads  # noqa: PLC0415
-
-    damage_amount = effect.damage_amount
-    if hasattr(target, "threads"):
-        damage_amount = apply_damage_reduction_from_threads(target, damage_amount)
-    # Damage-type resistance (condition + gift-thread) via the shared seam (#1588).
-    # Closes the asymmetry where traps ignored a character's damage-type resistance.
-    damage_amount = resolve_damage_type_resistance(target, damage_amount, effect.damage_type)
-    if damage_amount <= 0:
-        return AppliedEffect(
-            effect_type=EffectType.DEAL_DAMAGE,
-            description="Damage fully absorbed by thread survivability",
-            applied=False,
-            skip_reason="Reduced to zero",
-        )
-
-    vitals.health -= damage_amount
-    vitals.save(update_fields=["health"])
-
-    process_damage_consequences(
-        character_sheet=target.sheet_data,
-        damage_dealt=damage_amount,
-        damage_type=effect.damage_type,
-    )
+    from world.scenes.sudden_harm import arm_or_apply_sudden_harm  # noqa: PLC0415
 
     damage_type_name = effect.damage_type.name if effect.damage_type else "untyped"
+    arm_or_apply_sudden_harm(target, effect.damage_amount, effect.damage_type)
     return AppliedEffect(
         effect_type=EffectType.DEAL_DAMAGE,
-        description=f"Dealt {damage_amount} {damage_type_name} damage",
+        description=(
+            f"Dealt (or held pending Interpose) {effect.damage_amount} {damage_type_name} damage"
+        ),
         applied=True,
     )
 
@@ -648,15 +664,25 @@ def _resolve_position(
     Returns None when unresolved (handler skips).
     """
     from world.areas.positioning.models import Position  # noqa: PLC0415
-    from world.areas.positioning.services import position_of  # noqa: PLC0415
-    from world.checks.constants import PositionDestination  # noqa: PLC0415
 
     room = context.location
     if role == _ROLE_NAMED:
         return Position.objects.filter(room=room, name=effect.position_name).first()
     if role == _ROLE_NAMED_B:
         return Position.objects.filter(room=room, name=effect.position_name_b).first()
-    # destination role — dispatch on PositionDestination value
+    return _resolve_destination(effect, context)
+
+
+def _resolve_destination(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> "Position | None":
+    """Dispatch role="destination" on effect.position_destination."""
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
+    from world.checks.constants import PositionDestination  # noqa: PLC0415
+
+    room = context.location
     dest = effect.position_destination
     if dest == PositionDestination.ACTOR_POSITION:
         return position_of(context.character)
@@ -664,7 +690,51 @@ def _resolve_position(
         return Position.objects.filter(room=room, name=effect.position_name).first()
     if dest == PositionDestination.GATING_FAR_SIDE:
         return _gating_far_side(effect, context)
+    if dest == PositionDestination.AWAY_FROM_ACTOR:
+        return _resolve_away_from_actor(effect, context)
     return None
+
+
+def _resolve_away_from_actor(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> "Position | None":
+    """Resolve a knockback destination: a Position adjacent to the TARGET that
+    is not itself adjacent to the actor (i.e. actually puts distance between
+    them). Deterministic tie-break by lowest pk. Returns None if either side
+    lacks a Position, the target has no valid neighbor to be pushed into, or
+    the target resists via the ``sure_footed`` Capability (#1793) — same
+    no-op semantics as every other early return here.
+    """
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        adjacent_open_positions,
+        position_of,
+    )
+
+    target = _resolve_target(effect, context)
+    if target.has_capability("sure_footed"):
+        return None
+    actor_pos = position_of(context.character)
+    target_pos = position_of(target)
+    if actor_pos is None or target_pos is None:
+        return None
+
+    target_edges = adjacent_open_positions(target_pos)
+    neighbors = [
+        e.position_b if e.position_a_id == target_pos.pk else e.position_a for e in target_edges
+    ]
+    if not neighbors:
+        return None
+
+    actor_neighbor_ids = {
+        e.position_b_id if e.position_a_id == actor_pos.pk else e.position_a_id
+        for e in adjacent_open_positions(actor_pos)
+    }
+    away = [p for p in neighbors if p.pk not in actor_neighbor_ids and p.pk != actor_pos.pk]
+    candidates = away or [p for p in neighbors if p.pk != actor_pos.pk]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda p: p.pk)
 
 
 def _create_position(
