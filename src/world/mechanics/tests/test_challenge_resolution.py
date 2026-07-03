@@ -14,6 +14,7 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
+from world.mechanics.challenge_resolution import instantiate_challenge
 from world.mechanics.constants import CapabilitySourceType, ResolutionType
 from world.mechanics.factories import (
     ApplicationFactory,
@@ -796,3 +797,31 @@ class ResolveFullTests(TestCase):
         )
         assert record.consequence == override_consequence
         assert record.outcome == approach_outcome
+
+
+class InstantiateChallengeTests(TestCase):
+    def test_mints_active_revealed_instance(self):
+        from evennia_extensions.factories import ObjectDBFactory
+
+        template = ChallengeTemplateFactory()
+        room = ObjectDBFactory()
+
+        instance = instantiate_challenge(template, location=room, target_object=room)
+
+        self.assertIsInstance(instance, ChallengeInstance)
+        self.assertEqual(instance.template_id, template.pk)
+        self.assertEqual(instance.location_id, room.pk)
+        self.assertEqual(instance.target_object_id, room.pk)
+        self.assertTrue(instance.is_active)
+        self.assertTrue(instance.is_revealed)
+
+    def test_two_calls_mint_two_independent_instances(self):
+        from evennia_extensions.factories import ObjectDBFactory
+
+        template = ChallengeTemplateFactory()
+        room = ObjectDBFactory()
+
+        first = instantiate_challenge(template, location=room, target_object=room)
+        second = instantiate_challenge(template, location=room, target_object=room)
+
+        self.assertNotEqual(first.pk, second.pk)

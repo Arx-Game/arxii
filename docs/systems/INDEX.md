@@ -584,7 +584,9 @@ effects for graph mutation and flight).
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
   `dispatch_catch` → `resolve_catch` (`plummet.py`) — STRICT danger round (#1466) + `Plummeting` +
   per-round descent/impact + capability-gated bystander catch
-- **Deferred:** gated blueprint edges (requires absent `instantiate_situation()` service)
+- **Gated blueprint edges (built — #1216):** `BlueprintEdge.gating_challenge_template` →
+  `instantiate_blueprint` mints a live `ChallengeInstance` via `instantiate_challenge`
+  (`world.mechanics.challenge_resolution`) on staging.
 - **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),
