@@ -257,6 +257,49 @@ def is_untargetable(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
     ).exists()
 
 
+def is_concealed(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """True if *target* holds any active perception-concealing condition.
+
+    Mirrors is_untargetable's derive-on-read pattern (#1225).
+    """
+    return _active_concealments(target).exists()
+
+
+def can_perceive(actor: "ObjectDB", target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """Whether *actor* can perceive *target*.
+
+    Co-located (the pre-#1225 MVP baseline, unchanged), and either target carries no
+    active concealing condition or actor's sheet has detected every concealing
+    instance currently active on target (per-observer, not blanket — #1225).
+    """
+    if target.location not in (actor.location, actor):
+        return False
+    concealments = _active_concealments(target)
+    if not concealments.exists():
+        return True
+    actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if actor_sheet is None:
+        return False
+    return not concealments.exclude(detected_by=actor_sheet).exists()
+
+
+def register_detection(
+    observer_sheet: "CharacterSheet",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Record that observer_sheet has pierced target's active concealment(s) (#1225)."""
+    for instance in _active_concealments(target):
+        instance.detected_by.add(observer_sheet)
+
+
+def _active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # noqa: OBJECTDB_PARAM
+    return target.condition_instances.filter(
+        condition__category__conceals_from_perception=True,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+    )
+
+
 @dataclass
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
