@@ -535,6 +535,14 @@ class BattleActionDeclaration(SharedMemoryModel):
         related_name="scoped_declarations",
         help_text="Set when scope=SIDE.",
     )
+    target_fortification = models.ForeignKey(
+        Fortification,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="declarations",
+        help_text="Set when action_kind is BREACH or FORTIFY (#1713).",
+    )
     resolved = models.BooleanField(default=False)
     success_level = models.SmallIntegerField(
         default=0,

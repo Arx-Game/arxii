@@ -116,6 +116,7 @@ class BattleActionDeclarationFactory(factory_django.DjangoModelFactory):
     scope = BattleActionScope.UNIT
     resolved = False
     success_level = 0
+    target_fortification = None
 
 
 _PAYLOAD_PARAM = "@payload"

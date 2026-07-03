@@ -6,6 +6,9 @@ from django.test import SimpleTestCase
 
 from world.battles.exceptions import (
     CharacterDoesNotKnowTechniqueError,
+    FortificationAlreadyBreachedError,
+    FortificationOwnershipMismatchError,
+    FortificationTargetRequiredError,
     PlaceScopeRequiredError,
     TechniqueNotBattleReadyError,
 )
@@ -31,3 +34,17 @@ class PlaceScopeRequiredErrorTests(SimpleTestCase):
             exc.user_message,
             "That action can only be declared at a front (place scope).",
         )
+
+
+class FortificationExceptionTests(SimpleTestCase):
+    def test_fortification_target_required_error_message(self) -> None:
+        exc = FortificationTargetRequiredError()
+        self.assertIn("target fortification", exc.user_message)
+
+    def test_fortification_ownership_mismatch_error_message(self) -> None:
+        exc = FortificationOwnershipMismatchError()
+        self.assertIn("BREACH", exc.user_message)
+
+    def test_fortification_already_breached_error_message(self) -> None:
+        exc = FortificationAlreadyBreachedError()
+        self.assertIn("already been breached", exc.user_message)

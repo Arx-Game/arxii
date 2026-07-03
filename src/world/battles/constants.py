@@ -51,6 +51,8 @@ class BattleActionKind(models.TextChoices):
     RALLY = "rally", "Rally an ally"
     REPEL = "repel", "Repel an attack"
     HOLD = "hold", "Hold or seize an objective"
+    BREACH = "breach", "Breach a fortification"
+    FORTIFY = "fortify", "Fortify a structure"
 
 
 class BattleActionScope(models.TextChoices):

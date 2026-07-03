@@ -19,6 +19,8 @@ class BattleConstantsTests(TestCase):
             "rally",
             "repel",
             "hold",
+            "breach",
+            "fortify",
         }
 
     def test_battle_action_kind_has_rescue(self) -> None:
@@ -48,3 +50,9 @@ class BattleConstantsTests(TestCase):
         assert constants.HOLD_CAPTURE_VP == 8
         assert constants.HOLD_SUSTAIN_VP == 3
         assert constants.REPEL_DEFENSE_BONUS == 15
+
+
+class BattleActionKindSiegeTests(TestCase):
+    def test_breach_and_fortify_are_valid_choices(self) -> None:
+        self.assertIn(BattleActionKind.BREACH, BattleActionKind.values)
+        self.assertIn(BattleActionKind.FORTIFY, BattleActionKind.values)
