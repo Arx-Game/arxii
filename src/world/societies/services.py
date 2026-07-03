@@ -49,6 +49,7 @@ def create_solo_deed(  # noqa: PLR0913
     scene: Scene | None = None,
     story: Story | None = None,
     crime_kinds: list | None = None,
+    archetypes: list | None = None,
 ) -> LegendEntry:
     """Create a legend deed not tied to a shared event.
 
@@ -63,6 +64,9 @@ def create_solo_deed(  # noqa: PLR0913
         crime_kinds: Optional ``justice.CrimeKind`` rows this deed is an instance
             of (#1765) — criminality is declared at deed birth, so knowledge
             spreading mints pursuit heat wherever a law matches.
+        archetypes: Optional ``PhilosophicalArchetype`` rows framing the act
+            (#1464) — deed sources SHOULD tag; untagged deeds can never read as
+            scandal (missed tags = missed scandals) and skip the reach fork.
 
     Returns:
         The created LegendEntry.
@@ -83,6 +87,8 @@ def create_solo_deed(  # noqa: PLR0913
         from world.justice.services import tag_deed_crimes  # noqa: PLC0415
 
         tag_deed_crimes(entry, crime_kinds)
+    if archetypes:
+        entry.archetypes.set(archetypes)
     if scene is not None:
         # #902 — everyone on the scene list witnessed the deed's birth.
         from world.societies.knowledge_services import (  # noqa: PLC0415
@@ -90,12 +96,17 @@ def create_solo_deed(  # noqa: PLR0913
             scene_witness_personas,
         )
 
+        witnesses = scene_witness_personas(scene)
         grant_deed_knowledge(
             deed=entry,
-            personas=scene_witness_personas(scene),
+            personas=witnesses,
             source=DeedKnowledgeSource.WITNESSED,
             room=scene.location,
         )
+        # #1464 — the reach fork: contained Secret vs society awareness.
+        from world.societies.scandal import route_deed_reach  # noqa: PLC0415
+
+        route_deed_reach(entry=entry, scene=scene, actor_persona=persona, witnesses=witnesses)
     new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
@@ -117,6 +128,7 @@ def create_legend_event(  # noqa: PLR0913
     story: Story | None = None,
     created_by: AccountDB | None = None,
     crime_kinds: list | None = None,
+    archetypes: list | None = None,
 ) -> tuple[LegendEvent, list[LegendEntry]]:
     """Create a shared event and individual deeds for each participant.
 
@@ -132,6 +144,9 @@ def create_legend_event(  # noqa: PLR0913
         crime_kinds: Optional ``justice.CrimeKind`` rows the shared act is an
             instance of (#1765) — criminality belongs to the act, so every
             participant's entry gets tagged and soaks heat as word spreads.
+        archetypes: Optional ``PhilosophicalArchetype`` rows framing the shared
+            act (#1464) — every participant's entry carries them; the reach
+            fork routes each entry (each participant hushes their own part).
 
     Returns:
         Tuple of (LegendEvent, list of LegendEntry instances).
@@ -171,12 +186,16 @@ def create_legend_event(  # noqa: PLR0913
 
         for e in entries:
             tag_deed_crimes(e, crime_kinds)
+    if archetypes:
+        for e in entries:
+            e.archetypes.set(archetypes)
     if scene is not None:
         # #902 — scene-list witnesses know every deed born from the event.
         from world.societies.knowledge_services import (  # noqa: PLC0415
             grant_deed_knowledge,
             scene_witness_personas,
         )
+        from world.societies.scandal import route_deed_reach  # noqa: PLC0415
 
         witnesses = scene_witness_personas(scene)
         for e in entries:
@@ -186,6 +205,8 @@ def create_legend_event(  # noqa: PLR0913
                 source=DeedKnowledgeSource.WITNESSED,
                 room=scene.location,
             )
+            # #1464 — each participant routes (and hushes) their own part.
+            route_deed_reach(entry=e, scene=scene, actor_persona=e.persona, witnesses=witnesses)
     all_credits: list[CovenantLegendCredit] = []
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))

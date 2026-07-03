@@ -91,6 +91,12 @@ def _seed_governance() -> None:
     seed_governance_check_content()
 
 
+def _seed_stealth() -> None:
+    from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
+
+    seed_stealth_check_content()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -126,6 +132,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
     # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
     "governance": _seed_governance,
+    # Stealth: the act-time concealment skill + check (#1464). After "checks".
+    "stealth": _seed_stealth,
 }
 
 
@@ -202,4 +210,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
         # "checks"); appears as a seeded cluster with no standalone content model (#930).
         "governance": [],
+        # Stealth seeds skill/check rows counted under "checks" (#1464).
+        "stealth": [],
     }
