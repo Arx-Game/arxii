@@ -61,9 +61,9 @@ just test-fast-par <app>                 # force --parallel on one large app
 just test-affected                       # diff vs origin/main
 just test-affected --keepdb              # extra args passed to arx test
 
-# Parity tier (PG, parallel; what CI runs):
+# Parity tier (PG, serial by default — pass --parallel yourself if you want it):
 just test-parity <app>                   # one app
-just test-parity                         # full suite, ~30+ min
+just test-parity                         # full suite (avoid locally — see below)
 
 # Generic pass-through (PG, no parallel):
 just test <args>
@@ -150,7 +150,7 @@ just test flows --keepdb    # arx test pass-through
 just test-fast world.foo    # SQLite inner loop (serial)
 just test-fast-par world.foo # SQLite inner loop (forced parallel)
 just test-affected          # only apps your branch touches + importers
-just test-parity world.foo  # PG parity tier (parallel)
+just test-parity world.foo  # PG parity tier (serial; pass --parallel yourself if you want it)
 just regression             # full no-keepdb regression run
 just lint                   # ruff check
 just manage migrate flows   # arx manage pass-through
