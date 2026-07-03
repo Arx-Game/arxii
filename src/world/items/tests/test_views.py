@@ -133,10 +133,22 @@ class ItemTemplateViewTests(ItemViewTestCase):
 class ItemFacetViewTests(ItemViewTestCase):
     """Tests for /api/items/item-facets/ endpoint."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import AccountFactory, CharacterFactory
+    def setUp(self) -> None:
+        # Fixture creation moved from setUpTestData to setUp (#1234 CI fix):
+        # class-level Evennia-typeclassed objects created here acquire
+        # un-deepcopyable typeclass internals in multi-app Postgres CI shard
+        # runs (copy.Error: un(deep)copyable object of type DbHolder). See
+        # docs/dev-commands.md-adjacent running-tests skill's known-test-
+        # failures reference. ``ItemViewTestCase.setUpTestData`` (only sets
+        # ``cls.user``) still runs automatically via inheritance and is
+        # unaffected — this class's own, richer fixture is the trigger.
+        from evennia_extensions.factories import (
+            AccountFactory,
+            CharacterFactory,
+            RoomProfileFactory,
+        )
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import install_full_lab_station
         from world.magic.factories import FacetFactory
         from world.roster.factories import (
             PlayerDataFactory,
@@ -146,61 +158,62 @@ class ItemFacetViewTests(ItemViewTestCase):
         from world.traits.factories import CharacterTraitValueFactory
         from world.traits.models import Trait
 
-        super().setUpTestData()
         # Wire enchanting crafting so the POST endpoint can roll the check.
         wire_enchanting_crafting(base_difficulty=0)
         # Single wide-range quality tier so any score resolves.
-        cls.quality = QualityTierFactory(
+        self.quality = QualityTierFactory(
             name="ItemFacetViewCommon", numeric_min=0, numeric_max=9999, sort_order=0
         )
-        cls.facet_a = FacetFactory(name="ViewFacetA")
-        cls.facet_b = FacetFactory(name="ViewFacetB")
-        cls.facet_c = FacetFactory(name="ViewFacetC")
+        self.facet_a = FacetFactory(name="ViewFacetA")
+        self.facet_b = FacetFactory(name="ViewFacetB")
+        self.facet_c = FacetFactory(name="ViewFacetC")
 
         # #684: ownership is body-keyed. Wire each account to a character +
         # sheet via an active RosterTenure so the permission walk
         # (RosterEntry.objects.for_account) finds the entry.
-        cls.owner = AccountFactory(username="facet_view_owner")
-        cls.owner_char = CharacterFactory(db_key="facet_view_owner_char")
-        cls.owner_sheet = CharacterSheetFactory(character=cls.owner_char)
-        owner_entry = RosterEntryFactory(character_sheet=cls.owner_sheet)
+        self.owner = AccountFactory(username="facet_view_owner")
+        self.owner_char = CharacterFactory(db_key="facet_view_owner_char")
+        self.owner_sheet = CharacterSheetFactory(character=self.owner_char)
+        owner_entry = RosterEntryFactory(character_sheet=self.owner_sheet)
         RosterTenureFactory(
             roster_entry=owner_entry,
-            player_data=PlayerDataFactory(account=cls.owner),
+            player_data=PlayerDataFactory(account=self.owner),
         )
         # Give the owner's character an Enchanting trait so the check can run.
         CharacterTraitValueFactory(
-            character=cls.owner_char,
+            character=self.owner_char,
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing view test can still craft.
+        room_profile = RoomProfileFactory()
+        self.owner_char.location = room_profile.objectdb
+        self.owner_char.save()
+        install_full_lab_station(room_profile)
 
-        cls.non_owner = AccountFactory(username="facet_view_nonowner")
-        cls.non_owner_char = CharacterFactory(db_key="facet_view_nonowner_char")
-        cls.non_owner_sheet = CharacterSheetFactory(character=cls.non_owner_char)
-        non_owner_entry = RosterEntryFactory(character_sheet=cls.non_owner_sheet)
+        self.non_owner = AccountFactory(username="facet_view_nonowner")
+        self.non_owner_char = CharacterFactory(db_key="facet_view_nonowner_char")
+        self.non_owner_sheet = CharacterSheetFactory(character=self.non_owner_char)
+        non_owner_entry = RosterEntryFactory(character_sheet=self.non_owner_sheet)
         RosterTenureFactory(
             roster_entry=non_owner_entry,
-            player_data=PlayerDataFactory(account=cls.non_owner),
+            player_data=PlayerDataFactory(account=self.non_owner),
         )
 
-        cls.template_cap2 = ItemTemplateFactory(name="FacetView Cap2 Template", facet_capacity=2)
-        cls.template_cap1 = ItemTemplateFactory(name="FacetView Cap1 Template", facet_capacity=1)
+        self.template_cap2 = ItemTemplateFactory(name="FacetView Cap2 Template", facet_capacity=2)
+        self.template_cap1 = ItemTemplateFactory(name="FacetView Cap1 Template", facet_capacity=1)
 
-        cls.item_owner = ItemInstanceFactory(
-            template=cls.template_cap2, holder_character_sheet=cls.owner_sheet
+        self.item_owner = ItemInstanceFactory(
+            template=self.template_cap2, holder_character_sheet=self.owner_sheet
         )
-        cls.item_other = ItemInstanceFactory(
-            template=cls.template_cap2, holder_character_sheet=cls.non_owner_sheet
+        self.item_other = ItemInstanceFactory(
+            template=self.template_cap2, holder_character_sheet=self.non_owner_sheet
         )
-        cls.item_cap1 = ItemInstanceFactory(
-            template=cls.template_cap1, holder_character_sheet=cls.owner_sheet
+        self.item_cap1 = ItemInstanceFactory(
+            template=self.template_cap1, holder_character_sheet=self.owner_sheet
         )
-        # End-of-setup hook: any test that authenticates as cls.owner needs
-        # the items' holder relation primed (the select_related path through
-        # holder_character_sheet→character is used by the permission walk).
 
-    def setUp(self) -> None:
         super().setUp()
         # Authenticate as the item owner by default.
         self.client.force_authenticate(user=self.owner)

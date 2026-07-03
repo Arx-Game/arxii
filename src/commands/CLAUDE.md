@@ -360,6 +360,15 @@ actions, backends, and service functions.
   `sanctum dissolve`, `sanctum absorb`, `sanctum sever <thread name|id>`.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdCombat`). No
   business logic in the command.
+- **`crafting_station.py`**: `CmdLabStation` (`station`, #1234) — the Lab
+  crafting-station namespace. One `DispatchCommand` routes a leading subverb
+  (`station install [level=<n>]` / `station upgrade level=<n>` / `station repair
+  points=<n>`) to a REGISTRY `ActionRef` and dispatches through
+  `dispatch_player_action` — the same seam the web `LabStationViewSet` uses —
+  reaching `StartRoomFeatureProjectAction` / `RepairLabStationAction` in
+  `actions/definitions/room_features.py`. Bare `station` shows a status hub (level,
+  durability, broken flag) for the Lab station in the caller's current room, if any.
+  Mirrors `CmdSanctum`'s subverb-routing shape. No business logic in the command.
 - **`hire.py`**: `CmdHire` (`hire`, #1493) — telnet face of the three NPC-service lifecycle
   Actions (`npc_start`, `npc_resolve`, `npc_end`). Parses `hire <role> [as <persona>]`,
   `hire offer <id>`, `hire end`, and bare `hire` status hub. Stores the ephemeral

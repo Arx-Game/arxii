@@ -17,6 +17,7 @@ from world.items.views import (
     VisibleItemDetailViewSet,
     VisibleWornItemViewSet,
 )
+from world.items.views_station import LabStationViewSet
 
 router = DefaultRouter()
 router.register("quality-tiers", QualityTierViewSet, basename="quality-tier")
@@ -44,5 +45,6 @@ router.register(
     FashionJudgementViewSet,
     basename="fashion-judgement",
 )
+router.register("lab-stations", LabStationViewSet, basename="lab-station")
 
 urlpatterns = router.urls

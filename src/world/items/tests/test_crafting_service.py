@@ -7,7 +7,7 @@ selection, cost consumption, skill-cap clamp, attachment — through the public
 
 from django.test import TestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import CostConsumption
@@ -17,6 +17,7 @@ from world.items.factories import (
     CraftingSkillCapFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
+    install_full_lab_station,
     wire_enchanting_crafting,
 )
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
@@ -43,6 +44,12 @@ class RunCraftingRecipeTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing pipeline tests can still craft.
+        room_profile = RoomProfileFactory()
+        self.character.location = room_profile.objectdb
+        self.character.save()
+        install_full_lab_station(room_profile)
 
     def _set_skill(self, value: int) -> None:
         CharacterTraitValueFactory(character=self.character, trait=_enchanting_trait(), value=value)
@@ -221,3 +228,120 @@ class RunCraftingRecipeTests(TestCase):
         self.assertIsNotNone(result.item_style)
         self.assertEqual(result.item_style.attachment_quality_tier, result.quality_tier)
         self.assertTrue(ItemStyle.objects.filter(item_instance=item, style=style).exists())
+
+
+class CraftingStationGateTests(TestCase):
+    """Station gate + wear (#1234) — the recipe's requires_station branch."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.crafting.models import LabStationDetails
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+
+        self.recipe = wire_enchanting_crafting(base_difficulty=0)
+        self.sheet = CharacterSheetFactory()
+        self.account = AccountFactory()
+        self.character = self.sheet.character
+        self.room_profile = RoomProfileFactory()
+        self.character.location = self.room_profile.objectdb
+        self.character.save()
+        kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        instance = RoomFeatureInstanceFactory(
+            room_profile=self.room_profile, feature_kind=kind, level=1
+        )
+        self.station = LabStationDetails.objects.create(
+            feature_instance=instance, durability=1, max_durability=20
+        )
+
+    def _item(self, *, facet_capacity: int = 3):
+        template = ItemTemplateFactory(facet_capacity=facet_capacity)
+        return ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
+
+    def _facet(self):
+        from world.magic.factories import FacetFactory
+
+        return FacetFactory()
+
+    def test_no_station_in_room_raises_required(self) -> None:
+        from world.items.exceptions import CraftingStationRequired
+        from world.items.services.crafting import craft_attach_facet
+
+        self.station.feature_instance.delete()
+        item = self._item()
+        with self.assertRaises(CraftingStationRequired):
+            craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                facet=self._facet(),
+            )
+
+    def test_broken_station_raises_broken(self) -> None:
+        from world.items.exceptions import CraftingStationBroken
+        from world.items.services.crafting import craft_attach_facet
+
+        self.station.durability = 0
+        self.station.save(update_fields=["durability"])
+        item = self._item()
+        with self.assertRaises(CraftingStationBroken):
+            craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                facet=self._facet(),
+            )
+
+    def test_successful_attempt_decrements_station_durability(self) -> None:
+        from world.items.services.crafting import craft_attach_facet
+
+        item = self._item()
+        with force_check_outcome(CheckOutcomeFactory(name="StationSuccess", success_level=2)):
+            result = craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                facet=self._facet(),
+            )
+        self.assertTrue(result.attached)
+        self.station.refresh_from_db()
+        self.assertEqual(self.station.durability, 0)
+
+    def test_failed_attempt_still_decrements_station_durability(self) -> None:
+        """Wear fires on the roll itself, independent of success/failure (#1234)."""
+        from world.checks.factories import ConsequenceFactory
+        from world.items.services.crafting import craft_attach_facet
+
+        botch = CheckOutcomeFactory(name="StationBotch", success_level=-2)
+        cons = ConsequenceFactory(outcome_tier=botch, label="Station Botch")
+        CraftingRecipeConsequenceFactory(
+            recipe=self.recipe, consequence=cons, cost_consumption=CostConsumption.NONE
+        )
+
+        item = self._item()
+        with force_check_outcome(botch):
+            result = craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                facet=self._facet(),
+            )
+
+        self.assertFalse(result.attached)
+        self.station.refresh_from_db()
+        self.assertEqual(self.station.durability, 0)
+
+    def test_requires_station_false_bypasses_gate_entirely(self) -> None:
+        from world.items.services.crafting import craft_attach_facet
+
+        self.recipe.requires_station = False
+        self.recipe.save(update_fields=["requires_station"])
+        self.station.feature_instance.delete()  # no station in the room at all
+        item = self._item()
+        result = craft_attach_facet(
+            crafter_account=self.account,
+            crafter_character=self.character,
+            item_instance=item,
+            facet=self._facet(),
+        )
+        self.assertIsNotNone(result)  # ran without raising

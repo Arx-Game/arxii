@@ -82,7 +82,11 @@ building rooms (that lives in [Tooling](tooling.md)).
 - **Ownership has consequences.** Owning a room is not just a tag; it should
   unlock things. Decoration, furnishing, NPCs, security, special-purpose rooms
   (lab, vault, ballroom, smithy), location for housing valuables, place to
-  hold events with reduced cost, etc.
+  hold events with reduced cost, etc. **Lab is now a real, implemented
+  crafting-station kind** — a second Room Feature (`RoomFeatureServiceStrategy.LAB`)
+  with a durability gate/wear/repair economy over `run_crafting_recipe` (#1234; see
+  [crafting-economy.md](crafting-economy.md) and `docs/systems/items.md`). Vault,
+  ballroom, smithy, and the other special-purpose kinds remain still-future.
 - **Estates aggregate rooms.** A noble's manor isn't a single room — it's a
   collection of connected rooms that share an ownership boundary. Estate-level
   features (servants, security, prestige) operate at this scope.

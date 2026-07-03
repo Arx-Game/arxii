@@ -28,9 +28,14 @@ from world.items.crafting.cost import consume_cost, stage_and_assert_affordable
 from world.items.crafting.models import CraftingRecipe, CraftingSkillCap
 from world.items.crafting.quality import resolve_capped_tier
 from world.items.crafting.registry import get_handler
-from world.items.exceptions import CraftingNotConfigured
+from world.items.exceptions import (
+    CraftingNotConfigured,
+    CraftingStationBroken,
+    CraftingStationRequired,
+)
 from world.items.models import ItemInstance
 from world.items.services.materials import meets_quality_tier
+from world.room_features.constants import RoomFeatureServiceStrategy
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -38,8 +43,39 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.items.crafting.constants import CraftingRecipeKind
+    from world.items.crafting.models import LabStationDetails
     from world.items.models import QualityTier
     from world.traits.models import CheckOutcome
+
+
+def _resolve_active_lab_station(crafter_character: ObjectDB) -> LabStationDetails | None:
+    """Resolve the LabStationDetails for the crafter's current room, or None (#1234).
+
+    Uses ``RoomFeatureInstance.objects.filter(...).active().first()`` — NOT
+    ``room_profile.feature_instance``, which is a single-object OneToOneField
+    reverse accessor that raises ``DoesNotExist`` rather than being filterable.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.items.crafting.models import LabStationDetails  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    location = crafter_character.location
+    if location is None:
+        return None
+    room_profile = RoomProfile.objects.filter(objectdb=location).first()
+    if room_profile is None:
+        return None
+    instance = (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.LAB,
+        )
+        .active()
+        .first()
+    )
+    if instance is None:
+        return None
+    return LabStationDetails.objects.filter(feature_instance=instance).first()
 
 
 @dataclass(frozen=True)
@@ -80,6 +116,23 @@ class CraftingQuoteRisk:
 
 
 @dataclass(frozen=True)
+class StationStatus:
+    """Read-only snapshot of the crafter's room's LAB station, for the quote (#1234).
+
+    ``feature_instance_id`` is populated only when ``present`` is True — it lets
+    the frontend act on the station (repair) directly from quote data, since
+    there is no "current room" context primitive elsewhere in the frontend to
+    resolve it independently (see Task 14).
+    """
+
+    present: bool
+    durability: int
+    max_durability: int
+    is_broken: bool
+    feature_instance_id: int | None = None
+
+
+@dataclass(frozen=True)
 class CraftingQuote:
     """Read-only snapshot of what a crafting attempt would cost and what quality it could yield."""
 
@@ -88,6 +141,7 @@ class CraftingQuote:
     max_quality_tier: QualityTier | None
     # tuple (not list) so the frozen snapshot is genuinely immutable (#1243).
     failure_risk: tuple[CraftingQuoteRisk, ...] = ()
+    station_status: StationStatus | None = None
 
 
 def build_crafting_quote(
@@ -107,6 +161,9 @@ def build_crafting_quote(
     * ``affordable``: True iff all cost vectors are satisfied.
     * ``max_quality_tier``: Skill-capped ceiling quality tier (None if uncapped).
     * ``failure_risk``: Consequence pool rows mapped to risk summaries.
+    * ``station_status``: LAB station snapshot (#1234) when ``recipe.requires_station``
+      is True (None otherwise). ``affordable`` is narrowed to False when the
+      station is missing or broken.
 
     Args:
         kind: Which recipe to quote for.
@@ -182,6 +239,26 @@ def build_crafting_quote(
         skill = crafter_character.traits.get_trait_value(recipe.skill_trait.name)
         max_quality_tier = CraftingSkillCap.for_skill(recipe, skill)
 
+    # 6.5. Station status (#1234) ---
+    station_status: StationStatus | None = None
+    if recipe.requires_station:
+        station = _resolve_active_lab_station(crafter_character)
+        if station is None:
+            station_status = StationStatus(
+                present=False, durability=0, max_durability=0, is_broken=True
+            )
+            affordable = False
+        else:
+            station_status = StationStatus(
+                present=True,
+                durability=station.durability,
+                max_durability=station.max_durability,
+                is_broken=station.is_broken,
+                feature_instance_id=station.feature_instance_id,
+            )
+            if station.is_broken:
+                affordable = False
+
     # 7. Failure risk from consequence pool ---
     consequence_rows = list(
         recipe.consequence_rows.all().select_related("consequence", "consequence__outcome_tier")
@@ -208,6 +285,7 @@ def build_crafting_quote(
         affordable=affordable,
         max_quality_tier=max_quality_tier,
         failure_risk=tuple(failure_risk),
+        station_status=station_status,
     )
 
 
@@ -228,15 +306,20 @@ def run_crafting_recipe(
        missing or has no ``check_type``.
     2. Pre-validate attachability via the kind's handler — BEFORE rolling, so a
        full/duplicate item never wastes a roll.
-    3. Stage and assert affordability of AP / Anima / materials. Raises
+    3. Station gate (#1234) — if ``recipe.requires_station``, resolve the active
+       Lab station in the crafter's room; raise ``CraftingStationRequired`` if
+       none is installed, or ``CraftingStationBroken`` if it is at 0 durability.
+    4. Stage and assert affordability of AP / Anima / materials. Raises
        ``CraftingCostUnaffordable`` before any roll occurs.
-    4. Roll the recipe's check.
-    5. Select a weighted consequence from the recipe's pool for the rolled tier.
-    6. Consume cost per the selected consequence's consumption policy (or the
+    5. Roll the recipe's check.
+    6. Station wear (#1234) — if a station was resolved in step 3, decrement its
+       durability by 1, unconditionally (regardless of roll outcome).
+    7. Select a weighted consequence from the recipe's pool for the rolled tier.
+    8. Consume cost per the selected consequence's consumption policy (or the
        recipe default when the tier has no authored consequence).
-    7. Apply the consequence's effects.
-    8. On sufficient success level, resolve the skill-capped quality tier and
-       apply the attachment via the handler.
+    9. Apply the consequence's effects.
+    10. On sufficient success level, resolve the skill-capped quality tier and
+        apply the attachment via the handler.
 
     Args:
         kind: Which recipe drives this attempt.
@@ -250,6 +333,10 @@ def run_crafting_recipe(
 
     Raises:
         CraftingNotConfigured: No recipe for ``kind``, or it has no ``check_type``.
+        CraftingStationRequired: The recipe requires a station and none is
+            installed in the crafter's room.
+        CraftingStationBroken: The recipe requires a station and the one
+            installed in the crafter's room is at 0 durability.
         CraftingCostUnaffordable: The crafter cannot afford the recipe cost.
     """
     # --- 1. Resolve the recipe ---
@@ -264,17 +351,31 @@ def run_crafting_recipe(
     handler = get_handler(kind)
     handler.pre_validate(item_instance=item_instance, target=target)
 
-    # --- 3. Stage + assert affordability (before rolling) ---
+    # --- 3. Station gate (#1234) — before affordability-staging ---
+    station = None
+    if recipe.requires_station:
+        station = _resolve_active_lab_station(crafter_character)
+        if station is None:
+            raise CraftingStationRequired
+        if station.is_broken:
+            raise CraftingStationBroken
+
+    # --- 4. Stage + assert affordability (before rolling) ---
     staged = stage_and_assert_affordable(
         recipe=recipe,
         crafter_character=crafter_character,
         crafter_character_sheet=item_instance.holder_character_sheet,
     )
 
-    # --- 4. Roll ---
+    # --- 5. Roll ---
     check_result = perform_check(crafter_character, recipe.check_type, recipe.base_difficulty)
 
-    # --- 5. Select a weighted consequence for the rolled tier ---
+    # --- 6. Station wear (#1234) — unconditional, regardless of roll outcome ---
+    if station is not None:
+        station.durability = max(0, station.durability - 1)
+        station.save(update_fields=["durability"])
+
+    # --- 7. Select a weighted consequence for the rolled tier ---
     rows = list(
         recipe.consequence_rows.all().select_related("consequence", "consequence__outcome_tier")
     )
@@ -297,17 +398,17 @@ def run_crafting_recipe(
     )
     consequence_label = selected.label
 
-    # --- 6. Consume cost per the selected consumption policy ---
+    # --- 8. Consume cost per the selected consumption policy ---
     consumed = consume_cost(
         crafter_character=crafter_character,
         staged=staged,
         consumption=consumption,
     )
 
-    # --- 7. Apply the consequence's effects ---
+    # --- 9. Apply the consequence's effects ---
     apply_resolution(pending, ResolutionContext(character=crafter_character))
 
-    # --- 8. Resolve quality + apply the attachment on sufficient success ---
+    # --- 10. Resolve quality + apply the attachment on sufficient success ---
     if check_result.success_level >= recipe.min_success_level:
         tier = resolve_capped_tier(
             recipe=recipe,

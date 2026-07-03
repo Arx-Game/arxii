@@ -67,3 +67,19 @@ export interface CreateOutfitSlotPayload {
   body_region: BodyRegion;
   equipment_layer: EquipmentLayer;
 }
+
+// Lab station (#1234) install/upgrade/repair bodies. The generated schema
+// doesn't type these request bodies — LabStationViewSet's install/upgrade/
+// repair are custom @action methods validated by plain serializers.Serializer
+// subclasses (world/items/serializers_station.py), which drf-spectacular
+// doesn't infer a requestBody schema for. Hand-typed here, same as
+// CreateOutfitPayload above.
+
+export interface InstallLabStationPayload {
+  room_profile_id: number;
+  target_level: number;
+}
+
+export interface RepairLabStationPayload {
+  restore_points: number;
+}

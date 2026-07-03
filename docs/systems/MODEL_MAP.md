@@ -2167,6 +2167,10 @@
   - recipe -> items.CraftingRecipe [FK]
   - consequence -> checks.Consequence [FK]
 
+### LabStationDetails
+**Foreign Keys:**
+  - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' — Attach ``facet`` to ``item_instance``.`
 - `consume_item_charges(*, item_instance: 'ItemInstance', amount: 'int' = 1) -> 'ItemInstance' — Spend ``amount`` charges atomically (row-locked). Logs ACTIVATED; at 0`

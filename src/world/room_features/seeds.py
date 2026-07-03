@@ -95,3 +95,31 @@ def ensure_command_center_kind() -> RoomFeatureKind:
         },
     )
     return kind
+
+
+LAB_KIND_NAME = "Lab"
+LAB_MAX_LEVEL = 5
+
+
+def ensure_lab_kind() -> RoomFeatureKind:
+    """Get-or-create the Lab ``RoomFeatureKind`` (#1234).
+
+    The crafting-station kind: installs/upgrades via the plain
+    ROOM_FEATURE_PROGRESSION project (install_mechanism defaults to PROJECT),
+    mirroring Command Center. Per-kind state (durability) lives in
+    ``world.items.crafting.models.LabStationDetails``, keyed OneToOne to the
+    resulting RoomFeatureInstance.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.LAB,
+        defaults={
+            "name": LAB_KIND_NAME,
+            "max_level": LAB_MAX_LEVEL,
+            "description": (
+                "A crafting workspace — required to attach facets/styles. Wears "
+                "down with use; pay coppers to repair it. Fancier Labs hold more "
+                "durability but cost more per point to restore."
+            ),
+        },
+    )
+    return kind

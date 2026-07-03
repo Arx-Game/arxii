@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -23,12 +24,14 @@ import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
 import { useFacets } from '@/character-creation/queries';
 import {
+  itemFacetKeys,
   useCraftAttachFacet,
   useCraftingQuote,
   useItemFacets,
   useRemoveItemFacet,
 } from '../hooks/useItemFacets';
 import type { CraftingQuote } from '../api';
+import { LabStationStatusCard } from './LabStationStatusCard';
 
 // ---------------------------------------------------------------------------
 // Failure-risk consumption labels
@@ -47,9 +50,11 @@ const CONSUMPTION_LABELS: Record<string, string> = {
 interface CraftingQuotePanelProps {
   isLoading: boolean;
   quote: CraftingQuote | undefined;
+  /** Forwarded to `LabStationStatusCard` — see its `onRepaired` prop. */
+  onStationRepaired?: () => void;
 }
 
-function CraftingQuotePanel({ isLoading, quote }: CraftingQuotePanelProps) {
+function CraftingQuotePanel({ isLoading, quote, onStationRepaired }: CraftingQuotePanelProps) {
   if (isLoading) {
     return <p className="text-xs text-muted-foreground">Loading cost estimate…</p>;
   }
@@ -97,6 +102,13 @@ function CraftingQuotePanel({ isLoading, quote }: CraftingQuotePanelProps) {
             .join(', ')}
         </p>
       )}
+
+      {quote.station_status && (
+        <LabStationStatusCard
+          featureInstanceId={quote.station_status.feature_instance_id}
+          onRepaired={onStationRepaired}
+        />
+      )}
     </div>
   );
 }
@@ -110,6 +122,7 @@ interface AttachFacetDialogProps {
 export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: AttachFacetDialogProps) {
   const [selectedFacetId, setSelectedFacetId] = useState('');
 
+  const qc = useQueryClient();
   const facetsQuery = useFacets();
   const itemFacetsQuery = useItemFacets(itemInstanceId);
   const craftMutation = useCraftAttachFacet(itemInstanceId);
@@ -117,6 +130,19 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
 
   const selectedFacetIdNum = selectedFacetId ? Number(selectedFacetId) : undefined;
   const quoteQuery = useCraftingQuote(itemInstanceId, selectedFacetIdNum);
+
+  // Repairing the room's Lab station from LabStationStatusCard changes
+  // affordability but lives under a separate cache key
+  // (["crafting-quote", itemInstanceId, facetId]) that useRepairLabStation
+  // doesn't know about — invalidate it here on repair so "Attach" reflects
+  // the restored durability without the player closing/reopening the dialog
+  // (#1234 whole-branch review finding).
+  function handleStationRepaired() {
+    if (selectedFacetIdNum == null) return;
+    qc.invalidateQueries({
+      queryKey: itemFacetKeys.quote(itemInstanceId, selectedFacetIdNum),
+    }).catch(() => {});
+  }
 
   // Reset selection when the dialog opens.
   useEffect(() => {
@@ -223,7 +249,11 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
           </div>
 
           {selectedFacetId && (
-            <CraftingQuotePanel isLoading={quoteQuery.isLoading} quote={quoteQuery.data} />
+            <CraftingQuotePanel
+              isLoading={quoteQuery.isLoading}
+              quote={quoteQuery.data}
+              onStationRepaired={handleStationRepaired}
+            />
           )}
         </div>
 
