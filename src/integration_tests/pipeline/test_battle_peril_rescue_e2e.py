@@ -55,7 +55,7 @@ class BattlePerilRescueE2EJourneyTest(TestCase):
         self.side = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
         self.place = add_place(battle=self.battle, name="The Breach")
         self.enemy_unit = add_unit(
-            battle=self.battle, side=self.side, name="Foes", unit_type="infantry"
+            battle=self.battle, side=self.side, name="Foes", descriptor="infantry"
         )
 
         self.pc_char, self.pc_sheet = _make_pc("peril_pc", self.room)

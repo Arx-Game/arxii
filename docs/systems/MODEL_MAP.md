@@ -550,6 +550,8 @@
   - battle -> battles.Battle [FK]
   - side -> battles.BattleSide [FK]
   - place -> battles.BattlePlace [FK] (nullable)
+  - commander -> character_sheets.CharacterSheet [FK] (nullable)
+  - summoned_by -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - declarations <- battles.BattleActionDeclaration
 
@@ -577,10 +579,17 @@
   - target_unit -> battles.BattleUnit [FK] (nullable)
   - target_ally -> battles.BattleParticipant [FK] (nullable)
 
+### TechniqueCompositionAffinity
+**Foreign Keys:**
+  - technique -> magic.Technique [FK]
+
+### TerrainCompositionEffect
+
 ### Service Functions
-- `add_place(*, battle: 'Battle', name: 'str') -> 'BattlePlace' — Add a named front/zone to a battle.`
+- `add_place(*, battle: 'Battle', name: 'str', terrain_type: 'str' = TerrainType.OPEN, movement_cost: 'int' = 1) -> 'BattlePlace' — Add a named front/zone to a battle.`
 - `add_side(*, battle: 'Battle', role: 'str', victory_threshold: 'int' = 100) -> 'BattleSide' — Add a side (attacker or defender) to a battle.`
-- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', unit_type: 'str', strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
+- `add_unit(*, battle: 'Battle', side: 'BattleSide', name: 'str', descriptor: 'str' = '', composition: 'str' = UnitComposition.IRREGULAR, quality: 'str' = UnitQuality.TRAINED, commander: 'CharacterSheet | None' = None, summoned_by: 'CharacterSheet | None' = None, strength: 'int' = 100, place: 'BattlePlace | None' = None) -> 'BattleUnit' — Add an abstract typed unit to a battle side.`
+- `assign_unit_commander(*, unit: 'BattleUnit', commander: 'CharacterSheet | None') -> 'BattleUnit' — Assign (or clear, with ``commander=None``) a unit's commander (#1711).`
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome and end the backing scene.`
@@ -588,6 +597,7 @@
 - `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
+- `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' — Set a battle side's tactical posture (#1711).`
 
 
 ## world.buildings
@@ -991,6 +1001,8 @@
   - combat_risk_acknowledgements <- combat.EncounterRiskAcknowledgement
   - duel_challenges_issued <- combat.DuelChallenge
   - duel_challenges_received <- combat.DuelChallenge
+  - commanded_battle_units <- battles.BattleUnit
+  - summoned_battle_units <- battles.BattleUnit
   - battle_participations <- battles.BattleParticipant
   - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
   - detected_traps <- room_features.Trap
@@ -2390,6 +2402,7 @@
   - alternate_self_grants <- forms.AlternateSelf
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
+  - battle_composition_affinities <- battles.TechniqueCompositionAffinity
 
 ### TechniqueCapabilityGrant
 **Foreign Keys:**
