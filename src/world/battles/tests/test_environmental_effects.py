@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
 from world.areas.factories import AreaFactory
 from world.battles.constants import (
     SET_ENVIRONMENT_BASE_ROUNDS,
@@ -17,6 +18,7 @@ from world.battles.constants import (
     BattleActionScope,
 )
 from world.battles.factories import BattleFactory, BattlePlaceFactory
+from world.magic.factories import TechniqueFactory
 from world.weather.factories import WeatherTypeFactory
 
 # NOTE for every subsequent task in this plan: this file's imports are added
@@ -67,3 +69,17 @@ class WeatherFieldsExistTests(TestCase):
         place = BattlePlaceFactory()
         self.assertIsNone(place.weather_override_id)
         self.assertIsNone(place.weather_override_expires_round)
+
+
+class TechniqueTargetWeatherTypeTests(TestCase):
+    def test_technique_can_hold_a_target_weather_type(self) -> None:
+        weather_type = WeatherTypeFactory()
+        technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=weather_type
+        )
+        technique.refresh_from_db()
+        self.assertEqual(technique.target_weather_type_id, weather_type.pk)
+
+    def test_technique_target_weather_type_defaults_to_none(self) -> None:
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        self.assertIsNone(technique.target_weather_type_id)
