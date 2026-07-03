@@ -3,6 +3,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import DamageTypeFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -18,13 +19,16 @@ from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
     SceneParticipationFactory,
+    SceneRoundFactory,
     SceneSummaryRevisionFactory,
 )
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
+    PendingSuddenHarm,
     PersonaDiscovery,
     SceneSummaryRevision,
+    get_scene_round_defaults_config,
 )
 
 
@@ -374,3 +378,41 @@ class PersonaDisplayHelpersTest(TestCase):
 
     def test_display_to_staff_no_entry_returns_name(self) -> None:
         assert self.primary_persona.display_to_staff() == "Bob"
+
+
+class PendingSuddenHarmModelTests(TestCase):
+    """Tests for the PendingSuddenHarm model (#1316)."""
+
+    def test_create_and_one_per_target(self) -> None:
+        sheet = CharacterSheetFactory()
+        scene_round = SceneRoundFactory()
+        damage_type = DamageTypeFactory()
+        PendingSuddenHarm.objects.create(
+            target_sheet=sheet,
+            scene_round=scene_round,
+            amount=15,
+            damage_type=damage_type,
+            source_description="a spring-loaded trap",
+        )
+        with self.assertRaises(IntegrityError):
+            PendingSuddenHarm.objects.create(
+                target_sheet=sheet,
+                scene_round=scene_round,
+                amount=5,
+            )
+
+    def test_damage_type_nullable(self) -> None:
+        sheet = CharacterSheetFactory()
+        scene_round = SceneRoundFactory()
+        harm = PendingSuddenHarm.objects.create(
+            target_sheet=sheet, scene_round=scene_round, amount=8
+        )
+        assert harm.damage_type is None
+
+
+class SuddenHarmThresholdConfigTests(TestCase):
+    """Tests for SceneRoundDefaultsConfig.sudden_harm_interpose_threshold (#1316)."""
+
+    def test_default_threshold(self) -> None:
+        config = get_scene_round_defaults_config()
+        assert config.sudden_harm_interpose_threshold == 10
