@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0075_alter_resonancegrant_source_and_more"),
+        ("magic", "0076_techniquedraft_consequence_pool"),
         ("mechanics", "0007_modifiersource_achievement_reward"),
     ]
 

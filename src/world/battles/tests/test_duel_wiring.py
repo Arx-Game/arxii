@@ -130,6 +130,38 @@ class ChampionDuelOutcomeWiringTests(TestCase):
         self.challenger_side.refresh_from_db()
         self.assertEqual(self.challenger_side.victory_points, 0)
 
+    def test_challenger_victory_destroys_already_weak_enemy_unit(self) -> None:
+        """Preserves the existing severity rule: a unit already at/below
+        ROUTED_STRENGTH_THRESHOLD is wiped out by a champion's defeat, not merely
+        routed (#1712 — this exact branch had no prior test coverage)."""
+        from world.battles.constants import ROUTED_STRENGTH_THRESHOLD
+
+        self.enemy_unit.strength = ROUTED_STRENGTH_THRESHOLD
+        self.enemy_unit.save(update_fields=["strength"])
+
+        enc = create_lethal_duel(
+            self.pc_sheet,
+            {"name": "Boss", "max_health": 1, "threat_pool": self.threat_pool},
+            self.room,
+        )
+        self.place.combat_encounter = enc
+        self.place.save(update_fields=["combat_encounter"])
+        install_champion_duel_trigger(enc)
+        self.room.trigger_handler.refresh()
+
+        from world.combat.constants import OpponentStatus
+        from world.combat.models import CombatOpponent
+
+        opponent = CombatOpponent.objects.get(encounter=enc)
+        opponent.status = OpponentStatus.DEFEATED
+        opponent.save(update_fields=["status"])
+        resolve_duel_end(enc)
+
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.enemy_unit.status, BattleUnitStatus.DESTROYED)
+        self.assertEqual(self.enemy_unit.strength, 0)
+        self.assertEqual(self.enemy_unit.morale, 0)
+
     def test_apply_champion_duel_outcome_noop_when_not_battle_bound(self) -> None:
         enc = create_lethal_duel(
             self.pc_sheet,

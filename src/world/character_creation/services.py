@@ -835,7 +835,24 @@ def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: Character
     )
 
     # Create a real Technique from the cantrip template
-    from world.magic.services.technique_builder import create_technique  # noqa: PLC0415
+    from world.magic.services.technique_builder import (  # noqa: PLC0415
+        create_technique,
+        resolve_cast_action_template,
+    )
+
+    chosen_pool_id = draft.draft_data.get("selected_consequence_pool_id")
+    from world.magic.exceptions import InvalidConsequencePoolChoice  # noqa: PLC0415
+
+    try:
+        action_template = resolve_cast_action_template(chosen_pool_id)
+    except InvalidConsequencePoolChoice:
+        logger.warning(
+            "CG finalize: invalid selected_consequence_pool_id %s for draft %s; "
+            "falling back to the shared default technique-cast template.",
+            chosen_pool_id,
+            draft.pk,
+        )
+        action_template = resolve_cast_action_template(None)
 
     technique = create_technique(
         creator=sheet,
@@ -850,6 +867,7 @@ def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: Character
         action_category=derived_category,
         description=custom_description,
         source_cantrip=cantrip,
+        action_template=action_template,
     )
     CharacterTechnique.objects.create(character=sheet, technique=technique)
 

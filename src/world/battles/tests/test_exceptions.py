@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 
 from world.battles.exceptions import (
     CharacterDoesNotKnowTechniqueError,
+    PlaceScopeRequiredError,
     TechniqueNotBattleReadyError,
 )
 
@@ -20,4 +21,13 @@ class BattleTechniqueExceptionTests(SimpleTestCase):
         self.assertEqual(
             exc.user_message,
             "That technique cannot be used in battle (no action template).",
+        )
+
+
+class PlaceScopeRequiredErrorTests(SimpleTestCase):
+    def test_default_message(self) -> None:
+        exc = PlaceScopeRequiredError()
+        self.assertEqual(
+            exc.user_message,
+            "That action can only be declared at a front (place scope).",
         )

@@ -4,6 +4,7 @@ pricing, authoring policies, and the build/author entry points."""
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 
 from django.db import transaction
 
@@ -28,6 +29,8 @@ from world.magic.types.technique_builder import (
     TechniqueCostLine,
     TechniqueDesignInput,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIER_POWER_BUDGET = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100}
 DEFAULT_TIER_REPRESENTATIVE_LEVEL = {1: 1, 2: 6, 3: 11, 4: 16, 5: 21}
@@ -54,6 +57,44 @@ def get_technique_tier_budget(tier: int) -> TechniqueTierBudget:
             },
         )
         return row
+
+
+def get_technique_cast_catalog():
+    """Curated catalog: children of the base 'Magic: Technique Cast' ConsequencePool."""
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.magic.seeds_cast import get_standalone_cast_pool  # noqa: PLC0415
+
+    return ConsequencePool.objects.filter(parent=get_standalone_cast_pool()).order_by("name")
+
+
+def resolve_cast_action_template(consequence_pool_id: int | None):
+    """Resolve the ActionTemplate a technique's action_template should point at.
+
+    None (no flavor chosen) resolves to the shared base template — today's
+    unchanged default. A catalog pool id resolves to its matching seeded
+    ActionTemplate. Raises InvalidConsequencePoolChoice for any id that isn't
+    a catalog member (including a valid-but-unrelated ConsequencePool).
+    """
+    from actions.models import ActionTemplate  # noqa: PLC0415
+    from world.magic.exceptions import InvalidConsequencePoolChoice  # noqa: PLC0415
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+
+    if consequence_pool_id is None:
+        return get_standalone_cast_template()
+    if not get_technique_cast_catalog().filter(pk=consequence_pool_id).exists():
+        raise InvalidConsequencePoolChoice
+    matches = list(
+        ActionTemplate.objects.filter(consequence_pool_id=consequence_pool_id).order_by("pk")[:2]
+    )
+    if len(matches) > 1:
+        logger.warning(
+            "Multiple ActionTemplate rows point at ConsequencePool %s; using the oldest "
+            "(pk=%s). This is a data-integrity issue — a catalog ConsequencePool should "
+            "have exactly one matching ActionTemplate.",
+            consequence_pool_id,
+            matches[0].pk,
+        )
+    return matches[0]
 
 
 def create_technique(  # noqa: PLR0913
@@ -241,6 +282,7 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
         level=design.level,
         action_category=design.action_category,
         description=design.description,
+        action_template=resolve_cast_action_template(design.consequence_pool_id),
     )
     if design.restriction_ids:
         tech.restrictions.add(*Restriction.objects.filter(id__in=design.restriction_ids))

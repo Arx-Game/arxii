@@ -2369,9 +2369,13 @@ def seed_magic_dev() -> MagicDevSeedResult:
     penetration = seed_penetration_contest()
     flee = seed_flee_check()
     magic_checks = MagicContent.seed_magic_checks()
-    from world.magic.seeds_cast import ensure_technique_cast_content  # noqa: PLC0415
+    from world.magic.seeds_cast import (  # noqa: PLC0415
+        ensure_technique_cast_content,
+        ensure_technique_catalog_content,
+    )
 
     technique_cast_template = ensure_technique_cast_content()
+    ensure_technique_catalog_content()
 
     return MagicDevSeedResult(
         config=config,

@@ -68,6 +68,14 @@ latent GIFT thread (#1578, ADR-0055):
   `provision_latent_gift_thread(..., resonance=...)` directly). When unset, the
   provisioning falls back to `gift.resonances.first()` with a warning, and skips
   entirely if the gift supports no resonances.
+- The cantrip's starting technique may also carry a chosen consequence-pool "flavor"
+  (#1320): `draft.draft_data["selected_consequence_pool_id"]` is read and resolved via
+  `world.magic.services.technique_builder.resolve_cast_action_template()` to pick the
+  `Technique.action_template`. Unlike the resonance picker, the frontend picker (CG
+  magic stage's `CantripSelector`) is built and writes this key. An unset key resolves
+  to the shared default template (`resolve_cast_action_template(None)`); a stale/invalid
+  id raises `InvalidConsequencePoolChoice`, which finalize catches, logs a warning, and
+  falls back to the shared default template — finalize never fails on a bad pool id.
 
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.

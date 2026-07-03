@@ -408,6 +408,23 @@ export async function getRestrictions(effectTypeId?: number): Promise<Restrictio
   return res.json();
 }
 
+export interface ConsequencePoolCatalogEntry {
+  id: number;
+  name: string;
+  description: string;
+}
+
+/**
+ * Get all consequence pool catalog entries.
+ */
+export async function getConsequencePoolCatalog(): Promise<ConsequencePoolCatalogEntry[]> {
+  const res = await apiFetch(`${MAGIC_URL}/consequence-pool-catalog/`);
+  if (!res.ok) {
+    throw new Error('Failed to load consequence pool catalog');
+  }
+  return res.json();
+}
+
 /**
  * Get all resonance associations, optionally filtered by category.
  */

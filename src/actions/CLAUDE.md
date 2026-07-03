@@ -156,7 +156,22 @@ They do not use the command system, dispatchers, or handlers.
   (returns active `SanctumDetails` for the room, excludes dissolved), `room_profile_for_location`
   (resolves `RoomProfile` from an Evennia location). Shared by telnet `CmdSanctum` and the
   web `SanctumViewSet` (`world/magic/views_sanctum.py`), which now dispatches all 7 ops
-  through `Action().run(actor=request.user.puppet, ...)` (#1497).)
+  through `Action().run(actor=request.user.puppet, ...)` (#1497).
+  `battles.py` (#1592/#1710/#1712) — four REGISTRY actions, all `category="battle"`:
+  `BeginBattleRoundAction` (key `"begin_battle_round"`, `target_type=AREA`, GM/staff),
+  `ResolveBattleRoundAction` (`"resolve_battle_round"`, `target_type=AREA`, GM/staff;
+  auto-concludes via `check_victory` when a side crosses threshold),
+  `ConcludeBattleAction` (`"conclude_battle"`, `target_type=AREA`, GM/staff; natural win →
+  timer → DEFENDER_MARGINAL default), `DeclareBattleActionAction` (`"declare_battle_action"`,
+  `target_type=SELF`, player). `DeclareBattleActionAction` dispatches all 7
+  `BattleActionKind` values through the same generic `action_kind`/`target_unit`/
+  `target_ally`/`scope`/`target_place`/`target_side` kwargs it always had — #1712 added
+  ROUT/RALLY/REPEL/HOLD with zero code changes to this action; all four new-kind
+  validation (command scope, `PlaceScopeRequiredError`) lives in
+  `world.battles.services.declare_battle_action`. `ChallengeChampionDuelAction`
+  (`"challenge_champion_duel"`, `target_type=AREA`, player, #1710) rounds out the file,
+  binding a `BattlePlace` to a lethal duel via `open_champion_duel`. Shared by telnet
+  `CmdBattle` (`battle <subverb>`, `src/commands/battle.py`).)
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager

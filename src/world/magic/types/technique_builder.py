@@ -62,6 +62,7 @@ class TechniqueDesignInput:
     damage_profiles: tuple[DamageProfileSpec, ...] = ()
     applied_conditions: tuple[AppliedConditionSpec, ...] = ()
     removed_conditions: tuple[RemovedConditionSpec, ...] = ()
+    consequence_pool_id: int | None = None
 
 
 @dataclass(frozen=True)

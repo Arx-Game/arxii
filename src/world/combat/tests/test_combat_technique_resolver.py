@@ -787,6 +787,57 @@ class NonAttackPCActionRoutingTests(TestCase):
         # outcome is returned cleanly (no exception)
         self.assertIsNotNone(outcome)
 
+    def test_catalog_pool_technique_uses_same_check_type_as_default(self) -> None:
+        """A technique whose action_template is a catalog entry resolves combat's
+        offense_check_type identically to one on the shared default template —
+        proves the catalog feature doesn't touch combat's check_type read."""
+        from world.combat.services import _resolve_pc_action
+        from world.combat.types import CombatTechniqueResolution
+        from world.magic.seeds_cast import (
+            ensure_technique_catalog_content,
+            get_standalone_cast_template,
+        )
+
+        catalog_templates = ensure_technique_catalog_content()
+        catalog_template = catalog_templates[0]
+
+        # Prove the catalog/base check_type-sharing invariant directly, not just
+        # that combat forwards whatever check_type the technique happens to carry.
+        base_template = get_standalone_cast_template()
+        self.assertEqual(catalog_template.check_type_id, base_template.check_type_id)
+
+        encounter = CombatEncounterFactory(round_number=1)
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        technique = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=EffectTypeFactory(name="Buff", base_power=None),
+            action_template=catalog_template,
+        )
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=None,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        fake_resolution = CombatTechniqueResolution(
+            check_result=MagicMock(success_level=2),
+            damage_results=[],
+            applied_conditions=[],
+            pull_flat_bonus=0,
+            scaled_damage=0,
+        )
+
+        with patch("world.combat.services.resolve_combat_technique") as mock_resolve:
+            mock_resolve.return_value = fake_resolution
+            _resolve_pc_action(participant=participant, action=action, offense_check_fn=None)
+
+        call_kwargs = mock_resolve.call_args.kwargs
+        self.assertIs(call_kwargs["offense_check_type"], catalog_template.check_type)
+
 
 class ApplyDamageWithProfilesTests(EvenniaTestCase):
     """Resolver iterates damage_profiles instead of reading effect_type.base_power."""

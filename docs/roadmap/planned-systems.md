@@ -112,8 +112,6 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 - **Trainer system** — find trainers, costs, tiers. `intent`.
 - **Path discovery / research / switching** — beyond listing next options. `intent`.
 - **Resonance→aspect mapping** so path investment rewards magic checks (placeholder `Arcana` today). #1363, `partial`.
-- **Technique-designer consequence-pool catalog** — pick a pool from a curated set; all casts share one
-  seeded pool today. #1320, `partial`.
 - **Aspect-in-magic — DESIGN-CLARIFICATION, not an unbuilt system.** `Aspect`/`PathAspect`/
   `_calculate_aspect_bonus` are **built and live** as a *path-competence* check bonus
   (`world/classes/models.py:277,309`, `world/checks/services.py:161`). The open question (#1363): magic
@@ -226,5 +224,9 @@ Build to the ADR; these are not open questions. See
 - **Trap arming/placement** — only disarm exists; the GM side of the trap loop is unbuilt. `intent`.
 - **Persona minting** (create/edit/delete an identity) — reserved for future IC flows. `intent`.
 - **Tidings posting/reacting/commenting** — feed is read-only; no authoring model. `intent` — #1450.
+- **Scandal reach & containment — BUILT (#1464, ADR-0082):** acts fork at deed birth into
+  contained Secrets or society awareness (archetype-dot scandal judgment, containment check,
+  fame-scaled spread). Remaining #1450 slice: the in-world hubs reader (after #670 privacy
+  control); act-time Stealth witness-reduction wiring; interactive approach-fanned containment.
 - **Roster release / end-tenure**; **events RSVP-accept** (invitee response); **projects activation
   service** — small but real gaps where one half of a loop is unbuilt. `intent`.

@@ -87,6 +87,27 @@ class CmdTechniqueDraftShowTests(TestCase):
         draft = TechniqueDraft.objects.get(character=self.sheet)
         assert draft.name == "Renamed Technique"
 
+    def test_set_consequence_pool_by_id(self) -> None:
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+        self._run("draft Flavor Test")
+        self.character.msg.reset_mock()
+        self._run(f"set consequence_pool={chosen.consequence_pool_id}")
+        draft = TechniqueDraft.objects.get(character=self.sheet)
+        self.assertEqual(draft.consequence_pool_id, chosen.consequence_pool_id)
+
+    def test_set_consequence_pool_rejects_non_catalog_id(self) -> None:
+        from actions.factories import ConsequencePoolFactory
+
+        stray = ConsequencePoolFactory()
+        self._run("draft Flavor Test")
+        self.character.msg.reset_mock()
+        self._run(f"set consequence_pool={stray.pk}")
+        output = "\n".join(str(c.args[0]) for c in self.character.msg.call_args_list if c.args)
+        self.assertIn("no catalog consequence pool", output.lower())
+
     def test_discard_removes_draft(self) -> None:
         self._run("draft To Discard")
         assert TechniqueDraft.objects.filter(character=self.sheet).exists()

@@ -254,6 +254,34 @@ class TechniqueAuthoringJourneyTests(TestCase):
         )
 
     # ------------------------------------------------------------------
+    # Scenario 2b: catalog pool choice flows through to standalone cast
+    # ------------------------------------------------------------------
+
+    def test_catalog_pool_choice_flows_through_to_standalone_cast(self):
+        """set consequence_pool=<catalog id> -> author -> the technique's
+        standalone cast resolves through the catalog pool's ActionTemplate,
+        not the shared default."""
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+
+        self._run("draft Flavored Cast")
+        self._run(
+            f"set gift={self.gift.pk} style={self.style.pk} effect_type={self.effect_type.pk} "
+            "action_category=physical tier=1 intensity=1 control=1 anima_cost=1"
+        )
+        self._run(f"set consequence_pool={chosen.consequence_pool_id}")
+        self.character.msg.reset_mock()
+        self._run("author")
+
+        from world.magic.models import Technique
+
+        technique = Technique.objects.get(name="Flavored Cast")
+        assert technique.action_template_id == chosen.pk
+        assert technique.action_template.consequence_pool_id == chosen.consequence_pool_id
+
+    # ------------------------------------------------------------------
     # Scenario 3: over-budget (advisory for staff)
     # ------------------------------------------------------------------
 

@@ -360,6 +360,7 @@ export interface TechniqueDesignRequest {
   intensity: number;
   control: number;
   anima_cost: number;
+  consequence_pool_id?: number | null;
   restriction_ids?: number[];
   capability_grants?: {
     capability_id: number;

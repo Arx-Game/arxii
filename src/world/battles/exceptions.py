@@ -80,9 +80,9 @@ class MissingScopeTargetError(BattleError):
 
 
 class CannotStrikeOwnSideError(BattleError):
-    """Raised when a STRIKE declaration's target_side is the caster's own side."""
+    """Raised when a STRIKE or ROUT declaration's target_side is the caster's own side."""
 
-    def __init__(self, user_message: str = "You cannot strike your own side.") -> None:
+    def __init__(self, user_message: str = "You cannot target your own side.") -> None:
         super().__init__(user_message)
 
 
@@ -97,4 +97,13 @@ class PlaceAlreadyDuelingError(BattleError):
     """Raised when a BattlePlace already has a bound CombatEncounter."""
 
     def __init__(self, user_message: str = "A duel is already underway at this front.") -> None:
+        super().__init__(user_message)
+
+
+class PlaceScopeRequiredError(BattleError):
+    """Raised when REPEL/HOLD is declared with a scope other than PLACE (#1712)."""
+
+    def __init__(
+        self, user_message: str = "That action can only be declared at a front (place scope)."
+    ) -> None:
         super().__init__(user_message)

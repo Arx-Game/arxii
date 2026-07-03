@@ -27,7 +27,8 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueStyleFactory,
 )
-from world.magic.models import CharacterTechnique, Technique
+from world.magic.models import CharacterTechnique, Technique, TechniqueTierBudget
+from world.magic.services.technique_builder import get_technique_budget_config
 from world.roster.factories import RosterTenureFactory
 
 
@@ -334,3 +335,73 @@ class TechniqueBuilderPayloadFKTests(APITestCase):
         )
         res = self.client.post(url, payload, format="json")
         assert res.status_code == status.HTTP_201_CREATED, res.data
+
+
+# =============================================================================
+# Consequence-pool catalog choice (#1320)
+# =============================================================================
+
+
+class ConsequencePoolChoiceAPITests(APITestCase):
+    """author/price accept an optional consequence_pool_id, validated server-side."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+
+        cls.catalog_templates = ensure_technique_catalog_content()
+        cls.account = AccountFactory(is_staff=True)
+        cls.gift = GiftFactory()
+        cls.style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        get_technique_budget_config()
+        TechniqueTierBudget.objects.get_or_create(
+            tier=1, defaults={"power_budget": 100, "representative_level": 1, "label": "Tier 1"}
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(user=self.account)
+
+    def _payload(self, **overrides):
+        payload = {
+            "name": "Flavored Technique",
+            "description": "",
+            "gift_id": self.gift.pk,
+            "style_id": self.style.pk,
+            "effect_type_id": self.effect_type.pk,
+            "action_category": "physical",
+            "tier": 1,
+            "intensity": 1,
+            "control": 1,
+            "anima_cost": 1,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_author_with_catalog_pool_assigns_matching_template(self):
+        chosen = self.catalog_templates[0]
+        resp = self.client.post(
+            "/api/magic/techniques/author/",
+            self._payload(consequence_pool_id=chosen.consequence_pool_id),
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        technique = Technique.objects.get(pk=resp.data["id"])
+        self.assertEqual(technique.action_template_id, chosen.pk)
+
+    def test_author_without_pool_choice_uses_shared_default(self):
+        from world.magic.seeds_cast import get_standalone_cast_template
+
+        resp = self.client.post("/api/magic/techniques/author/", self._payload(), format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        technique = Technique.objects.get(pk=resp.data["id"])
+        self.assertEqual(technique.action_template_id, get_standalone_cast_template().pk)
+
+    def test_author_with_invalid_pool_id_returns_400(self):
+        resp = self.client.post(
+            "/api/magic/techniques/author/",
+            self._payload(consequence_pool_id=999999),
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("consequence_pool_id", resp.data)
