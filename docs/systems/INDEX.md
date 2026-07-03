@@ -625,7 +625,17 @@ Social structures, organizations, reputation, and legend tracking.
 - **DRF:** `OrganizationViewSet`, `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, and `/api/societies/offers/`
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
-- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), actions (shared `action.run()` / `dispatch_player_action()` seam)
+- **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
+  `route_deed_reach` runs at scene-deed birth (`create_solo_deed` /
+  `create_legend_event`, both now taking `archetypes=`): scandal = archetype
+  dot ≤ `SCANDAL_THRESHOLD` per society (`scandalous_societies`); private or
+  successfully-contained scandalous acts mint an act-anchored contained
+  `Secret` (blackmail material); public news/leaks set `societies_aware`,
+  fire `apply_archetype_society_reputation`, and scale `spread_multiplier`
+  by the involved personas' fame (`FAME_SPREAD_FACTORS`). Containment =
+  best-of Deception/Intimidation vs crowd size; Stealth (new skill, seeded)
+  is the act-time leg, wiring later. Untagged deeds skip the fork.
+- **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
 ### Goals

@@ -226,5 +226,9 @@ Build to the ADR; these are not open questions. See
 - **Trap arming/placement** — only disarm exists; the GM side of the trap loop is unbuilt. `intent`.
 - **Persona minting** (create/edit/delete an identity) — reserved for future IC flows. `intent`.
 - **Tidings posting/reacting/commenting** — feed is read-only; no authoring model. `intent` — #1450.
+- **Scandal reach & containment — BUILT (#1464, ADR-0082):** acts fork at deed birth into
+  contained Secrets or society awareness (archetype-dot scandal judgment, containment check,
+  fame-scaled spread). Remaining #1450 slice: the in-world hubs reader (after #670 privacy
+  control); act-time Stealth witness-reduction wiring; interactive approach-fanned containment.
 - **Roster release / end-tenure**; **events RSVP-accept** (invitee response); **projects activation
   service** — small but real gaps where one half of a loop is unbuilt. `intent`.

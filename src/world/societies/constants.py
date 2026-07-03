@@ -215,6 +215,38 @@ PRINCIPLE_FIELD_NAMES: tuple[str, ...] = (
 
 
 # ---------------------------------------------------------------------------
+# Scandal reach & containment minting (#1464). Magnitudes PLACEHOLDER and
+# never player-documented; the judgment is the archetype·principles dot.
+# ---------------------------------------------------------------------------
+
+# An act is scandalous TO a society when its archetype dot-product against
+# that society's principles is at or below this (negative) threshold.
+SCANDAL_THRESHOLD = -10
+
+# Containment difficulty grows with the crowd: base + step per witness.
+CONTAINMENT_BASE_DIFFICULTY = 0
+CONTAINMENT_DIFFICULTY_PER_WITNESS = 2
+
+# Contained-scandal Secret level scales with how badly the act reads
+# (|worst dot| at or past each floor, descending). (level, |dot| floor).
+SCANDAL_SECRET_LEVEL_FLOORS: tuple[tuple[int, int], ...] = (
+    (4, 60),  # DANGEROUS
+    (3, 30),  # CAREFULLY_KEPT
+    (2, 0),  # WHISPERS — the floor for any minted scandal
+)
+
+# Spread scales with who was involved: fame tier → spread_multiplier factor
+# (applied to SpreadingConfig.default_spread_multiplier at deed birth).
+FAME_SPREAD_FACTORS: dict[str, int] = {
+    "normal": 1,
+    "talked_about": 2,
+    "celebrity": 3,
+    "household_name": 4,
+    "world_famous": 5,
+}
+
+
+# ---------------------------------------------------------------------------
 # Org accumulation flow (Phase C, #676)
 #
 # Inflow: every member's renown deed contributes a flat fraction to each of

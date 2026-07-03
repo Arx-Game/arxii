@@ -77,6 +77,12 @@ def _seed_justice() -> None:
     seed_crime_kinds()
 
 
+def _seed_stealth() -> None:
+    from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
+
+    seed_stealth_check_content()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -106,6 +112,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "character_creation": _seed_character_creation,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
+    # Stealth: the act-time concealment skill + check (#1464). After "checks".
+    "stealth": _seed_stealth,
 }
 
 
@@ -176,4 +184,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "character_creation": [StartingArea, Beginnings, Species],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
+        # Stealth seeds skill/check rows counted under "checks" (#1464).
+        "stealth": [],
     }
