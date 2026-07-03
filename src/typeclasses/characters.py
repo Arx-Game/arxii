@@ -232,13 +232,17 @@ class Character(ObjectParent, DefaultCharacter):
         return bool(mine & other.active_covenant_ids())
 
     def has_property(self, name: str) -> bool:
-        """True if this character's primary persona carries the named Property tag.
+        """True if this character currently carries the named Property tag.
 
-        Used by the reactive-filter ``has_property`` op when the examined
-        *target* is a Character (e.g. Mage Sight scars).
+        Checks both the primary persona's authored identity tags (e.g.
+        masked-identity) and this character's runtime ObjectProperty
+        attachments (e.g. aerial) — the same Property catalog, two
+        attachment surfaces. Used by the reactive-filter ``has_property`` op.
         """
         from world.scenes.models import Persona
 
+        if self.object_properties.filter(property__name=name).exists():
+            return True
         sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
             return False

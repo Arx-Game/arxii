@@ -24,7 +24,7 @@ from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
 from world.magic.factories import TechniqueFactory
-from world.mechanics.factories import PropertyFactory
+from world.mechanics.factories import AerialPropertyFactory, ObjectPropertyFactory, PropertyFactory
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -302,6 +302,36 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
         # The stub ref has no `affinity`, so the broad ward's path is unresolved;
         # the narrow ward's resonance is "flame" != "shadow" → no match.
         self.assertFalse(stack.was_cancelled())
+
+
+class HasPropertyReadsObjectPropertyTest(TestCase):
+    """Character.has_property must also see runtime ObjectProperty attachments."""
+
+    def test_has_property_true_for_object_property(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        aerial = AerialPropertyFactory()
+        ObjectPropertyFactory(object=character, property=aerial)
+        self.assertTrue(character.has_property("aerial"))
+
+    def test_has_property_false_when_neither_source_matches(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        self.assertFalse(character.has_property("aerial"))
+
+    def test_has_property_still_true_for_persona_tag(self) -> None:
+        """Existing persona-tag path (Mage Sight etc.) is unaffected."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        character = sheet.character
+        abyssal = PropertyFactory(name="abyssal-htest")
+        sheet.primary_persona.properties.add(abyssal)
+        self.assertTrue(character.has_property("abyssal-htest"))
 
 
 class PropertyTaggedTechniqueTest(TestCase):
