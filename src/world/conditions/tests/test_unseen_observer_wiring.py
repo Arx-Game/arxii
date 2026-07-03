@@ -5,7 +5,9 @@ from world.conditions.factories import ConditionCategoryFactory, ConditionTempla
 from world.conditions.services import (
     apply_condition,
     bulk_apply_conditions,
+    clear_all_conditions,
     remove_condition,
+    remove_conditions_by_category,
     suppress_condition,
 )
 from world.conditions.types import BulkConditionApplication
@@ -75,3 +77,42 @@ class ConcealmentOOCWiringTests(TestCase):
             [BulkConditionApplication(target=self.character, template=self.template)]
         )
         self.assertTrue(has_unseen_observers(self.scene))
+
+    def test_remove_conditions_by_category_clears_unseen_observer(self) -> None:
+        """remove_conditions_by_category (final-review gap) previously bypassed the
+        per-instance teardown via a raw queryset ``.delete()`` — it must clear the
+        OOC banner when it removes the last concealing condition on target."""
+        apply_condition(target=self.character, condition=self.template)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        remove_conditions_by_category(self.character, self.template.category)
+
+        self.assertFalse(has_unseen_observers(self.scene))
+
+    def test_remove_conditions_by_category_keeps_banner_if_other_concealment_remains(
+        self,
+    ) -> None:
+        """Mirrors test_remove_one_of_two_concealments_keeps_banner_up for the bulk
+        category-clear path: clearing one category must not drop the banner while an
+        independently-applied concealment in another category is still active."""
+        other_cat = ConditionCategoryFactory(conceals_from_perception=True)
+        other_template = ConditionTemplateFactory(category=other_cat)
+
+        apply_condition(target=self.character, condition=self.template)
+        apply_condition(target=self.character, condition=other_template)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        remove_conditions_by_category(self.character, self.template.category)
+
+        self.assertTrue(has_unseen_observers(self.scene))
+
+    def test_clear_all_conditions_clears_unseen_observer(self) -> None:
+        """clear_all_conditions (final-review gap) previously bypassed the
+        per-instance teardown via a raw queryset ``.delete()`` — it must clear the
+        OOC banner when it removes the last concealing condition on target."""
+        apply_condition(target=self.character, condition=self.template)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        clear_all_conditions(self.character)
+
+        self.assertFalse(has_unseen_observers(self.scene))

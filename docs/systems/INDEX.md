@@ -415,6 +415,17 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
   `perform_treatment()`
+- **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
+  per-observer concealment detection (`is_concealed()`, `active_concealments()`,
+  `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),
+  `RoomStatePayloadSerializer._serialize_contents` + telnet `BaseState.get_display_characters`
+  (room-occupant lists omit a concealed-and-undetected character entirely — name, dbref, and
+  avatar never leak), and `SearchAction` (the detection roll; a successful detection also pushes
+  a `send_room_state()` refresh to the detecting actor so the target appears without waiting for
+  the next natural refresh). Bulk condition-clear paths (`remove_conditions_by_category`,
+  `clear_all_conditions`) route per-instance through the same teardown `remove_condition` uses, so
+  neither bypasses the OOC unseen-observer clear hook. See ADR-0083 for the separate OOC
+  unseen-observer transparency guarantee this composes with.
 - **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
   (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
   `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).

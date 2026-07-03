@@ -1061,6 +1061,43 @@ def _notify_stories_condition_expired(
     on_condition_expired(sheet, condition)
 
 
+def _teardown_removed_condition_instance(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    instance: ConditionInstance,
+) -> ConditionTemplate:
+    """Fully delete ``instance`` and run every side effect a removal must trigger.
+
+    Shared by ``remove_condition`` (full-stack removal branch), ``remove_conditions_by_category``,
+    and ``clear_all_conditions`` so bulk-clear paths never bypass the CONDITION_REMOVED event,
+    stories re-evaluation, the OOC unseen-observer clear hook (#1225), or deferred-death
+    resolution the way a raw queryset ``.delete()`` would. Always removes the instance outright —
+    callers needing partial-stack reduction (``remove_condition``'s ``remove_all_stacks=False``
+    branch) do not go through this helper.
+    """
+    instance_pk = instance.pk
+    condition = instance.condition
+    source = instance.source_character or instance.source_technique
+    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+
+    instance.delete()
+    _invalidate_condition_handler(target)
+    if target_location is not None:
+        emit_event(
+            EventName.CONDITION_REMOVED,
+            ConditionRemovedPayload(
+                target=target,
+                instance_id=instance_pk,
+                template=condition,
+                source=source,
+            ),
+            location=target_location,
+        )
+    _notify_stories_condition_expired(target, condition)
+    _clear_unseen_observer_if_concealing(target, condition)
+    _resolve_deferred_death_on_expiry(target, condition)
+    return condition
+
+
 @transaction.atomic
 def remove_condition(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
@@ -1112,22 +1149,7 @@ def remove_condition(
         # stories re-evaluation needed until the condition is gone.
         return True
 
-    instance.delete()
-    _invalidate_condition_handler(target)
-    if target_location is not None:
-        emit_event(
-            EventName.CONDITION_REMOVED,
-            ConditionRemovedPayload(
-                target=target,
-                instance_id=instance_pk,
-                template=condition,
-                source=source,
-            ),
-            location=target_location,
-        )
-    _notify_stories_condition_expired(target, condition)
-    _clear_unseen_observer_if_concealing(target, condition)
-    _resolve_deferred_death_on_expiry(target, condition)
+    _teardown_removed_condition_instance(target, instance)
     return True
 
 
@@ -1186,14 +1208,14 @@ def remove_conditions_by_category(
 
     Returns:
         List of removed ConditionTemplates
+
+    Reuses ``_teardown_removed_condition_instance`` per instance (the same helper
+    ``remove_condition`` uses) rather than a raw queryset ``.delete()``, so the OOC
+    unseen-observer clear hook (#1225) and every other per-instance teardown side
+    effect fires for a bulk category clear too.
     """
-    instances = get_active_conditions(target, category=category)
-    removed = [i.condition for i in instances]
-    instances.delete()
-    _invalidate_condition_handler(target)
-    for template in removed:
-        _notify_stories_condition_expired(target, template)
-    return removed
+    instances = list(get_active_conditions(target, category=category))
+    return [_teardown_removed_condition_instance(target, instance) for instance in instances]
 
 
 @transaction.atomic
@@ -1954,6 +1976,7 @@ def unsuppress_condition(
     return True
 
 
+@transaction.atomic
 def clear_all_conditions(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     *,
@@ -1970,6 +1993,12 @@ def clear_all_conditions(
 
     Returns:
         Number of conditions removed
+
+    Reuses ``_teardown_removed_condition_instance`` per instance (the same helper
+    ``remove_condition`` uses) rather than a raw queryset ``.delete()``, so the OOC
+    unseen-observer clear hook (#1225) and every other per-instance teardown side
+    effect fires for a full clear too. Includes suppressed instances, matching the
+    original unfiltered queryset.
     """
     qs = ConditionInstance.objects.filter(target=target)
 
@@ -1979,17 +2008,10 @@ def clear_all_conditions(
     if only_category:
         qs = qs.filter(condition__category=only_category)
 
-    removed_template_ids = list(qs.values_list("condition", flat=True))
-    count = len(removed_template_ids)
-    qs.delete()
-    _invalidate_condition_handler(target)
-    for template_id in removed_template_ids:
-        try:
-            template = ConditionTemplate.objects.get(pk=template_id)
-        except ConditionTemplate.DoesNotExist:
-            continue
-        _notify_stories_condition_expired(target, template)
-    return count
+    instances = list(qs)
+    for instance in instances:
+        _teardown_removed_condition_instance(target, instance)
+    return len(instances)
 
 
 def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:
