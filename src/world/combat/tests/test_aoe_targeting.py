@@ -318,6 +318,87 @@ class AoEDamageExpansionTests(TestCase):
         self.assertIn(opponent_b.pk, hit_targets)
 
 
+class AoETargetPrerequisitesTests(TestCase):
+    """AREA/FILTERED_GROUP techniques silently filter targets by target_prerequisites (#1793).
+
+    _resolved_opponent_targets' AREA/FILTERED_GROUP branches enumerate opponents
+    independently of _build_affected_targets/_check_combat_target_prerequisites
+    (the pre-flight hard-block only ever sees the single focused opponent/ally),
+    so damage/condition application must apply the SAME silent filter the
+    non-combat resolve_targets applies for AoE — not a raise.
+    """
+
+    def setUp(self) -> None:
+        # Ensure a success-level multiplier so damage is > 0
+        DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=Decimal("1.0"))
+
+    def _aerial_prerequisite(self):
+        from world.mechanics.constants import PropertyHolder
+        from world.mechanics.factories import AerialPropertyFactory, PrerequisiteFactory
+
+        return PrerequisiteFactory(
+            property=AerialPropertyFactory(),
+            property_holder=PropertyHolder.TARGET,
+            minimum_value=1,
+        )
+
+    def test_area_technique_silently_filters_non_matching_opponent(self) -> None:
+        """AREA technique: only the opponent meeting target_prerequisites is hit."""
+        from world.mechanics.factories import ObjectPropertyFactory
+
+        technique = _area_technique()
+        prereq = self._aerial_prerequisite()
+        technique.target_prerequisites.add(prereq)
+        _enc, participant, action, opponent_a, opponent_b = _build_encounter_with_two_opponents(
+            technique
+        )
+        ObjectPropertyFactory(object=opponent_a.objectdb, property=prereq.property)
+
+        resolver = _resolver(participant, action)
+
+        with patch("world.combat.services.perform_check") as mock_check:
+            mock_check.return_value = type(
+                "CR", (), {"success_level": 1, "roll": 10, "difficulty": 5}
+            )()
+            result = resolver(power=20, ledger=_ledger(20))
+
+        hit_targets = {r.opponent_id for r in result.damage_results}
+        self.assertIn(opponent_a.pk, hit_targets)
+        self.assertNotIn(opponent_b.pk, hit_targets)
+
+    def test_filtered_group_technique_silently_filters_non_matching_opponent(self) -> None:
+        """FILTERED_GROUP technique: join-table opponents are still filtered."""
+        from actions.constants import ActionTargetType
+        from world.mechanics.factories import ObjectPropertyFactory
+
+        technique = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=EffectTypeFactory(name="FilteredPrereqAttack", base_power=20),
+            target_type=ActionTargetType.FILTERED_GROUP,
+            damage_profile=False,
+        )
+        TechniqueDamageProfileFactory(technique=technique, base_damage=10)
+        prereq = self._aerial_prerequisite()
+        technique.target_prerequisites.add(prereq)
+
+        _enc, participant, action, opponent_a, opponent_b = _build_encounter_with_two_opponents(
+            technique
+        )
+        ObjectPropertyFactory(object=opponent_a.objectdb, property=prereq.property)
+
+        resolver = _resolver(participant, action)
+
+        with patch("world.combat.services.perform_check") as mock_check:
+            mock_check.return_value = type(
+                "CR", (), {"success_level": 1, "roll": 10, "difficulty": 5}
+            )()
+            result = resolver(power=20, ledger=_ledger(20))
+
+        hit_targets = {r.opponent_id for r in result.damage_results}
+        self.assertIn(opponent_a.pk, hit_targets)
+        self.assertNotIn(opponent_b.pk, hit_targets)
+
+
 class CombatRoundActionTargetModelTests(TestCase):
     """Unit tests for the CombatRoundActionTarget join table."""
 

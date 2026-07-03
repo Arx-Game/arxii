@@ -296,6 +296,34 @@ class CombatTechniqueResolver:
                     pull_bonus += eff.scaled_value
         return pull_bonus
 
+    def _filter_by_target_prerequisites(
+        self, technique: Technique, opponents: list[CombatOpponent]
+    ) -> list[CombatOpponent]:
+        """Silently drop opponents that fail technique.target_prerequisites.
+
+        AREA/FILTERED_GROUP only — these are enumerated independently of
+        _build_affected_targets/_check_combat_target_prerequisites, so a
+        target_prerequisites-gated technique would otherwise land on every
+        opponent regardless of eligibility. Mirrors resolve_targets' silent
+        AREA/FILTERED_GROUP filter (world/magic/services/targeting.py) rather
+        than raising — an AoE cast is expected to skip ineligible targets, not
+        block the whole cast (ADR-0045).
+        """
+        prereqs = technique.cached_target_prerequisites
+        if not prereqs:
+            return opponents
+        caster_od = self.participant.character_sheet.character
+        eligible = []
+        for opp in opponents:
+            target_od = opp.objectdb
+            if target_od is None:
+                continue  # can't evaluate a Property-based prerequisite without an ObjectDB
+            if all(
+                prereq.evaluate(caster_od, target_od, target_od.location).met for prereq in prereqs
+            ):
+                eligible.append(opp)
+        return eligible
+
     def _resolved_opponent_targets(self) -> list[CombatOpponent]:
         """Return the ordered list of CombatOpponents to act on for this action.
 
@@ -315,6 +343,12 @@ class CombatTechniqueResolver:
         after each preceding target's damage write.  AREA is the exception: it
         pre-filters to exclude DEFEATED so clients never need to enumerate the
         full list.
+
+        AREA and FILTERED_GROUP additionally run technique.target_prerequisites
+        through ``_filter_by_target_prerequisites`` (silent filter, #1793) — the
+        SINGLE/SELF branch does not, since that case is hard-gated pre-flight by
+        ``_check_combat_target_prerequisites`` in ``resolve_combat_technique``
+        before this method is ever reached for an AoE-independent enumeration.
         """
         from actions.constants import ActionTargetType  # noqa: PLC0415
 
@@ -327,13 +361,14 @@ class CombatTechniqueResolver:
         if target_type == ActionTargetType.AREA:
             # Enumerate ALL active (non-DEFEATED) opponents in the encounter.
             # One query; no join-table rows required.
-            return list(
+            opponents = list(
                 CombatOpponent.objects.filter(
                     encounter=self.participant.encounter,
                 )
                 .exclude(status=OpponentStatus.DEFEATED)
                 .order_by("pk")
             )
+            return self._filter_by_target_prerequisites(technique, opponents)
 
         if target_type == ActionTargetType.FILTERED_GROUP:
             join_opponents = list(
@@ -345,10 +380,12 @@ class CombatTechniqueResolver:
                 .order_by("pk")
             )
             if join_opponents:
-                return [row.opponent for row in join_opponents]
-            # Fallback: a direct caller that didn't write join rows
-            primary = self.action.focused_opponent_target
-            return [primary] if primary is not None else []
+                opponents = [row.opponent for row in join_opponents]
+            else:
+                # Fallback: a direct caller that didn't write join rows
+                primary = self.action.focused_opponent_target
+                opponents = [primary] if primary is not None else []
+            return self._filter_by_target_prerequisites(technique, opponents)
 
         # SINGLE / SELF: single target only
         primary = self.action.focused_opponent_target

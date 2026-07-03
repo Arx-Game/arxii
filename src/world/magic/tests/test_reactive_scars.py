@@ -453,3 +453,54 @@ class TargetRuntimePropertyNegatesEffectTest(TestCase):
     def test_grounded_target_does_not_cancel(self) -> None:
         stack = self._emit()
         self.assertFalse(stack.was_cancelled())
+
+
+class TargetCapabilityNegatesEffectTest(TestCase):
+    """A target's effective Capability (e.g. 'flight') can cancel an incoming effect.
+
+    Sibling proof to TargetRuntimePropertyNegatesEffectTest, but for the
+    has_capability DSL op (#1793) — a real ReactiveConditionFactory-built trigger
+    with {"op": "has_capability", ...} firing/cancelling via emit_event, against a
+    Character's real CapabilityType state (get_effective_capability_value). No
+    SELF_FILTER, since the trigger is installed on the potential victim and must
+    fire whenever an incoming DAMAGE_PRE_APPLY names them as target.
+    """
+
+    def setUp(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        self.room = _create_room("CapabilityTrapRoom")
+        sheet = CharacterSheetFactory()
+        self.character = sheet.character
+        self.character.location = self.room
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "path": "target",
+                "op": "has_capability",
+                "value": "flight-rtest",
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+    def _emit(self):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="technique", ref=None),
+        )
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_flying_target_cancels_the_trap(self) -> None:
+        CapabilityTypeFactory(name="flight-rtest", innate_baseline=1)
+        stack = self._emit()
+        self.assertTrue(stack.was_cancelled())
+
+    def test_grounded_target_does_not_cancel(self) -> None:
+        CapabilityTypeFactory(name="flight-rtest", innate_baseline=0)
+        stack = self._emit()
+        self.assertFalse(stack.was_cancelled())

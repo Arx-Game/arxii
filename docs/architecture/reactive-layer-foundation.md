@@ -214,7 +214,7 @@ the event payload at dispatch time. Grammar:
 }
 ```
 
-Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`.
+Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`, `has_capability`.
 
 Paths are dotted traversals against the payload and resolve via attribute
 access on model instances. `self` resolves to the handler owner (so a
