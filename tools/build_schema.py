@@ -7,6 +7,12 @@ ADR: ci-schema-from-models). Mirrors the SQLite fast tier's approach
 standalone SQL files (range partition, composite FKs, materialized views) and
 the idempotent RunPython seeds that migrations would otherwise carry.
 
+The SQL files + seeds run inside a single `transaction.atomic()` block, so the
+`_schema_already_built()` guard's skip/run semantics stay binary: idempotency
+is whole-block (skip everything if the partition rewrite already landed, else
+run everything), not a per-file resume — a failure partway through rolls the
+whole block back rather than leaving some files applied and others not.
+
 Usage (any checkout, any target DB):
 
     DATABASE_URL=postgres://... uv run python tools/build_schema.py
@@ -18,6 +24,10 @@ import importlib
 import os
 from pathlib import Path
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.db.backends.base.base import BaseDatabaseWrapper
 
 SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 
@@ -73,7 +83,7 @@ def _seed_modules() -> list[tuple[str, str]]:
     return pairs
 
 
-def _schema_already_built(connection) -> bool:
+def _schema_already_built(connection: "BaseDatabaseWrapper") -> bool:
     """True once the partitioned ``scenes_interaction`` table exists.
 
     The raw SQL files (partition rewrite, composite FKs, matviews) are
@@ -103,7 +113,7 @@ def main() -> None:
 
     from django.apps import apps  # noqa: PLC0415
     from django.core.management import call_command  # noqa: PLC0415
-    from django.db import connection  # noqa: PLC0415
+    from django.db import connection, transaction  # noqa: PLC0415
 
     call_command("migrate", run_syncdb=True, interactive=False, verbosity=1)
 
@@ -111,15 +121,16 @@ def main() -> None:
         print("schema already built (scenes_interaction is partitioned) — skipping SQL + seeds")
         return
 
-    with connection.cursor() as cursor:
-        for rel_path in SQL_FILES:
-            cursor.execute((SRC_DIR / rel_path).read_text())
-            print(f"applied {rel_path}")
+    with transaction.atomic():
+        with connection.cursor() as cursor:
+            for rel_path in SQL_FILES:
+                cursor.execute((SRC_DIR / rel_path).read_text())
+                print(f"applied {rel_path}")
 
-    for module_path, func_name in _seed_modules():
-        module = importlib.import_module(module_path)
-        getattr(module, func_name)(apps, None)
-        print(f"seeded {module_path}")
+        for module_path, func_name in _seed_modules():
+            module = importlib.import_module(module_path)
+            getattr(module, func_name)(apps, None)
+            print(f"seeded {module_path}")
 
 
 if __name__ == "__main__":
