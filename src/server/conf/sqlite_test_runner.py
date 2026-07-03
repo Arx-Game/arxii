@@ -108,8 +108,15 @@ def _schema_fingerprint() -> str:
     hasher = hashlib.sha256()
     hasher.update(django.get_version().encode())
     hasher.update(evennia.__version__.encode())
+    # Proxy models (every Evennia typeclass) have no schema of their own and
+    # get registered lazily on first import — including them would make the
+    # fingerprint depend on which test modules discovery happened to import.
     states = sorted(
-        (ModelState.from_model(model) for model in apps.get_models()),
+        (
+            ModelState.from_model(model)
+            for model in apps.get_models()
+            if not model._meta.proxy  # noqa: SLF001
+        ),
         key=lambda state: (state.app_label, state.name),
     )
     for state in states:
@@ -188,7 +195,8 @@ def _migrate_replaced_by_restore(template: Path) -> Iterator[None]:
     real_call_command = management.call_command
 
     def call_command_with_cached_schema(name: Any, *args: Any, **kwargs: Any) -> Any:
-        if name == "migrate":  # noqa: STRING_LITERAL — Django management-command name
+        # Django management-command name, not a domain identifier.
+        if name == "migrate":  # noqa: STRING_LITERAL
             alias = kwargs.get("database", DEFAULT_DB_ALIAS)
             try:
                 _restore_sqlite_from_template(alias, template)
