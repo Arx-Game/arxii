@@ -40,6 +40,7 @@ from commands.consent import (
 )
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
+from commands.crafting_station import CmdLabStation
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
@@ -305,6 +306,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCovenant,
             # #1592 — battle system: GM lifecycle + player declare namespace.
             CmdBattle,
+            # #1234 — Lab crafting station install/upgrade/repair namespace.
+            CmdLabStation,
         )
         for command_cls in command_classes:
             self.add(command_cls())
