@@ -208,11 +208,11 @@ class HoldsItemPrerequisite(Prerequisite):
 def _is_visible_to(actor, target) -> bool:
     """Whether ``actor`` can perceive ``target``.
 
-    MVP proxy: same-location presence (you perceive what is in your room).
-    TODO(#1225): replace with a real perception/visibility
-    system (darkness, stealth, line-of-sight).
+    Delegates to the real perception/concealment seam (#1225).
     """
-    return target.location in (actor.location, actor)
+    from world.conditions.services import can_perceive  # noqa: PLC0415
+
+    return can_perceive(actor, target)
 
 
 @dataclass

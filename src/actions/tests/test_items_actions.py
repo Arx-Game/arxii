@@ -15,9 +15,11 @@ from actions.definitions.items import (
     UseItemAction,
 )
 from actions.prerequisites import (
+    CANNOT_SEE_MESSAGE,
     HoldsItemPrerequisite,
     ItemUsablePrerequisite,
     OnUseTargetPrerequisite,
+    _check_character_target,
 )
 from evennia_extensions.factories import (
     AccountFactory,
@@ -422,6 +424,25 @@ class OnUseTargetPrereqTests(TestCase):
             actor, target=target_item_obj, context=self._ctx(item_obj)
         )
         assert met is True
+
+    def test_character_target_rejected_when_concealed_and_undetected(self) -> None:
+        """A concealed target that the actor hasn't detected must fail as invisible (#1225)."""
+        from world.conditions.factories import (
+            ConditionCategoryFactory,
+            ConditionInstanceFactory,
+            ConditionTemplateFactory,
+        )
+
+        actor = CharacterFactory(db_key="OUTConcealActor")
+        target = CharacterFactory(db_key="OUTConcealTarget", location=actor.location)
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        tmpl = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=target, condition=tmpl)
+
+        met, reason = _check_character_target(actor, target)
+
+        assert met is False
+        assert reason == CANNOT_SEE_MESSAGE
 
     def test_item_kind_unreachable_target_fails(self) -> None:
         """ITEM-kind item targeting an item in a different room must fail (reachability)."""
