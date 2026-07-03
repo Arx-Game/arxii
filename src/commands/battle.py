@@ -9,6 +9,10 @@ Player subverbs:
     battle declare strike place <name> with <technique>
     battle declare support <char> with <technique>
     battle declare rescue <ally> with <technique>
+    battle declare rout <unit> with <technique>
+    battle declare rally <unit> with <technique>
+    battle declare repel place <name> with <technique>
+    battle declare hold place <name> with <technique>
     battle duel <front> vs <boss name>
 
 GM subverbs:
@@ -41,6 +45,10 @@ class CmdBattle(ArxCommand):
         battle declare strike place <name> with <technique>
         battle declare support <ally> with <technique>
         battle declare rescue <ally> with <technique>
+        battle declare rout <unit> with <technique>
+        battle declare rally <unit> with <technique>
+        battle declare repel place <name> with <technique>
+        battle declare hold place <name> with <technique>
         battle duel <front> vs <boss name>
 
     Syntax (GM / staff):
@@ -57,9 +65,13 @@ class CmdBattle(ArxCommand):
     active enemy unit) instead of a single unit — requires an engaged SUPREME
     command_tier on your own side's covenant. ``strike place <name>`` is the
     same fan-out narrowed to one front (``BattlePlace``) — requires an engaged
-    SUBORDINATE or SUPREME command_tier. ``duel <front> vs <boss name>`` opens
-    a lethal Champion duel bound to that front — requires an engaged Champion
-    role for your side's covenant.
+    SUBORDINATE or SUPREME command_tier. ``rout`` targets an enemy unit
+    (ACTIVE only) to push it toward breaking. ``rally`` targets a unit on
+    *your own* side, including one that's already ROUTED — that's the whole
+    point of rallying it. ``repel``/``hold`` are PLACE-scope only, aimed at a
+    front (``BattlePlace``) rather than a single unit or an entire side.
+    ``duel <front> vs <boss name>`` opens a lethal Champion duel bound to that
+    front — requires an engaged Champion role for your side's covenant.
     """
 
     key = "battle"
@@ -147,6 +159,26 @@ class CmdBattle(ArxCommand):
             raise CommandError(msg)
         return unit
 
+    def _resolve_own_unit(self, participant: BattleParticipant, name: str) -> BattleUnit:
+        """Resolve a BattleUnit by name within the participant's own side (RALLY, #1712).
+
+        Unlike ``_resolve_unit`` (STRIKE/ROUT — ACTIVE only, any side), this also
+        matches ROUTED units — rallying a unit that's already broken is the point.
+        """
+        from world.battles.constants import BattleUnitStatus  # noqa: PLC0415
+        from world.battles.models import BattleUnit  # noqa: PLC0415
+
+        unit = BattleUnit.objects.filter(
+            battle=participant.battle,
+            side=participant.side,
+            name__iexact=name,
+            status__in=(BattleUnitStatus.ACTIVE, BattleUnitStatus.ROUTED),
+        ).first()
+        if unit is None:
+            msg = f"No active or routed unit named '{name}' on your side in this battle."
+            raise CommandError(msg)
+        return unit
+
     def _resolve_ally(self, participant: BattleParticipant, char_name: str) -> BattleParticipant:
         """Resolve an allied BattleParticipant by character name."""
         from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
@@ -222,7 +254,7 @@ class CmdBattle(ArxCommand):
             lines.append("No active round.")
         self.msg("\n".join(lines))
 
-    def _declare(self, rest: list[str]) -> None:
+    def _declare(self, rest: list[str]) -> None:  # noqa: C901
         from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
         from world.battles.constants import BattleActionKind  # noqa: PLC0415
 
@@ -231,6 +263,10 @@ class CmdBattle(ArxCommand):
                 "Usage: battle declare strike <unit> with <technique>"
                 " | battle declare support <ally> with <technique>"
                 " | battle declare rescue <ally> with <technique>"
+                " | battle declare rout <unit> with <technique>"
+                " | battle declare rally <unit> with <technique>"
+                " | battle declare repel place <name> with <technique>"
+                " | battle declare hold place <name> with <technique>"
             )
             raise CommandError(msg)
 
@@ -241,6 +277,10 @@ class CmdBattle(ArxCommand):
                 "Usage: battle declare strike <unit> with <technique>"
                 " | battle declare support <ally> with <technique>"
                 " | battle declare rescue <ally> with <technique>"
+                " | battle declare rout <unit> with <technique>"
+                " | battle declare rally <unit> with <technique>"
+                " | battle declare repel place <name> with <technique>"
+                " | battle declare hold place <name> with <technique>"
             )
             raise CommandError(msg)
         split_at = remainder.index("with")
@@ -275,41 +315,70 @@ class CmdBattle(ArxCommand):
                 technique_id=technique.pk,
                 target_ally=ally,
             )
+        elif kind == "rout":  # noqa: STRING_LITERAL
+            result = self._declare_rout(name, technique_name)
+        elif kind == "rally":  # noqa: STRING_LITERAL
+            result = self._declare_rally(name, technique_name)
+        elif kind == "repel":  # noqa: STRING_LITERAL
+            result = self._declare_place_scoped(
+                BattleActionKind.REPEL, name, technique_name, verb="repel"
+            )
+        elif kind == "hold":  # noqa: STRING_LITERAL
+            result = self._declare_place_scoped(
+                BattleActionKind.HOLD, name, technique_name, verb="hold"
+            )
         else:
-            msg = "Unknown declare subverb. Use 'strike', 'support', or 'rescue'."
+            msg = (
+                "Unknown declare subverb. Use 'strike', 'support', 'rescue', "
+                "'rout', 'rally', 'repel', or 'hold'."
+            )
             raise CommandError(msg)
 
         self._send(result)
 
-    def _declare_strike(self, name: str, technique_name: str) -> ActionResult:
-        """Resolve and dispatch a ``strike`` declaration: unit, side, or place target.
+    def _declare_unit_scoped(
+        self,
+        action_kind: str,
+        name: str,
+        technique_name: str,
+        *,
+        verb: str,
+        own_side: bool = False,
+    ) -> ActionResult:
+        """Resolve and dispatch a unit/side/place-scoped declaration (STRIKE/ROUT/RALLY).
 
-        ``name`` is the token(s) between ``strike`` and ``with`` — either a unit
-        name, the literal ``side`` (army-wide SIDE scope against the opposing
-        side), or ``place <name>`` (front-wide PLACE scope).
+        ``name`` is the token(s) between the subverb and ``with`` — either a unit
+        name, the literal ``side``, or ``place <name>``. ``own_side=True`` (RALLY)
+        means ``side``/a bare unit name both resolve against the declarant's own
+        side (and include ROUTED units, via ``_resolve_own_unit``) rather than the
+        opposing side (STRIKE/ROUT, ACTIVE units only, via ``_resolve_unit``).
         """
         from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
-        from world.battles.constants import BattleActionKind, BattleActionScope  # noqa: PLC0415
+        from world.battles.constants import BattleActionScope  # noqa: PLC0415
 
         if not name:
             msg = (
-                "Declare strike against which unit? (battle declare strike <unit> with <technique>)"
+                f"Declare {verb} against which unit? "
+                f"(battle declare {verb} <unit> with <technique>)"
             )
             raise CommandError(msg)
         participant = self._resolve_participant()
         technique = self._resolve_technique(participant, technique_name)
 
         if name.lower() == "side":  # noqa: STRING_LITERAL
-            enemy_side = participant.battle.sides.exclude(pk=participant.side_id).first()
-            if enemy_side is None:
-                msg = "There is no opposing side to strike."
-                raise CommandError(msg)
+            if own_side:
+                target_side = participant.side
+            else:
+                target_side = participant.battle.sides.exclude(pk=participant.side_id).first()
+                if target_side is None:
+                    msg = "There is no opposing side to target."
+                    raise CommandError(msg)
             return DeclareBattleActionAction().run(
                 self.caller,
-                action_kind=BattleActionKind.STRIKE,
+                action_kind=action_kind,
                 technique_id=technique.pk,
                 scope=BattleActionScope.SIDE,
-                target_side=enemy_side,
+                target_side=target_side,
             )
 
         if name.lower().startswith("place "):  # noqa: STRING_LITERAL
@@ -324,18 +393,69 @@ class CmdBattle(ArxCommand):
                 raise CommandError(msg)
             return DeclareBattleActionAction().run(
                 self.caller,
-                action_kind=BattleActionKind.STRIKE,
+                action_kind=action_kind,
                 technique_id=technique.pk,
                 scope=BattleActionScope.PLACE,
                 target_place=place,
             )
 
-        unit = self._resolve_unit(participant, name)
+        unit = (
+            self._resolve_own_unit(participant, name)
+            if own_side
+            else self._resolve_unit(participant, name)
+        )
         return DeclareBattleActionAction().run(
             self.caller,
-            action_kind=BattleActionKind.STRIKE,
+            action_kind=action_kind,
             technique_id=technique.pk,
             target_unit=unit,
+        )
+
+    def _declare_strike(self, name: str, technique_name: str) -> ActionResult:
+        from world.battles.constants import BattleActionKind  # noqa: PLC0415
+
+        return self._declare_unit_scoped(
+            BattleActionKind.STRIKE, name, technique_name, verb="strike"
+        )
+
+    def _declare_rout(self, name: str, technique_name: str) -> ActionResult:
+        from world.battles.constants import BattleActionKind  # noqa: PLC0415
+
+        return self._declare_unit_scoped(BattleActionKind.ROUT, name, technique_name, verb="rout")
+
+    def _declare_rally(self, name: str, technique_name: str) -> ActionResult:
+        from world.battles.constants import BattleActionKind  # noqa: PLC0415
+
+        return self._declare_unit_scoped(
+            BattleActionKind.RALLY, name, technique_name, verb="rally", own_side=True
+        )
+
+    def _declare_place_scoped(
+        self, action_kind: str, name: str, technique_name: str, *, verb: str
+    ) -> ActionResult:
+        """Resolve and dispatch a PLACE-scope-only declaration (REPEL/HOLD, #1712)."""
+        from actions.definitions.battles import DeclareBattleActionAction  # noqa: PLC0415
+        from world.battles.constants import BattleActionScope  # noqa: PLC0415
+        from world.battles.models import BattlePlace  # noqa: PLC0415
+
+        if not name.lower().startswith("place "):  # noqa: STRING_LITERAL
+            msg = f"Usage: battle declare {verb} place <name> with <technique>"
+            raise CommandError(msg)
+        place_name = name[len("place ") :].strip()
+        participant = self._resolve_participant()
+        technique = self._resolve_technique(participant, technique_name)
+        place = BattlePlace.objects.filter(
+            battle=participant.battle, name__iexact=place_name
+        ).first()
+        if place is None:
+            msg = f"No front named '{place_name}' in this battle."
+            raise CommandError(msg)
+        return DeclareBattleActionAction().run(
+            self.caller,
+            action_kind=action_kind,
+            technique_id=technique.pk,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
         )
 
     def _begin_round(self) -> None:
