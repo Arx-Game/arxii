@@ -88,6 +88,12 @@ class BuildingModelTests(TestCase):
         self.assertEqual(building.computed_stats(), {"resonance_amp": 4, "prestige": 4})
 
 
+class BuildingFortificationLevelTests(TestCase):
+    def test_defaults_to_zero(self):
+        building = BuildingFactory()
+        self.assertEqual(building.fortification_level, 0)
+
+
 class BuildingPermitDetailsModelTests(TestCase):
     def test_create_unconsumed(self) -> None:
         permit = BuildingPermitDetailsFactory()

@@ -236,6 +236,16 @@ class Building(SharedMemoryModel):
             "BUILDING_EXTENSION. Rooms spend their RoomSizeTier units from this pool."
         ),
     )
+    fortification_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Persistent defense investment (#1713), raised via a FORTIFICATION_UPGRADE "
+            "Project (see world.buildings.fortification_services). Snapshotted into a "
+            "battle Fortification's max_integrity when one is created against this "
+            "Building — see world.battles.services.create_fortification. Capped at "
+            "MAX_FORTIFICATION_LEVEL (world.buildings.room_constants)."
+        ),
+    )
     entry_room = models.ForeignKey(
         "evennia_extensions.RoomProfile",
         null=True,
