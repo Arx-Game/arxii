@@ -91,6 +91,12 @@ def _seed_governance() -> None:
     seed_governance_check_content()
 
 
+def _seed_domain_dev() -> None:
+    from world.seeds.domain_dev import ensure_dev_domain  # noqa: PLC0415
+
+    ensure_dev_domain()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -126,6 +132,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
     # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
     "governance": _seed_governance,
+    # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes
+    # so the books + scandal loops are walkable on a dev DB (#930/#1464). After
+    # governance (its CheckTypes) and character_creation (the Arx realm).
+    "domain_dev": _seed_domain_dev,
 }
 
 
@@ -202,4 +212,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
         # "checks"); appears as a seeded cluster with no standalone content model (#930).
         "governance": [],
+        # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
+        "domain_dev": [],
     }
