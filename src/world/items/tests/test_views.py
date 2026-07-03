@@ -135,8 +135,13 @@ class ItemFacetViewTests(ItemViewTestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from evennia_extensions.factories import (
+            AccountFactory,
+            CharacterFactory,
+            RoomProfileFactory,
+        )
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import install_full_lab_station
         from world.magic.factories import FacetFactory
         from world.roster.factories import (
             PlayerDataFactory,
@@ -174,6 +179,12 @@ class ItemFacetViewTests(ItemViewTestCase):
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing view test can still craft.
+        room_profile = RoomProfileFactory()
+        cls.owner_char.location = room_profile.objectdb
+        cls.owner_char.save()
+        install_full_lab_station(room_profile)
 
         cls.non_owner = AccountFactory(username="facet_view_nonowner")
         cls.non_owner_char = CharacterFactory(db_key="facet_view_nonowner_char")

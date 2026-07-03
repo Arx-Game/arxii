@@ -182,12 +182,20 @@ class FacetCraftResultConsumedTests(CraftingApiTestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.factories import install_full_lab_station
         from world.magic.factories import FacetFactory
 
         cls.facet = FacetFactory(name="ConsumedFacet")
         cls.item_for_craft = ItemInstanceFactory(
             template=cls.template, holder_character_sheet=cls.owner_sheet
         )
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing API test can still craft.
+        room_profile = RoomProfileFactory()
+        cls.owner_char.location = room_profile.objectdb
+        cls.owner_char.save()
+        install_full_lab_station(room_profile)
 
     def test_facet_craft_result_includes_consumed_and_consequence_label(self) -> None:
         """POST craft response includes consumed dict and consequence_label string."""

@@ -398,6 +398,33 @@ def _wire_recipe_caps_and_consequences(
         )
 
 
+def install_full_lab_station(room_profile, *, level: int = 1):
+    """Install a full-durability Lab station in ``room_profile`` (#1234).
+
+    Test-fixture helper: creates the ``RoomFeatureInstance`` (LAB strategy) +
+    a full-durability ``LabStationDetails`` in one call. Crafting-pipeline
+    tests need a live station in the crafter's room now that
+    ``CraftingRecipe.requires_station`` defaults to ``True`` (Task 6) — callers
+    must still set the crafter character's ``.location`` to
+    ``room_profile.objectdb`` themselves before crafting.
+
+    Returns the created ``LabStationDetails``.
+    """
+    from world.items.crafting.constants import LAB_BASE_DURABILITY_PER_LEVEL
+    from world.items.crafting.models import LabStationDetails
+    from world.room_features.constants import RoomFeatureServiceStrategy
+    from world.room_features.factories import RoomFeatureInstanceFactory, RoomFeatureKindFactory
+
+    kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+    instance = RoomFeatureInstanceFactory(room_profile=room_profile, feature_kind=kind, level=level)
+    max_durability = LAB_BASE_DURABILITY_PER_LEVEL * level
+    return LabStationDetails.objects.create(
+        feature_instance=instance,
+        durability=max_durability,
+        max_durability=max_durability,
+    )
+
+
 class CraftingRecipeFactory(factory.django.DjangoModelFactory):
     """Factory for CraftingRecipe.
 

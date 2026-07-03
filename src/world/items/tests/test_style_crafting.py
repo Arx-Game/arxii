@@ -20,7 +20,12 @@ from world.traits.factories import CharacterTraitValueFactory
 
 class CraftAttachStyleTests(TestCase):
     def setUp(self) -> None:
-        from world.items.factories import StyleFactory, wire_enchanting_crafting
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.items.factories import (
+            StyleFactory,
+            install_full_lab_station,
+            wire_enchanting_crafting,
+        )
         from world.traits.models import Trait
 
         # wire_enchanting_crafting seeds the Common/Fine/Masterwork tier ladder.
@@ -32,6 +37,12 @@ class CraftAttachStyleTests(TestCase):
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing pipeline tests can still craft.
+        room_profile = RoomProfileFactory()
+        self.sheet.character.location = room_profile.objectdb
+        self.sheet.character.save()
+        install_full_lab_station(room_profile)
         template = ItemTemplateFactory(style_capacity=2)
         self.item = ItemInstanceFactory(template=template, holder_character_sheet=self.sheet)
         self.style = StyleFactory(name="TestStyle")
@@ -135,7 +146,8 @@ class ItemStyleCraftViewTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia_extensions.factories import CharacterFactory
+        from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+        from world.items.factories import install_full_lab_station
         from world.roster.factories import (
             PlayerDataFactory,
             RosterEntryFactory,
@@ -161,6 +173,12 @@ class ItemStyleCraftViewTests(TestCase):
             trait=Trait.objects.get(name="Enchanting"),
             value=50,
         )
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing view tests can still craft.
+        room_profile = RoomProfileFactory()
+        cls.owner_char.location = room_profile.objectdb
+        cls.owner_char.save()
+        install_full_lab_station(room_profile)
 
         cls.non_owner = AccountFactory(username="style_view_nonowner")
         cls.non_owner_char = CharacterFactory(db_key="style_view_nonowner_char")

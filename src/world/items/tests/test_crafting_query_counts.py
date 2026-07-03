@@ -9,6 +9,8 @@ rather than discovered in production profiling.
 ``run_crafting_recipe`` pipeline (per call):
   1. CraftingRecipe GET — 1 query
   2. FacetAttachHandler.pre_validate (assert_facet_attachable): EXISTS + COUNT — 2 queries
+  2.5. Station gate (#1234) — _resolve_active_lab_station: RoomProfile filter.first
+       + RoomFeatureInstance filter.first + LabStationDetails filter.first — 3 queries
   3. stage_and_assert_affordable:
      a. ActionPointConfig × 2 (get_default_maximum called for maximum + current) — 2 q
      b. ActionPointPool GET — 1 query
@@ -21,6 +23,8 @@ rather than discovered in production profiling.
         + PointConversionRange — 4 queries
      c. _calculate_aspect_bonus: CharacterPathHistory filter — 1 query (returns None)
      d. CheckRank.get_rank_for_points × 2 + ResultChart.get_chart_for_difference — 3 q
+  4.5. Station wear (#1234) — unconditional durability decrement + save(update_fields=)
+       — SAVEPOINT + UPDATE + RELEASE SAVEPOINT — 3 queries
   5. consequence_rows.select_related — 1 query (all rows in one hit, not per-row)
   6. consume_cost:
      a. ActionPointConfig × 2 + ActionPointPool GET + pool.spend UPDATE — 4 queries
@@ -66,7 +70,7 @@ from __future__ import annotations
 from django.db import connection
 from django.test import TestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import ConsequenceFactory
@@ -79,6 +83,7 @@ from world.items.factories import (
     CraftingRecipeConsequenceFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
+    install_full_lab_station,
     wire_enchanting_crafting,
 )
 from world.items.services.crafting import craft_attach_facet
@@ -129,6 +134,12 @@ class CraftAttachFacetQueryCountTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so this pre-existing pinned-query test can still craft.
+        room_profile = RoomProfileFactory()
+        self.character.location = room_profile.objectdb
+        self.character.save()
+        install_full_lab_station(room_profile)
 
         # Give the character enough skill to qualify for the Fine cap band (skill >= 40).
         CharacterTraitValueFactory(character=self.character, trait=_enchanting_trait(), value=50)
@@ -171,7 +182,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
     def test_craft_attach_facet_query_count(self) -> None:
         """craft_attach_facet must not scale queries with consequence/cap/material row count.
 
-        Pinned at 65 queries (measured on Postgres CI; SQLite runs 66 — one extra
+        Pinned at 71 queries (measured on Postgres CI; SQLite runs 72 — one extra
         SELECT from a SharedMemoryModel identity-map miss). The 1-query difference
         is test-ordering-dependent: a preceding test may warm the identity map for
         a lookup model (ActionPointConfig, QualityTier), eliminating one SELECT.
@@ -179,20 +190,23 @@ class CraftAttachFacetQueryCountTests(TestCase):
         consequence rows would push the count up by ≥3, exceeding any baseline.
         Prior baselines: #1031 (63) → #1243 (+1 anima guard) → #1688 (+1 spec)
         → #1770 (+1 Stake.subject_item SET_NULL cascade) → shard rebalance (-1
-        from cache-hit ordering).
+        from cache-hit ordering) → #1234 (+6: the station gate's
+        ``_resolve_active_lab_station`` resolve — RoomProfile + RoomFeatureInstance
+        + LabStationDetails lookups, 3 queries — plus the unconditional wear-decrement
+        save wrapped in a SAVEPOINT/UPDATE/RELEASE, 3 queries).
 
         consequence_rows: single SELECT — NOT one per row.
         material_requirements: single SELECT — NOT one per requirement.
         CraftingSkillCap.for_skill: single SELECT — NOT one per cap row.
         """
         with force_check_outcome(self.success_outcome):
-            # Postgres runs 65: a preceding test in the shard warms the
+            # Postgres runs 71: a preceding test in the shard warms the
             # SharedMemoryModel identity map for a lookup model (e.g.
-            # ActionPointConfig), eliminating one SELECT. SQLite runs 66
+            # ActionPointConfig), eliminating one SELECT. SQLite runs 72
             # (no cache hit — different test isolation). The 1-query gap is
             # ordering-dependent, not a regression — a per-row N+1 over 3
             # consequence rows would push either count up by ≥3.
-            expected = 65 if connection.vendor == "postgresql" else 66
+            expected = 71 if connection.vendor == "postgresql" else 72
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

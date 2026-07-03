@@ -7,7 +7,7 @@ selection, cost consumption, skill-cap clamp, attachment — through the public
 
 from django.test import TestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import CostConsumption
@@ -17,6 +17,7 @@ from world.items.factories import (
     CraftingSkillCapFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
+    install_full_lab_station,
     wire_enchanting_crafting,
 )
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
@@ -43,6 +44,12 @@ class RunCraftingRecipeTests(TestCase):
         self.sheet = CharacterSheetFactory()
         self.account = AccountFactory()
         self.character = self.sheet.character
+        # requires_station defaults True (#1234) — install a Lab station in the
+        # crafter's room so the pre-existing pipeline tests can still craft.
+        room_profile = RoomProfileFactory()
+        self.character.location = room_profile.objectdb
+        self.character.save()
+        install_full_lab_station(room_profile)
 
     def _set_skill(self, value: int) -> None:
         CharacterTraitValueFactory(character=self.character, trait=_enchanting_trait(), value=value)
