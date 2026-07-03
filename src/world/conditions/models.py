@@ -77,6 +77,14 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
 
+    conceals_from_perception = models.BooleanField(
+        default=False,
+        help_text=(
+            "Conditions in this category make the bearer imperceptible to others "
+            "(invisibility, magical concealment, stealth). Aggregated by is_concealed()."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -1181,6 +1189,18 @@ class ConditionInstance(SharedMemoryModel):
     suppressed_until = models.DateTimeField(
         null=True,
         blank=True,
+    )
+
+    detected_by = models.ManyToManyField(
+        "character_sheets.CharacterSheet",
+        related_name="detected_concealments",
+        blank=True,
+        help_text=(
+            "Characters who have pierced this specific concealing instance via a "
+            "detection check. Per-observer: one character detecting it does not "
+            "reveal it to anyone else. Only meaningful when the condition's category "
+            "has conceals_from_perception=True."
+        ),
     )
 
     # === Resolution (Scope 6 §4.1) ===
