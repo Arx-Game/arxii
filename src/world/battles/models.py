@@ -434,3 +434,33 @@ class TerrainCompositionEffect(SharedMemoryModel):
             f"{self.get_terrain_type_display()} vs {self.get_composition_display()}: "
             f"{self.modifier:+d}"
         )
+
+
+class BattleOutcomeMapping(SharedMemoryModel):
+    """Designer-tunable map from a Battle's graded outcome to a CheckOutcome tier.
+
+    Used by ``classify_battle_conclusion_outcome`` (``world.battles.beat_wiring``)
+    to select the CheckOutcome tier for beat completion when a war-scale Battle
+    concludes (#1785). Unlike combat's ``EncounterOutcomeMapping``, there is no
+    separate risk-level axis — ``BattleOutcome`` already encodes decisive-vs-marginal
+    severity in its four resolved values. A missing row, or a row whose
+    ``check_outcome`` is null, signals the caller to resolve the beat to
+    PENDING_GM_REVIEW rather than firing a consequence pool. Starts empty; GMs
+    author rows via admin.
+    """
+
+    outcome = models.CharField(max_length=30, choices=BattleOutcome.choices, unique=True)
+    check_outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="battle_outcome_mappings",
+        help_text="CheckOutcome tier for this outcome. Null = resolve to PENDING_GM_REVIEW.",
+    )
+
+    class Meta:
+        ordering = ["outcome"]
+
+    def __str__(self) -> str:
+        return f"BattleOutcomeMapping({self.get_outcome_display()})"

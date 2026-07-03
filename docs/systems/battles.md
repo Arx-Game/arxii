@@ -68,7 +68,7 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 | `battle` | FK → `Battle` (`related_name="places"`) | |
 | `name` | CharField(120) | Human-readable front name |
 | `combat_encounter` | FK → `combat.CombatEncounter` (null) | Bridge seam: a discrete tactical combat at this front |
-| `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0080 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
+| `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0081 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
 | `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition action (#1712) to consume — data only, no movement action exists yet. |
 
 **Constraint:** unique `(battle, name)`.
@@ -355,6 +355,56 @@ Surrounded. Telnet: `battle declare rescue <ally> with <technique>` (`CmdBattle`
 every round the GM resolves regardless of whether they declared — a narrow, explicit
 exception to ADR-0004 scoped to peril only (see **ADR-0074**).
 
+## Stakes / Beat Wiring (#1785)
+
+`world.battles.beat_wiring` wires a concluded `Battle` into the same
+`record_outcome_tier_completion` seam #1746 built for `CombatEncounter` —
+reusing the stakes-contract engine (`world.stories.services.stakes`,
+`world.stories.services.stake_resolution`) as-is.
+
+### `BattleOutcomeMapping`
+
+A designer-authored map from `BattleOutcome` to a `traits.CheckOutcome` tier
+(`outcome` unique, `check_outcome` nullable FK). Unlike combat's
+`EncounterOutcomeMapping`, there's no separate risk-level axis —
+`BattleOutcome`'s four values already encode decisive-vs-marginal severity.
+Starts empty; a missing row or a null `check_outcome` resolves to
+`PENDING_GM_REVIEW`. Admin-registered (`world/battles/admin.py`).
+
+### `classify_battle_conclusion_outcome(battle) -> CheckOutcome | None`
+
+Looks up the `BattleOutcomeMapping` row for `battle.outcome`. Raises
+`ValueError` if called before the battle has a graded outcome.
+
+### `activate_stakes_for_battle(battle) -> None`
+
+Called from `begin_battle_round` the first time a battle opens round 1.
+Collects every currently-`ACTIVE` `BattleParticipant`'s character sheet
+(no-ops if none), and for each staked `UNSATISFIED` beat linked to
+`battle.scene` (via `staked_unsatisfied_beats_for_scene`,
+`world.stories.services.stakes`), boundary-screens it
+(`check_stake_boundaries`) and locks it with
+`activate_stakes_contract(beat, sheets, scale_by_party_level=False)`.
+
+**`scale_by_party_level=False`**: a war's stakes reflect the objective being
+fought over, not which specific PCs happen to be enlisted — unlike
+scene-level stakes (ADR-0077), Battle activation skips the
+party-level-gap-adjusted `compute_effective_risk` entirely; a ready contract
+prices at its declared risk unconditionally. See **ADR-0080**.
+
+### `resolve_battle_beats(battle) -> None`
+
+Called directly from `conclude_battle` — not via a flow event/`TriggerDefinition`
+like combat's `ENCOUNTER_COMPLETED` wiring, since `Battle` has no location
+(`Battle.scene.location` is `None`, per #1733) and `conclude_battle` is already
+the single call-site choke point for battle conclusion. Finds every
+`UNSATISFIED` `OUTCOME_TIER` beat linked to `battle.scene` (identical
+`Scene → EpisodeScene → Episode → Beat` discovery to combat's wiring),
+classifies `battle.outcome` once, and resolves every linked beat to that same
+tier (one `Battle` grades as one outcome, applied uniformly — per-front
+independent grading is **#1760**'s job, not duplicated here). No `withdrawal`
+path: `BattleOutcome` has no FLED/ABANDONED-equivalent value.
+
 ## Services (`src/world/battles/services.py`)
 
 All public functions are the only permitted entry points for battle state mutations.
@@ -372,7 +422,7 @@ Multi-write operations use `@transaction.atomic`.
 | `begin_battle_round` | `(*, battle) -> BattleRound` | Closes prior round (→ COMPLETED) and opens a new DECLARING round. Raises `BattleConcludedError` if already concluded. |
 | `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
-| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`). **Does NOT call `complete_story`** — campaign propagation is deferred to #1716. Idempotent. |
+| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
 
 ## Actions (`src/actions/definitions/battles.py`)
@@ -466,15 +516,17 @@ the type-matchup and terrain-effect content the modifier stack reads.
   - `CharacterDoesNotKnowTechniqueError` — participant declared a technique they don't know
   - `TechniqueNotBattleReadyError` — declared technique has no `action_template` (not castable)
 
-## Legend / Outcome Model and the #1716 Dependency
+## Legend / Outcome Model and Stakes Wiring (#1785)
 
 `Battle.outcome` stores the graded result (`BattleOutcome`), and `Battle.campaign_story`
-(FK → `stories.Story`, null) holds the optional parent campaign story. `conclude_battle`
-deliberately **does not** call `complete_story` — automatically closing the whole campaign
-story on one battle's conclusion would foreclose a war arc prematurely.
+(FK → `stories.Story`, null) holds the optional parent campaign story — informational
+metadata only, not used for beat resolution (see below). `conclude_battle` deliberately
+**does not** call `complete_story` — automatically closing the whole campaign story on
+one battle's conclusion would foreclose a war arc prematurely.
 
-Campaign-stakes propagation (battle outcome → Story + campaign arc + win-gated Legend
-awards) is tracked in **#1716** and is the explicit next step after this spine.
+Campaign-stakes propagation (battle outcome → Story + win-gated Legend) is wired via
+`world.battles.beat_wiring` (#1785) — see [Stakes / Beat Wiring](#stakes--beat-wiring-1785)
+below.
 
 ## PR 1 Scope vs. Deferred
 
@@ -510,11 +562,12 @@ instead of a skirmish `CombatOpponent` (see [Integrates With](#integrates-with) 
 | Command hierarchy, Champion duels | #1710 |
 | Sieges | #1713 |
 | Naval / aerial variants | #1714 |
-| Campaign propagation: battle outcome → Story + win-gated Legend | **#1716** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
 [Peril / Rescue (#1733)](#peril--rescue-1733) below. Rich unit type-matchups and terrain
 effects are no longer deferred — see [Modifier Stack (#1711)](#modifier-stack-1711) above.
+Campaign propagation (battle outcome → Story + win-gated Legend) is no longer deferred — see
+[Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below.
 
 ## Test Coverage
 
@@ -563,6 +616,10 @@ effects are no longer deferred — see [Modifier Stack (#1711)](#modifier-stack-
 - `src/world/magic/tests/test_summon_ally.py::SummonAllyMilitaryBranchTests` (#1711) —
   `payload.military=True` creates a `BattleUnit` (not a `CombatOpponent`) in the caster's
   active `Battle`; no-op when the caster has no ACTIVE `BattleParticipant`
+- `src/world/battles/tests/test_beat_wiring.py` (#1785) — `BattleOutcomeMapping`
+  model constraints, `classify_battle_conclusion_outcome`, `activate_stakes_for_battle`
+  wiring + `scale_by_party_level=False`, `conclude_battle` → beat/stake resolution
+  integration
 
 ## Integrates With
 
@@ -589,7 +646,9 @@ effects are no longer deferred — see [Modifier Stack (#1711)](#modifier-stack-
   `ConsequencePool` rows (#1733)
 - **Combat** — `BattlePlace.combat_encounter` bridge seam (for discrete tactical fights
   at a front); `RoundStatus` and `AbstractRound` shared from `world.scenes`
-- **Stories** — `Battle.campaign_story` FK (propagation deferred to #1716)
+- **Stories** — `Battle.campaign_story` FK (informational; not used for beat
+  resolution); `world.battles.beat_wiring` resolves linked `Beat`s via
+  `Scene → EpisodeScene → Episode` (#1785)
 - **Actions** — four REGISTRY actions, `BattleRoundContext` in `get_active_round_context`
 
 ## Source

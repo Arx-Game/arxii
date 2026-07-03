@@ -360,6 +360,26 @@ class ActivationTests(EvenniaTestCase):
 
         self.assertEqual(result.pk, existing.pk)
 
+    def test_scale_by_party_level_false_prices_at_declared_risk(self):
+        """Battle-style activation: effective risk ignores the level gap entirely."""
+        beat = self._ready_beat()  # HIGH risk, target_level=4
+        sheets = self._sheets_at_levels(8, 8)  # 4 levels over target → would shift to LOW
+        activation = activate_stakes_contract(beat, sheets, scale_by_party_level=False)
+        self.assertEqual(activation.declared_risk, RenownRisk.HIGH)
+        self.assertEqual(activation.effective_risk, RenownRisk.HIGH)  # unchanged, not LOW
+
+    def test_scale_by_party_level_false_still_downgrades_unready_contract(self):
+        """The readiness gate isn't bypassed — only the level-gap math is."""
+        beat = BeatFactory(
+            risk=RenownRisk.HIGH,
+            target_level=4,
+            predicate_type=BeatPredicateType.OUTCOME_TIER,
+        )  # no stakes at all -> unready
+        sheets = self._sheets_at_levels(4, 4)
+        activation = activate_stakes_contract(beat, sheets, scale_by_party_level=False)
+        self.assertFalse(activation.is_ready)
+        self.assertEqual(activation.effective_risk, RenownRisk.NONE)
+
 
 class LegendPaysEffectiveRiskTests(EvenniaTestCase):
     """Legend award scales off the beat's EFFECTIVE risk (#1770 auto-downgrade), not

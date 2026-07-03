@@ -11,6 +11,7 @@ from django.contrib import admin
 from world.battles.models import (
     Battle,
     BattleActionDeclaration,
+    BattleOutcomeMapping,
     BattleParticipant,
     BattlePlace,
     BattleRound,
@@ -85,3 +86,9 @@ class TechniqueCompositionAffinityAdmin(admin.ModelAdmin):
 class TerrainCompositionEffectAdmin(admin.ModelAdmin):
     list_display = ("terrain_type", "composition", "modifier")
     list_filter = ("terrain_type", "composition")
+
+
+@admin.register(BattleOutcomeMapping)
+class BattleOutcomeMappingAdmin(admin.ModelAdmin):
+    list_display = ["outcome", "check_outcome"]
+    list_filter = ["outcome"]

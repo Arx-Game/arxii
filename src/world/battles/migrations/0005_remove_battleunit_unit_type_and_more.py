@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("battles", "0003_battle_afk_peril_override"),
+        ("battles", "0004_battleoutcomemapping"),
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("magic", "0075_alter_resonancegrant_source_and_more"),
     ]

@@ -4,7 +4,7 @@ Canonical vocabulary for `world.battles` (#1592, #1711). Use these terms in code
 docs, and issues; avoid synonyms.
 
 - **Front / Place** — a `BattlePlace`: a named zone within a battle (e.g. "The Main
-  Gates"). Not a room; battles are location-less (see ADR-0080).
+  Gates"). Not a room; battles are location-less (see ADR-0081).
 - **Unit** — a `BattleUnit`: an abstract typed force (friendly or enemy) stationed at
   a place. Never "squad," "regiment," or "mob" in code/docs — "unit" is the term.
 - **Composition** — a `BattleUnit`'s `UnitComposition` (infantry, cavalry, archers,
