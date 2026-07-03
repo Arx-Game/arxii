@@ -12,18 +12,30 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.constants import (
     DECISIVE_MARGIN,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    BattleActionKind,
+    BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
     BattleSideRole,
     BattleUnitStatus,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
 from world.battles.exceptions import (
     BattleConcludedError,
+    CannotStrikeOwnSideError,
     CharacterDoesNotKnowTechniqueError,
+    InsufficientCommandTierError,
+    MissingScopeTargetError,
+    NoCommandHierarchyError,
+    NotAChampionError,
+    PlaceAlreadyDuelingError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -36,10 +48,13 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
 )
+from world.combat.constants import OpponentTier
 from world.scenes.constants import RoundStatus
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import CombatEncounter
+    from world.covenants.models import Covenant
     from world.magic.models import Technique
     from world.stories.models import Story
 
@@ -77,6 +92,7 @@ def add_side(
     battle: Battle,
     role: str,
     victory_threshold: int = DEFAULT_VICTORY_THRESHOLD,
+    covenant: Covenant | None = None,
 ) -> BattleSide:
     """Add a side (attacker or defender) to a battle.
 
@@ -84,6 +100,7 @@ def add_side(
         battle: The ``Battle`` to add the side to.
         role: A ``BattleSideRole`` value.
         victory_threshold: VP total required for this side to win.
+        covenant: Optional War Covenant fielding this side (#1710).
 
     Returns:
         The newly created ``BattleSide``.
@@ -92,21 +109,36 @@ def add_side(
         battle=battle,
         role=role,
         victory_threshold=victory_threshold,
+        covenant=covenant,
     )
 
 
 @transaction.atomic
-def add_place(*, battle: Battle, name: str) -> BattlePlace:
+def add_place(
+    *,
+    battle: Battle,
+    name: str,
+    terrain_type: str = TerrainType.OPEN,
+    movement_cost: int = 1,
+) -> BattlePlace:
     """Add a named front/zone to a battle.
 
     Args:
         battle: The ``Battle`` to add the place to.
         name: Human-readable name for the front (e.g. "The Main Gates").
+        terrain_type: A ``TerrainType`` value (#1711). Defaults to OPEN.
+        movement_cost: Authored cost for a future reposition action (#1712) to
+            consume (#1711). Defaults to 1.
 
     Returns:
         The newly created ``BattlePlace``.
     """
-    return BattlePlace.objects.create(battle=battle, name=name)
+    return BattlePlace.objects.create(
+        battle=battle,
+        name=name,
+        terrain_type=terrain_type,
+        movement_cost=movement_cost,
+    )
 
 
 @transaction.atomic
@@ -115,7 +147,11 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
     battle: Battle,
     side: BattleSide,
     name: str,
-    unit_type: str,
+    descriptor: str = "",
+    composition: str = UnitComposition.IRREGULAR,
+    quality: str = UnitQuality.TRAINED,
+    commander: CharacterSheet | None = None,
+    summoned_by: CharacterSheet | None = None,
     strength: int = 100,
     place: BattlePlace | None = None,
 ) -> BattleUnit:
@@ -125,7 +161,12 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         battle: The owning ``Battle``.
         side: The ``BattleSide`` this unit belongs to.
         name: Display name for this unit (e.g. "Cavalry").
-        unit_type: Descriptive type tag (e.g. "cavalry", "zombies-on-nightmares").
+        descriptor: Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only.
+        composition: A ``UnitComposition`` value (#1711). Defaults to IRREGULAR.
+        quality: A ``UnitQuality`` value (#1711). Defaults to TRAINED.
+        commander: Optional commanding ``CharacterSheet`` (#1711).
+        summoned_by: Optional summoning ``CharacterSheet``, set by the military-summon
+            bridge (#1711).
         strength: Starting strength value (default 100).
         place: Optional ``BattlePlace`` this unit is stationed at.
 
@@ -136,11 +177,45 @@ def add_unit(  # noqa: PLR0913 - each param is a distinct unit attribute
         battle=battle,
         side=side,
         name=name,
-        unit_type=unit_type,
+        descriptor=descriptor,
+        composition=composition,
+        quality=quality,
+        commander=commander,
+        summoned_by=summoned_by,
         strength=strength,
         status=BattleUnitStatus.ACTIVE,
         place=place,
     )
+
+
+def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
+    """Set a battle side's tactical posture (#1711).
+
+    Args:
+        side: The ``BattleSide`` to update.
+        posture: A ``BattlePosture`` value.
+
+    Returns:
+        The updated ``BattleSide``.
+    """
+    side.posture = posture
+    side.save(update_fields=["posture"])
+    return side
+
+
+def assign_unit_commander(*, unit: BattleUnit, commander: CharacterSheet | None) -> BattleUnit:
+    """Assign (or clear, with ``commander=None``) a unit's commander (#1711).
+
+    Args:
+        unit: The ``BattleUnit`` to update.
+        commander: The commanding ``CharacterSheet``, or ``None`` to clear.
+
+    Returns:
+        The updated ``BattleUnit``.
+    """
+    unit.commander = commander
+    unit.save(update_fields=["commander"])
+    return unit
 
 
 @transaction.atomic
@@ -195,7 +270,11 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         next_number = prior.round_number + 1
     else:
         last = battle.rounds.order_by("-round_number").first()
-        next_number = (last.round_number + 1) if last is not None else 1
+        if last is None:
+            next_number = 1
+            activate_stakes_for_battle(battle)
+        else:
+            next_number = last.round_number + 1
 
     return BattleRound.objects.create(
         battle=battle,
@@ -210,13 +289,16 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(
+def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declaration facet
     *,
     participant: BattleParticipant,
     action_kind: str,
     technique: Technique,
     target_unit: BattleUnit | None = None,
     target_ally: BattleParticipant | None = None,
+    scope: str = BattleActionScope.UNIT,
+    target_place: BattlePlace | None = None,
+    target_side: BattleSide | None = None,
 ) -> BattleActionDeclaration:
     """Record or update the participant's action declaration for the current round.
 
@@ -231,12 +313,25 @@ def declare_battle_action(
         target_unit: The ``BattleUnit`` being struck (STRIKE only).
         target_ally: The ``BattleParticipant`` being supported (SUPPORT) or rescued
             (RESCUE).
+        scope: A ``BattleActionScope`` value (#1710). PLACE/SIDE require the
+            participant to hold a matching engaged command_tier on the side's
+            covenant.
+        target_place: The ``BattlePlace`` affected (scope=PLACE).
+        target_side: The ``BattleSide`` affected (scope=SIDE).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
         CharacterDoesNotKnowTechniqueError: If the participant's character doesn't
             know ``technique``.
         TechniqueNotBattleReadyError: If ``technique`` has no ``action_template``.
+        NoCommandHierarchyError: If scope is PLACE/SIDE and the participant's
+            side has no covenant.
+        InsufficientCommandTierError: If scope is PLACE/SIDE and the
+            participant lacks the required engaged command_tier.
+        MissingScopeTargetError: If scope is PLACE and ``target_place`` is
+            None, or scope is SIDE and ``target_side`` is None.
+        CannotStrikeOwnSideError: If ``action_kind`` is STRIKE, scope is SIDE,
+            and ``target_side`` is the participant's own side.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -257,6 +352,22 @@ def declare_battle_action(
     if not technique.action_template_id:
         raise TechniqueNotBattleReadyError
 
+    if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE):
+        _validate_command_scope(participant=participant, scope=scope)
+
+    if scope == BattleActionScope.PLACE and target_place is None:
+        raise MissingScopeTargetError
+    if scope == BattleActionScope.SIDE and target_side is None:
+        raise MissingScopeTargetError
+
+    if (
+        action_kind == BattleActionKind.STRIKE
+        and scope == BattleActionScope.SIDE
+        and target_side is not None
+        and target_side.pk == participant.side_id
+    ):
+        raise CannotStrikeOwnSideError
+
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
         participant=participant,
@@ -265,10 +376,43 @@ def declare_battle_action(
             "technique": technique,
             "target_unit": target_unit,
             "target_ally": target_ally,
+            "scope": scope,
+            "target_place": target_place,
+            "target_side": target_side,
             "resolved": False,
         },
     )
     return declaration
+
+
+def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> None:
+    """Raise unless *participant* holds the command tier *scope* requires.
+
+    PLACE requires an engaged CharacterCovenantRole with command_tier in
+    (SUBORDINATE, SUPREME) on the side's covenant; SIDE requires SUPREME.
+    A side with no covenant has no command hierarchy at all.
+    """
+    from world.covenants.constants import CommandTier  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    covenant = participant.side.covenant
+    if covenant is None:
+        raise NoCommandHierarchyError
+
+    required_tiers = (
+        [CommandTier.SUPREME]
+        if scope == BattleActionScope.SIDE
+        else [CommandTier.SUBORDINATE, CommandTier.SUPREME]
+    )
+    has_tier = CharacterCovenantRole.objects.filter(
+        character_sheet=participant.character_sheet,
+        covenant=covenant,
+        covenant_role__command_tier__in=required_tiers,
+        engaged=True,
+        left_at__isnull=True,
+    ).exists()
+    if not has_tier:
+        raise InsufficientCommandTierError
 
 
 # ---------------------------------------------------------------------------
@@ -303,10 +447,15 @@ def check_victory(*, battle: Battle) -> BattleOutcome | None:
 
 @transaction.atomic
 def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
-    """Set the battle's outcome and end the backing scene.
+    """Set the battle's outcome, end the backing scene, and resolve any linked
+    story beat's stakes contract.
 
-    Does NOT call ``complete_story`` — campaign propagation is deferred to #1716.
-    Idempotent: if the battle is already concluded, returns it unchanged.
+    Resolves every UNSATISFIED OUTCOME_TIER beat linked to the battle's scene
+    via resolve_battle_beats (#1785) — classifying battle.outcome through
+    BattleOutcomeMapping and completing the beat through the same
+    record_outcome_tier_completion seam combat/missions already use. Idempotent:
+    if the battle is already concluded, returns it unchanged (resolve_battle_beats
+    does not re-fire).
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -327,6 +476,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.is_active = False
     scene.date_finished = timezone.now()
     scene.save(update_fields=["is_active", "date_finished"])
+
+    resolve_battle_beats(battle)
 
     return battle
 
@@ -370,3 +521,79 @@ def maybe_conclude_on_timer(*, battle: Battle) -> BattleOutcome | None:
 
     conclude_battle(battle=battle, outcome=outcome)
     return outcome
+
+
+# ---------------------------------------------------------------------------
+# Champion duel services (#1710)
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def open_champion_duel(
+    *,
+    battle_place: BattlePlace,
+    challenger_participant: BattleParticipant,
+    opponent_kwargs: dict,
+    tier: str = OpponentTier.BOSS,
+) -> CombatEncounter:
+    """Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).
+
+    Reuses ``create_lethal_duel`` (world.combat.duels) unmodified — a Champion
+    duel against an enemy boss is an ordinary lethal PC-vs-significant-NPC
+    duel. Installs the champion-duel-outcome Trigger on the encounter's room
+    so ``apply_champion_duel_outcome`` fires when the duel completes.
+
+    Args:
+        battle_place: The front the duel is bound to. Must have no existing
+            ``combat_encounter``.
+        challenger_participant: The Champion's ``BattleParticipant``. Must
+            hold an engaged ``is_champion_role`` ``CovenantRole`` for the
+            side's covenant.
+        opponent_kwargs: Forwarded to ``add_opponent`` via
+            ``create_lethal_duel`` (name, max_health, threat_pool, ...).
+        tier: Opponent tier; forwarded to ``create_lethal_duel`` (defaults to
+            BOSS — a Champion duel is definitionally against a significant
+            enemy, not a mook).
+
+    Raises:
+        NotAChampionError: If the challenger has no engaged Champion role for
+            the side's covenant.
+        NoCommandHierarchyError: If the challenger's side has no covenant.
+        PlaceAlreadyDuelingError: If ``battle_place.combat_encounter`` is
+            already set.
+
+    Returns:
+        The newly created ``CombatEncounter``.
+    """
+    from world.battles.duel_wiring import install_champion_duel_trigger  # noqa: PLC0415
+    from world.combat.duels import create_lethal_duel  # noqa: PLC0415
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    if battle_place.combat_encounter_id is not None:
+        raise PlaceAlreadyDuelingError
+
+    covenant = challenger_participant.side.covenant
+    if covenant is None:
+        raise NoCommandHierarchyError
+
+    is_champion = CharacterCovenantRole.objects.filter(
+        character_sheet=challenger_participant.character_sheet,
+        covenant=covenant,
+        covenant_role__is_champion_role=True,
+        engaged=True,
+        left_at__isnull=True,
+    ).exists()
+    if not is_champion:
+        raise NotAChampionError
+
+    room = battle_place.battle.scene.location
+    enc = create_lethal_duel(
+        challenger_participant.character_sheet,
+        opponent_kwargs,
+        room,
+        tier=tier,
+    )
+    battle_place.combat_encounter = enc
+    battle_place.save(update_fields=["combat_encounter"])
+    install_champion_duel_trigger(enc)
+    return enc

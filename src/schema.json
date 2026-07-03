@@ -26078,6 +26078,21 @@ components:
           nullable: true
           description: For AGGREGATE_THRESHOLD predicates — total contribution points
             required.
+        required_society:
+          type: integer
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates (society-level).
+        required_organization:
+          type: integer
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates (organization-level).
+        required_standing:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value
+            (-1000..1000).
         agm_eligible:
           type: boolean
           description: Lead GM may flag this beat to be claimable by Assistant GMs.
@@ -26277,6 +26292,21 @@ components:
           nullable: true
           description: For AGGREGATE_THRESHOLD predicates — total contribution points
             required.
+        required_society:
+          type: integer
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates (society-level).
+        required_organization:
+          type: integer
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates (organization-level).
+        required_standing:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value
+            (-1000..1000).
         agm_eligible:
           type: boolean
           description: Lead GM may flag this beat to be claimable by Assistant GMs.
@@ -34127,6 +34157,8 @@ components:
           type: string
         gross_amount:
           type: integer
+        uncollected_pool:
+          type: integer
         active:
           type: boolean
       required:
@@ -34135,6 +34167,7 @@ components:
       - id
       - kind
       - name
+      - uncollected_pool
     InlineActionInteraction:
       type: object
       description: Minimal serializer for an ACTION-mode Interaction embedded in an
@@ -35372,6 +35405,20 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    MachineMatchLifecycleStateEnum:
+      enum:
+      - ALIVE
+      - CAPTURED
+      - COMA
+      - RETIRED
+      - DEAD
+      type: string
+      description: |-
+        * `ALIVE` - Alive
+        * `CAPTURED` - Captured / Unknown
+        * `COMA` - Coma
+        * `RETIRED` - Retired
+        * `DEAD` - Dead
     ManageTrainingAddRequest:
       type: object
       description: Validate input for creating a training allocation.
@@ -37125,6 +37172,8 @@ components:
             * `permit` - Permit
             * `mission` - Mission
             * `loan` - Loan
+            * `collection` - Collection
+            * `improvement` - Improvement
         label:
           type: string
           description: UI display text for the menu option.
@@ -37190,11 +37239,15 @@ components:
       - permit
       - mission
       - loan
+      - collection
+      - improvement
       type: string
       description: |-
         * `permit` - Permit
         * `mission` - Mission
         * `loan` - Loan
+        * `collection` - Collection
+        * `improvement` - Improvement
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -37209,6 +37262,8 @@ components:
             * `permit` - Permit
             * `mission` - Mission
             * `loan` - Loan
+            * `collection` - Collection
+            * `improvement` - Improvement
         label:
           type: string
           minLength: 1
@@ -37752,6 +37807,8 @@ components:
         steward_role_id:
           type: integer
           nullable: true
+        uncollected_total:
+          type: integer
         income_streams:
           type: array
           items:
@@ -37784,6 +37841,7 @@ components:
       - organization_name
       - spend_rank_max
       - steward_role_id
+      - uncollected_total
     Organization:
       type: object
       properties:
@@ -41438,6 +41496,21 @@ components:
           nullable: true
           description: For AGGREGATE_THRESHOLD predicates — total contribution points
             required.
+        required_society:
+          type: integer
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates (society-level).
+        required_organization:
+          type: integer
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates (organization-level).
+        required_standing:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: For FACTION_STANDING_AT_LEAST predicates — minimum raw SocietyReputation/OrganizationReputation.value
+            (-1000..1000).
         agm_eligible:
           type: boolean
           description: Lead GM may flag this beat to be claimable by Assistant GMs.
@@ -42425,6 +42498,8 @@ components:
             * `permit` - Permit
             * `mission` - Mission
             * `loan` - Loan
+            * `collection` - Collection
+            * `improvement` - Improvement
         label:
           type: string
           minLength: 1
@@ -42823,6 +42898,16 @@ components:
           type: integer
         column:
           $ref: '#/components/schemas/ColumnEnum'
+        outcome_key:
+          type: string
+          default: ''
+          description: Short designer-authored slug naming this branch within its
+            column's polarity (#1760) — e.g. 'destroyed', 'captured', 'given_to_allies'.
+            Blank = the column's single default branch (backward compatible with pre-#1760
+            content). column stays the coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/machine-grading
+            rule keys off; outcome_key is a finer dimension within it, not a replacement
+            axis.
+          maxLength: 40
         consequence_pool:
           type: integer
           nullable: true
@@ -42846,12 +42931,16 @@ components:
           type: boolean
           description: On fire, soft-forfeit the stake's subject_item (ITEM stakes
             only).
-        npc_affection_delta:
+        subject_standing_delta:
           type: integer
           maximum: 32767
           minimum: -32768
-          description: On fire, adjust NPCStanding between the stake's subject_sheet's
-            primary persona and each participant persona (NPC_FATE/FACTION).
+          description: 'On fire, adjust standing between the stake''s subject and
+            each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet''s
+            primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation
+            or OrganizationReputation (whichever of subject_society/subject_organization
+            is set) — previously a dead FK (subject_society/subject_organization were
+            never read); this is the fix.'
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -42863,6 +42952,18 @@ components:
             * `DEAD` - Dead
           oneOf:
           - $ref: '#/components/schemas/SetsSubjectLifecycleEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        machine_match_lifecycle_state:
+          description: |-
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+
+            * `ALIVE` - Alive
+            * `CAPTURED` - Captured / Unknown
+            * `COMA` - Coma
+            * `RETIRED` - Retired
+            * `DEAD` - Dead
+          oneOf:
+          - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
     PatchedStakeRewardLineRequest:
       type: object
@@ -44733,6 +44834,7 @@ components:
       - story_at_milestone
       - aggregate_threshold
       - outcome_tier
+      - faction_standing_at_least
       type: string
       description: |-
         * `gm_marked` - GM-marked
@@ -44743,6 +44845,7 @@ components:
         * `story_at_milestone` - Referenced story at milestone
         * `aggregate_threshold` - Aggregate threshold reached
         * `outcome_tier` - Outcome tier (machine-graded)
+        * `faction_standing_at_least` - Faction standing at least
     PrivacyEnum:
       enum:
       - public
@@ -48689,6 +48792,16 @@ components:
           type: integer
         column:
           $ref: '#/components/schemas/ColumnEnum'
+        outcome_key:
+          type: string
+          default: ''
+          description: Short designer-authored slug naming this branch within its
+            column's polarity (#1760) — e.g. 'destroyed', 'captured', 'given_to_allies'.
+            Blank = the column's single default branch (backward compatible with pre-#1760
+            content). column stays the coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/machine-grading
+            rule keys off; outcome_key is a finer dimension within it, not a replacement
+            axis.
+          maxLength: 40
         consequence_pool:
           type: integer
           nullable: true
@@ -48712,12 +48825,16 @@ components:
           type: boolean
           description: On fire, soft-forfeit the stake's subject_item (ITEM stakes
             only).
-        npc_affection_delta:
+        subject_standing_delta:
           type: integer
           maximum: 32767
           minimum: -32768
-          description: On fire, adjust NPCStanding between the stake's subject_sheet's
-            primary persona and each participant persona (NPC_FATE/FACTION).
+          description: 'On fire, adjust standing between the stake''s subject and
+            each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet''s
+            primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation
+            or OrganizationReputation (whichever of subject_society/subject_organization
+            is set) — previously a dead FK (subject_society/subject_organization were
+            never read); this is the fix.'
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -48729,6 +48846,18 @@ components:
             * `DEAD` - Dead
           oneOf:
           - $ref: '#/components/schemas/SetsSubjectLifecycleEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        machine_match_lifecycle_state:
+          description: |-
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+
+            * `ALIVE` - Alive
+            * `CAPTURED` - Captured / Unknown
+            * `COMA` - Coma
+            * `RETIRED` - Retired
+            * `DEAD` - Dead
+          oneOf:
+          - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
         reward_lines:
           type: array
@@ -48757,6 +48886,16 @@ components:
           type: integer
         column:
           $ref: '#/components/schemas/ColumnEnum'
+        outcome_key:
+          type: string
+          default: ''
+          description: Short designer-authored slug naming this branch within its
+            column's polarity (#1760) — e.g. 'destroyed', 'captured', 'given_to_allies'.
+            Blank = the column's single default branch (backward compatible with pre-#1760
+            content). column stays the coarse WIN/LOSS/WITHDRAWAL polarity every severity/reward/machine-grading
+            rule keys off; outcome_key is a finer dimension within it, not a replacement
+            axis.
+          maxLength: 40
         consequence_pool:
           type: integer
           nullable: true
@@ -48780,12 +48919,16 @@ components:
           type: boolean
           description: On fire, soft-forfeit the stake's subject_item (ITEM stakes
             only).
-        npc_affection_delta:
+        subject_standing_delta:
           type: integer
           maximum: 32767
           minimum: -32768
-          description: On fire, adjust NPCStanding between the stake's subject_sheet's
-            primary persona and each participant persona (NPC_FATE/FACTION).
+          description: 'On fire, adjust standing between the stake''s subject and
+            each participant persona (#1760). NPC_FATE: adjusts NPCStanding via subject_sheet''s
+            primary persona (unchanged pre-#1760 behavior). FACTION: adjusts SocietyReputation
+            or OrganizationReputation (whichever of subject_society/subject_organization
+            is set) — previously a dead FK (subject_society/subject_organization were
+            never read); this is the fix.'
         sets_subject_lifecycle:
           description: |-
             On fire, set_lifecycle_state(subject_sheet, value). NPC_FATE only, and only when the subject sheet is not player-held (pillar 12).
@@ -48797,6 +48940,18 @@ components:
             * `DEAD` - Dead
           oneOf:
           - $ref: '#/components/schemas/SetsSubjectLifecycleEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        machine_match_lifecycle_state:
+          description: |-
+            On automatic (machine) grading, if the stake's subject_sheet's actual lifecycle_state equals this value, THIS branch is selected over the column's plain default (#1760 — generalizes the old is-dead-only override to the full LifecycleState ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). NPC_FATE stakes only — blank means no machine-match, resolve via the plain column default or a GM's Constrained Pick.
+
+            * `ALIVE` - Alive
+            * `CAPTURED` - Captured / Unknown
+            * `COMA` - Coma
+            * `RETIRED` - Retired
+            * `DEAD` - Dead
+          oneOf:
+          - $ref: '#/components/schemas/MachineMatchLifecycleStateEnum'
           - $ref: '#/components/schemas/BlankEnum'
       required:
       - column

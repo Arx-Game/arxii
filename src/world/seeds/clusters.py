@@ -29,6 +29,14 @@ def _seed_combat() -> None:
     seed_encounter_beat_wiring()
 
 
+def _seed_battles() -> None:
+    from integration_tests.game_content.battles import (  # noqa: PLC0415
+        seed_champion_duel_outcome_wiring,
+    )
+
+    seed_champion_duel_outcome_wiring()
+
+
 def _seed_checks() -> None:
     from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
 
@@ -77,6 +85,12 @@ def _seed_justice() -> None:
     seed_crime_kinds()
 
 
+def _seed_governance() -> None:
+    from world.seeds.governance_checks import seed_governance_check_content  # noqa: PLC0415
+
+    seed_governance_check_content()
+
+
 def _seed_stealth() -> None:
     from world.seeds.stealth_checks import seed_stealth_check_content  # noqa: PLC0415
 
@@ -104,6 +118,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
+    # Battles: the Champion-duel-outcome ENCOUNTER_COMPLETED wiring (#1710). After
+    # "combat" — depends on the combat seed cluster's content existing first.
+    "battles": _seed_battles,
     # Consent: seeds default SocialConsentCategory rows; tags ActionTemplates if present.
     "consent": _seed_consent,
     # Character-creation "world" content (Realm/StartingArea/Beginnings/Species/
@@ -112,6 +129,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "character_creation": _seed_character_creation,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
+    # Governance: Scholarship/Economics + Organization/Stewardship skills and the
+    # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
+    "governance": _seed_governance,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
 }
@@ -180,10 +200,16 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Combat seeds check-types used by the resolution spine, not standalone
         # content rows; it still appears in the inventory as a seeded cluster.
         "combat": [],
+        # Battles seeds the ENCOUNTER_COMPLETED trigger wiring, not standalone
+        # content rows; it still appears in the inventory as a seeded cluster.
+        "battles": [],
         "consent": [SocialConsentCategory],
         "character_creation": [StartingArea, Beginnings, Species],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
+        # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
+        # "checks"); appears as a seeded cluster with no standalone content model (#930).
+        "governance": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],
     }

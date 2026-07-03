@@ -41,6 +41,19 @@ _Avoid_: rank, position, office.
 The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage. Orthogonal to Role.
 _Avoid_: role, level.
 
+**Command Tier**:
+The battle-command hierarchy axis of a `CovenantRole` (`command_tier`, #1710) — a
+third axis alongside Role (combat power) and Rank (administrative authority),
+settable only on `CovenantType.BATTLE` roles. See the battles app glossary for the
+full Supreme/Subordinate Commander vocabulary.
+_Avoid_: is_leadership (removed under #1027 — do not revive), rank.
+
+**Champion (role flag)**:
+`CovenantRole.is_champion_role` (#1710) — marks a Battle covenant role as eligible
+to open/answer a single-combat duel for the covenant. See the battles app glossary
+for "The Champion."
+_Avoid_: duelist role, hero role.
+
 **Mentor's Vow / Mentor Bond**:
 A consensual bond pairing a higher-level mentor with a lower-level sidekick so a level-mismatched party scales fairly; the `MentorBond` record is active while `dissolved_at` is null.
 _Avoid_: master/apprentice (a future flavor display-label only, with no model surface), patron, sponsor.

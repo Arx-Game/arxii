@@ -53,8 +53,10 @@ One side in a battle (attacker or defender) with its victory-point tally.
 |---|---|---|
 | `battle` | FK → `Battle` (`related_name="sides"`) | |
 | `role` | CharField | `BattleSideRole` — ATTACKER / DEFENDER |
+| `covenant` | FK → `covenants.Covenant` (null, `related_name="battle_sides"`) | Optional War Covenant fielding this side (#1710) |
 | `victory_points` | PositiveIntegerField | Accumulates each round |
 | `victory_threshold` | PositiveIntegerField | Default 100; how many VP to win |
+| `posture` | CharField | `BattlePosture` — BALANCED / AGGRESSIVE / DEFENSIVE (#1711); trades VP-gain speed against check difficulty and failure damage — see [Modifier Stack (#1711)](#modifier-stack-1711) |
 
 **Constraint:** unique `(battle, role)` — one attacker and one defender per battle.
 
@@ -67,6 +69,8 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 | `battle` | FK → `Battle` (`related_name="places"`) | |
 | `name` | CharField(120) | Human-readable front name |
 | `combat_encounter` | FK → `combat.CombatEncounter` (null) | Bridge seam: a discrete tactical combat at this front |
+| `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0081 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
+| `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition action (#1712) to consume — data only, no movement action exists yet. |
 
 **Constraint:** unique `(battle, name)`.
 
@@ -80,7 +84,11 @@ An abstract typed force (enemy or friendly) stationed at a front.
 | `side` | FK → `BattleSide` (`related_name="units"`) | |
 | `place` | FK → `BattlePlace` (null) | Optional front assignment |
 | `name` | CharField(120) | Display name (e.g. "Cavalry") |
-| `unit_type` | CharField(80) | Descriptive type tag (e.g. "zombies-on-nightmares") |
+| `descriptor` | CharField(80), blank | Optional flavor tag (e.g. "zombies-on-nightmares"); narrative only — `composition`/`quality` below drive mechanics. Renamed from the spine's `unit_type` (#1711). |
+| `composition` | CharField | `UnitComposition` — INFANTRY / CAVALRY / ARCHERS / SIEGE / FLYING / NAVAL / MAGICAL / IRREGULAR (#1711); default IRREGULAR. Drives type-matchup and terrain-effect lookups. |
+| `quality` | CharField | `UnitQuality` — MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711); default TRAINED. Flat attacker-facing STRIKE-check modifier ladder, not a strength multiplier. |
+| `commander` | FK → `character_sheets.CharacterSheet` (null, `related_name="commanded_battle_units"`) | Optional commander (#1711); their Battle Command modifier-walk bonus applies to participants fighting alongside this unit's side/place. |
+| `summoned_by` | FK → `character_sheets.CharacterSheet` (null, `related_name="summoned_battle_units"`) | Set when this unit was created via a military-grade summon (#1711, see `_summon_military_unit`). |
 | `strength` | PositiveSmallIntegerField | Default 100; decremented by STRIKE successes |
 | `status` | CharField | `BattleUnitStatus` — ACTIVE / ROUTED / DESTROYED |
 
@@ -131,6 +139,41 @@ A participant's declared action for one round.
 
 **Constraint:** unique `(battle_round, participant)` — one declaration per participant
 per round. Participants may redeclare (the service uses `update_or_create`).
+
+### `TechniqueCompositionAffinity`
+
+Authored `(technique, composition) → flat STRIKE-check modifier` row (#1711). Positive
+means the technique is especially effective against that composition; negative means
+weak against it.
+
+| Field | Type | Notes |
+|---|---|---|
+| `technique` | FK → `magic.Technique` (PROTECT, `related_name="battle_composition_affinities"`) | |
+| `composition` | CharField | `UnitComposition` value |
+| `modifier` | SmallIntegerField | Signed flat check modifier |
+
+**Constraint:** unique `(technique, composition)`.
+
+Looked up by `BattleTechniqueResolver._composition_affinity_modifier` when a
+declaration's `target_unit.composition` matches a row; returns 0 (no effect) when no
+row matches — most techniques have no authored affinity.
+
+### `TerrainCompositionEffect`
+
+Authored `(terrain_type, composition) → flat attacker-facing STRIKE modifier` row
+(#1711). Positive means that composition is easier to strike in that terrain; negative
+means harder.
+
+| Field | Type | Notes |
+|---|---|---|
+| `terrain_type` | CharField | `TerrainType` value |
+| `composition` | CharField | `UnitComposition` value |
+| `modifier` | SmallIntegerField | Signed flat check modifier |
+
+**Constraint:** unique `(terrain_type, composition)`.
+
+Looked up by `BattleTechniqueResolver._terrain_effect_modifier` against the target
+unit's `place.terrain_type`; returns 0 when the unit has no place, or no row matches.
 
 ## Round Flow
 
@@ -191,6 +234,31 @@ Returns a `BattleRoundResult` dataclass:
 - `units_destroyed: list[int]` — destroyed unit pks
 - `units_routed: list[int]` — routed unit pks
 - `casualties: list[int]` — participant pks who took damage
+
+## Modifier Stack (#1711)
+
+`BattleTechniqueResolver._battle_modifier_stack()` (`src/world/battles/resolution.py`)
+sums five modifier sources into the `extra_modifiers` folded into the STRIKE check
+rolled by `perform_check` inside `__call__`. Each source is independently 0 when it
+doesn't apply — an unauthored technique/terrain combo, an unassigned commander, or a
+BALANCED posture all contribute nothing:
+
+| Source | Helper | Authored / looked up |
+|---|---|---|
+| Composition affinity | `_composition_affinity_modifier(technique, unit.composition)` | `TechniqueCompositionAffinity` row keyed on `(technique, target_unit.composition)`; 0 if none |
+| Terrain effect | `_terrain_effect_modifier(unit.place, unit.composition)` | `TerrainCompositionEffect` row keyed on `(unit.place.terrain_type, unit.composition)`; 0 if the unit has no place or no row matches |
+| Unit quality | `_quality_modifier(unit.quality)` | `UNIT_QUALITY_STRIKE_MODIFIER` dict in `constants.py` — a flat ladder from MILITIA (+10, easier to hit) to ELITE (−20, harder to hit) |
+| Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place; 0 if none commanded |
+| Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
+
+The first three sources only apply to STRIKE declarations (they read `declaration.target_unit`,
+which is `None` for SUPPORT/RESCUE); commander and posture apply to every declaration kind.
+Posture also independently scales VP gain (`BATTLE_POSTURE_VP_MULTIPLIER`, applied in
+`_resolve_strike_success`/`_resolve_support_success`) and failure damage
+(`BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER`, applied in `_resolve_failure`) — those two scalings
+are outside `_battle_modifier_stack()` (they don't affect the check roll itself) but are the
+same posture-driven trade-off: AGGRESSIVE trades a −5 check penalty and +4 failure damage for
+1.4× VP; DEFENSIVE trades +10 check ease and −4 failure damage for 0.7× VP.
 
 ## Peril / Rescue (#1733)
 
@@ -288,6 +356,56 @@ Surrounded. Telnet: `battle declare rescue <ally> with <technique>` (`CmdBattle`
 every round the GM resolves regardless of whether they declared — a narrow, explicit
 exception to ADR-0004 scoped to peril only (see **ADR-0074**).
 
+## Stakes / Beat Wiring (#1785)
+
+`world.battles.beat_wiring` wires a concluded `Battle` into the same
+`record_outcome_tier_completion` seam #1746 built for `CombatEncounter` —
+reusing the stakes-contract engine (`world.stories.services.stakes`,
+`world.stories.services.stake_resolution`) as-is.
+
+### `BattleOutcomeMapping`
+
+A designer-authored map from `BattleOutcome` to a `traits.CheckOutcome` tier
+(`outcome` unique, `check_outcome` nullable FK). Unlike combat's
+`EncounterOutcomeMapping`, there's no separate risk-level axis —
+`BattleOutcome`'s four values already encode decisive-vs-marginal severity.
+Starts empty; a missing row or a null `check_outcome` resolves to
+`PENDING_GM_REVIEW`. Admin-registered (`world/battles/admin.py`).
+
+### `classify_battle_conclusion_outcome(battle) -> CheckOutcome | None`
+
+Looks up the `BattleOutcomeMapping` row for `battle.outcome`. Raises
+`ValueError` if called before the battle has a graded outcome.
+
+### `activate_stakes_for_battle(battle) -> None`
+
+Called from `begin_battle_round` the first time a battle opens round 1.
+Collects every currently-`ACTIVE` `BattleParticipant`'s character sheet
+(no-ops if none), and for each staked `UNSATISFIED` beat linked to
+`battle.scene` (via `staked_unsatisfied_beats_for_scene`,
+`world.stories.services.stakes`), boundary-screens it
+(`check_stake_boundaries`) and locks it with
+`activate_stakes_contract(beat, sheets, scale_by_party_level=False)`.
+
+**`scale_by_party_level=False`**: a war's stakes reflect the objective being
+fought over, not which specific PCs happen to be enlisted — unlike
+scene-level stakes (ADR-0077), Battle activation skips the
+party-level-gap-adjusted `compute_effective_risk` entirely; a ready contract
+prices at its declared risk unconditionally. See **ADR-0080**.
+
+### `resolve_battle_beats(battle) -> None`
+
+Called directly from `conclude_battle` — not via a flow event/`TriggerDefinition`
+like combat's `ENCOUNTER_COMPLETED` wiring, since `Battle` has no location
+(`Battle.scene.location` is `None`, per #1733) and `conclude_battle` is already
+the single call-site choke point for battle conclusion. Finds every
+`UNSATISFIED` `OUTCOME_TIER` beat linked to `battle.scene` (identical
+`Scene → EpisodeScene → Episode → Beat` discovery to combat's wiring),
+classifies `battle.outcome` once, and resolves every linked beat to that same
+tier (one `Battle` grades as one outcome, applied uniformly — per-front
+independent grading is **#1760**'s job, not duplicated here). No `withdrawal`
+path: `BattleOutcome` has no FLED/ABANDONED-equivalent value.
+
 ## Services (`src/world/battles/services.py`)
 
 All public functions are the only permitted entry points for battle state mutations.
@@ -296,14 +414,17 @@ Multi-write operations use `@transaction.atomic`.
 | Service | Signature | Effect |
 |---|---|---|
 | `create_battle` | `(*, name, campaign_story=None, round_limit=DEFAULT_ROUND_LIMIT) -> Battle` | Creates Battle + backing Scene |
-| `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD) -> BattleSide` | Adds a side |
-| `add_place` | `(*, battle, name) -> BattlePlace` | Adds a named front |
-| `add_unit` | `(*, battle, side, name, unit_type, strength=100, place=None) -> BattleUnit` | Adds an abstract unit |
+| `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD, covenant=None) -> BattleSide` | Adds a side, optionally fielded by a War Covenant (#1710) |
+| `add_place` | `(*, battle, name, terrain_type=TerrainType.OPEN, movement_cost=1) -> BattlePlace` | Adds a named front (#1711: `terrain_type`/`movement_cost` kwargs) |
+| `add_unit` | `(*, battle, side, name, descriptor="", composition=UnitComposition.IRREGULAR, quality=UnitQuality.TRAINED, commander=None, summoned_by=None, strength=100, place=None) -> BattleUnit` | Adds an abstract unit (#1711: `descriptor` replaces `unit_type`; adds `composition`/`quality`/`commander`/`summoned_by`) |
+| `set_battle_side_posture` | `(*, side, posture) -> BattleSide` | Sets a side's `BattlePosture` (#1711) |
+| `assign_unit_commander` | `(*, unit, commander) -> BattleUnit` | Assigns (or clears, with `commander=None`) a unit's commander (#1711) |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |
 | `begin_battle_round` | `(*, battle) -> BattleRound` | Closes prior round (→ COMPLETED) and opens a new DECLARING round. Raises `BattleConcludedError` if already concluded. |
-| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`. |
+| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None, scope=BattleActionScope.UNIT, target_place=None, target_side=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. `scope`/`target_place`/`target_side` gate army/unit-scale declarations against command tier (#1710). Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`, `NoCommandHierarchyError`/`InsufficientCommandTierError`/`MissingScopeTargetError`/`CannotStrikeOwnSideError` for scope violations. |
+| `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
-| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`). **Does NOT call `complete_story`** — campaign propagation is deferred to #1716. Idempotent. |
+| `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
 
 ## Actions (`src/actions/definitions/battles.py`)
@@ -343,6 +464,18 @@ case-insensitively against the caller's known `CharacterTechnique` rows
 (`_resolve_technique`); an unknown name raises `CommandError`. `CommandError` is raised for
 bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 
+## Admin (`src/world/battles/admin.py`)
+
+New file (#1711) — the shipped spine (#1592) had zero admin exposure. Registers every
+battle model with a `ModelAdmin`: `Battle`, `BattleSide` (list-filtered on `role`/`posture`),
+`BattlePlace` (list-filtered on `terrain_type`), `BattleUnit` (list-filtered on
+`composition`/`quality`/`status`; `commander`/`summoned_by` as autocomplete fields),
+`BattleRound`, `BattleParticipant`, `BattleActionDeclaration`, and the two new authored
+catalogs `TechniqueCompositionAffinity` (list-filtered on `composition`; `technique` as an
+autocomplete field) and `TerrainCompositionEffect` (list-filtered on
+`terrain_type`/`composition`; no `technique` field), giving staff a CRUD surface to author
+the type-matchup and terrain-effect content the modifier stack reads.
+
 ## Enums / Constants (`src/world/battles/constants.py`)
 
 | Name | Kind | Values |
@@ -352,6 +485,10 @@ bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
 | `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
+| `UnitComposition` | TextChoices | INFANTRY / CAVALRY / ARCHERS / SIEGE / FLYING / NAVAL / MAGICAL / IRREGULAR (#1711) |
+| `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
+| `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
+| `BattlePosture` | TextChoices | BALANCED / AGGRESSIVE / DEFENSIVE (#1711) |
 
 **Tuning constants:**
 - `DEFAULT_VICTORY_THRESHOLD = 100`
@@ -364,6 +501,13 @@ bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
 - `ROUTED_STRENGTH_THRESHOLD = 30`
 - `SURROUNDED_ENTRY_ISOLATED_MODIFIER = -15` — entry-roll signal (#1733), isolated at a place
 - `SURROUNDED_ENTRY_MOBILITY_MODIFIER = 40` — entry-roll signal (#1733), unimpaired MOVEMENT capability
+- `UNIT_QUALITY_STRIKE_MODIFIER` — dict (#1711), flat attacker-facing STRIKE modifier per `UnitQuality`: MILITIA +10 … ELITE −20
+- `BATTLE_POSTURE_VP_MULTIPLIER` — dict (#1711), percent VP-gain scaling per `BattlePosture`: AGGRESSIVE 1.4, BALANCED 1.0, DEFENSIVE 0.7
+- `BATTLE_POSTURE_CHECK_MODIFIER` — dict (#1711), flat STRIKE-check modifier per `BattlePosture`: AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10
+- `BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER` — dict (#1711), flat failure-damage modifier per `BattlePosture`: AGGRESSIVE +4, BALANCED 0, DEFENSIVE −4
+- `BATTLE_COMMAND_TARGET_NAME = "battle_command"` — idempotent-seed `ModifierTarget` name (#1711)
+  for the commander-bonus walk, following the snake_case convention documented for
+  stat-category modifier targets in `world/mechanics/CLAUDE.md`.
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -374,15 +518,17 @@ bad usage; `_send(result)` routes the `ActionResult.message` back to the caller.
   - `CharacterDoesNotKnowTechniqueError` — participant declared a technique they don't know
   - `TechniqueNotBattleReadyError` — declared technique has no `action_template` (not castable)
 
-## Legend / Outcome Model and the #1716 Dependency
+## Legend / Outcome Model and Stakes Wiring (#1785)
 
 `Battle.outcome` stores the graded result (`BattleOutcome`), and `Battle.campaign_story`
-(FK → `stories.Story`, null) holds the optional parent campaign story. `conclude_battle`
-deliberately **does not** call `complete_story` — automatically closing the whole campaign
-story on one battle's conclusion would foreclose a war arc prematurely.
+(FK → `stories.Story`, null) holds the optional parent campaign story — informational
+metadata only, not used for beat resolution (see below). `conclude_battle` deliberately
+**does not** call `complete_story` — automatically closing the whole campaign story on
+one battle's conclusion would foreclose a war arc prematurely.
 
-Campaign-stakes propagation (battle outcome → Story + campaign arc + win-gated Legend
-awards) is tracked in **#1716** and is the explicit next step after this spine.
+Campaign-stakes propagation (battle outcome → Story + win-gated Legend) is wired via
+`world.battles.beat_wiring` (#1785) — see [Stakes / Beat Wiring](#stakes--beat-wiring-1785)
+below.
 
 ## PR 1 Scope vs. Deferred
 
@@ -400,28 +546,82 @@ anima cost, Soulfray accumulation, and the Audere / Audere Majora escalation hoo
 exactly as they would for any other cast. The generic `"Battle Action"` `CheckType` /
 `BATTLE_CHECK_TYPE_NAME` / `get_battle_check_type()` seam has been removed entirely.
 
+**Built as a follow-up spine (resources, units, terrain & tactics, #1711):** unit
+composition/quality/commander taxonomy (`BattleUnit.composition`/`.quality`/`.commander`/
+`.summoned_by`, replacing `unit_type` with the narrative-only `descriptor`); front
+terrain (`BattlePlace.terrain_type`/`.movement_cost`); side tactical posture
+(`BattleSide.posture`); the two new authored catalogs `TechniqueCompositionAffinity` and
+`TerrainCompositionEffect`; the five-source [modifier stack](#modifier-stack-1711) folded
+into every STRIKE check; Django admin for the whole app (`admin.py`, previously absent);
+and an opt-in `summon_ally(payload.military=True)` branch that creates a `BattleUnit`
+instead of a skirmish `CombatOpponent` (see [Integrates With](#integrates-with) below).
+
 **Deferred to follow-up issues:**
 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Rich unit type-matchups (cavalry vs. infantry modifiers) | #1711 |
-| Command hierarchy, naval / aerial / siege variants | #1710, #1713, #1714 |
-| Campaign propagation: battle outcome → Story + win-gated Legend | **#1716** |
+| Naval / aerial / siege variants | #1713, #1714 |
 
 Peril / rescue and the AFK knob are no longer deferred — see
-[Peril / Rescue (#1733)](#peril--rescue-1733) below.
+[Peril / Rescue (#1733)](#peril--rescue-1733) below. Rich unit type-matchups and terrain
+effects are no longer deferred — see [Modifier Stack (#1711)](#modifier-stack-1711) above.
+Campaign propagation (battle outcome → Story + win-gated Legend) is no longer deferred — see
+[Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below. Command hierarchy and the
+Champion are no longer deferred — see
+[Command Hierarchy & the Champion (#1710)](#command-hierarchy--the-champion-1710) below.
+
+## Command Hierarchy & the Champion (#1710)
+
+`CovenantRole.command_tier` (`NONE`/`SUBORDINATE`/`SUPREME`) and `.is_champion_role`
+(bool) are settable only on `CovenantType.BATTLE` roles (`CovenantRole.clean()`).
+Exclusivity — at most one engaged Supreme Commander and one engaged Champion per
+covenant — is enforced in `CharacterCovenantRole.clean()` and
+`world.covenants.services.set_engaged_membership`, structurally identical to the
+existing character-scoped "one engaged role per covenant_type" check.
+
+`BattleSide.covenant` (nullable FK -> `covenants.Covenant`) links a side to the War
+Covenant fielding it; a side with no covenant has no command hierarchy. Command
+permission is checked directly against `CharacterCovenantRole`/`command_tier` — not
+routed through the `CapabilityType`/`ThreadPullEffect` engaged-gating mechanism (that
+exists for condition-restricted capacities, a different domain).
+
+`BattleActionDeclaration.scope` (`UNIT`/`PLACE`/`SIDE`) plus `target_place`/`target_side`
+gate army/unit-scale declarations: `world.battles.services._validate_command_scope`
+requires an engaged `SUBORDINATE`/`SUPREME` role for `PLACE`, `SUPREME` for `SIDE`, on
+the side's covenant. `world.battles.resolution._resolve_strike_success` and
+`_resolve_rescue_success` fan out across every active unit/participant at the scope
+target instead of a single one.
+
+The Champion duel reuses `world.combat.duels.create_lethal_duel` unmodified —
+`world.battles.services.open_champion_duel` validates the challenger holds an engaged
+`is_champion_role` `CovenantRole`, then binds the resulting `CombatEncounter` to the
+`BattlePlace.combat_encounter` bridge seam (the first real caller of that seam since
+#1592). Outcome feedback (rout/destroy the losing side's unit at that front, VP bonus
+to the winner) is wired via `world.battles.duel_wiring`, mirroring
+`world.combat.beat_wiring`'s `ENCOUNTER_COMPLETED` `TriggerDefinition` pattern exactly
+— no new event type.
 
 ## Test Coverage
 
 - `src/world/battles/tests/test_constants.py` — enum smoke tests
-- `src/world/battles/tests/test_models.py` — model save + side/unit relationships
+- `src/world/battles/tests/test_models.py` — model save + side/unit relationships;
+  `BattleUnitTaxonomyTests` (composition/quality/commander/summoned_by/descriptor, #1711),
+  `TechniqueCompositionAffinityTests`, `TerrainCompositionEffectTests` (#1711)
 - `src/world/battles/tests/test_round_context.py` — `get_active_round_context` wiring
-- `src/world/battles/tests/test_services_setup.py` — create/enlist/begin-round lifecycle
+- `src/world/battles/tests/test_services_setup.py` — create/enlist/begin-round lifecycle;
+  `AddUnitTests`, `AddUnitTaxonomyTests` (`add_unit`'s new taxonomy kwargs, #1711),
+  `AddPlaceTerrainTests` (`add_place`'s `terrain_type`/`movement_cost` kwargs, #1711),
+  `SetBattleSidePostureTests`, `AssignUnitCommanderTests` (#1711)
+- `src/world/battles/tests/test_factories_seed.py` — `EnsureBattleCommandModifierTargetTests`
+  (idempotent seeding of the `"battle_command"` `ModifierTarget`, #1711)
 - `src/world/battles/tests/test_resolution.py` — `resolve_battle_technique` /
   `BattleTechniqueResolver` unit test; STRIKE success (unit attrition + VP) and failure
   (PC health debit) with `world.battles.resolution.perform_check` patched (the check inside
-  `use_technique`'s cast, not a bypass of it)
+  `use_technique`'s cast, not a bypass of it); `CompositionAffinityModifierTests`,
+  `TerrainEffectModifierTests`, `QualityModifierTests`, `CommanderBonusForSideAtPlaceTests`,
+  `BattleTechniqueResolverModifierStackTests` (the full five-source stack), and
+  `PostureVpScalingTests` (VP-gain and failure-damage posture scaling) (#1711)
 - `src/world/battles/tests/test_conclusion.py` — `check_victory` grading and
   `conclude_battle` (confirms `complete_story` is NOT called)
 - `src/world/battles/tests/test_actions.py` — each action's `run()` path; GM-gate rejection
@@ -446,6 +646,19 @@ Peril / rescue and the AFK knob are no longer deferred — see
   failure → Surrounded entry → AFK-driven escalation (`afk_peril_override`) → successful
   RESCUE clears it (`@tag("postgres")`); and terminal-stage resolution routing to the
   death-permitting enemy pool vs. the death-free PvP pool (ADR-0023)
+- `src/world/magic/tests/test_summon_ally.py::SummonAllyMilitaryBranchTests` (#1711) —
+  `payload.military=True` creates a `BattleUnit` (not a `CombatOpponent`) in the caster's
+  active `Battle`; no-op when the caster has no ACTIVE `BattleParticipant`
+- `src/world/battles/tests/test_beat_wiring.py` (#1785) — `BattleOutcomeMapping`
+  model constraints, `classify_battle_conclusion_outcome`, `activate_stakes_for_battle`
+  wiring + `scale_by_party_level=False`, `conclude_battle` → beat/stake resolution
+  integration
+- `src/world/battles/tests/test_resolution.py` (#1710) — SIDE-scope STRIKE fan-out
+  across all units on a side; PLACE-scope RESCUE fan-out across all participants at
+  a front
+- `src/world/battles/tests/test_duel_wiring.py` (#1710) — Champion duel outcome
+  auto-wiring: challenger victory routs the enemy unit at the bound place; a
+  non-battle-bound encounter completion no-ops cleanly
 
 ## Integrates With
 
@@ -460,15 +673,24 @@ Peril / rescue and the AFK knob are no longer deferred — see
   `apply_condition` / `remove_condition` (#1733)
 - **Magic** — `BattleActionDeclaration.technique` FK; `resolve_battle_technique` routes
   each declaration's cast through `world.magic.services.use_technique` (anima cost,
-  Soulfray, Audere / Audere Majora escalation all apply)
+  Soulfray, Audere / Audere Majora escalation all apply); `TechniqueCompositionAffinity.technique`
+  FK (#1711). `world.magic.services.effect_handlers.summon_ally` gained an opt-in
+  `payload.military` branch (`_summon_military_unit`, #1711) that creates a `BattleUnit` via
+  `add_unit` in the caster's active `Battle` instead of a skirmish `CombatOpponent` — for
+  summons too potent for a discrete-encounter skirmish.
 - **Checks** — `perform_check`, sourced from the cast technique's
   `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`;
   the Surrounded entry roll and per-round resist checks are dispatched through
   `world.checks.consequence_resolution.select_consequence` against authored
   `ConsequencePool` rows (#1733)
-- **Combat** — `BattlePlace.combat_encounter` bridge seam (for discrete tactical fights
-  at a front); `RoundStatus` and `AbstractRound` shared from `world.scenes`
-- **Stories** — `Battle.campaign_story` FK (propagation deferred to #1716)
+- **Combat** — `BattlePlace.combat_encounter` bridge seam, now wired for Champion duels
+  (`open_champion_duel`, #1710); `RoundStatus` and `AbstractRound` shared from
+  `world.scenes`
+- **Covenants** — `BattleSide.covenant` FK; `CovenantRole.command_tier`/
+  `.is_champion_role` gate SIDE/PLACE-scope declarations and Champion duels (#1710)
+- **Stories** — `Battle.campaign_story` FK (informational; not used for beat
+  resolution); `world.battles.beat_wiring` resolves linked `Beat`s via
+  `Scene → EpisodeScene → Episode` (#1785)
 - **Actions** — four REGISTRY actions, `BattleRoundContext` in `get_active_round_context`
 
 ## Source
@@ -477,10 +699,11 @@ Peril / rescue and the AFK knob are no longer deferred — see
 - `models.py` — all battle models
 - `constants.py` — enums + tuning constants
 - `services.py` — all service functions (setup + declaration + conclusion)
-- `resolution.py` — `resolve_battle_round` + `BattleRoundResult`
+- `resolution.py` — `resolve_battle_round` + `BattleRoundResult` + the #1711 modifier stack
 - `round_context.py` — `BattleRoundContext` + `resolve_battle_round_context`
 - `exceptions.py` — exception hierarchy
-- `factories.py` — FactoryBoy factories for all models
+- `factories.py` — FactoryBoy factories for all models + `ensure_battle_command_modifier_target` (#1711)
+- `admin.py` — Django admin registrations for every battle model (#1711)
 
 `src/actions/definitions/battles.py` — four REGISTRY actions
 

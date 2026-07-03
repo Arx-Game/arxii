@@ -54,3 +54,11 @@ Once a model instance is loaded, it is a persistent Python object in the identit
 **The correct mental model:** SharedMemoryModel is not a Django model that loads from the database each time. It is a persistent Python object whose attributes sometimes hit the database on first access and never again. Use it like a Python object.
 
 **Why this matters for mutations:** `.save()` on a SharedMemoryModel updates the in-memory instance. Cached properties (`@cached_property`, `Prefetch(to_attr=...)`) can go stale — update them in-place when you mutate, don't flush the whole cache. See `src/world/combat/views.py` for examples of in-place list updates on `participants_cached` after adding/removing participants.
+
+## Known stale-cache traps
+
+If a `@tag("postgres")` test fails with `obj.<fk> != expected` after a `refresh_from_db()` or a bulk `SET_NULL` elsewhere, the identity map can be stale in two distinct, easy-to-conflate ways — see [`references/stale-cache-traps.md`](references/stale-cache-traps.md) for the decision procedure before reaching for a fix (a cache-pop only helps one of the two cases; the other needs `flush_instance_cache()`, and the most common cause is neither — a service that never wrote the row).
+
+## `path` is a reserved idmapper attribute name
+
+A model field literally named **`path`** on a SharedMemoryModel is silently replaced by Evennia's idmapper metaclass with the model's dotted module-path string — Django's meta never sees the field, so it just vanishes with no error and no migration column. Use a different name (e.g. `training_path`). If a field mysteriously doesn't appear in `makemigrations` on an idmapper model, suspect a reserved-name collision like this one.

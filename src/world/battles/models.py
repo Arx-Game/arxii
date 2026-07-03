@@ -14,10 +14,15 @@ from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     BattleActionKind,
+    BattleActionScope,
     BattleOutcome,
     BattleParticipantStatus,
+    BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
 from world.scenes.constants import RoundStatus
 from world.scenes.round_models import AbstractRound
@@ -28,6 +33,7 @@ STORY_MODEL = "stories.Story"
 COMBAT_ENCOUNTER_MODEL = "combat.CombatEncounter"
 CHARACTER_SHEET_MODEL = "character_sheets.CharacterSheet"
 TECHNIQUE_MODEL = "magic.Technique"
+COVENANT_MODEL = "covenants.Covenant"
 
 
 class Battle(SharedMemoryModel):
@@ -114,8 +120,21 @@ class BattleSide(SharedMemoryModel):
         choices=BattleSideRole.choices,
         default=BattleSideRole.ATTACKER,
     )
+    covenant = models.ForeignKey(
+        COVENANT_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="battle_sides",
+        help_text="The War Covenant fielding this side, if any (#1710).",
+    )
     victory_points = models.PositiveIntegerField(default=0)
     victory_threshold = models.PositiveIntegerField(default=DEFAULT_VICTORY_THRESHOLD)
+    posture = models.CharField(
+        max_length=20,
+        choices=BattlePosture.choices,
+        default=BattlePosture.BALANCED,
+    )
 
     class Meta:
         ordering = ["battle", "role"]
@@ -146,6 +165,16 @@ class BattlePlace(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="battle_places",
         help_text="Bridge seam: discrete combat taking place at this front.",
+    )
+    terrain_type = models.CharField(
+        max_length=20,
+        choices=TerrainType.choices,
+        default=TerrainType.OPEN,
+    )
+    movement_cost = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Authored cost for a future reposition action (#1712) to consume. "
+        "This field is data only — #1711 does not build a movement action.",
     )
 
     class Meta:
@@ -182,7 +211,39 @@ class BattleUnit(SharedMemoryModel):
         related_name="units",
     )
     name = models.CharField(max_length=120)
-    unit_type = models.CharField(max_length=80)
+    descriptor = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only "
+        "— composition/quality below drive mechanics.",
+    )
+    composition = models.CharField(
+        max_length=20,
+        choices=UnitComposition.choices,
+        default=UnitComposition.IRREGULAR,
+    )
+    quality = models.CharField(
+        max_length=20,
+        choices=UnitQuality.choices,
+        default=UnitQuality.TRAINED,
+    )
+    commander = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="commanded_battle_units",
+        help_text="Optional commander whose Battle Command modifier bonus applies to "
+        "participants fighting alongside this unit's side/place.",
+    )
+    summoned_by = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="summoned_battle_units",
+        help_text="Set when this unit was created via a military-grade summon (#1711).",
+    )
     strength = models.PositiveSmallIntegerField(default=100)
     status = models.CharField(
         max_length=20,
@@ -194,7 +255,7 @@ class BattleUnit(SharedMemoryModel):
         ordering = ["battle", "side", "name"]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.unit_type}) [{self.get_status_display()}]"
+        return f"{self.name} ({self.composition}) [{self.get_status_display()}]"
 
 
 class BattleRound(AbstractRound):
@@ -308,6 +369,28 @@ class BattleActionDeclaration(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="support_declarations",
     )
+    scope = models.CharField(
+        max_length=10,
+        choices=BattleActionScope.choices,
+        default=BattleActionScope.UNIT,
+        help_text="Targeting breadth (#1710) — UNIT/PLACE/SIDE.",
+    )
+    target_place = models.ForeignKey(
+        BattlePlace,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="scoped_declarations",
+        help_text="Set when scope=PLACE.",
+    )
+    target_side = models.ForeignKey(
+        BattleSide,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="scoped_declarations",
+        help_text="Set when scope=SIDE.",
+    )
     resolved = models.BooleanField(default=False)
     success_level = models.SmallIntegerField(
         default=0,
@@ -327,3 +410,89 @@ class BattleActionDeclaration(SharedMemoryModel):
         return (
             f"{self.participant} declares {self.get_action_kind_display()} in {self.battle_round}"
         )
+
+
+class TechniqueCompositionAffinity(SharedMemoryModel):
+    """Authored (technique, composition) -> flat STRIKE-check modifier (#1711).
+
+    Positive = the technique is especially effective against that composition;
+    negative = weak against it. Looked up by BattleTechniqueResolver when the
+    declaration's target_unit.composition matches a row.
+    """
+
+    technique = models.ForeignKey(
+        TECHNIQUE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="battle_composition_affinities",
+    )
+    composition = models.CharField(max_length=20, choices=UnitComposition.choices)
+    modifier = models.SmallIntegerField()
+
+    class Meta:
+        ordering = ["technique", "composition"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "composition"],
+                name="unique_technique_composition_affinity",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} vs {self.get_composition_display()}: {self.modifier:+d}"
+
+
+class TerrainCompositionEffect(SharedMemoryModel):
+    """Authored (terrain_type, composition) -> flat attacker-facing STRIKE modifier (#1711).
+
+    Positive = that composition is easier to strike in that terrain; negative = harder.
+    Looked up by BattleTechniqueResolver against the target unit's place.terrain_type.
+    """
+
+    terrain_type = models.CharField(max_length=20, choices=TerrainType.choices)
+    composition = models.CharField(max_length=20, choices=UnitComposition.choices)
+    modifier = models.SmallIntegerField()
+
+    class Meta:
+        ordering = ["terrain_type", "composition"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["terrain_type", "composition"],
+                name="unique_terrain_composition_effect",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.get_terrain_type_display()} vs {self.get_composition_display()}: "
+            f"{self.modifier:+d}"
+        )
+
+
+class BattleOutcomeMapping(SharedMemoryModel):
+    """Designer-tunable map from a Battle's graded outcome to a CheckOutcome tier.
+
+    Used by ``classify_battle_conclusion_outcome`` (``world.battles.beat_wiring``)
+    to select the CheckOutcome tier for beat completion when a war-scale Battle
+    concludes (#1785). Unlike combat's ``EncounterOutcomeMapping``, there is no
+    separate risk-level axis — ``BattleOutcome`` already encodes decisive-vs-marginal
+    severity in its four resolved values. A missing row, or a row whose
+    ``check_outcome`` is null, signals the caller to resolve the beat to
+    PENDING_GM_REVIEW rather than firing a consequence pool. Starts empty; GMs
+    author rows via admin.
+    """
+
+    outcome = models.CharField(max_length=30, choices=BattleOutcome.choices, unique=True)
+    check_outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="battle_outcome_mappings",
+        help_text="CheckOutcome tier for this outcome. Null = resolve to PENDING_GM_REVIEW.",
+    )
+
+    class Meta:
+        ordering = ["outcome"]
+
+    def __str__(self) -> str:
+        return f"BattleOutcomeMapping({self.get_outcome_display()})"

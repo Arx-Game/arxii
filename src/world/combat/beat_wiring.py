@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from world.stories.services.stakes import staked_unsatisfied_beats_for_scene
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
@@ -25,33 +26,10 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.scenes.models import Scene
-    from world.stories.models import Beat
 
 logger = logging.getLogger(__name__)
 
 ENCOUNTER_BEAT_TRIGGER_NAME = "encounter_completed_beat_wiring"
-
-
-def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:
-    """Staked, still-open beats on episodes linked to this scene (#1770 PR4).
-
-    A beat is staked when its declared risk is above NONE; only UNSATISFIED
-    beats can still be wagered on. Uses the same Scene -> EpisodeScene ->
-    Episode -> Beat discovery as ``encounter_completed_beat_handler`` but
-    without its OUTCOME_TIER restriction — any predicate type can carry a
-    stakes contract.
-    """
-    from world.societies.constants import RenownRisk  # noqa: PLC0415
-    from world.stories.constants import BeatOutcome  # noqa: PLC0415
-    from world.stories.models import Beat, EpisodeScene  # noqa: PLC0415
-
-    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
-    return list(
-        Beat.objects.filter(
-            episode_id__in=episode_ids,
-            outcome=BeatOutcome.UNSATISFIED,
-        ).exclude(risk=RenownRisk.NONE)
-    )
 
 
 def activate_stakes_for_scene(
@@ -123,10 +101,13 @@ def classify_battle_outcome(encounter: CombatEncounter) -> CheckOutcome | None:
 
 
 def encounter_completed_beat_handler(*, payload: object) -> None:
-    """Flow-callable subscriber for ENCOUNTER_COMPLETED (#1746).
+    """Flow-callable subscriber for ENCOUNTER_COMPLETED (#1746, routed #1760).
 
-    Resolves any linked OUTCOME_TIER beat on the encounter's scene's episode(s):
-    classifies the outcome and completes the beat via
+    When ``encounter.story_beat`` is set, resolves ONLY that beat with this
+    encounter's own graded outcome. Otherwise falls back to resolving every
+    linked OUTCOME_TIER beat on the encounter's scene's episode(s) (legacy
+    find-all behavior, unchanged for existing single-beat-per-scene content).
+    Classifies the outcome via classify_battle_outcome and completes via
     record_outcome_tier_completion. No-ops cleanly when the encounter has no
     scene, no linked beat, or no active progress.
 
@@ -159,15 +140,26 @@ def encounter_completed_beat_handler(*, payload: object) -> None:
         return
 
     encounter = payload.encounter
-    # Find UNSATISFIED OUTCOME_TIER beats on episodes linked to this scene.
-    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
-    beats = list(
-        Beat.objects.filter(
-            episode_id__in=episode_ids,
-            predicate_type=BeatPredicateType.OUTCOME_TIER,
-            outcome=BeatOutcome.UNSATISFIED,
+    if encounter.story_beat_id is not None:
+        # #1760: an explicitly-routed encounter resolves ONLY its own beat,
+        # regardless of how many other beats share the scene.
+        beats = (
+            [encounter.story_beat]
+            if encounter.story_beat.predicate_type == BeatPredicateType.OUTCOME_TIER
+            and encounter.story_beat.outcome == BeatOutcome.UNSATISFIED
+            else []
         )
-    )
+    else:
+        # Legacy: find every UNSATISFIED OUTCOME_TIER beat on episodes linked
+        # to this scene. Preserved for existing single-beat-per-scene content.
+        episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
+        beats = list(
+            Beat.objects.filter(
+                episode_id__in=episode_ids,
+                predicate_type=BeatPredicateType.OUTCOME_TIER,
+                outcome=BeatOutcome.UNSATISFIED,
+            )
+        )
     if not beats:
         return
 

@@ -1,7 +1,8 @@
 """Model-shape tests for the stakes-contract models (#1770 PR1)."""
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
+from evennia.utils.test_resources import EvenniaTestCase
 
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
@@ -70,3 +71,32 @@ class ActivationConstraintTests(TestCase):
                 effective_risk=RenownRisk.LOW,
                 is_ready=True,
             )
+
+
+class StakeResolutionOutcomeKeyTests(EvenniaTestCase):
+    """Open branch vocabulary (#1760): multiple named branches per column."""
+
+    def test_two_loss_branches_with_different_outcome_keys_coexist(self) -> None:
+        stake = StakeFactory()
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="destroyed"
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="captured"
+        )
+        self.assertEqual(stake.resolutions.count(), 2)
+
+    def test_duplicate_column_and_outcome_key_rejected(self) -> None:
+        stake = StakeFactory()
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="destroyed"
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StakeResolutionFactory(
+                    stake=stake, column=StakeResolutionColumn.LOSS, outcome_key="destroyed"
+                )
+
+    def test_outcome_key_defaults_to_blank(self) -> None:
+        resolution = StakeResolutionFactory()
+        self.assertEqual(resolution.outcome_key, "")

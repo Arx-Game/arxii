@@ -123,14 +123,18 @@ The authored branch for one stake × one outcome column.
 |---|---|---|
 | `stake` | FK → `stories.Stake` (`related_name="resolutions"`, CASCADE) | |
 | `column` | CharField (`StakeResolutionColumn` choices) | `WIN` / `LOSS` / `WITHDRAWAL` |
+| `outcome_key` | CharField(40, blank, default `""`) | **#1760.** Open-vocabulary slug naming *this* branch within `column`'s polarity — e.g. two distinct LOSS branches `"destroyed"` and `"captured"`. Blank = the column's single plain/default branch (backward compatible: every pre-#1760 row has `outcome_key=""`). `column` stays the coarse WIN/LOSS/WITHDRAWAL axis every severity/reward/machine-grading rule keys off; `outcome_key` is a finer dimension *inside* it, not a replacement |
 | `consequence_pool` | FK → checks `ConsequencePool` (null, SET_NULL) | Pool to fire when this column resolves (tier-aware) |
 | `escalates_to_risk` | CharField (`RenownRisk` choices, blank) | The [fuse](#chain-rule--fuse-length) mechanic — the risk tier the situation spawned by this branch carries. Blank = no escalation declared |
 | `narrative_summary` | TextField (blank) | What happens in the story when this branch fires (GM-authored) |
 | `forfeits_subject_item` | BooleanField (default False) | **PR2 writer.** On fire, soft-forfeits the stake's `subject_item` (`forfeit_item_instance` — `destroyed_at` + a receiver-less `TRANSFERRED` `OwnershipEvent`; never hard-deleted). Requires an `ITEM` stake with `subject_item` set |
-| `npc_affection_delta` | SmallIntegerField (default 0) | **PR2 writer.** On fire, `adjust_npc_affection` between the subject sheet's primary persona and each completion participant persona. Requires `NPC_FATE`/`FACTION` + `subject_sheet` |
+| `subject_standing_delta` | SmallIntegerField (default 0) | **PR2 writer, dispatch by `subject_kind` (#1760).** On fire: `NPC_FATE` calls `adjust_npc_affection` between `subject_sheet`'s primary persona and each completion participant persona (unchanged). `FACTION` calls `bump_society_reputation`/`bump_organization_reputation` (whichever of `subject_society`/`subject_organization` is set) for each participant's own persona. Requires an `NPC_FATE` stake with `subject_sheet` set, or a `FACTION` stake with `subject_society` or `subject_organization` set |
 | `sets_subject_lifecycle` | CharField (`LifecycleState` choices, blank) | **PR2 writer.** On fire, `set_lifecycle_state(subject_sheet, value)`. **Pillar-12 gated:** only legal for `NPC_FATE` stakes whose subject sheet is not player-held |
+| `machine_match_lifecycle_state` | CharField (`LifecycleState` choices, blank) | **#1760, generalizes the old NPC-vitals DEAD-only override.** On MACHINE grading, if an `NPC_FATE` stake's `subject_sheet.lifecycle_state` equals this value, THIS branch fires instead of the column's plain default — matched across *all* of the stake's authored branches, so it can fire even when its own `column` crosses the beat-outcome-derived WIN/LOSS polarity (intentional; matches the pre-#1760 "dead NPC always grades LOSS regardless of beat outcome" behavior, now generalized to the full `LifecycleState` ladder: ALIVE/CAPTURED/COMA/RETIRED/DEAD). Blank = no machine-match signal; falls back to the plain per-column default (`world.stories.services.stake_resolution._branch_for_column`) |
 
-Unique constraint: `(stake, column)` — one resolution per stake per column.
+Unique constraint: `(stake, column, outcome_key)` — one resolution per stake per
+named branch (#1760; was `(stake, column)` pre-#1760, i.e. exactly one branch
+per column).
 
 **Pillar 12 (no-fiat removal):** the writer payloads are validated in *both*
 `StakeResolutionSerializer.validate` and `StakeResolution.clean` (shared
@@ -298,6 +302,15 @@ scales as `RISK_LEGEND_AWARDS[effective_risk_for_beat(beat)] × tier_multiplier`
 floored by the effect's authored `legend_base_value` (an author's explicit
 override never scales down).
 
+**Carve-out for war-scale Battle stakes (#1785, ADR-0080):** `activate_stakes_contract`
+takes an additive `scale_by_party_level: bool = True` parameter. Battle activation
+(`battles.beat_wiring.activate_stakes_for_battle`) passes `False` — a war's stakes
+are fought over an objective, not diluted or inflated by which specific PCs
+happen to be enlisted, unlike scene-level stakes. When `False`, a ready
+contract's effective risk equals its declared risk unconditionally, skipping
+the level-gap math above entirely; the readiness gate (unready → `NONE`) still
+applies. Every other caller keeps the default `True` — this is Battle-only.
+
 ## Lock Lifecycle (authoring → activation → completion)
 
 ```
@@ -357,9 +370,20 @@ open activation is still readable for the `StakeOutcome.activation` audit FK.
 **Machine grading (pillar 11 — grade off data where it exists):**
 
 - Beat `SUCCESS` → `WIN` column; `FAILURE`/`EXPIRED` → `LOSS`.
-- **NPC-vitals override:** an `NPC_FATE` stake whose `subject_sheet`'s
-  `CharacterVitals.life_state` reads `DEAD` grades `LOSS` even on a beat-level
-  SUCCESS — combat already wrote the truth into vitals.
+- **Lifecycle-match override (#1760, generalizes the old NPC-vitals DEAD-only
+  override):** for an `NPC_FATE` stake, `_branch_for_column` first checks the
+  subject sheet's *actual* `lifecycle_state` against every authored branch's
+  `machine_match_lifecycle_state` (not just branches under the beat-derived
+  column) — a match wins outright, even crossing the WIN/LOSS polarity the
+  beat outcome would otherwise imply. No match falls back to the beat-derived
+  column's plain (`outcome_key=""`) branch. This is the same "a dead NPC
+  always grades LOSS" behavior as before #1760, now expressed as authored data
+  across the full ladder (ALIVE/CAPTURED/COMA/RETIRED/DEAD) instead of a
+  hardcoded DEAD check.
+- Within the resolved column, `outcome_key=""` is always the plain/default
+  branch pick when no `machine_match_lifecycle_state` fires — machine grading
+  never lands on a *named* branch (`outcome_key != ""`) on its own; named
+  branches are reached only via a GM's Constrained Pick.
 - The chosen column's authored branch fires its `consequence_pool` (tier-aware
   via `apply_pool_for_tier` when the completion carries an `outcome_tier`, else
   `apply_pool_deterministically`) with the **same guards and
@@ -395,7 +419,11 @@ beat). This resolves #1746's deferred withdrawal design.
 **GM constrained pick:** `resolve_stake_by_gm_pick` /
 `POST /api/stakes/{id}/resolve/` — the GM picks **among the stake's authored
 resolution columns only** (never free composition; author the branch first).
-The branch fires exactly like the machine path (pool + writers); the
+**#1760:** the pick is by `(column, outcome_key)` pair, not column alone — a
+GM constrained to a column with multiple named branches (e.g. LOSS/"destroyed"
+vs. LOSS/"captured") must name the specific `outcome_key`; blank picks the
+column's plain default branch, matching pre-#1760 authoring. The branch fires
+exactly like the machine path (pool + writers); the
 `StakeOutcome` records `method=GM_PICK`, `resolved_by`, and `gm_notes`.
 Optional `participants` / `extra_participants` carry the personas the branch's
 pool and affection writer credit (same semantics as the beat mark endpoint:
@@ -568,11 +596,13 @@ be presented" failure (ADR-0033 privacy).
 | Hostile cast seed/feed | `combat.cast_seed.seed_or_feed_encounter_from_cast` → same | caster + target sheets |
 | Mission acceptance | `missions.services.offer_handler.issue_mission` → `missions.services.beat.activate_stakes_for_instance` | accepting persona's sheet (no-op until an offer path sets `source_beat`) |
 | Freeform scene | `declare_stakes` GM action (`actions/definitions/gm_stories.py`) | the scene's active participants' sheets |
+| Battle round 1 opening | `battles.services.begin_battle_round` → `battles.beat_wiring.activate_stakes_for_battle` | all enlisted ACTIVE participants' sheets, `scale_by_party_level=False` (see [Effective Risk](#effective-risk)) |
 
-`staked_unsatisfied_beats_for_scene(scene)` (`combat.beat_wiring`) is the
+`staked_unsatisfied_beats_for_scene(scene)` (`world.stories.services.stakes`,
+re-exported from `combat.beat_wiring` for its existing caller) is the
 Scene → EpisodeScene → Episode → Beat discovery helper (any predicate type;
 risk above NONE; outcome UNSATISFIED). Activation stays idempotent while an
-activation is open, so overlapping encounters on one scene are safe.
+activation is open, so overlapping encounters/battles on one scene are safe.
 
 ### Mission risk gate (`world.missions`)
 
@@ -602,7 +632,7 @@ stake's severity label + `player_summary` and the locked effective risk.
 | `compute_effective_risk` | `(declared_risk, target_level, party_average_level) -> str` | See [Effective Risk](#effective-risk) |
 | `validate_stakes_readiness` | `(beat: Beat) -> StakesReadinessReport` | Readiness gate: target_level declared, ≥1 stake, every stake has WIN+LOSS resolutions, severity within calibration bands, WIN reward total within the tier's reward band (PR3; skipped when `reward_ceiling == 0`), removal reachable within `max_fuse_hops`. Unstaked beats (`risk == NONE`) are trivially ready |
 | `get_open_activation` | `(beat: Beat) -> StakeContractActivation \| None` | The single open activation for a beat, if any |
-| `activate_stakes_contract` | `(beat, participants) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion) |
+| `activate_stakes_contract` | `(beat, participants, *, scale_by_party_level=True) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion); `scale_by_party_level=False` (Battle only, #1785) prices at declared risk unconditionally — see [Effective Risk](#effective-risk) |
 | `effective_risk_for_beat` | `(beat: Beat) -> str` | Read seam: open activation's effective risk, else `beat.risk` |
 | `resolve_open_activation` | `(beat: Beat) -> None` | Closes the open activation (sets `resolved_at`); called by the completion tail |
 | `reward_band_problems_for_beat` | `(beat: Beat) -> list[str]` | Re-runnable reward-band check (PR3): the readiness path *and* `_apply_stake_rewards` at pay time both use it |
@@ -615,8 +645,8 @@ stake's severity label + `player_summary` and the locked effective risk.
 | Function | Signature | Purpose |
 |---|---|---|
 | `resolve_stakes_for_completion` | `(*, beat, outcome, completion, progress, scope, explicit_participants=None, outcome_tier=None, withdrawal=False) -> list[StakeOutcome]` | Grade every open stake on a completing beat and fire the chosen branches — see [Resolution](#resolution-pr2). Called by `beats._create_completion_and_fire_pool` and `beats._finalize_aggregate_crossing` |
-| `resolve_stake_by_gm_pick` | `(stake, *, column, gm_profile, gm_notes="", participants=None, extra_participants=None) -> StakeOutcome` | The GM constrained pick — fires the authored branch like the machine path, records `GM_PICK` |
-| `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, npc_affection_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`) |
+| `resolve_stake_by_gm_pick` | `(stake, *, column, outcome_key="", gm_profile, gm_notes="", participants=None, extra_participants=None) -> StakeOutcome` | The GM constrained pick — `outcome_key` narrows the pick to one named branch within `column` (#1760; blank = the column's plain default). Fires the authored branch like the machine path, records `GM_PICK` |
+| `stake_resolution_payload_problems` | `(*, stake, forfeits_subject_item, subject_standing_delta, sets_subject_lifecycle) -> list[StakePayloadProblem]` | Shared pillar-12 payload validation (serializer + model `clean`) |
 | `sheet_is_player_held` | `(sheet: CharacterSheet) -> bool` | The pillar-12 gate: RosterEntry with a current tenure |
 
 Plumbing added in PR2: `record_outcome_tier_completion` gained
@@ -669,6 +699,7 @@ issues:
 | Opt-in player-facing surfaces + the scene-start activation triggers | **SHIPPED in PR4** — see [Opt-in & Visibility Surfaces](#opt-in--visibility-surfaces-1770-pr4) |
 | Player-boundary registry backing `check_stake_boundaries` | Sibling **#1771** (the seam ships allow-all) |
 | Scene *grading* | **#1748** |
+| Battle (war-scale) activation + outcome grading | **SHIPPED in #1785** — see `world.battles.beat_wiring` |
 
 ## Test Coverage
 
@@ -691,6 +722,8 @@ issues:
   GM-pick payout with/without participants, reward-line serializer gates
 - `src/world/combat/tests/test_encounter_beat_wiring.py` (PR2) — FLED fires
   withdrawal-authored stakes, pends unauthored ones
+- `src/world/battles/tests/test_beat_wiring.py` (#1785) — Battle conclusion
+  classify/activate/resolve wiring, `scale_by_party_level=False` carve-out
 - `src/world/vitals/tests/test_life_state.py` (PR2) — `_mark_dead` →
   `lifecycle_state DEAD` propagation
 - `src/world/items/tests/test_usage_service.py` (PR2) — `forfeit_item_instance`
@@ -713,7 +746,16 @@ issues:
 - **Stories** — `Beat.risk` / `Beat.target_level`; the fuse walk reads
   `Transition.cached_required_outcomes` and `Episode.maturity`
 - **Societies** — `RISK_LEGEND_AWARDS` (`world.societies.constants`), consumed by
-  `_legend_award`'s `effective_risk_for_beat` scaling
+  `_legend_award`'s `effective_risk_for_beat` scaling. **#1760, read-side
+  complement to the `FACTION` `subject_standing_delta` writer above:**
+  `BeatPredicateType.FACTION_STANDING_AT_LEAST` (`world.stories.constants`) is
+  a new Beat predicate — `Beat.required_society` / `required_organization`
+  (exactly one set) + `Beat.required_standing` — letting a later beat gate on
+  accumulated `SocietyReputation`/`OrganizationReputation.value` reaching a
+  threshold (no row = implicit 0). Evaluator:
+  `_evaluate_faction_standing_at_least` (`world.stories.services.beats`),
+  reading the sheet's primary persona's reputation row. Full predicate-type
+  field table lives in [stories.md](stories.md#beat)
 - **Checks** — `Beat.failure_consequences` → `resolve_pool_consequences` for the
   `character_loss` reachability test; `StakeResolution.consequence_pool` FK
 - **Mechanics** — `world.mechanics.effect_handlers._legend_award` reads

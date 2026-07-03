@@ -22,6 +22,25 @@ GitHub edits). The skill carries the full rule set; the essentials: emit
 and verify issue number↔title before any mutation. Temporary — removal tracked in
 **#883** (grep `HARNESS-BUNDLING-WORKAROUND`); delete when the harness is fixed.
 
+## Tool & Subagent Sequencing
+
+**Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer
+subagents) run strictly sequentially — one per message, verify the result
+before the next.** Parallelism is only for read-only fan-out (greps, reads,
+Explore/research agents). Two concrete failure modes motivate this:
+
+- **Parallel implementer subagents on a shared worktree corrupt the git
+  index** — they revert each other's uncommitted edits and cross-contaminate
+  commits. Dispatch one, await it, verify the commit actually landed
+  (`git log -1`), then the next.
+- **Batched mutating tool calls cascade-cancel**: when one call in a parallel
+  batch errors or hits an approval prompt, the harness cancels every sibling
+  in that batch, and most of the intended work silently doesn't run.
+
+Destructive or approval-gated git operations (`reset --hard`, force-push) go
+alone in their own message. Never cite an issue/PR number that wasn't read
+back from the creating command's own stdout.
+
 ## Git Workflow
 
 - **Never work directly on main.** Branch first: `git checkout -b feature-name`.
@@ -175,6 +194,15 @@ ratification. The `verify-against-code` skill carries the labeling procedure
 (`[BUILT & WIRED]` / `[BUILT, NOT WIRED]` / `[ABSENT]`), the ledger format, and the
 recurring-traps list. **Use it.**
 
+## Fold In, Don't File
+
+Trivial review-surfaced gaps (a missing test, a dedup, a wiring nit) get fixed in
+the current branch/PR now or dropped — never filed as a follow-up issue, no
+exceptions. File only for something substantial enough to need its own PR
+(separable system, scope beyond the current issue, a design question needing a
+human call), with the reason stated in the issue body. Overrides any skill step
+that says to file a follow-up — see `issue-to-merged-pr`'s SKILL.md for detail.
+
 ## Database & Code Quality Invariants
 
 Database design:
@@ -244,6 +272,10 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
 `just regression`), which CI runs on every PR.
 
+**For PR work, prefer `just test-affected`** — it diffs against `origin/main`
+and runs only the apps your branch touches plus import dependents, so you don't
+waste time on unrelated suites. For a single app, use `just test-fast <app>`.
+
 Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
 fixing what CI catches. **CI is the full-regression gate** — run a local
 `just regression` only to reproduce a CI failure the fast tier doesn't surface. For
@@ -268,6 +300,7 @@ rule: see the `running-tests` skill.
   *in this PR*. A code change that leaves its docs stale is incomplete.
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
-- **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).
+- **Run the fast SQLite tier** for the apps you touched (`just test-affected`
+  or `just test-fast <app>`).
 - **Push and let CI gate regression** — CI runs the Postgres parity suite on every
   PR; monitor the PR and fix failures there.

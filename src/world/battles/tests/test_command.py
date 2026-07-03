@@ -15,16 +15,21 @@ from django.test import TestCase
 from actions.factories import ActionTemplateFactory
 from commands.battle import CmdBattle
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.battles.constants import BattleActionKind
+from world.battles.constants import BattleActionKind, BattleActionScope
 from world.battles.factories import (
     BattleFactory,
     BattleParticipantFactory,
+    BattlePlaceFactory,
     BattleRoundFactory,
     BattleSideFactory,
     BattleUnitFactory,
 )
 from world.battles.models import BattleActionDeclaration
 from world.character_sheets.factories import CharacterSheetFactory
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.scenes.constants import RoundStatus
 
@@ -204,3 +209,108 @@ class CmdBattleDeclareTests(TestCase):
         self.player_char.msg.assert_called()
         feedback = self.player_char.msg.call_args[0][0]
         self.assertIn("Usage", feedback)
+
+    def test_declare_strike_side_scope_dispatches_side_target(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="cmd-test-supreme",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=supreme_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare strike side with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+        # The player is on defender_side — "strike side" must target the OPPOSING
+        # side (attacker_side), never the caster's own side (#1710 friendly-fire fix).
+        self.assertEqual(decl.target_side_id, self.attacker_side.pk)
+
+    def test_declare_strike_place_scope_dispatches_place_target(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle, name="North Ridge")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        subordinate_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="cmd-test-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=subordinate_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare strike place North Ridge with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.scope, BattleActionScope.PLACE)
+        self.assertEqual(decl.target_place_id, place.pk)
+
+
+class CmdBattleDuelTests(TestCase):
+    """CmdBattle `duel` subverb dispatches ChallengeChampionDuelAction."""
+
+    def setUp(self) -> None:
+        self.room = _make_room("CmdBattleDuelRoom")
+        self.player_char = CharacterFactory(db_key="cmd_duel_player", location=self.room)
+        self.player_sheet = CharacterSheetFactory(character=self.player_char)
+
+        self.battle = BattleFactory(name="Duel Cmd Test Battle")
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+
+        self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side = BattleSideFactory(
+            battle=self.battle, role="defender", covenant=self.covenant
+        )
+        self.place = BattlePlaceFactory(battle=self.battle, name="The Main Gates")
+        self.participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            character_sheet=self.player_sheet,
+            place=self.place,
+        )
+        rank = CovenantRankFactory(covenant=self.covenant)
+        champion_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            is_champion_role=True,
+            slug="cmd-test-champion",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=champion_role,
+            covenant=self.covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+    def test_duel_subverb_challenges_champion_duel(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "duel The Main Gates vs Warlord's Champion")
+
+        self.place.refresh_from_db()
+        self.assertIsNotNone(self.place.combat_encounter_id)

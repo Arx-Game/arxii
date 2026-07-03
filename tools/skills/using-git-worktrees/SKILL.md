@@ -171,11 +171,14 @@ container this is usually a no-op or fast.
 Run tests to ensure the workspace starts clean:
 
 ```bash
-# Fast tier for local iteration (SQLite)
-uv run arx test --keepdb world.magic 2>/dev/null || uv run arx test world.magic
+# For PR work — only apps your branch touches + import dependents
+just test-affected
+
+# Or a single app if you know which one you'll be editing
+just test-fast world.magic
 
 # Or the full suite if a broad baseline is warranted
-uv run arx test
+just regression
 ```
 
 **If tests fail:** Report failures, ask whether to proceed or investigate.
@@ -208,6 +211,18 @@ Ready to implement <feature-name>
 | Directory not ignored | Add to .gitignore + commit |
 | Permission error on create | Sandbox fallback, work in place |
 | Tests fail during baseline | Report failures + ask |
+
+## Arx II-specific worktree traps
+
+Beyond the generic mistakes below, this repo has hit five concrete worktree
+failure modes: absolute Read/Edit paths silently bypassing the worktree,
+`EnterWorktree`+`pickup-issue.sh` leaving two branches, a subagent detaching
+HEAD via `git checkout <sha>`, `git worktree add -f` stealing a branch ref
+from another live worktree, and `post-merge-cleanup.sh` failing inside an
+`EnterWorktree` worktree. See
+[`references/arxii-worktree-traps.md`](references/arxii-worktree-traps.md)
+for the symptom, cause, and fix for each — load it when you recognize one of
+these symptoms, not before.
 
 ## Common Mistakes
 

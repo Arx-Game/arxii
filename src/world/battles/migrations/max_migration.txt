@@ -1,1 +1,1 @@
-0003_battle_afk_peril_override
+0007_battleactiondeclaration_scope_and_more

@@ -263,9 +263,24 @@ coupled to the action's kwarg names by the base class.
 3. Override `execute(actor, context, **kwargs)` with the action's logic
 4. Override `get_prerequisites()` if the action has prerequisites — these are enforced
    by `run()` before `execute()` is called; read extra kwargs via `context["kwargs"]`
-5. Add the action instance to `_ALL_ACTIONS` in `registry.py`
+5. Add the action instance to `_ALL_ACTIONS` in `registry.py` — **also add its
+   key to `expected_keys` in `actions/tests/test_base.py`**
+   (`ActionRegistryTests.test_all_expected_actions_registered` is an exact-match
+   assertion; a new Action without the corresponding key addition fails it).
+   This test lives in CI's backend-shard-3, not necessarily the shard your
+   edited app runs in — running only your new test module passes locally, so
+   run the whole `actions` suite (`arx test actions --sqlite`) after adding an
+   Action or telnet command, not just your new module.
 6. Write tests in `tests/`
 7. (Optional) Create a telnet command in `commands/` that delegates to the action
+
+**Concurrent-PR conflict on the registry:** when several "telnet journey" PRs
+land around the same time, they typically all append to the same insertion
+point in `_ALL_ACTIONS` and `expected_keys` — a near-guaranteed 3-way conflict
+on sync-with-main. Resolution is mechanical: keep **both** sides' appends
+(concatenate the two Action lists / two key sets), never drop either — dropping
+one breaks the exact-match test. Verify post-merge with `just test-fast
+actions`; a failure there means a key was dropped or duplicated.
 
 ## Enhancement System
 
@@ -333,6 +348,27 @@ lives on the config model rows attached to the `ActionEnhancement`, not on the s
    afforded.
 6. Call `execute()` with context and kwargs
 7. Run post-effects
+
+## Social Template Actions Return an Honest `ActionResult`
+
+`_SocialTemplateAction.execute()` (and subclasses like `EntranceAction`, in
+`definitions/social.py`) return a plain `ActionResult` (success/message/data)
+built by `_result_from_resolution`, **not** the richer `PendingActionResolution`
+some code expects. The resolution object is stashed at
+`result.data["resolution"]` — code that does
+`result.main_result.check_result.success_level` after e.g. `PersuadeAction().run(...)`
+raises `AttributeError: 'ActionResult' object has no attribute 'main_result'`.
+Unwrap first: `resolution = result.data["resolution"]`, then
+`resolution.main_result...`. (`main_result is None` means a paused resolution
+that hasn't rolled its main step yet, which the success rule treats as not
+having succeeded.)
+
+**Side-effect wiring:** the shared `_resolve_template` helper (which already
+runs `dispatch_effects`) is the right place for any post-resolution side effect
+that should apply to *every* social template action
+(Persuade/Intimidate/Deceive/Flirt/Perform/Entrance/RestoreSense). Wiring a
+side effect into one `execute()` override only covers that one action — the
+base `execute()` bypasses it.
 
 ## What's Not Built Yet
 

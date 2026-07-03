@@ -26,6 +26,7 @@ from world.stories.constants import (
 )
 from world.stories.models import (
     Beat,
+    EpisodeScene,
     RiskCalibration,
     Stake,
     StakeContractActivation,
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from world.character_sheets.models import CharacterSheet
+    from world.scenes.models import Scene
 
 logger = logging.getLogger(__name__)
 
@@ -292,8 +294,28 @@ def get_open_activation(beat: Beat) -> StakeContractActivation | None:
     return beat.stake_activations.filter(resolved_at__isnull=True).first()
 
 
+def staked_unsatisfied_beats_for_scene(scene: Scene) -> list[Beat]:
+    """Staked, still-open beats on episodes linked to this scene (#1770 PR4).
+
+    A beat is staked when its declared risk is above NONE; only UNSATISFIED
+    beats can still be wagered on. Scene -> EpisodeScene -> Episode -> Beat
+    discovery (any predicate type — not just OUTCOME_TIER; any predicate type
+    can carry a stakes contract).
+    """
+    episode_ids = EpisodeScene.objects.filter(scene=scene).values_list("episode_id", flat=True)
+    return list(
+        Beat.objects.filter(
+            episode_id__in=episode_ids,
+            outcome=BeatOutcome.UNSATISFIED,
+        ).exclude(risk=RenownRisk.NONE)
+    )
+
+
 def activate_stakes_contract(
-    beat: Beat, participants: Sequence[CharacterSheet]
+    beat: Beat,
+    participants: Sequence[CharacterSheet],
+    *,
+    scale_by_party_level: bool = True,
 ) -> StakeContractActivation:
     """Lock the contract at scene start and price it for this party.
 
@@ -304,6 +326,15 @@ def activate_stakes_contract(
     constraint `unique_open_activation_per_beat` is the real backstop, and a
     losing concurrent create re-fetches and returns the winner's row instead
     of raising.
+
+    ``scale_by_party_level`` — when False, skips the party-level-gap
+    adjustment (``compute_effective_risk``) entirely: a ready contract's
+    effective risk equals its declared risk, unconditionally. Used by
+    war-scale Battle stakes (#1785), whose objective doesn't get less real
+    because strong PCs happened to be enlisted — unlike scene-level stakes,
+    which do scale by party level (ADR-0077; see ADR-0080 for this carve-out).
+    ``party_average_level`` is still computed and stored on the activation row
+    as an audit value even when this is False.
     """
     from world.stories.services.beats import _character_level  # noqa: PLC0415
 
@@ -319,7 +350,11 @@ def activate_stakes_contract(
     party_average = round(mean(_character_level(sheet) for sheet in participants))
     target = beat.target_level or 0
     if report.is_staked and report.is_ready:
-        effective = compute_effective_risk(beat.risk, target, party_average)
+        effective = (
+            compute_effective_risk(beat.risk, target, party_average)
+            if scale_by_party_level
+            else beat.risk
+        )
     else:
         effective = RenownRisk.NONE
     try:

@@ -14,15 +14,48 @@ from django.test import TestCase, tag
 from actions.factories import ActionTemplateFactory
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
+    BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
+    BATTLE_POSTURE_VP_MULTIPLIER,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
     BattleActionKind,
+    BattleActionScope,
+    BattlePosture,
     BattleSideRole,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
-from world.battles.services import add_side, add_unit, begin_battle_round, enlist_participant
+from world.battles.exceptions import (
+    CannotStrikeOwnSideError,
+    InsufficientCommandTierError,
+    MissingScopeTargetError,
+    NoCommandHierarchyError,
+)
+from world.battles.factories import (
+    BattleFactory,
+    BattleParticipantFactory,
+    BattlePlaceFactory,
+    BattleRoundFactory,
+    BattleSideFactory,
+    BattleUnitFactory,
+)
+from world.battles.models import TechniqueCompositionAffinity, TerrainCompositionEffect
+from world.battles.services import (
+    add_place,
+    add_side,
+    add_unit,
+    begin_battle_round,
+    declare_battle_action,
+    enlist_participant,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.types import CheckResult
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
@@ -105,7 +138,7 @@ class DeclareBattleActionTests(TestCase):
             battle=self.battle,
             side=self.unit_side,
             name="Enemy Archers",
-            unit_type="archers",
+            descriptor="archers",
         )
         self.battle_round = begin_battle_round(battle=self.battle)
         # Castable technique (action_template set) for the happy-path declarations
@@ -212,6 +245,134 @@ class DeclareBattleActionTests(TestCase):
             )
 
 
+class ScopePermissionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.battle = BattleFactory()
+        cls.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        cls.side = BattleSideFactory(battle=cls.battle, covenant=cls.covenant)
+        cls.no_covenant_side = BattleSideFactory(battle=cls.battle, role=BattleSideRole.DEFENDER)
+        cls.rank = CovenantRankFactory(covenant=cls.covenant)
+        cls.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        cls.supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="scope-test-supreme",
+        )
+
+    def _enlist(self, side):
+        sheet = CharacterSheetFactory()
+        CharacterTechniqueFactory(character=sheet, technique=self.technique)
+        participant = BattleParticipantFactory(battle=self.battle, side=side, character_sheet=sheet)
+        BattleRoundFactory(battle=self.battle, status=RoundStatus.DECLARING)
+        return participant, sheet
+
+    def test_side_scope_requires_supreme_command(self) -> None:
+        participant, _sheet = self._enlist(self.side)
+        with self.assertRaises(InsufficientCommandTierError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+    def test_side_scope_allowed_for_engaged_supreme_commander(self) -> None:
+        participant, sheet = self._enlist(self.side)
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=sheet,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        # Target the enemy side, not the commander's own side (#1710 Finding 2:
+        # STRIKE against target_side == participant's own side is rejected).
+        decl = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            scope=BattleActionScope.SIDE,
+            target_side=self.no_covenant_side,
+        )
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+
+    def test_side_scope_rejected_with_no_covenant_on_side(self) -> None:
+        participant, _sheet = self._enlist(self.no_covenant_side)
+        with self.assertRaises(NoCommandHierarchyError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.no_covenant_side,
+            )
+
+    def test_unit_scope_unaffected_by_command_tier(self) -> None:
+        participant, _sheet = self._enlist(self.side)
+        unit = BattleUnitFactory(battle=self.battle, side=self.side)
+        decl = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+        self.assertEqual(decl.scope, BattleActionScope.UNIT)
+
+    def _enlist_with_engaged_supreme_command(self, side):
+        """Enlist a participant on *side* holding an engaged SUPREME command tier.
+
+        Isolates the missing-target / own-side checks below from the separate
+        command-tier check (_validate_command_scope), which is covered by the
+        tests above.
+        """
+        participant, sheet = self._enlist(side)
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=sheet,
+            covenant_role=self.supreme_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        return participant
+
+    def test_side_scope_missing_target_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(MissingScopeTargetError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=None,
+            )
+
+    def test_place_scope_missing_target_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(MissingScopeTargetError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.PLACE,
+                target_place=None,
+            )
+
+    def test_side_scope_strike_own_side_raises(self) -> None:
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(CannotStrikeOwnSideError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+
 class ResolveBattleRoundSuccessTests(TestCase):
     """STRIKE success: unit strength drops, side VP increases, no PC damage."""
 
@@ -239,7 +400,7 @@ class ResolveBattleRoundSuccessTests(TestCase):
             battle=self.battle,
             side=self.defender_side,
             name="Skeleton Horde",
-            unit_type="undead",
+            descriptor="undead",
             strength=100,
         )
 
@@ -298,6 +459,58 @@ class ResolveBattleRoundSuccessTests(TestCase):
         declare.refresh_from_db()
         self.assertTrue(declare.resolved)
         self.assertGreater(declare.success_level, 0)
+
+    def test_side_scope_strike_attrites_every_unit_on_target_side(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_strike_success
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        unit_a = BattleUnitFactory(battle=battle, side=side, strength=100)
+        unit_b = BattleUnitFactory(battle=battle, side=side, strength=100)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            action_kind=BattleActionKind.STRIKE,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_strike_success(declaration, result, success_level=2)
+
+        unit_a.refresh_from_db()
+        unit_b.refresh_from_db()
+        self.assertEqual(unit_a.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
+        self.assertEqual(unit_b.strength, 100 - 2 * STRIKE_ATTRITION_PER_LEVEL)
+
+    def test_side_scope_strike_excludes_casters_own_side_unit(self) -> None:
+        """STRIKE at SIDE/PLACE scope must never attrite the caster's own side (#1710).
+
+        Defensive regression: even if a declaration is (mis)constructed with
+        target_side equal to the declaring participant's own side, the resolver
+        must filter that unit out rather than attrite it (friendly fire).
+        """
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_strike_success
+
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        own_unit = BattleUnitFactory(battle=battle, side=side, strength=100)
+        participant = BattleParticipantFactory(battle=battle, side=side)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            scope=BattleActionScope.SIDE,
+            target_side=side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_strike_success(declaration, result, success_level=2)
+
+        own_unit.refresh_from_db()
+        self.assertEqual(own_unit.strength, 100)
+        self.assertNotIn(side.pk, result.vp_awarded)
 
 
 class ResolveBattleRoundSupportTests(TestCase):
@@ -369,7 +582,7 @@ class ResolveBattleRoundFailureTests(TestCase):
             battle=self.battle,
             side=self.defender_side,
             name="Zombie Wall",
-            unit_type="undead",
+            descriptor="undead",
         )
         self.battle_round = begin_battle_round(battle=self.battle)
 
@@ -592,7 +805,7 @@ class EntryRollTests(TestCase):
         battle = create_battle(name="Entry Roll Test")
         side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
         place = add_place(battle=battle, name="The Gates")
-        unit = add_unit(battle=battle, side=side, name="Foes", unit_type="infantry")
+        unit = add_unit(battle=battle, side=side, name="Foes", descriptor="infantry")
         participant = enlist_participant(
             battle=battle, character_sheet=sheet, side=side, place=place
         )
@@ -791,3 +1004,432 @@ class RescueResolutionTests(TestCase):
         assert not get_active_conditions(
             victim_sheet.character, condition=self.content["condition"]
         ).exists()
+
+    def test_place_scope_rescue_clears_surrounded_for_every_ally_at_place(self) -> None:
+        from world.battles.factories import (
+            BattleActionDeclarationFactory,
+            BattlePlaceFactory,
+        )
+        from world.battles.resolution import _resolve_rescue_success
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        ally_a = BattleParticipantFactory(battle=battle, side=side, place=place)
+        ally_b = BattleParticipantFactory(battle=battle, side=side, place=place)
+        # The declaring (rescuing) participant must be on the SAME side as the allies
+        # it rescues — _resolve_rescue_success (#1710 friendly-fire fix) restricts
+        # scope fan-out to declaration.participant.side_id.
+        rescuer = BattleParticipantFactory(battle=battle, side=side, place=place)
+        # ConditionInstanceFactory direct creation, not apply_condition — apply_condition
+        # routes through _build_bulk_context's PG-only DISTINCT ON query for progressive
+        # conditions (Surrounded is progressive) and errors on the SQLite fast tier (same
+        # trap noted above for test_successful_rescue_clears_surrounded).
+        ConditionInstanceFactory(
+            target=ally_a.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        ConditionInstanceFactory(
+            target=ally_b.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        _resolve_rescue_success(declaration)
+
+        assert not get_active_conditions(
+            ally_a.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+        assert not get_active_conditions(
+            ally_b.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+
+    def test_place_scope_rescue_excludes_enemy_participant_at_place(self) -> None:
+        """RESCUE at PLACE scope must never clear Surrounded from an enemy (#1710).
+
+        A shared front (BattlePlace) can hold both sides' participants. The
+        rescuer's own-side ally should be cleared; an enemy participant Surrounded
+        at the same place must be left alone (clearing it would help the enemy).
+        """
+        from world.battles.factories import (
+            BattleActionDeclarationFactory,
+            BattlePlaceFactory,
+        )
+        from world.battles.resolution import _resolve_rescue_success
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.services import get_active_conditions
+
+        battle = BattleFactory()
+        place = BattlePlaceFactory(battle=battle)
+        friendly_side = BattleSideFactory(battle=battle, role=BattleSideRole.DEFENDER)
+        enemy_side = BattleSideFactory(battle=battle, role=BattleSideRole.ATTACKER)
+        ally = BattleParticipantFactory(battle=battle, side=friendly_side, place=place)
+        rescuer = BattleParticipantFactory(battle=battle, side=friendly_side, place=place)
+        enemy = BattleParticipantFactory(battle=battle, side=enemy_side, place=place)
+        ConditionInstanceFactory(
+            target=ally.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        ConditionInstanceFactory(
+            target=enemy.character_sheet.character,
+            condition=self.content["condition"],
+            current_stage=self.content["stages"][0],
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=battle,
+            participant=rescuer,
+            action_kind=BattleActionKind.RESCUE,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        _resolve_rescue_success(declaration)
+
+        assert not get_active_conditions(
+            ally.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+        assert get_active_conditions(
+            enemy.character_sheet.character, condition=self.content["condition"]
+        ).exists()
+
+
+class CompositionAffinityModifierTests(TestCase):
+    def test_returns_zero_when_no_row(self) -> None:
+        from world.battles.resolution import _composition_affinity_modifier
+
+        technique = TechniqueFactory()
+        self.assertEqual(_composition_affinity_modifier(technique, UnitComposition.CAVALRY), 0)
+
+    def test_returns_authored_modifier(self) -> None:
+        from world.battles.resolution import _composition_affinity_modifier
+
+        technique = TechniqueFactory()
+        TechniqueCompositionAffinity.objects.create(
+            technique=technique, composition=UnitComposition.CAVALRY, modifier=15
+        )
+        self.assertEqual(_composition_affinity_modifier(technique, UnitComposition.CAVALRY), 15)
+
+
+class TerrainEffectModifierTests(TestCase):
+    def test_returns_zero_when_no_place(self) -> None:
+        from world.battles.resolution import _terrain_effect_modifier
+
+        self.assertEqual(_terrain_effect_modifier(None, UnitComposition.CAVALRY), 0)
+
+    def test_returns_authored_modifier(self) -> None:
+        from world.battles.resolution import _terrain_effect_modifier
+
+        place = BattlePlaceFactory(terrain_type=TerrainType.DIFFICULT)
+        TerrainCompositionEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=20
+        )
+        self.assertEqual(_terrain_effect_modifier(place, UnitComposition.CAVALRY), 20)
+
+
+class QualityModifierTests(TestCase):
+    def test_maps_quality_to_modifier(self) -> None:
+        from world.battles.resolution import _quality_modifier
+
+        self.assertEqual(_quality_modifier(UnitQuality.ELITE), -20)
+        self.assertEqual(_quality_modifier(UnitQuality.TRAINED), 0)
+
+
+class CommanderBonusForSideAtPlaceTests(TestCase):
+    def test_zero_when_no_commanded_unit_present(self) -> None:
+        from world.battles.resolution import commander_bonus_for_side_at_place
+
+        battle = create_battle_for_test()
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        self.assertEqual(commander_bonus_for_side_at_place(side, place), 0)
+
+    def test_returns_max_across_commanders(self) -> None:
+        from world.battles.resolution import commander_bonus_for_side_at_place
+        from world.battles.services import add_unit
+
+        battle = create_battle_for_test()
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        place = add_place(battle=battle, name="The Gates")
+        weak_commander = CharacterSheetFactory()
+        strong_commander = CharacterSheetFactory()
+        add_unit(battle=battle, side=side, name="Unit A", place=place, commander=weak_commander)
+        add_unit(battle=battle, side=side, name="Unit B", place=place, commander=strong_commander)
+
+        # world.battles.resolution.commander_bonus_for_side_at_place does a
+        # function-local `from world.mechanics.services import get_modifier_total`
+        # — the name is never bound at `world.battles.resolution` module scope, so
+        # patching it there raises AttributeError (verified empirically). Per this
+        # repo's lazy-import-then-patch-origin convention, patch the ORIGIN instead.
+        with patch(
+            "world.mechanics.services.get_modifier_total",
+            side_effect=lambda character, _target: 5 if character == weak_commander else 12,
+        ):
+            bonus = commander_bonus_for_side_at_place(side, place)
+
+        self.assertEqual(bonus, 12)
+
+
+def create_battle_for_test():
+    from world.battles.services import create_battle
+
+    return create_battle(name="Modifier Stack Test Battle")
+
+
+class BattleTechniqueResolverModifierStackTests(TestCase):
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+    def test_sums_composition_terrain_quality_posture_into_extra_modifiers(self) -> None:
+        from world.battles.resolution import BattleTechniqueResolver
+        from world.battles.services import (
+            add_place,
+            add_side,
+            add_unit,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+            set_battle_side_posture,
+        )
+
+        battle = create_battle(name="Full Stack Test")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+        set_battle_side_posture(side=attacker, posture=BattlePosture.AGGRESSIVE)
+
+        place = add_place(battle=battle, name="The Marsh", terrain_type=TerrainType.DIFFICULT)
+        unit = add_unit(
+            battle=battle,
+            side=defender,
+            name="Heavy Cavalry",
+            composition=UnitComposition.CAVALRY,
+            quality=UnitQuality.ELITE,
+            place=place,
+        )
+        TechniqueCompositionAffinity.objects.create(
+            technique=self.technique, composition=UnitComposition.CAVALRY, modifier=10
+        )
+        TerrainCompositionEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=20
+        )
+
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=attacker)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+
+        resolver = BattleTechniqueResolver(
+            character=self.sheet.character, technique=self.technique, declaration=declaration
+        )
+        fake_result = _success_result()
+        # Expected: composition(+10) + terrain(+20) + quality(ELITE=-20)
+        #   + posture(AGGRESSIVE=-5) + commander(0, none assigned) + incoming(0) = 5
+        expected_total = 10 + 20 + (-20) + (-5) + 0 + 0
+        with patch(
+            "world.battles.resolution.perform_check", return_value=fake_result
+        ) as mock_check:
+            resolver(power=0, ledger=None, extra_modifiers=0)
+
+        mock_check.assert_called_once()
+        _called_args, called_kwargs = mock_check.call_args
+        self.assertEqual(called_kwargs["extra_modifiers"], expected_total)
+
+    def test_includes_nonzero_commander_bonus_in_extra_modifiers(self) -> None:
+        """A commander assigned to a unit on the acting participant's own side/place
+        contributes a nonzero commander term into extra_modifiers (final-review
+        finding: the composition/terrain/quality/posture full-stack test above
+        always has commander=0 since no commander is ever assigned there).
+
+        Composition/terrain/quality are isolated to 0 by using a ``target_unit``
+        with no authored ``TechniqueCompositionAffinity``/``TerrainCompositionEffect``
+        rows, default TRAINED quality, and default BALANCED posture — so the
+        commander term is the only nonzero contributor and is exactly the patched
+        ``get_modifier_total`` return value.
+        """
+        from world.battles.resolution import BattleTechniqueResolver
+        from world.battles.services import (
+            add_place,
+            add_side,
+            add_unit,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+
+        battle = create_battle(name="Commander Bonus Stack Test")
+        attacker = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        defender = add_side(battle=battle, role=BattleSideRole.DEFENDER)
+
+        place = add_place(battle=battle, name="The Field")
+        commander = CharacterSheetFactory()
+        add_unit(battle=battle, side=attacker, name="Vanguard", place=place, commander=commander)
+        target_unit = add_unit(battle=battle, side=defender, name="Line Infantry", place=place)
+
+        participant = enlist_participant(
+            battle=battle, character_sheet=self.sheet, side=attacker, place=place
+        )
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=target_unit,
+        )
+
+        resolver = BattleTechniqueResolver(
+            character=self.sheet.character, technique=self.technique, declaration=declaration
+        )
+        fake_result = _success_result()
+        # composition(0, no authored row) + terrain(0, OPEN default, no row)
+        #   + quality(TRAINED=0) + posture(BALANCED=0) + commander(8) = 8
+        expected_total = 8
+        # See CommanderBonusForSideAtPlaceTests.test_returns_max_across_commanders:
+        # get_modifier_total is imported function-local inside
+        # commander_bonus_for_side_at_place, so patch the origin, not
+        # world.battles.resolution.
+        with (
+            patch("world.mechanics.services.get_modifier_total", return_value=8),
+            patch("world.battles.resolution.perform_check", return_value=fake_result) as mock_check,
+        ):
+            resolver(power=0, ledger=None, extra_modifiers=0)
+
+        mock_check.assert_called_once()
+        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], expected_total)
+
+    def test_zero_stack_for_support_declaration_with_no_target_unit(self) -> None:
+        """A SUPPORT declaration has no target_unit — the stack degrades to just
+        posture + commander (both 0 by default here), proving no AttributeError
+        when target_unit is None.
+        """
+        from world.battles.resolution import BattleTechniqueResolver
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+
+        battle = create_battle(name="Support No-Unit Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        resolver = BattleTechniqueResolver(
+            character=self.sheet.character, technique=self.technique, declaration=declaration
+        )
+        with patch(
+            "world.battles.resolution.perform_check", return_value=_success_result()
+        ) as mock_check:
+            resolver(power=0, ledger=None, extra_modifiers=0)
+
+        mock_check.assert_called_once()
+        self.assertEqual(mock_check.call_args.kwargs["extra_modifiers"], 0)
+
+
+class PostureVpScalingTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = create_battle_for_test()
+        self.attacker = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.sheet = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=self.sheet, health=100, max_health=100)
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.sheet.character, current=20, maximum=30)
+
+    def test_aggressive_posture_scales_up_strike_vp(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_unit,
+            declare_battle_action,
+            enlist_participant,
+            set_battle_side_posture,
+        )
+
+        set_battle_side_posture(side=self.attacker, posture=BattlePosture.AGGRESSIVE)
+        unit = add_unit(battle=self.battle, side=self.defender, name="Foes")
+        participant = enlist_participant(
+            battle=self.battle, character_sheet=self.sheet, side=self.attacker
+        )
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+
+        success_level = 5
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(success_level)
+            resolve_battle_round(battle_round=battle_round)
+
+        self.attacker.refresh_from_db()
+        base_vp = success_level * STRIKE_VP_PER_LEVEL
+        expected_vp = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER[BattlePosture.AGGRESSIVE])
+        self.assertEqual(self.attacker.victory_points, expected_vp)
+
+    def test_defensive_posture_reduces_failure_damage(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import (
+            add_unit,
+            declare_battle_action,
+            enlist_participant,
+            set_battle_side_posture,
+        )
+
+        set_battle_side_posture(side=self.attacker, posture=BattlePosture.DEFENSIVE)
+        unit = add_unit(battle=self.battle, side=self.defender, name="Foes")
+        participant = enlist_participant(
+            battle=self.battle, character_sheet=self.sheet, side=self.attacker
+        )
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=unit,
+        )
+
+        failure_level = -3
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _failure_result(failure_level)
+            resolve_battle_round(battle_round=battle_round)
+
+        vitals = self.sheet.vitals
+        vitals.refresh_from_db()
+        expected_damage = (
+            BASE_FAILURE_DAMAGE
+            + abs(failure_level)
+            + BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER[BattlePosture.DEFENSIVE]
+        )
+        self.assertEqual(vitals.health, 100 - expected_damage)

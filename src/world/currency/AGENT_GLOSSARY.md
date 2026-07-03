@@ -17,5 +17,13 @@ The ledger holding one organization's money as a copper balance, with rank-gated
 _Avoid_: org bank, org wallet
 
 **Graft**:
-A never-zero percentage leak skimmed off the top of every organizational income flow, driven by NPC servant dissatisfaction and floored above zero by doctrine. It can be bought down by treating servants but never eliminated, and is deliberately distinct from magic's Corruption.
+A never-zero percentage leak skimmed off the top of every organizational income flow, driven by NPC servant dissatisfaction and floored above zero by doctrine. It can be bought down by treating servants but never eliminated, and is deliberately distinct from magic's Corruption. Since #930 it bites the *collected* aggregate at dispatch time, so a hoarded pool pays a bigger absolute leak.
 _Avoid_: tax, corruption, skim
+
+**Uncollected pool**:
+The uncapped per-stream copper amassment (`OrgIncomeStream.uncollected_pool`) the weekly cycle grows in place of any passive deposit (ADR-0081). Money in the pool is unusable until a collection dispatch lands it; the whole pool rides one graded outcome.
+_Avoid_: pending income, savings, stockpile (item sense)
+
+**Collection dispatch**:
+The active org-level act (`collect_org_income`, the COLLECTION offer on a steward summon) that gathers every pooled stream and runs the Tax Collection check whose band decides how much arrives — the sole path from pools to treasury.
+_Avoid_: payout, harvest, passive income

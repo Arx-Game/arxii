@@ -17,9 +17,11 @@ class TestClusterRegistry(TestCase):
                 "magic",
                 "items",
                 "combat",
+                "battles",
                 "consent",
                 "character_creation",
                 "justice",
+                "governance",
                 "stealth",
             },
         )

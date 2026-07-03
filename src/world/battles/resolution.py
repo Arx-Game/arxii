@@ -33,10 +33,14 @@ from django.utils import timezone
 
 from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
+    BATTLE_POSTURE_CHECK_MODIFIER,
+    BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
+    BATTLE_POSTURE_VP_MULTIPLIER,
     ROUTED_STRENGTH_THRESHOLD,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
+    UNIT_QUALITY_STRIKE_MODIFIER,
     BattleActionKind,
     BattleUnitStatus,
 )
@@ -48,7 +52,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models import ConsequencePool
-    from world.battles.models import Battle, BattleActionDeclaration
+    from world.battles.models import Battle, BattleActionDeclaration, BattlePlace, BattleSide
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance
@@ -95,6 +99,66 @@ def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
     if movement is None:
         return False
     return get_effective_capability_value(character_sheet, movement) > 0
+
+
+def _composition_affinity_modifier(technique: Technique, composition: str) -> int:
+    """Flat STRIKE-check modifier from an authored technique-vs-composition row (#1711).
+
+    Returns 0 when no TechniqueCompositionAffinity row matches — most techniques
+    have no authored affinity, and that's the expected common case.
+    """
+    from world.battles.models import TechniqueCompositionAffinity  # noqa: PLC0415
+
+    row = TechniqueCompositionAffinity.objects.filter(
+        technique=technique, composition=composition
+    ).first()
+    return row.modifier if row is not None else 0
+
+
+def _terrain_effect_modifier(place: BattlePlace | None, composition: str) -> int:
+    """Flat attacker-facing STRIKE modifier from an authored terrain-vs-composition
+    row (#1711). Returns 0 when the unit has no place, or no row matches.
+    """
+    from world.battles.models import TerrainCompositionEffect  # noqa: PLC0415
+
+    if place is None:
+        return 0
+    row = TerrainCompositionEffect.objects.filter(
+        terrain_type=place.terrain_type, composition=composition
+    ).first()
+    return row.modifier if row is not None else 0
+
+
+def _quality_modifier(quality: str) -> int:
+    """Flat attacker-facing STRIKE modifier from the unit's quality tier (#1711)."""
+    return UNIT_QUALITY_STRIKE_MODIFIER.get(quality, 0)
+
+
+def commander_bonus_for_side_at_place(side: BattleSide, place: BattlePlace | None) -> int:
+    """Max Battle Command modifier-walk bonus across commanded units on ``side`` at
+    ``place`` (#1711). Max, not sum — multiple commanders present don't stack.
+    Returns 0 when ``place`` is None or no ACTIVE unit on this side/place has a
+    commander set.
+    """
+    from world.battles.factories import ensure_battle_command_modifier_target  # noqa: PLC0415
+    from world.battles.models import BattleUnit  # noqa: PLC0415
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    if place is None:
+        return 0
+    commander_ids = (
+        BattleUnit.objects.filter(
+            side=side, place=place, status=BattleUnitStatus.ACTIVE, commander__isnull=False
+        )
+        .values_list("commander_id", flat=True)
+        .distinct()
+    )
+    if not commander_ids:
+        return 0
+    target = ensure_battle_command_modifier_target()
+    sheets = CharacterSheet.objects.filter(pk__in=commander_ids)
+    return max(get_modifier_total(sheet, target) for sheet in sheets)
 
 
 def select_surrounded_terminal_pool(
@@ -187,12 +251,15 @@ class BattleTechniqueResolution:
 @dataclass
 class BattleTechniqueResolver:
     """``resolve_fn`` passed to ``use_technique``: rolls the declared technique's
-    own check. Battle has no damage-profile/condition application of its own —
-    that stays in ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
+    own check, folding in the full battle modifier stack (composition affinity,
+    terrain, unit quality, commander bonus, posture — #1711). Battle has no
+    damage-profile/condition application of its own — that stays in
+    ``resolve_battle_round``'s STRIKE/SUPPORT/failure routing.
     """
 
     character: ObjectDB
     technique: Technique
+    declaration: BattleActionDeclaration
 
     def __call__(
         self,
@@ -202,8 +269,26 @@ class BattleTechniqueResolver:
         extra_modifiers: int = 0,
     ) -> BattleTechniqueResolution:
         check_type = self.technique.action_template.check_type
-        check_result = perform_check(self.character, check_type, extra_modifiers=extra_modifiers)
+        total_modifiers = extra_modifiers + self._battle_modifier_stack()
+        check_result = perform_check(self.character, check_type, extra_modifiers=total_modifiers)
         return BattleTechniqueResolution(check_result=check_result)
+
+    def _battle_modifier_stack(self) -> int:
+        """Sum every #1711 modifier source relevant to this declaration."""
+        participant = self.declaration.participant
+        unit = self.declaration.target_unit
+
+        composition = (
+            _composition_affinity_modifier(self.technique, unit.composition)
+            if unit is not None
+            else 0
+        )
+        terrain = _terrain_effect_modifier(unit.place, unit.composition) if unit is not None else 0
+        quality = _quality_modifier(unit.quality) if unit is not None else 0
+        commander = commander_bonus_for_side_at_place(participant.side, participant.place)
+        posture = BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture, 0)
+
+        return composition + terrain + quality + commander + posture
 
 
 def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckResult | None:
@@ -229,7 +314,9 @@ def resolve_battle_technique(*, declaration: BattleActionDeclaration) -> CheckRe
 
     character = declaration.participant.character_sheet.character
     technique = declaration.technique
-    resolver = BattleTechniqueResolver(character=character, technique=technique)
+    resolver = BattleTechniqueResolver(
+        character=character, technique=technique, declaration=declaration
+    )
 
     result = use_technique(
         character=character,
@@ -262,30 +349,79 @@ class BattleRoundResult:
     casualties: list[int] = field(default_factory=list)
 
 
+def _scope_target_units(declaration: BattleActionDeclaration) -> list:
+    """Active BattleUnits affected by *declaration*, per its scope (#1710)."""
+    from world.battles.constants import BattleActionScope, BattleUnitStatus  # noqa: PLC0415
+    from world.battles.models import BattleUnit  # noqa: PLC0415
+
+    if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
+        return list(
+            BattleUnit.objects.filter(
+                side_id=declaration.target_side_id, status=BattleUnitStatus.ACTIVE
+            )
+        )
+    if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
+        return list(
+            BattleUnit.objects.filter(
+                place_id=declaration.target_place_id, status=BattleUnitStatus.ACTIVE
+            )
+        )
+    return [declaration.target_unit] if declaration.target_unit is not None else []
+
+
+def _scope_target_participants(declaration: BattleActionDeclaration) -> list:
+    """Active BattleParticipants affected by *declaration*, per its scope (#1710)."""
+    from world.battles.constants import BattleActionScope, BattleParticipantStatus  # noqa: PLC0415
+
+    if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
+        return list(
+            BattleParticipant.objects.filter(
+                side_id=declaration.target_side_id, status=BattleParticipantStatus.ACTIVE
+            )
+        )
+    if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
+        return list(
+            BattleParticipant.objects.filter(
+                place_id=declaration.target_place_id, status=BattleParticipantStatus.ACTIVE
+            )
+        )
+    return [declaration.target_ally] if declaration.target_ally is not None else []
+
+
 def _resolve_strike_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
     success_level: int,
 ) -> None:
-    """Apply STRIKE success: attrite the unit, award VP to the participant's side."""
-    unit = declaration.target_unit
-    if unit is None:
+    """Apply STRIKE success: attrite the unit(s), award VP to the participant's side,
+    scaled by the side's posture (#1711).
+
+    Fans out across every active unit at the declaration's scope target
+    (SIDE/PLACE, #1710) — each unit takes the same per-level attrition; VP is
+    awarded once per declaration regardless of scope breadth. Units on the
+    declaring participant's own side are excluded — SIDE/PLACE scope fans out
+    across a shared bucket that isn't itself side-aware, so STRIKE must never
+    attrite the caster's own units (friendly fire).
+    """
+    units = _scope_target_units(declaration)
+    units = [u for u in units if u.side_id != declaration.participant.side_id]
+    if not units:
         return
 
     attrition = success_level * STRIKE_ATTRITION_PER_LEVEL
-    unit.strength = max(0, unit.strength - attrition)
-
-    if unit.strength == 0:
-        unit.status = BattleUnitStatus.DESTROYED
-        result.units_destroyed.append(unit.pk)
-    elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
-        unit.status = BattleUnitStatus.ROUTED
-        result.units_routed.append(unit.pk)
-
-    unit.save(update_fields=["strength", "status"])
+    for unit in units:
+        unit.strength = max(0, unit.strength - attrition)
+        if unit.strength == 0:
+            unit.status = BattleUnitStatus.DESTROYED
+            result.units_destroyed.append(unit.pk)
+        elif unit.strength <= ROUTED_STRENGTH_THRESHOLD:
+            unit.status = BattleUnitStatus.ROUTED
+            result.units_routed.append(unit.pk)
+        unit.save(update_fields=["strength", "status"])
 
     side = declaration.participant.side
-    vp_gain = success_level * STRIKE_VP_PER_LEVEL
+    base_vp = success_level * STRIKE_VP_PER_LEVEL
+    vp_gain = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
     side.victory_points += vp_gain
     side.save(update_fields=["victory_points"])
 
@@ -296,35 +432,43 @@ def _resolve_support_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
 ) -> None:
-    """Apply SUPPORT success: award SUPPORT_VP to the participant's side."""
+    """Apply SUPPORT success: award SUPPORT_VP to the participant's side, scaled by
+    the side's posture (#1711)."""
     side = declaration.participant.side
-    side.victory_points += SUPPORT_VP
+    vp_gain = round(SUPPORT_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
     side.save(update_fields=["victory_points"])
-    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + SUPPORT_VP
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
 def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
-    """Apply RESCUE success: clear the target ally's Surrounded condition (#1733).
+    """Apply RESCUE success: clear Surrounded from the ally/allies at scope (#1733, #1710).
 
-    No VP awarded — rescue trades round economy for saving an ally, not battlefield
-    progress. No-op if the target ally isn't (or is no longer) Surrounded — a second
-    rescue declaration on an already-clear ally is simply wasted, not an error.
+    Fans out across every active participant at the declaration's scope target
+    (SIDE/PLACE) instead of a single ally when scope != UNIT. No VP awarded —
+    rescue trades round economy for saving allies, not battlefield progress.
+    No-op for a target that isn't (or is no longer) Surrounded. Participants on
+    an enemy side are excluded — a PLACE-scope target bucket may hold both
+    sides' participants (a shared front), and RESCUE must never clear Surrounded
+    from an enemy (that would help the enemy, not the caster's side).
     """
     from world.conditions.constants import SURROUNDED_CONDITION_NAME  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.conditions.services import get_active_conditions, remove_condition  # noqa: PLC0415
 
-    target = declaration.target_ally
-    if target is None:
+    targets = _scope_target_participants(declaration)
+    targets = [t for t in targets if t.side_id == declaration.participant.side_id]
+    if not targets:
         return
 
     template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
     if template is None:
         return
 
-    character = target.character_sheet.character
-    if get_active_conditions(character, condition=template).exists():
-        remove_condition(character, template)
+    for target in targets:
+        character = target.character_sheet.character
+        if get_active_conditions(character, condition=template).exists():
+            remove_condition(character, template)
 
 
 def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
@@ -416,7 +560,10 @@ def _resolve_failure(
         result.casualties.append(declaration.participant.pk)
         return False
 
-    dmg = BASE_FAILURE_DAMAGE + abs(success_level)
+    posture_delta = BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER.get(
+        declaration.participant.side.posture, 0
+    )
+    dmg = BASE_FAILURE_DAMAGE + abs(success_level) + posture_delta
     vitals.health -= dmg
     vitals.save(update_fields=["health"])
 

@@ -13,17 +13,19 @@ from django.test import TestCase
 
 from actions.definitions.battles import (
     BeginBattleRoundAction,
+    ChallengeChampionDuelAction,
     ConcludeBattleAction,
     DeclareBattleActionAction,
     ResolveBattleRoundAction,
 )
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
-from world.battles.constants import BattleActionKind, BattleOutcome
+from world.battles.constants import BattleActionKind, BattleActionScope, BattleOutcome
 from world.battles.factories import (
     BattleActionDeclarationFactory,
     BattleFactory,
     BattleParticipantFactory,
+    BattlePlaceFactory,
     BattleRoundFactory,
     BattleSideFactory,
     BattleUnitFactory,
@@ -31,6 +33,11 @@ from world.battles.factories import (
 from world.battles.models import BattleActionDeclaration
 from world.battles.services import conclude_battle
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.factories import ThreatPoolFactory
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus
@@ -391,3 +398,86 @@ class DeclareBattleActionActionTests(BattleActionTestBase):
         )
         self.assertFalse(result.success)
         self.assertIn("technique", result.message.lower())
+
+    def test_declare_battle_action_passes_through_side_scope(self) -> None:
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        supreme_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUPREME,
+            slug="action-test-supreme",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=supreme_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        # Target the enemy (attacker) side, not the commander's own (defender)
+        # side (#1710 Finding 2: STRIKE against target_side == participant's
+        # own side is rejected at declare time).
+        result = DeclareBattleActionAction().run(
+            self.player_char,
+            action_kind=BattleActionKind.STRIKE,
+            technique_id=self.technique.pk,
+            scope=BattleActionScope.SIDE,
+            target_side=self.attacker_side,
+        )
+
+        self.assertTrue(result.success, result.message)
+        decl = BattleActionDeclaration.objects.get(pk=result.data["declaration_id"])
+        self.assertEqual(decl.scope, BattleActionScope.SIDE)
+        self.assertEqual(decl.target_side_id, self.attacker_side.pk)
+
+
+class ChallengeChampionDuelActionTests(BattleActionTestBase):
+    """ChallengeChampionDuelAction opens a lethal duel bound to a BattlePlace."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+        self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = self.covenant
+        self.defender_side.save(update_fields=["covenant"])
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            character_sheet=self.player_sheet,
+            place=self.place,
+        )
+        rank = CovenantRankFactory(covenant=self.covenant)
+        champion_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            is_champion_role=True,
+            slug="action-test-champion",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=champion_role,
+            covenant=self.covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+        self.threat_pool = ThreatPoolFactory()
+
+    def test_challenge_champion_duel_action_binds_place(self) -> None:
+        result = ChallengeChampionDuelAction().run(
+            self.player_char,
+            battle_place_id=self.place.pk,
+            opponent_kwargs={
+                "name": "Warlord's Champion",
+                "max_health": 300,
+                "threat_pool": self.threat_pool.pk,
+            },
+        )
+        self.assertTrue(result.success, result.message)
+        self.place.refresh_from_db()
+        self.assertIsNotNone(self.place.combat_encounter_id)

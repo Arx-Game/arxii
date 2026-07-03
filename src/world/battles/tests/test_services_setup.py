@@ -7,17 +7,39 @@ begin_battle_round, and the BattleError exception hierarchy.
 from __future__ import annotations
 
 from django.test import TestCase
+from evennia import create_object
 
 from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     BattleOutcome,
+    BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
-from world.battles.exceptions import BattleConcludedError
-from world.battles.factories import BattleFactory
+from world.battles.exceptions import (
+    BattleConcludedError,
+    NoCommandHierarchyError,
+    NotAChampionError,
+    PlaceAlreadyDuelingError,
+)
+from world.battles.factories import (
+    BattleFactory,
+    BattleParticipantFactory,
+    BattlePlaceFactory,
+    BattleSideFactory,
+)
+from world.battles.services import open_champion_duel
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import EncounterType, RiskLevel
+from world.combat.factories import ThreatPoolFactory
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
 from world.scenes.constants import RoundStatus
 
 
@@ -78,6 +100,14 @@ class AddSideTests(TestCase):
 
         self.assertEqual(self.battle.sides.count(), 2)
 
+    def test_add_side_accepts_covenant(self) -> None:
+        from world.battles.services import add_side, create_battle
+
+        battle = create_battle(name="Siege of Thornwall")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER, covenant=covenant)
+        self.assertEqual(side.covenant_id, covenant.pk)
+
 
 class AddPlaceTests(TestCase):
     def setUp(self) -> None:
@@ -108,7 +138,7 @@ class AddUnitTests(TestCase):
             battle=self.battle,
             side=self.attacker_side,
             name="Cavalry",
-            unit_type="cavalry",
+            descriptor="cavalry",
         )
 
         self.assertEqual(unit.battle, self.battle)
@@ -124,7 +154,7 @@ class AddUnitTests(TestCase):
             battle=self.battle,
             side=self.attacker_side,
             name="Elite Guard",
-            unit_type="guard",
+            descriptor="guard",
             strength=80,
             place=self.place,
         )
@@ -230,3 +260,211 @@ class BeginBattleRoundTests(TestCase):
         self.battle.refresh_from_db()
 
         self.assertEqual(self.battle.current_round.pk, round1.pk)
+
+
+class OpenChampionDuelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        cls.side = BattleSideFactory(battle=cls.battle, covenant=cls.covenant)
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+        cls.rank = CovenantRankFactory(covenant=cls.covenant)
+        cls.champion_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            is_champion_role=True,
+            slug="champion-svc-test",
+        )
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        self.room = create_object("typeclasses.rooms.Room", key="Champion Duel Room", nohome=True)
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+        self.sheet = CharacterSheetFactory()
+        self.participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=self.sheet, place=self.place
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant_role=self.champion_role,
+            covenant=self.covenant,
+            rank=self.rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+    def test_open_champion_duel_binds_place_to_new_encounter(self):
+        enc = open_champion_duel(
+            battle_place=self.place,
+            challenger_participant=self.participant,
+            opponent_kwargs={
+                "name": "Warlord's Champion",
+                "max_health": 300,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.combat_encounter_id, enc.pk)
+        self.assertEqual(enc.encounter_type, EncounterType.DUEL)
+        self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+
+    def test_open_champion_duel_rejects_non_champion(self) -> None:
+        other_sheet = CharacterSheetFactory()
+        other_participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=other_sheet, place=self.place
+        )
+        with self.assertRaises(NotAChampionError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=other_participant,
+                opponent_kwargs={
+                    "name": "Warlord's Champion",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+    def test_open_champion_duel_rejects_place_already_dueling(self) -> None:
+        open_champion_duel(
+            battle_place=self.place,
+            challenger_participant=self.participant,
+            opponent_kwargs={
+                "name": "Warlord's Champion",
+                "max_health": 300,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        with self.assertRaises(PlaceAlreadyDuelingError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=self.participant,
+                opponent_kwargs={
+                    "name": "Second Boss",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+    def test_open_champion_duel_rejects_side_with_no_covenant(self) -> None:
+        no_covenant_side = BattleSideFactory(
+            battle=self.battle, role=BattleSideRole.DEFENDER, covenant=None
+        )
+        other_sheet = CharacterSheetFactory()
+        other_participant = BattleParticipantFactory(
+            battle=self.battle,
+            side=no_covenant_side,
+            character_sheet=other_sheet,
+            place=self.place,
+        )
+        with self.assertRaises(NoCommandHierarchyError):
+            open_champion_duel(
+                battle_place=self.place,
+                challenger_participant=other_participant,
+                opponent_kwargs={
+                    "name": "Warlord's Champion",
+                    "max_health": 300,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+
+class AddUnitTaxonomyTests(TestCase):
+    def test_add_unit_accepts_composition_quality_commander(self) -> None:
+        from world.battles.services import add_side, add_unit, create_battle
+
+        battle = create_battle(name="Taxonomy Setup Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        commander = CharacterSheetFactory()
+
+        unit = add_unit(
+            battle=battle,
+            side=side,
+            name="Iron Cavalry",
+            descriptor="armored knights",
+            composition=UnitComposition.CAVALRY,
+            quality=UnitQuality.ELITE,
+            commander=commander,
+        )
+
+        self.assertEqual(unit.descriptor, "armored knights")
+        self.assertEqual(unit.composition, UnitComposition.CAVALRY)
+        self.assertEqual(unit.quality, UnitQuality.ELITE)
+        self.assertEqual(unit.commander, commander)
+
+    def test_add_unit_defaults_when_taxonomy_omitted(self) -> None:
+        from world.battles.services import add_side, add_unit, create_battle
+
+        battle = create_battle(name="Taxonomy Default Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        unit = add_unit(battle=battle, side=side, name="Rabble")
+
+        self.assertEqual(unit.composition, UnitComposition.IRREGULAR)
+        self.assertEqual(unit.quality, UnitQuality.TRAINED)
+        self.assertIsNone(unit.commander)
+
+
+class AddPlaceTerrainTests(TestCase):
+    def test_add_place_accepts_terrain_and_movement_cost(self) -> None:
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Terrain Setup Test")
+        place = add_place(
+            battle=battle,
+            name="The Marsh Crossing",
+            terrain_type=TerrainType.FLOODED,
+            movement_cost=3,
+        )
+        self.assertEqual(place.terrain_type, TerrainType.FLOODED)
+        self.assertEqual(place.movement_cost, 3)
+
+    def test_add_place_defaults(self) -> None:
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Terrain Default Test")
+        place = add_place(battle=battle, name="Open Field")
+        self.assertEqual(place.terrain_type, TerrainType.OPEN)
+        self.assertEqual(place.movement_cost, 1)
+
+
+class SetBattleSidePostureTests(TestCase):
+    def test_sets_posture(self) -> None:
+        from world.battles.services import add_side, create_battle, set_battle_side_posture
+
+        battle = create_battle(name="Posture Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+
+        updated = set_battle_side_posture(side=side, posture=BattlePosture.AGGRESSIVE)
+
+        self.assertEqual(updated.posture, BattlePosture.AGGRESSIVE)
+        side.refresh_from_db()
+        self.assertEqual(side.posture, BattlePosture.AGGRESSIVE)
+
+
+class AssignUnitCommanderTests(TestCase):
+    def test_assigns_commander(self) -> None:
+        from world.battles.services import add_side, add_unit, assign_unit_commander, create_battle
+
+        battle = create_battle(name="Commander Assign Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        unit = add_unit(battle=battle, side=side, name="Levy Spears")
+        commander = CharacterSheetFactory()
+
+        updated = assign_unit_commander(unit=unit, commander=commander)
+
+        self.assertEqual(updated.commander, commander)
+        unit.refresh_from_db()
+        self.assertEqual(unit.commander, commander)
+
+    def test_clears_commander_with_none(self) -> None:
+        from world.battles.services import add_side, add_unit, assign_unit_commander, create_battle
+
+        battle = create_battle(name="Commander Clear Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        commander = CharacterSheetFactory()
+        unit = add_unit(battle=battle, side=side, name="Levy Spears", commander=commander)
+
+        assign_unit_commander(unit=unit, commander=None)
+
+        unit.refresh_from_db()
+        self.assertIsNone(unit.commander)
