@@ -369,22 +369,28 @@ def _compute_unit_status(strength: int, morale: int) -> str:
     return BattleUnitStatus.ACTIVE
 
 
-def _scope_target_units(declaration: BattleActionDeclaration) -> list:
-    """Active BattleUnits affected by *declaration*, per its scope (#1710)."""
+def _scope_target_units(
+    declaration: BattleActionDeclaration, *, include_routed: bool = False
+) -> list:
+    """Active (optionally also ROUTED) BattleUnits affected by *declaration*, per its
+    scope (#1710). ``include_routed=True`` (RALLY, #1712) also includes ROUTED units
+    — RALLY's whole purpose is reaching units that have already broken; DESTROYED
+    units are never included (gone, not rallyable)."""
     from world.battles.constants import BattleActionScope, BattleUnitStatus  # noqa: PLC0415
     from world.battles.models import BattleUnit  # noqa: PLC0415
 
+    statuses = (
+        (BattleUnitStatus.ACTIVE, BattleUnitStatus.ROUTED)
+        if include_routed
+        else (BattleUnitStatus.ACTIVE,)
+    )
     if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
         return list(
-            BattleUnit.objects.filter(
-                side_id=declaration.target_side_id, status=BattleUnitStatus.ACTIVE
-            )
+            BattleUnit.objects.filter(side_id=declaration.target_side_id, status__in=statuses)
         )
     if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
         return list(
-            BattleUnit.objects.filter(
-                place_id=declaration.target_place_id, status=BattleUnitStatus.ACTIVE
-            )
+            BattleUnit.objects.filter(place_id=declaration.target_place_id, status__in=statuses)
         )
     return [declaration.target_unit] if declaration.target_unit is not None else []
 
@@ -457,6 +463,81 @@ def _resolve_support_success(
     the side's posture (#1711)."""
     side = declaration.participant.side
     vp_gain = round(SUPPORT_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_rout_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+) -> None:
+    """Apply ROUT success: damage the target unit(s)' morale, award VP (#1712).
+
+    Mirrors STRIKE's own-side exclusion and scope fan-out, but moves ``morale``
+    instead of ``strength`` — ROUT breaks a unit's will to fight without grinding
+    it down physically. Scales with success_level exactly like STRIKE's attrition.
+    Only reaches ACTIVE enemy units (default ``_scope_target_units`` filter) —
+    a unit that's already ROUTED has nothing further for ROUT to accomplish.
+    """
+    from world.battles.constants import ROUT_MORALE_PER_LEVEL, ROUT_VP_PER_LEVEL  # noqa: PLC0415
+
+    units = _scope_target_units(declaration)
+    units = [u for u in units if u.side_id != declaration.participant.side_id]
+    if not units:
+        return
+
+    morale_damage = success_level * ROUT_MORALE_PER_LEVEL
+    for unit in units:
+        unit.morale = max(0, unit.morale - morale_damage)
+        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        if unit.status == BattleUnitStatus.DESTROYED:
+            result.units_destroyed.append(unit.pk)
+        elif unit.status == BattleUnitStatus.ROUTED:
+            result.units_routed.append(unit.pk)
+        unit.save(update_fields=["morale", "status"])
+
+    side = declaration.participant.side
+    base_vp = success_level * ROUT_VP_PER_LEVEL
+    vp_gain = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
+def _resolve_rally_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+) -> None:
+    """Apply RALLY success: restore the target unit(s)' morale, award flat VP (#1712).
+
+    Fans out across the declarant's own side only (mirrors RESCUE's own-side
+    filter), including ROUTED units (``include_routed=True`` — RALLY's whole
+    point). A unit whose status reads ROUTED purely from low ``strength`` stays
+    ROUTED even after a full morale restore — RALLY only recovers units that
+    broke from morale collapse, not ones ground down by attrition.
+    """
+    from world.battles.constants import (  # noqa: PLC0415
+        MAX_MORALE,
+        RALLY_MORALE_PER_LEVEL,
+        RALLY_VP,
+    )
+
+    units = _scope_target_units(declaration, include_routed=True)
+    units = [u for u in units if u.side_id == declaration.participant.side_id]
+    if not units:
+        return
+
+    morale_gain = success_level * RALLY_MORALE_PER_LEVEL
+    for unit in units:
+        unit.morale = min(MAX_MORALE, unit.morale + morale_gain)
+        unit.status = _compute_unit_status(unit.strength, unit.morale)
+        unit.save(update_fields=["morale", "status"])
+
+    side = declaration.participant.side
+    vp_gain = round(RALLY_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
     side.victory_points += vp_gain
     side.save(update_fields=["victory_points"])
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
@@ -681,6 +762,10 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
                 _resolve_strike_success(declaration, result, sl)
             elif declaration.action_kind == BattleActionKind.RESCUE:
                 _resolve_rescue_success(declaration)
+            elif declaration.action_kind == BattleActionKind.ROUT:
+                _resolve_rout_success(declaration, result, sl)
+            elif declaration.action_kind == BattleActionKind.RALLY:
+                _resolve_rally_success(declaration, result, sl)
             else:
                 _resolve_support_success(declaration, result)
         elif _resolve_failure(declaration, result, sl):

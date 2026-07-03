@@ -16,6 +16,10 @@ from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
     BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
     BATTLE_POSTURE_VP_MULTIPLIER,
+    RALLY_MORALE_PER_LEVEL,
+    RALLY_VP,
+    ROUT_MORALE_PER_LEVEL,
+    ROUT_VP_PER_LEVEL,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
@@ -608,6 +612,212 @@ class ResolveBattleRoundSupportTests(TestCase):
 
         self.side.refresh_from_db()
         self.assertEqual(self.side.victory_points, SUPPORT_VP)
+
+
+class RoutResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
+        self.enemy_unit = BattleUnitFactory(
+            battle=self.battle, side=self.defender_side, strength=100, morale=70
+        )
+
+    def test_rout_success_damages_morale_and_awards_vp(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rout_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.ROUT,
+            target_unit=self.enemy_unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rout_success(declaration, result, success_level=3)
+
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.enemy_unit.morale, 70 - 3 * ROUT_MORALE_PER_LEVEL)
+        self.assertEqual(self.enemy_unit.strength, 100)  # ROUT never touches strength
+
+        self.attacker_side.refresh_from_db()
+        self.assertEqual(self.attacker_side.victory_points, 3 * ROUT_VP_PER_LEVEL)
+
+    def test_rout_can_flip_unit_to_routed(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rout_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.ROUT,
+            target_unit=self.enemy_unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rout_success(declaration, result, success_level=5)  # 75 morale damage
+
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.enemy_unit.morale, 0)
+        self.assertEqual(self.enemy_unit.status, BattleUnitStatus.ROUTED)
+        self.assertIn(self.enemy_unit.pk, result.units_routed)
+
+    def test_rout_excludes_casters_own_side(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rout_success
+
+        own_unit = BattleUnitFactory(
+            battle=self.battle, side=self.attacker_side, strength=100, morale=70
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.ROUT,
+            scope=BattleActionScope.SIDE,
+            target_side=self.attacker_side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rout_success(declaration, result, success_level=3)
+
+        own_unit.refresh_from_db()
+        self.assertEqual(own_unit.morale, 70)  # untouched
+        self.assertNotIn(self.attacker_side.pk, result.vp_awarded)
+
+
+class RallyResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+
+    def test_rally_success_restores_morale_and_awards_flat_vp(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            strength=100,
+            morale=10,
+            status=BattleUnitStatus.ROUTED,
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            target_unit=unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=2)
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.morale, 10 + 2 * RALLY_MORALE_PER_LEVEL)
+        self.assertEqual(unit.status, BattleUnitStatus.ACTIVE)
+
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, RALLY_VP)
+
+    def test_rally_clamps_morale_at_max(self) -> None:
+        from world.battles.constants import MAX_MORALE
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        unit = BattleUnitFactory(battle=self.battle, side=self.side, morale=95)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            target_unit=unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=5)
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.morale, MAX_MORALE)
+
+    def test_rally_cannot_recover_a_unit_routed_by_low_strength(self) -> None:
+        """RALLY only recovers units broken by morale collapse, not attrition."""
+        from world.battles.constants import MAX_MORALE
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            strength=20,
+            morale=70,
+            status=BattleUnitStatus.ROUTED,
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            target_unit=unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=5)
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.morale, MAX_MORALE)  # morale side is fully healed...
+        # ...but strength still holds it back
+        self.assertEqual(unit.status, BattleUnitStatus.ROUTED)
+
+    def test_rally_excludes_enemy_units(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        enemy_unit = BattleUnitFactory(
+            battle=self.battle, side=enemy_side, morale=10, status=BattleUnitStatus.ROUTED
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            scope=BattleActionScope.SIDE,
+            target_side=enemy_side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=3)
+
+        enemy_unit.refresh_from_db()
+        self.assertEqual(enemy_unit.morale, 10)  # untouched
+        self.assertNotIn(self.side.pk, result.vp_awarded)
+
+    def test_place_scope_rally_reaches_routed_units(self) -> None:
+        """_scope_target_units(include_routed=True) must include ROUTED units, not
+        just ACTIVE ones — RALLY's whole purpose is reaching already-broken units."""
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        place = BattlePlaceFactory(battle=self.battle)
+        routed_unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            place=place,
+            morale=10,
+            status=BattleUnitStatus.ROUTED,
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=2)
+
+        routed_unit.refresh_from_db()
+        self.assertEqual(routed_unit.morale, 10 + 2 * RALLY_MORALE_PER_LEVEL)
 
 
 class ResolveBattleRoundFailureTests(TestCase):
