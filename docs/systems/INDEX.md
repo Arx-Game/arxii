@@ -2113,7 +2113,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
   `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
   `TechniqueNotBattleReadyError`, `NoCommandHierarchyError`, `InsufficientCommandTierError`,
-  `MissingScopeTargetError`, `CannotStrikeOwnSideError` (#1710), `NotAChampionError`,
+  `MissingScopeTargetError`, `CannotStrikeOwnSideError` (#1710; guards STRIKE and ROUT
+  since #1712), `NotAChampionError`,
   `PlaceAlreadyDuelingError` (#1710), `PlaceScopeRequiredError` (#1712)
 - **Command Hierarchy & the Champion (#1710):** `CovenantRole.command_tier`
   (NONE/SUBORDINATE/SUPREME) + `.is_champion_role`, settable only on `CovenantType.BATTLE`

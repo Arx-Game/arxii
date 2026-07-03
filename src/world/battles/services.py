@@ -332,7 +332,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
             participant lacks the required engaged command_tier.
         MissingScopeTargetError: If scope is PLACE and ``target_place`` is
             None, or scope is SIDE and ``target_side`` is None.
-        CannotStrikeOwnSideError: If ``action_kind`` is STRIKE, scope is SIDE,
+        CannotStrikeOwnSideError: If ``action_kind`` is STRIKE or ROUT, scope is SIDE,
             and ``target_side`` is the participant's own side.
         PlaceScopeRequiredError: If action_kind is REPEL or HOLD and scope is not PLACE.
 
@@ -370,7 +370,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
         raise MissingScopeTargetError
 
     if (
-        action_kind == BattleActionKind.STRIKE
+        action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
         and scope == BattleActionScope.SIDE
         and target_side is not None
         and target_side.pk == participant.side_id

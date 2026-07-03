@@ -594,8 +594,8 @@ the modifier stack reads.
     declared scope requires (#1710)
   - `MissingScopeTargetError` — PLACE scope with no `target_place`, or SIDE scope with no
     `target_side` (#1710)
-  - `CannotStrikeOwnSideError` — STRIKE, scope=SIDE, `target_side` is the caster's own side
-    (#1710)
+  - `CannotStrikeOwnSideError` — STRIKE or ROUT, scope=SIDE, `target_side` is the caster's
+    own side (#1710; extended to ROUT in #1712's final review)
   - `NotAChampionError` — challenger holds no engaged `is_champion_role` `CovenantRole`
     (#1710)
   - `PlaceAlreadyDuelingError` — `BattlePlace.combat_encounter` is already set (#1710)

@@ -438,6 +438,20 @@ class ScopePermissionTests(TestCase):
                 target_side=self.side,
             )
 
+    def test_side_scope_rout_own_side_raises(self) -> None:
+        """ROUT excludes the caster's own side at resolution (#1712's
+        _resolve_rout_success), so declare-time must reject it too — the same
+        guard as STRIKE (#1710 Finding 2)."""
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(CannotStrikeOwnSideError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.ROUT,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
 
 class ComputeUnitStatusTests(TestCase):
     def test_destroyed_only_from_zero_strength(self) -> None:
@@ -919,17 +933,28 @@ class RepelResolutionTests(TestCase):
             battle=self.battle, side=self.defender_side, place=self.place, strength=100
         )
         attacker_participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
+        # The REPEL declarant is created *after* attacker_participant, so it has a
+        # higher pk. BattleActionDeclaration.Meta.ordering sorts by (battle_round,
+        # participant) — i.e. by participant pk — so without this ordering, the
+        # DB's default retrieval order would already put STRIKE (lower pk) ahead
+        # of REPEL (higher pk), same as the resolution the sort is meant to
+        # enforce. Only resolve_battle_round's explicit REPEL-first
+        # `.sort(...)` — not incidental pk/insertion order — can make the
+        # assertion below pass (#1712 final review Finding 2). self.participant
+        # is intentionally unused here: it's created in setUp (before this
+        # method runs) and would always sort first regardless of the sort call.
+        repel_participant = BattleParticipantFactory(battle=self.battle, side=self.defender_side)
         technique = TechniqueFactory(action_template=ActionTemplateFactory())
-        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        CharacterTechniqueFactory(character=repel_participant.character_sheet, technique=technique)
         CharacterTechniqueFactory(
             character=attacker_participant.character_sheet, technique=technique
         )
-        CharacterAnimaFactory(character=self.participant.character_sheet.character)
+        CharacterAnimaFactory(character=repel_participant.character_sheet.character)
         CharacterAnimaFactory(character=attacker_participant.character_sheet.character)
         battle_round = begin_battle_round(battle=self.battle)
 
         # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
-        # self.participant a SUBORDINATE role on a covenant fielding self.defender_side
+        # repel_participant a SUBORDINATE role on a covenant fielding self.defender_side
         # so the authorization check in _validate_command_scope passes.
         covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
         self.defender_side.covenant = covenant
@@ -941,7 +966,7 @@ class RepelResolutionTests(TestCase):
             slug="repel-e2e-subordinate",
         )
         membership = CharacterCovenantRole.objects.create(
-            character_sheet=self.participant.character_sheet,
+            character_sheet=repel_participant.character_sheet,
             covenant_role=role,
             covenant=covenant,
             rank=rank,
@@ -949,18 +974,22 @@ class RepelResolutionTests(TestCase):
         )
         set_engaged_membership(membership=membership)
 
-        declare_battle_action(
-            participant=self.participant,
-            action_kind=BattleActionKind.REPEL,
-            technique=technique,
-            scope=BattleActionScope.PLACE,
-            target_place=self.place,
-        )
+        # Declare STRIKE before REPEL (opposite of resolution order) so that only
+        # resolve_battle_round's explicit REPEL-first sort — not incidental
+        # declaration-insertion order — can make the assertion below pass
+        # (#1712 final review Finding 2).
         declare_battle_action(
             participant=attacker_participant,
             action_kind=BattleActionKind.STRIKE,
             technique=technique,
             target_unit=defender_unit,
+        )
+        declare_battle_action(
+            participant=repel_participant,
+            action_kind=BattleActionKind.REPEL,
+            technique=technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
         )
 
         with patch("world.battles.resolution.perform_check") as mock_check:

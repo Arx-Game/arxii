@@ -840,6 +840,8 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "participant__character_sheet",
             "participant__side",
             "target_unit",
+            "target_place",
+            "target_side",
             "technique__action_template",
         )
     )

@@ -80,9 +80,9 @@ class MissingScopeTargetError(BattleError):
 
 
 class CannotStrikeOwnSideError(BattleError):
-    """Raised when a STRIKE declaration's target_side is the caster's own side."""
+    """Raised when a STRIKE or ROUT declaration's target_side is the caster's own side."""
 
-    def __init__(self, user_message: str = "You cannot strike your own side.") -> None:
+    def __init__(self, user_message: str = "You cannot target your own side.") -> None:
         super().__init__(user_message)
 
 
