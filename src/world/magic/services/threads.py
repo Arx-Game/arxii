@@ -849,11 +849,16 @@ def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
     threads = character.threads._all  # noqa: SLF001 — same handler used by passive_vital_bonuses
     sheet = character.sheet_data
     score = Decimal(0)
+    coherence_by_resonance: dict[int, int] = {}
     for t in threads:
         depth = max(1, t.level // 10)
         factor = Decimal(1)
         if tuning.coherence_scale:
-            bonus = motif_coherence_bonus(sheet, t.resonance_id)
+            if t.resonance_id not in coherence_by_resonance:
+                coherence_by_resonance[t.resonance_id] = motif_coherence_bonus(
+                    sheet, t.resonance_id
+                )
+            bonus = coherence_by_resonance[t.resonance_id]
             factor = min(
                 Decimal(str(tuning.coherence_max_multiplier)),
                 Decimal(1) + Decimal(bonus) / Decimal(tuning.coherence_scale),
