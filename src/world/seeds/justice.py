@@ -67,8 +67,7 @@ _CRIME_KINDS: list[tuple[str, str, str]] = [
     (
         "tax-fraud",
         "Tax Fraud",
-        "Declaring less than was taken. The ledgers remember what was actual "
-        "and what was sworn.",
+        "Declaring less than was taken. The ledgers remember what was actual and what was sworn.",
     ),
     # --- faith -------------------------------------------------------------
     (
@@ -86,8 +85,7 @@ _CRIME_KINDS: list[tuple[str, str, str]] = [
     (
         "demon-summoning",
         "Demon Summoning",
-        "Calling the abyss into the world. Illegal in Umbros, Ariwn, Inferna, "
-        "and Aythirmok alike.",
+        "Calling the abyss into the world. Illegal in Umbros, Ariwn, Inferna, and Aythirmok alike.",
     ),
     (
         "unbonded-great-work",

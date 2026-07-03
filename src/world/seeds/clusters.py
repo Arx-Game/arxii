@@ -91,6 +91,12 @@ def _seed_governance() -> None:
     seed_governance_check_content()
 
 
+def _seed_scandal_archetypes() -> None:
+    from world.seeds.scandal_archetypes import seed_scandal_archetypes  # noqa: PLC0415
+
+    seed_scandal_archetypes()
+
+
 def _seed_domain_dev() -> None:
     from world.seeds.domain_dev import ensure_dev_domain  # noqa: PLC0415
 
@@ -141,6 +147,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes
     # so the books + scandal loops are walkable on a dev DB (#930/#1464). After
     # governance (its CheckTypes) and character_creation (the Arx realm).
+    # Scandal vocabulary: the nine authored "X Scandal" archetype categories
+    # (#1464/#1806 — Apostate, 2026-07-03). Authoritative on vectors.
+    "scandal": _seed_scandal_archetypes,
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
@@ -221,6 +230,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # "checks"); appears as a seeded cluster with no standalone content model (#930).
         "governance": [],
         # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
+        # Scandal vocabulary: the authored archetype categories (#1464/#1806).
+        "scandal": [],
         "domain_dev": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],

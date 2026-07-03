@@ -93,3 +93,19 @@ Guard-encounter spawning (combat domain — no pursuit-NPC surface exists);
 #1334 secrets-outing writer (calls `associate_heat`); accusation-minting
 surfaces; allied-society warrant sharing; active heat-clearing (bribe/pardon);
 wanted-poster/public-knowledge surfaces.
+
+## Authored law postures (Apostate, 2026-07-03 — transcribe to AreaLaw when the grid lands)
+
+The kind vocabulary is seeded; law rows await authored `Area` rows. Ratified
+postures: **the victim decides the kind at the tagging seam** (assault is a
+crime *upon the gentle*; caste transgression is Luxen's khati-touch line; joy
+is contraband only for those low enough to prosecute); **weak crowns, strong
+local control** — author the interesting rows at duchy/barony level, thin
+kingdom defaults. Heat: the abyssal statutes VERY hot wherever they are law;
+murder hot everywhere; most else low and target-dependent. Realm sketches:
+Luxen outlaws all abyssal practice (capital), sacrilege, and nearly every
+pleasure for the lower castes; Umbros/Ariwn/Inferna/Aythirmok outlaw
+demon-summoning and unbonded great works, and require puissant-or-greater
+abyssal mages to announce themselves with their soul-tether on entry
+(failure-to-announce); sacrilege elsewhere is a *local* law only where a
+domain is sworn to its god (much of Inferna holds Envala as patron).
