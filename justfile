@@ -131,12 +131,14 @@ _ensure-testdb rebuild="":
         just build-test-schema
     fi
 
-# CI-parity tier — runs the same Postgres path CI runs, in parallel, against
-# a pre-built test DB (schema from current model state, no migration
-# replay). Builds the test DB automatically the first time; pass `--rebuild`
-# to force a rebuild after a model change. Always uses --keepdb — the test
-# DB's schema comes from `build-test-schema`, not Django's migration-driven
-# create_test_db.
+# CI-parity tier — runs the same Postgres path CI runs, against a pre-built
+# test DB (schema from current model state, no migration replay). Builds the
+# test DB automatically the first time; pass `--rebuild` to force a rebuild
+# after a model change. Always uses --keepdb — the test DB's schema comes
+# from `build-test-schema`, not Django's migration-driven create_test_db.
+# Serial by default — this tier is expensive enough that going parallel
+# should be a deliberate choice, not automatic; pass --parallel yourself if
+# you actually want it (e.g. reproducing a CI failure).
 # Use before pushing, and for apps that can't run on the SQLite tier.
 #   just test-parity world.character_sheets
 #   just test-parity --rebuild world.character_sheets   # after a model change
@@ -154,7 +156,7 @@ test-parity *args: _fs-warn
         fi
     done
     just _ensure-testdb "$REBUILD"
-    echo "yes" | uv run arx test --keepdb --parallel "${ARGS[@]}"
+    echo "yes" | uv run arx test --keepdb "${ARGS[@]}"
 
 # Change-impact-aware regression: tests only the apps your branch
 # actually touches PLUS apps that import from them (catches the
