@@ -41,7 +41,11 @@ module-import time, so any code path that loads the migration graph — `Migrati
 an offline check (see `docs/evennia-quirks.md`). At production launch, migration validation must
 move into the deploy pipeline itself (restore the latest prod backup to staging, migrate,
 smoke-test before deploy) — nightly replay against a synthetic dev-model database does not
-substitute for that, and this is recorded here as the explicit launch-era follow-through.
+substitute for that, and this is recorded here as the explicit launch-era follow-through. Separately,
+a plain `arx manage migrate`-built environment does not invoke the idempotent seed functions
+(`world/progression/seeds.py`, `world/magic/seeds_soul_tether.py`) either — only
+`tools/build_schema.py` does — so a deploy pipeline must call them explicitly, or lookups like
+`scenes/action_services._get_social_engagement_category()` hard-fail on the missing row.
 
 > Status: accepted · Source: CI-speedup branch, task 5 · Related: ADR-0013 (schema-only
 > migrations pre-production), ADR-0021 (merge queue + single-leaf migration guard)

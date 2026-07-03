@@ -65,7 +65,7 @@ If the merge commit itself times out on pre-commit (ty/ruff over hundreds of fil
 
 ### Phantom `objects` migration dependency (CI-only, invisible locally)
 
-**Symptom:** all backend shards plus `pre-commit` and `api-types-drift` fail at the "Run migrations" step with `NodeNotFoundError: Migration <app>.NNNN dependencies reference nonexistent parent node ('objects', '0014_defaultobject_...')`. Local SQLite tests pass because the dev venv happens to have the phantom migration.
+**Symptom:** `NodeNotFoundError: Migration <app>.NNNN dependencies reference nonexistent parent node ('objects', '0014_defaultobject_...')`. Backend shards and `api-types-drift` build their schema from model state (`tools/build_schema.py`, migrations disabled entirely) so they don't hit this; it now surfaces at the `ty` job's "Check migrations match models" step, `pre-commit`'s "Check Django migrations" hook, and the nightly migration-replay workflow's migrate/check steps. Local SQLite tests pass because the dev venv happens to have the phantom migration.
 
 **Cause:** `.venv/.../evennia/objects/migrations/0012-0014` are venv-only phantoms (not git-tracked — a stray `makemigrations` once generated them into the Evennia library dir). Regenerating a project migration can bake a dependency on the latest *local* phantom objects migration even though the `arx manage` wrapper suppresses phantom migration *files*. CI's clean Evennia install only ships `objects` migrations up to **0013**, so the dependency dangles.
 
@@ -88,6 +88,23 @@ that only run `ty`/`makemigrations --check` still need a `postgres:` service
 container for this reason (see the `ty` job in `.github/workflows/ci.yml` and
 the nightly migration-replay workflow). See ADR-0083 for how this interacts
 with the CI schema-from-models decision.
+
+### A new standalone-SQL migration must be mirrored into `tools/build_schema.py`
+
+Per-PR CI and local `just test-parity`/`just test-fast` build their schema from current model
+state (`tools/build_schema.py`), not migration replay (ADR-0083) — see the note above on the
+vendored `objects` migration for how that decision interacts with the drift gate. `build_schema.py`
+applies exactly the standalone SQL files listed in its `SQL_FILES` constant (the partition
+rewrite, composite FKs, materialized views) plus the idempotent seed functions; it does not
+replay migrations, so it has no way to discover a new standalone SQL artifact on its own.
+
+**Rule: a migration that adds `RunSQL` DDL for a materialized view, a range partition, a custom
+constraint, or any other object that can't be expressed as a plain model field must add the
+matching `.sql` file to `SQL_FILES` in `tools/build_schema.py`, in the same PR.** Nightly full
+migration replay (`nightly-migration-replay.yml`) exercises the real migration and will build the
+object correctly; CI and local test/dev DBs built via `build_schema.py` will not, and — unless a
+test actually exercises that object — the omission fails silently rather than loudly: no error,
+just an object that's simply never there in any schema-from-models DB.
 
 ### Fuzzy/partial object search is broken on PostgreSQL
 

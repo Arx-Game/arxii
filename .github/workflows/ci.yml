@@ -214,7 +214,7 @@ jobs:
       # (NAME=arxii_test, no TEST override). We connect to the `postgres`
       # maintenance DB so nothing is attached to the arxii_test template
       # during the copy.
-      - name: Clone migrated DB into the test database
+      - name: Clone built DB into the test database
         run: |
           docker exec postgres-ci psql -U postgres -d postgres \
             -c "CREATE DATABASE test_arxii_test TEMPLATE arxii_test"
@@ -354,8 +354,8 @@ jobs:
   # committed files differ — so the generated types can't silently rot
   # against the backend schema. The schema is DB-backend-sensitive
   # (SQLite's 64-bit integer ranges produce int64 formats PG doesn't, and
-  # one path param needs a migrated table), so this regenerates against a
-  # migrated Postgres — trust-auth service container, no password exists.
+  # one path param needs a built table), so this regenerates against a
+  # schema-from-models Postgres — trust-auth service container, no password exists.
   api-types-drift:
     needs: changes
     if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' || github.event_name != 'pull_request'

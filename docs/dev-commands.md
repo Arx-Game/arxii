@@ -16,7 +16,9 @@ Command reference for working on Arx II. The load-bearing *rules* live in
 
 ## Common Development Commands
 
-- `arx test` — Run Evennia tests (run `arx manage migrate` first if fresh environment)
+- `arx test` — Run Evennia tests (Postgres by default; on a fresh environment
+  go through `just test-parity` / `just build-test-schema` rather than bare
+  `arx test`/`arx test --keepdb` — see the `running-tests` skill)
 - `arx test <args>` — Run specific tests with additional arguments
 - `arx shell` — Start Evennia Django shell with correct settings
 - `arx manage <command>` — Run arbitrary Django management commands
@@ -28,7 +30,11 @@ builds the Postgres parity-tier test DB straight from current model state (no
 migration replay); `just test-parity` and `just regression` build it
 automatically the first time and reuse it via `--keepdb` on every run after —
 pass `--rebuild` to either (e.g. `just test-parity --rebuild world.vitals`) to
-force a rebuild after a model change.
+force a rebuild after a model change. A plain `arx manage migrate` (with no
+`build_schema.py` run) leaves the seed functions
+(`world/progression/seeds.py`, `world/magic/seeds_soul_tether.py`) uncalled —
+a deploy pipeline must invoke them explicitly or lookups like the
+`social_engagement` KudosSourceCategory row will be missing.
 
 ## Server Management
 

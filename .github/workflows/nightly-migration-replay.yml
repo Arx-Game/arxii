@@ -8,6 +8,12 @@ name: Nightly migration replay
 # between models and migrations) that the per-PR drift gate's static check
 # can miss. Runs nightly rather than per-PR because the replay itself costs
 # 12.5-14 minutes per shard-sized app set — see the ADR for the measurement.
+# A failed run surfaces only through GitHub's default cron-failure signal:
+# an email to the actor GitHub attributes the scheduled run to, plus the run
+# showing red in the Actions tab. There is no issue-filing or chat
+# notification step here, so the staleness window this workflow exists to
+# bound (per-PR CI no longer replays migrations at all) depends on someone
+# actually seeing that email or checking the tab.
 on:
   schedule:
     - cron: "0 6 * * *"

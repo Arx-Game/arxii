@@ -95,14 +95,29 @@ build-test-schema:
     psql "$MAINT_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${TESTDB}\";"
     DATABASE_URL="$TESTDB_URL" uv run python tools/build_schema.py
 
-# Internal: build the test DB if it doesn't exist yet, or if `rebuild` is
-# non-empty. Shared by test-parity and regression.
+# Internal: build the test DB if it doesn't exist yet, if its schema isn't
+# actually complete, or if `rebuild` is non-empty. Shared by test-parity and
+# regression.
+#
+# Existence alone isn't enough: a bare `arx test`/`arx test --keepdb` run
+# (bypassing this recipe) can make Django itself create test_<dbname> via
+# plain syncdb — no partition, no composite FKs, no matviews, no seeds — and
+# with --keepdb that broken schema persists. So probe the same signal
+# build_schema.py itself uses for its idempotency guard (scenes_interaction
+# being partitioned, relkind='p') against the actual test DB, not just
+# pg_database existence, and rebuild if it's missing or wrong.
 _ensure-testdb rebuild="":
     #!/usr/bin/env bash
     set -euo pipefail
     eval "$(just _testdb-url)"
     EXISTS=$(psql "$MAINT_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='${TESTDB}'")
-    if [ -n "{{rebuild}}" ] || [ "$EXISTS" != "1" ]; then
+    SCHEMA_OK=""
+    if [ "$EXISTS" = "1" ]; then
+        SCHEMA_OK=$(psql "$TESTDB_URL" -tAc \
+            "SELECT 1 FROM pg_class WHERE relname='scenes_interaction' AND relkind='p'" \
+            2>/dev/null || echo "")
+    fi
+    if [ -n "{{rebuild}}" ] || [ "$EXISTS" != "1" ] || [ "$SCHEMA_OK" != "1" ]; then
         just build-test-schema
     fi
 

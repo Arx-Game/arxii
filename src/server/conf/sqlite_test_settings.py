@@ -74,11 +74,12 @@ TEST_RUNNER = "server.conf.sqlite_test_runner.SqliteTestRunner"
 # migration-chain coverage — that's gated by `makemigrations --check` and
 # the nightly full-replay workflow.
 #
-# Caveat: ``RunPython`` data seeds (e.g.
-# ``world.progression.migrations.0002_social_engagement_kudos_category``)
-# do NOT run when migrations are disabled. Tests that depend on a seeded
-# lookup row either need (a) explicit seeding in setUpTestData, or (b)
-# ``@django.test.tag("postgres")`` so they only run in the PG tier.
+# Caveat: the idempotent seed functions (``world.progression.seeds``,
+# ``world.magic.seeds_soul_tether``) only run via ``tools/build_schema.py``
+# (the Postgres parity tier's schema build) — they do NOT run here. Tests
+# that depend on a seeded lookup row either need (a) explicit seeding in
+# setUpTestData, or (b) ``@django.test.tag("postgres")`` so they only run in
+# the PG tier.
 class _DisableMigrations:
     """Sentinel: tells Django every app has no migrations."""
 
