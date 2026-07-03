@@ -303,6 +303,19 @@ class Trap(SharedMemoryModel):
         related_name="traps",
         help_text="The room this trap is set in. A room may hold several traps.",
     )
+    position = models.ForeignKey(
+        "areas.Position",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="traps",
+        help_text=(
+            "Optional specific spot this hazard is anchored to. Unset (default) = "
+            "room-wide, matching pre-#1317 behavior. When set, this trap only fires "
+            "for a character actually occupying this Position — whether they walked "
+            "there or were knocked there."
+        ),
+    )
     name = models.CharField(max_length=100)
     consequence_pool = models.ForeignKey(
         "actions.ConsequencePool",

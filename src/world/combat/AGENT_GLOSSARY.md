@@ -30,7 +30,7 @@ _Avoid_: shelter (as the maneuver name), cover, shield, protect
 
 **Clash**:
 The reserved combat primitive for a multi-round contest in which two sides pour magical energy into overpowering each other (the "beam-struggle" trope) — the clash of wills. Modelled by `Clash` with a flavor discriminator (CLASH / LOCK / WARD / BREAK). The word "clash" is reserved for this feature and must not name any other concept.
-_Avoid_: contest, struggle, beam struggle; backfire / rejection / dissonance for unrelated opposing-resonance effects
+_Avoid_: contest, struggle, beam struggle, push (colloquial in code for Clash's tug-of-war progress — see `clash.py` — but ambiguous with Strain and Knockback; prefer "clash"); backfire / rejection / dissonance for unrelated opposing-resonance effects
 
 **Strain**:
 Anima a PC commits beyond a technique's effective cost floor, converted by a diminishing-returns curve (`StrainConfig`) into a power/intensity bonus passed to the cast. Strain scales the technique's power and progress delta — never the check roll.
@@ -85,3 +85,7 @@ force-field (absorb_pool, priority 10), reflect (reflect_damage, priority 20), o
 interceptors guard `if payload.amount <= 0: return`. Cost: `reactive_anima_cost` per fire;
 can't pay → fizzle, attack lands. No `CANCEL_EVENT` child step (ADR-0060).
 _Avoid_: cancel-event interceptor, reactive cancel, shield handler
+
+**Knockback**:
+A deterministic on-hit effect that shoves the defender one Position away from the attacker, authored via `ThreatPoolEntry.on_hit_consequence_pool` firing a `MOVE_TO_POSITION`/`AWAY_FROM_ACTOR` consequence effect. Fires only after the #1273 Interpose seam resolves — a clean block prevents it for free.
+_Avoid_: push ("push" is already ambiguous with Strain and Clash's tug-of-war progress — see those entries), shove, displace

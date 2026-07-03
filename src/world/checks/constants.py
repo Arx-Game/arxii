@@ -34,6 +34,7 @@ class PositionDestination(models.TextChoices):
     ACTOR_POSITION = "actor_position", "Actor's current position"
     GATING_FAR_SIDE = "gating_far_side", "Far side of the gating edge"
     NAMED = "named", "Named position in the room"
+    AWAY_FROM_ACTOR = "away_from_actor", "Away from actor (knockback)"
 
 
 class EffectTarget(models.TextChoices):

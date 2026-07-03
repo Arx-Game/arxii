@@ -566,7 +566,8 @@ effects for graph mutation and flight).
   **fall seam** `maybe_emit_fall(objectdb, position)` — emits `EventName.FELL` when entering a CHASM
 - **Enums:** `PositionKind` (PRIMARY / FEATURE / ELEVATED / AERIAL / BARRIER_SIDE / CHASM);
   `PositionDestination` in `world/checks/constants.py`
-  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED) — governs `MOVE_TO_POSITION` effect destination
+  (ACTOR_POSITION / GATING_FAR_SIDE / NAMED / AWAY_FROM_ACTOR) — governs `MOVE_TO_POSITION`
+  effect destination; AWAY_FROM_ACTOR is combat's knockback primitive (#1317)
 - **Seed factory:** `AerialPropertyFactory` (`world/mechanics/factories.py`) — get-or-create
   factory for the `"aerial"` `Property` tag used to track airborne objects
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
@@ -1514,6 +1515,11 @@ registering a service strategy + per-kind details model.
 - **Tests:** `src/world/room_features/tests/`. SANCTUM install and
   upgrade are exercised end-to-end via the SanctumDetails layer below.
 - **Source:** `src/world/room_features/`
+- **Traps** (`world.room_features.models.Trap`, #1051/#520 Phase 6, position-scoped #1317):
+  a room-anchored (or, optionally, `Position`-anchored) hazard resolved through the shared
+  check/consequence-pool path — see `trap_services.py`'s `check_room_traps_on_entry` /
+  `check_traps_at_position`. Not a `RoomFeatureInstance` kind; a plain FK to `RoomProfile`
+  since a room may hold several.
 
 ### Sanctum (Plan 4 §F — first Room Feature kind)
 Plan 4 §F (#669 §F, shipped via #703). Per-resonance per-room
