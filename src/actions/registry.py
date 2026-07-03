@@ -175,6 +175,7 @@ from actions.definitions.relationships import (
     RedistributePointsAction,
 )
 from actions.definitions.ritual import PerformRitualAction
+from actions.definitions.room_features import StartRoomFeatureProjectAction
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
@@ -402,6 +403,7 @@ _ALL_ACTIONS: list[Action] = [
     SignatureSetAction(),
     SignatureClearAction(),
     SignatureListAction(),
+    StartRoomFeatureProjectAction(),
 ]
 
 # Lookup by key
