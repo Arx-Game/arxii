@@ -58,6 +58,10 @@ class BattleActionKind(models.TextChoices):
     STRIKE = "strike", "Strike a unit"
     SUPPORT = "support", "Support an ally"
     RESCUE = "rescue", "Rescue a surrounded ally"
+    ROUT = "rout", "Rout an enemy unit"
+    RALLY = "rally", "Rally an ally"
+    REPEL = "repel", "Repel an attack"
+    HOLD = "hold", "Hold or seize an objective"
 
 
 class BattleActionScope(models.TextChoices):
@@ -89,6 +93,27 @@ SUPPORT_VP = 3
 BASE_FAILURE_DAMAGE = 8
 DECISIVE_MARGIN = 50
 ROUTED_STRENGTH_THRESHOLD = 30
+
+# Morale — a second BattleUnit resource alongside strength (#1712). Unlike strength
+# (starts at its ceiling, only depletes), morale starts well below its ceiling and
+# climbing it is comparatively hard — sitting near MAX_MORALE reads as "fanatical,"
+# not baseline. status is always DERIVED from strength+morale jointly (see
+# world.battles.resolution._compute_unit_status) — never written independently.
+DEFAULT_MORALE = 70
+MAX_MORALE = 100
+ROUTED_MORALE_THRESHOLD = 25
+
+# Battle-flow action tuning (#1712). ROUT/RALLY scale with success_level exactly
+# like STRIKE's attrition; REPEL/HOLD award flat VP like SUPPORT (they don't move a
+# numeric resource). All values here are tuning — adjust freely during playtesting.
+ROUT_MORALE_PER_LEVEL = 15
+RALLY_MORALE_PER_LEVEL = 15
+ROUT_VP_PER_LEVEL = 4
+RALLY_VP = 3
+REPEL_VP = 4
+HOLD_CAPTURE_VP = 8
+HOLD_SUSTAIN_VP = 3
+REPEL_DEFENSE_BONUS = 15
 
 # Surrounded entry-roll signal weights (#1733). Fed as perform_check extra_modifiers
 # for the entry roll (Task 6) — authored content (the surrounded_entry pool's rows)

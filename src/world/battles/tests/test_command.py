@@ -269,6 +269,95 @@ class CmdBattleDeclareTests(TestCase):
         self.assertEqual(decl.scope, BattleActionScope.PLACE)
         self.assertEqual(decl.target_place_id, place.pk)
 
+    def test_declare_rout_creates_declaration(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare rout Iron Guard with Lance Thrust")
+
+        self.assertTrue(
+            BattleActionDeclaration.objects.filter(
+                battle_round=self.battle_round,
+                participant=self.participant,
+                action_kind=BattleActionKind.ROUT,
+                target_unit=self.unit,
+            ).exists()
+        )
+
+    def test_declare_rally_targets_own_routed_unit(self) -> None:
+        from world.battles.constants import BattleUnitStatus
+
+        own_unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.defender_side,
+            name="Broken Wing",
+            status=BattleUnitStatus.ROUTED,
+            morale=5,
+        )
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare rally Broken Wing with Lance Thrust")
+
+        self.assertTrue(
+            BattleActionDeclaration.objects.filter(
+                battle_round=self.battle_round,
+                participant=self.participant,
+                action_kind=BattleActionKind.RALLY,
+                target_unit=own_unit,
+            ).exists()
+        )
+
+    def test_declare_rally_rejects_enemy_side_unit_by_name(self) -> None:
+        """_resolve_own_unit only matches units on the participant's own side —
+        the attacker's `Iron Guard` unit must not be rally-able by the defender."""
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare rally Iron Guard with Lance Thrust")
+
+        self.assertFalse(
+            BattleActionDeclaration.objects.filter(battle_round=self.battle_round).exists()
+        )
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("Iron Guard", feedback)
+
+    def test_declare_repel_place_creates_declaration(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle, name="South Wall")
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save(update_fields=["covenant"])
+        rank = CovenantRankFactory(covenant=covenant)
+        subordinate_role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="cmd-test-repel-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.player_sheet,
+            covenant_role=subordinate_role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare repel place South Wall with Lance Thrust")
+
+        decl = BattleActionDeclaration.objects.get(
+            battle_round=self.battle_round, participant=self.participant
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.REPEL)
+        self.assertEqual(decl.scope, BattleActionScope.PLACE)
+        self.assertEqual(decl.target_place_id, place.pk)
+
+    def test_declare_hold_without_place_scope_sends_usage(self) -> None:
+        cmd = CmdBattle()
+        _run(cmd, self.player_char, "declare hold Iron Guard with Lance Thrust")
+
+        self.assertFalse(
+            BattleActionDeclaration.objects.filter(battle_round=self.battle_round).exists()
+        )
+        self.player_char.msg.assert_called()
+        feedback = self.player_char.msg.call_args[0][0]
+        self.assertIn("Usage", feedback)
+
 
 class CmdBattleDuelTests(TestCase):
     """CmdBattle `duel` subverb dispatches ChallengeChampionDuelAction."""

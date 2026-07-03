@@ -36,6 +36,7 @@ from world.battles.exceptions import (
     NoCommandHierarchyError,
     NotAChampionError,
     PlaceAlreadyDuelingError,
+    PlaceScopeRequiredError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -127,8 +128,9 @@ def add_place(
         battle: The ``Battle`` to add the place to.
         name: Human-readable name for the front (e.g. "The Main Gates").
         terrain_type: A ``TerrainType`` value (#1711). Defaults to OPEN.
-        movement_cost: Authored cost for a future reposition action (#1712) to
-            consume (#1711). Defaults to 1.
+        movement_cost: Authored cost for a future reposition/movement action —
+            not yet filed as an issue; #1712 explicitly did not build this
+            (#1711). Defaults to 1.
 
     Returns:
         The newly created ``BattlePlace``.
@@ -330,8 +332,9 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
             participant lacks the required engaged command_tier.
         MissingScopeTargetError: If scope is PLACE and ``target_place`` is
             None, or scope is SIDE and ``target_side`` is None.
-        CannotStrikeOwnSideError: If ``action_kind`` is STRIKE, scope is SIDE,
+        CannotStrikeOwnSideError: If ``action_kind`` is STRIKE or ROUT, scope is SIDE,
             and ``target_side`` is the participant's own side.
+        PlaceScopeRequiredError: If action_kind is REPEL or HOLD and scope is not PLACE.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -352,6 +355,12 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
     if not technique.action_template_id:
         raise TechniqueNotBattleReadyError
 
+    if (
+        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD)
+        and scope != BattleActionScope.PLACE
+    ):
+        raise PlaceScopeRequiredError
+
     if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE):
         _validate_command_scope(participant=participant, scope=scope)
 
@@ -361,7 +370,7 @@ def declare_battle_action(  # noqa: PLR0913 - each param is a distinct declarati
         raise MissingScopeTargetError
 
     if (
-        action_kind == BattleActionKind.STRIKE
+        action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
         and scope == BattleActionScope.SIDE
         and target_side is not None
         and target_side.pk == participant.side_id

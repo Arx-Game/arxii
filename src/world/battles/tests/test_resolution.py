@@ -16,6 +16,12 @@ from world.battles.constants import (
     BASE_FAILURE_DAMAGE,
     BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER,
     BATTLE_POSTURE_VP_MULTIPLIER,
+    RALLY_MORALE_PER_LEVEL,
+    RALLY_VP,
+    REPEL_DEFENSE_BONUS,
+    REPEL_VP,
+    ROUT_MORALE_PER_LEVEL,
+    ROUT_VP_PER_LEVEL,
     STRIKE_ATTRITION_PER_LEVEL,
     STRIKE_VP_PER_LEVEL,
     SUPPORT_VP,
@@ -23,6 +29,7 @@ from world.battles.constants import (
     BattleActionScope,
     BattlePosture,
     BattleSideRole,
+    BattleUnitStatus,
     TerrainType,
     UnitComposition,
     UnitQuality,
@@ -244,6 +251,65 @@ class DeclareBattleActionTests(TestCase):
                 target_unit=self.unit,
             )
 
+    def test_repel_requires_place_scope(self) -> None:
+        from world.battles.exceptions import PlaceScopeRequiredError
+        from world.battles.services import declare_battle_action
+
+        with self.assertRaises(PlaceScopeRequiredError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.REPEL,
+                technique=self.technique,
+            )
+
+    def test_hold_requires_place_scope(self) -> None:
+        from world.battles.exceptions import PlaceScopeRequiredError
+        from world.battles.services import declare_battle_action
+
+        with self.assertRaises(PlaceScopeRequiredError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.HOLD,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+    def test_repel_with_place_scope_and_target_succeeds(self) -> None:
+        from world.battles.services import declare_battle_action
+
+        # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
+        # self.participant a SUBORDINATE role on a covenant fielding self.side
+        # so the authorization check in _validate_command_scope passes.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.side.covenant = covenant
+        self.side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="repel-place-scope-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        place = BattlePlaceFactory(battle=self.battle)
+        decl = declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.REPEL,
+            technique=self.technique,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+        self.assertEqual(decl.action_kind, BattleActionKind.REPEL)
+        self.assertEqual(decl.target_place_id, place.pk)
+
 
 class ScopePermissionTests(TestCase):
     @classmethod
@@ -371,6 +437,51 @@ class ScopePermissionTests(TestCase):
                 scope=BattleActionScope.SIDE,
                 target_side=self.side,
             )
+
+    def test_side_scope_rout_own_side_raises(self) -> None:
+        """ROUT excludes the caster's own side at resolution (#1712's
+        _resolve_rout_success), so declare-time must reject it too — the same
+        guard as STRIKE (#1710 Finding 2)."""
+        participant = self._enlist_with_engaged_supreme_command(self.side)
+        with self.assertRaises(CannotStrikeOwnSideError):
+            declare_battle_action(
+                participant=participant,
+                action_kind=BattleActionKind.ROUT,
+                technique=self.technique,
+                scope=BattleActionScope.SIDE,
+                target_side=self.side,
+            )
+
+
+class ComputeUnitStatusTests(TestCase):
+    def test_destroyed_only_from_zero_strength(self) -> None:
+        from world.battles.constants import BattleUnitStatus
+        from world.battles.resolution import _compute_unit_status
+
+        self.assertEqual(_compute_unit_status(0, 100), BattleUnitStatus.DESTROYED)
+        # Zero morale never destroys — it routs, since strength is still nonzero.
+        self.assertEqual(_compute_unit_status(50, 0), BattleUnitStatus.ROUTED)
+
+    def test_routed_from_either_axis(self) -> None:
+        from world.battles.constants import (
+            ROUTED_MORALE_THRESHOLD,
+            ROUTED_STRENGTH_THRESHOLD,
+            BattleUnitStatus,
+        )
+        from world.battles.resolution import _compute_unit_status
+
+        self.assertEqual(
+            _compute_unit_status(ROUTED_STRENGTH_THRESHOLD, 100), BattleUnitStatus.ROUTED
+        )
+        self.assertEqual(
+            _compute_unit_status(100, ROUTED_MORALE_THRESHOLD), BattleUnitStatus.ROUTED
+        )
+
+    def test_active_when_both_axes_healthy(self) -> None:
+        from world.battles.constants import BattleUnitStatus
+        from world.battles.resolution import _compute_unit_status
+
+        self.assertEqual(_compute_unit_status(100, 100), BattleUnitStatus.ACTIVE)
 
 
 class ResolveBattleRoundSuccessTests(TestCase):
@@ -512,6 +623,29 @@ class ResolveBattleRoundSuccessTests(TestCase):
         self.assertEqual(own_unit.strength, 100)
         self.assertNotIn(side.pk, result.vp_awarded)
 
+    def test_strike_success_still_routes_when_morale_already_low(self) -> None:
+        """A unit already broken on morale (from a prior ROUT, say) should flip to
+        ROUTED from a STRIKE hit too small to cross the strength threshold alone."""
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        self.unit.morale = 20  # already below ROUTED_MORALE_THRESHOLD (25)
+        self.unit.save(update_fields=["morale"])
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=self.unit,
+        )
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(1)  # small hit: 10 attrition, strength 90
+            resolve_battle_round(battle_round=self.battle_round)
+
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.strength, 90)  # well above ROUTED_STRENGTH_THRESHOLD
+        self.assertEqual(self.unit.status, BattleUnitStatus.ROUTED)  # but morale forces it
+
 
 class ResolveBattleRoundSupportTests(TestCase):
     """SUPPORT success: side VP increases by SUPPORT_VP."""
@@ -553,6 +687,447 @@ class ResolveBattleRoundSupportTests(TestCase):
 
         self.side.refresh_from_db()
         self.assertEqual(self.side.victory_points, SUPPORT_VP)
+
+
+class RoutResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
+        self.enemy_unit = BattleUnitFactory(
+            battle=self.battle, side=self.defender_side, strength=100, morale=70
+        )
+
+    def test_rout_success_damages_morale_and_awards_vp(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rout_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.ROUT,
+            target_unit=self.enemy_unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rout_success(declaration, result, success_level=3)
+
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.enemy_unit.morale, 70 - 3 * ROUT_MORALE_PER_LEVEL)
+        self.assertEqual(self.enemy_unit.strength, 100)  # ROUT never touches strength
+
+        self.attacker_side.refresh_from_db()
+        self.assertEqual(self.attacker_side.victory_points, 3 * ROUT_VP_PER_LEVEL)
+
+    def test_rout_can_flip_unit_to_routed(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rout_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.ROUT,
+            target_unit=self.enemy_unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rout_success(declaration, result, success_level=5)  # 75 morale damage
+
+        self.enemy_unit.refresh_from_db()
+        self.assertEqual(self.enemy_unit.morale, 0)
+        self.assertEqual(self.enemy_unit.status, BattleUnitStatus.ROUTED)
+        self.assertIn(self.enemy_unit.pk, result.units_routed)
+
+    def test_rout_excludes_casters_own_side(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rout_success
+
+        own_unit = BattleUnitFactory(
+            battle=self.battle, side=self.attacker_side, strength=100, morale=70
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.ROUT,
+            scope=BattleActionScope.SIDE,
+            target_side=self.attacker_side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rout_success(declaration, result, success_level=3)
+
+        own_unit.refresh_from_db()
+        self.assertEqual(own_unit.morale, 70)  # untouched
+        self.assertNotIn(self.attacker_side.pk, result.vp_awarded)
+
+
+class RallyResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+
+    def test_rally_success_restores_morale_and_awards_flat_vp(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            strength=100,
+            morale=10,
+            status=BattleUnitStatus.ROUTED,
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            target_unit=unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=2)
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.morale, 10 + 2 * RALLY_MORALE_PER_LEVEL)
+        self.assertEqual(unit.status, BattleUnitStatus.ACTIVE)
+
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, RALLY_VP)
+
+    def test_rally_clamps_morale_at_max(self) -> None:
+        from world.battles.constants import MAX_MORALE
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        unit = BattleUnitFactory(battle=self.battle, side=self.side, morale=95)
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            target_unit=unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=5)
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.morale, MAX_MORALE)
+
+    def test_rally_cannot_recover_a_unit_routed_by_low_strength(self) -> None:
+        """RALLY only recovers units broken by morale collapse, not attrition."""
+        from world.battles.constants import MAX_MORALE
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            strength=20,
+            morale=70,
+            status=BattleUnitStatus.ROUTED,
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            target_unit=unit,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=5)
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.morale, MAX_MORALE)  # morale side is fully healed...
+        # ...but strength still holds it back
+        self.assertEqual(unit.status, BattleUnitStatus.ROUTED)
+
+    def test_rally_excludes_enemy_units(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        enemy_unit = BattleUnitFactory(
+            battle=self.battle, side=enemy_side, morale=10, status=BattleUnitStatus.ROUTED
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            scope=BattleActionScope.SIDE,
+            target_side=enemy_side,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=3)
+
+        enemy_unit.refresh_from_db()
+        self.assertEqual(enemy_unit.morale, 10)  # untouched
+        self.assertNotIn(self.side.pk, result.vp_awarded)
+
+    def test_place_scope_rally_reaches_routed_units(self) -> None:
+        """_scope_target_units(include_routed=True) must include ROUTED units, not
+        just ACTIVE ones — RALLY's whole purpose is reaching already-broken units."""
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_rally_success
+
+        place = BattlePlaceFactory(battle=self.battle)
+        routed_unit = BattleUnitFactory(
+            battle=self.battle,
+            side=self.side,
+            place=place,
+            morale=10,
+            status=BattleUnitStatus.ROUTED,
+        )
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.RALLY,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_rally_success(declaration, result, success_level=2)
+
+        routed_unit.refresh_from_db()
+        self.assertEqual(routed_unit.morale, 10 + 2 * RALLY_MORALE_PER_LEVEL)
+
+
+class RepelResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.defender_side)
+
+    def test_repel_success_raises_place_defense_bonus_and_awards_vp(self) -> None:
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_repel_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.REPEL,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+        place_defense_bonus: dict[int, int] = {}
+
+        _resolve_repel_success(declaration, result, place_defense_bonus)
+
+        self.assertEqual(place_defense_bonus[self.place.pk], REPEL_DEFENSE_BONUS)
+        self.defender_side.refresh_from_db()
+        self.assertEqual(self.defender_side.victory_points, REPEL_VP)
+
+    def test_repel_declared_this_round_reduces_strike_attrition_same_round(self) -> None:
+        """End-to-end through resolve_battle_round: a REPEL at a place must resolve
+        before an enemy STRIKE against a unit there in the same round (#1712)."""
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        defender_unit = BattleUnitFactory(
+            battle=self.battle, side=self.defender_side, place=self.place, strength=100
+        )
+        attacker_participant = BattleParticipantFactory(battle=self.battle, side=self.attacker_side)
+        # The REPEL declarant is created *after* attacker_participant, so it has a
+        # higher pk. BattleActionDeclaration.Meta.ordering sorts by (battle_round,
+        # participant) — i.e. by participant pk — so without this ordering, the
+        # DB's default retrieval order would already put STRIKE (lower pk) ahead
+        # of REPEL (higher pk), same as the resolution the sort is meant to
+        # enforce. Only resolve_battle_round's explicit REPEL-first
+        # `.sort(...)` — not incidental pk/insertion order — can make the
+        # assertion below pass (#1712 final review Finding 2). self.participant
+        # is intentionally unused here: it's created in setUp (before this
+        # method runs) and would always sort first regardless of the sort call.
+        repel_participant = BattleParticipantFactory(battle=self.battle, side=self.defender_side)
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=repel_participant.character_sheet, technique=technique)
+        CharacterTechniqueFactory(
+            character=attacker_participant.character_sheet, technique=technique
+        )
+        CharacterAnimaFactory(character=repel_participant.character_sheet.character)
+        CharacterAnimaFactory(character=attacker_participant.character_sheet.character)
+        battle_round = begin_battle_round(battle=self.battle)
+
+        # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
+        # repel_participant a SUBORDINATE role on a covenant fielding self.defender_side
+        # so the authorization check in _validate_command_scope passes.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.defender_side.covenant = covenant
+        self.defender_side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="repel-e2e-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=repel_participant.character_sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        # Declare STRIKE before REPEL (opposite of resolution order) so that only
+        # resolve_battle_round's explicit REPEL-first sort — not incidental
+        # declaration-insertion order — can make the assertion below pass
+        # (#1712 final review Finding 2).
+        declare_battle_action(
+            participant=attacker_participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=technique,
+            target_unit=defender_unit,
+        )
+        declare_battle_action(
+            participant=repel_participant,
+            action_kind=BattleActionKind.REPEL,
+            technique=technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(2)  # both declarations succeed
+            resolve_battle_round(battle_round=battle_round)
+
+        defender_unit.refresh_from_db()
+        expected_attrition = max(0, 2 * STRIKE_ATTRITION_PER_LEVEL - REPEL_DEFENSE_BONUS)
+        self.assertEqual(defender_unit.strength, 100 - expected_attrition)
+
+
+class HoldResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+
+    def test_hold_captures_uncontrolled_place_and_awards_capture_vp(self) -> None:
+        from world.battles.constants import HOLD_CAPTURE_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_hold_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_hold_success(declaration, result)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, HOLD_CAPTURE_VP)
+
+    def test_hold_sustains_already_controlled_place_with_smaller_vp(self) -> None:
+        from world.battles.constants import HOLD_SUSTAIN_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_hold_success
+
+        self.place.controlled_by = self.side
+        self.place.save(update_fields=["controlled_by"])
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_hold_success(declaration, result)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)  # unchanged
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, HOLD_SUSTAIN_VP)
+
+    def test_hold_captures_from_enemy_control(self) -> None:
+        from world.battles.constants import HOLD_CAPTURE_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_hold_success
+
+        self.place.controlled_by = self.enemy_side
+        self.place.save(update_fields=["controlled_by"])
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_hold_success(declaration, result)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, HOLD_CAPTURE_VP)
+
+    def test_hold_declared_this_round_captures_place_end_to_end(self) -> None:
+        """End-to-end through resolve_battle_round: a HOLD declaration dispatched by
+        _dispatch_success_handler must actually capture the place and award VP (#1712)."""
+        from world.battles.constants import BATTLE_POSTURE_VP_MULTIPLIER, HOLD_CAPTURE_VP
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        CharacterAnimaFactory(character=self.participant.character_sheet.character)
+        battle_round = begin_battle_round(battle=self.battle)
+
+        # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
+        # self.participant a SUBORDINATE role on a covenant fielding self.side
+        # so the authorization check in _validate_command_scope passes.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.side.covenant = covenant
+        self.side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="hold-e2e-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.participant.character_sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            technique=technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(2)
+            resolve_battle_round(battle_round=battle_round)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)
+        self.side.refresh_from_db()
+        expected_vp = round(
+            HOLD_CAPTURE_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(self.side.posture, 1.0)
+        )
+        self.assertEqual(self.side.victory_points, expected_vp)
 
 
 class ResolveBattleRoundFailureTests(TestCase):
