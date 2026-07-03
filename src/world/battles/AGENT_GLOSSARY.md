@@ -28,6 +28,48 @@ irregular, #1711) driving type-matchups and terrain effects, and a `UnitQuality`
 strength multiplier.
 _Avoid_: squad, regiment, mob.
 
+**Morale**:
+A `BattleUnit`'s second numeric resource (#1712), alongside `strength`. Unlike
+strength (starts at its ceiling, only depletes), morale starts well below its
+ceiling (`DEFAULT_MORALE`) and climbing it is comparatively hard — sitting near
+`MAX_MORALE` reads as exceptional, not baseline. `status` is derived jointly
+from both resources (`_compute_unit_status`) — never written independently. A
+future unit property (Mindless, Fearless — see #1794, "Battle units:
+Property/Capability holding") would exempt some units from the morale branch
+of that derivation; no such mechanism exists yet.
+
+**Rout** (verb):
+The `BattleActionKind.ROUT` declaration — damages an enemy unit's `morale`
+(#1712). Distinct from the `ROUTED` `BattleUnitStatus` value, which is a
+*derived state* any sufficiently low `strength` or `morale` can trigger, not
+something ROUT sets directly.
+
+**Rally**:
+The `BattleActionKind.RALLY` declaration — restores a friendly unit's `morale`
+(#1712), including units already `ROUTED`. Cannot recover a unit whose
+`ROUTED` status comes from low `strength` instead — RALLY only heals the
+morale axis.
+
+**Repel**:
+The `BattleActionKind.REPEL` declaration (#1712, PLACE-scope only) — raises a
+same-round defense bonus reducing enemy STRIKE attrition against units at that
+front.
+
+**Hold/Seize**:
+The `BattleActionKind.HOLD` declaration (#1712, PLACE-scope only) — captures
+or sustains control of a `BattlePlace` (see **Front control** below).
+
+**Front control**:
+`BattlePlace.controlled_by` (#1712) — which `BattleSide`, if any, currently
+holds a front as an objective. `None` means uncontrolled/contested. Set by a
+successful HOLD declaration.
+
+**Victory Points**:
+`BattleSide.victory_points` — the accumulating score each side races toward
+its `victory_threshold`. Award-only in every existing action kind (STRIKE,
+SUPPORT, ROUT, RALLY, REPEL, HOLD) — no action denies/subtracts VP from a
+side (#1712 considered and explicitly deferred a denial mechanic).
+
 **Descriptor**:
 A `BattleUnit`'s free-text flavor tag (e.g. "zombies-on-nightmares"); narrative only,
 never mechanical — `composition`/`quality` drive mechanics. Renamed from the spine's

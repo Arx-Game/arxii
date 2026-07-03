@@ -34,11 +34,12 @@ def _rout_units_at_place(battle_place: BattlePlace, *, side_id: int) -> None:
     """Rout (or destroy, if already weak) every ACTIVE unit for *side_id* at *battle_place*.
 
     Preserves the existing severity rule byte-for-byte — a unit already at or below
-    ROUTED_STRENGTH_THRESHOLD is wiped out by a champion's defeat, not merely routed —
-    but expresses it through the numeric resources + the shared derivation (#1712)
-    instead of writing `status` directly: status must always be a derived view, or a
-    later ROUT/RALLY/STRIKE recomputing it for this unit would silently clobber a
-    directly-written value.
+    ROUTED_STRENGTH_THRESHOLD is wiped out when this fires (on the losing side's units,
+    whether that's the enemy after a Champion victory or the challenger's own side after
+    a defeat), not merely routed — but expresses it through the numeric resources + the
+    shared derivation (#1712) instead of writing `status` directly: status must always
+    be a derived view, or a later ROUT/RALLY/STRIKE recomputing it for this unit would
+    silently clobber a directly-written value.
     """
     from world.battles.constants import ROUTED_STRENGTH_THRESHOLD  # noqa: PLC0415
     from world.battles.models import BattleUnit  # noqa: PLC0415
