@@ -289,12 +289,38 @@ class CraftingStationGateTests(TestCase):
         from world.items.services.crafting import craft_attach_facet
 
         item = self._item()
-        craft_attach_facet(
-            crafter_account=self.account,
-            crafter_character=self.character,
-            item_instance=item,
-            facet=self._facet(),
+        with force_check_outcome(CheckOutcomeFactory(name="StationSuccess", success_level=2)):
+            result = craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                facet=self._facet(),
+            )
+        self.assertTrue(result.attached)
+        self.station.refresh_from_db()
+        self.assertEqual(self.station.durability, 0)
+
+    def test_failed_attempt_still_decrements_station_durability(self) -> None:
+        """Wear fires on the roll itself, independent of success/failure (#1234)."""
+        from world.checks.factories import ConsequenceFactory
+        from world.items.services.crafting import craft_attach_facet
+
+        botch = CheckOutcomeFactory(name="StationBotch", success_level=-2)
+        cons = ConsequenceFactory(outcome_tier=botch, label="Station Botch")
+        CraftingRecipeConsequenceFactory(
+            recipe=self.recipe, consequence=cons, cost_consumption=CostConsumption.NONE
         )
+
+        item = self._item()
+        with force_check_outcome(botch):
+            result = craft_attach_facet(
+                crafter_account=self.account,
+                crafter_character=self.character,
+                item_instance=item,
+                facet=self._facet(),
+            )
+
+        self.assertFalse(result.attached)
         self.station.refresh_from_db()
         self.assertEqual(self.station.durability, 0)
 
