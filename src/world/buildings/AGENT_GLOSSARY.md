@@ -8,6 +8,22 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   (`Building.space_budget`), snapshotted from `BuildingSizeTier[target_size]`
   at construction and grown by a Building Extension. Rooms spend from it; it is
   NOT a room count. _Avoid:_ max rooms, room cap, room budget.
+- **Fortification level** — `Building.fortification_level` (#1713): a persistent
+  defense investment, raised via a `FORTIFICATION_UPGRADE` Project
+  (`world.buildings.fortification_services.start_fortification_upgrade` /
+  `complete_fortification_upgrade`, monotonic max-set on completion — never
+  regresses), capped at `MAX_FORTIFICATION_LEVEL`. Consumed by
+  `world.battles.services.create_fortification`, which snapshots it once into a
+  battle-scoped `Fortification`'s `max_integrity` when that Fortification is tied
+  to this Building. **Distinct from `BuildingKind.is_fortified`** — that's a
+  cosmetic/filter flag on the *catalog* (one of nine non-exclusive descriptive
+  tags a `BuildingKind` may carry, e.g. for search/flavor), carrying no numeric
+  value and no mechanical weight; `fortification_level` is the numeric, ladder-
+  gated, upgradeable defense investment on a concrete `Building` instance. A
+  building can be `is_fortified=True` at `fortification_level=0`, or vice versa —
+  the two are orthogonal. _Avoid:_ fortified (ambiguous between the two;
+  prefer "fortification level" for the numeric investment, "is_fortified" only
+  when specifically meaning the catalog tag).
 - **Room size tier** — a rung on the shared unit ladder
   (`evennia_extensions.RoomSizeTier`, Micro → Expanse) giving a room its
   mechanical size (`RoomProfile.size`). The same ladder is the contract for the

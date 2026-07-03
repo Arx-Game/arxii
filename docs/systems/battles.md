@@ -75,6 +75,25 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 
 **Constraint:** unique `(battle, name)`.
 
+### `Fortification`
+
+A defensible structure (wall/gate/battlement) at a `BattlePlace` (#1713). A front may
+carry multiple `Fortification` rows — an outer wall, a gate, and a battlement — each
+independently breachable via its own `integrity`/`max_integrity` (see ADR-0083). See
+[Sieges (#1713)](#sieges-1713) below for the BREACH/FORTIFY verbs that act on it.
+
+| Field | Type | Notes |
+|---|---|---|
+| `place` | FK → `BattlePlace` (`related_name="fortifications"`) | The front this structure defends |
+| `defending_side` | FK → `BattleSide` (`related_name="fortifications"`) | The side this structure protects; gates BREACH (must differ) vs FORTIFY (must match) |
+| `building` | FK → `buildings.Building` (null, `related_name="battle_fortifications"`) | Optional persistent Building this structure's integrity ceiling derives from; `None` means an ad-hoc, non-persistent structure |
+| `kind` | CharField | `FortificationKind` — WALL / GATE / BATTLEMENT; default WALL. Purely descriptive plus a base-integrity lookup — BREACH/FORTIFY behave identically regardless of kind in this MVP |
+| `integrity` | PositiveSmallIntegerField | Default 0; attrited by BREACH, restored by FORTIFY (capped at `max_integrity`) |
+| `max_integrity` | PositiveSmallIntegerField | Default 0; snapshotted once at creation from `BASE_INTEGRITY[kind]` plus `building.fortification_level × FORTIFICATION_LEVEL_INTEGRITY_BONUS` if `building` is set — see `world.battles.services.create_fortification` |
+| `breached` | BooleanField | Default False; set True when `integrity` reaches 0 via BREACH. Terminal — a breached structure can no longer be targeted by BREACH or FORTIFY |
+
+**Ordering:** `["place", "kind", "id"]`.
+
 ### `BattleUnit`
 
 An abstract typed force (enemy or friendly) stationed at a front.
@@ -164,9 +183,10 @@ A participant's declared action for one round.
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
 | `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
-| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) |
+| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target, or the Surrounded ally being rescued (RESCUE, #1733) |
+| `target_fortification` | FK → `Fortification` (null) | Set when `action_kind` is BREACH or FORTIFY (#1713) |
 | `resolved` | BooleanField | False until the GM resolves the round |
 | `success_level` | SmallIntegerField | Check success level; >0 = success, ≤0 = failure |
 
@@ -490,12 +510,14 @@ Multi-write operations use `@transaction.atomic`.
 | `add_side` | `(*, battle, role, victory_threshold=DEFAULT_VICTORY_THRESHOLD, covenant=None) -> BattleSide` | Adds a side, optionally fielded by a War Covenant (#1710) |
 | `add_place` | `(*, battle, name, terrain_type=TerrainType.OPEN, movement_cost=1) -> BattlePlace` | Adds a named front (#1711: `terrain_type`/`movement_cost` kwargs) |
 | `add_unit` | `(*, battle, side, name, descriptor="", quality=UnitQuality.TRAINED, commander=None, summoned_by=None, strength=100, place=None, properties=(), capability_values=(), individual_count=None) -> BattleUnit` | Adds an abstract unit (#1711: `descriptor` replaces `unit_type`; adds `quality`/`commander`/`summoned_by`. #1794: `properties` — iterable of `Property` to attach; `capability_values` — iterable of `(CapabilityType, magnitude)` pairs, each becomes a `BattleUnitCapability` row; `individual_count` — optional population data point) |
+| `create_fortification` | `(*, place, defending_side, kind=FortificationKind.WALL, building=None) -> Fortification` | Creates a `Fortification` at `place`, snapshotting `max_integrity` once from `BASE_INTEGRITY[kind]` plus `building.fortification_level × FORTIFICATION_LEVEL_INTEGRITY_BONUS` if `building` is given (#1713) |
 | `set_battle_side_posture` | `(*, side, posture) -> BattleSide` | Sets a side's `BattlePosture` (#1711) |
 | `assign_unit_commander` | `(*, unit, commander) -> BattleUnit` | Assigns (or clears, with `commander=None`) a unit's commander (#1711) |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |
 | `begin_battle_round` | `(*, battle) -> BattleRound` | Closes prior round (→ COMPLETED) and opens a new DECLARING round. Raises `BattleConcludedError` if already concluded. |
-| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None, scope=BattleActionScope.UNIT, target_place=None, target_side=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. `scope`/`target_place`/`target_side` gate army/unit-scale declarations against command tier (#1710). Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`, `NoCommandHierarchyError`/`InsufficientCommandTierError`/`MissingScopeTargetError`/`CannotStrikeOwnSideError` for scope violations. |
+| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None, scope=BattleActionScope.UNIT, target_place=None, target_side=None, target_fortification=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. `scope`/`target_place`/`target_side` gate army/unit-scale declarations against command tier (#1710); `target_fortification` gates BREACH/FORTIFY ownership (#1713). Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`, `NoCommandHierarchyError`/`InsufficientCommandTierError`/`MissingScopeTargetError`/`CannotStrikeOwnSideError` for scope violations, `FortificationTargetRequiredError`/`FortificationAlreadyBreachedError`/`FortificationOwnershipMismatchError` for BREACH/FORTIFY violations. |
 | `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
+| `open_siege_engine_encounter` | `(*, battle_place, participant, opponent_kwargs, tier=OpponentTier.ELITE) -> CombatEncounter` | Binds `battle_place` to a discrete siege-engine skirmish — same bridge and `create_lethal_duel` call as `open_champion_duel`, no Champion-role requirement (#1713). Raises `PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
 | `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
@@ -509,7 +531,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (any of the 7 `BattleActionKind` values, with `technique_id`) for the current round |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side` kwargs) for the current round. Does not yet forward `target_fortification` — BREACH/FORTIFY are not reachable through this Action (or telnet); see [Sieges (#1713)](#sieges-1713) scope note. |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -563,7 +585,9 @@ tabular inline for `BattleUnitCapability` rows, #1794), `BattleRound`, `BattlePa
 (list-filtered on `property`; `technique`/`property` as autocomplete fields, #1794) and
 `TerrainPropertyEffect` (list-filtered on `terrain_type`/`property`; `property` as an
 autocomplete field, #1794), giving staff a CRUD surface to author the type-matchup and
-terrain-effect content the modifier stack reads.
+terrain-effect content the modifier stack reads, and `Fortification` (#1713;
+list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_integrity`/
+`breached` in `list_display`).
 
 ## Enums / Constants (`src/world/battles/constants.py`)
 
@@ -572,11 +596,12 @@ terrain-effect content the modifier stack reads.
 | `BattleSideRole` | TextChoices | ATTACKER / DEFENDER |
 | `BattleUnitStatus` | TextChoices | ACTIVE / ROUTED / DESTROYED |
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
-| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) |
+| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
 | `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
 | `BattlePosture` | TextChoices | BALANCED / AGGRESSIVE / DEFENSIVE (#1711) |
+| `FortificationKind` | TextChoices | WALL / GATE / BATTLEMENT (#1713) |
 
 **Tuning constants:**
 - `DEFAULT_VICTORY_THRESHOLD = 100`
@@ -610,6 +635,16 @@ terrain-effect content the modifier stack reads.
   controls (#1712) — deliberately less than capture so holding a front doesn't runaway-farm VP
 - `REPEL_DEFENSE_BONUS = 15` — flat reduction applied to STRIKE attrition against units at a
   place with a REPEL declared this round (#1712)
+- `BASE_INTEGRITY` — dict (#1713), starting `Fortification.max_integrity` ceiling per
+  `FortificationKind` before any persistent investment: WALL 100, BATTLEMENT 80, GATE 60
+- `FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20` — flat per-level ladder bonus (#1713) applied per
+  `Building.fortification_level` when a `Fortification` is created against a persistent `building`
+- `BREACH_INTEGRITY_PER_LEVEL = 10` — BREACH's integrity damage per success level (#1713), mirrors
+  `STRIKE_ATTRITION_PER_LEVEL`'s scaling
+- `FORTIFY_INTEGRITY_PER_LEVEL = 15` — FORTIFY's integrity restoration per success level (#1713),
+  mirrors `RALLY_MORALE_PER_LEVEL`'s scaling
+- `BREACH_VP_PER_LEVEL = 5` — BREACH's VP award per success level (#1713)
+- `FORTIFY_VP = 3` — FORTIFY's flat VP award (#1713)
 
 ## Exceptions (`src/world/battles/exceptions.py`)
 
@@ -629,8 +664,15 @@ terrain-effect content the modifier stack reads.
     own side (#1710; extended to ROUT in #1712's final review)
   - `NotAChampionError` — challenger holds no engaged `is_champion_role` `CovenantRole`
     (#1710)
-  - `PlaceAlreadyDuelingError` — `BattlePlace.combat_encounter` is already set (#1710)
+  - `PlaceAlreadyDuelingError` — `BattlePlace.combat_encounter` is already set (#1710;
+    also raised by `open_siege_engine_encounter`, #1713)
   - `PlaceScopeRequiredError` — REPEL/HOLD declared with a scope other than PLACE (#1712)
+  - `FortificationTargetRequiredError` — BREACH/FORTIFY declared with no
+    `target_fortification` (#1713)
+  - `FortificationOwnershipMismatchError` — BREACH targets your own side's
+    `Fortification`, or FORTIFY targets the enemy's (#1713)
+  - `FortificationAlreadyBreachedError` — BREACH/FORTIFY targets a `Fortification`
+    with `breached=True` (#1713)
 
 ## Legend / Outcome Model and Stakes Wiring (#1785)
 
@@ -698,7 +740,8 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Naval / aerial / siege variants | #1713, #1714 |
+| Naval / aerial variants | #1714 (deferred) |
+| Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
 [Peril / Rescue (#1733)](#peril--rescue-1733) below. Rich unit type-matchups and terrain
@@ -707,6 +750,7 @@ Campaign propagation (battle outcome → Story + win-gated Legend) is no longer 
 [Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below. Command hierarchy and the
 Champion are no longer deferred — see
 [Command Hierarchy & the Champion (#1710)](#command-hierarchy--the-champion-1710) below.
+Siege variants are no longer deferred — see [Sieges (#1713)](#sieges-1713) below.
 
 ## Command Hierarchy & the Champion (#1710)
 
@@ -739,6 +783,70 @@ The Champion duel reuses `world.combat.duels.create_lethal_duel` unmodified —
 to the winner) is wired via `world.battles.duel_wiring`, mirroring
 `world.combat.beat_wiring`'s `ENCOUNTER_COMPLETED` `TriggerDefinition` pattern exactly
 — no new event type.
+
+## Sieges (#1713)
+
+Siege warfare is a battle variety built on two new pieces: the `Fortification`
+model (a defensible structure at a front — see [`Fortification`](#fortification)
+above) and the `BREACH`/`FORTIFY` `BattleActionKind` pair that acts on it. A
+`BattlePlace` may carry several `Fortification` rows at once (an outer wall, a
+gate, a battlement), each independently ground down or shored up — see
+**ADR-0083** for why this is per-structure state rather than a single shared
+value on `BattlePlace` itself, and why BREACH/FORTIFY are a dedicated verb pair
+rather than a reuse of STRIKE/REPEL.
+
+**BREACH** (attacker verb) and **FORTIFY** (defender verb) both declare against a
+`target_fortification`, validated in `declare_battle_action`
+(`world.battles.services._validate_fortification_target`): the target must be set
+(`FortificationTargetRequiredError` if not), must not already be `breached`
+(`FortificationAlreadyBreachedError`), and its `defending_side` must differ from
+the declaring participant's side for BREACH or match it for FORTIFY
+(`FortificationOwnershipMismatchError` otherwise — a side may only tear down the
+enemy's structures or shore up its own). Resolution
+(`world.battles.resolution._resolve_breach_success` /
+`_resolve_fortify_success`) mirrors the existing resource-verb pairs: BREACH
+attrites `integrity` by `success_level × BREACH_INTEGRITY_PER_LEVEL` (setting
+`breached = True` once it reaches 0 — terminal, matching STRIKE's attrition of
+`BattleUnit.strength`) and awards `success_level × BREACH_VP_PER_LEVEL` VP;
+FORTIFY restores `integrity` by `success_level × FORTIFY_INTEGRITY_PER_LEVEL`
+(capped at `max_integrity`, matching RALLY's restoration of `morale`) and awards a
+flat `FORTIFY_VP`. Both scale VP with `BATTLE_POSTURE_VP_MULTIPLIER` like every
+other VP-awarding kind.
+
+`open_siege_engine_encounter` (`world.battles.services`) binds a `BattlePlace` to a
+discrete siege-engine skirmish the same way `open_champion_duel` (#1710) binds a
+Champion challenge — reusing the `BattlePlace.combat_encounter` bridge and
+`create_lethal_duel` — but without the Champion-role requirement, since sabotaging
+a ram's crew or defending a tower is an ordinary discrete fight, not a duel gated
+on covenant rank. Siege engines themselves are ordinary `BattleUnit` rows, not a
+separate model — content authors differentiate one via the #1794 `properties`/
+`capabilities` taxonomy (e.g. a descriptive `Property` tag) the same way any other
+unit distinction is now authored, rather than a dedicated composition/kind field.
+This function only opens the discrete-combat bridge for a skirmish over one.
+
+A `Fortification`'s starting `max_integrity` can draw on a persistent, player-built
+investment: `world.buildings.Building.fortification_level` (raised by a
+`FORTIFICATION_UPGRADE` Project — see `world.buildings.fortification_services`,
+`start_fortification_upgrade` / `complete_fortification_upgrade`, monotonic
+max-set on completion so a lower-target Project completing after a higher one
+never regresses the level). `create_fortification` snapshots this once, at
+creation, into `max_integrity = BASE_INTEGRITY[kind] + building.fortification_level
+× FORTIFICATION_LEVEL_INTEGRITY_BONUS` when a `building` is supplied — the same
+snapshot-once-at-creation pattern `Building` itself uses for `target_size`/
+`target_grandeur`. A `Fortification` created with `building=None` is an ad-hoc
+structure with no persistent investment behind it (`max_integrity` is just
+`BASE_INTEGRITY[kind]`).
+
+**Scope note:** BREACH/FORTIFY are fully wired at the model/service/resolution
+layer (validated in `declare_battle_action`, resolved in `resolve_battle_round`,
+covered by the `test_siege.py` E2E journeys below) but this PR does not extend
+`DeclareBattleActionAction` or `CmdBattle`'s telnet grammar with a
+`target_fortification` kwarg or a `breach`/`fortify` subverb — unlike
+STRIKE/ROUT/REPEL/HOLD, a siege declaration is currently only reachable by calling
+`declare_battle_action` directly (GM/scripted setup), not from a player's telnet
+session or the generic battle-declaration REST path. The same applies to
+`open_siege_engine_encounter`: it has no `ChallengeChampionDuelAction`-style Action
+or telnet counterpart yet.
 
 ## Test Coverage
 
@@ -818,6 +926,19 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
 - `src/world/battles/tests/test_duel_wiring.py` (#1710) — Champion duel outcome
   auto-wiring: challenger victory routs the enemy unit at the bound place; a
   non-battle-bound encounter completion no-ops cleanly
+- `src/world/battles/tests/test_siege.py` (#1713) — E2E siege journeys:
+  `SiegeBreachJourneyTests` (BREACH against your own side's `Fortification` is
+  rejected; repeated BREACH grinds `integrity` to 0, sets `breached`, and awards
+  VP), `HoldTheWallsJourneyTests` (an untouched `Fortification` survives a
+  no-declarations timeout — proves hold-the-walls needs zero siege-specific
+  win-condition code, reusing `maybe_conclude_on_timer` unchanged),
+  `FortificationInvestmentJourneyTests` (a funded `FORTIFICATION_UPGRADE`
+  raises the snapshot integrity a subsequent `create_fortification` sees; a
+  second, lower-target upgrade completing after a higher one never regresses it)
+- `src/world/buildings/tests/test_fortification_upgrade_kind.py` (#1713) —
+  `start_fortification_upgrade`/`complete_fortification_upgrade`: target-level
+  validation (`FortificationLevelExceedsMaximumError`), monotonic max-set on
+  completion, idempotent re-application via the `applied_at` claim
 
 ## Integrates With
 
@@ -850,8 +971,12 @@ to the winner) is wired via `world.battles.duel_wiring`, mirroring
   `world.checks.consequence_resolution.select_consequence` against authored
   `ConsequencePool` rows (#1733)
 - **Combat** — `BattlePlace.combat_encounter` bridge seam, now wired for Champion duels
-  (`open_champion_duel`, #1710); `RoundStatus` and `AbstractRound` shared from
-  `world.scenes`
+  (`open_champion_duel`, #1710) and siege-engine skirmishes (`open_siege_engine_encounter`,
+  #1713); `RoundStatus` and `AbstractRound` shared from `world.scenes`
+- **Buildings** — `Fortification.building` FK (optional; #1713) — a persistent
+  `Building.fortification_level`, raised via a `FORTIFICATION_UPGRADE` Project
+  (`world.buildings.fortification_services`), is snapshotted once into a new
+  `Fortification`'s `max_integrity` by `create_fortification`
 - **Covenants** — `BattleSide.covenant` FK; `CovenantRole.command_tier`/
   `.is_champion_role` gate SIDE/PLACE-scope declarations and Champion duels (#1710)
 - **Stories** — `Battle.campaign_story` FK (informational; not used for beat

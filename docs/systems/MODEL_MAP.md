@@ -541,6 +541,7 @@
   - covenant -> covenants.Covenant [FK] (nullable)
 **Pointed to by:**
   - controlled_places <- battles.BattlePlace
+  - fortifications <- battles.Fortification
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
   - scoped_declarations <- battles.BattleActionDeclaration
@@ -551,9 +552,18 @@
   - combat_encounter -> combat.CombatEncounter [FK] (nullable)
   - controlled_by -> battles.BattleSide [FK] (nullable)
 **Pointed to by:**
+  - fortifications <- battles.Fortification
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
   - scoped_declarations <- battles.BattleActionDeclaration
+
+### Fortification
+**Foreign Keys:**
+  - place -> battles.BattlePlace [FK]
+  - defending_side -> battles.BattleSide [FK]
+  - building -> buildings.Building [FK] (nullable)
+**Pointed to by:**
+  - declarations <- battles.BattleActionDeclaration
 
 ### BattleUnit
 **Foreign Keys:**
@@ -598,6 +608,7 @@
   - target_ally -> battles.BattleParticipant [FK] (nullable)
   - target_place -> battles.BattlePlace [FK] (nullable)
   - target_side -> battles.BattleSide [FK] (nullable)
+  - target_fortification -> battles.Fortification [FK] (nullable)
 
 ### TechniquePropertyAffinity
 **Foreign Keys:**
@@ -622,10 +633,12 @@
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome, end the backing scene, and resolve any linked`
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None) -> 'Fortification' — Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
+- `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `resolve_battle_beats(battle: 'Battle') -> 'None' — Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' — Set a battle side's tactical posture (#1711).`
 
@@ -656,8 +669,10 @@
   - constructed_by_persona -> scenes.Persona [FK] (nullable)
   - source_project -> projects.Project [OneToOne] (nullable)
 **Pointed to by:**
+  - battle_fortifications <- battles.Fortification
   - materials_used <- buildings.BuildingMaterial
   - extension_details <- buildings.BuildingExtensionDetails
+  - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
@@ -680,6 +695,11 @@
   - construction_projects <- buildings.BuildingConstructionDetails
 
 ### BuildingExtensionDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
+
+### FortificationUpgradeDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
@@ -3882,6 +3902,7 @@
   - contributions <- projects.Contribution
   - resulting_building <- buildings.Building
   - building_extension_details <- buildings.BuildingExtensionDetails
+  - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance

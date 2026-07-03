@@ -722,8 +722,10 @@ def open_siege_engine_encounter(
     call as open_champion_duel, but without the Champion-role requirement — a
     siege-engine skirmish (sabotaging a ram's crew, defending a tower) is an
     ordinary discrete fight, not a Champion-only duel. Siege engines themselves
-    are BattleUnit(composition=SIEGE) rows, not a separate model (#1713 Decision 3)
-    — this function only opens the discrete-combat bridge for a skirmish over one.
+    are ordinary BattleUnit rows, not a separate model (#1713 Decision 3) —
+    content authors differentiate one via the #1794 properties/capabilities
+    taxonomy, not a dedicated composition/kind field. This function only opens
+    the discrete-combat bridge for a skirmish over one.
     The distinction from open_champion_duel is about who may open the duel, not
     the opponent's tier: create_lethal_duel only accepts significant-NPC tiers
     (ELITE/BOSS/HERO_KILLER) regardless of which function calls it, so this
