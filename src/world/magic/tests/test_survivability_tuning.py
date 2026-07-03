@@ -518,7 +518,7 @@ class CoherenceMemoizationTests(TestCase):
                 survivability_save_baselines(char)
 
         endorsement_queries = [
-            q for q in ctx.captured_queries if "StylePresentationEndorsement" in q["sql"]
+            q for q in ctx.captured_queries if "stylepresentationendorsement" in q["sql"].lower()
         ]
         # 3 threads, 1 unique resonance → exactly 1 endorsement query expected.
         self.assertEqual(
@@ -539,7 +539,7 @@ class CoherenceMemoizationTests(TestCase):
             survivability_save_baselines(char)
 
         endorsement_queries = [
-            q for q in ctx.captured_queries if "StylePresentationEndorsement" in q["sql"]
+            q for q in ctx.captured_queries if "stylepresentationendorsement" in q["sql"].lower()
         ]
         # 4 baseline calls (1 DR + 3 saves), each walks once (Layer 1 dedups
         # within each call, but there's no cross-call cache).
