@@ -18,6 +18,7 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
     BattleUnitCapability,
+    Fortification,
     TechniquePropertyAffinity,
     TerrainPropertyEffect,
 )
@@ -42,6 +43,12 @@ class BattlePlaceAdmin(admin.ModelAdmin):
     list_display = ("battle", "name", "terrain_type", "movement_cost", "controlled_by")
     list_filter = ("terrain_type",)
     autocomplete_fields = ("controlled_by",)
+
+
+@admin.register(Fortification)
+class FortificationAdmin(admin.ModelAdmin):
+    list_display = ("place", "kind", "defending_side", "integrity", "max_integrity", "breached")
+    list_filter = ("kind", "breached")
 
 
 class BattleUnitCapabilityInline(admin.TabularInline):

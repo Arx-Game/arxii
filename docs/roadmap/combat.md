@@ -40,8 +40,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   AFK override shipped (#1733). Resources/units/terrain/tactics + type-matchups shipped
   (#1711). Command hierarchy + the Champion shipped (#1710). Campaign-stakes propagation
   + win-gated Legend shipped (#1785). Battle-flow actions (rout/rally/repel/hold, second
-  BattleUnit.morale resource, BattlePlace.controlled_by objective) shipped (#1712).
-  Deferred: sieges (#1713), naval/aerial (#1714), battle writeup page (#1735).
+  BattleUnit.morale resource, BattlePlace.controlled_by objective) shipped (#1712). Siege
+  warfare: Fortification objectives + BREACH/FORTIFY + persistent
+  Building.fortification_level investment (#1713).
+  Deferred: naval/aerial (#1714), battle writeup page (#1735).
 - Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
 
 ## Reserved term: "clash"

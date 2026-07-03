@@ -1398,7 +1398,8 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   `BuildingSizeTier` (#670: `tier` → `space_budget` lookup, PLACEHOLDER seeded
   Hut 50 → Citadel 5000), `Building` (decorates an Area at level BUILDING;
   `target_size`, `target_grandeur`, `space_budget`, `entry_room` FK →
-  RoomProfile), `BuildingMaterial`
+  RoomProfile; `fortification_level` — persistent defense investment, #1713,
+  capped at `MAX_FORTIFICATION_LEVEL`), `BuildingMaterial`
   (per-building snapshot of materials used at construction), `MaterialLoreEffect`
   (per-template special properties — godswar stone → resonance_amp etc.; zero
   rows shipped, content-authored), `BuildingPermitDetails` (persona-scoped permit
@@ -1407,7 +1408,9 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   `BuildingExtensionDetails` (#670: BUILDING_EXTENSION payload — `added_budget`,
   `applied_at` idempotency marker), `InteriorDesignDetails` (#670:
   INTERIOR_DESIGN payload — `template` FK ProjectTemplate, `building`, nullable
-  `room` target, `applied_at`).
+  `room` target, `applied_at`), `FortificationUpgradeDetails` (#1713:
+  FORTIFICATION_UPGRADE payload — `building`, `target_level`, `applied_at`
+  idempotency marker; monotonic max-set on completion, not additive).
 - **Key functions** (`world.buildings.services`):
   - `issue_permit(offer, persona) -> EffectResult` — real PERMIT effect handler
     (replaces Plan 2's stub; registered via `BuildingsConfig.ready()`)
@@ -1420,6 +1423,15 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   - `contribution_value_for_construction(contribution) -> int` — material/money
     value formula (materials ~110% baseline, lore-bearing materials scale by
     `lore_value`)
+- **Fortification investment** (`world.buildings.fortification_services`, #1713):
+  `start_fortification_upgrade(persona, building, target_level) -> Project` — opens
+  a FORTIFICATION_UPGRADE Project (raises `FortificationLevelExceedsMaximumError` if
+  `target_level` isn't strictly greater than the current level or exceeds
+  `MAX_FORTIFICATION_LEVEL`); `complete_fortification_upgrade(project)` — kind
+  handler, monotonic `max(current, target_level)` set on `Building.fortification_level`
+  so completion order never regresses it. Consumed by `world.battles.services
+  .create_fortification`, which snapshots the level once into a new `Fortification`'s
+  `max_integrity` — see [battles.md](battles.md#sieges-1713).
 - **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
@@ -1505,7 +1517,10 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   `world.items` (ItemTemplate + ItemInstance + OwnershipEvent + `lore_value`),
   `world.projects` (Project + Contribution), `world.npc_services` (NPCRole +
   NPCServiceOffer + PermitOfferDetails), `world.scenes` (Persona), `world.predicates`
-  (`has_item` leaf dispatch).
+  (`has_item` leaf dispatch); `world.battles` reads `Building.fortification_level`
+  (`Fortification.building` FK, #1713) but this app never imports `world.battles` —
+  the dependency runs one-way, buildings→battles direction avoided (FK direction
+  specific→general, ADR-0010).
 - **Source:** `src/world/buildings/`
 
 ### Room Features (Plan 4 framework — Subsystem E)
@@ -2152,24 +2167,34 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `BattleRound` (subclasses `AbstractRound`; partial unique constraint: one active round per
   battle), `BattleParticipant` (`character_sheet` FK, `side`, `place`, `status`; unique
   `(battle, character_sheet)`), `BattleActionDeclaration` (`technique` FK required,
-  `action_kind` STRIKE/SUPPORT/RESCUE/ROUT/RALLY/REPEL/HOLD, `target_unit`, `target_ally`,
+  `action_kind` STRIKE/SUPPORT/RESCUE/ROUT/RALLY/REPEL/HOLD/BREACH/FORTIFY (#1713),
+  `target_unit`, `target_ally`,
   `scope` (`BattleActionScope` UNIT/PLACE/SIDE, #1710) + `target_place`/`target_side`,
+  `target_fortification` (#1713, set for BREACH/FORTIFY),
   `resolved`, `success_level`; unique `(battle_round, participant)`);
   `TechniquePropertyAffinity` / `TerrainPropertyEffect` (authored type-matchup /
   terrain-effect catalogs keyed on `Property`, summed across a unit's matching properties,
   #1794, replacing #1711's `TechniqueCompositionAffinity`/`TerrainCompositionEffect`);
   `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
   tier for beat resolution, #1785); `Battle.afk_peril_override` (BooleanField, default
-  False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
+  False — narrow ADR-0004 exception for Surrounded peril escalation, #1733);
+  `Fortification` (#1713: a defensible structure — wall/gate/battlement — at a
+  `BattlePlace`; `defending_side` FK gates BREACH/FORTIFY ownership; `building` FK →
+  `buildings.Building` (nullable) snapshots `max_integrity` from
+  `Building.fortification_level`; `integrity`/`max_integrity`/`breached`)
 - **Key Services (`world.battles.services`):**
   - Setup: `create_battle`, `add_side`, `add_place`, `add_unit` (`properties`/
     `capability_values`/`individual_count` kwargs, #1794), `enlist_participant`,
-    `set_battle_side_posture` (#1711), `assign_unit_commander` (#1711)
+    `set_battle_side_posture` (#1711), `assign_unit_commander` (#1711),
+    `create_fortification` (snapshots `max_integrity` from `Building.fortification_level`
+    if a `building` is given, #1713)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
-    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 7
+    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 9
     `BattleActionKind` values; scope/command-tier validated for PLACE/SIDE, #1710;
-    REPEL/HOLD require scope=PLACE, #1712), `open_champion_duel` (binds a `BattlePlace` to a
-    lethal duel via `create_lethal_duel`, gated on an engaged `is_champion_role`, #1710)
+    REPEL/HOLD require scope=PLACE, #1712; BREACH/FORTIFY validate `target_fortification`
+    ownership, #1713), `open_champion_duel` (binds a `BattlePlace` to a
+    lethal duel via `create_lethal_duel`, gated on an engaged `is_champion_role`, #1710),
+    `open_siege_engine_encounter` (same bridge/duel call, no Champion-role gate, #1713)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
     `conclude_battle` (sets outcome + ends scene; resolves any linked story beat's stakes
     contract via `resolve_battle_beats`, #1785; still never calls `complete_story`),
@@ -2181,7 +2206,9 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   commander bonus, posture — #1711/#1794); REPEL resolves before every other kind so its defense
   bonus is live for STRIKE in the same round (#1712). STRIKE/ROUT attrite
   strength/morale + award VP; SUPPORT/REPEL/HOLD award flat VP; RALLY restores morale;
-  RESCUE clears Surrounded; failure debits PC health + `process_damage_consequences`.
+  RESCUE clears Surrounded; BREACH attrites a `Fortification`'s `integrity` (setting
+  `breached=True` at 0) + awards VP; FORTIFY restores it (capped at `max_integrity`) +
+  awards flat VP (#1713); failure debits PC health + `process_damage_consequences`.
   Returns `BattleRoundResult(vp_awarded, units_destroyed, units_routed, casualties)`.
   `BattleTechniqueResolver` is the `resolve_fn` passed to `use_technique`.
 - **Round context (`world.battles.round_context`):** `BattleRoundContext(RoundContext)` —
@@ -2189,20 +2216,27 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   finds the character's ACTIVE participant in an active-scene battle.
 - **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
   `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`, requires
-  `technique_id`, covers all 7 `BattleActionKind` values) ·
+  `technique_id`; forwards `action_kind`/`target_unit`/`target_ally`/`scope`/
+  `target_place`/`target_side`/`target_fortification` — all 9 `BattleActionKind` values,
+  including BREACH/FORTIFY, are reachable through this Action, see
+  [battles.md](battles.md#sieges-1713)) ·
   `challenge_champion_duel` (player, `target_type=AREA`, #1710)
-- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold ... with
-  <technique>|duel <front> vs <boss name>|round|resolve|conclude]` — `strike`/`rout`/`rally`
-  also accept `side` or `place <name>` scope tokens (#1710/#1712)
+- **Telnet:** `battle [declare strike|support|rescue|rout|rally|repel|hold|breach|fortify
+  ... with <technique>|duel <front> vs <boss name>|round|resolve|conclude]` —
+  `strike`/`rout`/`rally` also accept `side` or `place <name>` scope tokens (#1710/#1712);
+  `breach`/`fortify` require `place <name> fortification <kind>` (#1713).
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
-  `BattleActionKind` (7 values), `BattleActionScope` (#1710), `BattleOutcome`,
-  `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711)
+  `BattleActionKind` (9 values, #1713 adds BREACH/FORTIFY), `BattleActionScope` (#1710),
+  `BattleOutcome`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711),
+  `FortificationKind` (WALL/GATE/BATTLEMENT, #1713)
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
   `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
   `TechniqueNotBattleReadyError`, `NoCommandHierarchyError`, `InsufficientCommandTierError`,
   `MissingScopeTargetError`, `CannotStrikeOwnSideError` (#1710; guards STRIKE and ROUT
   since #1712), `NotAChampionError`,
-  `PlaceAlreadyDuelingError` (#1710), `PlaceScopeRequiredError` (#1712)
+  `PlaceAlreadyDuelingError` (#1710; also raised by `open_siege_engine_encounter`, #1713),
+  `PlaceScopeRequiredError` (#1712), `FortificationTargetRequiredError`,
+  `FortificationOwnershipMismatchError`, `FortificationAlreadyBreachedError` (#1713)
 - **Command Hierarchy & the Champion (#1710):** `CovenantRole.command_tier`
   (NONE/SUBORDINATE/SUPREME) + `.is_champion_role`, settable only on `CovenantType.BATTLE`
   roles; `BattleSide.covenant` links a side to the fielding War Covenant. PLACE/SIDE-scope
@@ -2227,11 +2261,21 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `BattleActionKind.RESCUE` clears an ally's Surrounded condition
   (`_resolve_rescue_success`), declared via `battle declare rescue <ally> with
   <technique>`. See ADR-0074 for the AFK-safety exception.
-- **Deferred follow-ups:** naval / aerial / siege (#1713, #1714), battle writeup page
-  (#1735).
-- **Test coverage:** unit + integration tests in `src/world/battles/tests/`;
-  E2E journeys `src/integration_tests/pipeline/test_battle_telnet_e2e.py`,
-  `test_battle_peril_rescue_e2e.py`
+- **Sieges (#1713):** `Fortification` (wall/gate/battlement, per `BattlePlace`, each
+  independently breachable — ADR-0083) + `BREACH`/`FORTIFY` `BattleActionKind` values,
+  ownership-validated in `declare_battle_action`. `open_siege_engine_encounter` binds a
+  siege-engine skirmish the way `open_champion_duel` binds a Champion challenge, without
+  the Champion-role gate. `create_fortification` snapshots starting integrity from
+  `Building.fortification_level`, itself raised via a persistent `FORTIFICATION_UPGRADE`
+  Project (`world.buildings.fortification_services`). BREACH/FORTIFY are reachable
+  through `DeclareBattleActionAction` and `CmdBattle`'s telnet grammar, the same as every
+  other `BattleActionKind` (#1713). See [battles.md](battles.md#sieges-1713) for the full
+  mechanism.
+- **Deferred follow-ups:** naval / aerial (#1714), battle writeup page (#1735).
+- **Test coverage:** unit + integration tests in `src/world/battles/tests/`
+  (including `test_siege.py`'s three E2E siege journeys, #1713) and
+  `src/world/buildings/tests/test_fortification_upgrade_kind.py` (#1713); E2E journeys
+  `src/integration_tests/pipeline/test_battle_telnet_e2e.py`, `test_battle_peril_rescue_e2e.py`
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant/commander FK),
   vitals (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
   conditions (the "Surrounded" staged `ConditionTemplate`, #1733; `CapabilityType` via
@@ -2243,11 +2287,13 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from the
   cast technique's `action_template.check_type`, via `use_technique`; `select_consequence`
   for the Surrounded entry roll and resist checks, #1733), combat
-  (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710; shared
-  `RoundStatus` / `AbstractRound`), covenants (`BattleSide.covenant`;
-  `CovenantRole.command_tier`/`.is_champion_role`, #1710), stories (`campaign_story` FK,
-  informational; `world.battles.beat_wiring` resolves linked beats via campaign-stakes
-  propagation, #1785),
+  (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710, and
+  siege-engine skirmishes, #1713; shared `RoundStatus` / `AbstractRound`), covenants
+  (`BattleSide.covenant`; `CovenantRole.command_tier`/`.is_champion_role`, #1710), stories
+  (`campaign_story` FK, informational; `world.battles.beat_wiring` resolves linked beats via
+  campaign-stakes propagation, #1785), buildings (`Fortification.building` FK, nullable,
+  #1713 — `create_fortification` reads `Building.fortification_level` once at creation;
+  this app does not import `world.buildings` beyond that FK),
   actions (REGISTRY + `get_active_round_context` seam)
 - **Source:** `src/world/battles/`
 - **Details:** [battles.md](battles.md)

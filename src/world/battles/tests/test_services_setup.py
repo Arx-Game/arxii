@@ -10,12 +10,15 @@ from django.test import TestCase
 from evennia import create_object
 
 from world.battles.constants import (
+    BASE_INTEGRITY,
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
+    FORTIFICATION_LEVEL_INTEGRITY_BONUS,
     BattleOutcome,
     BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
+    FortificationKind,
     TerrainType,
     UnitQuality,
 )
@@ -31,7 +34,12 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
 )
-from world.battles.services import open_champion_duel
+from world.battles.services import (
+    create_fortification,
+    open_champion_duel,
+    open_siege_engine_encounter,
+)
+from world.buildings.factories import BuildingFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterType, RiskLevel
 from world.combat.factories import ThreatPoolFactory
@@ -368,6 +376,62 @@ class OpenChampionDuelTests(TestCase):
             )
 
 
+class OpenSiegeEngineEncounterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.side = BattleSideFactory(battle=cls.battle)
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+        cls.threat_pool = ThreatPoolFactory()
+
+    def setUp(self):
+        self.room = create_object(
+            "typeclasses.rooms.Room", key="Siege Engine Skirmish Room", nohome=True
+        )
+        self.battle.scene.location = self.room
+        self.battle.scene.save(update_fields=["location"])
+        self.sheet = CharacterSheetFactory()
+        self.participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=self.sheet, place=self.place
+        )
+
+    def test_opens_encounter_and_binds_place(self) -> None:
+        enc = open_siege_engine_encounter(
+            battle_place=self.place,
+            participant=self.participant,
+            opponent_kwargs={
+                "name": "Ram crew",
+                "max_health": 30,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.combat_encounter_id, enc.pk)
+        self.assertEqual(enc.encounter_type, EncounterType.DUEL)
+        self.assertEqual(enc.risk_level, RiskLevel.LETHAL)
+
+    def test_raises_if_place_already_dueling(self) -> None:
+        open_siege_engine_encounter(
+            battle_place=self.place,
+            participant=self.participant,
+            opponent_kwargs={
+                "name": "Ram crew",
+                "max_health": 30,
+                "threat_pool": self.threat_pool,
+            },
+        )
+        with self.assertRaises(PlaceAlreadyDuelingError):
+            open_siege_engine_encounter(
+                battle_place=self.place,
+                participant=self.participant,
+                opponent_kwargs={
+                    "name": "Second ram crew",
+                    "max_health": 30,
+                    "threat_pool": self.threat_pool,
+                },
+            )
+
+
 class AddUnitTaxonomyTests(TestCase):
     def test_add_unit_accepts_quality_commander(self) -> None:
         from world.battles.services import add_side, add_unit, create_battle
@@ -475,3 +539,34 @@ class AssignUnitCommanderTests(TestCase):
 
         unit.refresh_from_db()
         self.assertIsNone(unit.commander)
+
+
+class CreateFortificationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.battle = BattleFactory()
+        cls.side = BattleSideFactory(battle=cls.battle)
+        cls.place = BattlePlaceFactory(battle=cls.battle)
+
+    def test_no_building_uses_base_integrity_only(self):
+        fort = create_fortification(
+            place=self.place, defending_side=self.side, kind=FortificationKind.WALL
+        )
+        self.assertEqual(fort.max_integrity, BASE_INTEGRITY[FortificationKind.WALL])
+        self.assertEqual(fort.integrity, fort.max_integrity)
+
+    def test_building_level_adds_flat_bonus(self):
+        building = BuildingFactory(fortification_level=2)
+        fort = create_fortification(
+            place=self.place,
+            defending_side=self.side,
+            kind=FortificationKind.GATE,
+            building=building,
+        )
+        expected = BASE_INTEGRITY[FortificationKind.GATE] + 2 * FORTIFICATION_LEVEL_INTEGRITY_BONUS
+        self.assertEqual(fort.max_integrity, expected)
+
+    def test_zero_level_building_matches_no_building(self):
+        building = BuildingFactory(fortification_level=0)
+        fort = create_fortification(place=self.place, defending_side=self.side, building=building)
+        self.assertEqual(fort.max_integrity, BASE_INTEGRITY[FortificationKind.WALL])

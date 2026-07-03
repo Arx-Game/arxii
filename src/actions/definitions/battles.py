@@ -208,7 +208,7 @@ class ConcludeBattleAction(Action):
 
 @dataclass
 class DeclareBattleActionAction(Action):
-    """Declare a battle action (STRIKE or SUPPORT) for the current round."""
+    """Declare a battle action (any BattleActionKind) for the current round."""
 
     key: str = "declare_battle_action"
     name: str = "Declare Battle Action"
@@ -267,6 +267,7 @@ class DeclareBattleActionAction(Action):
         scope = kwargs.get("scope", BattleActionScope.UNIT)
         target_place = kwargs.get("target_place")
         target_side = kwargs.get("target_side")
+        target_fortification = kwargs.get("target_fortification")
 
         try:
             decl = declare_battle_action(
@@ -278,6 +279,7 @@ class DeclareBattleActionAction(Action):
                 scope=scope,
                 target_place=target_place,
                 target_side=target_side,
+                target_fortification=target_fortification,
             )
         except BattleError as exc:
             return ActionResult(success=False, message=exc.user_message)

@@ -51,6 +51,8 @@ class BattleActionKind(models.TextChoices):
     RALLY = "rally", "Rally an ally"
     REPEL = "repel", "Repel an attack"
     HOLD = "hold", "Hold or seize an objective"
+    BREACH = "breach", "Breach a fortification"
+    FORTIFY = "fortify", "Fortify a structure"
 
 
 class BattleActionScope(models.TextChoices):
@@ -64,6 +66,18 @@ class BattleActionScope(models.TextChoices):
     UNIT = "unit", "Unit"
     PLACE = "place", "Place (front-wide)"
     SIDE = "side", "Side (army-wide)"
+
+
+class FortificationKind(models.TextChoices):
+    """Descriptive/authoring axis for a Fortification (#1713).
+
+    Purely descriptive plus a base-integrity lookup — BREACH/FORTIFY behave
+    identically regardless of kind in this MVP (see docs/adr/0083).
+    """
+
+    WALL = "wall", "Wall"
+    GATE = "gate", "Gate"
+    BATTLEMENT = "battlement", "Battlement"
 
 
 class BattleOutcome(models.TextChoices):
@@ -104,6 +118,16 @@ HOLD_CAPTURE_VP = 8
 HOLD_SUSTAIN_VP = 3
 REPEL_DEFENSE_BONUS = 15
 
+# Fortification BREACH/FORTIFY tuning (#1713). BREACH scales like STRIKE's attrition
+# (both grind a depletable resource); FORTIFY scales like ROUT/RALLY's morale
+# movement (both restore/damage a resource by success_level). VP awards mirror
+# STRIKE_VP_PER_LEVEL/RALLY_VP's magnitude — BREACH is the "grinding attrition" verb,
+# FORTIFY the "restore" verb.
+BREACH_INTEGRITY_PER_LEVEL = 10
+FORTIFY_INTEGRITY_PER_LEVEL = 15
+BREACH_VP_PER_LEVEL = 5
+FORTIFY_VP = 3
+
 # Surrounded entry-roll signal weights (#1733). Fed as perform_check extra_modifiers
 # for the entry roll (Task 6) — authored content (the surrounded_entry pool's rows)
 # decides the actual odds; these are inputs to that roll, not a code-level gate.
@@ -143,3 +167,16 @@ BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER: dict[str, int] = {
 # category="stat" (already EQUIPMENT_RELEVANT_CATEGORIES) so covenant-role /
 # facet / mantle bonuses authored against it flow through the existing walk.
 BATTLE_COMMAND_TARGET_NAME = "battle_command"
+
+# Fortification (#1713) tuning. BASE_INTEGRITY is a starting ceiling per
+# FortificationKind before any persistent investment; FORTIFICATION_LEVEL_INTEGRITY_BONUS
+# is a flat per-level ladder bonus (mirrors UNIT_QUALITY_STRIKE_MODIFIER being a flat
+# ladder, not a multiplier) applied per Building.fortification_level. A fully-invested
+# (MAX_FORTIFICATION_LEVEL, see world.buildings.room_constants) WALL tops out at
+# 100 + 5*20 = 200 integrity — always breachable given enough BREACH rounds.
+BASE_INTEGRITY: dict[str, int] = {
+    FortificationKind.WALL: 100,
+    FortificationKind.BATTLEMENT: 80,
+    FortificationKind.GATE: 60,
+}
+FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20
