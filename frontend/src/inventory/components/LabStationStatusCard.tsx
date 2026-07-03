@@ -12,12 +12,17 @@
  * cache key but has no way to invalidate the (unrelated) crafting-quote
  * cache key.
  *
- * Scope note: INSTALL is intentionally not wired here. `AttachFacetDialog`'s
- * component tree has no "current room" context (no `roomProfileId` anywhere
- * above it) to drive `useInstallLabStation`, and this codebase has no
- * established "what room am I in" frontend primitive to invent one from
- * cleanly. When there is no station (`featureInstanceId` is null/undefined)
- * this card only informs the player — it does not offer an install action.
+ * Scope note: INSTALL/UPGRADE are intentionally not wired here. A
+ * `roomProfileId` is in fact reachable anywhere in the tree via the existing
+ * `useAppSelector((state) => state.game.sessions[active]?.room?.id)` Redux
+ * primitive (numerically identical to `RoomProfile.pk`, since
+ * `RoomProfile.objectdb` is `primary_key=True`) — so plumbing it to
+ * `useInstallLabStation` would be technically straightforward. It's left out
+ * because the approved #1234 spec's Web UI section only asks for a status
+ * card with a repair button; install/upgrade already has a working surface
+ * via the telnet `station install`/`station upgrade` commands (Task 12).
+ * When there is no station (`featureInstanceId` is null/undefined) this card
+ * only informs the player — it does not offer an install action.
  */
 
 import { toast } from 'sonner';
