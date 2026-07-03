@@ -88,25 +88,15 @@ def _potential_catcher_present(
     there to attempt the catch. With nobody present (or only the departing mover),
     the fall is unattended and resolves immediately instead of freezing mid-air.
     ``exclude_id`` omits one further character (the departing mover, who is still
-    in ``room.contents`` when ``Room.at_object_leave`` fires).
+    in ``room.contents`` when ``Room.at_object_leave`` fires). Thin wrapper over the
+    shared ``conscious_bystander_present`` core (#1813).
     """
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+    from world.vitals.services import conscious_bystander_present  # noqa: PLC0415
 
-    from world.vitals.services import can_act  # noqa: PLC0415
-
-    room = faller.location
-    if room is None:
-        return False
-    for obj in room.contents:
-        if obj.id == faller.id or (exclude_id is not None and obj.id == exclude_id):
-            continue
-        try:
-            sheet = obj.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            continue
-        if can_act(sheet):
-            return True
-    return False
+    exclude_ids = frozenset({exclude_id}) if exclude_id is not None else frozenset()
+    return conscious_bystander_present(
+        faller.location, subject_id=faller.id, exclude_ids=exclude_ids
+    )
 
 
 def begin_plummet(faller: ObjectDB, position: Position) -> None:  # noqa: OBJECTDB_PARAM

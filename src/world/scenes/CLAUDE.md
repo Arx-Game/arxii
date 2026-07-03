@@ -43,13 +43,29 @@ the unified Persona identity system, and non-combat scene rounds.
 - **`SceneRoundDefaultsConfig`** (singleton pk=1): staff-tunable defaults for new scene rounds. Fields:
   `default_mode`, `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`,
   `anti_spam_seconds`, `abandonment_grace_rounds` (#1479: N action-driven beats an abandoned
-  downed victim waits for rescue before their fate resolves; default 2). Retrieved via
-  `get_scene_round_defaults_config()` (get-or-create pattern).
+  downed victim waits for rescue before their fate resolves; default 2),
+  `sudden_harm_interpose_threshold` (#1316: minimum out-of-combat sudden-harm amount that
+  justifies holding for a reactive Interpose beat instead of applying it immediately; default 10).
+  Retrieved via `get_scene_round_defaults_config()` (get-or-create pattern).
 - **`SceneActionDeclaration`**: Per-round ledger of participant actions. `is_immediate=True` for
   OPEN/POSE_ORDER resolved actions; `is_immediate=False` for deferred STRICT declarations. Carries
   `target_persona` FK and `is_pass` bool. No unique-per-round constraint — multiple actions per round
-  are allowed (up to `max_actions_per_round`).
+  are allowed (up to `max_actions_per_round`). `succor_target` FK (`SceneRoundParticipant`, #1744)
+  names the ally this declaration shelters from a round-ticked hazard, paired with a cached
+  `succor_resolution` float (this round's graded Succor outcome, read by `get_cover_for`).
+  `interpose_target` FK (`SceneRoundParticipant`, #1316) names the ally this declaration guards
+  against out-of-combat sudden harm — the scene-round sibling of `succor_target` — but has no
+  paired resolution-cache field: `resolve_pending_interpose_harm` reads it directly at round
+  resolution instead of caching an outcome onto the declaration row.
 - **`SceneRoundParticipant`**: A character taking turns in a `SceneRound`.
+- **`PendingSuddenHarm`** (#1316): a one-shot out-of-combat damage payload held pending a
+  reactive Interpose beat. `target_sheet` (FK `CharacterSheet` — multiple unresolved rows may
+  exist per target at once, e.g. a single Consequence with two DEAL_DAMAGE effects against the
+  same target), `scene_round` FK (the bootstrapped DANGER round bound to resolve it), `amount`,
+  `damage_type` (nullable FK `DamageType`), `source_description`. Created by
+  `world.scenes.sudden_harm.arm_or_apply_sudden_harm` when a bystander is present and the harm
+  clears `SceneRoundDefaultsConfig.sudden_harm_interpose_threshold`; resolved and deleted by
+  `world.scenes.sudden_harm.resolve_pending_interpose_harm` at that round's resolution.
 
 ### `constants.py`
 - **`SceneRoundMode`** (`TextChoices`): `OPEN` (immediate, unbounded), `POSE_ORDER` (immediate,
@@ -85,6 +101,29 @@ Scene-round Succor challenge-binding (#1744) — the scene-round equivalent of c
   `logger.warning` and no-ops when the Succor `ChallengeTemplate` isn't seeded (mirrors
   `world.combat.services._ensure_succor_challenges`'s equivalent branch).
 
+### `sudden_harm.py` (#1316)
+Out-of-combat sudden-harm arming — the non-combat sibling of combat's Interpose. Mirrors
+`world.areas.positioning.plummet.begin_plummet`'s bystander-present/absent branch: alone (or below
+the configured significance threshold), harm resolves immediately, byte-identical to the pre-#1316
+behavior; with a bystander present, the harm is held (`PendingSuddenHarm`) and a DANGER round is
+bootstrapped so they get a genuine declare-then-resolve window before it lands.
+- `arm_or_apply_sudden_harm(target, amount, damage_type, *, source_description="")`: the branch
+  entrypoint, called from `world.mechanics.effect_handlers._deal_damage`. Below
+  `sudden_harm_interpose_threshold`, or with nobody present who could plausibly interpose
+  (`_potential_interposer_present`), applies immediately via `apply_resolved_damage`. Otherwise
+  binds an Interpose `ChallengeInstance` to the target (`_bind_interpose_challenge`) and
+  bootstraps (or rides) a scene round via `ensure_round_for_acute_condition`, then creates the
+  `PendingSuddenHarm` row. Degrades to immediate resolution — logging a warning — if the Interpose
+  `ChallengeTemplate` isn't seeded or no room is available to hold a round in.
+- `resolve_pending_interpose_harm(scene_round)`: called from `resolve_scene_round` right after the
+  END tick. For each `PendingSuddenHarm` bound to the round's ACTIVE participants: looks up this
+  round's `interpose_target` declaration naming the victim (if any), resolves it via the unchanged
+  `world.combat.services.dispatch_interpose` (mutates a `DamagePreApplyPayload` in place per the
+  graded outcome, mirroring combat's `_try_interpose`), applies the resulting amount via
+  `apply_resolved_damage`, then deactivates the bound Interpose `ChallengeInstance` and deletes the
+  pending row. No declaration this round -> full harm lands (the AFK-safe default, inherited for
+  free from the existing quorum-gated round system).
+
 ### `round_services.py`
 Key service functions for scene round lifecycle:
 - `actions_this_round(scene_round, participant) -> int`: Declaration count for a participant this round.
@@ -98,14 +137,16 @@ Key service functions for scene round lifecycle:
 - `resolve_scene_round(scene_round)`: Unconditional resolver — binds this round's Succor challenges
   (`ensure_succor_challenges_for_round`, #1744), runs declared CHALLENGE actions in
   initiative order, fires the end-round tick (which advances acute conditions — DoTs, bleed-out, plummet),
-  then either advances to the next round or **auto-ends**. **Succor declarations are excluded from
-  `_resolve_scene_declarations`'s generic challenge-resolution sweep and its end-of-sweep delete**
-  (#1744 bugfix) — a pending Succor row has `challenge_instance=None` (identified instead by
-  `succor_target`), so feeding it into the CHALLENGE sweep would crash on
-  `req.challenge_instance.location`, and deleting it early would erase
+  resolves any pending out-of-combat sudden-harm Interpose beats (`resolve_pending_interpose_harm`,
+  #1316), then either advances to the next round or **auto-ends**. **Succor and Interpose
+  declarations are excluded from `_resolve_scene_declarations`'s generic challenge-resolution sweep
+  and its end-of-sweep delete** (#1744 bugfix, extended to Interpose in #1316) — a pending Succor
+  row has `challenge_instance=None` (identified instead by `succor_target`) and a pending Interpose
+  declaration is identified by `interpose_target`, so feeding either into the CHALLENGE sweep would
+  crash on `req.challenge_instance.location`, and deleting a Succor row early would erase
   `SceneActionDeclaration.succor_resolution`'s cache before `get_cover_for` (called from the END
-  tick) can ever read it. A leftover Succor row from a past round is harmless — `round_number`
-  advances every round and `get_cover_for` only matches the current one. (a `start_reason==DANGER` round COMPLETES once
+  tick) can ever read it. A leftover Succor or Interpose row from a past round is harmless —
+  `round_number` advances every round and both readers only match the current one. (a `start_reason==DANGER` round COMPLETES once
   `_danger_persists` is False — no ACTIVE participant still carries an acute danger condition). **AFK
   own-peril skip (#1480):** a present `can_act` participant who did NOT declare this round (swept as an
   implicit pass by quorum completion) is excluded from the END-tick target set, so their OWN acute
@@ -144,6 +185,11 @@ Key service functions for scene round lifecycle:
   ally" path, same rationale). Writable during an open STRICT declaration window; upserts the
   round's deferred `SceneActionDeclaration` for `participant`, setting `succor_target=ally` and
   resetting `succor_resolution` to `None`.
+- `declare_interpose_scene(participant, ally) -> SceneActionDeclaration` (#1316): the scene-round
+  sibling of `world.combat.services.declare_interpose` — named-ally only (mirrors
+  `declare_succor_scene`'s #1744 narrowing; no fatigue charge, scene rounds have no combat fatigue
+  seam). Writable during an open STRICT declaration window; upserts the round's deferred
+  `SceneActionDeclaration` for `participant`, setting `interpose_target=ally`.
 - `scene_round_is_complete(scene_round) -> bool`: True when enough present ACTIVE participants who *can
   act* have a deferred (`is_immediate=False`) declaration for the current round — the threshold is
   `ceil(advance_quorum_pct / 100 × present_active_count)` (the same field POSE_ORDER uses; at 100 it

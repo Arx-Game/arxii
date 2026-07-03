@@ -178,6 +178,7 @@ from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.rounds import (
     EndRoundAction,
     ForceResolveRoundAction,
+    InterposeSceneAction,
     JoinRoundAction,
     LeaveRoundAction,
     PassRoundAction,
@@ -296,6 +297,7 @@ _ALL_ACTIONS: list[Action] = [
     ForceResolveRoundAction(),
     SetRoundModeAction(),
     SuccorSceneAction(),
+    InterposeSceneAction(),
     FleeAction(),
     CoverAction(),
     InterposeAction(),

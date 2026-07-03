@@ -36,3 +36,13 @@ _Avoid_: feed, recap, summary, spotlight
 **Co-owner**:
 A character marked `is_owner=True` on their `SceneParticipation` because they were present in the room at scene creation, granting scene-administration rights (finish, change round mode). Latecomers who join mid-scene are non-owner participants and never inherit admin rights by entering.
 _Avoid_: host, GM (GMs administer via story-runner status, not co-ownership), moderator
+
+**Sudden Harm (out-of-combat Interpose)**:
+The non-combat sibling of combat's Interpose maneuver (#1316) — a bystander readies a
+capability-gated block against out-of-combat harm (a trap, a failed-check consequence) by
+declaring `interpose_target` during a bootstrapped DANGER round instead of a `CombatRoundAction`.
+Below the room's `sudden_harm_interpose_threshold`, or with no bystander present, harm still
+applies immediately — this only exists for the significant, witnessed case. Named-ally only (no
+"any ally" path), mirroring Succor's #1744 narrowing. See `world/combat/AGENT_GLOSSARY.md`'s
+Interpose entry for the shared mechanism.
+_Avoid_: reactive block, ambush guard, trap interpose (the model name is `PendingSuddenHarm`)
