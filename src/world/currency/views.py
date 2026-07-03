@@ -36,6 +36,7 @@ class IncomeStreamRowSerializer(serializers.Serializer):
     name = serializers.CharField()
     kind = serializers.CharField()
     gross_amount = serializers.IntegerField()
+    uncollected_pool = serializers.IntegerField()
     active = serializers.BooleanField()
 
 
@@ -92,6 +93,7 @@ class OrgBooksSerializer(serializers.Serializer):
     spend_rank_max = serializers.IntegerField()
     graft_pct = serializers.IntegerField()
     steward_role_id = serializers.IntegerField(allow_null=True)
+    uncollected_total = serializers.IntegerField()
     income_streams = IncomeStreamRowSerializer(many=True)
     debts = DebtRowSerializer(many=True)
     obligations = ObligationRowSerializer(many=True)
@@ -247,6 +249,7 @@ def _books_payload(organization) -> dict:
         [organization.pk, *(d.creditor_organization_id for d in debts)]
     )
 
+    streams = list(OrgIncomeStream.objects.filter(organization=organization))
     return {
         "organization_id": organization.pk,
         "organization_name": organization.name,
@@ -254,15 +257,18 @@ def _books_payload(organization) -> dict:
         "spend_rank_max": treasury.spend_rank_max,
         "graft_pct": economics.graft_pct,
         "steward_role_id": summon_roles.get(organization.pk),
+        # #930 — what a collection dispatch would set out with, org-wide.
+        "uncollected_total": sum(s.uncollected_pool for s in streams if s.active),
         "income_streams": [
             {
                 "id": s.pk,
                 "name": s.name,
                 "kind": s.kind,
                 "gross_amount": s.gross_amount,
+                "uncollected_pool": s.uncollected_pool,
                 "active": s.active,
             }
-            for s in OrgIncomeStream.objects.filter(organization=organization)
+            for s in streams
         ],
         "debts": [
             {

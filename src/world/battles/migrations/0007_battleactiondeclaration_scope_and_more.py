@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("battles", "0005_battleside_covenant"),
+        ("battles", "0006_battleside_covenant"),
     ]
 
     operations = [

@@ -22,6 +22,25 @@ GitHub edits). The skill carries the full rule set; the essentials: emit
 and verify issue number↔title before any mutation. Temporary — removal tracked in
 **#883** (grep `HARNESS-BUNDLING-WORKAROUND`); delete when the harness is fixed.
 
+## Tool & Subagent Sequencing
+
+**Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer
+subagents) run strictly sequentially — one per message, verify the result
+before the next.** Parallelism is only for read-only fan-out (greps, reads,
+Explore/research agents). Two concrete failure modes motivate this:
+
+- **Parallel implementer subagents on a shared worktree corrupt the git
+  index** — they revert each other's uncommitted edits and cross-contaminate
+  commits. Dispatch one, await it, verify the commit actually landed
+  (`git log -1`), then the next.
+- **Batched mutating tool calls cascade-cancel**: when one call in a parallel
+  batch errors or hits an approval prompt, the harness cancels every sibling
+  in that batch, and most of the intended work silently doesn't run.
+
+Destructive or approval-gated git operations (`reset --hard`, force-push) go
+alone in their own message. Never cite an issue/PR number that wasn't read
+back from the creating command's own stdout.
+
 ## Git Workflow
 
 - **Never work directly on main.** Branch first: `git checkout -b feature-name`.

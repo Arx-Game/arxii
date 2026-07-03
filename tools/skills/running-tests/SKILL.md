@@ -82,11 +82,17 @@ Recurring stumbles, all avoidable:
   grep the output instead.
 - **`ruff` and `pre-commit` are not on PATH** — use `uv run ruff` /
   `uv run pre-commit` (same as `uv run arx`).
-- **Don't store Evennia objects (ObjectDB / RoomProfile / typeclassed rows)
-  in `setUpTestData`.** Django deepcopies class-level test data per test,
-  and these objects acquire un-deepcopyable typeclass internals once the
-  full suite has loaded — tests then pass standalone but error under
-  `arx test` with `un(deep)copyable object`. Create them in `setUp`.
+- **Bare `arx` is not on PATH either** for the main Bash tool's non-interactive
+  shell (or `run_in_background` shells) — subagents get it via their profile,
+  but the controller doesn't. Always invoke via `uv run arx test ...` or the
+  `just` recipes, never bare `arx`.
+
+Five more specific failure signatures (DbHolder/`setUpTestData` copy errors,
+`EvenniaTest` login breakage, `pnpm test` watch-mode hangs, a stray
+`src/.venv` failing `shard-coverage`, parallel-session Postgres DB
+contention) are in
+[`references/known-test-failures.md`](references/known-test-failures.md) —
+look there when you actually hit one of those symptoms.
 
 ## When tests fail on SQLite but pass on PG
 
@@ -96,6 +102,8 @@ The two-tier model exposes a small set of patterns:
 - **Fix the test** when the failure is a test-design issue PG happened to mask: `assertEqual(queryset[0].field, expected)` without `order_by`, direct ID comparison (`[2, 3] != [1, 2]`), or SharedMemoryModel identity-map pollution from other tests in the class. Fix via `order_by("pk")`, set comparison, or `from evennia.utils.idmapper.models import SharedMemoryModel; SharedMemoryModel.flush_instance_cache()` in setUp. (See the `sharedmemory-model` skill for identity-map / cache-flushing details.)
 
 See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canonical `@tag("postgres")` pattern.
+
+**A test failing only on the SQLite fast tier is not automatically your bug.** Two whole apps (`world.areas`, and `world.magic`/`world.vitals`/`world.mechanics` via `apply_condition`) have known pre-existing PG-only failure patterns, and parallel worktree sessions can contend over the shared Postgres test DB. See [`references/known-test-failures.md`](references/known-test-failures.md) before spending time chasing either.
 
 ## CI is the full-regression gate
 

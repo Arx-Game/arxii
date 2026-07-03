@@ -49,6 +49,7 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
+from world.currency.types import CollectionResult, ImprovementResult
 
 logger = logging.getLogger(__name__)
 
@@ -226,46 +227,195 @@ def get_or_create_economics(organization: Organization) -> OrgEconomicsProfile:
 
 
 @transaction.atomic
+def accrue_income_stream(stream: OrgIncomeStream) -> int:
+    """One weekly cycle: the gross amasses in the uncollected pool (#930).
+
+    No treasury transfer, no declaration — income never lands passively
+    (ADR-0081). No cap either: an idle org's pool grows unusably while a
+    hoarded pool concentrates collection risk. Returns the new pool value.
+    Plain add, not F() — SharedMemoryModel instances must never hold a
+    CombinedExpression.
+    """
+    if not stream.active:
+        msg = "This income stream is inactive."
+        raise ValidationError(msg)
+    stream.uncollected_pool = stream.uncollected_pool + stream.gross_amount
+    stream.save(update_fields=["uncollected_pool"])
+    return stream.uncollected_pool
+
+
 def process_income_stream(
     stream: OrgIncomeStream,
+    amount: int,
     *,
     declared_amount: int | None = None,
 ) -> IncomeDeclaration:
-    """Pay out one income-stream cycle (#926).
+    """Land ``amount`` collected coppers from one stream (#926, reshaped by #930).
 
-    Graft leaks off the gross first (never reaches the treasury at all —
-    where it goes is mission content, not a ledger row); the net mints into
-    the org treasury via the audited transfer path; an IncomeDeclaration
-    records actual-vs-declared for obligation settlement. ``declared_amount``
-    defaults to the honest number — under-declaring is a deliberate caller
-    action with discovery consequences.
+    ``amount`` is this stream's share of a collection dispatch's landed
+    aggregate — graft has already leaked off upstream (it hits the collected
+    aggregate, not the weekly gross). The net mints into the org treasury via
+    the audited transfer path; debt service and garnishments withhold at the
+    source; an IncomeDeclaration records actual-vs-declared for obligation
+    settlement. ``declared_amount`` defaults to the honest number —
+    under-declaring is a deliberate caller action with discovery consequences.
     """
     if not stream.active:
         msg = "This income stream is inactive."
         raise ValidationError(msg)
 
-    economics = get_or_create_economics(stream.organization)
-    leak = stream.gross_amount * economics.graft_pct // 100
-    net = stream.gross_amount - leak
-
     treasury = get_or_create_treasury(stream.organization)
-    if net > 0:
+    if amount > 0:
         transfer(
-            amount=net,
+            amount=amount,
             reason=f"income: {stream.name}",
             to_treasury=treasury,
         )
 
-    # Costs come off before the money is "yours" (#927): debt service
-    # withholds at the source, then any defaulted-contract liens (#928).
-    _withhold_debt_service(stream, treasury, net)
-    _enforce_garnishments(stream, treasury, net)
+    # Backstop only (#930): creditors normally collect at source from the
+    # pools each week; this catches arrears the pools couldn't cover, biting
+    # the landed amount before the money is "yours" (#927).
+    _withhold_debt_service(stream, treasury, amount)
 
-    declared = net if declared_amount is None else declared_amount
+    declared = amount if declared_amount is None else declared_amount
     return IncomeDeclaration.objects.create(
         stream=stream,
-        actual_amount=net,
+        actual_amount=amount,
         declared_amount=declared,
+    )
+
+
+def _collection_band_pct(success_level: int) -> int | None:
+    """Percent of the gathered pool that lands for this band; None = catastrophe."""
+    from world.currency.constants import COLLECTION_BAND_PCTS  # noqa: PLC0415
+
+    for floor, pct in COLLECTION_BAND_PCTS:
+        if success_level >= floor:
+            return pct
+    return None
+
+
+@transaction.atomic
+def collect_org_income(*, organization: Organization, character) -> CollectionResult:
+    """One active collection dispatch across every pooled stream of ``organization`` (#930).
+
+    The collector gathers the org's whole uncollected aggregate (pools zero
+    the moment the attempt happens — the money left with the collector), then
+    a Tax Collection check decides how much arrives: the outcome band scales
+    the aggregate, graft leaks its percentage off the *collected* amount, and
+    the net rides the per-stream landing path (debt withholding, garnishment,
+    declarations) proportionally to each stream's share. Catastrophe lands
+    nothing — the pool is simply gone, and the collector-incident encounter is
+    a combat-domain follow-up seam. Collector competence is a flat PLACEHOLDER
+    input until improvable agent stats (#672) exist; the streams' ``area`` FK
+    is authored data for a future local order/crime difficulty modifier (the
+    locations cascade reads rooms, not bare areas — deliberately not rebuilt
+    here).
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.currency.constants import TAX_COLLECTION_CHECK_NAME  # noqa: PLC0415
+    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+
+    streams = list(
+        OrgIncomeStream.objects.filter(
+            organization=organization, active=True, uncollected_pool__gt=0
+        )
+    )
+    gathered = sum(stream.uncollected_pool for stream in streams)
+    if gathered <= 0:
+        msg = "There is nothing waiting to be collected."
+        raise ValidationError(msg)
+    shares = {stream.pk: stream.uncollected_pool for stream in streams}
+    for stream in streams:
+        stream.uncollected_pool = 0
+        stream.save(update_fields=["uncollected_pool"])
+
+    check_type = CheckType.objects.filter(name__iexact=TAX_COLLECTION_CHECK_NAME).first()
+    success_level = 0  # unseeded world: every collection is an unremarkable partial
+    if check_type is not None:
+        result = perform_check(
+            character,
+            check_type,
+            target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+        )
+        success_level = result.success_level
+
+    pct = _collection_band_pct(success_level)
+    if pct is None:
+        # Catastrophe: the collector never made it back with the money.
+        return CollectionResult(
+            gathered=gathered, landed=0, graft_leak=0, success_level=success_level, catastrophe=True
+        )
+
+    collected = gathered * pct // 100
+    economics = get_or_create_economics(organization)
+    graft_leak = collected * economics.graft_pct // 100
+    net = collected - graft_leak
+
+    # Land per stream, proportional to each pool's share of the gather, so
+    # declarations/obligations stay per-stream. Remainder rides the last row.
+    landed_total = 0
+    for index, stream in enumerate(streams):
+        if index < len(streams) - 1:
+            share = net * shares[stream.pk] // gathered
+        else:
+            share = net - landed_total
+        landed_total += share
+        process_income_stream(stream, share)
+    return CollectionResult(
+        gathered=gathered, landed=net, graft_leak=graft_leak, success_level=success_level
+    )
+
+
+@transaction.atomic
+def improve_org_domain(*, organization: Organization, character) -> ImprovementResult:
+    """One domain-investment attempt (#930): Scholarship/Economics against the ledgers.
+
+    Success raises every active stream's gross by ``IMPROVEMENT_GROSS_PCT``
+    percent AND cracks graft down a step; a partial success only manages the
+    crackdown; failure changes nothing (backfire texture is a later pass).
+    All magnitudes PLACEHOLDER.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.currency.constants import (  # noqa: PLC0415
+        DOMAIN_INVESTMENT_CHECK_NAME,
+        IMPROVEMENT_GRAFT_STEP,
+        IMPROVEMENT_GROSS_PCT,
+    )
+    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name__iexact=DOMAIN_INVESTMENT_CHECK_NAME).first()
+    success_level = -1  # unseeded world: investment simply fails, nothing moves
+    if check_type is not None:
+        result = perform_check(
+            character,
+            check_type,
+            target_difficulty=DIFFICULTY_VALUES[DifficultyChoice.NORMAL],
+        )
+        success_level = result.success_level
+
+    economics = get_or_create_economics(organization)
+    gross_raised = False
+    graft_cracked = False
+    if success_level >= 0:
+        new_graft = max(GRAFT_FLOOR_PCT, economics.graft_pct - IMPROVEMENT_GRAFT_STEP)
+        graft_cracked = new_graft != economics.graft_pct
+        economics.graft_pct = new_graft
+        economics.save(update_fields=["graft_pct"])
+    if success_level >= 1:
+        for stream in OrgIncomeStream.objects.filter(organization=organization, active=True):
+            bump = stream.gross_amount * IMPROVEMENT_GROSS_PCT // 100
+            if bump > 0:
+                stream.gross_amount = stream.gross_amount + bump
+                stream.save(update_fields=["gross_amount"])
+                gross_raised = True
+    return ImprovementResult(
+        success_level=success_level,
+        gross_raised=gross_raised,
+        graft_cracked=graft_cracked,
+        new_graft_pct=economics.graft_pct,
     )
 
 
@@ -411,6 +561,99 @@ def accrue_monthly_interest(organization: Organization) -> int:
     return total
 
 
+def _service_debts_from_pools(organization: Organization) -> int:
+    """Weekly at-source debt service (#930): the creditor collects from the pools.
+
+    Apostate's asymmetry rule: automatic LOSS is fine, automatic gain is not —
+    so while income never lands passively (ADR-0081), contractual debt service
+    deducts from the amassing pools every cycle without the debtor lifting a
+    finger. Oldest debt first, capped at what the pools hold (over-leverage
+    bottoms at empty pools, never seizure); ``diverting`` debts are skipped —
+    that money pools whole, the arrears keep growing, and discovery stays the
+    player-facing risk loop. Pool money is off-ledger, so the creditor-side
+    transfer is mint-shaped (the same way landing mints at collection).
+    Returns coppers serviced.
+    """
+    debts = list(
+        DebtInstrument.objects.filter(
+            debtor_organization=organization,
+            active=True,
+            diverting=False,
+            arrears__gt=0,
+        ).order_by("created_at")
+    )
+    if not debts:
+        return 0
+    streams = list(
+        OrgIncomeStream.objects.filter(
+            organization=organization, active=True, uncollected_pool__gt=0
+        )
+    )
+    available = sum(stream.uncollected_pool for stream in streams)
+    if available <= 0:
+        return 0
+    paid_total = 0
+    for debt in debts:
+        if available <= 0:
+            break
+        payment = min(debt.arrears, available)
+        transfer(
+            amount=payment,
+            reason=f"debt service at source: {debt.creditor_organization.name}",
+            to_treasury=get_or_create_treasury(debt.creditor_organization),
+        )
+        debt.arrears -= payment
+        debt.save(update_fields=["arrears"])
+        available -= payment
+        paid_total += payment
+    remaining = paid_total
+    for stream in streams:
+        take = min(stream.uncollected_pool, remaining)
+        if take > 0:
+            stream.uncollected_pool = stream.uncollected_pool - take
+            stream.save(update_fields=["uncollected_pool"])
+            remaining -= take
+        if remaining <= 0:
+            break
+    return paid_total
+
+
+def _service_contract_liens_from_pools(organization: Organization) -> int:
+    """Weekly at-source lien service (#930 unification of #928's garnishment).
+
+    A defaulted notarized contract's lien (agreed at signing) takes its percent
+    of the liened stream's fresh gross straight out of the pool — the same
+    before-the-debtor-touches-it path as debt service. There is no separate
+    landing-time garnishment machinery. Capped at what the pool holds.
+    Returns coppers diverted.
+    """
+    diverted = 0
+    liens = Contract.objects.filter(
+        garnish_stream__organization=organization,
+        status=ContractStatus.DEFAULTED,
+        garnish_percent__gt=0,
+    ).select_related("garnish_stream")
+    for lien in liens:
+        stream = lien.garnish_stream
+        if not stream.active or stream.uncollected_pool <= 0:
+            continue
+        amount = min(stream.uncollected_pool, stream.gross_amount * lien.garnish_percent // 100)
+        if amount <= 0:
+            continue
+        defaulter_is_proposer = lien.proposer_organization_id == stream.organization_id
+        to_purse, to_treasury = _party_accounts(lien, proposer=not defaulter_is_proposer)
+        transfer(
+            amount=amount,
+            reason=f"lien service at source: {lien.title}",
+            to_purse=to_purse,
+            to_treasury=to_treasury,
+        )
+        stream.uncollected_pool = stream.uncollected_pool - amount
+        stream.save(update_fields=["uncollected_pool"])
+        diverted += amount
+    return diverted
+
+
 def _withhold_debt_service(
     stream: OrgIncomeStream, treasury: OrganizationTreasury, available: int
 ) -> int:
@@ -464,33 +707,6 @@ def repay_principal(debt: DebtInstrument, amount: int) -> CurrencyTransfer:
         update_fields.append("active")
     debt.save(update_fields=update_fields)
     return row
-
-
-def _enforce_garnishments(
-    stream: OrgIncomeStream, treasury: OrganizationTreasury, net: int
-) -> None:
-    """Divert liened income from a defaulted contract's stream (#928).
-
-    The lien was agreed at signing; enforcement only begins after default —
-    the system enforces agreed terms, it never initiates antagonism.
-    """
-    for lien in Contract.objects.filter(
-        garnish_stream=stream,
-        status=ContractStatus.DEFAULTED,
-        garnish_percent__gt=0,
-    ):
-        amount = net * lien.garnish_percent // 100
-        if amount == 0:
-            continue
-        defaulter_is_proposer = lien.proposer_organization_id == stream.organization_id
-        to_purse, to_treasury = _party_accounts(lien, proposer=not defaulter_is_proposer)
-        transfer(
-            amount=amount,
-            reason=f"garnishment: {lien.title}",
-            from_treasury=treasury,
-            to_purse=to_purse,
-            to_treasury=to_treasury,
-        )
 
 
 def _party_accounts(
@@ -733,22 +949,54 @@ def run_business_week(business: Business, *, fortune: int) -> int:
 
 
 def run_weekly_economy() -> dict[str, int]:
-    """The Sunday-rollover economy pass (#932). Returns per-phase counts.
+    """The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.
 
-    Order matters: interest accrues into arrears FIRST so this week's
-    income withholding services this week's interest; then income streams
-    flow (graft → debt withholding → garnishment → declaration); then
-    notarized contracts settle; then employment wages pay for
-    actively-played weeks; then businesses roll their fortune. Each phase
-    isolates failures per row — one broken org never wedges the rollover.
+    Order matters: interest accrues into arrears FIRST; then income streams
+    pool their gross (never landing — ADR-0081); then at-source debt service
+    deducts this week's arrears from the pools automatically (automatic loss
+    is fine, automatic gain is not); then notarized contracts settle; then
+    employment wages pay for actively-played weeks; then businesses roll
+    their fortune. Each phase isolates failures per row — one broken org
+    never wedges the rollover.
     """
     return {
         "interest": _weekly_interest_accrual(),
         "income": _weekly_income_streams(),
+        "debt_service": _weekly_debt_service(),
         "contracts": _weekly_contract_settlement(),
         "wages": _weekly_wages(),
         "businesses": _weekly_business_fortunes(),
     }
+
+
+def _weekly_debt_service() -> int:
+    """At-source creditor servicing for every owing org with pooled income (#930).
+
+    One phase, one principle: debts AND defaulted-contract liens collect from
+    the pools before the debtor can touch a copper.
+    """
+    count = 0
+    debtor_ids = set(
+        DebtInstrument.objects.filter(active=True, diverting=False, arrears__gt=0)
+        .values_list("debtor_organization_id", flat=True)
+        .distinct()
+    )
+    debtor_ids |= set(
+        Contract.objects.filter(status=ContractStatus.DEFAULTED, garnish_percent__gt=0)
+        .values_list("garnish_stream__organization_id", flat=True)
+        .distinct()
+    )
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    for organization in Organization.objects.filter(pk__in=debtor_ids):
+        try:
+            serviced = _service_debts_from_pools(organization)
+            serviced += _service_contract_liens_from_pools(organization)
+            if serviced > 0:
+                count += 1
+        except Exception:
+            logger.exception("weekly economy: debt service failed for org %s", organization.pk)
+    return count
 
 
 def _weekly_interest_accrual() -> int:
@@ -767,10 +1015,12 @@ def _weekly_interest_accrual() -> int:
 
 
 def _weekly_income_streams() -> int:
+    # #930 / ADR-0081: the weekly cycle only amasses pools — money reaches a
+    # treasury exclusively through an active collection dispatch.
     count = 0
     for stream in OrgIncomeStream.objects.filter(active=True).select_related("organization"):
         try:
-            process_income_stream(stream)
+            accrue_income_stream(stream)
             count += 1
         except Exception:
             logger.exception("weekly economy: income stream %s failed", stream.pk)

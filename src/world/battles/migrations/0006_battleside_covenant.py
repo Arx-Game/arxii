@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("battles", "0004_battleoutcomemapping"),
+        ("battles", "0005_remove_battleunit_unit_type_and_more"),
         ("covenants", "0020_covenantrole_command_tier_and_more"),
     ]
 

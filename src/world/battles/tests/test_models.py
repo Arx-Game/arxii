@@ -1,3 +1,4 @@
+from django.db import IntegrityError
 from django.test import TestCase
 
 from world.battles.constants import (
@@ -5,6 +6,9 @@ from world.battles.constants import (
     BattleOutcome,
     BattleSideRole,
     BattleUnitStatus,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
 from world.battles.factories import (
     BattleFactory,
@@ -12,6 +16,12 @@ from world.battles.factories import (
     BattleSideFactory,
     BattleUnitFactory,
 )
+from world.battles.models import (
+    BattleUnit,
+    TechniqueCompositionAffinity,
+    TerrainCompositionEffect,
+)
+from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory
 from world.magic.factories import TechniqueFactory
@@ -39,7 +49,7 @@ class BattleModelTests(TestCase):
             battle=self.battle,
             side=defender,
             place=place,
-            unit_type="zombies-on-nightmares",
+            descriptor="zombies-on-nightmares",
             strength=80,
         )
         self.assertEqual(unit.status, BattleUnitStatus.ACTIVE)
@@ -90,3 +100,44 @@ class BattleActionDeclarationTechniqueTests(TestCase):
             target_side=side,
         )
         self.assertEqual(decl.target_side_id, side.pk)
+
+
+class BattleUnitTaxonomyTests(TestCase):
+    def test_defaults(self) -> None:
+        unit = BattleUnitFactory()
+        self.assertEqual(unit.composition, UnitComposition.IRREGULAR)
+        self.assertEqual(unit.quality, UnitQuality.TRAINED)
+        self.assertIsNone(unit.commander)
+        self.assertIsNone(unit.summoned_by)
+
+    def test_commander_set_null_on_character_sheet_delete(self) -> None:
+        commander = CharacterSheetFactory()
+        unit = BattleUnitFactory(commander=commander)
+        commander.character.delete()
+        # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
+        BattleUnit.flush_instance_cache()
+        unit.refresh_from_db()
+        self.assertIsNone(unit.commander)
+
+
+class TechniqueCompositionAffinityTests(TestCase):
+    def test_unique_per_technique_composition(self) -> None:
+        technique = TechniqueFactory()
+        TechniqueCompositionAffinity.objects.create(
+            technique=technique, composition=UnitComposition.CAVALRY, modifier=15
+        )
+        with self.assertRaises(IntegrityError):
+            TechniqueCompositionAffinity.objects.create(
+                technique=technique, composition=UnitComposition.CAVALRY, modifier=-5
+            )
+
+
+class TerrainCompositionEffectTests(TestCase):
+    def test_unique_per_terrain_composition(self) -> None:
+        TerrainCompositionEffect.objects.create(
+            terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=15
+        )
+        with self.assertRaises(IntegrityError):
+            TerrainCompositionEffect.objects.create(
+                terrain_type=TerrainType.DIFFICULT, composition=UnitComposition.CAVALRY, modifier=5
+            )

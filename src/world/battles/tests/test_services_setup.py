@@ -13,8 +13,12 @@ from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     BattleOutcome,
+    BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
+    TerrainType,
+    UnitComposition,
+    UnitQuality,
 )
 from world.battles.exceptions import (
     BattleConcludedError,
@@ -134,7 +138,7 @@ class AddUnitTests(TestCase):
             battle=self.battle,
             side=self.attacker_side,
             name="Cavalry",
-            unit_type="cavalry",
+            descriptor="cavalry",
         )
 
         self.assertEqual(unit.battle, self.battle)
@@ -150,7 +154,7 @@ class AddUnitTests(TestCase):
             battle=self.battle,
             side=self.attacker_side,
             name="Elite Guard",
-            unit_type="guard",
+            descriptor="guard",
             strength=80,
             place=self.place,
         )
@@ -363,3 +367,104 @@ class OpenChampionDuelTests(TestCase):
                     "threat_pool": self.threat_pool,
                 },
             )
+
+
+class AddUnitTaxonomyTests(TestCase):
+    def test_add_unit_accepts_composition_quality_commander(self) -> None:
+        from world.battles.services import add_side, add_unit, create_battle
+
+        battle = create_battle(name="Taxonomy Setup Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        commander = CharacterSheetFactory()
+
+        unit = add_unit(
+            battle=battle,
+            side=side,
+            name="Iron Cavalry",
+            descriptor="armored knights",
+            composition=UnitComposition.CAVALRY,
+            quality=UnitQuality.ELITE,
+            commander=commander,
+        )
+
+        self.assertEqual(unit.descriptor, "armored knights")
+        self.assertEqual(unit.composition, UnitComposition.CAVALRY)
+        self.assertEqual(unit.quality, UnitQuality.ELITE)
+        self.assertEqual(unit.commander, commander)
+
+    def test_add_unit_defaults_when_taxonomy_omitted(self) -> None:
+        from world.battles.services import add_side, add_unit, create_battle
+
+        battle = create_battle(name="Taxonomy Default Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        unit = add_unit(battle=battle, side=side, name="Rabble")
+
+        self.assertEqual(unit.composition, UnitComposition.IRREGULAR)
+        self.assertEqual(unit.quality, UnitQuality.TRAINED)
+        self.assertIsNone(unit.commander)
+
+
+class AddPlaceTerrainTests(TestCase):
+    def test_add_place_accepts_terrain_and_movement_cost(self) -> None:
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Terrain Setup Test")
+        place = add_place(
+            battle=battle,
+            name="The Marsh Crossing",
+            terrain_type=TerrainType.FLOODED,
+            movement_cost=3,
+        )
+        self.assertEqual(place.terrain_type, TerrainType.FLOODED)
+        self.assertEqual(place.movement_cost, 3)
+
+    def test_add_place_defaults(self) -> None:
+        from world.battles.services import add_place, create_battle
+
+        battle = create_battle(name="Terrain Default Test")
+        place = add_place(battle=battle, name="Open Field")
+        self.assertEqual(place.terrain_type, TerrainType.OPEN)
+        self.assertEqual(place.movement_cost, 1)
+
+
+class SetBattleSidePostureTests(TestCase):
+    def test_sets_posture(self) -> None:
+        from world.battles.services import add_side, create_battle, set_battle_side_posture
+
+        battle = create_battle(name="Posture Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+
+        updated = set_battle_side_posture(side=side, posture=BattlePosture.AGGRESSIVE)
+
+        self.assertEqual(updated.posture, BattlePosture.AGGRESSIVE)
+        side.refresh_from_db()
+        self.assertEqual(side.posture, BattlePosture.AGGRESSIVE)
+
+
+class AssignUnitCommanderTests(TestCase):
+    def test_assigns_commander(self) -> None:
+        from world.battles.services import add_side, add_unit, assign_unit_commander, create_battle
+
+        battle = create_battle(name="Commander Assign Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        unit = add_unit(battle=battle, side=side, name="Levy Spears")
+        commander = CharacterSheetFactory()
+
+        updated = assign_unit_commander(unit=unit, commander=commander)
+
+        self.assertEqual(updated.commander, commander)
+        unit.refresh_from_db()
+        self.assertEqual(unit.commander, commander)
+
+    def test_clears_commander_with_none(self) -> None:
+        from world.battles.services import add_side, add_unit, assign_unit_commander, create_battle
+
+        battle = create_battle(name="Commander Clear Test")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        commander = CharacterSheetFactory()
+        unit = add_unit(battle=battle, side=side, name="Levy Spears", commander=commander)
+
+        assign_unit_commander(unit=unit, commander=None)
+
+        unit.refresh_from_db()
+        self.assertIsNone(unit.commander)

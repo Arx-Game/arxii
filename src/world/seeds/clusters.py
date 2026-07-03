@@ -85,6 +85,12 @@ def _seed_justice() -> None:
     seed_crime_kinds()
 
 
+def _seed_governance() -> None:
+    from world.seeds.governance_checks import seed_governance_check_content  # noqa: PLC0415
+
+    seed_governance_check_content()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -117,6 +123,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "character_creation": _seed_character_creation,
     # Justice: the starter CrimeKind vocabulary (#1765). Laws are world data, not seeds.
     "justice": _seed_justice,
+    # Governance: Scholarship/Economics + Organization/Stewardship skills and the
+    # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
+    "governance": _seed_governance,
 }
 
 
@@ -190,4 +199,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "character_creation": [StartingArea, Beginnings, Species],
         # Justice: the starter CrimeKind vocabulary (#1765); AreaLaw rows are world data.
         "justice": [CrimeKind],
+        # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
+        # "checks"); appears as a seeded cluster with no standalone content model (#930).
+        "governance": [],
     }

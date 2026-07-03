@@ -119,3 +119,76 @@ class SummonAllyHandlerTests(TestCase):
         # Sanity: the other encounter's participant is untouched.
         other_participant.refresh_from_db()
         self.assertEqual(other_participant.status, ParticipantStatus.ACTIVE)
+
+
+class SummonAllyMilitaryBranchTests(TestCase):
+    """military=True routes to a BattleUnit instead of a CombatOpponent (#1711)."""
+
+    def test_military_summon_creates_battle_unit_not_combat_opponent(self) -> None:
+        from world.battles.constants import BattleSideRole
+        from world.battles.models import BattleUnit
+        from world.battles.services import add_side, create_battle, enlist_participant
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        battle = create_battle(name="Military Summon Test Battle")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        sheet = CharacterSheetFactory()
+        enlist_participant(battle=battle, character_sheet=sheet, side=side)
+
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool)
+
+        payload = SimpleNamespace(
+            caster=sheet.character,
+            threat_pool_id=pool.pk,
+            military=True,
+            max_health=200,
+            composition="magical",
+        )
+
+        before_units = BattleUnit.objects.filter(battle=battle).count()
+        before_opponents = CombatOpponent.objects.count()
+
+        summon_ally(payload=payload)
+
+        after_units = BattleUnit.objects.filter(battle=battle).count()
+        after_opponents = CombatOpponent.objects.count()
+
+        self.assertEqual(after_units, before_units + 1)
+        self.assertEqual(after_opponents, before_opponents)
+
+        unit = BattleUnit.objects.filter(battle=battle).latest("pk")
+        self.assertEqual(unit.side, side)
+        self.assertEqual(unit.strength, 200)
+        self.assertEqual(unit.composition, "magical")
+        self.assertEqual(unit.summoned_by, sheet)
+
+    def test_military_summon_no_op_without_active_battle_participant(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.battles.models import BattleUnit
+
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool)
+        caster = CharacterFactory()
+
+        payload = SimpleNamespace(caster=caster, threat_pool_id=pool.pk, military=True)
+
+        before = BattleUnit.objects.count()
+        result = summon_ally(payload=payload)
+        self.assertIsNone(result)
+        self.assertEqual(BattleUnit.objects.count(), before)
+
+    def test_non_military_skirmish_path_unaffected(self) -> None:
+        """Regression: military absent/False keeps the pre-#1711 behavior byte-identical."""
+        encounter = CombatEncounterFactory()
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool)
+        participant = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        caster_objectdb = participant.character_sheet.character
+
+        payload = SimpleNamespace(caster=caster_objectdb, threat_pool_id=pool.pk)
+
+        before = CombatOpponent.objects.filter(encounter=encounter).count()
+        summon_ally(payload=payload)
+        after = CombatOpponent.objects.filter(encounter=encounter).count()
+        self.assertEqual(after, before + 1)

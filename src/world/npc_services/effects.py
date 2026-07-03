@@ -144,25 +144,26 @@ def dispatch_offer_effect(offer: NPCServiceOffer, persona: Persona) -> EffectRes
 
 
 class AmbiguousDebtorError(LookupError):
-    """The persona's org standing doesn't resolve to exactly one debtor."""
+    """The persona's org standing doesn't resolve to exactly one authority org."""
 
     def __init__(self, count: int) -> None:
-        super().__init__(f"Loan debtor resolution matched {count} organizations")
+        super().__init__(f"Authority-org resolution matched {count} organizations")
         self.count = count
         self.user_message = (
-            "The representative needs to know whose books this loan lands on — "
+            "The representative needs to know whose books this lands on — "
             "you keep the books for more than one house."
             if count
-            else "You don't hold the spending authority to sign for a loan."
+            else "You don't hold the spending authority for any house's books."
         )
 
 
-def _resolve_loan_debtor(persona: Persona):
+def _resolve_authority_org(persona: Persona):
     """The one organization whose treasury this persona may commit (#930).
 
-    Loans are org↔org (``DebtInstrument``); the handler contract only carries
-    the persona, so the debtor is the single org where the persona holds
-    treasury spend authority. Zero or several → ``AmbiguousDebtorError``.
+    Loans, collections, and improvements are all org-level acts; the handler
+    contract only carries the persona, so the target is the single org where
+    the persona holds treasury spend authority. Zero or several →
+    ``AmbiguousDebtorError``.
     """
     from world.currency.services import (  # noqa: PLC0415
         can_spend_treasury,
@@ -196,7 +197,7 @@ def grant_loan(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
             payload={"offer_pk": offer.pk},
         )
     try:
-        debtor = _resolve_loan_debtor(persona)
+        debtor = _resolve_authority_org(persona)
     except AmbiguousDebtorError as exc:
         return EffectResult(
             kind=OfferKind.LOAN.value,
@@ -223,3 +224,109 @@ def grant_loan(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
 
 OFFER_EFFECT_HANDLERS[OfferKind.LOAN.value] = grant_loan
+
+
+def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """COLLECTION effect handler (#930): dispatch a collector across the org's pools.
+
+    The graded outcome (Tax Collection check + band table + graft) lives in
+    ``currency.collect_org_income``; this handler resolves the org, runs the
+    dispatch, and phrases the toast. Messages are PLACEHOLDER copy.
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    from world.currency.constants import format_coppers  # noqa: PLC0415
+    from world.currency.services import collect_org_income  # noqa: PLC0415
+
+    try:
+        organization = _resolve_authority_org(persona)
+    except AmbiguousDebtorError as exc:
+        return EffectResult(
+            kind=OfferKind.COLLECTION.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk},
+        )
+    character = persona.character_sheet.character
+    try:
+        result = collect_org_income(organization=organization, character=character)
+    except ValidationError:
+        return EffectResult(
+            kind=OfferKind.COLLECTION.value,
+            message="PLACEHOLDER: The strongboxes hold nothing worth a collector's boots.",
+            payload={"offer_pk": offer.pk, "organization_pk": organization.pk},
+        )
+    if result.catastrophe:
+        # The collector-incident encounter is a combat-domain follow-up seam.
+        message = (
+            "PLACEHOLDER: Word comes back ugly — the collection run was set upon and "
+            f"the take is gone. {format_coppers(result.gathered)} lost."
+        )
+    elif result.stolen > 0:
+        message = (
+            f"PLACEHOLDER: The collector returns light — {format_coppers(result.landed)} "
+            f"banked of {format_coppers(result.gathered)} gathered; the rest went missing."
+        )
+    else:
+        message = (
+            f"PLACEHOLDER: The rounds went smoothly — {format_coppers(result.landed)} "
+            "banked after the usual leakage."
+        )
+    return EffectResult(
+        kind=OfferKind.COLLECTION.value,
+        object_label=f"Collection for {organization.name}",
+        message=message,
+        payload={
+            "organization_pk": organization.pk,
+            "gathered": result.gathered,
+            "landed": result.landed,
+            "catastrophe": result.catastrophe,
+        },
+    )
+
+
+def run_improvement(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """IMPROVEMENT effect handler (#930): invest in the domain's income lines.
+
+    Scholarship/Economics against the ledgers (``currency.improve_org_domain``):
+    success raises the streams and cracks down on graft; a partial only manages
+    the crackdown. Messages are PLACEHOLDER copy.
+    """
+    from world.currency.services import improve_org_domain  # noqa: PLC0415
+
+    try:
+        organization = _resolve_authority_org(persona)
+    except AmbiguousDebtorError as exc:
+        return EffectResult(
+            kind=OfferKind.IMPROVEMENT.value,
+            message=exc.user_message,
+            payload={"offer_pk": offer.pk},
+        )
+    character = persona.character_sheet.character
+    result = improve_org_domain(organization=organization, character=character)
+    if result.gross_raised:
+        message = (
+            "PLACEHOLDER: The investment takes — the income lines run richer, and the "
+            "clerks mind their sums."
+        )
+    elif result.graft_cracked:
+        message = (
+            "PLACEHOLDER: No new coin found, but the crackdown bites — less leaks from "
+            "the books this season."
+        )
+    else:
+        message = "PLACEHOLDER: The ledgers resist — nothing comes of the effort this time."
+    return EffectResult(
+        kind=OfferKind.IMPROVEMENT.value,
+        object_label=f"Domain investment for {organization.name}",
+        message=message,
+        payload={
+            "organization_pk": organization.pk,
+            "gross_raised": result.gross_raised,
+            "graft_cracked": result.graft_cracked,
+            "new_graft_pct": result.new_graft_pct,
+        },
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.COLLECTION.value] = run_collection
+OFFER_EFFECT_HANDLERS[OfferKind.IMPROVEMENT.value] = run_improvement

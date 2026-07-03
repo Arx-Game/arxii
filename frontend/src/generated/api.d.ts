@@ -18930,6 +18930,7 @@ export interface components {
       name: string;
       kind: string;
       gross_amount: number;
+      uncollected_pool: number;
       active: boolean;
     };
     /** @description Minimal serializer for an ACTION-mode Interaction embedded in an action-link chip. */
@@ -20436,6 +20437,8 @@ export interface components {
        *     * `permit` - Permit
        *     * `mission` - Mission
        *     * `loan` - Loan
+       *     * `collection` - Collection
+       *     * `improvement` - Improvement
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20468,9 +20471,11 @@ export interface components {
      * @description * `permit` - Permit
      *     * `mission` - Mission
      *     * `loan` - Loan
+     *     * `collection` - Collection
+     *     * `improvement` - Improvement
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan';
+    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan' | 'collection' | 'improvement';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20479,6 +20484,8 @@ export interface components {
        *     * `permit` - Permit
        *     * `mission` - Mission
        *     * `loan` - Loan
+       *     * `collection` - Collection
+       *     * `improvement` - Improvement
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20757,6 +20764,7 @@ export interface components {
       spend_rank_max: number;
       graft_pct: number;
       steward_role_id: number | null;
+      uncollected_total: number;
       income_streams: components['schemas']['IncomeStreamRow'][];
       debts: components['schemas']['DebtRow'][];
       obligations: components['schemas']['ObligationRow'][];
@@ -23590,6 +23598,8 @@ export interface components {
        *     * `permit` - Permit
        *     * `mission` - Mission
        *     * `loan` - Loan
+       *     * `collection` - Collection
+       *     * `improvement` - Improvement
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */

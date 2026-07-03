@@ -79,6 +79,10 @@ class OfferNotEligibleError(ResolveOfferError):
     user_message = "That offer is not currently available."
 
 
+class InsufficientAPError(ResolveOfferError):
+    user_message = "You don't have the action points for that right now."
+
+
 # #684: ``persona_for_character`` + ``MissingPrimaryPersonaError`` moved to
 # ``world.scenes.services`` — the resolver belongs in scenes (general use
 # across NPCStanding, item ownership snapshots, mission flavor, ...) and
@@ -544,6 +548,23 @@ def _weight_for_offer(offer: NPCServiceOffer) -> int:
     return 1
 
 
+def _charge_offer_ap(offer: NPCServiceOffer, *, character: Character) -> None:
+    """Charge the offer's ``ap_cost`` before its effect dispatches (#930).
+
+    Raises ``InsufficientAPError`` (transaction rolls back — nothing granted)
+    when the character can't pay. Free offers (the default) skip the pool
+    lookup entirely.
+    """
+    if offer.ap_cost <= 0:
+        return
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    pool = ActionPointPool.get_or_create_for_character(character)
+    if not pool.spend(offer.ap_cost):
+        msg = f"Offer {offer.pk} costs {offer.ap_cost} AP; character {character.pk} cannot pay."
+        raise InsufficientAPError(msg)
+
+
 def _apply_check(
     offer: NPCServiceOffer,
     *,
@@ -602,6 +623,8 @@ def resolve_offer(
     ):
         msg = f"Offer {offer.pk} ({offer.label!r}) is not currently eligible for this session."
         raise OfferNotEligibleError(msg)
+
+    _charge_offer_ap(offer, character=session.character)
 
     if offer.is_final:
         result = dispatch_offer_effect(offer, session.persona)
