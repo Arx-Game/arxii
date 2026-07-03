@@ -44,8 +44,9 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    `seeds_checks.py` / `services/anima.py`); the same check is used by the anima ritual
    (wired via `provision_player_anima_ritual`). A graded **"Magic: Technique Cast"**
    `ConsequencePool` routes outcomes. No schema migration required.
-   **Follow-ups from #1306:** technique designer (player picks a consequence pool from a
-   curated catalog). The targeting model gaps (listed below) were closed by #1321.
+   **Follow-ups from #1306:** the targeting model gaps (listed below) were closed by
+   #1321; the technique-designer consequence-pool catalog was closed by #1320 (see
+   below).
 
 2. **✅ #1321 — RESOLVED: targeting model + behavior-consent + AoE + standalone condition
    application** (`priority:now` → done). Closed the four gaps deferred from #1306:
@@ -119,12 +120,14 @@ through a graded **"Magic: Technique Cast"** `ConsequencePool`. The anima ritual
 technique casts always share the same personal check (`provision_player_anima_ritual`
 in `services/anima.py`).
 
-Deferred to follow-up issues: technique designer (player selects a consequence pool
-from a curated catalog built on `ConsequencePool.parent`); optional resonance→aspect
-mapping for the per-character check (today all magic checks use the Arcana aspect).
+Deferred to follow-up issues: optional resonance→aspect mapping for the per-character
+check (today all magic checks use the Arcana aspect).
 
 The targeting model gaps (validity enforcement, AoE, frontend picker, standalone condition
-application) were resolved in #1321 — see the #1321 entry above.
+application) were resolved in #1321 — see the #1321 entry above. The consequence-pool
+catalog (player/CG selects a flavor from a curated catalog built on
+`ConsequencePool.parent`, instead of the single shared pool) was resolved in #1320 — see
+`docs/systems/magic.md` and `src/world/magic/CLAUDE.md` for detail.
 
 ## Telnet technique-authoring workbench (#1496 — BUILT, staff/GM-only)
 

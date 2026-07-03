@@ -194,10 +194,19 @@ casting never hard-fails with "no template." The resolution chain:
 - **Graded consequence pool** — a single "Magic: Technique Cast" `ConsequencePool`
   (seeded by `seeds_cast.py`) routes graded outcomes (failure / partial success / success)
   through the shared consequence machinery. No per-technique pool is required.
+- **Consequence-pool catalog (#1320)** — a technique's author (web builder, telnet
+  `technique set consequence_pool=<id>`, or CG cantrip finalize) may pick a
+  "flavor" from a curated catalog instead of the shared graded pool. The catalog
+  is `ConsequencePool.objects.filter(parent=<base pool>)` — single-depth children
+  of the base pool seeded by `seeds_cast.ensure_technique_catalog_content()`. Each
+  catalog entry has its own `ActionTemplate` (same `check_type`/`pipeline`/
+  `target_type` as the shared template — only `consequence_pool` differs) so
+  combat's direct read of `technique.action_template.check_type` is unaffected by
+  which flavor was picked. Resolution: `technique_builder.resolve_cast_action_template()`.
 
-Follow-ups deferred to later issues: technique designer (players pick a consequence pool
-from a curated catalog), targeting model (targeting validity + AoE + per-technique target
-constraints + frontend target picker), and the optional resonance→aspect mapping.
+Follow-ups deferred to later issues: the optional resonance→aspect mapping. (The
+targeting model — targeting validity + AoE + per-technique target constraints +
+frontend target picker — was resolved in #1321; see "Targeting/hostility" below.)
 
 ### Dispel / Cleanse (#1585)
 

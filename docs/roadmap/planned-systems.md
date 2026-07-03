@@ -112,8 +112,6 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 - **Trainer system** — find trainers, costs, tiers. `intent`.
 - **Path discovery / research / switching** — beyond listing next options. `intent`.
 - **Resonance→aspect mapping** so path investment rewards magic checks (placeholder `Arcana` today). #1363, `partial`.
-- **Technique-designer consequence-pool catalog** — pick a pool from a curated set; all casts share one
-  seeded pool today. #1320, `partial`.
 - **Aspect-in-magic — DESIGN-CLARIFICATION, not an unbuilt system.** `Aspect`/`PathAspect`/
   `_calculate_aspect_bonus` are **built and live** as a *path-competence* check bonus
   (`world/classes/models.py:277,309`, `world/checks/services.py:161`). The open question (#1363): magic
