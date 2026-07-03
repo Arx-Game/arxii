@@ -1047,6 +1047,59 @@ class HoldResolutionTests(TestCase):
         self.side.refresh_from_db()
         self.assertEqual(self.side.victory_points, HOLD_CAPTURE_VP)
 
+    def test_hold_declared_this_round_captures_place_end_to_end(self) -> None:
+        """End-to-end through resolve_battle_round: a HOLD declaration dispatched by
+        _dispatch_success_handler must actually capture the place and award VP (#1712)."""
+        from world.battles.constants import BATTLE_POSTURE_VP_MULTIPLIER, HOLD_CAPTURE_VP
+        from world.battles.resolution import resolve_battle_round
+        from world.battles.services import declare_battle_action
+
+        technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        CharacterTechniqueFactory(character=self.participant.character_sheet, technique=technique)
+        CharacterAnimaFactory(character=self.participant.character_sheet.character)
+        battle_round = begin_battle_round(battle=self.battle)
+
+        # PLACE scope requires an engaged command-hierarchy tier (#1710); grant
+        # self.participant a SUBORDINATE role on a covenant fielding self.side
+        # so the authorization check in _validate_command_scope passes.
+        covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.side.covenant = covenant
+        self.side.save()
+        rank = CovenantRankFactory(covenant=covenant)
+        role = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            command_tier=CommandTier.SUBORDINATE,
+            slug="hold-e2e-subordinate",
+        )
+        membership = CharacterCovenantRole.objects.create(
+            character_sheet=self.participant.character_sheet,
+            covenant_role=role,
+            covenant=covenant,
+            rank=rank,
+            engaged=False,
+        )
+        set_engaged_membership(membership=membership)
+
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            technique=technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(2)
+            resolve_battle_round(battle_round=battle_round)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)
+        self.side.refresh_from_db()
+        expected_vp = round(
+            HOLD_CAPTURE_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(self.side.posture, 1.0)
+        )
+        self.assertEqual(self.side.victory_points, expected_vp)
+
 
 class ResolveBattleRoundFailureTests(TestCase):
     """STRIKE failure: PC health debited."""
