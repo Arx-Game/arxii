@@ -2081,12 +2081,17 @@ Large-scale battle scenes (war covenant engagements, sieges, pitched fields) res
 through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scenes.Scene`.
 
 - **Models:** `Battle` (O2O Scene, `campaign_story` FK, `round_limit`, `outcome` / `concluded_at`;
-  `is_concluded` property; `current_round` property), `BattleSide` (`role` ATTACKER/DEFENDER,
+  `is_concluded` property; `current_round` property; `region` FK → `areas.Area`, nullable —
+  seeds ambient weather via `get_effective_weather(region)`; `weather_override` /
+  `weather_override_expires_round` — the battle-wide default set by a `BATTLE`-scoped
+  `SET_ENVIRONMENT` cast, #1715), `BattleSide` (`role` ATTACKER/DEFENDER,
   `covenant` FK → `covenants.Covenant` (nullable, #1710) fielding this side, `posture`
   (`BattlePosture`, #1711), `victory_points`, `victory_threshold`; unique `(battle, role)`),
   `BattlePlace` (named front; `combat_encounter` FK bridge seam; `terrain_type`
   (`TerrainType`, #1711); `movement_cost` (authored, no consuming action yet, #1711);
-  `controlled_by` FK → `BattleSide`, nullable, set by a successful HOLD declaration, #1712),
+  `controlled_by` FK → `BattleSide`, nullable, set by a successful HOLD declaration, #1712;
+  `weather_override` / `weather_override_expires_round` — a `PLACE`-scoped local exception
+  that beats the battle-wide value at this front only, #1715),
   `BattleUnit` (`descriptor` free-text flavor tag — renamed from the spine's `unit_type`,
   #1711; `properties` (M2M → `mechanics.Property`, presence-only tags) and `capabilities`
   (M2M → `conditions.CapabilityType` through `BattleUnitCapability`, authored per-unit
@@ -2109,6 +2114,12 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `TechniquePropertyAffinity` / `TerrainPropertyEffect` (authored type-matchup /
   terrain-effect catalogs keyed on `Property`, summed across a unit's matching properties,
   #1794, replacing #1711's `TechniqueCompositionAffinity`/`TerrainCompositionEffect`);
+  `WeatherTypePropertyEffect` / `WeatherTypeCapabilityChallenge` (authored
+  `(weather_type, property) -> modifier` / `(weather_type, capability, threshold) -> modifier`
+  catalogs, #1715 — mirror `TerrainPropertyEffect`'s shape but key on the place's *effective*
+  weather rather than static `terrain_type`; `WeatherTypeCapabilityChallenge` is the first
+  absence/threshold-based battle modifier, applying when `effective_capability(capability)`
+  falls strictly below `threshold`);
   `BattleOutcomeMapping` (`BattleOutcome` → `CheckOutcome`
   tier for beat resolution, #1785); `Battle.afk_peril_override` (BooleanField, default
   False — narrow ADR-0004 exception for Surrounded peril escalation, #1733)
@@ -2167,6 +2178,16 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (including already-ROUTED units); REPEL/HOLD are PLACE-scope only — REPEL raises a
   same-round STRIKE-defense bonus at a front, HOLD captures/sustains
   `BattlePlace.controlled_by`. No action kind denies/subtracts VP from a side (award-only).
+- **Environmental weather (#1715, ADR-0084):** two-tier — `Battle.region`/`weather_override`
+  is the battle-wide default (`BATTLE`-scoped `SET_ENVIRONMENT` cast, or ambient-seeded from
+  `region` via the Weather system's `get_effective_weather`, see the "Weather" section);
+  `BattlePlace.weather_override` (`PLACE`-scoped cast) is a local exception that beats it at
+  one front only. `resolution.effective_weather(place)` resolves the precedence: place
+  override → battle override → ambient → none, each with a round-count expiry
+  (`weather_override_expires_round`, cleared at round-boundary). Feeds the same
+  modifier-stack resolvers as terrain via `WeatherTypePropertyEffect`/
+  `WeatherTypeCapabilityChallenge`. `world.weather` internals are unchanged — battles only
+  ever calls `get_effective_weather(area)` read-only, never writes into `RegionWeatherState`.
 - **Peril / Rescue (#1733):** isolated participants can be Surrounded — a staged,
   3-stage acute-peril `ConditionTemplate` (seeded by
   `world.vitals.factories.ensure_surrounded_content`) resolved through the same
@@ -2186,9 +2207,12 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Integrates with:** scenes (1:1 extension), character_sheets (participant/commander FK),
   vitals (damage consequences; shared `_resolve_peril_via_pool` core for Surrounded, #1733),
   conditions (the "Surrounded" staged `ConditionTemplate`, #1733; `CapabilityType` via
-  `BattleUnit.capabilities`/`BattleUnitCapability`, #1794), magic
+  `BattleUnit.capabilities`/`BattleUnitCapability`, #1794), weather (read-only
+  `get_effective_weather(area)` via `Battle.region` to seed ambient weather, #1715 —
+  see the "Weather" section above; no write dependency), areas (`Battle.region` FK), magic
   (`BattleActionDeclaration.technique` FK; `resolve_battle_technique`
-  → `use_technique`; `TechniquePropertyAffinity.technique` FK, #1794; military-grade
+  → `use_technique`; `TechniquePropertyAffinity.technique` FK, #1794; `Technique.target_weather_type`
+  for `SET_ENVIRONMENT` casts, #1715; military-grade
   `summon_ally(payload.military=True)` now reading `payload.properties`/
   `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
   `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from the

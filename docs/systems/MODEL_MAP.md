@@ -126,6 +126,7 @@
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_units <- battles.BattleUnit
   - battle_unit_values <- battles.BattleUnitCapability
+  - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
 
 ### DamageType
 **Foreign Keys:**
@@ -456,6 +457,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - weather_state <- weather.RegionWeatherState
+  - battles <- battles.Battle
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
   - building_permits_valid_in <- buildings.BuildingPermitDetails
@@ -528,6 +530,8 @@
 **Foreign Keys:**
   - scene -> scenes.Scene [OneToOne]
   - campaign_story -> stories.Story [FK] (nullable)
+  - region -> areas.Area [FK] (nullable)
+  - weather_override -> weather.WeatherType [FK] (nullable)
 **Pointed to by:**
   - sides <- battles.BattleSide
   - places <- battles.BattlePlace
@@ -550,6 +554,7 @@
   - battle -> battles.Battle [FK]
   - combat_encounter -> combat.CombatEncounter [FK] (nullable)
   - controlled_by -> battles.BattleSide [FK] (nullable)
+  - weather_override -> weather.WeatherType [FK] (nullable)
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
@@ -607,6 +612,16 @@
 ### TerrainPropertyEffect
 **Foreign Keys:**
   - property -> mechanics.Property [FK]
+
+### WeatherTypePropertyEffect
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+  - property -> mechanics.Property [FK]
+
+### WeatherTypeCapabilityChallenge
+**Foreign Keys:**
+  - weather_type -> weather.WeatherType [FK]
+  - capability -> conditions.CapabilityType [FK]
 
 ### BattleOutcomeMapping
 **Foreign Keys:**
@@ -1362,6 +1377,7 @@
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_units <- battles.BattleUnit
   - battle_unit_values <- battles.BattleUnitCapability
+  - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
 
 ### DamageType
 **Foreign Keys:**
@@ -2414,6 +2430,7 @@
   - source_cantrip -> magic.Cantrip [FK] (nullable)
   - creator -> character_sheets.CharacterSheet [FK] (nullable)
   - action_template -> actions.ActionTemplate [FK] (nullable)
+  - target_weather_type -> weather.WeatherType [FK] (nullable)
   - restrictions -> magic.Restriction [M2M]
   - applied_conditions -> conditions.ConditionTemplate [M2M]
   - properties -> mechanics.Property [M2M]
@@ -3180,6 +3197,7 @@
   - battle_units <- battles.BattleUnit
   - battle_technique_affinities <- battles.TechniquePropertyAffinity
   - battle_terrain_effects <- battles.TerrainPropertyEffect
+  - battle_weather_effects <- battles.WeatherTypePropertyEffect
 
 ### ChallengeTemplateProperty
 **Foreign Keys:**
@@ -5194,10 +5212,15 @@
 **Foreign Keys:**
   - codex_subject -> codex.CodexSubject [FK] (nullable)
 **Pointed to by:**
+  - conjuring_techniques <- magic.Technique
   - exposures <- weather.WeatherTypeExposure
   - emits <- weather.WeatherEmit
   - active_in_regions <- weather.RegionWeatherState
   - feast_days <- weather.FeastDay
+  - overriding_battles <- battles.Battle
+  - overriding_battle_places <- battles.BattlePlace
+  - battle_property_effects <- battles.WeatherTypePropertyEffect
+  - battle_capability_challenges <- battles.WeatherTypeCapabilityChallenge
 
 ### WeatherTypeExposure
 **Foreign Keys:**
