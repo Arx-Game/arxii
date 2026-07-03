@@ -1012,9 +1012,8 @@ action consent flow, and a three-mode non-combat round framework.
       default).
     - `InterposeSceneAction` (`actions/definitions/rounds.py`, key `"scene_interpose"`) — the
       REGISTRY dispatch surface wrapping `declare_interpose_scene`, registered and callable via
-      the web dispatcher (`Action().run()`); **unlike `SuccorSceneAction`, no telnet command
-      routes to it yet** — `commands/scene.py`'s `CmdScene` only handles `scene succor <ally>`, so
-      `scene interpose <ally>` is a follow-up wiring gap, not a missing feature.
+      the web dispatcher (`Action().run()`) and telnet (`scene interpose <ally>`,
+      `commands/scene.py`'s `CmdScene`, mirroring `scene succor <ally>`).
   - **Scene administration (`scene_admin_services.py`, #1445):**
     - `actor_can_administer_scene(actor, scene) -> bool` — permission gate; True for GM/Staff characters (`is_story_runner`), staff accounts, or scene co-owners (`is_owner=True`).
     - `resolve_actor_account(actor) -> AccountDB | None` — controlling account for a PC actor; None for GM/Staff/NPC.

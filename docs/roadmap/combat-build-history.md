@@ -469,13 +469,12 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
   (`ensure_round_for_acute_condition`) when a bystander is present, giving them a genuine
   declare-then-resolve window (`declare_interpose_scene` → `InterposeSceneAction`, key
   `"scene_interpose"`) before the harm lands — reusing the unchanged `dispatch_interpose` combat
-  service via `resolve_pending_interpose_harm`. See ADR-0083. `InterposeSceneAction` is registered
-  and web-dispatchable but has no telnet command yet (`scene_succor`'s telnet counterpart,
-  `scene succor <ally>`, has no `scene interpose <ally>` sibling in `commands/scene.py`).
+  service via `resolve_pending_interpose_harm`. See ADR-0083. `InterposeSceneAction` is registered,
+  web-dispatchable, and reachable via telnet (`scene interpose <ally>`, `commands/scene.py`,
+  mirroring `scene succor <ally>`).
 
   **What remains open (tracked as follow-ups):** knockback / hazard interposition (#1317, separate);
-  frontend declaration UI for INTERPOSE (both the in-combat and out-of-combat forms); a telnet
-  `scene interpose <ally>` command mirroring `scene succor <ally>`.
+  frontend declaration UI for INTERPOSE (both the in-combat and out-of-combat forms).
 
 **Phase 1 (complete):** Foundation models and core services
 - CombatEncounter, CombatOpponent, CombatParticipant, BossPhase models
