@@ -29,8 +29,8 @@ the default ``DiscoverRunner`` and runs the real refresh implementations
 against actual materialized views.
 
 **Schema-template cache:** building the in-memory test schema from model
-state (``migrate --run-syncdb`` over 90+ apps / ~700 models) costs ~20s of
-every invocation despite creating an identical schema each time. This
+state (``migrate --run-syncdb`` over 90+ apps / ~700 models) costs ~15-20s
+of every invocation despite creating an identical schema each time. This
 runner therefore caches the fully-built test DB (schema + the
 ``post_migrate``-seeded rows: content types, permissions, sites) as a
 SQLite file under ``src/.test_schema_cache/``, keyed by a fingerprint of
@@ -51,6 +51,8 @@ from pathlib import Path
 import re
 import sqlite3
 import tempfile
+import time
+import types
 from typing import Any
 
 from django.db import DEFAULT_DB_ALIAS
@@ -88,6 +90,11 @@ def _stable_repr(value: Any) -> str:
         return "{" + ",".join(f"{_stable_repr(k)}:{_stable_repr(v)}" for k, v in items) + "}"
     if isinstance(value, list | tuple):
         return "[" + ",".join(_stable_repr(item) for item in value) + "]"
+    if isinstance(value, types.FunctionType):
+        # Function repr omits the module, so same-named functions (and all
+        # lambdas) from different modules would collapse to one string once
+        # the address is stripped; hash by module-qualified name instead.
+        return f"<function {value.__module__}.{value.__qualname__}>"
     return _MEMORY_ADDRESS_RE.sub("0x", repr(value))
 
 
@@ -96,12 +103,13 @@ def _schema_fingerprint() -> str:
 
     Covers each concrete model's fields (via ``Field.deconstruct()``),
     ``Meta`` options (indexes, constraints, unique_together, ordering, ...)
-    and bases, plus the Django and Evennia versions. Auto-created M2M
-    through-tables are excluded — their schema is fully determined by the
-    owning ``ManyToManyField``, which is hashed. A false mismatch merely
-    rebuilds the template; a false match would need two genuinely different
-    schemas to hash equal, which address-stripping cannot cause (function
-    reprs keep their qualified names).
+    and bases, plus the Django and Evennia versions and the installed-app
+    labels. Auto-created M2M through-tables are excluded — their schema is
+    fully determined by the owning ``ManyToManyField``, which is hashed. A
+    false mismatch merely rebuilds the template; a false match would need
+    two genuinely different schemas to hash equal, which the
+    canonicalizations in ``_stable_repr`` cannot cause (callables hash by
+    module-qualified name).
     """
     import django  # noqa: PLC0415
     from django.apps import apps  # noqa: PLC0415
@@ -111,6 +119,10 @@ def _schema_fingerprint() -> str:
     hasher = hashlib.sha256()
     hasher.update(django.get_version().encode())
     hasher.update(evennia.__version__.encode())
+    # Include the installed-app list itself: a model-less app being added or
+    # removed can still change what migrate would have produced (post_migrate
+    # receivers seeding rows) without altering any model's state.
+    hasher.update(repr(sorted(app.label for app in apps.get_app_configs())).encode())
     # Proxy models (every Evennia typeclass) have no schema of their own and
     # get registered lazily on first import — including them would make the
     # fingerprint depend on which test modules discovery happened to import.
@@ -136,16 +148,32 @@ def _schema_fingerprint() -> str:
 
 
 def _restore_sqlite_from_template(alias: str, template: Path) -> None:
-    """Copy the cached template DB into the (fresh, empty) in-memory test DB."""
+    """Copy the cached template DB into the (fresh, empty) in-memory test DB.
+
+    The source opens in read-only URI mode: a template deleted between the
+    existence check and this call (concurrent prune or corrupt-fallback in
+    another process) must raise — a plain ``sqlite3.connect(path)`` would
+    silently create an empty DB at the path, and a backup from an empty
+    source "succeeds" while leaving the target with zero tables. For the
+    empty-but-present case, the restored DB is verified to contain tables.
+    Both failures raise ``sqlite3.Error`` subclasses, which the caller's
+    fallback turns into a real ``migrate``.
+    """
     from django.db import connections  # noqa: PLC0415
 
     connection = connections[alias]
     connection.ensure_connection()
-    source = sqlite3.connect(str(template))
+    source = sqlite3.connect(f"file:{template}?mode=ro", uri=True)
     try:
         source.backup(connection.connection)
     finally:
         source.close()
+    tables = connection.connection.execute(
+        "SELECT count(*) FROM sqlite_master WHERE type='table'"
+    ).fetchone()[0]
+    if tables == 0:
+        message = f"schema template {template.name} restored zero tables"
+        raise sqlite3.DatabaseError(message)
 
 
 def _dump_sqlite_to_template(alias: str, template: Path) -> None:
@@ -170,7 +198,12 @@ def _dump_sqlite_to_template(alias: str, template: Path) -> None:
 
 
 def _prune_schema_cache() -> None:
-    """Drop all but the newest ``_SCHEMA_CACHE_KEEP`` cached templates."""
+    """Drop all but the newest ``_SCHEMA_CACHE_KEEP`` cached templates.
+
+    Also sweeps ``*.sqlite3.tmp`` files older than an hour — a hard-killed
+    dump (the ``except BaseException`` cleanup never ran) orphans its tmp
+    file, and nothing else would ever remove it.
+    """
     entries = sorted(
         SCHEMA_CACHE_DIR.glob("schema-*.sqlite3"),
         key=lambda path: path.stat().st_mtime,
@@ -178,6 +211,10 @@ def _prune_schema_cache() -> None:
     )
     for stale in entries[_SCHEMA_CACHE_KEEP:]:
         stale.unlink(missing_ok=True)
+    cutoff = time.time() - 3600
+    for orphan in SCHEMA_CACHE_DIR.glob("*.sqlite3.tmp"):
+        if orphan.stat().st_mtime < cutoff:
+            orphan.unlink(missing_ok=True)
 
 
 @contextmanager
@@ -189,25 +226,28 @@ def _migrate_replaced_by_restore(template: Path) -> Iterator[None]:
     attribute is the reliable seam. Every other command (e.g.
     ``createcachetable``) passes through untouched.
 
-    If the template file turns out unreadable, the target in-memory DB is
-    discarded (closing an in-memory SQLite DB destroys it), the template is
-    deleted, and the real ``migrate`` runs — the next run rebuilds the cache.
+    If the template turns out unreadable, concurrently deleted, or empty,
+    the target in-memory DB is discarded (closing an in-memory SQLite DB
+    destroys it), the template is deleted, and the real ``migrate`` runs —
+    the next run rebuilds the cache.
     """
     from django.core import management  # noqa: PLC0415
 
     real_call_command = management.call_command
 
     def call_command_with_cached_schema(name: Any, *args: Any, **kwargs: Any) -> Any:
-        # Django management-command name, not a domain identifier.
-        if name == "migrate":  # noqa: STRING_LITERAL
-            alias = kwargs.get("database", DEFAULT_DB_ALIAS)
+        # Django management-command name, not a domain identifier. Only the
+        # default alias's template is ever dumped, so only its migrate call
+        # is intercepted — a hypothetical second test DB alias falls through
+        # to a real migrate rather than silently receiving default's schema.
+        if name == "migrate" and kwargs.get("database", DEFAULT_DB_ALIAS) == DEFAULT_DB_ALIAS:  # noqa: STRING_LITERAL
             try:
-                _restore_sqlite_from_template(alias, template)
+                _restore_sqlite_from_template(DEFAULT_DB_ALIAS, template)
                 return None
             except sqlite3.Error:
                 from django.db import connections  # noqa: PLC0415
 
-                connections[alias].close()
+                connections[DEFAULT_DB_ALIAS].close()
                 template.unlink(missing_ok=True)
         return real_call_command(name, *args, **kwargs)
 
