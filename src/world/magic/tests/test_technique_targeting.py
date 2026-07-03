@@ -18,6 +18,12 @@ from world.magic.services.targeting import (
     technique_alters_behavior,
     validate_cast_target,
 )
+from world.mechanics.constants import PropertyHolder
+from world.mechanics.factories import (
+    AerialPropertyFactory,
+    ObjectPropertyFactory,
+    PrerequisiteFactory,
+)
 from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
 
 
@@ -507,3 +513,69 @@ class ResolveTargetsTests(TestCase):
         result_ids = {p.pk for p in result}
         self.assertNotIn(initiator.pk, result_ids)
         self.assertIn(enemy.pk, result_ids)
+
+
+class TargetPrerequisitesEnforcementTest(TestCase):
+    """Tests for Technique.target_prerequisites enforcement (#1793)."""
+
+    def _aerial_prerequisite(self):
+        return PrerequisiteFactory(
+            property=AerialPropertyFactory(),
+            property_holder=PropertyHolder.TARGET,
+            minimum_value=1,
+        )
+
+    def test_single_target_missing_prerequisite_raises(self) -> None:
+        # damage_profile=True (default) makes this ENEMY-relationship, target_type=SINGLE.
+        technique = TechniqueFactory(target_type=ActionTargetType.SINGLE)
+        technique.target_prerequisites.add(self._aerial_prerequisite())
+        caster = PersonaFactory()
+        target = PersonaFactory()
+
+        with self.assertRaises(InvalidCastTarget):
+            validate_cast_target(
+                technique=technique, initiator_persona=caster, target_personas=[target]
+            )
+
+    def test_single_target_meeting_prerequisite_passes(self) -> None:
+        technique = TechniqueFactory(target_type=ActionTargetType.SINGLE)
+        prereq = self._aerial_prerequisite()
+        technique.target_prerequisites.add(prereq)
+        caster = PersonaFactory()
+        target = PersonaFactory()
+        ObjectPropertyFactory(object=target.character_sheet.character, property=prereq.property)
+
+        validate_cast_target(
+            technique=technique, initiator_persona=caster, target_personas=[target]
+        )  # does not raise
+
+    def test_area_cast_silently_filters_non_matching_targets(self) -> None:
+        """AREA + ALLY relationship (via _make_ally_technique's fixture shape)."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            target_type=ActionTargetType.AREA,
+        )
+        TechniqueAppliedConditionFactory(technique=technique, target_kind=ConditionTargetKind.ALLY)
+        prereq = self._aerial_prerequisite()
+        technique.target_prerequisites.add(prereq)
+        scene = SceneFactory()
+        caster_persona = PersonaFactory()
+        flying_persona = PersonaFactory()
+        grounded_persona = PersonaFactory()
+        for persona in (caster_persona, flying_persona, grounded_persona):
+            InteractionFactory(scene=scene, persona=persona)
+        ObjectPropertyFactory(
+            object=flying_persona.character_sheet.character, property=prereq.property
+        )
+
+        result = resolve_targets(
+            technique=technique,
+            initiator_persona=caster_persona,
+            scene=scene,
+            supplied_personas=[],
+        )
+        result_ids = {p.pk for p in result}
+
+        self.assertIn(flying_persona.pk, result_ids)
+        self.assertNotIn(grounded_persona.pk, result_ids)

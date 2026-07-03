@@ -58,6 +58,30 @@ def _check_relationship(
     # ALLY: no restriction — self and others are both permitted.
 
 
+def _target_meets_prerequisites(technique: Technique, caster_od, persona: Persona) -> bool:
+    """True if persona's character satisfies every one of technique's target_prerequisites."""
+    prereqs = technique.cached_target_prerequisites
+    if not prereqs:
+        return True
+    target_od = persona.character_sheet.character
+    return all(prereq.evaluate(caster_od, target_od, target_od.location).met for prereq in prereqs)
+
+
+def _check_target_prerequisites(
+    technique: Technique,
+    initiator_persona: Persona,
+    target_personas: list[Persona],
+) -> None:
+    """Enforce target_prerequisites for explicit (SELF/SINGLE) targets — raises on failure."""
+    if not technique.cached_target_prerequisites:
+        return
+    caster_od = initiator_persona.character_sheet.character
+    for persona in target_personas:
+        if not _target_meets_prerequisites(technique, caster_od, persona):
+            msg = "Target does not meet this technique's targeting requirement."
+            raise InvalidCastTarget(msg)
+
+
 def validate_cast_target(
     *,
     technique: Technique,
@@ -83,6 +107,7 @@ def validate_cast_target(
 
     _check_cardinality(technique, target_personas)
     _check_relationship(relationship, initiator_sheet_id, target_personas)
+    _check_target_prerequisites(technique, initiator_persona, target_personas)
 
 
 def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
@@ -233,6 +258,9 @@ def resolve_targets(
     )
     # Exclude intangible targets — they are untargetable regardless of technique type.
     eligible = [p for p in eligible if not is_untargetable(p.character_sheet.character)]
+    if technique.cached_target_prerequisites:
+        caster_od = initiator_persona.character_sheet.character
+        eligible = [p for p in eligible if _target_meets_prerequisites(technique, caster_od, p)]
 
     if target_type == ActionTargetType.AREA:
         return eligible
