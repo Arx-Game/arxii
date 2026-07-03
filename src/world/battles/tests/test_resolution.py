@@ -972,6 +972,82 @@ class RepelResolutionTests(TestCase):
         self.assertEqual(defender_unit.strength, 100 - expected_attrition)
 
 
+class HoldResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.enemy_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.place = BattlePlaceFactory(battle=self.battle)
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+
+    def test_hold_captures_uncontrolled_place_and_awards_capture_vp(self) -> None:
+        from world.battles.constants import HOLD_CAPTURE_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_hold_success
+
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_hold_success(declaration, result)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, HOLD_CAPTURE_VP)
+
+    def test_hold_sustains_already_controlled_place_with_smaller_vp(self) -> None:
+        from world.battles.constants import HOLD_SUSTAIN_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_hold_success
+
+        self.place.controlled_by = self.side
+        self.place.save(update_fields=["controlled_by"])
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_hold_success(declaration, result)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)  # unchanged
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, HOLD_SUSTAIN_VP)
+
+    def test_hold_captures_from_enemy_control(self) -> None:
+        from world.battles.constants import HOLD_CAPTURE_VP
+        from world.battles.factories import BattleActionDeclarationFactory
+        from world.battles.resolution import BattleRoundResult, _resolve_hold_success
+
+        self.place.controlled_by = self.enemy_side
+        self.place.save(update_fields=["controlled_by"])
+        declaration = BattleActionDeclarationFactory(
+            battle_round__battle=self.battle,
+            participant=self.participant,
+            action_kind=BattleActionKind.HOLD,
+            scope=BattleActionScope.PLACE,
+            target_place=self.place,
+        )
+        result = BattleRoundResult()
+
+        _resolve_hold_success(declaration, result)
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.controlled_by_id, self.side.pk)
+        self.side.refresh_from_db()
+        self.assertEqual(self.side.victory_points, HOLD_CAPTURE_VP)
+
+
 class ResolveBattleRoundFailureTests(TestCase):
     """STRIKE failure: PC health debited."""
 

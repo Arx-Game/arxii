@@ -576,6 +576,34 @@ def _resolve_repel_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
+def _resolve_hold_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+) -> None:
+    """Apply HOLD success: capture or sustain control of the target place, award VP
+    (#1712). Requires scope=PLACE (enforced at declare time) — ``target_place`` is
+    always set here. Capturing (place uncontrolled or held by the enemy) awards
+    HOLD_CAPTURE_VP and flips control; sustaining (already held by the declarant's
+    side) awards the smaller HOLD_SUSTAIN_VP with no state change, so repeatedly
+    holding a front doesn't runaway-farm the capture bonus.
+    """
+    from world.battles.constants import HOLD_CAPTURE_VP, HOLD_SUSTAIN_VP  # noqa: PLC0415
+
+    place = declaration.target_place
+    side = declaration.participant.side
+
+    if place.controlled_by_id != side.pk:
+        place.controlled_by = side
+        place.save(update_fields=["controlled_by"])
+        vp_gain = round(HOLD_CAPTURE_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    else:
+        vp_gain = round(HOLD_SUSTAIN_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
 def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     """Apply RESCUE success: clear Surrounded from the ally/allies at scope (#1733, #1710).
 
@@ -756,6 +784,37 @@ def _advance_surrounded_participants(
         advance_surrounded(sheet, battle=battle)
 
 
+def _dispatch_success_handler(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+    place_defense_bonus: dict[int, int],
+) -> None:
+    """Route a successful declaration to its action-kind-specific resolver (#1712).
+
+    Extracted from ``resolve_battle_round`` to keep that function's own branching
+    within the McCabe complexity budget — this is purely a dispatch table, kept
+    separate from round-level orchestration (declaration ordering, failure
+    handling, Surrounded advancement).
+    """
+    if declaration.action_kind == BattleActionKind.STRIKE:
+        _resolve_strike_success(declaration, result, success_level, place_defense_bonus)
+    elif declaration.action_kind == BattleActionKind.RESCUE:
+        _resolve_rescue_success(declaration)
+    elif declaration.action_kind == BattleActionKind.ROUT:
+        _resolve_rout_success(declaration, result, success_level)
+    elif declaration.action_kind == BattleActionKind.RALLY:
+        _resolve_rally_success(declaration, result, success_level)
+    elif declaration.action_kind == BattleActionKind.REPEL:
+        _resolve_repel_success(declaration, result, place_defense_bonus)
+    elif declaration.action_kind == BattleActionKind.HOLD:
+        _resolve_hold_success(declaration, result)
+    elif declaration.action_kind == BattleActionKind.SUPPORT:
+        _resolve_support_success(declaration, result)
+    else:
+        _resolve_support_success(declaration, result)
+
+
 @transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
@@ -796,18 +855,7 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
         sl = check_result.success_level if check_result is not None else 0
 
         if sl > 0:
-            if declaration.action_kind == BattleActionKind.STRIKE:
-                _resolve_strike_success(declaration, result, sl, place_defense_bonus)
-            elif declaration.action_kind == BattleActionKind.RESCUE:
-                _resolve_rescue_success(declaration)
-            elif declaration.action_kind == BattleActionKind.ROUT:
-                _resolve_rout_success(declaration, result, sl)
-            elif declaration.action_kind == BattleActionKind.RALLY:
-                _resolve_rally_success(declaration, result, sl)
-            elif declaration.action_kind == BattleActionKind.REPEL:
-                _resolve_repel_success(declaration, result, place_defense_bonus)
-            else:
-                _resolve_support_success(declaration, result)
+            _dispatch_success_handler(declaration, result, sl, place_defense_bonus)
         elif _resolve_failure(declaration, result, sl):
             newly_surrounded_participant_ids.add(declaration.participant_id)
 
