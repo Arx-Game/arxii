@@ -673,6 +673,48 @@ def _resolve_hold_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
+def _resolve_environment_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,
+    success_level: int,
+    round_number: int,
+) -> None:
+    """Apply SET_ENVIRONMENT success: set the cast weather at the declared scope,
+    award flat VP (#1715).
+
+    BATTLE scope writes Battle.weather_override (the battle-wide default);
+    PLACE scope writes a local exception on the target BattlePlace that beats
+    the battle-wide value there only (see resolution.effective_weather).
+    Duration scales with success_level so a stronger cast holds longer — see
+    SET_ENVIRONMENT_BASE_ROUNDS's docstring for the >= 2 round guarantee.
+    """
+    from world.battles.constants import (  # noqa: PLC0415
+        SET_ENVIRONMENT_BASE_ROUNDS,
+        SET_ENVIRONMENT_VP,
+        BattleActionScope,
+    )
+
+    weather_type = declaration.technique.target_weather_type
+    expires_round = round_number + SET_ENVIRONMENT_BASE_ROUNDS + success_level
+
+    if declaration.scope == BattleActionScope.BATTLE:
+        battle = declaration.battle_round.battle
+        battle.weather_override = weather_type
+        battle.weather_override_expires_round = expires_round
+        battle.save(update_fields=["weather_override", "weather_override_expires_round"])
+    else:
+        place = declaration.target_place
+        place.weather_override = weather_type
+        place.weather_override_expires_round = expires_round
+        place.save(update_fields=["weather_override", "weather_override_expires_round"])
+
+    side = declaration.participant.side
+    vp_gain = round(SET_ENVIRONMENT_VP * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
+    side.victory_points += vp_gain
+    side.save(update_fields=["victory_points"])
+    result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
+
+
 def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     """Apply RESCUE success: clear Surrounded from the ally/allies at scope (#1733, #1710).
 
@@ -858,8 +900,9 @@ def _dispatch_success_handler(
     result: BattleRoundResult,
     success_level: int,
     place_defense_bonus: dict[int, int],
+    round_number: int,
 ) -> None:
-    """Route a successful declaration to its action-kind-specific resolver (#1712).
+    """Route a successful declaration to its action-kind-specific resolver (#1712/#1715).
 
     Extracted from ``resolve_battle_round`` to keep that function's own branching
     within the McCabe complexity budget — this is purely a dispatch table, kept
@@ -878,6 +921,8 @@ def _dispatch_success_handler(
         _resolve_repel_success(declaration, result, place_defense_bonus)
     elif declaration.action_kind == BattleActionKind.HOLD:
         _resolve_hold_success(declaration, result)
+    elif declaration.action_kind == BattleActionKind.SET_ENVIRONMENT:
+        _resolve_environment_success(declaration, result, success_level, round_number)
     elif declaration.action_kind == BattleActionKind.SUPPORT:
         _resolve_support_success(declaration, result)
     else:
@@ -912,6 +957,7 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
             "target_place",
             "target_side",
             "technique__action_template",
+            "technique__target_weather_type",
         )
     )
     # REPEL must resolve before every other action kind this round (#1712) — its
@@ -926,7 +972,9 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
         sl = check_result.success_level if check_result is not None else 0
 
         if sl > 0:
-            _dispatch_success_handler(declaration, result, sl, place_defense_bonus)
+            _dispatch_success_handler(
+                declaration, result, sl, place_defense_bonus, battle_round.round_number
+            )
         elif _resolve_failure(declaration, result, sl):
             newly_surrounded_participant_ids.add(declaration.participant_id)
 

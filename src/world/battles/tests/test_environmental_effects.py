@@ -7,6 +7,11 @@ front only. See world.battles.resolution.effective_weather.
 
 from __future__ import annotations
 
+# NEW imports for this task only — CharacterTechniqueFactory was already
+# imported by Task 6; do not re-import it here.
+import types
+from unittest.mock import patch
+
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -46,10 +51,16 @@ from world.battles.resolution import (
     _weather_capability_modifier,
     _weather_property_modifier,
     effective_weather,
+    resolve_battle_round,
 )
-from world.battles.services import declare_battle_action
+from world.battles.services import begin_battle_round, declare_battle_action
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import CapabilityTypeFactory
-from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+from world.covenants.constants import CommandTier, CovenantType
+from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
+from world.covenants.models import CharacterCovenantRole
+from world.covenants.services import set_engaged_membership
+from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory, TechniqueFactory
 from world.mechanics.factories import PropertyFactory
 from world.scenes.constants import RoundStatus
 from world.weather.factories import RegionWeatherStateFactory, WeatherTypeFactory
@@ -319,3 +330,129 @@ class DeclareEnvironmentValidationTests(TestCase):
                 technique=technique,
                 scope=BattleActionScope.BATTLE,
             )
+
+
+def _success_result(level: int = 2) -> types.SimpleNamespace:
+    return types.SimpleNamespace(success_level=level)
+
+
+def _grant_command_tier(*, participant, side, covenant, tier) -> None:
+    rank = CovenantRankFactory(covenant=covenant)
+    role = CovenantRoleFactory(
+        covenant_type=CovenantType.BATTLE,
+        command_tier=tier,
+        slug=f"env-e2e-{tier}-{participant.pk}",
+    )
+    membership = CharacterCovenantRole.objects.create(
+        character_sheet=participant.character_sheet,
+        covenant_role=role,
+        covenant=covenant,
+        rank=rank,
+        engaged=False,
+    )
+    set_engaged_membership(membership=membership)
+
+
+class SetEnvironmentSuccessTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle)
+        self.covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        self.side.covenant = self.covenant
+        self.side.save()
+        self.character = CharacterSheetFactory()
+        self.participant = BattleParticipantFactory(
+            battle=self.battle, side=self.side, character_sheet=self.character
+        )
+        _grant_command_tier(
+            participant=self.participant,
+            side=self.side,
+            covenant=self.covenant,
+            tier=CommandTier.SUPREME,
+        )
+        self.weather_type = WeatherTypeFactory()
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), target_weather_type=self.weather_type
+        )
+        CharacterTechniqueFactory(character=self.character, technique=self.technique)
+        CharacterAnimaFactory(character=self.character.character)
+
+    def test_battle_scope_cast_sets_battle_weather_override(self) -> None:
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.SET_ENVIRONMENT,
+            technique=self.technique,
+            scope=BattleActionScope.BATTLE,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(1)
+            resolve_battle_round(battle_round=battle_round)
+
+        self.battle.refresh_from_db()
+        self.assertEqual(self.battle.weather_override_id, self.weather_type.pk)
+        # round_number=1, SET_ENVIRONMENT_BASE_ROUNDS=1, success_level=1 -> expires at 3.
+        self.assertEqual(self.battle.weather_override_expires_round, 3)
+
+    def test_place_scope_cast_sets_local_exception_only(self) -> None:
+        place = BattlePlaceFactory(battle=self.battle)
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.SET_ENVIRONMENT,
+            technique=self.technique,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(1)
+            resolve_battle_round(battle_round=battle_round)
+
+        place.refresh_from_db()
+        self.battle.refresh_from_db()
+        self.assertEqual(place.weather_override_id, self.weather_type.pk)
+        self.assertIsNone(self.battle.weather_override_id)
+
+    def test_place_local_exception_beats_active_battle_wide_override(self) -> None:
+        other_weather = WeatherTypeFactory()
+        self.battle.weather_override = other_weather
+        self.battle.weather_override_expires_round = 99
+        self.battle.save()
+        place = BattlePlaceFactory(battle=self.battle)
+        other_place = BattlePlaceFactory(battle=self.battle)
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.SET_ENVIRONMENT,
+            technique=self.technique,
+            scope=BattleActionScope.PLACE,
+            target_place=place,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(1)
+            resolve_battle_round(battle_round=battle_round)
+
+        self.assertEqual(effective_weather(place), self.weather_type)
+        self.assertEqual(effective_weather(other_place), other_weather)
+
+    def test_minimum_success_level_produces_at_least_two_active_rounds(self) -> None:
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.SET_ENVIRONMENT,
+            technique=self.technique,
+            scope=BattleActionScope.BATTLE,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(1)  # minimum possible success
+            resolve_battle_round(battle_round=battle_round)
+
+        self.battle.refresh_from_db()
+        # Active for round_number (1) through weather_override_expires_round (3)
+        # inclusive per the round-boundary-expiry rule in Task 8 — at least 2
+        # rounds beyond the casting round itself.
+        self.assertGreaterEqual(self.battle.weather_override_expires_round - 1, 2)
