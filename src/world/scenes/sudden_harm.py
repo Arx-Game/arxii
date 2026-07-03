@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.conditions.models import DamageType
+    from world.scenes.models import SceneRound
 
 
 logger = logging.getLogger(__name__)
@@ -133,3 +134,73 @@ def arm_or_apply_sudden_harm(
         damage_type=damage_type,
         source_description=source_description,
     )
+
+
+def resolve_pending_interpose_harm(scene_round: SceneRound) -> None:
+    """Resolve every PendingSuddenHarm bound to this round's ACTIVE participants (#1316).
+
+    Called from resolve_scene_round right after the END tick. For each pending harm:
+    look up this round's interpose_target declaration naming the victim (if any),
+    resolve it via the unchanged combat dispatch_interpose (mutates a
+    DamagePreApplyPayload in place per the graded outcome — mirrors combat's
+    _try_interpose), apply the resulting amount via apply_resolved_damage, then clean
+    up the pending row and deactivate the bound Interpose ChallengeInstance. No
+    declaration this round -> full harm lands (the AFK-safe default, inherited for
+    free from the existing quorum-gated round system).
+    """
+    from flows.events.payloads import DamagePreApplyPayload, DamageSource  # noqa: PLC0415
+    from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
+    from world.combat.services import dispatch_interpose  # noqa: PLC0415
+    from world.mechanics.effect_handlers import apply_resolved_damage  # noqa: PLC0415
+    from world.mechanics.models import ChallengeInstance  # noqa: PLC0415
+    from world.scenes.constants import SceneRoundParticipantStatus  # noqa: PLC0415
+    from world.scenes.models import PendingSuddenHarm, SceneActionDeclaration  # noqa: PLC0415
+
+    active_char_ids = list(
+        scene_round.participants.filter(status=SceneRoundParticipantStatus.ACTIVE).values_list(
+            "character_sheet__character_id", flat=True
+        )
+    )
+    if not active_char_ids:
+        return
+
+    pending_qs = PendingSuddenHarm.objects.filter(
+        scene_round=scene_round, target_sheet__character_id__in=active_char_ids
+    ).select_related("target_sheet__character", "damage_type")
+
+    for pending in pending_qs:
+        target_character = pending.target_sheet.character
+        amount = pending.amount
+
+        target_participant = scene_round.participants.filter(
+            character_sheet=pending.target_sheet,
+            status=SceneRoundParticipantStatus.ACTIVE,
+        ).first()
+        if target_participant is not None:
+            declaration = SceneActionDeclaration.objects.filter(
+                scene_round=scene_round,
+                round_number=scene_round.round_number,
+                interpose_target=target_participant,
+            ).first()
+            if declaration is not None:
+                interposer = declaration.participant.character_sheet.character
+                pre_payload = DamagePreApplyPayload(
+                    target=target_character,
+                    amount=amount,
+                    damage_type=pending.damage_type,
+                    source=DamageSource(type="environment", ref=pending.source_description or None),
+                )
+                dispatch_interpose(interposer, target_character, pre_payload, approach=None)
+                amount = pre_payload.amount
+
+        if amount > 0:
+            apply_resolved_damage(target_character, amount, pending.damage_type)
+
+        # Scoped to the Interpose template so an unrelated active ChallengeInstance
+        # bound to the same target (e.g. a Succor cover challenge) is left untouched.
+        ChallengeInstance.objects.filter(
+            template__name=INTERPOSE_CHALLENGE_NAME,
+            target_object=target_character,
+            is_active=True,
+        ).update(is_active=False)
+        pending.delete()

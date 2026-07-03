@@ -651,6 +651,10 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
         targets.append(sheet.character)
     tick_round_for_targets(targets, timing="end")
 
+    from world.scenes.sudden_harm import resolve_pending_interpose_harm  # noqa: PLC0415
+
+    resolve_pending_interpose_harm(rnd)
+
     # Advance plummet for victims whose bleed-out is held but who are also falling.
     # They were excluded from the main tick above to keep their bleed-out held, but
     # gravity does not pause for an abandoned round — their descent must still advance
