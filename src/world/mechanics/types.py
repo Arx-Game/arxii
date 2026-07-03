@@ -7,7 +7,7 @@ Dataclasses and type definitions for the mechanics service layer.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
@@ -21,6 +21,28 @@ from world.mechanics.models import Prerequisite
 
 # Re-export for backwards compatibility within mechanics app
 ConsequenceDisplay = OutcomeDisplay
+
+if TYPE_CHECKING:
+    from world.conditions.models import CapabilityType
+    from world.mechanics.models import Property
+
+
+class HasCapabilities(Protocol):
+    """Duck-typed contract: something that can be asked for its magnitude on a
+    CapabilityType. Implemented by CharacterSheet (delegates to
+    get_effective_capability_value) and BattleUnit (reads its own
+    BattleUnitCapability rows) — no isinstance branching (#1794)."""
+
+    def effective_capability(self, capability: CapabilityType) -> int: ...
+
+
+class HasProperties(Protocol):
+    """Duck-typed contract: something that can be asked whether it carries a
+    Property tag. Implemented by CharacterSheet (delegates to ObjectProperty/
+    persona-authored properties) and BattleUnit (reads its own properties M2M)
+    — no isinstance branching (#1794)."""
+
+    def has_property(self, prop: Property) -> bool: ...
 
 
 @dataclass
