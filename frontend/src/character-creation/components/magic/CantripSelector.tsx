@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { useUpdateDraft } from '../../queries';
+import { useConsequencePoolCatalog, useUpdateDraft } from '../../queries';
 import type { Cantrip, CharacterDraft } from '../../types';
 
 const ARCHETYPE_LABELS: Record<Cantrip['archetype'], string> = {
@@ -39,6 +39,9 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
   const selectedFacetId = draft.draft_data.selected_facet_id ?? null;
 
   const selectedCantrip = cantrips.find((c) => c.id === selectedCantripId) ?? null;
+
+  const { data: consequencePools = [] } = useConsequencePoolCatalog();
+  const selectedPoolId = draft.draft_data.selected_consequence_pool_id ?? null;
 
   // Group cantrips by archetype
   const grouped = ARCHETYPE_ORDER.map((archetype) => ({
@@ -69,6 +72,18 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
         draft_data: {
           ...draft.draft_data,
           selected_facet_id: parseInt(facetId, 10),
+        },
+      },
+    });
+  };
+
+  const handleSelectPool = (poolId: string) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draft.draft_data,
+          selected_consequence_pool_id: poolId === 'standard' ? undefined : parseInt(poolId, 10),
         },
       },
     });
@@ -117,6 +132,29 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
               {selectedCantrip.allowed_facets.map((facet) => (
                 <SelectItem key={facet.id} value={facet.id.toString()}>
                   {facet.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Outcome flavor selector for the chosen cantrip */}
+      {selectedCantrip && (
+        <div className="max-w-xs space-y-2">
+          <Label>Outcome Flavor</Label>
+          <Select
+            value={selectedPoolId != null ? String(selectedPoolId) : 'standard'}
+            onValueChange={handleSelectPool}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Standard" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="standard">Standard</SelectItem>
+              {consequencePools.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>
+                  {p.name}
                 </SelectItem>
               ))}
             </SelectContent>

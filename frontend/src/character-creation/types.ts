@@ -636,6 +636,7 @@ export interface DraftData {
   // Magic fields - Cantrip selection
   selected_cantrip_id?: number;
   selected_facet_id?: number | null;
+  selected_consequence_pool_id?: number | null;
   custom_gift_name?: string;
   custom_gift_description?: string;
   motif_description?: string;
