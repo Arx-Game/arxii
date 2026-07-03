@@ -54,6 +54,11 @@ test-fast-par *args:
 # DATABASE_URL does NOT reach `arx` subcommands (setup_env() reloads
 # src/.env with override=True), so every recipe that needs the test DB name
 # re-derives it from the file instead of trusting the environment.
+# Only supports the plain documented form (postgres://user:pass@host:port/dbname)
+# — no query string, no surrounding quotes. Both would silently mis-derive the
+# DB name (query lands in it; quotes leak into it), so this validates the
+# derived name and fails loudly instead, rather than building a name Postgres
+# will accept but nothing else will match.
 #   just _testdb-url                 # prints "TESTDB=... MAINT_URL=..." (eval'd by callers)
 _testdb-url:
     #!/usr/bin/env bash
@@ -61,6 +66,14 @@ _testdb-url:
     DBURL=$(grep -E '^DATABASE_URL=' src/.env | head -1 | cut -d= -f2-)
     DBNAME=${DBURL##*/}
     PREFIX=${DBURL%/*}
+    if ! [[ "$DBNAME" =~ ^[A-Za-z0-9_]+$ ]]; then
+        echo "_testdb-url: src/.env's DATABASE_URL isn't in the supported form." >&2
+        echo "  DATABASE_URL=${DBURL}" >&2
+        echo "  Derived db name: '${DBNAME}' (must match ^[A-Za-z0-9_]+\$)" >&2
+        echo "  Supported form: postgres://user:pass@host:port/dbname" >&2
+        echo "  (no query string, no surrounding quotes)" >&2
+        exit 1
+    fi
     echo "TESTDB=test_${DBNAME}"
     echo "MAINT_URL=${PREFIX}/postgres"
     echo "TESTDB_URL=${PREFIX}/test_${DBNAME}"
@@ -106,14 +119,17 @@ _ensure-testdb rebuild="":
 test-parity *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    ARGS="{{args}}"
     REBUILD=""
-    if [[ "$ARGS" == *"--rebuild"* ]]; then
-        REBUILD="1"
-        ARGS=$(echo "${ARGS/--rebuild/}" | xargs)
-    fi
+    ARGS=()
+    for tok in {{args}}; do
+        if [ "$tok" = "--rebuild" ]; then
+            REBUILD="1"
+        else
+            ARGS+=("$tok")
+        fi
+    done
     just _ensure-testdb "$REBUILD"
-    echo "yes" | uv run arx test --keepdb --parallel $ARGS
+    echo "yes" | uv run arx test --keepdb --parallel "${ARGS[@]}"
 
 # Change-impact-aware regression: tests only the apps your branch
 # actually touches PLUS apps that import from them (catches the
@@ -176,14 +192,17 @@ test-affected *args:
 regression *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    ARGS="{{args}}"
     REBUILD=""
-    if [[ "$ARGS" == *"--rebuild"* ]]; then
-        REBUILD="1"
-        ARGS=$(echo "${ARGS/--rebuild/}" | xargs)
-    fi
+    ARGS=()
+    for tok in {{args}}; do
+        if [ "$tok" = "--rebuild" ]; then
+            REBUILD="1"
+        else
+            ARGS+=("$tok")
+        fi
+    done
     just _ensure-testdb "$REBUILD"
-    echo "yes" | uv run arx test --keepdb --parallel $ARGS
+    echo "yes" | uv run arx test --keepdb --parallel "${ARGS[@]}"
 
 # --- Lint / format -----------------------------------------------------------
 
