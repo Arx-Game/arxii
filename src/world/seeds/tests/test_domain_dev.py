@@ -26,9 +26,9 @@ class DomainDevSeedTests(TestCase):
             self.assertGreater(offer.ap_cost, 0)
             self.assertIsNotNone(offer.cooldown)
 
-    def test_placeholder_scandal_archetypes_exist(self) -> None:
-        rows = PhilosophicalArchetype.objects.filter(name__startswith="PLACEHOLDER")
-        self.assertGreaterEqual(rows.count(), 2)
+    def test_authored_scandal_archetypes_exist(self) -> None:
+        rows = PhilosophicalArchetype.objects.filter(name__endswith="Scandal")
+        self.assertGreaterEqual(rows.count(), 9)
 
     def test_idempotent(self) -> None:
         ensure_dev_domain()

@@ -21,8 +21,11 @@ STEWARD_ROLE_NAME = "House Steward"
 
 
 def ensure_dev_domain() -> None:
-    """Seed the walkable domain loop: house, streams, steward, offers, archetypes."""
-    _ensure_scandal_archetypes()
+    """Seed the walkable domain loop: house, streams, steward, offers."""
+    # Scandal vocabulary now lives in the authored seed (scandal_archetypes.py).
+    from world.seeds.scandal_archetypes import seed_scandal_archetypes  # noqa: PLC0415
+
+    seed_scandal_archetypes()
     organization = _ensure_house()
     _ensure_income_streams(organization)
     _ensure_steward_offers(organization)
@@ -105,27 +108,5 @@ def _ensure_steward_offers(organization) -> None:
                 "is_final": True,
                 "ap_cost": 2,  # PLACEHOLDER
                 "cooldown": timedelta(days=1),  # PLACEHOLDER
-            },
-        )
-
-
-def _ensure_scandal_archetypes() -> None:
-    """Two PLACEHOLDER rows so the #1464 judgment has vocabulary to read.
-
-    Deltas are PLACEHOLDER signs, not tuning: one reads badly to honor-bound
-    societies (oath-breaking shape), one to hierarchical ones (insolence
-    shape). Apostate's deed-type↔principle mapping pass replaces/extends these.
-    """
-    from world.societies.models import PhilosophicalArchetype  # noqa: PLC0415
-
-    for name, deltas in (
-        ("PLACEHOLDER Oathbreaking", {"method_delta": -2, "allegiance_delta": -1}),
-        ("PLACEHOLDER Insolence", {"power_delta": -2, "status_delta": -1}),
-    ):
-        PhilosophicalArchetype.objects.get_or_create(
-            name=name,
-            defaults={
-                "description": "PLACEHOLDER: awaiting the authored archetype pass.",
-                **deltas,
             },
         )

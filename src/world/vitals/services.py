@@ -107,6 +107,40 @@ def can_act(character_sheet: CharacterSheet | None) -> bool:
     return get_effective_capability_value(character_sheet, awareness) > 0
 
 
+def conscious_bystander_present(
+    room: ObjectDB | None,  # noqa: OBJECTDB_PARAM
+    *,
+    subject_id: int,
+    exclude_ids: frozenset[int] = frozenset(),
+) -> bool:
+    """True if anyone but ``subject_id`` present in ``room`` is conscious (can_act).
+
+    The shared core of the three "is a conscious bystander present" checks (#1813):
+    ``world.areas.positioning.plummet._potential_catcher_present``,
+    ``world.vitals.peril_resolution.potential_rescuer_present``, and
+    ``world.scenes.sudden_harm._potential_interposer_present``. Each of those stays a
+    thin wrapper with its own docstring/signature/parameter name — only their internal
+    loop delegates here.
+
+    ``exclude_ids`` additionally omits any character ids the caller wants excluded
+    (e.g. a departing mover, or a peril's hostile source) beyond ``subject_id`` —
+    resolving which ids to exclude stays with the caller; this function only walks
+    the room and checks ``can_act``.
+    """
+    if room is None:
+        return False
+    for obj in room.contents:
+        if obj.id == subject_id or obj.id in exclude_ids:
+            continue
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if can_act(sheet):
+            return True
+    return False
+
+
 def derive_character_status(character_sheet: CharacterSheet | None) -> str:
     """Derive a coarse, read-only life-status string for the wire/API.
 
