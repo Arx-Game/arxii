@@ -231,7 +231,7 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
     The graded outcome (Tax Collection check + band table + graft) lives in
     ``currency.collect_org_income``; this handler resolves the org, runs the
-    dispatch, and phrases the toast. Messages are PLACEHOLDER copy.
+    dispatch, and phrases the toast. Copy approved by Apostate (2026-07-03).
     """
     from django.core.exceptions import ValidationError  # noqa: PLC0415
 
@@ -252,23 +252,23 @@ def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     except ValidationError:
         return EffectResult(
             kind=OfferKind.COLLECTION.value,
-            message="PLACEHOLDER: The strongboxes hold nothing worth a collector's boots.",
+            message="The strongboxes hold nothing worth a collector's boots.",
             payload={"offer_pk": offer.pk, "organization_pk": organization.pk},
         )
     if result.catastrophe:
         # The collector-incident encounter is a combat-domain follow-up seam.
         message = (
-            "PLACEHOLDER: Word comes back ugly — the collection run was set upon and "
+            "Word comes back ugly: the collection run was set upon and "
             f"the take is gone. {format_coppers(result.gathered)} lost."
         )
     elif result.stolen > 0:
         message = (
-            f"PLACEHOLDER: The collector returns light — {format_coppers(result.landed)} "
+            f"The collector returns light: {format_coppers(result.landed)} "
             f"banked of {format_coppers(result.gathered)} gathered; the rest went missing."
         )
     else:
         message = (
-            f"PLACEHOLDER: The rounds went smoothly — {format_coppers(result.landed)} "
+            f"The rounds went smoothly: {format_coppers(result.landed)} "
             "banked after the usual leakage."
         )
     return EffectResult(
@@ -289,7 +289,7 @@ def run_improvement(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 
     Scholarship/Economics against the ledgers (``currency.improve_org_domain``):
     success raises the streams and cracks down on graft; a partial only manages
-    the crackdown. Messages are PLACEHOLDER copy.
+    the crackdown. Copy approved by Apostate (2026-07-03).
     """
     from world.currency.services import improve_org_domain  # noqa: PLC0415
 
@@ -305,16 +305,14 @@ def run_improvement(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     result = improve_org_domain(organization=organization, character=character)
     if result.gross_raised:
         message = (
-            "PLACEHOLDER: The investment takes — the income lines run richer, and the "
-            "clerks mind their sums."
+            "The investment takes; the income lines run richer, and the clerks mind their sums."
         )
     elif result.graft_cracked:
         message = (
-            "PLACEHOLDER: No new coin found, but the crackdown bites — less leaks from "
-            "the books this season."
+            "No new coin found, but the crackdown bites; less leaks from the books this season."
         )
     else:
-        message = "PLACEHOLDER: The ledgers resist — nothing comes of the effort this time."
+        message = "The ledgers resist; nothing comes of the effort this time."
     return EffectResult(
         kind=OfferKind.IMPROVEMENT.value,
         object_label=f"Domain investment for {organization.name}",

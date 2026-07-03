@@ -139,6 +139,7 @@
   - signaturemotifbonusdamageprofile_damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
+  - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -502,6 +503,7 @@
   - blueprint -> areas.PositionBlueprint [FK]
   - position_a -> areas.BlueprintPosition [FK]
   - position_b -> areas.BlueprintPosition [FK]
+  - gating_challenge_template -> mechanics.ChallengeTemplate [FK] (nullable)
 
 ### ObjectPosition
 **Foreign Keys:**
@@ -983,6 +985,7 @@
   - personas <- scenes.Persona
   - persona_discoveries <- scenes.PersonaDiscovery
   - scene_round_participations <- scenes.SceneRoundParticipant
+  - pending_sudden_harm <- scenes.PendingSuddenHarm
   - character_stories <- stories.Story
   - aggregate_contributions <- stories.AggregateBeatContribution
   - beat_completions <- stories.BeatCompletion
@@ -1375,6 +1378,7 @@
   - signaturemotifbonusdamageprofile_damage_profiles <- magic.SignatureMotifBonusDamageProfile
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
+  - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -4410,6 +4414,7 @@
 **Pointed to by:**
   - participants <- scenes.SceneRoundParticipant
   - action_declarations <- scenes.SceneActionDeclaration
+  - pending_sudden_harms <- scenes.PendingSuddenHarm
 
 ### SceneRoundDefaultsConfig
 **Foreign Keys:**
@@ -4422,6 +4427,7 @@
 **Pointed to by:**
   - action_declarations <- scenes.SceneActionDeclaration
   - succor_declarations <- scenes.SceneActionDeclaration
+  - interpose_declarations <- scenes.SceneActionDeclaration
 
 ### SceneActionDeclaration
 **Foreign Keys:**
@@ -4431,6 +4437,13 @@
   - challenge_approach -> mechanics.ChallengeApproach [FK] (nullable)
   - target_persona -> scenes.Persona [FK] (nullable)
   - succor_target -> scenes.SceneRoundParticipant [FK] (nullable)
+  - interpose_target -> scenes.SceneRoundParticipant [FK] (nullable)
+
+### PendingSuddenHarm
+**Foreign Keys:**
+  - target_sheet -> character_sheets.CharacterSheet [FK]
+  - scene_round -> scenes.SceneRound [FK]
+  - damage_type -> conditions.DamageType [FK] (nullable)
 
 ### SceneActionRequest
 **Foreign Keys:**

@@ -176,7 +176,7 @@ def _mint_contained_secret(
 
     ACTION_ANCHORED provenance + scene/deed anchors satisfy ``Secret.clean()``;
     archetypes copy across so a later ``expose_secret`` fires the same
-    reputation math the leak would have. Content is PLACEHOLDER prose.
+    reputation math the leak would have. Content template approved (2026-07-03).
     """
     from world.secrets.services import SecretError, author_secret  # noqa: PLC0415
 
@@ -190,7 +190,7 @@ def _mint_contained_secret(
             subject_sheet=sheet,
             provenance=SecretProvenance.ACTION_ANCHORED,
             level=_scandal_secret_level(worst_dot),
-            content=f"PLACEHOLDER: The truth of what happened during '{entry.title}'.",
+            content=f"The truth of what happened during '{entry.title}'.",
             legend_deed=entry,
             scene=scene,
         )

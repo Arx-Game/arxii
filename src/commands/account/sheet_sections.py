@@ -324,7 +324,7 @@ def _render_crime_section(command: Command) -> list[str]:
         PersonaHeat.objects.filter(persona=persona, value__gt=0).select_related("area", "society")
     )
     if not rows:
-        return ["No one is hunting you anywhere — as far as you know."]
+        return ["So far as you know, no one is hunting you anywhere."]
     lines = [f"|wWanted — {persona.name}:|n"]
     for row in rows:
         tier = tier_for_value(row.value)
