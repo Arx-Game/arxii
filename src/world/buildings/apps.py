@@ -18,6 +18,9 @@ class BuildingsConfig(AppConfig):
         #      a completed construction project spawns the Building.
         # Both go through helper functions so tests can roll back via
         # reset_offer_effect_handlers / clear_kind_handlers.
+        from world.buildings.fortification_services import (  # noqa: PLC0415
+            complete_fortification_upgrade,
+        )
         from world.buildings.room_services import (  # noqa: PLC0415
             complete_building_extension,
             complete_interior_design,
@@ -35,3 +38,4 @@ class BuildingsConfig(AppConfig):
         register_kind_handler(ProjectKind.BUILDING_CONSTRUCTION, complete_building_construction)
         register_kind_handler(ProjectKind.BUILDING_EXTENSION, complete_building_extension)
         register_kind_handler(ProjectKind.INTERIOR_DESIGN, complete_interior_design)
+        register_kind_handler(ProjectKind.FORTIFICATION_UPGRADE, complete_fortification_upgrade)
