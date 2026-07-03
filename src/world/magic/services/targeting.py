@@ -72,13 +72,24 @@ def _check_target_prerequisites(
     initiator_persona: Persona,
     target_personas: list[Persona],
 ) -> None:
-    """Enforce target_prerequisites for explicit (SELF/SINGLE) targets — raises on failure."""
+    """Enforce target_prerequisites for explicit (SELF/SINGLE) targets — raises on failure.
+
+    For target_type=SELF, the caster IS the target — but the real call site
+    (world/scenes/cast_services.py) conventionally omits an explicit target for a SELF
+    cast, so target_personas is []. Check initiator_persona directly against the
+    prerequisites in that case rather than relying on target_personas being populated.
+    """
     if not technique.cached_target_prerequisites:
         return
     caster_od = initiator_persona.character_sheet.character
+    msg = "Target does not meet this technique's targeting requirement."
+
+    if technique.target_type == ActionTargetType.SELF:
+        if not _target_meets_prerequisites(technique, caster_od, initiator_persona):
+            raise InvalidCastTarget(msg)
+
     for persona in target_personas:
         if not _target_meets_prerequisites(technique, caster_od, persona):
-            msg = "Target does not meet this technique's targeting requirement."
             raise InvalidCastTarget(msg)
 
 

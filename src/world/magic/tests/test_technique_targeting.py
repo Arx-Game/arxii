@@ -579,3 +579,84 @@ class TargetPrerequisitesEnforcementTest(TestCase):
 
         self.assertIn(flying_persona.pk, result_ids)
         self.assertNotIn(grounded_persona.pk, result_ids)
+
+    def test_filtered_group_cast_silently_filters_non_matching_targets(self) -> None:
+        """FILTERED_GROUP + ALLY relationship silently filters non-matching supplied targets.
+
+        Mirrors test_area_cast_silently_filters_non_matching_targets above, but supplies
+        the candidate personas explicitly via supplied_personas rather than relying on
+        scene-wide AREA expansion (mirroring
+        test_filtered_group_intersects_supplied_with_area_eligible).
+        """
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            target_type=ActionTargetType.FILTERED_GROUP,
+        )
+        TechniqueAppliedConditionFactory(technique=technique, target_kind=ConditionTargetKind.ALLY)
+        prereq = self._aerial_prerequisite()
+        technique.target_prerequisites.add(prereq)
+        scene = SceneFactory()
+        caster_persona = PersonaFactory()
+        flying_persona = PersonaFactory()
+        grounded_persona = PersonaFactory()
+        for persona in (caster_persona, flying_persona, grounded_persona):
+            InteractionFactory(scene=scene, persona=persona)
+        ObjectPropertyFactory(
+            object=flying_persona.character_sheet.character, property=prereq.property
+        )
+
+        result = resolve_targets(
+            technique=technique,
+            initiator_persona=caster_persona,
+            scene=scene,
+            supplied_personas=[flying_persona, grounded_persona],
+        )
+        result_ids = {p.pk for p in result}
+
+        self.assertIn(flying_persona.pk, result_ids)
+        self.assertNotIn(grounded_persona.pk, result_ids)
+
+    def test_self_target_missing_prerequisite_raises(self) -> None:
+        """target_type=SELF: a failing target_prerequisites row raises against the caster
+        themselves, even though target_personas=[] — matching the real call site's
+        convention (world/scenes/cast_services.py) of never supplying a target for SELF."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            target_type=ActionTargetType.SELF,
+        )
+        technique.target_prerequisites.add(self._aerial_prerequisite())
+        caster = PersonaFactory()
+
+        with self.assertRaises(InvalidCastTarget):
+            validate_cast_target(technique=technique, initiator_persona=caster, target_personas=[])
+
+    def test_self_target_meeting_prerequisite_passes(self) -> None:
+        """target_type=SELF: a met target_prerequisites row against the caster does not raise."""
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            target_type=ActionTargetType.SELF,
+        )
+        prereq = self._aerial_prerequisite()
+        technique.target_prerequisites.add(prereq)
+        caster = PersonaFactory()
+        ObjectPropertyFactory(object=caster.character_sheet.character, property=prereq.property)
+
+        validate_cast_target(
+            technique=technique, initiator_persona=caster, target_personas=[]
+        )  # does not raise
+
+    def test_no_target_prerequisites_is_complete_noop(self) -> None:
+        """A technique with zero target_prerequisites rows never raises through
+        validate_cast_target, regardless of target — an explicit assertion rather than
+        relying only on the rest of the suite passing unchanged."""
+        technique = TechniqueFactory(target_type=ActionTargetType.SINGLE)
+        self.assertEqual(technique.target_prerequisites.count(), 0)
+        caster = PersonaFactory()
+        target = PersonaFactory()
+
+        validate_cast_target(
+            technique=technique, initiator_persona=caster, target_personas=[target]
+        )  # does not raise
