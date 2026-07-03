@@ -535,6 +535,7 @@
   - battle -> battles.Battle [FK]
   - covenant -> covenants.Covenant [FK] (nullable)
 **Pointed to by:**
+  - controlled_places <- battles.BattlePlace
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
   - scoped_declarations <- battles.BattleActionDeclaration
@@ -543,6 +544,7 @@
 **Foreign Keys:**
   - battle -> battles.Battle [FK]
   - combat_encounter -> combat.CombatEncounter [FK] (nullable)
+  - controlled_by -> battles.BattleSide [FK] (nullable)
 **Pointed to by:**
   - units <- battles.BattleUnit
   - participants <- battles.BattleParticipant
