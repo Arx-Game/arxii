@@ -154,7 +154,7 @@ def get_standalone_cast_pool():
 
 
 def _catalog_pool_name(flavor_name: str) -> str:
-    return f"{TECHNIQUE_CAST_POOL_NAME} — {flavor_name}"
+    return f"{TECHNIQUE_CAST_POOL_NAME}: {flavor_name}"
 
 
 def _catalog_template_name(flavor_name: str) -> str:

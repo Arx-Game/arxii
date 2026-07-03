@@ -475,6 +475,22 @@ class ConsequencePoolCatalogResolutionTests(TestCase):
         catalog = get_technique_cast_catalog()
         self.assertEqual(catalog.count(), 2)
 
+    def test_duplicate_action_templates_on_one_pool_does_not_raise(self):
+        """No unique constraint on ActionTemplate.consequence_pool — a staff mistake could
+        seed two ActionTemplate rows pointing at the same catalog pool.
+        resolve_cast_action_template must degrade to the oldest match rather than
+        raising MultipleObjectsReturned (#1320 final review)."""
+        from world.magic.seeds_cast import ensure_technique_catalog_content
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+        duplicate = ActionTemplateFactory(consequence_pool_id=chosen.consequence_pool_id)
+
+        resolved = resolve_cast_action_template(chosen.consequence_pool_id)
+
+        self.assertIn(resolved.pk, {chosen.pk, duplicate.pk})
+
 
 class BuildTechniqueConsequencePoolTests(TestCase):
     def _minimal_design_kwargs(self, **overrides):

@@ -204,7 +204,7 @@ Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caste
 check into `start_action_resolution` via the `check_type` override (optional kwarg added to
 `src/actions/services.py`). No schema migration — all seeded via `ensure_technique_cast_content()`.
 
-**Consequence-pool catalog (#1320)** — beyond the single shared "Magic: Technique Cast"
+**Consequence-pool catalog (#1320) [BUILT & WIRED]** — beyond the single shared "Magic: Technique Cast"
 pool above, a curated **catalog** of pool "flavors" exists as single-depth children of
 that base pool (`ConsequencePool.objects.filter(parent=<base pool>)`, seeded by
 `ensure_technique_catalog_content()`). A technique's author may pick one instead of the

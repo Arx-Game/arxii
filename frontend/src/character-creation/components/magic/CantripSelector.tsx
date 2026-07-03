@@ -83,7 +83,7 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
       data: {
         draft_data: {
           ...draft.draft_data,
-          selected_consequence_pool_id: poolId === 'standard' ? undefined : parseInt(poolId, 10),
+          selected_consequence_pool_id: poolId === 'standard' ? null : parseInt(poolId, 10),
         },
       },
     });

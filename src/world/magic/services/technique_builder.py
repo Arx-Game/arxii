@@ -4,6 +4,7 @@ pricing, authoring policies, and the build/author entry points."""
 from __future__ import annotations
 
 from decimal import Decimal
+import logging
 
 from django.db import transaction
 
@@ -28,6 +29,8 @@ from world.magic.types.technique_builder import (
     TechniqueCostLine,
     TechniqueDesignInput,
 )
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIER_POWER_BUDGET = {1: 20, 2: 40, 3: 60, 4: 80, 5: 100}
 DEFAULT_TIER_REPRESENTATIVE_LEVEL = {1: 1, 2: 6, 3: 11, 4: 16, 5: 21}
@@ -80,7 +83,18 @@ def resolve_cast_action_template(consequence_pool_id: int | None):
         return get_standalone_cast_template()
     if not get_technique_cast_catalog().filter(pk=consequence_pool_id).exists():
         raise InvalidConsequencePoolChoice
-    return ActionTemplate.objects.get(consequence_pool_id=consequence_pool_id)
+    matches = list(
+        ActionTemplate.objects.filter(consequence_pool_id=consequence_pool_id).order_by("pk")[:2]
+    )
+    if len(matches) > 1:
+        logger.warning(
+            "Multiple ActionTemplate rows point at ConsequencePool %s; using the oldest "
+            "(pk=%s). This is a data-integrity issue — a catalog ConsequencePool should "
+            "have exactly one matching ActionTemplate.",
+            consequence_pool_id,
+            matches[0].pk,
+        )
+    return matches[0]
 
 
 def create_technique(  # noqa: PLR0913
