@@ -458,7 +458,7 @@ station's durability. Both REGISTRY, `target_type=SELF`.
 
 | Endpoint | Notes |
 |----------|-------|
-| `GET /api/items/lab-stations/` | List/detail `LabStationDetails` rows |
+| `GET /api/items/lab-stations/` | List/detail `LabStationDetails` rows; paginated (`ItemTemplatePagination`, page_size=50) and filterable by `room_profile` (`LabStationFilter`, `world.items.filters`) |
 | `POST /api/items/lab-stations/install/` | Dispatches `StartRoomFeatureProjectAction` |
 | `POST /api/items/lab-stations/upgrade/` | Dispatches `StartRoomFeatureProjectAction` |
 | `POST /api/items/lab-stations/<feature_instance_id>/repair/` | Dispatches `RepairLabStationAction` |

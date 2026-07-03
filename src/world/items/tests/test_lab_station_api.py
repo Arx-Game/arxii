@@ -178,6 +178,57 @@ class LabStationRepairTests(LabStationApiTestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
+class LabStationListTests(LabStationApiTestCase):
+    """GET /api/items/lab-stations/ — pagination + room filter (#1234 review finding).
+
+    ``LabStationViewSet`` previously had no ``pagination_class``/
+    ``filter_backends``, so this list endpoint returned every
+    ``LabStationDetails`` row in the game unbounded to any authenticated user.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.kind = RoomFeatureKindFactory(service_strategy=RoomFeatureServiceStrategy.LAB)
+        cls.instance = RoomFeatureInstanceFactory(
+            room_profile=cls.room_profile, feature_kind=cls.kind, level=1
+        )
+        cls.station = LabStationDetails.objects.create(
+            feature_instance=cls.instance, durability=20, max_durability=20
+        )
+        cls.other_room = RoomProfileFactory()
+        cls.other_kind = RoomFeatureKindFactory(
+            service_strategy=RoomFeatureServiceStrategy.COMMAND_CENTER
+        )
+        cls.other_instance = RoomFeatureInstanceFactory(
+            room_profile=cls.other_room, feature_kind=cls.other_kind, level=1
+        )
+        cls.other_station = LabStationDetails.objects.create(
+            feature_instance=cls.other_instance, durability=5, max_durability=20
+        )
+
+    def test_list_is_paginated(self) -> None:
+        response = self.client.get("/api/items/lab-stations/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("count", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["count"], 2)
+
+    def test_list_filters_by_room_profile(self) -> None:
+        response = self.client.get(
+            "/api/items/lab-stations/", {"room_profile": self.room_profile.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["durability"], self.station.durability)
+
+    def test_list_filters_to_other_room_excludes_first_station(self) -> None:
+        response = self.client.get("/api/items/lab-stations/", {"room_profile": self.other_room.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["durability"], self.other_station.durability)
+
+
 class LabStationActorResolutionTests(LabStationApiTestCase):
     """Alt-guard coverage for ``LabStationViewSet._resolve_actor`` (review finding).
 

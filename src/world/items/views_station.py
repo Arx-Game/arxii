@@ -8,6 +8,7 @@ from __future__ import annotations
 from http import HTTPMethod
 
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from evennia.objects.models import ObjectDB
 from rest_framework import status, viewsets
@@ -18,6 +19,7 @@ from rest_framework.response import Response
 
 from actions.definitions.room_features import RepairLabStationAction, StartRoomFeatureProjectAction
 from world.items.crafting.models import LabStationDetails
+from world.items.filters import LabStationFilter
 from world.items.serializers_station import (
     LabStationDetailsSerializer,
     LabStationInstallSerializer,
@@ -25,18 +27,31 @@ from world.items.serializers_station import (
     LabStationRepairSerializer,
     RoomFeatureProjectStartResultSerializer,
 )
+from world.items.views import ItemTemplatePagination
 from world.magic.services.auth import _resolve_actor_sheet
 from world.room_features.seeds import ensure_lab_kind
 
 
 class LabStationViewSet(viewsets.ReadOnlyModelViewSet):
-    """Status + install/upgrade/repair endpoints for Lab stations."""
+    """Status + install/upgrade/repair endpoints for Lab stations.
+
+    ``pagination_class``/``filter_backends`` on the list endpoint (#1234
+    whole-branch review finding) — reuses ``ItemTemplatePagination`` (the
+    repo's shared page-size-50 convention, already reused by
+    ``FashionPresentationViewSet``) rather than a bespoke pagination class;
+    ``LabStationFilter`` lets callers scope the list to a single room.
+    """
 
     serializer_class = LabStationDetailsSerializer
     permission_classes = [IsAuthenticated]
-    queryset = LabStationDetails.objects.select_related("feature_instance")
+    queryset = LabStationDetails.objects.select_related("feature_instance").order_by(
+        "feature_instance_id"
+    )
     lookup_field = "feature_instance_id"
     lookup_value_regex = r"\d+"
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = LabStationFilter
 
     def _resolve_actor(self, request: Request) -> ObjectDB:
         """Resolve the acting character via the shared alt-guard helper.

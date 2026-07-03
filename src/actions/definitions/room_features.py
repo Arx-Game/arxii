@@ -81,7 +81,16 @@ class StartRoomFeatureProjectAction(Action):
         Three-way branch (#1234 Decision 7): no existing instance -> fresh install
         (mechanism-gated); existing instance of the SAME kind -> upgrade (level-gated);
         existing instance of a DIFFERENT kind -> blocked outright (one feature per room).
+        ``target_level`` is bounded by ``feature_kind.max_level`` on BOTH the install
+        and upgrade paths — this is the only player-reachable write path for
+        ``target_level``/``RoomFeatureInstance.level``, so the bound their docstrings
+        claim is enforced "at write/project-creation time" has to live here.
         """
+        if target_level > feature_kind.max_level:
+            return (
+                f"Level {target_level} exceeds this feature kind's maximum of "
+                f"{feature_kind.max_level}."
+            )
         if existing is None:
             if feature_kind.install_mechanism != RoomFeatureInstallMechanism.PROJECT:
                 return _MSG_WRONG_MECHANISM
@@ -201,7 +210,7 @@ class RepairLabStationAction(Action):
                 station=station, restore_points=restore_points, payer_purse=purse
             )
         except ValidationError as exc:
-            return ActionResult(success=False, message=str(exc))
+            return ActionResult(success=False, message=exc.messages[0])
 
         station.refresh_from_db()
         return ActionResult(

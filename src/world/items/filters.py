@@ -11,6 +11,7 @@ ItemTemplate) and the visible-worn endpoint still use FilterSets.
 
 import django_filters
 
+from world.items.crafting.models import LabStationDetails
 from world.items.models import (
     EquippedItem,
     FashionPresentation,
@@ -79,3 +80,18 @@ class FashionPresentationFilter(django_filters.FilterSet):
     class Meta:
         model = FashionPresentation
         fields = ["event", "presenter"]
+
+
+class LabStationFilter(django_filters.FilterSet):
+    """Filters for the Lab station list endpoint (#1234 whole-branch review).
+
+    ``room_profile`` reaches through the OneToOne to ``RoomFeatureInstance``
+    so callers can scope the list to a single room without a raw
+    ``feature_instance__room_profile`` query-param name.
+    """
+
+    room_profile = django_filters.NumberFilter(field_name="feature_instance__room_profile_id")
+
+    class Meta:
+        model = LabStationDetails
+        fields = ["room_profile"]

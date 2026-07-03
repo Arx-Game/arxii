@@ -100,6 +100,31 @@ class StartRoomFeatureProjectActionTests(TestCase):
         self.assertFalse(result.success)
         self.assertIn("not be an upgrade", result.message)
 
+    def test_install_rejected_when_target_level_exceeds_max_level(self) -> None:
+        result = self.action_cls().run(
+            actor=self.character,
+            room_profile=self.room_profile,
+            feature_kind=self.kind,
+            target_level=self.kind.max_level + 1,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("maximum", result.message)
+        self.assertFalse(Project.objects.filter(kind=ProjectKind.ROOM_FEATURE_PROGRESSION).exists())
+
+    def test_upgrade_rejected_when_target_level_exceeds_max_level(self) -> None:
+        RoomFeatureInstanceFactory(
+            room_profile=self.room_profile, feature_kind=self.kind, level=self.kind.max_level - 1
+        )
+        result = self.action_cls().run(
+            actor=self.character,
+            room_profile=self.room_profile,
+            feature_kind=self.kind,
+            target_level=self.kind.max_level + 1,
+        )
+        self.assertFalse(result.success)
+        self.assertIn("maximum", result.message)
+        self.assertFalse(Project.objects.filter(kind=ProjectKind.ROOM_FEATURE_PROGRESSION).exists())
+
     def test_install_rejected_when_mechanism_is_ritual(self) -> None:
         ritual_kind = RoomFeatureKindFactory(
             service_strategy=RoomFeatureServiceStrategy.GRANARY,
@@ -157,6 +182,19 @@ class RepairLabStationActionTests(TestCase):
             actor=self.character, room_profile=self.room_profile, restore_points=10
         )
         self.assertFalse(result.success)
+
+    def test_insufficient_funds_returns_clean_message(self) -> None:
+        self.purse.balance = 0
+        self.purse.save(update_fields=["balance"])
+        result = self.action_cls().run(
+            actor=self.character, room_profile=self.room_profile, restore_points=10
+        )
+        self.assertFalse(result.success)
+        self.assertIn("Insufficient funds", result.message)
+        self.assertNotIn("[", result.message)
+        self.assertNotIn("'", result.message)
+        self.station.refresh_from_db()
+        self.assertEqual(self.station.durability, 5)
 
     def test_rejected_without_standing(self) -> None:
         from world.locations.models import LocationOwnership
