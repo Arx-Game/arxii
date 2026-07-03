@@ -93,6 +93,11 @@ class CmdLook(ArxCommand):
         if not results:
             return None
         owner = results[0] if isinstance(results, list) else results
+        if owner != self.caller and not self._can_perceive(owner):
+            # Treat a concealed-and-undetected owner exactly like a nonexistent
+            # one — fall through to the plain-search path so the two are
+            # indistinguishable (#1225; mirrors the LookAction target gate).
+            return None
         # Switch dispatch to LookAtItemAction. Safe because ``func()`` reads
         # ``self.action`` after ``resolve_action_args()``, and Evennia
         # instantiates commands per invocation.
@@ -109,8 +114,18 @@ class CmdLook(ArxCommand):
         if not results:
             return None
         container = results[0] if isinstance(results, list) else results
+        if container != self.caller and not self._can_perceive(container):
+            # Same treatment as the owner path — a concealed container falls
+            # through to plain search rather than dispatching (#1225).
+            return None
         self.action = LookAtItemAction()
         return {"container_id": container.pk, "item_name": item_name}
+
+    def _can_perceive(self, target: Any) -> bool:
+        """Thin wrapper around ``can_perceive`` for the drilled-form dispatch gates."""
+        from world.conditions.services import can_perceive  # noqa: PLC0415
+
+        return can_perceive(self.caller, target)
 
 
 class CmdInventory(ArxCommand):

@@ -41,6 +41,20 @@ class LookAction(Action):
         if target is None:
             return ActionResult(success=False, message="Look at what?")
 
+        # #1225: gate direct look-at-target on the real perception/concealment seam.
+        # The bare-``look`` case (target is the room itself) and looking at oneself
+        # are exempt — ``can_perceive``'s co-location check assumes an occupant/held
+        # item, not the room container, and a looker always perceives themselves
+        # regardless of their own concealment (mirrors ``get_display_characters``).
+        if target not in (actor.location, actor):
+            from world.conditions.services import can_perceive  # noqa: PLC0415
+
+            if not can_perceive(actor, target):
+                # Deliberately the same not-found idiom ``CmdLook`` uses for a failed
+                # search (``f"Could not find '{args}'."``) — a concealed-and-undetected
+                # target must be indistinguishable from a genuinely absent one.
+                return ActionResult(success=False, message=f"Could not find '{target.key}'.")
+
         sdm = context.scene_data if context else SceneDataManager()
         target_state = sdm.initialize_state_for_object(target)
         looker_state = sdm.initialize_state_for_object(actor)

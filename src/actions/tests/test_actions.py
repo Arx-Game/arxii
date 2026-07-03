@@ -87,6 +87,31 @@ class LookActionConcealmentTests(TestCase):
         # looker's own concealment must never make the room itself unreadable.
         assert result.success is True
 
+    def test_direct_look_at_concealed_and_undetected_character_fails_generic(self):
+        """Bypassing the room list by naming the target directly must still be
+        blocked (#1225 review gap) — and with the same not-found idiom the
+        genuinely-absent case uses, so the two are indistinguishable."""
+        result = LookAction().run(self.actor, target=self.concealed)
+        assert result.success is False
+        assert result.message == f"Could not find '{self.concealed.key}'."
+
+    def test_direct_look_at_detected_concealed_character_succeeds(self):
+        register_detection(self.actor_sheet, self.concealed)
+
+        result = LookAction().run(self.actor, target=self.concealed)
+        assert result.success is True
+
+    def test_direct_look_at_unconcealed_character_unaffected(self):
+        result = LookAction().run(self.actor, target=self.visible)
+        assert result.success is True
+
+    def test_bare_room_look_not_gated_by_new_check(self):
+        """No-args ``look`` resolves target to the room itself — the new gate
+        must never apply ``can_perceive`` to the room container, which would
+        incorrectly return False (rooms aren't occupants/held items)."""
+        result = LookAction().run(self.actor, target=self.room)
+        assert result.success is True
+
 
 class InventoryActionTests(TestCase):
     def test_empty_inventory(self):

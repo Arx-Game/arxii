@@ -20,11 +20,18 @@ from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.exceptions import CommandError
 from evennia_extensions.factories import ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import register_detection
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     OutfitFactory,
 )
+from world.roster.factories import RosterEntryFactory
 
 
 def _make_cmd(cls, caller, args="", obj=None):
@@ -237,6 +244,92 @@ class CmdLookParserTests(TestCase):
         kwargs = cmd.resolve_action_args()
         self.assertIsInstance(cmd.action, LookAction)
         self.assertEqual(kwargs, {"target": hat})
+
+
+class CmdLookParserConcealmentTests(TestCase):
+    """#1225 review gap — the drilled owner/container dispatch resolves names via
+    Evennia's default (concealment-unaware) ``caller.search``. A concealed-and-
+    undetected owner/container must fall through to plain search exactly like a
+    nonexistent one, so the two are indistinguishable to the player.
+    """
+
+    def _make_caller(self, key: str = "ConcealAlice"):
+        room = ObjectDBFactory(
+            db_key=f"ConcealRoom_{key}",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        roster = RosterEntryFactory()
+        caller = roster.character_sheet.character
+        caller.location = room
+        return room, caller, roster.character_sheet
+
+    def test_possessive_form_falls_through_when_owner_concealed_and_undetected(
+        self,
+    ) -> None:
+        room, caller, _actor_sheet = self._make_caller("ConcealPossAlice")
+        shade = ObjectDBFactory(
+            db_key="ConcealShade",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        tmpl = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=shade, condition=tmpl)
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name == "ConcealShade":
+                return [shade] if quiet else shade
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=" ConcealShade's hat")
+        # Same failure mode as an unknown owner (test_possessive_unknown_owner_
+        # raises_command_error) — falls all the way through to plain search,
+        # which also misses, raising the generic not-found error.
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_possessive_form_dispatches_when_owner_detected(self) -> None:
+        room, caller, actor_sheet = self._make_caller("ConcealDetectAlice")
+        shade = ObjectDBFactory(
+            db_key="ConcealDetectShade",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        tmpl = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=shade, condition=tmpl)
+        register_detection(actor_sheet, shade)
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name == "ConcealDetectShade":
+                return [shade] if quiet else shade
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=" ConcealDetectShade's hat")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAtItemAction)
+        self.assertEqual(kwargs, {"owner_id": shade.pk, "item_name": "hat"})
+
+    def test_in_form_falls_through_when_container_concealed_and_undetected(
+        self,
+    ) -> None:
+        room, caller, _actor_sheet = self._make_caller("ConcealContainerAlice")
+        chest = ObjectDBFactory(db_key="ConcealChest", location=room)
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        tmpl = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=chest, condition=tmpl)
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name == "ConcealChest":
+                return [chest] if quiet else chest
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=" coin in ConcealChest")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
 
 
 class CmdInventoryTests(TestCase):
