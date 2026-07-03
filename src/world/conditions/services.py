@@ -262,7 +262,7 @@ def is_concealed(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
 
     Mirrors is_untargetable's derive-on-read pattern (#1225).
     """
-    return _active_concealments(target).exists()
+    return active_concealments(target).exists()
 
 
 def can_perceive(actor: "ObjectDB", target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
@@ -274,7 +274,7 @@ def can_perceive(actor: "ObjectDB", target: "ObjectDB") -> bool:  # noqa: OBJECT
     """
     if target.location not in (actor.location, actor):
         return False
-    concealments = _active_concealments(target)
+    concealments = active_concealments(target)
     if not concealments.exists():
         return True
     actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
@@ -288,7 +288,7 @@ def register_detection(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
 ) -> None:
     """Record that observer_sheet has pierced target's active concealment(s) (#1225)."""
-    for instance in _active_concealments(target):
+    for instance in active_concealments(target):
         instance.detected_by.add(observer_sheet)
 
 
@@ -322,6 +322,11 @@ def _clear_unseen_observer_if_concealing(
     """Inverse of _register_unseen_observer_if_concealing (#1225)."""
     if not condition.category.conceals_from_perception:
         return
+    if is_concealed(target):
+        # Another independently-applied concealing condition is still active on
+        # target — the OOC banner must stay up until the LAST concealment clears,
+        # not the first (#1225 review fix).
+        return
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
     from world.scenes.services import clear_unseen_observer  # noqa: PLC0415
@@ -336,7 +341,7 @@ def _clear_unseen_observer_if_concealing(
     clear_unseen_observer(scene, sheet)
 
 
-def _active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # noqa: OBJECTDB_PARAM
+def active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # noqa: OBJECTDB_PARAM
     return target.condition_instances.filter(
         condition__category__conceals_from_perception=True,
         is_suppressed=False,
@@ -931,6 +936,7 @@ def bulk_apply_conditions(
             _notify_stories_condition_applied(app.target, result.instance)
             _install_reactive_side_effects(app.target, app.template, result.instance)
             _make_just_installed_triggers_live(app.target)
+            _register_unseen_observer_if_concealing(app.target, app.template)
 
         if result.instance is not None and target_location is not None:
             emit_event(

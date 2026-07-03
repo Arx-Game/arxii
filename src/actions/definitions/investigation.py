@@ -85,7 +85,7 @@ class SearchAction(Action):
         other characters' ability to perceive the same target."""
         from world.checks.services import perform_check  # noqa: PLC0415
         from world.conditions.services import (  # noqa: PLC0415
-            _active_concealments,
+            active_concealments,
             can_perceive,
             register_detection,
         )
@@ -96,7 +96,7 @@ class SearchAction(Action):
         for candidate in actor.location.contents:
             if candidate == actor or can_perceive(actor, candidate):
                 continue
-            concealments = _active_concealments(candidate)
+            concealments = active_concealments(candidate)
             if not concealments.exists():
                 continue
             severity = max(inst.effective_severity for inst in concealments)
