@@ -28,6 +28,7 @@ from world.scenes.models import (
     SceneRound,
     SceneRoundParticipant,
     SceneSummaryRevision,
+    SceneUnseenObserver,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
 
@@ -67,6 +68,15 @@ class SceneOwnerParticipationFactory(SceneParticipationFactory):
     """Factory for scene owners"""
 
     is_owner = True
+
+
+class SceneUnseenObserverFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneUnseenObserver
+
+    scene = factory.SubFactory(SceneFactory)
+    observer = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    source_label = "concealment"
 
 
 class SceneGMParticipationFactory(SceneParticipationFactory):
