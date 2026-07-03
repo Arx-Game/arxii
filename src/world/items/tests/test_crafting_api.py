@@ -9,6 +9,7 @@ Covers:
 """
 
 from django.test import TestCase
+from evennia.utils.idmapper.models import flush_cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -29,6 +30,11 @@ class CraftingApiTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # Multi-app CI shard runs can hand back a contaminated idmapper cache
+        # entry for an Evennia-typeclassed object from an earlier app's tests,
+        # which then fails to deepcopy per-test (DbHolder is un-deepcopyable).
+        # See docs' known-test-failures reference for this exact symptom.
+        flush_cache()
         # Wire both crafting recipes with skill caps + consequence pool.
         cls.facet_recipe = wire_enchanting_crafting(base_difficulty=0)
         # Fetch the style recipe for later assertions.

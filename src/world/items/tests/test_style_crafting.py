@@ -1,6 +1,7 @@
 """Tests for craft_attach_style service function and API endpoint (#1151)."""
 
 from django.test import TestCase
+from evennia.utils.idmapper.models import flush_cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -146,6 +147,11 @@ class ItemStyleCraftViewTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # Multi-app CI shard runs can hand back a contaminated idmapper cache
+        # entry for an Evennia-typeclassed object from an earlier app's tests,
+        # which then fails to deepcopy per-test (DbHolder is un-deepcopyable).
+        # See docs' known-test-failures reference for this exact symptom.
+        flush_cache()
         from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
         from world.items.factories import install_full_lab_station
         from world.roster.factories import (

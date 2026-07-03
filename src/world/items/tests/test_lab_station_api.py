@@ -14,6 +14,7 @@ underlying services are already unit-tested in
 from __future__ import annotations
 
 from django.test import TestCase
+from evennia.utils.idmapper.models import flush_cache
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -32,6 +33,11 @@ class LabStationApiTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        # Multi-app CI shard runs can hand back a contaminated idmapper cache
+        # entry for an Evennia-typeclassed object from an earlier app's tests,
+        # which then fails to deepcopy per-test (DbHolder is un-deepcopyable).
+        # See docs' known-test-failures reference for this exact symptom.
+        flush_cache()
         cls.owner = AccountFactory(username="lab_station_api_owner")
         cls.owner_char = CharacterFactory(db_key="lab_station_api_owner_char")
         cls.owner_sheet = CharacterSheetFactory(character=cls.owner_char)
