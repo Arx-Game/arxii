@@ -248,14 +248,16 @@ checkpoint — that manufactures a gate the skill doesn't have.
 Compose the PR body's substitution values (summary, follow-ups, sync
 summary).
 
-**Default disposition: fix it now, in this branch, not a follow-up issue**
+**Trivial findings never get filed — fix now or drop, no exceptions**
 (CLAUDE.md "Fold In, Don't File"). This applies to task-review and
 whole-branch-review findings the same as PR-comment findings — a missing
 test for code this PR just wrote, a one-line dedup, an admin/serializer
-wiring gap are **fixed here**, not deferred. Before opening the PR, loop
-back and address these findings directly.
+wiring nit: **fixed here, or dropped**, never deferred to an issue. Being
+correctly verified against code does not make something worth tracking —
+only substantial, separable scope does. Before opening the PR, loop back
+and address (or consciously drop) these findings directly.
 
-Only file a follow-up when there's a real, stated blocker — a genuinely
+Only file a follow-up for something that genuinely needs its own PR — a
 separable system, scope well beyond this issue, or an open design question
 needing a human call — and say what the blocker is in the issue body.
 For each such follow-up, call
