@@ -489,7 +489,8 @@ class ConsequencePoolCatalogResolutionTests(TestCase):
 
         resolved = resolve_cast_action_template(chosen.consequence_pool_id)
 
-        self.assertIn(resolved.pk, {chosen.pk, duplicate.pk})
+        self.assertEqual(resolved.pk, min(chosen.pk, duplicate.pk))
+        self.assertEqual(resolved.pk, chosen.pk)
 
 
 class BuildTechniqueConsequencePoolTests(TestCase):
