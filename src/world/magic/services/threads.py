@@ -60,23 +60,24 @@ if TYPE_CHECKING:
 def thread_level_multiplier(level: int) -> Decimal:
     """The shared level-bucketing multiplier for thread-pull-effect scaling (#1718).
 
-    Smoothly interpolates across levels 1-9 (today's flat floor of 1, the
-    coarseness #1718 flags — a grant of 1 and a grant of 9 used to feel
-    identical) up to the existing anchor value of 1 at level 10, exactly
-    ``max(1, level // 10)`` for level >= 10 unchanged. Single source of truth
-    for what were 5 duplicated ``max(1, level // 10)`` call sites.
+    A freshly-provisioned thread (level 0) keeps today's floor of 1 — several
+    consumers (e.g. _gift_thread_depth) document this as a deliberate
+    guarantee for newly-provisioned threads, not part of the continuous
+    investment curve. For level 1-9, a linear ramp from 0.1 (level 1) to 1.0
+    (level 10) replaces the old flat floor of 1 for all of 1-9 — this is what
+    #1718 asked for (a grant of 1 and a grant of 9 no longer feel identical),
+    at the cost of levels 1-9 now scoring BELOW today's flat-1 floor rather
+    than at or above it. That tradeoff is deliberate: the alternative (ramping
+    above 1.0 and clipping back down at the level-10 anchor) creates a worse
+    regression — level 9 would outscore level 10, which is a real gameplay
+    regression at the exact milestone this feature should improve, and was
+    caught in review. Level >= 10 is untouched: max(1, level // 10) exactly.
     """
+    if level <= 0:
+        return Decimal(1)
     if level >= 10:  # noqa: PLR2004 — the existing 10-per-tier thread-level scale
         return Decimal(level // 10)
-    # Linear interpolation from 1.0 at level<=1 to 1.0 at level==10, i.e. every
-    # point below 10 now differs from its neighbors instead of all reading "1".
-    # (level - 1) / 9 spans 0.0 (level=1) to 1.0 (level=10); the multiplier is
-    # 1 + a small fractional bump per level so 1-9 are distinct while level 10
-    # still lands on exactly 1 (no discontinuity at the boundary).
-    if level <= 1:
-        return Decimal(1)
-    step = (Decimal(1) / Decimal(9)) * Decimal(level - 1) / Decimal(10)
-    return Decimal(1) + step
+    return Decimal(level) / Decimal(10)
 
 
 def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:

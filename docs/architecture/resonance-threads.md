@@ -324,8 +324,10 @@ baseline = round(cap × S / (S + half_saturation))
 `thread_level_multiplier` (`world/magic/services/threads.py`, #1718) is the single
 source of truth for level-bucketing, shared by every FLAT_BONUS/VITAL_BONUS/RESISTANCE
 scaling call site: it returns `Decimal(level // 10)` unchanged for level ≥ 10 (the
-original anchor), and a smoothed fractional value between `1` and the level-10 anchor
-for levels 1-9 (previously a flat `1` for the whole 1-9 range — #1718's coarseness fix).
+original anchor), `Decimal(1)` at level 0 (the freshly-provisioned-thread floor), and a
+linear ramp from `0.1` (level 1) to `1.0` (level 10) for levels 1-9 — strictly below the
+level-10 anchor throughout, so a thread never scores higher pre-milestone than at the
+milestone itself (previously a flat `1` for the whole 1-9 range — #1718's coarseness fix).
 
 `S` is the breadth × depth investment score — a character with many threads or
 high-level threads has a higher `S`. The formula is a soft cap: every additional
@@ -1522,8 +1524,9 @@ and the list of threads to pull:
      For each matched row, scale its authored amount by the thread's
      display level (`scaled = round(authored × thread_level_multiplier(thread.level))`
      — `thread_level_multiplier`, #1718, is the single shared level-bucketing
-     helper: `Decimal(level // 10)` unchanged for level ≥ 10, a smoothed
-     fractional value between 1 and the level-10 anchor for levels 1-9).
+     helper: `Decimal(level // 10)` unchanged for level ≥ 10, `Decimal(1)` at
+     level 0, and a linear ramp from 0.1 (level 1) to 1.0 (level 10) for
+     levels 1-9).
      The level-scaling rule applies to all numeric
      effect_kinds (FLAT_BONUS, INTENSITY_BUMP, VITAL_BONUS).
      CAPABILITY_GRANT and NARRATIVE_ONLY do not scale (granting a

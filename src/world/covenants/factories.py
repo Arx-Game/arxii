@@ -882,11 +882,17 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
     # narrative_snippet="" for FLAT_BONUS, so a snippet here would make the pull
     # un-committable in combat (IntegrityError in _persist_combat_pull). Pull
     # flavour belongs on NARRATIVE_ONLY effects, not the mechanical FLAT_BONUS.
+    #
+    # amount=10, not 3: thread_level_multiplier(1) == 0.1 (#1718's corrected
+    # ramp — see thread.py) and scaled_value = round(authored * multiplier);
+    # an authored amount below 6 rounds to 0 at the level-1 pact-gate boundary,
+    # silently defeating the "a pact grants a real bonus" premise this catalog
+    # exists to demonstrate. 10 clears that floor with margin.
     # ------------------------------------------------------------------
     flat_effects: list[ThreadPullEffect] = []
     pulls = (
-        (res_whisper, 3),
-        (res_garrote, 3),
+        (res_whisper, 10),
+        (res_garrote, 10),
     )
     for resonance, amount in pulls:
         effect, _ = ThreadPullEffect.objects.get_or_create(
