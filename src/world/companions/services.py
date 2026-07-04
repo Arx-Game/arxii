@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.utils import timezone
+from evennia.utils.create import create_object
+
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.companions.models import Companion, CompanionArchetype
     from world.magic.models.gifts import Gift
 
 
@@ -53,3 +57,44 @@ def used_companion_capacity(character_sheet: CharacterSheet, gift: Gift) -> int:
         released_at__isnull=True,
     ).select_related("archetype")
     return sum(c.archetype.capacity_cost for c in active)
+
+
+def bind_companion(
+    *,
+    owner: CharacterSheet,
+    archetype: CompanionArchetype,
+    granting_gift: Gift,
+    name: str,
+) -> Companion:
+    """Create a bonded Companion + its live CompanionObject in owner's current room.
+
+    The caller (the Bind Action, Task 8) is responsible for the capacity
+    check and the perform_check roll before calling this — this function has
+    no prerequisite logic of its own, mirroring the service-function/Action
+    split used throughout src/actions/.
+    """
+    from typeclasses.companions import CompanionObject  # noqa: PLC0415 — avoid circular import
+    from world.companions.models import Companion  # noqa: PLC0415 — avoid circular import
+
+    room = owner.character.location
+    companion_object = create_object(CompanionObject, key=name, location=room, nohome=True)
+    return Companion.objects.create(
+        owner=owner,
+        archetype=archetype,
+        granting_gift=granting_gift,
+        name=name,
+        objectdb=companion_object,
+    )
+
+
+def release_companion(companion: Companion) -> None:
+    """Release a bonded companion: destroy its live object, keep the row.
+
+    The Companion row is never hard-deleted — released_at is set and
+    objectdb is cleared.
+    """
+    if companion.objectdb is not None:
+        companion.objectdb.delete()
+    companion.released_at = timezone.now()
+    companion.objectdb = None
+    companion.save(update_fields=["released_at", "objectdb"])

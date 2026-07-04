@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.companions.factories import CompanionFactory
+from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
 from world.companions.services import (
     NoCompanionThreadError,
     companion_capacity,
@@ -77,3 +77,49 @@ class CompanionCapacityTests(TestCase):
         self.assertEqual(
             used_companion_capacity(self.sheet, self.gift), active.archetype.capacity_cost
         )
+
+
+class BindAndReleaseCompanionTests(TestCase):
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="Test Room")
+        self.sheet = CharacterSheetFactory()
+        self.sheet.character.location = self.room
+        self.sheet.character.save()
+        self.gift = GiftFactory(name="Beastlord Bind Test", kind=GiftKind.MINOR)
+        self.archetype = CompanionArchetypeFactory(name="Test Wolf")
+
+    def test_bind_companion_creates_row_and_object(self) -> None:
+        from world.companions.services import bind_companion
+
+        companion = bind_companion(
+            owner=self.sheet, archetype=self.archetype, granting_gift=self.gift, name="Fang"
+        )
+
+        self.assertEqual(companion.name, "Fang")
+        self.assertTrue(companion.is_active)
+        self.assertIsNotNone(companion.objectdb)
+        self.assertEqual(companion.objectdb.location, self.room)
+        self.assertEqual(
+            companion.objectdb.db_typeclass_path, "typeclasses.companions.CompanionObject"
+        )
+
+    def test_release_companion_clears_object_keeps_row(self) -> None:
+        from world.companions.services import bind_companion, release_companion
+
+        companion = bind_companion(
+            owner=self.sheet, archetype=self.archetype, granting_gift=self.gift, name="Fang"
+        )
+        object_id = companion.objectdb_id
+
+        release_companion(companion)
+
+        self.assertIsNone(companion.objectdb)
+        self.assertIsNotNone(companion.released_at)
+        from world.companions.models import Companion
+
+        self.assertTrue(Companion.objects.filter(pk=companion.pk).exists())
+        from evennia.objects.models import ObjectDB
+
+        self.assertFalse(ObjectDB.objects.filter(pk=object_id).exists())
