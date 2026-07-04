@@ -12,3 +12,6 @@ class PublicFeedItemSerializer(serializers.Serializer):
     headline = serializers.CharField()
     subject = serializers.CharField()
     occurred_at = serializers.DateTimeField()
+    # The authored scandal-category name ("Treacherous Scandal", #1806) when the
+    # row's archetypes carry one — the player-legible type of the scandal.
+    category = serializers.CharField(allow_null=True, required=False)

@@ -22,6 +22,7 @@ export function handleRoomStatePayload(
         exits: payload.exits,
         is_owner: payload.room.is_owner ?? false,
         is_public: payload.room.is_public ?? false,
+        hub: payload.hub ?? null,
       },
     })
   );

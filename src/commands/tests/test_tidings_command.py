@@ -1,8 +1,8 @@
-"""Telnet tidings command tests (#1450) — thin over public_feed_for."""
+"""Telnet tidings command tests (#1450) — thin over the tidings services."""
 
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from commands.social.tidings import CmdTidings
 from world.roster.factories import RosterEntryFactory
@@ -87,3 +87,67 @@ class TidingsCommandTests(TestCase):
         set_active_persona(self.entry.character_sheet, mask)
 
         assert "no tidings circulating" in self._run().lower()
+
+    def test_unknown_argument_shows_usage(self) -> None:
+        assert "usage" in self._run("gossip").lower()
+
+    def test_local_without_a_hub_room_is_refused(self) -> None:
+        # The caller has no location at all — the strictest no-hub case.
+        self.caller.location = None
+        assert "no notice board or crier" in self._run("local").lower()
+
+
+@tag("postgres")  # Area.save() refreshes the areas_areaclosure materialized view
+class TidingsLocalCommandTests(TestCase):
+    """``tidings local`` — the civic-hub scope, gated on a board/crier in the room."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.areas.constants import AreaLevel
+        from world.areas.factories import AreaFactory
+        from world.room_features.models import RoomFeatureInstance
+        from world.room_features.seeds import ensure_notice_board_kind, ensure_town_crier_kind
+
+        self.entry = RosterEntryFactory()
+        self.caller = self.entry.character_sheet.character
+        self.caller.msg = MagicMock()
+        self.crown = SocietyFactory(name="The Crown")
+        kingdom = AreaFactory(level=AreaLevel.KINGDOM, dominant_society=self.crown)
+        self.room_profile = RoomProfileFactory(area=kingdom)
+        self.caller.location = self.room_profile.objectdb
+        self.board_kind = ensure_notice_board_kind()
+        self.crier_kind = ensure_town_crier_kind()
+        self._instances = RoomFeatureInstance.objects
+
+    def _run(self) -> str:
+        self.caller.msg.reset_mock()
+        cmd = CmdTidings()
+        cmd.caller = self.caller
+        cmd.args = "local"
+        cmd.switches = []
+        cmd.func()
+        return "\n".join(str(c.args[0]) for c in self.caller.msg.call_args_list if c.args)
+
+    def test_no_hub_feature_is_refused(self) -> None:
+        assert "no notice board or crier" in self._run().lower()
+
+    def test_board_lists_local_tidings_with_board_header(self) -> None:
+        self._instances.create(room_profile=self.room_profile, feature_kind=self.board_kind)
+        deed = LegendEntryFactory(title="crowned the tourney")
+        deed.societies_aware.add(self.crown)
+
+        out = self._run()
+
+        assert "notice board" in out.lower()
+        assert "crowned the tourney" in out
+
+    def test_crier_uses_the_crier_header(self) -> None:
+        self._instances.create(room_profile=self.room_profile, feature_kind=self.crier_kind)
+        deed = LegendEntryFactory(title="crowned the tourney")
+        deed.societies_aware.add(self.crown)
+
+        assert "crier" in self._run().lower()
+
+    def test_hub_with_quiet_locale_reports_quiet(self) -> None:
+        self._instances.create(room_profile=self.room_profile, feature_kind=self.board_kind)
+        assert "quiet" in self._run().lower()

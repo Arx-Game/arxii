@@ -75,9 +75,41 @@ describe('handleRoomStatePayload', () => {
           exits: payload.exits,
           is_owner: false,
           is_public: false,
+          hub: null,
         },
       });
       expect(mockDispatch).toHaveBeenCalledTimes(3);
+    });
+
+    it('threads the civic-hub tidings block through to the room (#1450)', () => {
+      const hub = {
+        kind: 'NOTICE_BOARD',
+        name: 'Notice Board',
+        items: [
+          {
+            kind: 'scandal',
+            headline: 'poisoned the toast',
+            subject: 'Lady Vex',
+            category: 'Treacherous Scandal',
+            occurred_at: '2026-07-04T00:00:00Z',
+          },
+        ],
+      };
+      const payload: RoomStatePayload = {
+        room: createRoomStateObject('#100', 'Market Square'),
+        characters: [],
+        objects: [],
+        exits: [],
+        hub,
+      };
+
+      handleRoomStatePayload('Character', payload, mockDispatch);
+
+      expect(setSessionRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: expect.objectContaining({ hub }),
+        })
+      );
     });
 
     it('dispatches setSessionScene with scene data when present', () => {
@@ -397,6 +429,7 @@ describe('handleRoomStatePayload', () => {
           exits: [],
           is_owner: false,
           is_public: false,
+          hub: null,
         },
       });
     });
@@ -490,6 +523,7 @@ describe('handleRoomStatePayload', () => {
           exits: [],
           is_owner: false,
           is_public: false,
+          hub: null,
         },
       });
     });
@@ -576,6 +610,7 @@ describe('handleRoomStatePayload', () => {
           exits,
           is_owner: false,
           is_public: false,
+          hub: null,
         },
       });
 

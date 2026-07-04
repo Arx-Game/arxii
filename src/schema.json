@@ -11832,8 +11832,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -45310,6 +45309,9 @@ components:
         occurred_at:
           type: string
           format: date-time
+        category:
+          type: string
+          nullable: true
       required:
       - headline
       - kind

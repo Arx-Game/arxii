@@ -20,6 +20,7 @@ import {
 } from '../gameSlice';
 import type {
   GameMessage,
+  HubTidings,
   InteractionWsPayload,
   RoomStateObject,
   SceneSummary,
@@ -40,6 +41,7 @@ interface RoomData {
   objects: RoomStateObject[];
   exits: RoomStateObject[];
   is_owner: boolean;
+  hub: HubTidings | null;
   is_public: boolean;
 }
 
@@ -94,6 +96,7 @@ const createRoomData = (
   objects,
   exits,
   is_owner: false,
+  hub: null,
   is_public: false,
 });
 

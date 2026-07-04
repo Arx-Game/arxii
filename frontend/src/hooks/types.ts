@@ -94,12 +94,33 @@ export interface RoomStateObject {
   is_public?: boolean;
 }
 
+/** One local tiding carried by a room's civic-hub feature (#1450). */
+export interface HubTidingsItem {
+  /** Feed row kind: 'DEED' or 'SCANDAL'. */
+  kind: string;
+  headline: string;
+  subject: string;
+  /** Authored scandal-category label ("Treacherous Scandal") when the row carries one. */
+  category: string | null;
+  occurred_at: string;
+}
+
+/** The room's civic-hub tidings block: present only where a board/crier stands (#1450). */
+export interface HubTidings {
+  /** Feature strategy: 'NOTICE_BOARD' or 'TOWN_CRIER'. */
+  kind: string;
+  /** The feature kind's display name ("Notice Board", "Town Crier"). */
+  name: string;
+  items: HubTidingsItem[];
+}
+
 export interface RoomStatePayload {
   room: RoomStateObject;
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
   scene?: SceneSummary | null;
+  hub?: HubTidings | null;
 }
 
 export interface SceneSummary {

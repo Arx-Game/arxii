@@ -70,6 +70,7 @@ function makeRoomData(): RoomData {
     objects: [],
     exits: [],
     is_owner: false,
+    hub: null,
     is_public: false,
   };
 }

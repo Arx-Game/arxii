@@ -226,7 +226,11 @@ Build to the ADR; these are not open questions. See
 - **Tidings posting/reacting/commenting** — feed is read-only; no authoring model. `intent` — #1450.
 - **Scandal reach & containment — BUILT (#1464, ADR-0082):** acts fork at deed birth into
   contained Secrets or society awareness (archetype-dot scandal judgment, containment check,
-  fame-scaled spread). Remaining #1450 slice: the in-world hubs reader (after #670 privacy
-  control); act-time Stealth witness-reduction wiring; interactive approach-fanned containment.
+  fame-scaled spread). **Civic-hub reader BUILT (#1450, closes the epic):** Notice Board / Town
+  Crier RoomFeatureKinds gate a local tidings slice (`hub_feed_for_room`: room → area →
+  `societies_for_area`) surfaced as arrival echo, `tidings local`, and a web room-panel block;
+  crier install places a Functionary. Still open (separate issues): act-time Stealth
+  witness-reduction wiring; interactive approach-fanned containment; venue vitality (PC-owned
+  RP hubs) is its own future umbrella.
 - **Roster release / end-tenure**; **events RSVP-accept** (invitee response); **projects activation
   service** — small but real gaps where one half of a loop is unbuilt. `intent`.

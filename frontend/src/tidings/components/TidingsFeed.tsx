@@ -14,7 +14,7 @@ function FeedRow({ item }: { item: PublicFeedItem }) {
     <Card>
       <CardContent className="flex items-start gap-3 p-4">
         <Badge variant={isScandal ? 'destructive' : 'default'} className="mt-0.5 shrink-0">
-          {isScandal ? 'Scandal' : 'Deed'}
+          {item.category ?? (isScandal ? 'Scandal' : 'Deed')}
         </Badge>
         <div className="min-w-0">
           <p className="font-medium">{item.subject}</p>

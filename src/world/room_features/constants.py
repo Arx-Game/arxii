@@ -20,6 +20,11 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     COMMAND_CENTER = "COMMAND_CENTER", "Command Center"
     GRANARY = "GRANARY", "Granary"
     CANNON_DECK = "CANNON_DECK", "Cannon Deck"
+    # Civic-hub reader surfaces (#1450): one per room (the instance is a
+    # OneToOne), so a room carries a board OR a crier — flavor variants of the
+    # same local-tidings reader.
+    NOTICE_BOARD = "NOTICE_BOARD", "Notice Board"
+    TOWN_CRIER = "TOWN_CRIER", "Town Crier"
 
 
 class RoomFeatureInstallMechanism(models.TextChoices):

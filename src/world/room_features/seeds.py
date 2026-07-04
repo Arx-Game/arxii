@@ -12,12 +12,17 @@ Plan 4 seeds:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from world.room_features.constants import (
     RoomFeatureInstallMechanism,
     RoomFeatureOwnerType,
     RoomFeatureServiceStrategy,
 )
 from world.room_features.models import RoomFeatureKind, RoomFeatureKindOwnerType
+
+if TYPE_CHECKING:
+    from world.npc_services.models import NPCRole
 
 SANCTUM_KIND_NAME = "Sanctum"
 SANCTUM_MAX_LEVEL = 5
@@ -123,3 +128,67 @@ def ensure_lab_kind() -> RoomFeatureKind:
         },
     )
     return kind
+
+
+NOTICE_BOARD_KIND_NAME = "Notice Board"
+TOWN_CRIER_KIND_NAME = "Town Crier"
+TOWN_CRIER_ROLE_NAME = "Town Crier"
+
+
+def ensure_notice_board_kind() -> RoomFeatureKind:
+    """Get-or-create the Notice Board ``RoomFeatureKind`` (#1450).
+
+    The pull half of the civic-hub reader: an examinable fixture carrying the
+    local slice of tidings (``tidings local``); wanted posters (#1826) render
+    here later. PLACEHOLDER prose for the content pass.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.NOTICE_BOARD,
+        defaults={
+            "name": NOTICE_BOARD_KIND_NAME,
+            "max_level": 1,
+            "description": (
+                "PLACEHOLDER — Notice Board kind: postings of the deeds and "
+                "scandals the local societies speak of."
+            ),
+        },
+    )
+    return kind
+
+
+def ensure_town_crier_kind() -> RoomFeatureKind:
+    """Get-or-create the Town Crier ``RoomFeatureKind`` + its NPCRole (#1450).
+
+    The push half: installing it places a crier Functionary in the room (the
+    install handler wires this); arrivals hear the freshest tidings called.
+    PLACEHOLDER prose for the content pass.
+    """
+    ensure_town_crier_role()
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.TOWN_CRIER,
+        defaults={
+            "name": TOWN_CRIER_KIND_NAME,
+            "max_level": 1,
+            "description": (
+                "PLACEHOLDER — Town Crier kind: a crier calls the news of the day to all who pass."
+            ),
+        },
+    )
+    return kind
+
+
+def ensure_town_crier_role() -> NPCRole:
+    """The crier's NPCRole (a class-1 Functionary anchor). PLACEHOLDER flavor."""
+    from world.npc_services.models import NPCRole  # noqa: PLC0415
+
+    role, _ = NPCRole.objects.get_or_create(
+        name=TOWN_CRIER_ROLE_NAME,
+        defaults={
+            "description": "PLACEHOLDER: calls the news of the day in the square.",
+            "default_description_template": (
+                "PLACEHOLDER: A crier stands on a worn crate, voice carrying over the crowd."
+            ),
+            "default_rapport_starting_value": 0,
+        },
+    )
+    return role

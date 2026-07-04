@@ -805,19 +805,29 @@ heat; identity-association copies it (`associate_heat` — the #1334 outing seam
 ### Tidings / Public-reaction feed (#1450)
 The pull/browse vector of the public-reaction "contextual center" (#1446) — recent public events
 scoped to what a viewer's persona would have heard. **Modelless and greenfield-light:** there is no
-feed table; the service aggregates two awareness M2Ms other apps already own. *In-world criers/hubs
-are a later slice of #1450.*
+feed table; the service aggregates two awareness M2Ms other apps already own.
 
 - **No models.** `world.tidings` is a service + API app (no migrations).
-- **Key function (`world/tidings/services.py`):** `public_feed_for(persona, *, limit)` → list of
-  `PublicFeedItem` dataclasses (`kind` / `headline` / `subject` / `occurred_at`), newest first.
-  Merges **deeds** (`societies.LegendEntry` filtered by `societies_aware`) + **scandals**
-  (`secrets.Secret` filtered by `societies_exposed`), scoped to the viewer's societies (union of
-  `SocietyReputation` societies + `OrganizationMembership` orgs' societies).
+- **Key functions (`world/tidings/services.py`):** `public_feed_for_societies(society_ids, *,
+  limit)` is the core read; `public_feed_for(persona, *, limit)` (viewer scope: union of
+  `SocietyReputation` societies + `OrganizationMembership` orgs' societies) and
+  `hub_feed_for_room(room, *, limit)` (civic-hub scope: `societies_for_area` ancestor walk) both
+  delegate to it. Returns `PublicFeedItem` dataclasses (`kind` / `headline` / `subject` /
+  `occurred_at` / `category`), newest first. Merges **deeds** (`societies.LegendEntry` filtered by
+  `societies_aware`) + **scandals** (`secrets.Secret` filtered by `societies_exposed`). `category`
+  is the authored scandal-category label — the first attached archetype named `*Scandal` (#1806).
 - **Faces:** web `/api/tidings/feed/?viewer=<RosterEntry pk>` (`PublicFeedView`) → React `/tidings`
-  page (`TidingsFeed`); telnet `tidings` (`CmdTidings`). Both converge on the one service. (Named
-  *tidings*, not `gossip`/`news`: `gossip` is reserved for level-1-secret access, `news` for OOC
-  game news; criers will be NPCs.)
+  page (`TidingsFeed`); telnet `tidings` / `tidings local` (`CmdTidings`). All converge on the one
+  service. (Named *tidings*, not `gossip`/`news`: `gossip` is reserved for level-1-secret access,
+  `news` for OOC game news; criers are NPCs.)
+- **Civic-hub reader (#1450 final slice):** rooms carrying a `NOTICE_BOARD` or `TOWN_CRIER`
+  `RoomFeatureKind` (see Room Features; `active_hub_feature(room_profile)` is the gate) surface the
+  local slice: arrival echo of the two freshest items (`Room._echo_hub_tidings`), telnet
+  `tidings local`, and a `hub` block on the `room_state` payload (`_get_hub` in
+  `flows/service_functions/serializers/room_state.py`) rendered by the web `HubTidingsPanel`.
+  Installing a Town Crier places a "Town Crier" `Functionary` in the room
+  (`handle_town_crier_progression` → `place_functionary`). Kinds + the crier `NPCRole` seed via
+  the `civic_hubs` cluster (`world/seeds/clusters.py`).
 - **Source:** `src/world/tidings/`
 - **Echo (push) vector — staff/GM gemits with reach (#1450), in `world.narrative`:**
   `broadcast_gemit` broadcasts a **hand-authored, verbatim** message (colour codes and all) to a
@@ -1550,9 +1560,12 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
 `RoomFeatureInstance` decorates a `RoomProfile` and dispatches per-kind logic
-via a strategy enum. The first kind shipped is **SANCTUM** (see Sanctum below);
-future kinds (Library, Training Room, Lab, etc. — #675) plug in by
-registering a service strategy + per-kind details model.
+via a strategy enum. Shipped kinds: **SANCTUM** (see Sanctum below),
+**COMMAND_CENTER** (#930), **LAB** (#1234), and the civic-hub readers
+**NOTICE_BOARD** / **TOWN_CRIER** (#1450 — `active_hub_feature(room_profile)`
+resolves a room's hub; crier install places a "Town Crier" `Functionary` via
+`handle_town_crier_progression`). Future kinds (Library, Training Room, etc. —
+#675) plug in by registering a service strategy + per-kind details model.
 
 - **Models** (`world.room_features.models`):
   - `RoomFeatureKind` — open catalog row. Carries `service_strategy`

@@ -331,6 +331,12 @@ reach-scoped retroactive viewing — the push vector of the public-reaction cent
 The **pull**/browse feed of the public-reaction center, scoped to the societies a persona
 hears through. _Avoid_: news feed, inbox.
 
+**Civic hub**:
+A room carrying a Notice Board or Town Crier room feature (#1450) — an in-world reader
+surfacing the *local* tidings slice (room → area → local societies). Distinct from a
+**venue** (a PC-owned RP hub, future umbrella); a room can be both. _Avoid_: news kiosk,
+bulletin board (Notice Board is the canonical kind name).
+
 ## Process & design tenets
 
 **Journey**:

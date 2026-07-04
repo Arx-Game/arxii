@@ -26,6 +26,7 @@ class TestClusterRegistry(TestCase):
                 "domain_dev",
                 "stealth",
                 "perception",
+                "civic_hubs",
             },
         )
 

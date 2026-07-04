@@ -25198,6 +25198,7 @@ export interface components {
       subject: string;
       /** Format: date-time */
       occurred_at: string;
+      category?: string | null;
     };
     /**
      * @description * `deed` - Deed
@@ -39028,8 +39029,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };

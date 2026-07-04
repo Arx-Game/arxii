@@ -288,6 +288,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "exits": exits,
             "scene": scene_data,
             "heat": self._get_heat(caller, room),
+            "hub": self._get_hub(room),
         }
 
     def _get_heat(self, caller: BaseState, room: BaseState) -> dict[str, str] | None:
@@ -295,6 +296,34 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         from world.justice.display import room_heat_payload  # noqa: PLC0415
 
         return room_heat_payload(caller.obj, room.obj)
+
+    def _get_hub(self, room: BaseState) -> dict[str, object] | None:
+        """#1450 — the room's civic-hub tidings block (None when no board/crier here).
+
+        Same feed for every viewer: hub tidings are what the LOCAL societies talk
+        about (room → area → societies), not viewer-scoped.
+        """
+        from world.areas.services import get_room_profile  # noqa: PLC0415
+        from world.room_features.services import active_hub_feature  # noqa: PLC0415
+        from world.tidings.services import hub_feed_for_room  # noqa: PLC0415
+
+        feature = active_hub_feature(get_room_profile(room.obj))
+        if feature is None:
+            return None
+        return {
+            "kind": feature.feature_kind.service_strategy,
+            "name": feature.feature_kind.name,
+            "items": [
+                {
+                    "kind": item.kind,
+                    "headline": item.headline,
+                    "subject": item.subject,
+                    "category": item.category,
+                    "occurred_at": item.occurred_at.isoformat(),
+                }
+                for item in hub_feed_for_room(room.obj, limit=10)
+            ],
+        }
 
 
 def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, object]:
