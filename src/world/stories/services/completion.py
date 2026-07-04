@@ -4,6 +4,10 @@ Honest about unresolved threads — in-flight progress is FORECLOSED, not falsel
 COMPLETED and never orphaned — and never blocks on absent participants.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -15,7 +19,10 @@ from world.stories.models import (
     StoryProgress,
 )
 from world.stories.services.frontier import set_progress_status
-from world.stories.types import StoryStatus
+from world.stories.types import AnyStoryProgress, StoryStatus
+
+if TYPE_CHECKING:
+    from world.gm.models import GMProfile
 
 # Every per-run pointer model that tracks progress through a story. complete_story
 # forecloses any still-active row across all three regardless of the story's scope.
@@ -65,3 +72,37 @@ def _dissolve_linked_campaigns(story: Story) -> None:
     )
     for covenant in campaigns:
         dissolve_covenant(covenant=covenant)
+
+
+@transaction.atomic
+def resolve_foreclosed_progress(
+    *,
+    progress: AnyStoryProgress,
+    resolved_by: GMProfile,
+) -> AnyStoryProgress:
+    """Wrap up a FORECLOSED progress record.
+
+    Stamps ``resolved_at`` / ``resolved_by`` — an honest closure marker
+    layered on the terminal FORECLOSED outcome, never a reclassification to
+    COMPLETED. Idempotent: a no-op (no re-notify) if already resolved. Does
+    not touch ``status`` or ``is_active``.
+
+    Defensive programmer-error guard only: ``progress`` must be FORECLOSED.
+    User-input validation (the record exists, is foreclosed, belongs to the
+    resolved story) belongs in the serializer.
+    """
+    from world.stories.services.narrative import notify_foreclosed_resolved  # noqa: PLC0415
+
+    if progress.status != ProgressStatus.FORECLOSED:
+        msg = (
+            f"Progress {progress.pk} is not FORECLOSED (status={progress.status!r}); "
+            "ResolveForeclosureInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
+    if progress.resolved_at is not None:
+        return progress
+    progress.resolved_at = timezone.now()
+    progress.resolved_by = resolved_by
+    progress.save(update_fields=["resolved_at", "resolved_by"])
+    notify_foreclosed_resolved(progress=progress, resolved_by=resolved_by)
+    return progress
