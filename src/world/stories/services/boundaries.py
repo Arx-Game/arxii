@@ -24,13 +24,17 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from world.stories.types import StakeBoundaryReport
+from django.utils import timezone
+
+from world.stories.types import StakeAvailability, StakeBoundaryReport
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+    from evennia_extensions.models import PlayerData
+    from world.boundaries.models import TreasuredSubject
     from world.character_sheets.models import CharacterSheet
-    from world.stories.models import Beat, Stake
+    from world.stories.models import Beat, Stake, TreasuredSignoff
 
 # Identity key: (subject_kind, subject_sheet_id, subject_item_id,
 # subject_society_id, subject_organization_id, subject_label-or-"").
@@ -266,3 +270,72 @@ def check_stake_boundaries(
     if requires:
         return StakeBoundaryReport(allowed=True, requires_signoff=tuple(sorted(requires)))
     return StakeBoundaryReport(allowed=True)
+
+
+def grant_treasured_signoff(
+    beat: Beat,
+    player_data: PlayerData,
+    treasured_subject: TreasuredSubject,
+) -> TreasuredSignoff:
+    """Create (or reactivate) a player's pre-scene sign-off on ``beat``.
+
+    Idempotent: the most recent existing ``TreasuredSignoff`` for this exact
+    ``(beat, player_data, treasured_subject)`` triple is reactivated (its
+    ``withdrawn_at`` cleared) instead of creating a duplicate row; calling
+    this when an active signoff already exists is a no-op. Never hard-deletes
+    or duplicates — story-significant data.
+    """
+    from world.stories.models import TreasuredSignoff  # noqa: PLC0415
+
+    existing = (
+        TreasuredSignoff.objects.filter(
+            beat=beat,
+            player_data=player_data,
+            treasured_subject=treasured_subject,
+        )
+        .order_by("-granted_at", "-pk")
+        .first()
+    )
+    if existing is not None:
+        if not existing.active:
+            existing.withdrawn_at = None
+            existing.save(update_fields=["withdrawn_at"])
+        return existing
+    return TreasuredSignoff.objects.create(
+        beat=beat,
+        player_data=player_data,
+        treasured_subject=treasured_subject,
+    )
+
+
+def withdraw_treasured_signoff(signoff: TreasuredSignoff) -> None:
+    """Soft-withdraw a sign-off: sets ``withdrawn_at`` (never deletes). Idempotent."""
+    if signoff.active:
+        signoff.withdrawn_at = timezone.now()
+        signoff.save(update_fields=["withdrawn_at"])
+
+
+def stake_availability(
+    beat: Beat,
+    character_sheets: Sequence[CharacterSheet],
+) -> StakeAvailability:
+    """GM-facing counts of how ``beat``'s candidate stakes screen for a party (#1771).
+
+    Reuses ``check_stake_boundaries`` once per candidate ``Stake`` on the beat
+    so the exact same hard-line/treasured logic backs both the enforcement
+    seam and this read — COUNTS ONLY, never a reason, never which player or
+    stake (ADR-0033). One ``check_stake_boundaries`` call per stake (each
+    already batched internally); bounded by the number of stakes on a single
+    beat, not by scene/story size.
+    """
+    sheets = list(character_sheets)
+    available = blocked = needs_signoff = 0
+    for stake in beat.stakes.all():
+        report = check_stake_boundaries([stake], sheets)
+        if not report.allowed:
+            blocked += 1
+        elif report.requires_signoff:
+            needs_signoff += 1
+        else:
+            available += 1
+    return StakeAvailability(available=available, blocked=blocked, needs_signoff=needs_signoff)

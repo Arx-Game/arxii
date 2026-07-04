@@ -297,6 +297,21 @@ class StakeBoundaryReport:
 
 
 @dataclass(frozen=True)
+class StakeAvailability:
+    """GM-facing tally of how a beat's candidate stakes screen for a party (#1771).
+
+    Produced by ``world.stories.services.boundaries.stake_availability``, one
+    ``check_stake_boundaries`` call per candidate stake. COUNTS ONLY — no
+    reason, no player/theme identifier (ADR-0033): a GM sees "3 available, 1
+    blocked, 2 need sign-off", never which stake or why.
+    """
+
+    available: int = 0
+    blocked: int = 0
+    needs_signoff: int = 0
+
+
+@dataclass(frozen=True)
 class StakesReadinessReport:
     """Result of validate_stakes_readiness (world.stories.services.stakes).
 
