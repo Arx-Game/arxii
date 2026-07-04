@@ -411,3 +411,40 @@ class IsShipOwnerPrerequisite(Prerequisite):
         if entry_room is not None and is_owner(persona, entry_room.objectdb):
             return True, ""
         return False, "You don't own this ship."
+
+
+@dataclass
+class HasCompanionCapacityPrerequisite(Prerequisite):
+    """True if the actor has Companion Capacity remaining for one more companion.
+
+    Reads gift_id/archetype_id straight from context["kwargs"] — the same
+    convention IsShipOwnerPrerequisite and other action prerequisites use to
+    read action-call kwargs before execute() runs.
+    """
+
+    def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
+        from world.companions.models import CompanionArchetype  # noqa: PLC0415
+        from world.companions.services import (  # noqa: PLC0415
+            companion_capacity,
+            used_companion_capacity,
+        )
+        from world.magic.models.gifts import Gift  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        gift_id = kwargs.get("gift_id")
+        archetype_id = kwargs.get("archetype_id")
+        if not gift_id or not archetype_id:
+            return False, "Pick a gift and an archetype first."
+        try:
+            gift = Gift.objects.get(pk=gift_id)
+            archetype = CompanionArchetype.objects.get(pk=archetype_id)
+        except (Gift.DoesNotExist, CompanionArchetype.DoesNotExist):
+            return False, "No such gift or archetype."
+
+        sheet = resolve_actor_sheet(actor)
+        if sheet is None:
+            return False, "You have no character sheet."
+        remaining = companion_capacity(sheet, gift) - used_companion_capacity(sheet, gift)
+        if remaining < archetype.capacity_cost:
+            return False, f"You don't have enough Companion Capacity to bind a {archetype.name}."
+        return True, ""

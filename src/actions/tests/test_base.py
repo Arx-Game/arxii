@@ -324,6 +324,7 @@ class ActionRegistryTests(TestCase):
             "upgrade_ship",
             "repair_ship",
             "ship_status",
+            "bind_companion",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
