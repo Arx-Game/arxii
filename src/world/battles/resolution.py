@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -679,6 +680,46 @@ def _resolve_hold_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
+def _resolve_reposition_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,  # noqa: ARG001 — no VP awarded for movement
+    success_level: int,  # noqa: ARG001 — movement is capability-bounded, not margin-scaled
+) -> None:
+    """Apply REPOSITION success: move the target vehicle's place by up to its
+    SPEED capability magnitude toward the declared delta (#1714).
+
+    Distance moved this round is bounded by min(requested distance, SPEED
+    capability value * success_level scaling is intentionally NOT applied here —
+    unlike STRIKE/BREACH, movement is capability-bounded, not check-margin-scaled;
+    success_level only determines whether the move happens at all (the check
+    already gates that via resolve_battle_technique).
+    """
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+
+    place = declaration.target_place
+    vehicle = getattr(place, "vehicle", None)  # noqa: GETATTR_LITERAL
+    if vehicle is None:
+        return
+    dx = declaration.reposition_dx or 0
+    dy = declaration.reposition_dy or 0
+    requested_distance = (dx * dx + dy * dy) ** Decimal("0.5") if (dx or dy) else Decimal(0)
+    if requested_distance == 0:
+        return
+
+    speed_capability = CapabilityType.objects.filter(name="speed").first()
+    max_distance = Decimal(
+        vehicle.unit.effective_capability(speed_capability) if speed_capability else 0
+    )
+    if requested_distance > max_distance:
+        scale = max_distance / requested_distance
+        dx *= scale
+        dy *= scale
+
+    place.x += dx
+    place.y += dy
+    place.save(update_fields=["x", "y"])
+
+
 def _resolve_breach_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
@@ -994,6 +1035,9 @@ def _dispatch_success_handler(
             declaration, result, success_level
         ),
         BattleActionKind.FORTIFY: lambda: _resolve_fortify_success(
+            declaration, result, success_level
+        ),
+        BattleActionKind.REPOSITION: lambda: _resolve_reposition_success(
             declaration, result, success_level
         ),
     }

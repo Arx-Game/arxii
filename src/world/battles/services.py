@@ -8,6 +8,7 @@ directly.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -440,6 +441,8 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
     target_place: BattlePlace | None = None,
     target_side: BattleSide | None = None,
     target_fortification: Fortification | None = None,
+    reposition_dx: Decimal | None = None,
+    reposition_dy: Decimal | None = None,
 ) -> BattleActionDeclaration:
     """Record or update the participant's action declaration for the current round.
 
@@ -460,6 +463,8 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         target_place: The ``BattlePlace`` affected (scope=PLACE).
         target_side: The ``BattleSide`` affected (scope=SIDE).
         target_fortification: The ``Fortification`` being BREACHed/FORTIFYed (#1713).
+        reposition_dx: Requested x-axis delta for a REPOSITION declaration (#1714).
+        reposition_dy: Requested y-axis delta for a REPOSITION declaration (#1714).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
@@ -555,6 +560,8 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
             "target_place": target_place,
             "target_side": target_side,
             "target_fortification": target_fortification,
+            "reposition_dx": reposition_dx,
+            "reposition_dy": reposition_dy,
             "resolved": False,
         },
     )

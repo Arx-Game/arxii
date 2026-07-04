@@ -603,6 +603,20 @@ class BattleActionDeclaration(SharedMemoryModel):
         related_name="declarations",
         help_text="Set when action_kind is BREACH or FORTIFY (#1713).",
     )
+    reposition_dx = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Requested x-axis delta for a REPOSITION declaration (#1714). "
+        "Clamped to the vehicle's SPEED capability magnitude at resolution.",
+    )
+    reposition_dy = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     resolved = models.BooleanField(default=False)
     success_level = models.SmallIntegerField(
         default=0,

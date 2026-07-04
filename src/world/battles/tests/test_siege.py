@@ -4,6 +4,7 @@ Fortification's snapshotted integrity."""
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -27,6 +28,8 @@ from world.battles.factories import (
     BattlePlaceFactory,
     BattleSideFactory,
 )
+from world.battles.models import BattleUnitCapability
+from world.battles.resolution import resolve_battle_round
 from world.battles.services import (
     begin_battle_round,
     create_battle_vehicle,
@@ -36,6 +39,7 @@ from world.battles.services import (
 )
 from world.buildings.factories import BuildingFactory, FortificationUpgradeDetailsFactory
 from world.buildings.fortification_services import complete_fortification_upgrade
+from world.conditions.factories import CapabilityTypeFactory
 from world.magic.factories import CharacterAnimaFactory, CharacterTechniqueFactory, TechniqueFactory
 from world.projects.factories import ProjectFactory
 from world.scenes.constants import RoundStatus
@@ -220,3 +224,44 @@ class RepositionDeclarationTests(TestCase):
                 scope=BattleActionScope.PLACE,
                 target_place=self.vehicle.place,
             )
+
+
+class RepositionResolutionTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory(round_limit=10)
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.vehicle = create_battle_vehicle(
+            battle=self.battle,
+            side=self.side,
+            place_name="The Gull",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        speed = CapabilityTypeFactory(name="speed")
+        BattleUnitCapability.objects.create(unit=self.vehicle.unit, capability=speed, value=5)
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+        self.vehicle.unit.commander = self.participant.character_sheet
+        self.vehicle.unit.save(update_fields=["commander"])
+        CharacterTechniqueFactory(
+            character=self.participant.character_sheet, technique=self.technique
+        )
+        CharacterAnimaFactory(
+            character=self.participant.character_sheet.character, current=30, maximum=30
+        )
+
+    def test_moves_place_toward_declared_delta_bounded_by_speed(self):
+        battle_round = begin_battle_round(battle=self.battle)
+        declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.REPOSITION,
+            technique=self.technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.vehicle.place,
+            reposition_dx=Decimal(10),
+            reposition_dy=Decimal(0),
+        )
+        with patch("world.battles.resolution.perform_check", return_value=_mock_check(2)):
+            resolve_battle_round(battle_round=battle_round)
+
+        self.vehicle.place.refresh_from_db()
+        self.assertEqual(self.vehicle.place.x, Decimal("5.00"))
