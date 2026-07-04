@@ -13249,6 +13249,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/SceneEntryEndorsement'
           description: ''
+  /api/magic/signatures/:
+    get:
+      operationId: magic_signatures_retrieve
+      description: |-
+        List available bonuses and set/clear the signature bonus on a Thread.
+
+        ``list`` runs :class:`SignatureListAction`. ``set``/``clear`` resolve the
+        ``Thread`` (scoped to the actor's own threads) and, for ``set``, the
+        ``SignatureMotifBonus`` catalog row, then dispatch
+        :class:`SignatureSetAction` / :class:`SignatureClearAction`.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/magic/signatures/clear/:
+    post:
+      operationId: magic_signatures_clear_create
+      description: |-
+        List available bonuses and set/clear the signature bonus on a Thread.
+
+        ``list`` runs :class:`SignatureListAction`. ``set``/``clear`` resolve the
+        ``Thread`` (scoped to the actor's own threads) and, for ``set``, the
+        ``SignatureMotifBonus`` catalog row, then dispatch
+        :class:`SignatureSetAction` / :class:`SignatureClearAction`.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/magic/signatures/set/:
+    post:
+      operationId: magic_signatures_set_create
+      description: |-
+        List available bonuses and set/clear the signature bonus on a Thread.
+
+        ``list`` runs :class:`SignatureListAction`. ``set``/``clear`` resolve the
+        ``Thread`` (scoped to the actor's own threads) and, for ``set``, the
+        ``SignatureMotifBonus`` catalog row, then dispatch
+        :class:`SignatureSetAction` / :class:`SignatureClearAction`.
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/magic/soul-tether/{relationship_id}/:
     get:
       operationId: magic_soul_tether_retrieve
