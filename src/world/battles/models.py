@@ -10,6 +10,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.battles.constants import (
     DEFAULT_MORALE,
     DEFAULT_ROUND_LIMIT,
@@ -647,6 +648,8 @@ class TechniquePropertyAffinity(SharedMemoryModel):
     which could only ever match a unit's single composition tag.
     """
 
+    objects = ArxSharedMemoryManager()
+
     technique = models.ForeignKey(
         TECHNIQUE_MODEL,
         on_delete=models.PROTECT,
@@ -680,6 +683,8 @@ class TerrainPropertyEffect(SharedMemoryModel):
     a matching row — replaces #1711's TerrainCompositionEffect.
     """
 
+    objects = ArxSharedMemoryManager()
+
     terrain_type = models.CharField(max_length=20, choices=TerrainType.choices)
     property = models.ForeignKey(
         Property,
@@ -710,6 +715,8 @@ class WeatherTypePropertyEffect(SharedMemoryModel):
     keyed on the place's *effective* weather (resolution.effective_weather)
     rather than its static terrain_type.
     """
+
+    objects = ArxSharedMemoryManager()
 
     weather_type = models.ForeignKey(
         WeatherType,
@@ -744,6 +751,8 @@ class WeatherTypeCapabilityChallenge(SharedMemoryModel):
     Stormy weather. The first absence/threshold-based battle modifier in the
     codebase (everything else is presence- or >=-threshold based).
     """
+
+    objects = ArxSharedMemoryManager()
 
     weather_type = models.ForeignKey(
         WeatherType,

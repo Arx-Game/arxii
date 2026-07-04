@@ -115,26 +115,33 @@ def _property_affinity_modifier(technique: Technique, holder: HasProperties) -> 
     """Sum every TechniquePropertyAffinity row matching one of holder's properties (#1794).
 
     Returns 0 when no row matches — most techniques have no authored affinity,
-    and that's the expected common case.
+    and that's the expected common case. Reads from cached_all() (#1846) — the
+    whole table is small and admin-authored, so it's loaded once per process
+    and filtered in Python rather than re-queried per declaration.
     """
     from world.battles.models import TechniquePropertyAffinity  # noqa: PLC0415
 
-    rows = TechniquePropertyAffinity.objects.filter(technique=technique).select_related("property")
+    rows = [
+        r for r in TechniquePropertyAffinity.objects.cached_all() if r.technique_id == technique.pk
+    ]
     return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
 def _terrain_property_modifier(place: BattlePlace | None, holder: HasProperties) -> int:
     """Sum every TerrainPropertyEffect row matching one of holder's properties (#1794).
 
-    Returns 0 when the unit has no place, or no row matches.
+    Returns 0 when the unit has no place, or no row matches. Reads from
+    cached_all() (#1846) — see _property_affinity_modifier for why.
     """
     from world.battles.models import TerrainPropertyEffect  # noqa: PLC0415
 
     if place is None:
         return 0
-    rows = TerrainPropertyEffect.objects.filter(terrain_type=place.terrain_type).select_related(
-        "property"
-    )
+    rows = [
+        r
+        for r in TerrainPropertyEffect.objects.cached_all()
+        if r.terrain_type == place.terrain_type
+    ]
     return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
@@ -164,15 +171,18 @@ def _weather_property_modifier(place: BattlePlace | None, holder: HasProperties)
     """Sum every WeatherTypePropertyEffect row matching one of holder's properties (#1715).
 
     Returns 0 when there's no effective weather at place, or no row matches.
+    Reads from cached_all() (#1846) — see _property_affinity_modifier for why.
     """
     from world.battles.models import WeatherTypePropertyEffect  # noqa: PLC0415
 
     weather_type = effective_weather(place)
     if weather_type is None:
         return 0
-    rows = WeatherTypePropertyEffect.objects.filter(weather_type=weather_type).select_related(
-        "property"
-    )
+    rows = [
+        r
+        for r in WeatherTypePropertyEffect.objects.cached_all()
+        if r.weather_type_id == weather_type.pk
+    ]
     return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
@@ -182,15 +192,18 @@ def _weather_capability_modifier(place: BattlePlace | None, holder: HasCapabilit
     battle modifier in the codebase (everything else is presence- or >=-threshold based).
 
     Returns 0 when there's no effective weather at place, or no row applies.
+    Reads from cached_all() (#1846) — see _property_affinity_modifier for why.
     """
     from world.battles.models import WeatherTypeCapabilityChallenge  # noqa: PLC0415
 
     weather_type = effective_weather(place)
     if weather_type is None:
         return 0
-    rows = WeatherTypeCapabilityChallenge.objects.filter(weather_type=weather_type).select_related(
-        "capability"
-    )
+    rows = [
+        r
+        for r in WeatherTypeCapabilityChallenge.objects.cached_all()
+        if r.weather_type_id == weather_type.pk
+    ]
     return sum(
         row.modifier for row in rows if holder.effective_capability(row.capability) < row.threshold
     )
