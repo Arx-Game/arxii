@@ -9,6 +9,10 @@ as alts. Mirrors the ``where`` listing's session-enumeration shape (`world.areas
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 # Coarse idle buckets, in seconds. Intentionally coarse (alt-safety); tunable.
 _IDLE_ACTIVE_UNDER = 15 * 60  # under 15 min: active (no marker)
@@ -111,13 +115,17 @@ def who_listing(viewer_account: object | None = None) -> list[WhoEntry]:
     on the **active** persona so a disguised character shows the face it's wearing. Sorted by
     name. Idle is bucketed, never exact, to avoid outing alts by identical idle times; an `afk`
     marker forces the ``away`` bucket. Quiet-mode characters are omitted unless ``viewer_account``
-    is the player themselves or on their allowlist.
+    is the player themselves or on their allowlist. A concealed character (#1225 — any active
+    ``conceals_from_perception`` condition) is omitted unconditionally, mirroring the quiet-mode
+    omission above — there is no per-observer "detection" concept for an anonymous global
+    directory like ``who``, unlike the room-occupant list's per-observer ``can_perceive`` gate.
     """
     from time import time  # noqa: PLC0415
 
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
     from evennia import SESSION_HANDLER  # noqa: PLC0415
 
+    from world.conditions.services import is_concealed  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     now = time()
@@ -136,6 +144,11 @@ def who_listing(viewer_account: object | None = None) -> list[WhoEntry]:
     entries: list[WhoEntry] = []
     for puppet_id, puppet in puppets_by_id.items():
         if hidden_from_viewer(puppet, viewer_account):
+            continue
+        # puppets_by_id is typed loosely (`object`) to match this module's other
+        # puppet-handling helpers; is_concealed's real ObjectDB param is a runtime
+        # guarantee (puppet is always a session's live Character), not a static one.
+        if is_concealed(cast("ObjectDB", puppet)):
             continue
         try:
             sheet = puppet.sheet_data

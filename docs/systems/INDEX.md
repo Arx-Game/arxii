@@ -420,12 +420,21 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),
   `RoomStatePayloadSerializer._serialize_contents` + telnet `BaseState.get_display_characters`
   (room-occupant lists omit a concealed-and-undetected character entirely — name, dbref, and
-  avatar never leak), and `SearchAction` (the detection roll; a successful detection also pushes
+  avatar never leak), `SearchAction` (the detection roll; a successful detection also pushes
   a `send_room_state()` refresh to the detecting actor so the target appears without waiting for
-  the next natural refresh). Bulk condition-clear paths (`remove_conditions_by_category`,
-  `clear_all_conditions`) route per-instance through the same teardown `remove_condition` uses, so
-  neither bypasses the OOC unseen-observer clear hook. See ADR-0083 for the separate OOC
-  unseen-observer transparency guarantee this composes with.
+  the next natural refresh), and `LookAction`'s direct-target gate (naming a concealed character
+  directly fails with the same not-found message a genuinely absent target would — `CmdLook`
+  rewrites the message from the player's own raw input so a prefix/case-variant probe can't
+  distinguish "concealed" from "never there"). The global presence directories (`where_listing`,
+  `who_listing`) instead consult the unconditional `is_concealed()` directly (no per-observer
+  detection concept for an anonymous global directory) — a concealed character never appears in
+  `where`/`who`, regardless of who's asking. Bulk condition-clear paths
+  (`remove_conditions_by_category`, `clear_all_conditions`) and the severity
+  advance/decay paths (`advance_condition_severity` re-advancing from zero,
+  `decay_condition_severity` decaying to zero) all route through the same
+  register/clear teardown `remove_condition` uses, so none of them bypass the OOC
+  unseen-observer hook. See ADR-0083 for the separate OOC unseen-observer transparency
+  guarantee this composes with.
 - **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
   (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
   `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).

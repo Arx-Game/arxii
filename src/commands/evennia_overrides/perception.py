@@ -10,6 +10,7 @@ from actions.definitions.perception import (
     LookAction,
     LookAtItemAction,
 )
+from actions.types import ActionResult
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -76,6 +77,35 @@ class CmdLook(ArxCommand):
             msg = f"Could not find '{args}'."
             raise CommandError(msg)
         return {"target": target}
+
+    def _execute(self) -> None:
+        """Run the plain-look dispatch, rewriting the concealment-gate failure.
+
+        Evennia's ``search()`` is prefix-matching and case-insensitive, so a
+        probe that resolves to a real-but-concealed character reaches
+        ``LookAction.execute()`` with a genuinely resolved target — its
+        failure message would otherwise echo the object's canonical name
+        (``target.key``), which the player never typed. That's a tell: an
+        equivalent probe against a nonexistent target echoes the player's own
+        unmatched input verbatim (``resolve_action_args``'s ``CommandError``
+        above). Rewriting the message from ``self.args`` here makes the two
+        indistinguishable (#1225 review fix) — only for the plain-look
+        dispatch (``self.action`` is still the default ``LookAction``; the
+        drilled item forms switch ``self.action`` and already fall through to
+        plain search on a concealed owner/container, never reaching this
+        failure path).
+        """
+        args = (self.args or "").strip()
+        kwargs = self.resolve_action_args()
+        result = self.action.run(actor=self.caller, **kwargs)
+        if (
+            not result.success
+            and isinstance(self.action, LookAction)
+            and kwargs.get("target") not in (self.caller, self.caller.location)
+        ):
+            result = ActionResult(success=False, message=f"Could not find '{args}'.")
+        if result.message:
+            self.msg(result.message)
 
     def _try_dispatch_at_owner(
         self,

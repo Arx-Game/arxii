@@ -2196,6 +2196,11 @@ def advance_condition_severity(
     persists over threshold). Fail = stage advances normally.
     """
     previous_stage = instance.current_stage
+    # Captured before any mutation below — used to detect the resolved→active
+    # transition (severity re-advancing from zero) so the OOC unseen-observer
+    # hook fires exactly once, on the edge, not on every call (#1225 — ADR-0083
+    # promises this for any future duration/decay-based concealment producer).
+    was_resolved = instance.resolved_at is not None
     instance.severity += amount
 
     # Find the highest severity-threshold stage that's been reached
@@ -2225,6 +2230,8 @@ def advance_condition_severity(
                     update_fields.append("resolved_at")
                 instance.save(update_fields=update_fields)
                 _invalidate_condition_handler(instance.target)
+                if was_resolved and instance.resolved_at is None:
+                    _register_unseen_observer_if_concealing(instance.target, instance.condition)
                 return SeverityAdvanceResult(
                     previous_stage=previous_stage,
                     new_stage=previous_stage,
@@ -2244,6 +2251,9 @@ def advance_condition_severity(
 
     instance.save(update_fields=update_fields)
     _invalidate_condition_handler(instance.target)
+
+    if was_resolved and instance.resolved_at is None:
+        _register_unseen_observer_if_concealing(instance.target, instance.condition)
 
     if stage_changed:
         stage_change_payload = ConditionStageChangedPayload(
@@ -2390,6 +2400,11 @@ def decay_condition_severity(
     preventing double-decrement.
     """
     previous_stage = instance.current_stage
+    # Captured before any mutation below — used to detect the active→resolved
+    # transition (severity decaying to zero) so the OOC unseen-observer hook
+    # fires exactly once, on the edge, not on every call (#1225 — ADR-0083
+    # promises this for any future duration/decay-based concealment producer).
+    previously_resolved = instance.resolved_at is not None
     new_severity = max(0, instance.severity - amount)
 
     new_stage = (
@@ -2412,6 +2427,9 @@ def decay_condition_severity(
 
     instance.save(update_fields=update_fields)
     _invalidate_condition_handler(instance.target)
+
+    if resolved and not previously_resolved:
+        _clear_unseen_observer_if_concealing(instance.target, instance.condition)
 
     if new_stage != previous_stage:
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL

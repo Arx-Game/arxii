@@ -1,11 +1,17 @@
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.conditions.services import (
+    advance_condition_severity,
     apply_condition,
     bulk_apply_conditions,
     clear_all_conditions,
+    decay_condition_severity,
     remove_condition,
     remove_conditions_by_category,
     suppress_condition,
@@ -116,3 +122,51 @@ class ConcealmentOOCWiringTests(TestCase):
         clear_all_conditions(self.character)
 
         self.assertFalse(has_unseen_observers(self.scene))
+
+    def test_decay_to_zero_severity_clears_unseen_observer(self) -> None:
+        """Natural severity decay to zero (final-review gap, #1225) — a concealing
+        condition that expires via ``decay_condition_severity`` must clear the OOC
+        banner exactly like ``remove_condition`` does. Currently inert in production
+        (the seeded ``Concealed`` template has no ``passive_decay_per_day``, so
+        ``decay_all_conditions_tick`` never reaches this path today) but ADR-0083
+        promises the hook for any future duration/decay-based concealment producer."""
+        instance = ConditionInstanceFactory(
+            target=self.character, condition=self.template, severity=1
+        )
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        decay_condition_severity(instance, amount=1)
+
+        self.assertEqual(instance.severity, 0)
+        self.assertIsNotNone(instance.resolved_at)
+        self.assertFalse(has_unseen_observers(self.scene))
+
+    def test_decay_that_holds_above_zero_does_not_clear_banner(self) -> None:
+        """A partial decay that leaves severity above zero must NOT clear the OOC
+        banner — only a full decay-to-zero (natural expiry) does."""
+        instance = ConditionInstanceFactory(
+            target=self.character, condition=self.template, severity=3
+        )
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        decay_condition_severity(instance, amount=1)
+
+        self.assertEqual(instance.severity, 2)
+        self.assertIsNone(instance.resolved_at)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+    def test_advance_from_zero_reregisters_unseen_observer(self) -> None:
+        """Inverse of the decay-to-zero case — a resolved concealing condition
+        re-advancing from zero severity must re-register the OOC banner (#1225)."""
+        instance = ConditionInstanceFactory(
+            target=self.character, condition=self.template, severity=1
+        )
+        self.assertTrue(has_unseen_observers(self.scene))
+        decay_condition_severity(instance, amount=1)
+        self.assertFalse(has_unseen_observers(self.scene))
+
+        advance_condition_severity(instance, amount=1)
+
+        self.assertEqual(instance.severity, 1)
+        self.assertIsNone(instance.resolved_at)
+        self.assertTrue(has_unseen_observers(self.scene))

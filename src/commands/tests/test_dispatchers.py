@@ -286,8 +286,23 @@ class CmdLookParserConcealmentTests(TestCase):
         # Same failure mode as an unknown owner (test_possessive_unknown_owner_
         # raises_command_error) — falls all the way through to plain search,
         # which also misses, raising the generic not-found error.
-        with self.assertRaises(CommandError):
+        with self.assertRaises(CommandError) as concealed_ctx:
             cmd.resolve_action_args()
+
+        # Strengthened per #1225 final review: assert exact message equality
+        # against a genuinely nonexistent owner, not just "raises some error"
+        # (mirrors LookActionConcealmentTests's rigor) — the two probes must be
+        # byte-identical so a concealed owner is indistinguishable from one
+        # that was never there.
+        def fake_search_absent(_name, *, quiet=False, **_kwargs):
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search_absent)
+        absent_cmd = _make_cmd(CmdLook, caller, args=" ConcealShade's hat")
+        with self.assertRaises(CommandError) as absent_ctx:
+            absent_cmd.resolve_action_args()
+
+        self.assertEqual(str(concealed_ctx.exception), str(absent_ctx.exception))
 
     def test_possessive_form_dispatches_when_owner_detected(self) -> None:
         room, caller, actor_sheet = self._make_caller("ConcealDetectAlice")
@@ -328,8 +343,92 @@ class CmdLookParserConcealmentTests(TestCase):
 
         caller.search = MagicMock(side_effect=fake_search)
         cmd = _make_cmd(CmdLook, caller, args=" coin in ConcealChest")
-        with self.assertRaises(CommandError):
+        with self.assertRaises(CommandError) as concealed_ctx:
             cmd.resolve_action_args()
+
+        # Strengthened per #1225 final review: assert exact message equality
+        # against a genuinely nonexistent container (mirrors
+        # LookActionConcealmentTests's rigor) — byte-identical, so a concealed
+        # container is indistinguishable from one that was never there.
+        def fake_search_absent(_name, *, quiet=False, **_kwargs):
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search_absent)
+        absent_cmd = _make_cmd(CmdLook, caller, args=" coin in ConcealChest")
+        with self.assertRaises(CommandError) as absent_ctx:
+            absent_cmd.resolve_action_args()
+
+        self.assertEqual(str(concealed_ctx.exception), str(absent_ctx.exception))
+
+
+class CmdLookMessageParityTests(TestCase):
+    """#1225 final review — the plain-look concealment-gate failure must be
+    byte-identical to a genuinely nonexistent probe, exercised through the real
+    ``CmdLook`` dispatch path (``resolve_action_args`` -> ``action.run()`` ->
+    ``CmdLook._execute``'s message rewrite), NOT a direct ``LookAction().run()``
+    call with a pre-resolved target (which bypasses name resolution entirely and
+    can't observe this asymmetry — see ``LookActionConcealmentTests`` in
+    ``actions/tests/test_actions.py`` for that narrower, still-valid check).
+
+    ``LookAction.execute()`` builds its concealment-gate failure message from the
+    resolved object's canonical ``target.key`` — a name the player never typed
+    when their probe was a prefix or a different case. ``CmdLook._execute``
+    rewrites that message from the caller's own raw ``self.args`` so it matches
+    the genuinely-not-found message byte-for-byte.
+    """
+
+    def _make_caller(self, key: str = "MsgParityAlice"):
+        room = ObjectDBFactory(
+            db_key=f"MsgParityRoom_{key}",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        roster = RosterEntryFactory()
+        caller = roster.character_sheet.character
+        caller.location = room
+        caller.msg = MagicMock()
+        return room, caller
+
+    def test_prefix_case_variant_probe_matches_nonexistent_probe(self) -> None:
+        room, caller = self._make_caller()
+        shade = ObjectDBFactory(
+            db_key="Umbrastalker",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        tmpl = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=shade, condition=tmpl)
+
+        # A lowercase prefix of the concealed character's key — the kind of
+        # probe Evennia's default (prefix-matching, case-insensitive)
+        # ``search()`` resolves to a real object; the mock stands in for that
+        # real resolution (matching this file's existing convention of
+        # mocking ``caller.search`` rather than exercising Evennia's search
+        # internals directly).
+        probe = "umbrastalk"
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name.lower() == probe:
+                return [shade] if quiet else shade
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=f" {probe}")
+        cmd.func()
+        concealed_message = caller.msg.call_args[0][0]
+
+        # Same probe text, but nothing resolves at all — the genuinely-absent case.
+        caller.msg.reset_mock()
+
+        def fake_search_absent(_name, *, quiet=False, **_kwargs):
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search_absent)
+        absent_cmd = _make_cmd(CmdLook, caller, args=f" {probe}")
+        absent_cmd.func()
+        absent_message = caller.msg.call_args[0][0]
+
+        assert concealed_message == absent_message == f"Could not find '{probe}'."
 
 
 class CmdInventoryTests(TestCase):
