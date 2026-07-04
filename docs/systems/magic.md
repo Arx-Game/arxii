@@ -89,9 +89,15 @@ were dropped (no readers beyond Mage Scars, which now uses
 `CharacterSheet`, and `balance` + `lifetime_earned` were added. Row existence
 replaces the old `is_active` flag. `CharacterResonanceTotal` (denormalized
 aggregate) was deleted — aura recompute (`recompute_aura`) reads
-`CharacterResonance.lifetime_earned` grouped by affinity directly. (Distinction
-effects still write resonance-category `CharacterModifier` rows, but nothing
-reads them today — see #1834.)
+`CharacterResonance.lifetime_earned` grouped by affinity directly. Distinction
+effects targeting a resonance-category `ModifierTarget` no longer write a
+`CharacterModifier` row at all (#1834) — `create_distinction_modifiers` and
+`update_distinction_rank` (`world/mechanics/services.py`) skip them and instead call
+`reconcile_distinction_resonance_grants` (`world/magic/services/distinction_resonance.py`),
+which reads the `DistinctionResonanceGrant` authoring sidecar and grants real
+`CharacterResonance`/`ResonanceGrant` currency. The `resonance` `ModifierCategory` is
+still live for non-distinction sources (facet/mantle/motif-coherence passive bonuses via
+`equipment_walk_total`).
 
 ### Techniques (Player-Created Abilities)
 

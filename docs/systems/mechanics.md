@@ -116,23 +116,32 @@ for source in breakdown.sources:
 ```python
 from world.mechanics.services import create_distinction_modifiers, delete_distinction_modifiers, update_distinction_rank
 
-# When a CharacterDistinction is granted: create ModifierSource + CharacterModifier per effect
+# When a CharacterDistinction is granted: create ModifierSource + CharacterModifier per
+# non-resonance effect, then reconcile any resonance grants (see below).
 modifiers = create_distinction_modifiers(character_distinction)
-# Resonance-targeting effects are covered by the CharacterModifier rows themselves;
-# no denormalized resonance total is maintained.
 
 # When a CharacterDistinction is removed: cascade-delete all modifiers
 count = delete_distinction_modifiers(character_distinction)
 
-# When rank changes: recalculate modifier values
+# When rank changes: recalculate modifier values (and re-reconcile resonance grants)
 update_distinction_rank(character_distinction)
 ```
 
-The aura percentage calculation (`magic.services.recompute_aura()`) reads
-`CharacterResonance.lifetime_earned` grouped by affinity — it does not read these
-resonance-targeting `CharacterModifier` rows, which currently have no live reader
-(see #1834). The legacy `CharacterResonanceTotal` denormalized aggregate was
-removed in the Spec A pivot — there is no sync step to keep in lockstep.
+**Resonance-targeting distinction effects are handled separately (#1834).** A
+`DistinctionEffect` whose `target.category.name == "resonance"` is skipped entirely by
+the loop above — it never gets a `ModifierSource`/`CharacterModifier` row. Instead,
+`create_distinction_modifiers` and `update_distinction_rank` both call
+`reconcile_distinction_resonance_grants(character_distinction)`
+(`world.magic.services.distinction_resonance`), which reads the `DistinctionResonanceGrant`
+authoring sidecar on the distinction and grants real, rank-scaled `CharacterResonance`
+currency (idempotent — a second call at the same rank grants nothing further). The `resonance`
+`ModifierCategory` itself is not deprecated: non-distinction sources (facet/mantle/motif
+passive bonuses, walked via `equipment_walk_total`) still read/write resonance-category
+`CharacterModifier` rows normally. The aura percentage calculation
+(`magic.services.recompute_aura()`) reads `CharacterResonance.lifetime_earned` grouped by
+affinity and was never coupled to either path. The legacy `CharacterResonanceTotal`
+denormalized aggregate was removed in the Spec A pivot — there is no sync step to keep in
+lockstep.
 
 ---
 

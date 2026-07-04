@@ -873,8 +873,11 @@ class GetModifierTotalEquipmentWalkTests(TestCase):
         from world.mechanics.factories import ModifierCategoryFactory
 
         cls.character = CharacterSheetFactory()
-        # Equipment-relevant category
-        cls.eq_category = ModifierCategoryFactory(name="resonance")
+        # Equipment-relevant category. Deliberately not "resonance" — #1834 Task 5 made
+        # distinction effects targeting a resonance-category ModifierTarget skip
+        # CharacterModifier creation entirely, which would zero out the eager total this
+        # test exercises. "stat" is equally equipment-relevant and unaffected by that skip.
+        cls.eq_category = ModifierCategoryFactory(name="stat")
         cls.eq_target = ModifierTargetFactory(name="EqWalkTarget", category=cls.eq_category)
         # Non-equipment category (not in EQUIPMENT_RELEVANT_CATEGORIES)
         cls.other_category = ModifierCategoryFactory(name="goal")

@@ -1,11 +1,15 @@
-"""Tests for distinction resonance integration via CharacterModifier rows.
+"""Tests for distinction resonance integration (#1834 Task 5).
 
-After Phase 2 of the resonance pivot, `CharacterResonanceTotal` was removed and
-distinction effects targeting a Resonance now write directly to `CharacterModifier`
-rows whose target's category is `resonance`. These tests assert on those rows
-instead of the deleted denormalized aggregate. (These rows currently have no live
-reader — the aura calc reads `CharacterResonance.lifetime_earned` via
-`recompute_aura` instead; see #1834.)
+Historically, distinction effects targeting a resonance-category ModifierTarget wrote a
+resonance-CATEGORY `CharacterModifier` row (asserted by this file's tests pre-#1834). That
+reader (`get_aura_percentages`) was removed in #1836, making those rows write-only dead
+data. This task stops writing them and instead wires
+`reconcile_distinction_resonance_grants` (the `DistinctionResonanceGrant` sidecar) into
+`create_distinction_modifiers`/`update_distinction_rank` — so a distinction's resonance
+effect flows through the real currency mechanism (`CharacterResonance` +
+`ResonanceGrant` ledger) instead of a dead `CharacterModifier` row. Non-resonance
+distinction effects are unaffected and still materialize `CharacterModifier` rows exactly
+as before.
 """
 
 from django.test import TestCase
@@ -16,7 +20,13 @@ from world.distinctions.factories import (
     DistinctionEffectFactory,
     DistinctionFactory,
 )
-from world.magic.factories import AffinityFactory, ResonanceFactory
+from world.magic.constants import GainSource
+from world.magic.factories import (
+    AffinityFactory,
+    DistinctionResonanceGrantFactory,
+    ResonanceFactory,
+)
+from world.magic.models import CharacterResonance, ResonanceGrant
 from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
@@ -39,20 +49,16 @@ def _resonance_modifier_total(character_sheet, resonance):
     )
 
 
-class DistinctionResonanceIntegrationTest(TestCase):
-    """Tests for distinction effects that target resonances."""
+class DistinctionResonanceModifierSkippedTest(TestCase):
+    """Resonance-CATEGORY distinction effects no longer write CharacterModifier rows."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data."""
         cls.character_sheet = CharacterSheetFactory()
         cls.character = cls.character_sheet.character
 
-        # Affinity is needed so aura recompute can attribute resonance modifier
-        # rows to the right affinity column.
         cls.abyssal = AffinityFactory(name="Abyssal")
 
-        # Create a resonance with a linked ModifierTarget in the resonance category.
         resonance_category = ModifierCategoryFactory(name=RESONANCE_CATEGORY_NAME)
         cls.serenity = ResonanceFactory(name="Serenity", affinity=cls.abyssal)
         cls.serenity_target = ModifierTargetFactory(
@@ -62,8 +68,8 @@ class DistinctionResonanceIntegrationTest(TestCase):
         # Non-resonance ModifierTarget for comparison.
         cls.allure = ModifierTargetFactory(name="Allure")
 
-    def test_create_distinction_creates_resonance_modifier(self):
-        """Granting a distinction with a resonance effect creates a CharacterModifier."""
+    def test_resonance_effect_creates_no_character_modifier(self):
+        """A resonance-category-targeted effect creates no CharacterModifier row at all."""
         patient = DistinctionFactory(name="Patient", max_rank=3)
         DistinctionEffectFactory(
             distinction=patient,
@@ -78,120 +84,16 @@ class DistinctionResonanceIntegrationTest(TestCase):
         )
         create_distinction_modifiers(char_dist)
 
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            10,  # 10 * rank 1
+        self.assertEqual(_resonance_modifier_total(self.character_sheet, self.serenity), 0)
+        self.assertFalse(
+            CharacterModifier.objects.filter(
+                character=self.character_sheet,
+                target__category__name=RESONANCE_CATEGORY_NAME,
+            ).exists()
         )
 
-    def test_create_distinction_higher_rank_scales_modifier(self):
-        """Higher rank produces a proportionally larger modifier value."""
-        patient = DistinctionFactory(name="Patient2", max_rank=3)
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=10,
-        )
-
-        char_dist = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=3,
-        )
-        create_distinction_modifiers(char_dist)
-
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            30,  # 10 * rank 3
-        )
-
-    def test_delete_distinction_removes_resonance_modifier(self):
-        """Removing a distinction deletes its resonance CharacterModifier row."""
-        patient = DistinctionFactory(name="Patient3", max_rank=3)
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=10,
-        )
-
-        char_dist = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=1,
-        )
-        create_distinction_modifiers(char_dist)
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            10,
-        )
-
-        delete_distinction_modifiers(char_dist)
-        char_dist.delete()
-
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            0,
-        )
-
-    def test_update_rank_adjusts_resonance_modifier(self):
-        """Updating distinction rank updates the underlying CharacterModifier value."""
-        patient = DistinctionFactory(name="Patient4", max_rank=5)
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=10,
-        )
-
-        char_dist = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=1,
-        )
-        create_distinction_modifiers(char_dist)
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            10,
-        )
-
-        char_dist.rank = 3
-        char_dist.save()
-        update_distinction_rank(char_dist)
-
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            30,
-        )
-
-    def test_update_rank_decrease_adjusts_resonance_modifier(self):
-        """Decreasing rank lowers the CharacterModifier value accordingly."""
-        patient = DistinctionFactory(name="Patient5", max_rank=5)
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=10,
-        )
-
-        char_dist = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=3,
-        )
-        create_distinction_modifiers(char_dist)
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            30,
-        )
-
-        char_dist.rank = 1
-        char_dist.save()
-        update_distinction_rank(char_dist)
-
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            10,
-        )
-
-    def test_non_resonance_effect_creates_no_resonance_modifier(self):
-        """Effects targeting non-resonance targets create no resonance modifier rows."""
+    def test_non_resonance_effect_still_creates_modifier(self):
+        """Effects targeting non-resonance targets are unaffected — still create a modifier."""
         charming = DistinctionFactory(name="Charming")
         DistinctionEffectFactory(
             distinction=charming,
@@ -204,8 +106,16 @@ class DistinctionResonanceIntegrationTest(TestCase):
             distinction=charming,
             rank=1,
         )
-        create_distinction_modifiers(char_dist)
+        modifiers = create_distinction_modifiers(char_dist)
 
+        self.assertEqual(len(modifiers), 1)
+        self.assertEqual(
+            CharacterModifier.objects.filter(
+                character=self.character_sheet,
+                target=self.allure,
+            ).count(),
+            1,
+        )
         self.assertFalse(
             CharacterModifier.objects.filter(
                 character=self.character_sheet,
@@ -213,16 +123,8 @@ class DistinctionResonanceIntegrationTest(TestCase):
             ).exists()
         )
 
-    def test_multiple_resonance_effects_create_separate_modifiers(self):
-        """A distinction with multiple resonance effects creates per-target modifiers."""
-        from world.mechanics.models import ModifierCategory
-
-        resonance_category = ModifierCategory.objects.get(name=RESONANCE_CATEGORY_NAME)
-        tranquility = ResonanceFactory(name="Tranquility", affinity=self.abyssal)
-        tranquility_target = ModifierTargetFactory(
-            name="Tranquility", category=resonance_category, target_resonance=tranquility
-        )
-
+    def test_mixed_effects_only_skip_the_resonance_one(self):
+        """A distinction with both a resonance and non-resonance effect only skips the former."""
         zen = DistinctionFactory(name="Zen Master", max_rank=3)
         DistinctionEffectFactory(
             distinction=zen,
@@ -231,7 +133,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         )
         DistinctionEffectFactory(
             distinction=zen,
-            target=tranquility_target,
+            target=self.allure,
             value_per_rank=8,
         )
 
@@ -240,103 +142,117 @@ class DistinctionResonanceIntegrationTest(TestCase):
             distinction=zen,
             rank=2,
         )
+        modifiers = create_distinction_modifiers(char_dist)
+
+        self.assertEqual(len(modifiers), 1)
+        self.assertEqual(modifiers[0].target, self.allure)
+        self.assertEqual(modifiers[0].value, 16)  # 8 * rank 2
+        self.assertFalse(
+            CharacterModifier.objects.filter(
+                character=self.character_sheet,
+                target__category__name=RESONANCE_CATEGORY_NAME,
+            ).exists()
+        )
+
+    def test_delete_distinction_modifiers_unaffected(self):
+        """delete_distinction_modifiers still cleans up the non-resonance modifier."""
+        charming = DistinctionFactory(name="Charming2")
+        DistinctionEffectFactory(
+            distinction=charming,
+            target=self.allure,
+            value_per_rank=5,
+        )
+        char_dist = CharacterDistinctionFactory(
+            character=self.character,
+            distinction=charming,
+            rank=1,
+        )
         create_distinction_modifiers(char_dist)
 
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            10,  # 5 * rank 2
-        )
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, tranquility),
-            16,  # 8 * rank 2
-        )
+        deleted_count = delete_distinction_modifiers(char_dist)
 
-    def test_multiple_distinctions_same_resonance_stack(self):
-        """Multiple distinctions affecting the same resonance produce additive total."""
-        patient = DistinctionFactory(name="Patient6")
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=10,
-        )
-        cd1 = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=1,
-        )
-        create_distinction_modifiers(cd1)
+        self.assertEqual(deleted_count, 1)
+        self.assertFalse(CharacterModifier.objects.filter(character=self.character_sheet).exists())
 
-        calm = DistinctionFactory(name="Calm")
-        DistinctionEffectFactory(
-            distinction=calm,
-            target=self.serenity_target,
-            value_per_rank=5,
-        )
-        cd2 = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=calm,
-            rank=1,
-        )
-        create_distinction_modifiers(cd2)
 
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            15,  # 10 + 5
-        )
+class DistinctionGrantReconcilesResonanceTest(TestCase):
+    """Granting/ranking a CharacterDistinction reconciles its DistinctionResonanceGrant rows."""
 
-    def test_delete_one_distinction_leaves_other_modifier(self):
-        """Deleting one distinction preserves the other distinction's modifier."""
-        patient = DistinctionFactory(name="Patient7")
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=10,
-        )
-        cd1 = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=1,
-        )
-        create_distinction_modifiers(cd1)
+    @classmethod
+    def setUpTestData(cls):
+        cls.character_sheet = CharacterSheetFactory()
+        cls.character = cls.character_sheet.character
+        cls.resonance = ResonanceFactory(name="Devotion")
 
-        calm = DistinctionFactory(name="Calm2")
-        DistinctionEffectFactory(
-            distinction=calm,
-            target=self.serenity_target,
-            value_per_rank=5,
-        )
-        cd2 = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=calm,
-            rank=1,
-        )
-        create_distinction_modifiers(cd2)
-
-        delete_distinction_modifiers(cd1)
-        cd1.delete()
-
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            5,
-        )
-
-    def test_scaling_values_used_for_modifier(self):
-        """Custom scaling_values populate the CharacterModifier value correctly."""
-        patient = DistinctionFactory(name="Patient8", max_rank=3)
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            scaling_values=[5, 15, 30],  # Non-linear scaling
+    def test_create_distinction_modifiers_claims_and_seeds_resonance(self):
+        """Granting a distinction with a DistinctionResonanceGrant claims + seeds resonance."""
+        devoted = DistinctionFactory(name="Devoted", max_rank=3)
+        DistinctionResonanceGrantFactory(
+            distinction=devoted, resonance=self.resonance, flat_amount_per_rank=10
         )
 
         char_dist = CharacterDistinctionFactory(
             character=self.character,
-            distinction=patient,
+            distinction=devoted,
             rank=2,
         )
         create_distinction_modifiers(char_dist)
 
-        self.assertEqual(
-            _resonance_modifier_total(self.character_sheet, self.serenity),
-            15,  # scaling_values[1] for rank 2
+        character_resonance = CharacterResonance.objects.get(
+            character_sheet=self.character_sheet, resonance=self.resonance
+        )
+        self.assertEqual(character_resonance.lifetime_earned, 20)  # 10 * rank 2
+
+        grants = ResonanceGrant.objects.filter(
+            source=GainSource.DISTINCTION,
+            source_character_distinction=char_dist,
+            resonance=self.resonance,
+        )
+        self.assertEqual(grants.count(), 1)
+        self.assertEqual(grants.first().amount, 20)
+
+    def test_update_distinction_rank_tops_off_resonance_seed(self):
+        """A rank change re-reconciles and tops off the flat seed to the new rank."""
+        devoted = DistinctionFactory(name="Devoted2", max_rank=5)
+        DistinctionResonanceGrantFactory(
+            distinction=devoted, resonance=self.resonance, flat_amount_per_rank=10
+        )
+
+        char_dist = CharacterDistinctionFactory(
+            character=self.character,
+            distinction=devoted,
+            rank=1,
+        )
+        create_distinction_modifiers(char_dist)
+        character_resonance = CharacterResonance.objects.get(
+            character_sheet=self.character_sheet, resonance=self.resonance
+        )
+        self.assertEqual(character_resonance.lifetime_earned, 10)
+
+        char_dist.rank = 3
+        char_dist.save(update_fields=["rank"])
+        update_distinction_rank(char_dist)
+
+        character_resonance.refresh_from_db()
+        self.assertEqual(character_resonance.lifetime_earned, 30)
+        grants = ResonanceGrant.objects.filter(
+            source=GainSource.DISTINCTION,
+            source_character_distinction=char_dist,
+            resonance=self.resonance,
+        )
+        self.assertEqual(grants.count(), 2)  # initial seed + rank-up top-off
+
+    def test_grant_without_resonance_grant_is_a_no_op(self):
+        """A distinction with no DistinctionResonanceGrant row reconciles to nothing."""
+        plain = DistinctionFactory(name="Plain")
+        char_dist = CharacterDistinctionFactory(
+            character=self.character,
+            distinction=plain,
+            rank=1,
+        )
+
+        create_distinction_modifiers(char_dist)
+
+        self.assertFalse(
+            CharacterResonance.objects.filter(character_sheet=self.character_sheet).exists()
         )

@@ -30,6 +30,7 @@ from world.magic.models import (
 )
 from world.mechanics.constants import (
     EQUIPMENT_RELEVANT_CATEGORIES,
+    RESONANCE_CATEGORY_NAME,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_UNKNOWN,
     CapabilitySourceType,
@@ -836,19 +837,31 @@ def create_distinction_modifiers(
 
     Called when a CharacterDistinction is created.
 
+    Resonance-CATEGORY effects are skipped here — distinction resonance now flows
+    through ``reconcile_distinction_resonance_grants`` (the ``DistinctionResonanceGrant``
+    sidecar), not a resonance-targeted ``CharacterModifier`` row (#1834). Every other
+    effect still materializes a modifier as before.
+
     Args:
         character_distinction: The character's distinction instance
 
     Returns:
         List of created CharacterModifier records
     """
+    from world.magic.services.distinction_resonance import (  # noqa: PLC0415
+        reconcile_distinction_resonance_grants,
+    )
+
     distinction = character_distinction.distinction
     rank = character_distinction.rank
     character = character_distinction.character.sheet_data
 
     created_modifiers = []
 
-    for effect in distinction.effects.all():
+    for effect in distinction.effects.select_related("target__category").all():
+        if effect.target.category.name == RESONANCE_CATEGORY_NAME:
+            continue
+
         # Create the source linking effect template to character instance
         source = ModifierSource.objects.create(
             distinction_effect=effect,
@@ -858,9 +871,6 @@ def create_distinction_modifiers(
         # Calculate value at current rank
         value = effect.get_value_at_rank(rank)
 
-        # Create the modifier. Resonance-targeted CharacterModifier rows have no
-        # live reader today (the aura calc reads CharacterResonance.lifetime_earned
-        # via magic.services.recompute_aura instead; see #1834).
         modifier = CharacterModifier.objects.create(
             character=character,
             target=effect.target,
@@ -868,6 +878,8 @@ def create_distinction_modifiers(
             source=source,
         )
         created_modifiers.append(modifier)
+
+    reconcile_distinction_resonance_grants(character_distinction)
 
     return created_modifiers
 
@@ -885,9 +897,11 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
     Returns:
         Count of deleted CharacterModifier records
     """
-    # Get modifiers BEFORE deleting (evaluate queryset once). Aura percentages
-    # are derived from these CharacterModifier rows directly, so no separate
-    # denormalized resonance-total bookkeeping is required.
+    # Get modifiers BEFORE deleting (evaluate queryset once) so the caller gets an
+    # accurate count. Aura no longer reads these rows — it derives from
+    # CharacterResonance.lifetime_earned via magic.services.recompute_aura instead
+    # (the CharacterModifier reader was removed in #1836); distinction resonance is
+    # tracked separately via DistinctionResonanceGrant + reconcile (#1834).
     modifiers = list(
         CharacterModifier.objects.filter(
             source__character_distinction=character_distinction
@@ -905,11 +919,18 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
     """
     Update CharacterModifier values when rank changes.
 
-    Recalculates value for each effect using the new rank.
+    Recalculates value for each effect using the new rank. Also reconciles the
+    distinction's resonance grants at the new rank (#1834) — resonance-CATEGORY
+    effects never get a CharacterModifier row (skipped at create time), so this
+    is the only path that tops off the rank-scaled resonance seed on a rank change.
 
     Args:
         character_distinction: The character's distinction instance (with updated rank)
     """
+    from world.magic.services.distinction_resonance import (  # noqa: PLC0415
+        reconcile_distinction_resonance_grants,
+    )
+
     new_rank = character_distinction.rank
 
     # Get all modifiers for this distinction
@@ -921,10 +942,13 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
         effect = modifier.source.distinction_effect
         new_value = effect.get_value_at_rank(new_rank)
 
-        # Update modifier — the aura calc reads from these rows directly,
-        # so no denormalized resonance-total adjustment is required.
+        # Update the modifier — aura no longer reads these rows directly (see
+        # delete_distinction_modifiers); no denormalized resonance-total adjustment
+        # is required either way.
         modifier.value = new_value
         modifier.save()
+
+    reconcile_distinction_resonance_grants(character_distinction)
 
 
 # =============================================================================

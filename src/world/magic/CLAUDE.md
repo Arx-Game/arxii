@@ -1108,8 +1108,16 @@ The following models have been removed and replaced:
   `ThreadWeavingUnlock` / `ThreadLevelUnlock` / `CharacterThreadWeavingUnlock` /
   `ThreadWeavingTeachingOffer`). See "Thread System (Resonance Pivot Spec A)"
   above.
-- `CharacterResonanceTotal` - Aura recompute now reads `CharacterModifier` rows
-  whose target category is `resonance` directly (no denormalized aggregate)
+- `CharacterResonanceTotal` - Superseded by `CharacterResonance.lifetime_earned`
+  (monotonic, updated via `grant_resonance`); aura recompute reads that field via
+  `recompute_aura`, not a `CharacterModifier`/resonance-category walk (#1836). Distinction
+  effects targeting a resonance-category `ModifierTarget` no longer write a
+  `CharacterModifier` row at all — they flow through
+  `reconcile_distinction_resonance_grants` (the `DistinctionResonanceGrant` sidecar)
+  instead (#1834). The `resonance` `ModifierCategory` itself is still live infrastructure
+  for non-distinction sources — facet/mantle/motif-coherence passive bonuses
+  (`equipment_walk_total` in `world/mechanics/services.py`) still read/write
+  resonance-category `CharacterModifier` rows via `EQUIPMENT_RELEVANT_CATEGORIES`.
 
 ## Design Docs
 
