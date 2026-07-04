@@ -12,3 +12,8 @@ class CodexKnowledgeStatus(models.TextChoices):
 
     UNCOVERED = "uncovered", "Uncovered"
     KNOWN = "known", "Known"
+
+
+#: Per-level AP discount a Library grants to codex learning (#675).
+#: PLACEHOLDER — pending content pass.
+LIBRARY_AP_DISCOUNT_PER_LEVEL = 1
