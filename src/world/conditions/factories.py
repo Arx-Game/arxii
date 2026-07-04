@@ -243,7 +243,9 @@ class ConditionDamageOverTimeFactory(DjangoModelFactory):
     base_damage = 5
     scales_with_severity = True
     scales_with_stacks = True
-    tick_timing = DamageTickTiming.START_OF_ROUND
+    # END_OF_ROUND is the convention + safe default (#1762); START_OF_ROUND is a
+    # deliberate, un-shieldable, scene-inert opt-in — pass it explicitly if intended.
+    tick_timing = DamageTickTiming.END_OF_ROUND
     is_long_term = False
 
 

@@ -125,7 +125,8 @@ class SunlightExposureE2ETests(TestCase):
         apply_condition -> ensure_round_for_acute_condition -> resolve_scene_round, with
         NO direct tick_round_for_targets(timing=...) workaround call. Proves the
         resolve_scene_round gap (which only ever fires timing="end") is genuinely closed
-        for a START_OF_ROUND-model-default hazard now seeded as END_OF_ROUND.
+        for a hazard once left at the old START_OF_ROUND model default (flipped to
+        END_OF_ROUND in #1762), now explicitly seeded as END_OF_ROUND.
         """
         from world.conditions.services import apply_condition
         from world.scenes.models import SceneActionDeclaration

@@ -16,7 +16,8 @@ sibling of the one documented in ``test_succor_e2e.py``), since closed:
 ``resolve_scene_round`` only ever fires the shared round-tick at ``timing="end"``
 (``DamageTickTiming.END_OF_ROUND``); nothing in the scene-round lifecycle ever
 calls a ``timing="start"`` tick. Sunlight Exposure originally ticked at
-``DamageTickTiming.START_OF_ROUND`` (the model default), so it never dealt damage
+``DamageTickTiming.START_OF_ROUND`` (then the model field's default, flipped to
+``END_OF_ROUND`` in #1762), so it never dealt damage
 through the real ``resolve_scene_round`` production path regardless of Succor.
 Sunlight Exposure now ticks ``DamageTickTiming.END_OF_ROUND`` instead (matching
 poison's convention), so it's reachable through the real production path — see

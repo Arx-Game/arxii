@@ -92,8 +92,9 @@ def ensure_sunlight_exposure_content() -> "ConditionTemplate":
     ``reconcile_sunlight_exposure`` in ``world.species.services``.
 
     ``tick_timing=END_OF_ROUND`` (#1744): matches poison's established convention
-    (``world.conditions.services.ensure_poison_content``) rather than the model
-    field's ``START_OF_ROUND`` default. START-timing DoTs tick during combat's
+    (``world.conditions.services.ensure_poison_content``). END_OF_ROUND is also the
+    model field's default as of #1762 (it was ``START_OF_ROUND`` when this was
+    written, which is why the explicit set mattered). START-timing DoTs tick during combat's
     DECLARING phase (``begin_declaration_phase``) and are never reached at all by
     non-combat ``resolve_scene_round`` (which only ever ticks ``timing="end"``);
     Succor's cover window is also RESOLVING-gated

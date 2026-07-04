@@ -77,6 +77,22 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` |
 
+#### DoT tick timing (`DamageTickTiming`) — #1762
+
+`tick_timing` decides *when in a round* a `ConditionDamageOverTime` fires. **`END_OF_ROUND`
+is the convention and the model/factory default** (poison, sunlight) — use it unless you
+have a specific reason not to.
+
+| Value | When it fires | Notes |
+|-------|---------------|-------|
+| `END_OF_ROUND` | After the round's actions resolve (`status == RESOLVING` in combat; the only tick scene rounds fire) | **Default.** Shieldable by Succor/Interpose; ticks in both combat and non-combat scene rounds. |
+| `START_OF_ROUND` | Top of the round, during `DECLARING`, *before any action resolves* | Deliberate "unpreventable top-of-round damage" opt-in. **Intentionally un-shieldable** by Succor/Interpose (no ally has acted yet). **Inert in non-combat scene rounds** — the scene-round lifecycle only ever ticks `timing="end"` (`scenes/round_services.py`); no `timing="start"` path exists outside `combat/services.py:begin_declaration_phase`. A hazard that needs to actually damage in scene rounds would have to build that scene-round START tick first. |
+| `ON_ACTION` | When the bearer takes an action (`process_action_tick`) | — |
+
+Choosing `START_OF_ROUND` is guarded: `world/conditions/tests/test_tick_timing_guard.py`
+locks the `END_OF_ROUND` defaults and fails if authored DoT content ships `START_OF_ROUND`
+without being listed (with justification) in that test's `ACKNOWLEDGED_START_OF_ROUND_HAZARDS`.
+
 ### Condition Interactions
 
 | Model | Purpose | Key Fields |
