@@ -14,11 +14,13 @@ from world.battles.constants import (
     BASE_INTEGRITY,
     FORTIFICATION_LEVEL_INTEGRITY_BONUS,
     BattleActionKind,
+    BattleActionScope,
     BattleOutcome,
     BattleSideRole,
     FortificationKind,
+    VehicleKind,
 )
-from world.battles.exceptions import FortificationOwnershipMismatchError
+from world.battles.exceptions import FortificationOwnershipMismatchError, NotVehicleCommanderError
 from world.battles.factories import (
     BattleFactory,
     BattleParticipantFactory,
@@ -27,6 +29,7 @@ from world.battles.factories import (
 )
 from world.battles.services import (
     begin_battle_round,
+    create_battle_vehicle,
     create_fortification,
     declare_battle_action,
     maybe_conclude_on_timer,
@@ -170,3 +173,50 @@ class FortificationInvestmentJourneyTests(TestCase):
 
         expected = BASE_INTEGRITY[FortificationKind.WALL] + 4 * FORTIFICATION_LEVEL_INTEGRITY_BONUS
         self.assertEqual(fort.max_integrity, expected)
+
+
+class RepositionDeclarationTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory(round_limit=10)
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.vehicle = create_battle_vehicle(
+            battle=self.battle,
+            side=self.side,
+            place_name="The Gull",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        self.participant = BattleParticipantFactory(battle=self.battle, side=self.side)
+        CharacterTechniqueFactory(
+            character=self.participant.character_sheet, technique=self.technique
+        )
+        CharacterAnimaFactory(
+            character=self.participant.character_sheet.character, current=30, maximum=30
+        )
+
+    def test_commander_can_declare_reposition(self):
+        self.vehicle.unit.commander = self.participant.character_sheet
+        self.vehicle.unit.save(update_fields=["commander"])
+        begin_battle_round(battle=self.battle)
+
+        declaration = declare_battle_action(
+            participant=self.participant,
+            action_kind=BattleActionKind.REPOSITION,
+            technique=self.technique,
+            scope=BattleActionScope.PLACE,
+            target_place=self.vehicle.place,
+        )
+
+        self.assertEqual(declaration.action_kind, BattleActionKind.REPOSITION)
+
+    def test_non_commander_cannot_declare_reposition(self):
+        begin_battle_round(battle=self.battle)
+
+        with self.assertRaises(NotVehicleCommanderError):
+            declare_battle_action(
+                participant=self.participant,
+                action_kind=BattleActionKind.REPOSITION,
+                technique=self.technique,
+                scope=BattleActionScope.PLACE,
+                target_place=self.vehicle.place,
+            )

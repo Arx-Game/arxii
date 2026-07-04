@@ -44,6 +44,7 @@ from world.battles.exceptions import (
     MissingScopeTargetError,
     NoCommandHierarchyError,
     NotAChampionError,
+    NotVehicleCommanderError,
     PlaceAlreadyDuelingError,
     PlaceScopeRequiredError,
     RoundNotOpenError,
@@ -428,7 +429,7 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + validation checks
+def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration facets + checks
     *,
     participant: BattleParticipant,
     action_kind: str,
@@ -483,6 +484,8 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
             not BATTLE or PLACE.
         MissingEnvironmentTargetError: If action_kind is SET_ENVIRONMENT and
             technique.target_weather_type is None.
+        NotVehicleCommanderError: If action_kind is REPOSITION and the participant
+            is not the target vehicle's BattleUnit.commander.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -515,7 +518,9 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
         if technique.target_weather_type_id is None:
             raise MissingEnvironmentTargetError
 
-    if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
+    if action_kind == BattleActionKind.REPOSITION:
+        _validate_vehicle_command(participant=participant, target_place=target_place)
+    elif scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
         _validate_command_scope(participant=participant, scope=scope)
 
     if scope == BattleActionScope.PLACE and target_place is None:
@@ -585,6 +590,22 @@ def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> No
     ).exists()
     if not has_tier:
         raise InsufficientCommandTierError
+
+
+def _validate_vehicle_command(
+    *, participant: BattleParticipant, target_place: BattlePlace | None
+) -> None:
+    """Raise unless *participant* is the target vehicle's declared commander (#1714).
+
+    Deliberately bypasses _validate_command_scope's covenant command_tier check —
+    a ship with no covenant backing (a pirate crew, an ad-hoc vessel) must still
+    be commandable and movable.
+    """
+    if target_place is None:
+        raise MissingScopeTargetError
+    vehicle = getattr(target_place, "vehicle", None)  # noqa: GETATTR_LITERAL
+    if vehicle is None or vehicle.unit.commander_id != participant.character_sheet_id:
+        raise NotVehicleCommanderError
 
 
 def _validate_fortification_target(

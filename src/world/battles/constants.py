@@ -56,6 +56,7 @@ class BattleActionKind(models.TextChoices):
     BREACH = "breach", "Breach a fortification"
     FORTIFY = "fortify", "Fortify a structure"
     SET_ENVIRONMENT = "set_environment", "Set battlefield weather"
+    REPOSITION = "reposition", "Reposition a vehicle"
 
 
 class BattleActionScope(models.TextChoices):

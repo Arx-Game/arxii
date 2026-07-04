@@ -70,6 +70,17 @@ class InsufficientCommandTierError(BattleError):
         super().__init__(user_message)
 
 
+class NotVehicleCommanderError(BattleError):
+    """Raised when REPOSITION is declared by someone other than the target
+    vehicle's BattleUnit.commander (#1714). Vehicle command is independent of
+    covenant command_tier — a non-covenant-backed vessel must still be movable."""
+
+    def __init__(
+        self, user_message: str = "Only this vehicle's commander may reposition it."
+    ) -> None:
+        super().__init__(user_message)
+
+
 class MissingScopeTargetError(BattleError):
     """Raised when a PLACE/SIDE-scope declaration has no matching target set."""
 
