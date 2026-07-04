@@ -42,6 +42,7 @@ from world.magic.types import (
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
@@ -399,13 +400,21 @@ def resolve_pull_effects(
     tier: int,
     *,
     in_combat: bool,
+    target: ObjectDB | None = None,
 ) -> list[ResolvedPullEffect]:
     """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
 
     Implements Spec A §5.4 step 3. VITAL_BONUS rows in non-combat (ephemeral)
     context are flagged ``inactive`` with ``scaled_value=0`` per spec §7.4
     lines 1981–1989; the caller still pays full cost.
+
+    ``target`` is the live target this pull's action is directed at (#1831);
+    ``None`` for ephemeral / untargeted pulls. Fed through ``apply_target_modulation``
+    for numeric-payload rows — a no-op unless a per-``target_kind`` rule exists
+    (currently only COVENANT_ROLE / Court-role pulls).
     """
+    from world.magic.services.pull_modulation import apply_target_modulation  # noqa: PLC0415
+
     resolved: list[ResolvedPullEffect] = []
     for t in threads:
         multiplier = max(1, t.level // 10)
@@ -463,6 +472,9 @@ def resolve_pull_effects(
                     )
                 else:
                     base_scaled = (authored or 0) * multiplier if has_numeric_payload else None
+
+                if has_numeric_payload:
+                    base_scaled = apply_target_modulation(t, target, row, base_scaled)
 
                 # VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot
                 # lives on CombatPullResolvedEffect and is read on the combat damage
@@ -716,7 +728,9 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
         raise ResonanceInsufficient(msg)
 
     in_combat = action_context.combat_encounter is not None
-    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = resolve_pull_effects(
+        threads, tier, in_combat=in_combat, target=action_context.target
+    )
 
     applicable = [e for e in resolved if not e.inactive]
     if not applicable:

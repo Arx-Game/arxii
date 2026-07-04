@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.conditions.models import CapabilityType, DamageType
     from world.forms.models import CharacterForm
@@ -29,6 +31,10 @@ class PullActionContext:
     involved_traits: tuple[int, ...] = ()
     involved_techniques: tuple[int, ...] = ()
     involved_objects: tuple[int, ...] = ()
+    # The live target this pull's action is directed at (#1831). Feeds
+    # ``apply_target_modulation`` in ``resolve_pull_effects``; None for
+    # ephemeral / untargeted actions.
+    target: ObjectDB | None = None
 
 
 @dataclass(frozen=True)
