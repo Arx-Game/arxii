@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from actions.factories import ActionTemplateFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ActionCategory
 from world.combat.services import resolve_combat_technique
 from world.combat.tests.test_combat_magic_integration import _setup_pc_attacking_mook
@@ -28,6 +30,8 @@ from world.magic.factories import (
 from world.magic.models import SignatureMotifBonus, Thread
 from world.magic.models.signature import SignatureMotifBonusDamageProfile
 from world.magic.services.signature import set_signature_bonus
+from world.scenes.constants import InteractionMode
+from world.scenes.models import Interaction
 
 
 class SignatureCombatDamageE2ETests(TestCase):
@@ -108,4 +112,70 @@ class SignatureCombatDamageE2ETests(TestCase):
             f"Expected signed damage ({signed_damage}) > unsigned damage "
             f"({unsigned_damage}) — the signature bonus's damage profile must "
             "land alongside the technique's own.",
+        )
+
+
+class SignatureCombatNarrationE2ETests(TestCase):
+    """The combat OUTCOME narration surfaces a signed technique's cosmetic clause.
+
+    #1728, Task 3.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+
+    def test_signed_technique_appends_signature_clause_to_combat_narration(self) -> None:
+        """A signed cast's combat OUTCOME broadcast ends with "— <snippet>"."""
+        from world.combat.services import _resolve_pc_action
+
+        participant, action, opponent, _anima, technique, _room = _setup_pc_attacking_mook(
+            technique_intensity=5,
+            technique_control=10,
+            technique_anima_cost=2,
+            base_power=20,
+            opponent_health=999,
+        )
+        technique.action_template = ActionTemplateFactory(check_type=CheckTypeFactory())
+        technique.save()
+
+        sheet = participant.character_sheet
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+
+        motif = MotifFactory(character=sheet)
+        resonance = ResonanceFactory()
+        facet = FacetFactory(name="SigCombatNarrationFacet")
+        motif_res = MotifResonanceFactory(motif=motif, resonance=resonance)
+        MotifResonanceAssociationFactory(motif_resonance=motif_res, facet=facet)
+
+        bonus = SignatureMotifBonus.objects.create(
+            name="Combat Narration Bonus",
+            narrative_snippet="webs of shimmering silk unfurl",
+            required_facet=facet,
+        )
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=technique,
+        )
+        sheet.character.threads.invalidate()
+        set_signature_bonus(thread, bonus)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            _resolve_pc_action(participant=participant, action=action, offense_check_fn=None)
+
+        opponent.refresh_from_db()
+        narration = Interaction.objects.filter(
+            persona__name="Narrator", mode=InteractionMode.OUTCOME
+        ).latest("timestamp")
+
+        self.assertIn(
+            "— webs of shimmering silk unfurl",
+            narration.content,
+            "Combat OUTCOME narration must surface the signed bonus's cosmetic snippet, "
+            f"got: {narration.content!r}",
         )

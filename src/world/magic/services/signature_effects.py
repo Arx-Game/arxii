@@ -20,7 +20,12 @@ damage seam via :func:`signature_damage_profiles`, consumed by
 appends the signed technique's bonus profiles to the technique's own before
 resolving damage. Capability grants authored on a SignatureMotifBonus remain
 unapplied: there is no cast-time OR combat seam for technique-authored capability
-grants today. Cosmetic narration of the bonus is Task 6.
+grants today.
+
+Cosmetic narration of the bonus (the "— <snippet>" clause) is resolved by
+:func:`resolve_signature_snippet` — shared by the non-combat cast pose
+(``world/scenes/cast_services.py``) and the combat OUTCOME narration
+(``world/combat/services.py``'s ``_record_and_broadcast_pc_action``).
 """
 
 from __future__ import annotations
@@ -75,6 +80,40 @@ def signature_damage_profiles(character, technique: Technique) -> list:
     """
     bonus = signature_bonus_for(character, technique)
     return bonus.cached_damage_profiles if bonus is not None else []
+
+
+def resolve_signature_snippet(character, technique: Technique) -> str | None:
+    """Resolve the cosmetic narration snippet for a signed technique's bonus.
+
+    Resolves the active bonus via :func:`signature_bonus_for`, then prefers
+    ``bonus.narrative_snippet`` (staff-authored prose). When blank, falls back
+    to the first facet name found in the character's Motif
+    (``MotifResonanceAssociation.facet.name``). Returns ``None`` when the
+    technique is not signed or no fallback facet is available.
+
+    Shared by both cast paths — non-combat (`world/scenes/cast_services.py`) and
+    combat (`world/combat/services.py`'s ``_record_and_broadcast_pc_action``).
+
+    Args:
+        character: The casting game Character (not CharacterSheet).
+        technique: The technique being cast.
+    """
+    bonus = signature_bonus_for(character, technique)
+    if bonus is None:
+        return None
+    if bonus.narrative_snippet:
+        return bonus.narrative_snippet
+    # Fallback: primary Motif facet name (first MotifResonanceAssociation on record).
+    from world.magic.models.motifs import MotifResonanceAssociation  # noqa: PLC0415
+
+    first_assoc = (
+        MotifResonanceAssociation.objects.filter(
+            motif_resonance__motif__character=character.sheet_data
+        )
+        .select_related("facet")
+        .first()
+    )
+    return first_assoc.facet.name if first_assoc is not None else None
 
 
 def apply_signature_bonus_conditions(  # noqa: PLR0913 - cohesive condition-application params

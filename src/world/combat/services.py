@@ -3836,13 +3836,17 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
 
             persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
 
+    from world.magic.services.signature_effects import resolve_signature_snippet  # noqa: PLC0415
+
     target_label = target.name if target is not None else None
+    signature_snippet = resolve_signature_snippet(participant.character_sheet.character, technique)
     narration = render_action_outcome_narration(
         actor_label=str(participant),
         technique_name=technique.name,
         target_label=target_label,
         outcome=outcome,
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
+        signature_snippet=signature_snippet,
     )
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
