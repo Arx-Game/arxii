@@ -153,12 +153,28 @@ def compute_story_status_line(progress: AnyStoryProgress) -> str:
     (no "over"/"done"/"complete"/"the end"), and reassuring at
     WAITING_FOR_GM so a player knows their GM has the ball.
     """
-    if progress.status == ProgressStatus.WAITING_FOR_GM:
-        return "The trail goes quiet — your GM has been notified. More to come."
-    if progress.status == ProgressStatus.RESTING:
-        return "The story rests here for now."
-    if progress.status == ProgressStatus.COMPLETED:
-        return "This story has reached its conclusion."
+    # Terminal / paused states: deliberate copy that never implies the story is
+    # finished at a pause/rest (no "over"/"done"/"the end"), and is reassuring
+    # at WAITING_FOR_GM so a player knows their GM has the ball.
+    terminal_lines: dict[str, str] = {
+        ProgressStatus.WAITING_FOR_GM: (
+            "The trail goes quiet — your GM has been notified. More to come."
+        ),
+        ProgressStatus.RESTING: "The story rests here for now.",
+        ProgressStatus.COMPLETED: "This story has reached its conclusion.",
+    }
+    line = terminal_lines.get(progress.status)
+    if line is not None:
+        return line
+    if progress.status == ProgressStatus.FORECLOSED:
+        return (
+            "This thread has been closed."
+            if progress.resolved_at is not None
+            else (
+                "This thread was left unresolved when its story concluded. "
+                "A GM can wrap it up for you."
+            )
+        )
 
     # ACTIVE — describe the current position from the structured summary.
     summary = compute_story_status(progress)
