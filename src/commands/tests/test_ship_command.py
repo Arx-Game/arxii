@@ -121,9 +121,9 @@ class ShipCommandKwargsTests(TestCase):
         self.assertNotIn("covenant", kwargs)
 
     def test_commission_resolves_covenant_instance(self) -> None:
-        cmd = _make_cmd("commission ship_type=Sloop name=Wavecutter covenant=TheTide")
+        cmd = _make_cmd("commission ship_type=Sloop covenant=TheTide name=Wavecutter")
         cmd._subverb = "commission"
-        cmd._rest = "ship_type=Sloop name=Wavecutter covenant=TheTide"
+        cmd._rest = "ship_type=Sloop covenant=TheTide name=Wavecutter"
 
         mock_ship_type = MagicMock()
         mock_covenant = MagicMock()
@@ -149,9 +149,9 @@ class ShipCommandKwargsTests(TestCase):
                 cmd.resolve_action_args()
 
     def test_commission_unknown_covenant_raises_friendly_error(self) -> None:
-        cmd = _make_cmd("commission ship_type=Sloop name=Wavecutter covenant=Nonexistent")
+        cmd = _make_cmd("commission ship_type=Sloop covenant=Nonexistent name=Wavecutter")
         cmd._subverb = "commission"
-        cmd._rest = "ship_type=Sloop name=Wavecutter covenant=Nonexistent"
+        cmd._rest = "ship_type=Sloop covenant=Nonexistent name=Wavecutter"
 
         with (
             patch(_SHIP_TYPE_OBJECTS) as st_obj,
@@ -161,6 +161,25 @@ class ShipCommandKwargsTests(TestCase):
             cov_obj.filter.return_value.first.return_value = None
             with self.assertRaises(CommandError):
                 cmd.resolve_action_args()
+
+    def test_commission_resolves_multiword_name(self) -> None:
+        """A multi-word ``name=`` must reach dispatch kwargs as the FULL string.
+
+        Regression test (#1832 Task 9 fix): ``_parse_kwargs`` used to split on
+        whitespace and treat every token as its own ``key=value`` pair, so
+        ``name=The Black Pearl`` silently truncated to ``name="The"`` and
+        dropped "Black Pearl" with no error.
+        """
+        cmd = _make_cmd("commission ship_type=Sloop name=The Black Pearl")
+        cmd._subverb = "commission"
+        cmd._rest = "ship_type=Sloop name=The Black Pearl"
+
+        mock_ship_type = MagicMock()
+        with patch(_SHIP_TYPE_OBJECTS) as st_obj:
+            st_obj.filter.return_value.first.return_value = mock_ship_type
+            kwargs = cmd.resolve_action_args()
+
+        self.assertEqual(kwargs["name"], "The Black Pearl")
 
     def test_commission_missing_name_raises_command_error(self) -> None:
         cmd = _make_cmd("commission ship_type=Sloop")
@@ -281,6 +300,27 @@ class ShipCommandDispatchTests(TestCase):
         self.assertEqual(ref.registry_key, "commission_ship")
         self.assertEqual(kwargs["ship_type"], mock_ship_type)
         self.assertEqual(kwargs["name"], "Wavecutter")
+
+    def test_commission_dispatches_with_multiword_name(self) -> None:
+        """Full ``func()`` dispatch preserves a multi-word ship name intact."""
+        cmd = _make_cmd("commission ship_type=Sloop name=The Black Pearl")
+        mock_ship_type = MagicMock()
+        result = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True, message="Construction commissioned."),
+        )
+        with (
+            patch(_SHIP_TYPE_OBJECTS) as st_obj,
+            patch(_DISPATCH, return_value=result) as dispatch,
+        ):
+            st_obj.filter.return_value.first.return_value = mock_ship_type
+            cmd.func()
+
+        dispatch.assert_called_once()
+        _, ref, kwargs = dispatch.call_args.args
+        self.assertEqual(ref.registry_key, "commission_ship")
+        self.assertEqual(kwargs["name"], "The Black Pearl")
 
     def test_commission_unknown_ship_type_does_not_dispatch(self) -> None:
         cmd = _make_cmd("commission ship_type=Nonexistent name=Wavecutter")

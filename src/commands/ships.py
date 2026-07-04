@@ -49,13 +49,27 @@ _SHIP_ID_KWARG = "ship_id"
 
 
 def _parse_kwargs(args: str) -> dict[str, str]:
-    """Parse ``key=value`` tokens, left to right. Non-kwarg tokens are skipped."""
+    """Parse ``key=value`` tokens, left to right.
+
+    ``name`` greedily consumes the rest of the line so a ship name may
+    contain spaces (mirrors ``sanctum.py``'s ``narrative=`` special-case).
+    All other values are single whitespace-delimited tokens. Tokens that
+    contain no ``=`` are silently skipped (positional leftovers).
+    """
     out: dict[str, str] = {}
-    for token in args.split():
+    tokens = args.split()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
         if "=" not in token:
+            index += 1
             continue
         key, _, value = token.partition("=")
+        if key == _NAME_KWARG:
+            out[_NAME_KWARG] = " ".join([value, *tokens[index + 1 :]]).strip()
+            break
         out[key] = value
+        index += 1
     return out
 
 
@@ -66,11 +80,15 @@ class CmdShip(DispatchCommand):
         ship                                        — status hub
         ship status [ship_id=<n>]                    — status hub, or a
                                                         specific ship's report
-        ship commission ship_type=<name> name=<x>
-             [covenant=<name>]                        — commission a new ship
+        ship commission ship_type=<name> [covenant=<name>] name=<ship name>
+                                                      — commission a new ship
         ship upgrade stat=handling|armament|hull
              level=<n> [ship_id=<n>]                   — raise a ship stat
         ship repair [ship_id=<n>]                      — start repairs
+
+    ``name=`` greedily consumes the rest of the line so a ship name may
+    contain spaces — it must come last on the ``commission`` line (mirrors
+    ``sanctum homecoming``'s ``narrative=`` placement).
     """
 
     key = "ship"
@@ -141,12 +159,15 @@ class CmdShip(DispatchCommand):
 
         ``ship_type``/``covenant`` are resolved here to model instances —
         ``CommissionShipAction`` requires already-resolved instances, not
-        telnet strings.
+        telnet strings. ``name=`` is a greedy token (see ``_parse_kwargs``)
+        that consumes the rest of the line, so it must be supplied last —
+        any ``ship_type=``/``covenant=`` token after it would be swallowed
+        into the ship name instead of parsed as its own kwarg.
         """
         ship_type_raw = parsed.get(_SHIP_TYPE_KWARG, "").strip()
         name = parsed.get(_NAME_KWARG, "").strip()
         if not ship_type_raw or not name:
-            msg = "Usage: ship commission ship_type=<name> name=<ship name> [covenant=<name>]."
+            msg = "Usage: ship commission ship_type=<name> [covenant=<name>] name=<ship name>."
             raise CommandError(msg)
         kwargs: dict[str, Any] = {
             "ship_type": self._require_ship_type(ship_type_raw),
