@@ -4,9 +4,9 @@ Reads the ``DistinctionResonanceGrant`` authoring sidecar (``world.magic.models.
 to derive per-character currency effects on read — no denormalized totals, no cached
 columns. ``distinction_earn_rate_for`` backs the earn-rate accelerator wired into
 ``grant_resonance`` (``services/resonance.py``); ``reconcile_distinction_resonance_grants``
-is the grant-time consumer — called whenever a character gains/ranks-up a distinction —
-that establishes the character's resonance and tops off a rank-scaled, ledger-idempotent
-flat seed.
+is the grant-time consumer — intended to be called whenever a character gains/ranks-up a
+distinction (wired into those paths by Task 5/6) — that establishes the character's
+resonance and tops off a rank-scaled, ledger-idempotent flat seed.
 """
 
 from __future__ import annotations
@@ -58,8 +58,10 @@ def distinction_earn_rate_for(
 def reconcile_distinction_resonance_grants(character_distinction: CharacterDistinction) -> None:
     """Reconcile a ``CharacterDistinction`` into the character's resonance standing.
 
-    Called at grant time whenever a character gains a distinction or ranks it up. For
-    every ``DistinctionResonanceGrant`` authored on ``character_distinction.distinction``:
+    Intended to be called at grant time whenever a character gains a distinction or
+    ranks it up (wired into the distinction-grant/rank-change paths by Task 5/6 — not
+    yet wired as of this function's introduction). For every ``DistinctionResonanceGrant``
+    authored on ``character_distinction.distinction``:
 
     1. **Establish** — ``get_or_create`` a ``CharacterResonance`` row for the grant's
        resonance (balance/lifetime_earned default to 0), so the character is claimed

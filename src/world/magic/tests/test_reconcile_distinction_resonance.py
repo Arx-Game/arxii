@@ -99,6 +99,62 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
         ).order_by("granted_at")
         self.assertEqual([g.amount for g in grants], [20, 10])
 
+    def test_single_distinction_with_two_resonance_grants_reconciles_independently(self) -> None:
+        """A distinction giving both allure AND Predatory (two grants, two resonances)."""
+        sheet = CharacterSheetFactory()
+        distinction = DistinctionFactory()
+        allure = ResonanceFactory()
+        predatory = ResonanceFactory()
+        DistinctionResonanceGrantFactory(
+            distinction=distinction, resonance=allure, flat_amount_per_rank=10
+        )
+        DistinctionResonanceGrantFactory(
+            distinction=distinction, resonance=predatory, flat_amount_per_rank=7
+        )
+        character_distinction = CharacterDistinctionFactory(
+            character=sheet.character, distinction=distinction, rank=3
+        )
+
+        reconcile_distinction_resonance_grants(character_distinction)
+
+        self.assertTrue(
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=allure).exists()
+        )
+        self.assertTrue(
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=predatory).exists()
+        )
+
+        allure_cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=allure)
+        predatory_cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=predatory)
+        self.assertEqual(allure_cr.lifetime_earned, 30)
+        self.assertEqual(predatory_cr.lifetime_earned, 21)
+
+        allure_grants = ResonanceGrant.objects.filter(
+            source=GainSource.DISTINCTION,
+            source_character_distinction=character_distinction,
+            resonance=allure,
+        )
+        predatory_grants = ResonanceGrant.objects.filter(
+            source=GainSource.DISTINCTION,
+            source_character_distinction=character_distinction,
+            resonance=predatory,
+        )
+        self.assertEqual(allure_grants.count(), 1)
+        self.assertEqual(allure_grants.first().amount, 30)
+        self.assertEqual(predatory_grants.count(), 1)
+        self.assertEqual(predatory_grants.first().amount, 21)
+
+        # Re-run: idempotent for both — no new ledger rows, no cross-contamination
+        # in the already-sum filter (each is scoped to its own resonance).
+        reconcile_distinction_resonance_grants(character_distinction)
+
+        allure_cr.refresh_from_db()
+        predatory_cr.refresh_from_db()
+        self.assertEqual(allure_cr.lifetime_earned, 30)
+        self.assertEqual(predatory_cr.lifetime_earned, 21)
+        self.assertEqual(allure_grants.count(), 1)
+        self.assertEqual(predatory_grants.count(), 1)
+
     def test_rank_down_never_debits(self) -> None:
         sheet = CharacterSheetFactory()
         distinction = DistinctionFactory()
