@@ -28,8 +28,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TenureMultiSearch } from '@/components/TenureMultiSearch';
 import { useCreateTreasuredSubject, useUpdateTreasuredSubject } from '../queries';
 import type { SubjectKindEnum, TreasuredSubject, VisibilityModeEnum } from '../types';
+import type { Option } from '@/shared/types';
+
+function tenureOptionsFromIds(ids: number[] | undefined): Option<number>[] {
+  return (ids ?? []).map((id) => ({ value: id, label: String(id) }));
+}
 
 const SUBJECT_KIND_LABELS: Record<SubjectKindEnum, string> = {
   personal_jeopardy: 'Personal jeopardy',
@@ -73,6 +79,9 @@ export function TreasuredSubjectFormDialog({
   const [visibilityMode, setVisibilityMode] = useState<VisibilityModeEnum>(
     subject?.visibility_mode ?? 'private'
   );
+  const [visibleToTenures, setVisibleToTenures] = useState<Option<number>[]>(
+    tenureOptionsFromIds(subject?.visible_to_tenures)
+  );
   const [localError, setLocalError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
@@ -85,6 +94,7 @@ export function TreasuredSubjectFormDialog({
     setSubjectLabel(subject?.subject_label ?? '');
     setDetail(subject?.detail ?? '');
     setVisibilityMode(subject?.visibility_mode ?? 'private');
+    setVisibleToTenures(tenureOptionsFromIds(subject?.visible_to_tenures));
     setLocalError(null);
     setFieldErrors({});
   }
@@ -120,6 +130,9 @@ export function TreasuredSubjectFormDialog({
       return;
     }
 
+    const sharedTenures =
+      visibilityMode === 'characters' ? visibleToTenures.map((t) => t.value) : [];
+
     if (isEdit && subject) {
       updateMutation.mutate(
         {
@@ -130,6 +143,7 @@ export function TreasuredSubjectFormDialog({
             subject_label: subjectLabel.trim(),
             detail: detail.trim(),
             visibility_mode: visibilityMode,
+            visible_to_tenures: sharedTenures,
           },
         },
         {
@@ -149,6 +163,7 @@ export function TreasuredSubjectFormDialog({
           subject_label: subjectLabel.trim(),
           detail: detail.trim(),
           visibility_mode: visibilityMode,
+          visible_to_tenures: sharedTenures,
         },
         {
           onSuccess: (created) => {
@@ -222,6 +237,13 @@ export function TreasuredSubjectFormDialog({
                 <SelectItem value="characters">Specific characters</SelectItem>
               </SelectContent>
             </Select>
+            {visibilityMode === 'characters' && (
+              <TenureMultiSearch
+                value={visibleToTenures}
+                onChange={setVisibleToTenures}
+                label="Shared with"
+              />
+            )}
           </div>
 
           {localError && <p className="text-sm text-destructive">{localError}</p>}

@@ -26,8 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TenureMultiSearch } from '@/components/TenureMultiSearch';
 import { useContentThemes, useCreatePlayerBoundary, useUpdatePlayerBoundary } from '../queries';
 import type { PlayerBoundary, PlayerBoundaryKindEnum, VisibilityModeEnum } from '../types';
+import type { Option } from '@/shared/types';
+
+function tenureOptionsFromIds(ids: number[] | undefined): Option<number>[] {
+  return (ids ?? []).map((id) => ({ value: id, label: String(id) }));
+}
 
 interface DRFFieldErrors {
   theme?: string[];
@@ -54,6 +60,9 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
   const [visibilityMode, setVisibilityMode] = useState<VisibilityModeEnum>(
     boundary?.visibility_mode ?? 'private'
   );
+  const [visibleToTenures, setVisibleToTenures] = useState<Option<number>[]>(
+    tenureOptionsFromIds(boundary?.visible_to_tenures)
+  );
   const [localError, setLocalError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
 
@@ -70,6 +79,7 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
     setTheme(boundary?.theme != null ? String(boundary.theme) : '');
     setDetail(boundary?.detail ?? '');
     setVisibilityMode(boundary?.visibility_mode ?? 'private');
+    setVisibleToTenures(tenureOptionsFromIds(boundary?.visible_to_tenures));
     setLocalError(null);
     setFieldErrors({});
   }
@@ -118,6 +128,8 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
       theme: theme !== '' ? Number(theme) : null,
       detail: detail.trim(),
       visibility_mode: effectiveVisibility,
+      visible_to_tenures:
+        effectiveVisibility === 'characters' ? visibleToTenures.map((t) => t.value) : [],
     };
 
     if (isEdit && boundary) {
@@ -215,6 +227,13 @@ export function PlayerBoundaryFormDialog({ open, onOpenChange, boundary, onSucce
               <p className="text-xs text-muted-foreground">
                 Hard lines are always private and cannot be shared.
               </p>
+            )}
+            {!isHardLine && effectiveVisibility === 'characters' && (
+              <TenureMultiSearch
+                value={visibleToTenures}
+                onChange={setVisibleToTenures}
+                label="Shared with"
+              />
             )}
           </div>
 

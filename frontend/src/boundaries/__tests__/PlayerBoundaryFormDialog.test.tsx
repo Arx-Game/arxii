@@ -50,6 +50,28 @@ vi.mock('../queries', () => ({
   useUpdatePlayerBoundary: vi.fn(),
 }));
 
+vi.mock('@/components/TenureMultiSearch', () => ({
+  TenureMultiSearch: ({
+    value,
+    onChange,
+    label,
+  }: {
+    value: { value: number; label: string }[];
+    onChange: (v: { value: number; label: string }[]) => void;
+    label?: string;
+  }) => (
+    <div>
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={() => onChange([...value, { value: 42, label: 'Test Tenure' }])}
+      >
+        add-tenure
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -189,6 +211,44 @@ describe('PlayerBoundaryFormDialog', () => {
         expect.any(Object)
       );
     });
+  });
+
+  it('shows the tenure picker for "specific characters" and submits the chosen tenures', async () => {
+    const mutate = setupMocks();
+    renderWithProviders(<PlayerBoundaryFormDialog {...defaultProps} />);
+
+    const selects = screen.getAllByTestId('mock-select');
+    await userEvent.selectOptions(selects[0], 'advisory');
+    await userEvent.selectOptions(screen.getAllByTestId('mock-select')[2], 'characters');
+
+    expect(screen.getByText('Shared with')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'add-tenure' }));
+    await userEvent.type(screen.getByLabelText(/detail/i), 'Shared only with allies.');
+
+    await userEvent.click(screen.getByRole('button', { name: /save|create/i }));
+
+    await waitFor(() => {
+      expect(mutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visibility_mode: 'characters',
+          visible_to_tenures: [42],
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('does not show the tenure picker for private or public visibility', async () => {
+    setupMocks();
+    renderWithProviders(<PlayerBoundaryFormDialog {...defaultProps} />);
+
+    expect(screen.queryByText('Shared with')).not.toBeInTheDocument();
+
+    const selects = screen.getAllByTestId('mock-select');
+    await userEvent.selectOptions(selects[0], 'advisory');
+    await userEvent.selectOptions(screen.getAllByTestId('mock-select')[2], 'public');
+
+    expect(screen.queryByText('Shared with')).not.toBeInTheDocument();
   });
 
   it('prefills fields in edit mode', () => {
