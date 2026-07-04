@@ -445,6 +445,19 @@ class MissionOfferDetails(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="offer_details",
     )
+    source_beat = models.ForeignKey(
+        "stories.Beat",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Optional: the staked Beat this offer resolves. When set, accepting "
+            "the offer copies it onto MissionInstance.source_beat, arming the "
+            "#1770-PR4 stakes gate + contract activation. Independent of "
+            "Beat.required_mission (ADR-0010). SET_NULL on Beat delete."
+        ),
+    )
     weight = models.PositiveIntegerField(
         null=True,
         blank=True,
