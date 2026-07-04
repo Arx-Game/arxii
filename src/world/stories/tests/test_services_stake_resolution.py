@@ -7,12 +7,14 @@ guard, the world-state writers, and stake-level transition routing.
 """
 
 from django.urls import reverse
+from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from evennia_extensions.factories import AccountFactory
+from world.boundaries.factories import TreasuredSubjectFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
 from world.checks.constants import EffectType
@@ -43,6 +45,7 @@ from world.stories.factories import (
     StoryFactory,
     StoryProgressFactory,
     TransitionFactory,
+    TreasuredSignoffFactory,
     seed_default_risk_calibrations,
 )
 from world.stories.models import StakeOutcome, TransitionRequiredOutcome
@@ -260,6 +263,52 @@ class MachineGradingTests(EvenniaTestCase):
             record_outcome_tier_completion(
                 progress=progress, beat=beat, outcome_tier=self.fail_tier, withdrawal=True
             )
+
+    def test_withdrawn_treasured_signoff_routes_stake_to_withdrawal(self):
+        """#1771 story 5: a revoked-consent wager never grades against the
+        player. A stake whose treasured subject has a WITHDRAWN signoff
+        grades WITHDRAWAL at an ORDINARY (non-withdrawal-flag) completion,
+        even though the beat resolves SUCCESS; the sibling stake grades WIN
+        normally."""
+        _sheet, beat, progress = _character_story_beat()
+        tenure = RosterTenureFactory()
+        treasured = TreasuredSubjectFactory(
+            owner=tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Grandmother's locket",
+        )
+        treasured_stake = StakeFactory(
+            beat=beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Grandmother's locket",
+        )
+        withdrawal_branch = StakeResolutionFactory(
+            stake=treasured_stake, column=StakeResolutionColumn.WITHDRAWAL
+        )
+        StakeResolutionFactory(stake=treasured_stake, column=StakeResolutionColumn.WIN)
+        TreasuredSignoffFactory(
+            beat=beat,
+            player_data=tenure.player_data,
+            treasured_subject=treasured,
+            withdrawn_at=timezone.now(),
+        )
+        ordinary_stake = StakeFactory(beat=beat)
+        ordinary_win = StakeResolutionFactory(
+            stake=ordinary_stake, column=StakeResolutionColumn.WIN
+        )
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.win_tier)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        treasured_outcome = StakeOutcome.objects.get(stake=treasured_stake)
+        self.assertEqual(treasured_outcome.column, StakeResolutionColumn.WITHDRAWAL)
+        self.assertEqual(treasured_outcome.method, StakeOutcomeMethod.MACHINE)
+        self.assertEqual(treasured_outcome.resolution_id, withdrawal_branch.pk)
+        ordinary_outcome = StakeOutcome.objects.get(stake=ordinary_stake)
+        self.assertEqual(ordinary_outcome.column, StakeResolutionColumn.WIN)
+        self.assertEqual(ordinary_outcome.resolution_id, ordinary_win.pk)
 
     def test_no_matching_tier_row_fires_nothing_but_records_outcome(self):
         """Machine grading is tier-filtered: a branch pool with no consequence

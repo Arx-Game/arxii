@@ -206,6 +206,7 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
         scope=scope,
         explicit_participants=explicit_participants,
     )
+    withdrawn_stake_ids = _withdrawn_consent_stake_ids(beat, stakes)
 
     outcomes: list[StakeOutcome] = []
     for stake in stakes:
@@ -218,6 +219,16 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
                 # beat's PENDING_GM_REVIEW for a GM's constrained pick.
                 continue
             column = StakeResolutionColumn.WITHDRAWAL
+        elif stake.pk in withdrawn_stake_ids:
+            # #1771 story 5: the stake's treasured subject had its sign-off
+            # withdrawn on this beat — a revoked-consent wager never grades
+            # WIN/LOSS, even though the beat itself resolves normally.
+            column = StakeResolutionColumn.WITHDRAWAL
+            resolution = _branch_for_column(stake, column)
+            if resolution is None:
+                # No authored WITHDRAWAL branch: pend for a GM's constrained
+                # pick, same semantics as the whole-encounter withdrawal path.
+                continue
         else:
             column = _machine_column_for_stake(stake, outcome)
             resolution = _branch_for_column(
@@ -271,6 +282,74 @@ def _subject_lifecycle_state(stake: Stake) -> str | None:
     if stake.subject_kind != StakeSubjectKind.NPC_FATE or stake.subject_sheet_id is None:
         return None
     return stake.subject_sheet.lifecycle_state
+
+
+def _withdrawn_consent_stake_ids(beat: Beat, stakes: list[Stake]) -> set[int]:
+    """Ids of ``stakes`` whose treasured subject has a WITHDRAWN sign-off on ``beat``.
+
+    #1771 story 5 (per-stake override, distinct from the whole-encounter
+    ``withdrawal=True`` FLED/ABANDONED path): a player who withdraws a
+    ``TreasuredSignoff`` mid-story must never have that stake grade WIN/LOSS
+    at a later ordinary completion, even though sibling stakes grade
+    normally. Batched — one query for the beat's withdrawn
+    ``TreasuredSignoff`` rows, one for the ``TreasuredSubject`` rows they
+    point at — no query inside the loop over ``stakes``. Reuses
+    ``boundaries._subject_identity`` (#1771 task 3) as the single identity-key
+    definition also used by ``check_stake_boundaries``.
+    """
+    from world.boundaries.models import TreasuredSubject  # noqa: PLC0415
+    from world.stories.models import TreasuredSignoff  # noqa: PLC0415
+    from world.stories.services.boundaries import _subject_identity  # noqa: PLC0415
+
+    treasured_ids = set(
+        TreasuredSignoff.objects.filter(beat=beat, withdrawn_at__isnull=False).values_list(
+            "treasured_subject_id", flat=True
+        )
+    )
+    if not treasured_ids:
+        return set()
+
+    withdrawn_identities = {
+        _subject_identity(
+            subject_kind,
+            subject_sheet_id,
+            subject_item_id,
+            subject_society_id,
+            subject_organization_id,
+            subject_label,
+        )
+        for (
+            subject_kind,
+            subject_sheet_id,
+            subject_item_id,
+            subject_society_id,
+            subject_organization_id,
+            subject_label,
+        ) in TreasuredSubject.objects.filter(pk__in=treasured_ids).values_list(
+            "subject_kind",
+            "subject_sheet_id",
+            "subject_item_id",
+            "subject_society_id",
+            "subject_organization_id",
+            "subject_label",
+        )
+    }
+    if not withdrawn_identities:
+        return set()
+
+    return {
+        stake.pk
+        for stake in stakes
+        if _subject_identity(
+            stake.subject_kind,
+            stake.subject_sheet_id,
+            stake.subject_item_id,
+            stake.subject_society_id,
+            stake.subject_organization_id,
+            stake.subject_label,
+        )
+        in withdrawn_identities
+    }
 
 
 def _branch_for_column(
