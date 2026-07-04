@@ -307,6 +307,54 @@ def hazard_is_covered(room: DefaultObject, damage_type: DamageType, *, threshold
     return effective_value(room, damage_type=damage_type) >= threshold
 
 
+def _character_position_shelter(character: DefaultObject, damage_type: DamageType) -> int:
+    """Position shelter for a character, or 0 if they have no position.
+
+    Looks up the character's current Position via ``position_of`` (existing,
+    in ``world.areas.positioning.services``) and sums ``PositionShelter``
+    rows for the given damage_type.
+    """
+    from world.areas.positioning.services import (  # noqa: PLC0415
+        position_of,
+        position_shelter_value,
+    )
+
+    position = position_of(character)
+    if position is None:
+        return 0
+    return position_shelter_value(position, damage_type)
+
+
+def hazard_is_covered_for(
+    character: DefaultObject,
+    room: DefaultObject | None,
+    damage_type: DamageType,
+    *,
+    threshold: int = 1,
+) -> bool:
+    """Whether *character* in *room* is sheltered against *damage_type*.
+
+    Composes the room-level cascade (``effective_value``) with position-level
+    shelter (additive). A character at a sheltering Position (e.g. under a tent)
+    is covered even when the room as a whole is not — the tent's shelter adds
+    to the room's value regardless of room overrides (#1756).
+
+    Args:
+        character: the ObjectDB character whose shelter to check.
+        room: the room the character is in (may be None — returns False).
+        damage_type: the hazard to check shelter against.
+        threshold: minimum total shelter value to count as covered (default 1).
+
+    Returns:
+        True if room cascade value + position shelter value >= threshold.
+    """
+    if room is None:
+        return False
+    room_value = effective_value(room, damage_type=damage_type)
+    position_value = _character_position_shelter(character, damage_type)
+    return (room_value + position_value) >= threshold
+
+
 def room_enclosure(room: DefaultObject) -> RoomEnclosure:
     """The room's enclosure level (#1514); ``WALLED`` (a normal indoor room) if no profile."""
     try:

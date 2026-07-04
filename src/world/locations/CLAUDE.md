@@ -21,6 +21,15 @@ threshold=1)` wraps the damage-type axis as a hard boolean gate ("does the
 hazard reach this place at all"), not an arithmetic resistance — that stays
 `ConditionResistanceModifier` (per ADR-0073, ADR-0069).
 
+**Position-level shelter (#1756).** `hazard_is_covered_for(character, room,
+damage_type)` composes the room cascade with position-level shelter — a
+character at a specific `Position` (a tent, table, or alcove) can be sheltered
+even when the room as a whole is not. Position shelter is an additive layer
+(`PositionShelter` rows in `world.areas.positioning`), not part of the ambient
+cascade: it adds on top of the room's resolved value, and a room override does
+not cut it. `hazard_is_covered(room, ...)` remains the room-level primitive;
+`hazard_is_covered_for` is the character-aware composition.
+
 **Climate → comfort (#1514, #1522).** The stat axis hosts environmental **exposure** axes
 (`StatKey.COLD`, `HEAT`, `WET`, `WIND`, `DRY`; listed in `EXPOSURE_STAT_KEYS`). Each is a
 non-negative *discomfort* magnitude clamped at a **0-floor** — climate/weather/style push it up,
