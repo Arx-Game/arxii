@@ -44,6 +44,40 @@ Per-category social consent settings UI and enforcement, merged [branch: feature
 - **Admin:** `SocialConsentCategoryAdmin`, `SocialConsentPreferenceAdmin` (with category-rule
   inline), `SocialConsentWhitelistAdmin` (raw_id_fields for tenures + category).
 
+## Built — Player Content Boundaries (#1771)
+A private registry for hard content limits and treasured-subject flags, backing the
+stakes-contract engine's `check_stake_boundaries` seam (#1770 PR4's allow-all stub).
+
+- **Models (world/boundaries):** `ContentTheme` (NaturalKey slug, staff-authored —
+  the small starter set: child endangerment, suicide/self-harm, sexual violence,
+  torture), `PlayerBoundary` (owner `PlayerData`; `kind` HARD_LINE/ADVISORY; a hard
+  line is structurally forced private and blocks any stakes contract whose
+  `StakeTemplate.content_themes` intersects it), `TreasuredSubject` (owner
+  `RosterTenure`; a specific entity — NPC, item, location, faction, custom — flagged
+  as devastating-if-lost; matched by identity, not theme, and requires an explicit
+  `TreasuredSignoff` rather than blocking outright).
+- **Enforcement + resolution (world/stories):** `check_stake_boundaries` is now a
+  real registry (was allow-all); `StakeTemplate.content_themes` M2M;
+  `TreasuredSignoff` (soft-withdrawable pre-scene consent); a withdrawn sign-off
+  routes only its stake to `WITHDRAWAL` at completion, siblings unaffected.
+- **Sharing + scene aggregate:** both models reuse `world.consent.VisibilityMixin`
+  (a hard line is always PRIVATE regardless); `scene_lines_and_veils` gives a scene
+  an anonymized, owner-stripped union of shared advisories + treasured subjects
+  (hard lines structurally excluded — the query never selects them).
+- **GM availability:** `stake_availability` gives a GM counts-only tally
+  (`available`/`blocked`/`needs_signoff`) — never a reason, player, or stake id.
+- **API:** `/api/boundaries/` (content-themes, player-boundaries,
+  treasured-subjects, scene lines-and-veils) + `/api/treasured-signoffs/` +
+  `/api/beats/{id}/stake-availability/` (mounted on the stories router per
+  ADR-0010's dependency direction).
+- **Frontend:** `frontend/src/boundaries/` — a "Boundaries" tab on the Profile page
+  (account-wide boundary authoring, per-tenure treasured-subject flagging, pre-scene
+  sign-off), plus a `SceneLinesAndVeilsCard` on the scene detail page.
+- **Privacy (ADR-0033/ADR-0086):** a hard line's reason is never surfaced to any GM
+  or player, structurally (owner-scoped querysets with no staff carve-out,
+  hard-line-excluded queries, counts-only GM reads) — not by convention.
+- **Details:** `docs/systems/boundaries.md`, ADR-0086.
+
 ## What's Needed for MVP
 - Friend list system — explicit friend tracking with online status
 - Player finder — who's online, who's in scenes, who's looking for RP

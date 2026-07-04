@@ -1110,7 +1110,9 @@ def get_vitals_consequence_config() -> VitalsConsequenceConfig:
     """
     from world.vitals.models import VitalsConsequenceConfig  # noqa: PLC0415
 
-    cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
+    cfg = VitalsConsequenceConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = VitalsConsequenceConfig.objects.get_or_create(pk=1)
     return cfg
 
 

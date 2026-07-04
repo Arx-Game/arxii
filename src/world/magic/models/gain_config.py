@@ -5,6 +5,8 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 
 class ResonanceGainConfig(SharedMemoryModel):
     """Staff-tunable singleton for resonance gain magnitudes.
@@ -12,6 +14,8 @@ class ResonanceGainConfig(SharedMemoryModel):
     One row per environment. Access via ``get_resonance_gain_config()`` —
     singleton-by-convention, no DB-level uniqueness constraint.
     """
+
+    objects = ArxSharedMemoryManager()
 
     weekly_pot_per_character = models.PositiveIntegerField(
         default=20,

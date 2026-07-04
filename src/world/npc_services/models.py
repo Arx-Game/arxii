@@ -67,6 +67,37 @@ class NPCStanding(SharedMemoryModel):
             "and functionary contexts to surface 'why we left off where we did'."
         ),
     )
+    debt = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Outstanding debt owed to this NPC from over-ceiling emergency draws "
+            "(#1718). Generic: any future petition-style NPC feature may reuse this "
+            "field, not just Court grant negotiation."
+        ),
+    )
+    debt_baseline_affection = models.IntegerField(
+        default=0,
+        help_text=(
+            "Snapshot of `affection` at the moment `debt` was last incurred. Debt "
+            "repays on read as affection grows past this baseline (#1718)."
+        ),
+    )
+    debt_baseline_missions_completed = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Snapshot of the caller-supplied completed-mission count at the moment "
+            "`debt` was last incurred. Debt repays on read as that count grows past "
+            "this baseline (#1718)."
+        ),
+    )
+    consecutive_failed_petitions = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Consecutive failed/botched petition-style checks against this NPC "
+            "(#1718). Increments on failure, resets to 0 on success. Mirrors "
+            "`Contract.consecutive_missed` (world.currency)."
+        ),
+    )
     last_changed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -724,3 +755,30 @@ class NpcRegard(DiscriminatorMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.holder_persona} -> {self.get_active_target_name()} ({self.value:+d})"
+
+
+class CourtGrantOfferDetails(SharedMemoryModel):
+    """Per-kind details for ``NPCServiceOffer`` rows of kind=COURT_GRANT (#1718).
+
+    Names which Court covenant this petition offer belongs to — the effect
+    handler (``world.npc_services.effects.raise_court_grant``) only receives
+    ``(offer, persona)``, so the covenant can't be derived from the session's
+    ``npc_persona``; it must be explicit here, same shape as
+    ``LoanOfferDetails.creditor_organization``.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="court_grant_offer_details",
+        help_text="The NPCServiceOffer row this details model decorates.",
+    )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="court_grant_offer_details",
+        help_text="The Court covenant this petition raises the servant's grant in.",
+    )
+
+    def __str__(self) -> str:
+        return f"CourtGrantOfferDetails for {self.offer} ({self.covenant})"

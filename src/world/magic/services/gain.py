@@ -116,8 +116,10 @@ def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
 def get_resonance_gain_config() -> ResonanceGainConfig:
     """Get-or-create the resonance gain config singleton (pk=1)."""
     with transaction.atomic():
+        cfg = ResonanceGainConfig.objects.cached_singleton()
+    if cfg is None:
         cfg, _ = ResonanceGainConfig.objects.get_or_create(pk=1)
-        return cfg
+    return cfg
 
 
 ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"

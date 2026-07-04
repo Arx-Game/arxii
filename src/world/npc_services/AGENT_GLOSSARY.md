@@ -43,3 +43,18 @@ extension of the same discriminator, not built). Deliberately separate from
 _Avoid: "NpcEnmity" (collides with the dead `ThreadAxis.ENMITY`), "grudge" as a
 model name (implies negative-only; fine as informal narration of a strongly
 negative row)._
+
+**NPC Debt**:
+`NPCStanding.debt` (#1718) — generic per-(PC, NPC) debt incurred by drawing more
+aid than the PC has currently earned; repays on read as affection/mission
+progress grows past the baseline snapshotted when the debt was incurred
+(`incur_npc_debt`/`outstanding_debt`, `world.npc_services.services`). Not
+Court-specific — any petition-style feature may reuse it.
+_Avoid_: favor, boon, obligation (no such terms exist elsewhere in this codebase).
+
+**Petition failure streak**:
+`NPCStanding.consecutive_failed_petitions` (#1718) — increments on a failed
+petition-style check against this NPC, resets on success
+(`record_petition_outcome`). Mirrors `Contract.consecutive_missed`
+(`world.currency`). Crossing an authored threshold is the caller's cue to fire
+its own escalation consequence — this field only tracks the count.

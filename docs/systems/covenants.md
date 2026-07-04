@@ -295,6 +295,66 @@ mission-gate is new dedicated machinery.
 `TargetKind.COVENANT_ROLE` threads on COURT covenants. This bounds the anchor cap by the
 servant's `granted_pull_cap` from the active `CourtPact`. No pact → cap 0 → the grant is the gate.
 
+### Grant negotiation (#1718)
+
+`granted_pull_cap` is no longer fixed at swearing-in. Two channels raise it:
+
+- **Formal petition** — a new `OfferKind.COURT_GRANT` offer (auto-provisioned per
+  Court via `world.covenants.court_grant.ensure_court_grant_role`, which is
+  `@transaction.atomic` with a `select_for_update()` re-fetch of the `Covenant`
+  row so two concurrent negotiation attempts for the same Court can't both pass
+  the "role not yet provisioned" check), riding the existing
+  `NPCServiceOffer`/effect-handler pipeline. The effect handler
+  (`world.npc_services.effects.raise_court_grant`) rolls a shared "Court Grant
+  Petition" check (eased by the master's `NPCStanding.affection`) and, on
+  success, raises the grant up to `court_grant_ceiling(...)` via
+  `raise_court_pact_grant`, which is strictly monotonic
+  (`CourtGrantNotMonotonicError` on any attempted decrease; raising to the
+  current cap is a harmless no-op).
+- **Emergency thread-bond draw** — not a standalone Action. It's an optional
+  `beseech=<n>` token on the existing `cast`/`clash` pull-declaration grammar
+  (`commands/combat.py`), resolved by the shared, combat-agnostic
+  `_resolve_emergency_draw(sheet, cast_pull)` helper
+  (`world.combat.pull_helpers`). That helper is called from both the in-combat
+  path (`commit_combat_pull`) and the non-combat immediate-cast path
+  (`world.magic.services.techniques._charge_cast_pull`), so the draw works
+  whether or not the master is in the scene. **Web (non-telnet) support does
+  not exist** — `world/scenes/action_serializers.py::_validate_cast_pull` →
+  `world.combat.pull_helpers.build_cast_pull_declaration` has no
+  `beseech_bonus` parameter; only the telnet grammar parses `beseech=`.
+  The requested bonus is clamped to `min(requested_bonus,
+  court_grant_ceiling(...) + CourtGrantConfig.emergency_draw_max_bonus)` — the
+  config field bounds how far the draw may exceed the ceiling, not the raw
+  bonus — for one pull only, never persisted to `Thread.level`, at the cost of
+  debt on any amount past the ceiling.
+
+`court_grant_ceiling(*, covenant, servant_sheet) -> int`
+(`world.covenants.court_grant`) = `base_headroom + affection // affection_divisor
++ completed_court_mission_count // mission_divisor - outstanding_debt(...)`,
+floored at 0, all tunable via the `CourtGrantConfig` singleton
+(`get_court_grant_config()`).
+
+Debt and the consecutive-failed-petition streak generalize onto `NPCStanding`
+(`world.npc_services`), not `CourtPact` — `NPCStanding.debt` /
+`debt_baseline_affection` / `debt_baseline_missions_completed` /
+`consecutive_failed_petitions`, plus the generic services
+`incur_npc_debt`/`outstanding_debt`/`record_petition_outcome`
+(`world.npc_services.services`) — so any future "petition an NPC" feature can
+reuse the same substrate. `consecutive_failed_petitions` crossing
+`CourtGrantConfig.petition_failure_escalation_threshold` fires
+`CourtGrantConfig.escalation_consequence_pool` (a standard `ConsequencePool`,
+same machinery as trap/clash/stakes resolution).
+
+Pull-effect scaling by thread level (`thread_level_multiplier`,
+`world.magic.services.threads`) was corrected alongside this feature: level 0
+keeps the old floor of `Decimal(1)`; levels 1–9 now ramp linearly from 0.1 to
+1.0 (`Decimal(level) / Decimal(10)`) instead of sitting flat at the old
+floor — levels 1–9 score *below* the old flat-1.0 floor, a deliberate
+tradeoff so a thread crossing the level-10 milestone doesn't score worse than
+level 9 did; level ≥ 10 is unchanged (`Decimal(level // 10)`).
+
+See ADR-0085 for why the debt/streak fields live on `NPCStanding` rather than `CourtPact`.
+
 ### Fealty ceremony
 
 `induct_member_via_session` (the ritual fire-handler) was extended for COURT covenants: after
@@ -305,6 +365,7 @@ from `participant_kwargs` and emits a servant-spotlight narration alongside the 
 
 - `CourtGulfViolationError` — servant's power tier is not strictly below the leader's.
 - `CourtPactExistsError` — an active pact already exists for `(covenant, servant_sheet)`.
+- `CourtGrantNotMonotonicError` — a grant raise would lower an existing `CourtPact.granted_pull_cap` (#1718).
 
 ### Test coverage
 

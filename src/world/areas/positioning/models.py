@@ -1,6 +1,9 @@
+from datetime import datetime
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.areas.positioning.constants import PositionKind
@@ -241,3 +244,110 @@ class ObjectPosition(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.objectdb_id} @ {self.position_id}"
+
+
+class PositionShelter(SharedMemoryModel):
+    """Shelter against a hazard granted by a specific Position within a room.
+
+    A local structural fact (tent, awning, rock overhang), not an ambient
+    cascade value. Stacks additively with the room's cascade-resolved shelter
+    and with other PositionShelter rows on the same position.
+
+    Reuses the ``change_per_day`` / ``source`` / ``applied_at`` /
+    ``current_value`` pattern from ``LocationValueModifier`` so a temporary
+    ward can decay and a flow can clean up by source.
+    """
+
+    position = models.ForeignKey(Position, on_delete=models.CASCADE, related_name="shelters")
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        related_name="position_shelters",
+    )
+    value = models.IntegerField(
+        help_text="Magnitude of shelter. Added to the room's cascade value."
+    )
+    change_per_day = models.IntegerField(
+        default=0,
+        help_text=(
+            "Signed: negative decays toward zero, positive grows away from "
+            "zero, zero is permanent. Mirrors LocationValueModifier."
+        ),
+    )
+    source = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Free-text label for cleanup (e.g. filter(source=...).delete()).",
+    )
+    applied_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="Decay anchor. Update this to 'refresh' the modifier.",
+    )
+
+    class Meta:
+        app_label = "areas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["position", "damage_type", "source"],
+                condition=~models.Q(source=""),
+                name="unique_position_shelter_per_source",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["position", "damage_type"]),
+        ]
+
+    def current_value(self, *, now: datetime | None = None) -> int:
+        """Return the lazy decay/growth-resolved value.
+
+        Mirrors ``LocationValueModifier.current_value``. Returns 0 once the
+        modifier has crossed its original sign. Partial days truncate toward
+        zero.
+        """
+        if self.value == 0 or self.change_per_day == 0:
+            return self.value
+        anchor = now if now is not None else timezone.now()
+        elapsed = anchor - self.applied_at
+        days = elapsed.total_seconds() / 86400.0
+        new_value = self.value + int(self.change_per_day * days)
+        if self.value > 0 and new_value <= 0:
+            return 0
+        if self.value < 0 and new_value >= 0:
+            return 0
+        return new_value
+
+    def __str__(self) -> str:
+        return f"PositionShelter {self.damage_type_id}={self.value} @ pos:{self.position_id}"
+
+
+class BlueprintPositionShelter(SharedMemoryModel):
+    """Template shelter cloned into PositionShelter by instantiate_blueprint.
+
+    Static template data — no decay fields. The clone produces a PositionShelter
+    with ``change_per_day=0`` and ``source=""``.
+    """
+
+    blueprint_position = models.ForeignKey(
+        BlueprintPosition, on_delete=models.CASCADE, related_name="shelters"
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        related_name="blueprint_position_shelters",
+    )
+    value = models.IntegerField()
+
+    class Meta:
+        app_label = "areas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["blueprint_position", "damage_type"],
+                name="unique_bp_position_shelter",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"BlueprintShelter {self.damage_type_id}={self.value}"
+            f" @ bp_pos:{self.blueprint_position_id}"
+        )

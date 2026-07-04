@@ -122,21 +122,42 @@ actions, backends, and service functions.
   - `CmdDeclareTechnique` (`cast`, alias `declare`) — unified scene-adaptive
     technique cast (#1351/#1330); thin `DispatchCommand` that parses
     `cast <technique> [at <name>] [effort=<level>] [secondary]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]] [fury=<tier> anchor=<name>]`
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>] [beseech=N]] [fury=<tier> anchor=<name>]`
     and emits a SCENE_ADAPTIVE `ActionRef` keyed to `"cast_technique"`. Outside combat:
     runs `CastTechniqueAction.execute()` immediately (non-combat cast via
     `request_technique_cast`). In a DECLARING round: calls
     `CastTechniqueAction.round_declaration()` which builds a `CombatRoundAction`
     declaration row.
 
-    **Thread-pull params** (`pull=` / `resonance=` / `tier=`) are parsed by the shared
-    `_CombatCommandMixin` pull parser. The pull rides the `cast` or `clash` declaration —
-    there is no standalone `pull` verb. In combat, one pull is allowed per round (a second
-    attempt surfaces `PULL_ALREADY_COMMITTED`). `pull=` lists comma-separated thread names
-    or ids; `resonance=` names the resonance to spend from; `tier=` is 1, 2, or 3
+    **Thread-pull params** (`pull=` / `resonance=` / `tier=` / `beseech=`) are parsed by
+    the shared `_CombatCommandMixin` pull parser. The pull rides the `cast` or `clash`
+    declaration — there is no standalone `pull` verb. In combat, one pull is allowed per
+    round (a second attempt surfaces `PULL_ALREADY_COMMITTED`). `pull=` lists comma-separated
+    thread names or ids; `resonance=` names the resonance to spend from; `tier=` is 1, 2, or 3
     (default 1). Effects that don't apply to the current context are silently applied as
     far as they fit; the declaration is refused without charge only if none apply
     (inert-effect rule).
+
+    **`beseech=N` (#1718)** — an optional emergency thread-bond draw riding the same
+    `pull=`/`resonance=` declaration. When the pulled thread is a COURT-covenant
+    COVENANT_ROLE thread, `N` is requested as a temporary bonus to that thread's
+    effective level for THIS pull's resolution only (never persisted to `Thread.level`).
+    Rolls the shared Court-grant petition check (`world.combat.pull_helpers
+    ._resolve_emergency_draw`); on success the bonus is clamped so it may exceed the
+    servant's current `court_grant_ceiling` by at most `CourtGrantConfig
+    .emergency_draw_max_bonus`, and any amount past the ceiling incurs debt via
+    `incur_npc_debt`; on failure the pull still commits with no bonus. Works whether or
+    not the Court master is present — it draws on the servant's own bond, not a live
+    negotiation. Every attempt records `record_petition_outcome`. **Combat or
+    non-combat**: both entry points call the identical combat-agnostic
+    `_resolve_emergency_draw(sheet, cast_pull)` helper (it takes no
+    `CombatEncounter`/`CombatParticipant`) — the in-combat commit
+    (`commit_combat_pull`) and the non-combat charge
+    (`world.magic.services.techniques._charge_cast_pull`, reached via
+    `request_technique_cast`) each call it directly before
+    `spend_resonance_for_pull`, so a standalone `cast <technique>
+    pull=<thread> resonance=<name> beseech=N` outside any encounter rolls the
+    same petition check and gets the same bonus/debt treatment.
 
     **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
     names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the
@@ -161,7 +182,7 @@ actions, backends, and service functions.
   - `CmdClashCommit` (`clash`) — commit a technique + optional strain + optional pull
     to an active Clash during a DECLARING round (#1451/#1455); parses
     `clash <opponent> with <technique> [strain=<n>]
-    [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]`,
+    [pull=<thread>[,…] resonance=<name> [tier=<1-3>] [beseech=N]]`,
     resolves the `Clash` by NPC opponent name
     (`Clash.objects.filter(npc_opponent__name__iexact=...)`),
     and emits a COMBAT `ActionRef` with `clash_id=clash.pk` +

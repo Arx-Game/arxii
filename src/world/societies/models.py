@@ -25,6 +25,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import connection, models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
@@ -852,6 +853,8 @@ class SpreadingConfig(SharedMemoryModel):
     for how legend spreads work across the game.
     """
 
+    objects = ArxSharedMemoryManager()
+
     default_spread_multiplier = models.PositiveIntegerField(
         default=9,
         help_text="Default spread multiplier for new deeds. Total legend can reach "
@@ -893,7 +896,9 @@ class SpreadingConfig(SharedMemoryModel):
         Returns:
             The active SpreadingConfig instance (pk=1).
         """
-        config, _created = cls.objects.get_or_create(pk=1)
+        config = cls.objects.cached_singleton()
+        if config is None:
+            config, _created = cls.objects.get_or_create(pk=1)
         return config
 
     def __str__(self) -> str:

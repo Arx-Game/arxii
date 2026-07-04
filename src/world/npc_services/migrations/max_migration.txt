@@ -1,1 +1,1 @@
-0010_missionofferdetails_source_beat
+0012_alter_npcserviceoffer_kind_courtgrantofferdetails

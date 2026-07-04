@@ -8,6 +8,7 @@ export function ProfilePage() {
     if (pathname.includes('/media')) return 'media';
     if (pathname.includes('/settings')) return 'settings';
     if (pathname.includes('/privacy')) return 'privacy';
+    if (pathname.includes('/boundaries')) return 'boundaries';
     if (pathname.includes('/blocks')) return 'blocks';
     if (pathname.includes('/mutes')) return 'mutes';
     return 'mail';
@@ -29,6 +30,9 @@ export function ProfilePage() {
           </TabsTrigger>
           <TabsTrigger value="privacy" asChild>
             <Link to="privacy">Privacy</Link>
+          </TabsTrigger>
+          <TabsTrigger value="boundaries" asChild>
+            <Link to="boundaries">Boundaries</Link>
           </TabsTrigger>
           <TabsTrigger value="blocks" asChild>
             <Link to="blocks">Blocked</Link>

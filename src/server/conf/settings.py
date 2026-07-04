@@ -75,6 +75,7 @@ INSTALLED_APPS += [
     "world.currency.apps.CurrencyConfig",
     "world.action_points.apps.ActionPointsConfig",
     "world.consent.apps.ConsentConfig",
+    "world.boundaries.apps.BoundariesConfig",
     "world.codex.apps.CodexConfig",
     "world.clues.apps.CluesConfig",
     "world.secrets.apps.SecretsConfig",

@@ -11,12 +11,16 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 
 class SoulfrayConfig(SharedMemoryModel):
     """Global configuration for Soulfray severity accumulation and resilience checks.
 
-    Single-row table (queried with .first()), same pattern as AudereThreshold.
+    Single-row table (queried via cached_singleton()), same pattern as AudereThreshold.
     """
+
+    objects = ArxSharedMemoryManager()
 
     soulfray_threshold_ratio = models.DecimalField(
         max_digits=3,

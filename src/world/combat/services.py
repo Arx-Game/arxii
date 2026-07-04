@@ -212,12 +212,15 @@ def get_penetration_check_type() -> CheckType:
 def get_flee_config() -> FleeConfig:
     """Return the seeded FleeConfig singleton (#878).
 
-    Uses get() — never get_or_create — because this is authored content; a
-    fabricated row would have no check_type and silently break flee
+    Uses cached_singleton() — never get_or_create — because this is authored
+    content; a fabricated row would have no check_type and silently break flee
     resolution. DoesNotExist propagates loudly. Mirrors
     get_penetration_check_type.
     """
-    return FleeConfig.objects.get(pk=1)
+    config = FleeConfig.objects.cached_singleton()
+    if config is None:
+        raise FleeConfig.DoesNotExist
+    return config
 
 
 # ---------------------------------------------------------------------------
@@ -5550,7 +5553,9 @@ def get_strain_config() -> StrainConfig:
         StrainConfig,
     )
 
-    cfg, _ = StrainConfig.objects.get_or_create(pk=1)
+    cfg = StrainConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = StrainConfig.objects.get_or_create(pk=1)
     return cfg
 
 
@@ -5560,7 +5565,9 @@ def get_clash_config() -> ClashConfig:
         ClashConfig,
     )
 
-    cfg, _ = ClashConfig.objects.get_or_create(pk=1)
+    cfg = ClashConfig.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = ClashConfig.objects.get_or_create(pk=1)
     return cfg
 
 

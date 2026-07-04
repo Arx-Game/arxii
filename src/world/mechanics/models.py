@@ -15,6 +15,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 if TYPE_CHECKING:
@@ -1266,6 +1267,8 @@ class AestheticAxisConfig(SharedMemoryModel):
     Real columns, no JSON. Lazy-created by ``get_aesthetic_config()``; consume
     via that getter rather than direct ORM access.
     """
+
+    objects = ArxSharedMemoryManager()
 
     base_magnitude = models.PositiveIntegerField(
         default=5,

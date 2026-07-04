@@ -11,6 +11,7 @@ from typing import ClassVar
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.tarot.constants import SUIT_SINGULAR, ArcanaType, TarotSuit
 
 
@@ -106,6 +107,8 @@ class NamingRitualConfig(SharedMemoryModel):
     Singleton config for the tarot naming ritual displayed in CG.
     Editable via Django admin. Optional link to a codex entry for lore.
     """
+
+    objects = ArxSharedMemoryManager()
 
     flavor_text = models.TextField(
         help_text="Flavor text displayed above the tarot card browser in CG.",

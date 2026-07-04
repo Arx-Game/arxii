@@ -11,6 +11,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.traits.models import Trait, TraitType
 
 if TYPE_CHECKING:
@@ -218,6 +219,8 @@ class SkillPointBudget(SharedMemoryModel):
     Staff can adjust these values without code changes.
     """
 
+    objects = ArxSharedMemoryManager()
+
     path_points = models.PositiveSmallIntegerField(
         default=50,
         help_text="Points allocated from path suggestions",
@@ -267,7 +270,9 @@ class SkillPointBudget(SharedMemoryModel):
     def get_active_budget(cls) -> "SkillPointBudget":
         """Get the active budget, creating with defaults if none exists."""
         # Use get_or_create with pk=1 for atomic safety (single-row model)
-        budget, _ = cls.objects.get_or_create(pk=1)
+        budget = cls.objects.cached_singleton()
+        if budget is None:
+            budget, _ = cls.objects.get_or_create(pk=1)
         return budget
 
 

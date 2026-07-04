@@ -239,8 +239,13 @@ class ClashRoundDeclarationPullTests(TestCase):
 
     def test_clash_pull_visible_to_intensity_read_path(self) -> None:
         """compute_intensity_for_clash returns a higher value with the pull committed via clash."""
+        # amount=10, not 2: the thread is fixed at level=5 (see _make_clash_pull_setup),
+        # so thread_level_multiplier(5) == 0.5 (#1718's corrected ramp) and
+        # scaled_value = round(authored * multiplier); an authored amount of 2
+        # rounds to 1, which no longer clears this test's "+2" assertion floor
+        # below. 10 clears it with margin: round(10 * 0.5) = 5.
         data = _make_clash_pull_setup(
-            effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=2
+            effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=10
         )
 
         # Build a CombatRoundAction so compute_intensity_for_clash has something to work with.
@@ -270,7 +275,7 @@ class ClashRoundDeclarationPullTests(TestCase):
             intensity_without_pull,
             "compute_intensity_for_clash must be higher after a clash pull commits INTENSITY_BUMP.",
         )
-        # Specifically, the pull should add 2 (the authored intensity_bump_amount).
+        # Specifically, the pull should add at least 2 (scaled: round(10 * 0.5) = 5).
         self.assertGreaterEqual(
             intensity_with_pull,
             data["technique"].intensity + 2,

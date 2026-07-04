@@ -1018,6 +1018,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/Beat'
           description: ''
+  /api/beats/{beat_id}/stake-availability/:
+    get:
+      operationId: beats_stake_availability_retrieve
+      description: |-
+        GET /api/beats/{beat_id}/stake-availability/?sheets={id}&sheets={id} (#1771).
+
+        GM-facing counts-only tally of how ``beat``'s candidate stakes screen for
+        the given party — reuses ``stake_availability``. Never a reason, never
+        which stake or player (ADR-0033): the response is exactly
+        ``{available, blocked, needs_signoff}``. Access mirrors ``BeatViewSet``
+        (staff or the beat's story owner) since this is a GM planning tool.
+      parameters:
+      - in: path
+        name: beat_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - beats
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/beats/{id}/:
     get:
       operationId: beats_retrieve
@@ -1301,6 +1325,456 @@ paths:
               schema:
                 $ref: '#/components/schemas/Block'
           description: ''
+  /api/boundaries/content-themes/:
+    get:
+      operationId: boundaries_content_themes_list
+      description: |-
+        Read-only viewset for the staff-authored content theme catalog.
+
+        Every authenticated player reads the same shared catalog to pick hard
+        lines / tag advisories from — only staff configure it (via admin).
+      parameters:
+      - in: query
+        name: is_active
+        schema:
+          type: boolean
+      - in: query
+        name: key
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedContentThemeList'
+          description: ''
+  /api/boundaries/content-themes/{id}/:
+    get:
+      operationId: boundaries_content_themes_retrieve
+      description: |-
+        Read-only viewset for the staff-authored content theme catalog.
+
+        Every authenticated player reads the same shared catalog to pick hard
+        lines / tag advisories from — only staff configure it (via admin).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Content Theme.
+        required: true
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentTheme'
+          description: ''
+  /api/boundaries/player-boundaries/:
+    get:
+      operationId: boundaries_player_boundaries_list
+      description: |-
+        ViewSet for a player's own content boundaries (hard lines + advisories).
+
+        Self-authoring only: ``get_queryset`` scopes to the requesting player's
+        own rows, so another player's hard-line ``detail`` (or any row at all)
+        is structurally unreachable through this endpoint — 404, not a filtered
+        field.
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+          enum:
+          - advisory
+          - hard_line
+        description: |-
+          * `hard_line` - Hard line
+          * `advisory` - Advisory
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: theme
+        schema:
+          type: integer
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlayerBoundaryList'
+          description: ''
+    post:
+      operationId: boundaries_player_boundaries_create
+      description: |-
+        ViewSet for a player's own content boundaries (hard lines + advisories).
+
+        Self-authoring only: ``get_queryset`` scopes to the requesting player's
+        own rows, so another player's hard-line ``detail`` (or any row at all)
+        is structurally unreachable through this endpoint — 404, not a filtered
+        field.
+      tags:
+      - boundaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerBoundaryRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerBoundary'
+          description: ''
+  /api/boundaries/player-boundaries/{id}/:
+    get:
+      operationId: boundaries_player_boundaries_retrieve
+      description: |-
+        ViewSet for a player's own content boundaries (hard lines + advisories).
+
+        Self-authoring only: ``get_queryset`` scopes to the requesting player's
+        own rows, so another player's hard-line ``detail`` (or any row at all)
+        is structurally unreachable through this endpoint — 404, not a filtered
+        field.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Player Boundary.
+        required: true
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerBoundary'
+          description: ''
+    put:
+      operationId: boundaries_player_boundaries_update
+      description: |-
+        ViewSet for a player's own content boundaries (hard lines + advisories).
+
+        Self-authoring only: ``get_queryset`` scopes to the requesting player's
+        own rows, so another player's hard-line ``detail`` (or any row at all)
+        is structurally unreachable through this endpoint — 404, not a filtered
+        field.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Player Boundary.
+        required: true
+      tags:
+      - boundaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerBoundaryRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerBoundary'
+          description: ''
+    patch:
+      operationId: boundaries_player_boundaries_partial_update
+      description: |-
+        ViewSet for a player's own content boundaries (hard lines + advisories).
+
+        Self-authoring only: ``get_queryset`` scopes to the requesting player's
+        own rows, so another player's hard-line ``detail`` (or any row at all)
+        is structurally unreachable through this endpoint — 404, not a filtered
+        field.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Player Boundary.
+        required: true
+      tags:
+      - boundaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPlayerBoundaryRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerBoundary'
+          description: ''
+    delete:
+      operationId: boundaries_player_boundaries_destroy
+      description: |-
+        ViewSet for a player's own content boundaries (hard lines + advisories).
+
+        Self-authoring only: ``get_queryset`` scopes to the requesting player's
+        own rows, so another player's hard-line ``detail`` (or any row at all)
+        is structurally unreachable through this endpoint — 404, not a filtered
+        field.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Player Boundary.
+        required: true
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/boundaries/scenes/{scene_id}/lines-and-veils/:
+    get:
+      operationId: boundaries_scenes_lines_and_veils_retrieve
+      description: |-
+        GET /api/boundaries/scenes/{scene_id}/lines-and-veils/?tenure={id}
+
+        Read-only scene aggregate (#1771): the anonymized union of the scene's
+        participants' shared ADVISORY boundaries + shared treasured subjects,
+        filtered to what ``tenure`` (the requester's own tenure, validated
+        below) is allowed to see. Hard lines are structurally excluded by the
+        service layer, never by a filter here.
+      parameters:
+      - in: path
+        name: scene_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/boundaries/treasured-subjects/:
+    get:
+      operationId: boundaries_treasured_subjects_list
+      description: |-
+        ViewSet for a player's own treasured subjects (per-tenure attachments).
+
+        Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+        requesting player.
+      parameters:
+      - in: query
+        name: owner
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: subject_kind
+        schema:
+          type: string
+          enum:
+          - campaign_track
+          - custom
+          - faction
+          - item
+          - location
+          - npc_fate
+          - personal_jeopardy
+        description: |-
+          * `personal_jeopardy` - Personal jeopardy
+          * `npc_fate` - NPC fate
+          * `location` - Location
+          * `faction` - Faction relationship
+          * `item` - Item
+          * `campaign_track` - Campaign track
+          * `custom` - Custom (trust-gated)
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTreasuredSubjectList'
+          description: ''
+    post:
+      operationId: boundaries_treasured_subjects_create
+      description: |-
+        ViewSet for a player's own treasured subjects (per-tenure attachments).
+
+        Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+        requesting player.
+      tags:
+      - boundaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreasuredSubjectRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSubject'
+          description: ''
+  /api/boundaries/treasured-subjects/{id}/:
+    get:
+      operationId: boundaries_treasured_subjects_retrieve
+      description: |-
+        ViewSet for a player's own treasured subjects (per-tenure attachments).
+
+        Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+        requesting player.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Treasured Subject.
+        required: true
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSubject'
+          description: ''
+    put:
+      operationId: boundaries_treasured_subjects_update
+      description: |-
+        ViewSet for a player's own treasured subjects (per-tenure attachments).
+
+        Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+        requesting player.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Treasured Subject.
+        required: true
+      tags:
+      - boundaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreasuredSubjectRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSubject'
+          description: ''
+    patch:
+      operationId: boundaries_treasured_subjects_partial_update
+      description: |-
+        ViewSet for a player's own treasured subjects (per-tenure attachments).
+
+        Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+        requesting player.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Treasured Subject.
+        required: true
+      tags:
+      - boundaries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTreasuredSubjectRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSubject'
+          description: ''
+    delete:
+      operationId: boundaries_treasured_subjects_destroy
+      description: |-
+        ViewSet for a player's own treasured subjects (per-tenure attachments).
+
+        Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+        requesting player.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Treasured Subject.
+        required: true
+      tags:
+      - boundaries
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/buildings/decoration-templates/:
     get:
       operationId: buildings_decoration_templates_list
@@ -25522,6 +25996,132 @@ paths:
               schema:
                 $ref: '#/components/schemas/Transition'
           description: ''
+  /api/treasured-signoffs/:
+    get:
+      operationId: treasured_signoffs_list
+      description: |-
+        ViewSet for a player's own pre-scene ``TreasuredSignoff`` grants (#1771).
+
+        Self-authored consent: ``get_queryset`` scopes to the requesting
+        player's own sign-offs. ``create()`` grants (or reactivates) via
+        ``grant_treasured_signoff``; the ``withdraw`` action soft-withdraws via
+        ``withdraw_treasured_signoff``. Never hard-deletes (``destroy`` is not
+        exposed) — story-significant data, per repo convention.
+      parameters:
+      - in: query
+        name: beat
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: treasured_subject
+        schema:
+          type: integer
+      tags:
+      - treasured-signoffs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTreasuredSignoffList'
+          description: ''
+    post:
+      operationId: treasured_signoffs_create
+      description: Grant (or reactivate) a sign-off via ``grant_treasured_signoff``.
+      tags:
+      - treasured-signoffs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreasuredSignoffRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSignoff'
+          description: ''
+  /api/treasured-signoffs/{id}/:
+    get:
+      operationId: treasured_signoffs_retrieve
+      description: |-
+        ViewSet for a player's own pre-scene ``TreasuredSignoff`` grants (#1771).
+
+        Self-authored consent: ``get_queryset`` scopes to the requesting
+        player's own sign-offs. ``create()`` grants (or reactivates) via
+        ``grant_treasured_signoff``; the ``withdraw`` action soft-withdraws via
+        ``withdraw_treasured_signoff``. Never hard-deletes (``destroy`` is not
+        exposed) — story-significant data, per repo convention.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this treasured signoff.
+        required: true
+      tags:
+      - treasured-signoffs
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSignoff'
+          description: ''
+  /api/treasured-signoffs/{id}/withdraw/:
+    post:
+      operationId: treasured_signoffs_withdraw_create
+      description: POST /api/treasured-signoffs/{id}/withdraw/ — soft-withdraw (idempotent).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this treasured signoff.
+        required: true
+      tags:
+      - treasured-signoffs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreasuredSignoffRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuredSignoff'
+          description: ''
   /api/user/:
     get:
       operationId: user_retrieve
@@ -29661,6 +30261,36 @@ components:
           description: GM authoring context for this pool.
       required:
       - id
+      - name
+    ContentTheme:
+      type: object
+      description: Read-only serializer for the staff-authored content theme catalog.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        key:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        display_order:
+          type: integer
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+      required:
+      - description
+      - display_order
+      - id
+      - is_active
+      - key
       - name
     ContributionRow:
       type: object
@@ -37606,6 +38236,7 @@ components:
             * `loan` - Loan
             * `collection` - Collection
             * `improvement` - Improvement
+            * `court_grant` - Court Grant
         label:
           type: string
           description: UI display text for the menu option.
@@ -37673,6 +38304,7 @@ components:
       - loan
       - collection
       - improvement
+      - court_grant
       type: string
       description: |-
         * `permit` - Permit
@@ -37680,6 +38312,7 @@ components:
         * `loan` - Loan
         * `collection` - Collection
         * `improvement` - Improvement
+        * `court_grant` - Court Grant
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -37696,6 +38329,7 @@ components:
             * `loan` - Loan
             * `collection` - Collection
             * `improvement` - Improvement
+            * `court_grant` - Court Grant
         label:
           type: string
           minLength: 1
@@ -38981,6 +39615,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConsequenceOutcome'
+    PaginatedContentThemeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentTheme'
     PaginatedCovenantList:
       type: object
       required:
@@ -40581,6 +41238,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerAction'
+    PaginatedPlayerBoundaryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerBoundary'
     PaginatedPlayerFeedbackDetailList:
       type: object
       required:
@@ -41639,6 +42319,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TransitionRequiredOutcome'
+    PaginatedTreasuredSignoffList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreasuredSignoff'
+    PaginatedTreasuredSubjectList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreasuredSubject'
     PaginatedUserCategoryMuteList:
       type: object
       required:
@@ -42985,6 +43711,7 @@ components:
             * `loan` - Loan
             * `collection` - Collection
             * `improvement` - Improvement
+            * `court_grant` - Court Grant
         label:
           type: string
           minLength: 1
@@ -43107,6 +43834,54 @@ components:
         offer:
           type: integer
           description: The NPCServiceOffer row this details model decorates.
+    PatchedPlayerBoundaryRequest:
+      type: object
+      description: |-
+        Owner-authored ``PlayerBoundary`` CRUD shape.
+
+        ``owner`` is never client-writable — the viewset sets it from the
+        requesting player's own ``PlayerData`` on create, so a player can never
+        author a boundary for anyone else. Mounted behind an owner-scoped
+        queryset (see ``PlayerBoundaryViewSet.get_queryset``), so this serializer
+        is only ever handed rows the requester already owns; there is no
+        non-owner read path through this class.
+      properties:
+        kind:
+          $ref: '#/components/schemas/PlayerBoundaryKindEnum'
+        theme:
+          type: integer
+          nullable: true
+          description: Required for HARD_LINE (the machine-matched category); optional
+            for ADVISORY.
+        detail:
+          type: string
+          description: Free-text nuance. For HARD_LINE this is staff/audit-only and
+            never surfaced.
+        visibility_mode:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityModeEnum'
+          description: |-
+            Who can see this content.
+
+            * `public` - Public
+            * `private` - Private
+            * `characters` - Specific Characters
+            * `groups` - Consent Groups
+        visible_to_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures who can see this (if mode is 'characters').
+        visible_to_groups:
+          type: array
+          items:
+            type: integer
+          description: Consent groups who can see this (if mode is 'groups').
+        excluded_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures explicitly excluded even if otherwise visible.
     PatchedPlayerFeedbackDetailRequest:
       type: object
       description: Read serializer for staff review.
@@ -43784,6 +44559,71 @@ components:
           oneOf:
           - $ref: '#/components/schemas/RequiredStakeColumnEnum'
           - $ref: '#/components/schemas/BlankEnum'
+    PatchedTreasuredSubjectRequest:
+      type: object
+      description: |-
+        Owner-authored ``TreasuredSubject`` CRUD shape.
+
+        ``owner`` (a ``RosterTenure``) IS client-writable — a player may have
+        several tenures (characters) — but ``validate()`` rejects any tenure not
+        belonging to the requesting player, mirroring
+        ``world.consent.serializers``' ``owner_tenure`` validation pattern.
+      properties:
+        owner:
+          type: integer
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        subject_sheet:
+          type: integer
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
+          nullable: true
+        subject_item:
+          type: integer
+          nullable: true
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
+        subject_society:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
+        subject_organization:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
+        subject_label:
+          type: string
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK / LOCATION,
+            or flavor).
+          maxLength: 200
+        detail:
+          type: string
+        visibility_mode:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityModeEnum'
+          description: |-
+            Who can see this content.
+
+            * `public` - Public
+            * `private` - Private
+            * `characters` - Specific Characters
+            * `groups` - Consent Groups
+        visible_to_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures who can see this (if mode is 'characters').
+        visible_to_groups:
+          type: array
+          items:
+            type: integer
+          description: Consent groups who can see this (if mode is 'groups').
+        excluded_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures explicitly excluded even if otherwise visible.
     PatchedUpdateBulletinPostInputRequest:
       type: object
       description: |-
@@ -44677,6 +45517,127 @@ components:
       - soulfray_warning
       - strain
       - target_spec
+    PlayerBoundary:
+      type: object
+      description: |-
+        Owner-authored ``PlayerBoundary`` CRUD shape.
+
+        ``owner`` is never client-writable — the viewset sets it from the
+        requesting player's own ``PlayerData`` on create, so a player can never
+        author a boundary for anyone else. Mounted behind an owner-scoped
+        queryset (see ``PlayerBoundaryViewSet.get_queryset``), so this serializer
+        is only ever handed rows the requester already owns; there is no
+        non-owner read path through this class.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        owner:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/PlayerBoundaryKindEnum'
+        theme:
+          type: integer
+          nullable: true
+          description: Required for HARD_LINE (the machine-matched category); optional
+            for ADVISORY.
+        detail:
+          type: string
+          description: Free-text nuance. For HARD_LINE this is staff/audit-only and
+            never surfaced.
+        visibility_mode:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityModeEnum'
+          description: |-
+            Who can see this content.
+
+            * `public` - Public
+            * `private` - Private
+            * `characters` - Specific Characters
+            * `groups` - Consent Groups
+        visible_to_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures who can see this (if mode is 'characters').
+        visible_to_groups:
+          type: array
+          items:
+            type: integer
+          description: Consent groups who can see this (if mode is 'groups').
+        excluded_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures explicitly excluded even if otherwise visible.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - kind
+      - owner
+    PlayerBoundaryKindEnum:
+      enum:
+      - hard_line
+      - advisory
+      type: string
+      description: |-
+        * `hard_line` - Hard line
+        * `advisory` - Advisory
+    PlayerBoundaryRequest:
+      type: object
+      description: |-
+        Owner-authored ``PlayerBoundary`` CRUD shape.
+
+        ``owner`` is never client-writable — the viewset sets it from the
+        requesting player's own ``PlayerData`` on create, so a player can never
+        author a boundary for anyone else. Mounted behind an owner-scoped
+        queryset (see ``PlayerBoundaryViewSet.get_queryset``), so this serializer
+        is only ever handed rows the requester already owns; there is no
+        non-owner read path through this class.
+      properties:
+        kind:
+          $ref: '#/components/schemas/PlayerBoundaryKindEnum'
+        theme:
+          type: integer
+          nullable: true
+          description: Required for HARD_LINE (the machine-matched category); optional
+            for ADVISORY.
+        detail:
+          type: string
+          description: Free-text nuance. For HARD_LINE this is staff/audit-only and
+            never surfaced.
+        visibility_mode:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityModeEnum'
+          description: |-
+            Who can see this content.
+
+            * `public` - Public
+            * `private` - Private
+            * `characters` - Specific Characters
+            * `groups` - Consent Groups
+        visible_to_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures who can see this (if mode is 'characters').
+        visible_to_groups:
+          type: array
+          items:
+            type: integer
+          description: Consent groups who can see this (if mode is 'groups').
+        excluded_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures explicitly excluded even if otherwise visible.
+      required:
+      - kind
     PlayerFeedbackCreate:
       type: object
       description: |-
@@ -52043,6 +53004,210 @@ components:
       required:
       - beat
       - transition
+    TreasuredSignoff:
+      type: object
+      description: |-
+        A player's pre-scene sign-off to stake one of their treasured subjects.
+
+        ``player_data`` is never client-writable — the viewset sets it from the
+        requesting player, so a player can only sign off as themselves.
+        ``treasured_subject`` must belong to one of the requesting player's own
+        tenures (validated below) — a player cannot sign off on someone else's
+        treasured subject.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        beat:
+          type: integer
+        player_data:
+          type: integer
+          readOnly: true
+        treasured_subject:
+          type: integer
+        granted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        withdrawn_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        active:
+          type: boolean
+          readOnly: true
+      required:
+      - active
+      - beat
+      - granted_at
+      - id
+      - player_data
+      - treasured_subject
+      - withdrawn_at
+    TreasuredSignoffRequest:
+      type: object
+      description: |-
+        A player's pre-scene sign-off to stake one of their treasured subjects.
+
+        ``player_data`` is never client-writable — the viewset sets it from the
+        requesting player, so a player can only sign off as themselves.
+        ``treasured_subject`` must belong to one of the requesting player's own
+        tenures (validated below) — a player cannot sign off on someone else's
+        treasured subject.
+      properties:
+        beat:
+          type: integer
+        treasured_subject:
+          type: integer
+      required:
+      - beat
+      - treasured_subject
+    TreasuredSubject:
+      type: object
+      description: |-
+        Owner-authored ``TreasuredSubject`` CRUD shape.
+
+        ``owner`` (a ``RosterTenure``) IS client-writable — a player may have
+        several tenures (characters) — but ``validate()`` rejects any tenure not
+        belonging to the requesting player, mirroring
+        ``world.consent.serializers``' ``owner_tenure`` validation pattern.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        owner:
+          type: integer
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        subject_sheet:
+          type: integer
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
+          nullable: true
+        subject_item:
+          type: integer
+          nullable: true
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
+        subject_society:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
+        subject_organization:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
+        subject_label:
+          type: string
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK / LOCATION,
+            or flavor).
+          maxLength: 200
+        detail:
+          type: string
+        visibility_mode:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityModeEnum'
+          description: |-
+            Who can see this content.
+
+            * `public` - Public
+            * `private` - Private
+            * `characters` - Specific Characters
+            * `groups` - Consent Groups
+        visible_to_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures who can see this (if mode is 'characters').
+        visible_to_groups:
+          type: array
+          items:
+            type: integer
+          description: Consent groups who can see this (if mode is 'groups').
+        excluded_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures explicitly excluded even if otherwise visible.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - owner
+      - subject_kind
+    TreasuredSubjectRequest:
+      type: object
+      description: |-
+        Owner-authored ``TreasuredSubject`` CRUD shape.
+
+        ``owner`` (a ``RosterTenure``) IS client-writable — a player may have
+        several tenures (characters) — but ``validate()`` rejects any tenure not
+        belonging to the requesting player, mirroring
+        ``world.consent.serializers``' ``owner_tenure`` validation pattern.
+      properties:
+        owner:
+          type: integer
+        subject_kind:
+          $ref: '#/components/schemas/SubjectKindEnum'
+        subject_sheet:
+          type: integer
+          description: For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet
+            is deleted.
+          nullable: true
+        subject_item:
+          type: integer
+          nullable: true
+          description: For ITEM subjects. Nulls if the item instance is deleted/consumed.
+        subject_society:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (society-level). Nulls if the society
+            is deleted.
+        subject_organization:
+          type: integer
+          nullable: true
+          description: For FACTION subjects (organization-level). Nulls if the org
+            is deleted.
+        subject_label:
+          type: string
+          description: Freeform subject name (CUSTOM / CAMPAIGN_TRACK / LOCATION,
+            or flavor).
+          maxLength: 200
+        detail:
+          type: string
+        visibility_mode:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityModeEnum'
+          description: |-
+            Who can see this content.
+
+            * `public` - Public
+            * `private` - Private
+            * `characters` - Specific Characters
+            * `groups` - Consent Groups
+        visible_to_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures who can see this (if mode is 'characters').
+        visible_to_groups:
+          type: array
+          items:
+            type: integer
+          description: Consent groups who can see this (if mode is 'groups').
+        excluded_tenures:
+          type: array
+          items:
+            type: integer
+          description: Tenures explicitly excluded even if otherwise visible.
+      required:
+      - owner
+      - subject_kind
     TreatmentCandidate:
       type: object
       description: |-
@@ -52504,6 +53669,18 @@ components:
         * `shared` - Shared
         * `gossip` - Gossip
         * `public` - Public
+    VisibilityModeEnum:
+      enum:
+      - public
+      - private
+      - characters
+      - groups
+      type: string
+      description: |-
+        * `public` - Public
+        * `private` - Private
+        * `characters` - Specific Characters
+        * `groups` - Consent Groups
     VisibilitySettings:
       type: object
       description: |-

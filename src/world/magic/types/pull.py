@@ -79,6 +79,10 @@ class CastPullDeclaration:
     resonance: Resonance
     tier: int
     threads: tuple[Thread, ...]
+    beseech_bonus: int = 0
+    """Emergency thread-bond draw bonus (#1718): added to the single COVENANT_ROLE
+    thread's effective level for this pull's multiplier only — never persisted to
+    Thread.level. 0 (default) means no emergency draw was invoked."""
 
 
 @dataclass(frozen=True)

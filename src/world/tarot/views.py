@@ -27,7 +27,7 @@ class NamingRitualConfigView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        config = NamingRitualConfig.objects.first()
+        config = NamingRitualConfig.objects.cached_singleton()
         if config:
             return Response(NamingRitualConfigSerializer(config).data)
         return Response(

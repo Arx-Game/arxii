@@ -64,8 +64,10 @@ if TYPE_CHECKING:
 def get_soul_tether_config() -> SoulTetherConfig:
     """Get-or-create the Soul Tether tuning config singleton (pk=1)."""
     with transaction.atomic():
+        cfg = SoulTetherConfig.objects.cached_singleton()
+    if cfg is None:
         cfg, _ = SoulTetherConfig.objects.get_or_create(pk=1)
-        return cfg
+    return cfg
 
 
 # =============================================================================

@@ -2,7 +2,9 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
+from world.boundaries.factories import TreasuredSubjectFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import PlayerDataFactory
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     DEFAULT_RISK_CALIBRATIONS,
@@ -53,6 +55,7 @@ from world.stories.models import (
     TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
+    TreasuredSignoff,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -641,6 +644,16 @@ class StakeOutcomeFactory(factory_django.DjangoModelFactory):
     method = StakeOutcomeMethod.MACHINE
     resolved_by = None
     gm_notes = ""
+
+
+class TreasuredSignoffFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = TreasuredSignoff
+
+    beat = factory.SubFactory(BeatFactory)
+    player_data = factory.SubFactory(PlayerDataFactory)
+    treasured_subject = factory.SubFactory(TreasuredSubjectFactory)
+    withdrawn_at = None
 
 
 # Convenience functions for common test scenarios

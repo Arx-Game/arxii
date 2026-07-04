@@ -32,6 +32,7 @@ from world.magic.services.threads import (
     get_imbue_cost_multiplier,
     get_pull_cost,
     recompute_max_health_with_threads,
+    thread_level_multiplier,
 )
 from world.magic.types import (
     PullPreviewResult,
@@ -399,16 +400,27 @@ def resolve_pull_effects(
     tier: int,
     *,
     in_combat: bool,
+    beseech_bonus_thread_id: int | None = None,
+    beseech_bonus: int = 0,
 ) -> list[ResolvedPullEffect]:
     """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
 
     Implements Spec A §5.4 step 3. VITAL_BONUS rows in non-combat (ephemeral)
     context are flagged ``inactive`` with ``scaled_value=0`` per spec §7.4
     lines 1981–1989; the caller still pays full cost.
+
+    ``beseech_bonus_thread_id``/``beseech_bonus`` (#1718): when set, the named
+    thread's level is treated as ``(thread.level + beseech_bonus)`` for THIS
+    resolution's multiplier only — ``ResolvedPullEffect.source_thread_level``
+    still reports the thread's REAL level (the bonus is a resolution-time
+    override, never a persisted fact).
     """
     resolved: list[ResolvedPullEffect] = []
     for t in threads:
-        multiplier = max(1, t.level // 10)
+        effective_level = t.level
+        if beseech_bonus_thread_id is not None and t.pk == beseech_bonus_thread_id:
+            effective_level = t.level + beseech_bonus
+        multiplier = thread_level_multiplier(effective_level)
         for effect_tier in range(tier + 1):
             rows = get_pull_effects_for_thread(
                 t,
@@ -456,13 +468,19 @@ def resolve_pull_effects(
                         for item_facet in matching
                     ]
                     worn_aggregate = sum(items_aggregate, Decimal(0))
+                    # round(), not int() truncation: thread_level_multiplier (#1718)
+                    # now returns a fractional Decimal for levels 1-9, and rounding to
+                    # the nearest int is fairer to the player than always flooring.
                     base_scaled = (
-                        int((authored or 0) * multiplier * worn_aggregate)
+                        round((authored or 0) * multiplier * worn_aggregate)
                         if has_numeric_payload
                         else None
                     )
                 else:
-                    base_scaled = (authored or 0) * multiplier if has_numeric_payload else None
+                    # See the FACET-branch comment above re: round() vs int().
+                    base_scaled = (
+                        round((authored or 0) * multiplier) if has_numeric_payload else None
+                    )
 
                 # VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot
                 # lives on CombatPullResolvedEffect and is read on the combat damage
@@ -475,7 +493,11 @@ def resolve_pull_effects(
                     ResolvedPullEffect(
                         kind=row.effect_kind,
                         authored_value=authored,
-                        level_multiplier=multiplier,
+                        # ResolvedPullEffect.level_multiplier is int-typed (persisted
+                        # to CombatPullResolvedEffect.level_multiplier, a
+                        # PositiveSmallIntegerField); round() the transient Decimal
+                        # multiplier to an int for the snapshot (#1718).
+                        level_multiplier=round(multiplier),
                         scaled_value=0 if inactive else base_scaled,
                         vital_target=row.vital_target,
                         source_thread=t,
@@ -635,12 +657,14 @@ def _persist_combat_pull(  # noqa: PLR0913
 
 
 @transaction.atomic
-def spend_resonance_for_pull(  # noqa: C901, PLR0912
+def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
     threads: list[Thread],
     action_context: PullActionContext,
+    beseech_bonus_thread_id: int | None = None,
+    beseech_bonus: int = 0,
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
@@ -657,6 +681,9 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
         tier: 1..3, the pull intensity tier.
         threads: Non-empty list of owned threads matching ``resonance``.
         action_context: PullActionContext describing the action.
+        beseech_bonus_thread_id: PK of the thread whose effective level gets the
+            emergency thread-bond draw bonus for this resolution only (#1718).
+        beseech_bonus: The bonus amount to apply to that thread's effective level.
 
     Returns:
         ResonancePullResult with resonance_spent, anima_spent, resolved_effects.
@@ -716,7 +743,13 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
         raise ResonanceInsufficient(msg)
 
     in_combat = action_context.combat_encounter is not None
-    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = resolve_pull_effects(
+        threads,
+        tier,
+        in_combat=in_combat,
+        beseech_bonus_thread_id=beseech_bonus_thread_id,
+        beseech_bonus=beseech_bonus,
+    )
 
     applicable = [e for e in resolved if not e.inactive]
     if not applicable:
