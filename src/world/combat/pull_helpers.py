@@ -32,6 +32,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.magic.types.pull import CastPullDeclaration
@@ -167,6 +169,7 @@ def commit_combat_pull(
     participant: CombatParticipant,
     encounter: CombatEncounter,
     technique_id: int,
+    target: ObjectDB | None = None,
 ) -> None:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
 
@@ -195,6 +198,10 @@ def commit_combat_pull(
         participant: The ``CombatParticipant`` making the pull.
         encounter: The ``CombatEncounter`` the participant belongs to.
         technique_id: PK of the technique involved (used for anchor validation).
+        target: The live focused target this pull's action is directed at (#1831);
+            ``None`` when the action has no resolvable target. Threaded through to
+            ``PullActionContext.target``, which feeds ``court_regard_modulation``
+            for COVENANT_ROLE pulls via ``resolve_pull_effects``.
 
     Raises:
         ActionDispatchError(PULL_ALREADY_COMMITTED): When the
@@ -217,6 +224,7 @@ def commit_combat_pull(
         combat_encounter=encounter,
         participant=participant,
         involved_techniques=(technique_id,),
+        target=target,
     )
 
     beseech_bonus_thread_id = None

@@ -40,6 +40,16 @@ on active business for the Court's org, or while someone their master cares
 about is right there with them.
 _Avoid_: mission assignment (use "Court mission").
 
+**Court Regard Pull Modulation**:
+The Court covenant's stake in the magic app's Pull Target Modulation seam
+(#1831): a Court servant's COVENANT_ROLE thread pull can be empowered by scaling
+off the Court leader's signed `NpcRegard` (#1717) for the pull's live target,
+sign-directed by the pull effect's authored Regard Polarity (offensive/protective/
+neutral). Full entry: magic app glossary ("Regard Polarity", "Court Regard
+Modulation", "Pull Target Modulation").
+_Avoid_: regard bonus (ambiguous — regard itself is signed, but the polarity
+match is what gates empowerment, not the raw value).
+
 **Covenant Role**:
 The combat-power axis of membership: a role's archetype (Sword / Shield / Crown), speed_rank, role bonuses, and COVENANT_ROLE Thread-pull eligibility. Orthogonal to authority.
 _Avoid_: rank, position, office.

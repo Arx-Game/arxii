@@ -408,7 +408,7 @@ All SharedMemoryModel lookups.
 | `ThreadPullCost` | Per-tier pull pricing knobs | `tier` (unique: 1/2/3), `resonance_cost`, `anima_per_thread`, `label`. Cost *shape* lives in `spend_resonance_for_pull`; this table only holds the per-tier numbers |
 | `ThreadXPLockedLevel` | XP-locked-boundary price list | `level` (unique; 20/30/40 on the internal scale), `xp_cost` |
 | `SoulTetherConfig` | Singleton (pk=1) tuning surface for Soul Tether | sineating: `anima_cost_per_unit`, `fatigue_cost_per_unit`, `per_scene_cap_hard_max`, `per_scene_cap_level_mult`, `per_scene_cap_base`, `hollow_max_level_mult`. Rescue thresholds: `rescue_strain_stage3/4/5`. Rescue resonance costs: `rescue_resonance_stage3/4/5`. Rescue budget bases and multipliers (integer-encoded). Lazy-created via `get_soul_tether_config()`. |
-| `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows: for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
+| `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. `regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL, default NEUTRAL, #1831) — how Court-role (COVENANT_ROLE) pull modulation responds to the Court leader's signed regard for the live target; ignored for every other `target_kind`. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows: for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
 | `ImbuingProseTemplate` | Fallback narrative prose for Imbuing | `resonance` FK (nullable), `target_kind` (nullable), `prose`. Row with both NULL = universal fallback |
 | `Ritual` | Authored ritual procedure | `name`, `description`, `hedge_accessible`, `glimpse_eligible`, `narrative_prose`, `execution_kind` (SERVICE/FLOW), `service_function_path` (SERVICE), `flow` FK (FLOW), optional `site_property` FK. CheckConstraint: exactly one dispatch payload |
 | `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK, `item_template` FK, `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
@@ -481,6 +481,56 @@ A CombatPull is considered *active* while `round_number == encounter.round_numbe
 (canonical liveness check). `expire_pulls_for_round` (combat services) deletes
 stale rows on round advance and invalidates the per-character
 `CharacterCombatPullHandler` cache.
+
+### Target-Aware Pulls — Court Regard Modulation (#1831 — ADR-0086) [BUILT & WIRED]
+
+Thread pulls are **target-aware**: the live target the pull's action is directed at
+flows into `resolve_pull_effects(threads, tier, *, in_combat, target=...)`
+(`world/magic/services/resonance.py`) as an `ObjectDB | None`. `None` for
+ephemeral/untargeted pulls (existing behavior, byte-identical). The target is
+threaded through `world.magic.types.pull.PullActionContext.target` — populated by
+`commit_combat_pull` (`world/combat/pull_helpers.py`, combat cast/clash, reading
+`CombatParticipant`'s focused target) and by `use_technique`'s `pull_target` kwarg
+(`world/magic/services/techniques.py`, non-combat cast; defaults to the cast's
+first resolved target when not supplied explicitly).
+
+**Modulation seam** — `apply_target_modulation(thread, target, effect_row,
+base_scaled)` (`world/magic/services/pull_modulation.py`) is the single dispatch
+point on `thread.target_kind` for numeric-payload pull effects, called from inside
+`resolve_pull_effects` for every row with a numeric payload. It is a no-op (returns
+`base_scaled` unchanged) when there is no numeric payload, no target, or the
+thread's `target_kind` has no registered rule — so every existing (untargeted or
+non-COVENANT_ROLE) pull stays byte-identical. This is the **documented extension
+point** for future per-`target_kind` rules — e.g. a deferred RELATIONSHIP_TRACK
+rule that would scale a relationship-thread pull by the target's relationship to
+the threaded persona (not built; noted in the module docstring).
+
+**Court rule (only rule wired today)** — `court_regard_modulation(thread, target,
+effect_row, base_scaled)` (`world/magic/services/pull_modulation_court.py`) fires
+for `TargetKind.COVENANT_ROLE` threads. It resolves the Court leader's primary
+persona for the servant's engaged Court membership anchored on the thread's
+`target_covenant_role`, reads the leader's signed `NpcRegard` for the target
+persona (`world.npc_services.regard.get_regard`, #1717), and empowers the pull
+only when `ThreadPullEffect.regard_polarity` matches the sign of that regard:
+`OFFENSIVE` ⇒ empowered by negative regard (a disfavored target), `PROTECTIVE` ⇒
+empowered by positive regard (a favored target), `NEUTRAL` ⇒ empowered by either
+nonzero sign. When empowered: `base_scaled + round(base_scaled × (abs(regard) /
+REGARD_MAX) × COURT_REGARD_PULL_K)` — `COURT_REGARD_PULL_K` (`world/magic/constants.py`,
+currently `1.0`) is a flagged tuning placeholder for playtest. No-op (returns
+`base_scaled` unchanged) when no Court leader is resolvable, the target has no
+`CharacterSheet`, regard is 0, or the polarity doesn't match.
+
+**Picker signal** — `compute_thread_applicability` (`world/magic/services/pull_applicability.py`,
+the `POST /api/magic/applicable-pulls/` combat-UI picker; this module's own
+`PullActionContext` is a distinct, caller-supplied dataclass from
+`world.magic.types.pull.PullActionContext` above — same name, different shape and
+purpose) reports `InapplicabilityReason.COURT_LEADER_NO_STAKE` for a COVENANT_ROLE
+thread when a `target_persona_id` is supplied in context and no candidate
+`ThreadPullEffect` on the thread would ever be empowered against that persona
+(leader indifferent, or every candidate effect's `regard_polarity` mismatches the
+regard's sign) — so the player isn't offered a pull that won't actually do
+anything extra. No-op (thread stays applicable) when no Court leader is
+resolvable at all — the base pull is simply unmodulated in that case.
 
 ### Mage Scars (renamed from Magical Scars — §7.2)
 

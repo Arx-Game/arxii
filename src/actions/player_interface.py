@@ -743,11 +743,14 @@ def _dispatch_clash_contribution(
     sheet = ctx.participant.character_sheet
     cast_pull = resolve_pull_from_kwargs(sheet, kwargs)
     if cast_pull is not None:
+        # The clash's target is always its NPC opponent (#1831) — Clash is a
+        # PC(s)-vs-one-NPC primitive; there is no ally leg to consider here.
         commit_combat_pull(
             cast_pull=cast_pull,
             participant=ctx.participant,
             encounter=ctx.participant.encounter,
             technique_id=technique_id,
+            target=clash.npc_opponent.objectdb,
         )
 
     declare_clash_contribution(

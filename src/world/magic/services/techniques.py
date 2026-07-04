@@ -826,12 +826,18 @@ def _charge_cast_pull(
     technique: Technique,
     cast_pull: CastPullDeclaration,
     effective_power: int,
+    target: ObjectDB | None = None,
 ) -> tuple[int, int, list[ResolvedPullEffect]]:
     """Charge a non-combat cast pull and return resolved effects.
 
     Spends the resonance, iterates resolved effects, accumulates FLAT_BONUS into
     *pull_flat_bonus* (forwarded to ``resolve_fn`` as ``extra_modifiers``), and
     adds INTENSITY_BUMP to *effective_power* in-place.
+
+    ``target`` is the live target this cast is directed at (#1831); threaded onto
+    ``PullActionContext.target`` so ``resolve_pull_effects`` can apply
+    ``court_regard_modulation`` for COVENANT_ROLE pulls. ``None`` for untargeted
+    casts.
 
     When ``cast_pull.beseech_bonus > 0``, resolves the shared emergency
     thread-bond draw (``world.combat.pull_helpers._resolve_emergency_draw``,
@@ -867,6 +873,7 @@ def _charge_cast_pull(
         PullActionContext(
             combat_encounter=None,
             involved_techniques=(technique.pk,),
+            target=target,
         ),
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=applied_bonus,
@@ -894,6 +901,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     strain_commitment: int = 0,
     applicable_threads: Sequence[ApplicableThread] | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    pull_target: ObjectDB | None = None,
     power_intensity_bonus: int = 0,
     lethal: bool = True,
     control_penalty: int = 0,
@@ -923,6 +931,13 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     flows into both ``calculate_effective_anima_cost`` (raises effective cost) and
     ``_resolve_control_mishap`` (increases mishap likelihood). Defaults to ``0`` so
     all existing callers are unaffected.
+
+    ``pull_target`` is the live cast target forwarded to ``_charge_cast_pull`` (which
+    threads it onto ``PullActionContext.target`` for ``court_regard_modulation``,
+    #1831). It is decoupled from ``targets`` on purpose: ``targets`` also drives
+    TECHNIQUE_AFFECTED reactive events below, and non-combat casts must not start
+    firing those just to activate pull modulation. When omitted, falls back to
+    ``targets[0]`` (Task 5 behavior) so existing callers/tests are unaffected.
 
     Emits reactive events:
     - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
@@ -1029,6 +1044,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
             technique=technique,
             cast_pull=cast_pull,
             effective_power=effective_power,
+            target=pull_target or (targets[0] if targets else None),
         )
 
     # Step 4: Deduct anima

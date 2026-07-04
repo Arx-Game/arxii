@@ -195,7 +195,7 @@ class CastTechniqueAction(Action):
         sheet = ctx.participant.character_sheet
         cast_pull = resolve_pull_from_kwargs(sheet, kwargs)
         if cast_pull is not None:
-            self._commit_combat_pull(cast_pull, ctx, technique_id)
+            self._commit_combat_pull(cast_pull, ctx, technique_id, kwargs)
 
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
@@ -287,12 +287,17 @@ class CastTechniqueAction(Action):
         cast_pull: CastPullDeclaration,
         ctx: Any,
         technique_id: int,
+        kwargs: dict[str, Any],
     ) -> None:
         """Commit a thread pull as a ``CombatPull`` row at declaration time.
 
         Delegates to ``world.combat.pull_helpers.commit_combat_pull`` so the
         commit logic is shared with the clash-contribution path and is not
         duplicated here.
+
+        Resolves the live focused target (opponent, else ally) from *kwargs* via
+        ``resolve_focused_target_objectdb`` (#1831) and passes it through so
+        ``court_regard_modulation`` can fire for COVENANT_ROLE pulls.
 
         Raises:
             ActionDispatchError(PULL_ALREADY_COMMITTED): When the unique constraint fires
@@ -302,12 +307,15 @@ class CastTechniqueAction(Action):
                 insufficient balance).
         """
         from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
+        from world.combat.round_context import resolve_focused_target_objectdb  # noqa: PLC0415
 
         participant = ctx.participant
         encounter = participant.encounter
+        target = resolve_focused_target_objectdb(encounter, kwargs)
         commit_combat_pull(
             cast_pull=cast_pull,
             participant=participant,
             encounter=encounter,
             technique_id=technique_id,
+            target=target,
         )

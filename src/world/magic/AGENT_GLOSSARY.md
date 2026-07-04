@@ -137,4 +137,35 @@ The status of being untargetable in combat, conferred by a `ConditionInstance` w
 `ConditionCategory.grants_intangibility` is True. Checked by `is_untargetable(objectdb)` in
 `world/conditions/services.py` at NPC targeting and PC AoE filter sites. Ghostform and
 Earthmeld are the seeded intangibility conditions (#1584).
+
+**Target-Aware Pull**:
+A thread pull whose numeric payload can be modulated by the live target the pull's
+action is directed at, via `apply_target_modulation` (#1831). Distinct from an
+ephemeral/untargeted pull, which always resolves unmodulated.
+_Avoid_: targeted pull (ambiguous with targeting a technique, not a pull).
+
+**Pull Target Modulation**:
+The per-`target_kind` extension seam (`apply_target_modulation`,
+`world/magic/services/pull_modulation.py`) that `resolve_pull_effects` calls for every
+numeric-payload pull effect row, dispatching on `thread.target_kind`. A no-op unless a
+rule is registered for that kind — today only COVENANT_ROLE (Court Regard Modulation,
+below). The documented extension point for a future RELATIONSHIP_TRACK rule (deferred,
+not built). (#1831.)
+
+**Regard Polarity**:
+`ThreadPullEffect.regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL) —
+authored on a pull-effect row to say how Court-role (COVENANT_ROLE) pull modulation
+responds to the Court leader's signed `NpcRegard` for the live target: OFFENSIVE is
+empowered by negative regard (a disfavored target), PROTECTIVE by positive regard (a
+favored target), NEUTRAL by either nonzero sign. Ignored for every other `target_kind`.
+(#1831.)
+
+**Court Regard Modulation**:
+The only `Pull Target Modulation` rule wired today (`court_regard_modulation`,
+`world/magic/services/pull_modulation_court.py`): empowers a COVENANT_ROLE thread pull
+by the covenant leader's signed `NpcRegard` (#1717) for the live target, sign-directed
+by the effect row's `Regard Polarity`. The combat-UI picker
+(`compute_thread_applicability`) surfaces `InapplicabilityReason.COURT_LEADER_NO_STAKE`
+when no candidate effect on the thread would ever be empowered against the given target.
+(#1831.)
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

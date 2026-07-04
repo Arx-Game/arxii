@@ -204,6 +204,16 @@ cap bounds the servant's Court-role thread pull level. The grant is the gate: no
 effective cap of 0 → cannot pull. _Avoid_: mentor bond, patron, indenture.
 Full entry: [covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
 
+**Court Regard Pull Modulation** (#1831):
+A Court servant's COVENANT_ROLE thread pull can be empowered by the Court leader's signed
+`NpcRegard` (#1717) for the pull's live target, sign-directed by the pull effect's authored
+`RegardPolarity` (offensive/protective/neutral). Wired through the magic app's per-`target_kind`
+Pull Target Modulation seam (`apply_target_modulation`) — the only rule registered today.
+_Avoid_: regard bonus (the polarity match gates empowerment, not the raw regard value).
+Full entry: [magic AGENT_GLOSSARY](src/world/magic/AGENT_GLOSSARY.md) ("Regard Polarity", "Court
+Regard Modulation", "Pull Target Modulation"); covenants-side framing in
+[covenants AGENT_GLOSSARY](src/world/covenants/AGENT_GLOSSARY.md).
+
 ## Combat-magic surface (#1584)
 
 **Allegiance**:

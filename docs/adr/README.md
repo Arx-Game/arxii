@@ -134,6 +134,7 @@ treat those names as hints to confirm, not gospel.
 - [0056 — Technique-threads are an optional "signature" axis, distinct from the gift-thread](0056-technique-threads-are-an-optional-signature-axis.md)
 - [0071 — Species-gift drawbacks are conditions the gift's own thread mitigates](0071-species-gift-drawbacks-mitigated-by-gift-thread.md)
 - [0072 — Signature motif bonus is an additive flourish, not a discovered TechniqueVariant](0072-signature-motif-bonus-is-additive-not-a-variant.md)
+- [0086 — Thread pulls are target-aware via a per-target_kind modulation seam; regard attaches to the pull, not the Prerequisite system](0086-target-aware-pulls-court-regard-modulation-seam.md)
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)
