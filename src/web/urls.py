@@ -41,6 +41,7 @@ urlpatterns = [
     path("api/consent/", include("world.consent.urls")),
     path("api/gm/", include("world.gm.urls")),
     path("api/narrative/", include("world.narrative.urls")),
+    path("api/ships/", include("world.ships.urls")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),
