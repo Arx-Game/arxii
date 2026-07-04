@@ -152,6 +152,35 @@ conditions/challenges.
 
 **Constraint:** unique `(unit, capability)`.
 
+### `BattleVehicle`
+
+A vessel or great mount — a naval ship, airship, dragon, or kraken — modeled as a
+single in-fiction object by pairing one `BattleUnit` (the thing that fights: takes
+STRIKE damage, can be destroyed) with one `BattlePlace` (the thing units and
+participants embed on) (#1714). See ADR-0085 for the `BattlePlace` `(x, y)`/
+`footprint_radius` coordinates this shares the battle-map plane with.
+
+| Field | Type | Notes |
+|---|---|---|
+| `unit` | OneToOne → `BattleUnit` (`related_name="vehicle"`) | The vehicle's own fighting stats (strength/morale/status) |
+| `place` | OneToOne → `BattlePlace` (`related_name="vehicle"`) | What other units/participants embed onto |
+| `vehicle_kind` | CharField | `VehicleKind` — SHIP / AIRSHIP / DRAGON / KRAKEN; default SHIP |
+| `is_structural` | BooleanField | Default True. True for constructed vessels (ship/airship) — destruction goes through a hull `Fortification` breach. False for living mounts (dragon/kraken) — destruction reuses `BattleUnitStatus.DESTROYED`. Authored, not derived from `vehicle_kind`, so a future design can still model a "living hull" if needed. |
+
+**`unit.place` stays `None`:** the vehicle's own `BattleUnit` is not "at" a front —
+it IS the front other units/participants embed onto via their own `place` FK
+pointed at `vehicle.place`. Nothing ever sets `unit.place` to the vehicle's own
+`place`; doing so would make the vehicle try to embed onto itself.
+
+**Hull integrity reuses `Fortification`, not new destruction logic:** for a
+structural vehicle (`is_structural=True`), `create_battle_vehicle` creates a hull
+`Fortification` (`FortificationKind.HULL`, see [`Fortification`](#fortification)
+above) at `vehicle.place` rather than inventing a parallel integrity/breach
+mechanism — BREACH/FORTIFY against the hull work exactly as they do against a
+wall or gate (see [Sieges (#1713)](#sieges-1713) below). Non-structural vehicles
+(living mounts) have no hull `Fortification` at all; their destruction is just the
+existing `BattleUnit`-strength path (`BattleUnitStatus.DESTROYED`).
+
 ### `BattleRound`
 
 Subclasses `world.scenes.round_models.AbstractRound` (which provides `round_number`,
@@ -607,7 +636,8 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
 | `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
 | `BattlePosture` | TextChoices | BALANCED / AGGRESSIVE / DEFENSIVE (#1711) |
-| `FortificationKind` | TextChoices | WALL / GATE / BATTLEMENT (#1713) |
+| `FortificationKind` | TextChoices | WALL / GATE / BATTLEMENT (#1713) / HULL (#1714) |
+| `VehicleKind` | TextChoices | SHIP / AIRSHIP / DRAGON / KRAKEN (#1714) |
 
 **Tuning constants:**
 - `DEFAULT_VICTORY_THRESHOLD = 100`
@@ -746,7 +776,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Naval / aerial variants | #1714 (deferred) |
+| Naval / aerial variants | partially built (`BattleVehicle`, see below); reposition/embark actions, vehicle-commander gating, hull-breach ejection, and drowning/falling hazards still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
@@ -756,7 +786,11 @@ Campaign propagation (battle outcome → Story + win-gated Legend) is no longer 
 [Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below. Command hierarchy and the
 Champion are no longer deferred — see
 [Command Hierarchy & the Champion (#1710)](#command-hierarchy--the-champion-1710) below.
-Siege variants are no longer deferred — see [Sieges (#1713)](#sieges-1713) below.
+Siege variants are no longer deferred — see [Sieges (#1713)](#sieges-1713) below. The
+`BattleVehicle` model and `create_battle_vehicle` service (pairing a `BattleUnit` + `BattlePlace`,
+plus a hull `Fortification` for structural vehicles) are built — see
+[`BattleVehicle`](#battlevehicle) above and the `create_battle_vehicle` row in
+[Services](#services-srcworldbattlesservicespy) below; the rest of #1714 remains deferred.
 
 ## Command Hierarchy & the Champion (#1710)
 
