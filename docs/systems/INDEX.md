@@ -1195,7 +1195,13 @@ and paying authored win-reward lines through an anti-farming activation gate
   `missions.MissionRiskAcknowledgement` + `MISSION_RISK_ACK_TIER` gate with the
   two-phase `acknowledge_risk` opt-in inside `npc_resolve`
   (`MissionRiskUnacknowledgedError`); `InteractionOfferSerializer.risk_tier`
-  pre-accept surfacing.
+  pre-accept surfacing. NPC mission offers now carry the opt-in themselves
+  (#1780): `MissionOfferDetails.source_beat` (staff-authored, exposed on
+  `MissionOfferDetailsSerializer`) copies onto `MissionInstance.source_beat` at
+  `issue_mission`, so the risk gate also fires — and surfaces the linked
+  beat's `player_summary` stake lines — whenever that beat is staked
+  (`risk != NONE`), independent of the template's own `risk_tier`; ADR-0085
+  puts the FK on `MissionOfferDetails`, not the unified `NPCServiceOffer`.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.

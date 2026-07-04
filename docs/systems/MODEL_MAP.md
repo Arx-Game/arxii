@@ -3653,6 +3653,7 @@
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - role -> npc_services.NPCRole [FK]
   - mission_template -> missions.MissionTemplate [FK]
+  - source_beat -> stories.Beat [FK] (nullable)
 
 ### PermitOfferDetails
 **Foreign Keys:**

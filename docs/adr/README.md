@@ -147,3 +147,4 @@ treat those names as hints to confirm, not gospel.
 - [0080 — Heat jurisdiction is judged at the commit location, enforcement scoped to the dominant society](0080-heat-jurisdiction-judged-at-the-commit-location.md)
 - [0081 — Org income requires active collection; idle approaches stasis, never decay](0081-income-requires-collection.md)
 - [0082 — Scandal is a derived per-society judgment; reach forks at act birth](0082-scandal-reach-derived-at-act-birth.md)
+- [0085 — The offer→staked-beat link lives on MissionOfferDetails, not NPCServiceOffer](0085-offer-to-beat-link-on-missionofferdetails.md)

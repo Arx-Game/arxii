@@ -36082,10 +36082,11 @@ components:
         source_beat:
           type: integer
           nullable: true
-          description: 'Optional: the stories Beat that launched this run. SET_NULL
-            on Beat delete. Engine that flips the Beat at terminal is deferred to
-            a future stories-missions seam design pass (5b.3 stub-records the trigger
-            only).'
+          description: 'Optional: the stories Beat this run resolves. When set, the
+            stakes contract locks at acceptance (activate_stakes_for_instance) and
+            the Beat completes at terminal (on_mission_complete_for_beat). SET_NULL
+            on Beat delete. For offer-issued runs, set from MissionOfferDetails.source_beat
+            at issue_mission (#1780).'
       required:
       - id
       - started_at
@@ -36303,6 +36304,13 @@ components:
             catalog uniqueness. Kept in sync via save().
         mission_template:
           type: integer
+        source_beat:
+          type: integer
+          nullable: true
+          description: 'Optional: the staked Beat this offer resolves. When set, accepting
+            the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4
+            stakes gate + contract activation. Independent of Beat.required_mission
+            (ADR-0010). SET_NULL on Beat delete.'
         weight:
           type: integer
           maximum: 2147483647
@@ -36347,6 +36355,13 @@ components:
           type: integer
         mission_template:
           type: integer
+        source_beat:
+          type: integer
+          nullable: true
+          description: 'Optional: the staked Beat this offer resolves. When set, accepting
+            the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4
+            stakes gate + contract activation. Independent of Beat.required_mission
+            (ADR-0010). SET_NULL on Beat delete.'
         weight:
           type: integer
           maximum: 2147483647
@@ -42470,6 +42485,13 @@ components:
           type: integer
         mission_template:
           type: integer
+        source_beat:
+          type: integer
+          nullable: true
+          description: 'Optional: the staked Beat this offer resolves. When set, accepting
+            the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4
+            stakes gate + contract activation. Independent of Beat.required_mission
+            (ADR-0010). SET_NULL on Beat delete.'
         weight:
           type: integer
           maximum: 2147483647

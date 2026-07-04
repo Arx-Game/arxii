@@ -32,11 +32,22 @@ def _truthy(value: Any) -> bool:
 
 
 def _risk_prompt_message(exc: MissionRiskUnacknowledgedError) -> str:
-    """The informed-consent prompt for a risky mission offer (#1770 PR4)."""
-    lines = [f"This job is dangerous (risk tier {exc.risk_tier}). At stake:"]
-    lines.extend(f"  - {summary}" for summary in exc.stake_summaries)
-    if not exc.stake_summaries:
-        lines.append("  - The usual hazards of work at this tier.")
+    """The informed-consent prompt for a risky mission offer (#1770 PR4).
+
+    When a staked linked beat drives the gate (#1780), the concrete stakes
+    carry the danger, so we don't foreground the template ``risk_tier`` number
+    — it can understate a low-tier template that resolves a high-risk beat.
+    The numeric tier is shown only when there are no named stakes to speak for
+    themselves.
+    """
+    if exc.stake_summaries:
+        lines = ["This job is dangerous. At stake:"]
+        lines.extend(f"  - {summary}" for summary in exc.stake_summaries)
+    else:
+        lines = [
+            f"This job is dangerous (risk tier {exc.risk_tier}). At stake:",
+            "  - The usual hazards of work at this tier.",
+        ]
     lines.append("Accept again with acknowledge_risk=yes to take the job anyway.")
     return "\n".join(lines)
 

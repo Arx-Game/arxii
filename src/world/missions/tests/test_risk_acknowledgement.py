@@ -226,3 +226,88 @@ class ActivateStakesForInstanceTests(TestCase):
         instance_arg, sheets_arg = mocked.call_args.args
         self.assertEqual(instance_arg.pk, result.object_pk)
         self.assertEqual(list(sheets_arg), [persona.character_sheet])
+
+
+class IssueMissionBeatLinkTests(TestCase):
+    def test_unstaked_linked_beat_sets_source_beat_no_ack(self):
+        _character, persona = _make_pc()
+        offer, _template = _make_mission_offer(risk_tier=MISSION_RISK_ACK_TIER - 1)
+        beat = BeatFactory(risk=RenownRisk.NONE)
+        details = offer.mission_offer_details
+        details.source_beat = beat
+        details.save(update_fields=["source_beat"])
+
+        result = issue_mission(offer, persona)  # no ack: unstaked + low tier
+
+        instance = MissionInstance.objects.get(pk=result.object_pk)
+        self.assertEqual(instance.source_beat_id, beat.pk)
+
+
+class IssueMissionStakedBeatGateTests(TestCase):
+    def _staked_offer(self):
+        # low template tier so ONLY the beat's stakes can trip the gate
+        offer, _template = _make_mission_offer(risk_tier=MISSION_RISK_ACK_TIER - 1)
+        beat = BeatFactory(risk=RenownRisk.HIGH, target_level=1)
+        StakeFactory(
+            beat=beat,
+            severity=StakeSeverity.GRAVE,
+            player_summary="Your name dies with this job.",
+        )
+        details = offer.mission_offer_details
+        details.source_beat = beat
+        details.save(update_fields=["source_beat"])
+        return offer, beat
+
+    def test_staked_beat_gates_and_carries_summaries(self):
+        _character, persona = _make_pc()
+        offer, _beat = self._staked_offer()
+
+        with self.assertRaises(MissionRiskUnacknowledgedError) as ctx:
+            issue_mission(offer, persona)
+
+        self.assertIn("Your name dies with this job.", ctx.exception.stake_summaries)
+        self.assertFalse(MissionInstance.objects.exists())
+
+    def test_acknowledged_staked_beat_issues_and_activates_contract(self):
+        _character, persona = _make_pc()
+        offer, beat = self._staked_offer()
+
+        acknowledge_mission_risk(offer, persona)
+        result = issue_mission(offer, persona)
+
+        instance = MissionInstance.objects.get(pk=result.object_pk)
+        self.assertEqual(instance.source_beat_id, beat.pk)
+        from world.stories.services.stakes import get_open_activation
+
+        self.assertIsNotNone(get_open_activation(beat))
+
+
+class RiskPromptMessageTests(TestCase):
+    """The player-facing consent prompt (#1780): named stakes speak for
+    themselves; the numeric template tier is not foregrounded when it would
+    understate a staked beat."""
+
+    def test_prompt_leads_with_stakes_not_low_template_tier(self):
+        from actions.definitions.npc_services import _risk_prompt_message
+
+        exc = MissionRiskUnacknowledgedError(
+            "gated by staked beat",
+            risk_tier=MISSION_RISK_ACK_TIER - 1,
+            stake_summaries=("Your name dies with this job.",),
+        )
+        msg = _risk_prompt_message(exc)
+
+        self.assertIn("Your name dies with this job.", msg)
+        self.assertNotIn(f"risk tier {MISSION_RISK_ACK_TIER - 1}", msg)
+
+    def test_prompt_keeps_tier_number_when_no_named_stakes(self):
+        from actions.definitions.npc_services import _risk_prompt_message
+
+        exc = MissionRiskUnacknowledgedError(
+            "gated by template tier",
+            risk_tier=MISSION_RISK_ACK_TIER,
+            stake_summaries=(),
+        )
+        msg = _risk_prompt_message(exc)
+
+        self.assertIn(f"risk tier {MISSION_RISK_ACK_TIER}", msg)
