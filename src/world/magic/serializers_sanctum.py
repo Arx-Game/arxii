@@ -112,6 +112,47 @@ class SanctifyActionSerializer(serializers.Serializer):
     room_profile_id = serializers.IntegerField()
     resonance_type_id = serializers.IntegerField()
     owner_mode = serializers.ChoiceField(choices=["PERSONAL", "COVENANT"])
+    components = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+
+    def validate_components(self, value: list[int]) -> list:
+        """Resolve component PKs to ItemInstances, validated against the requesting sheet.
+
+        Mirrors ``RitualPerformRequestSerializer.validate_components``
+        (``world/magic/serializers.py``) — explicit item-ID selection for the
+        web surface, as opposed to the telnet surface's auto-gather-from-
+        inventory (``commands.sanctum.CmdSanctum._gather_components``).
+        Ownership is checked against ``ItemInstance.holder_character_sheet``
+        (the body owns the item — #684), not the requesting account, since a
+        player may act as any of their own characters' sheets.
+        """
+        from world.items.models import ItemInstance  # noqa: PLC0415
+
+        if not value:
+            return []
+        instances = list(ItemInstance.objects.filter(pk__in=value))
+        found_pks = {inst.pk for inst in instances}
+        missing = set(value) - found_pks
+        if missing:
+            msg = f"ItemInstance(s) not found: {sorted(missing)}."
+            raise serializers.ValidationError(msg)
+
+        request = self.context.get("request")
+        sheet = None
+        if request is not None and request.user.is_authenticated:
+            from world.roster.models import RosterEntry  # noqa: PLC0415
+
+            entry = RosterEntry.objects.for_account(request.user).first()
+            sheet = entry.character_sheet if entry else None
+        if sheet is not None:
+            not_owned = [
+                inst.pk for inst in instances if inst.holder_character_sheet_id != sheet.pk
+            ]
+            if not_owned:
+                msg = f"ItemInstance(s) not in your inventory: {sorted(not_owned)}."
+                raise serializers.ValidationError(msg)
+        return instances
 
 
 class HomecomingActionSerializer(serializers.Serializer):

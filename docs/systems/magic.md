@@ -417,7 +417,31 @@ All SharedMemoryModel lookups.
 | `ThreadPullEffect` | Authored pull-effect template | `target_kind`, `resonance` FK, `tier` (0..3), `min_thread_level`, `effect_kind`, + mutually-exclusive payload columns: `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount` (+ `vital_target`), `capability_grant` FK to `CapabilityType`, `narrative_snippet`, `target_form` FK to `forms.CharacterForm` (nullable; set only for `ASSUME_ALTERNATE_SELF`, which names the form whose profiles to assume on cast), `resistance_amount` (+ `resistance_damage_type` FK to `conditions.DamageType`; null = all types — `RESISTANCE` effect kind, #1580). `target_gift` (nullable FK to `magic.Gift`) — when set, this pull-effect applies only to GIFT threads anchored to that specific gift (species-gift-specific tier-0 passives); null rows serve as the generic fallback for that kind. `regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL, default NEUTRAL, #1831) — how Court-role (COVENANT_ROLE) pull modulation responds to the Court leader's signed regard for the live target; ignored for every other `target_kind`. Tier 0 = passive always-on; tiers 1–3 = paid pulls. Unique per (target_kind, resonance, tier, min_thread_level) — with two partial `UniqueConstraint`s for GIFT kind (one with `target_gift` set, one without). CheckConstraints enforce payload/effect_kind alignment — `ASSUME_ALTERNATE_SELF` requires `target_form` set and all numeric/capability/snippet payload empty; `RESISTANCE` requires `resistance_amount` set and all other payload null; all other kinds require `target_form__isnull=True`. `get_pull_effects_for_thread(thread, **filters)` (`world/magic/services/pull_effects.py`) resolves the correct rows: for GIFT kind, tries `target_gift`-specific rows first, falls back to `target_gift IS NULL` |
 | `ImbuingProseTemplate` | Fallback narrative prose for Imbuing | `resonance` FK (nullable), `target_kind` (nullable), `prose`. Row with both NULL = universal fallback |
 | `Ritual` | Authored ritual procedure | `name`, `description`, `hedge_accessible`, `glimpse_eligible`, `narrative_prose`, `execution_kind` (SERVICE/FLOW), `service_function_path` (SERVICE), `flow` FK (FLOW), optional `site_property` FK. CheckConstraint: exactly one dispatch payload |
-| `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK, `item_template` FK, `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
+| `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK, either `item_template` FK (template-mode) or `min_touchstone_tier` FK to `ResonanceTier` (touchstone-mode — exactly one of the two set, enforced by `CheckConstraint`), `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
+| `ResonanceTier` | Ordered potency tier for resonance-tied items/touchstones (independent of `items.QualityTier` — potency and crafting quality are orthogonal axes) | `name` (unique), `tier_level` (unique, ordering/threshold value), `description` |
+
+**Touchstones + reagents (#707).** `ItemTemplate.tied_resonance` (FK to `Resonance`) +
+`ItemTemplate.resonance_tier` (FK to `ResonanceTier`) mark a template as a *touchstone* —
+a resonance-tied item a character personally attunes to. `ItemInstance.attuned_to_character_sheet`
++ `attuned_at` record that binding, set by `attune_touchstone()` (`services/touchstones.py`,
+dispatched by the seeded "Rite of Attunement" `Ritual`, `seeds_touchstones.py`). A
+`RitualComponentRequirement` row in touchstone-mode (`min_touchstone_tier` set, `item_template`
+null) is satisfied by any `ItemInstance` attuned to the performer whose template's
+`resonance_tier.tier_level` meets the requirement and whose `tied_resonance` matches either the
+ritual's `resonance_context` (when given, e.g. Sanctification's founding Resonance) or any
+Resonance the performer has claimed. The shared validate/consume helper
+`resolve_and_consume_ritual_components(ritual, components, performer_sheet, resonance_context=None)`
+(`services/ritual_components.py`) partitions a ritual's requirements into template-mode and
+touchstone-mode, resolves both against a caller-supplied `components` list of carried
+`ItemInstance` rows, and atomically consumes the matched set — all-or-nothing (raises
+`RitualComponentError` and consumes nothing if any requirement is unsatisfied). Used by both
+`PerformRitualAction` (the generic ritual seam — telnet `CmdRitual`/`_gather_components` auto-
+gathers everything carried; web `RitualPerformRequestSerializer.components` is an explicit
+item-id list) and, independently, `SanctumInstallAction` (Ritual of Sanctification does not
+dispatch through `PerformRitualAction` — see the Sanctum section below). `seeds_touchstone_content.py`
+seeds a small framework-proving catalog (three `ResonanceTier` rows, one example Praedari-paw
+touchstone template, three generic reagent templates) and attaches requirements to both
+Sanctification rituals; a full per-resonance/per-tier catalog is separate content-authoring work.
 
 ### ThreadWeaving Acquisition (Spec A §2.1 / §4.2)
 
@@ -1388,6 +1412,14 @@ execute_flow("cast_power", context={
 - **Thread PROTECT FKs** - All typed `target_*` FKs use `on_delete=PROTECT`. Anchors cannot be deleted while threads reference them. This is why `CharacterThreadHandler.passive_vital_bonuses` doesn't need an anchor-in-scope runtime filter.
 - **SANCTUM room anchor** - `target_sanctum_details` (FK to `SanctumDetails`) is the leveled room anchor. Cap = `sanctum.feature_instance.level × 10`. Thread is pull-applicable (in-sanctum boost) while the character is in the Sanctum's room. Bare ROOM `target_kind` was removed.
 - **Sanctum ops are TELNET+WEB** (#1497) — 7 REGISTRY Actions (`sanctum_install` / `sanctum_homecoming` / `sanctum_purging` / `sanctum_weave` / `sanctum_dissolve` / `sanctum_absorb` / `sanctum_sever`) in `actions/definitions/sanctum.py`. `CmdSanctum` (`commands/sanctum.py`) is the namespaced telnet face; the web `SanctumViewSet` dispatches the same Actions. Dissolution is a soft-delete: `RoomFeatureInstance.dissolved_at` marks dissolved sanctums; `.active()` excludes them; SANCTUM threads are soft-retired on dissolution. One-personal-per-founder enforced in service layer (excluding dissolved rows).
+- **Sanctification requires real components (#707)** — both Sanctification `Ritual` rows
+  (Personal + Covenant) carry seeded `RitualComponentRequirement` rows (a touchstone tied to the
+  founding Resonance + three generic reagents; see "Touchstones + reagents" above).
+  `sanctum_install` validates/consumes them via `resolve_and_consume_ritual_components` before
+  calling `perform_sanctification`. `CmdSanctum`'s `install` subverb auto-gathers everything the
+  caller is carrying (`_gather_components`, mirrors `CmdRitual`); the web `install` endpoint takes
+  an explicit `components` list of the caller's own `ItemInstance` pks
+  (`SanctifyActionSerializer.components`).
 - **Currency has no cap** - `CharacterResonance.balance` grows freely; the strategic tension is over allocation, not over a ceiling.
 - **Pull-cost tuning surface** - `ThreadPullCost` rows hold per-tier numbers; the cost *formula shape* lives in `spend_resonance_for_pull`. Both the model docstring and service docstring cross-reference this split.
 - **SoulTetherConfig tuning** - `SoulTetherConfig` singleton (pk=1) holds all Soul Tether tuning knobs (sineating costs, rescue budgets/thresholds). Read via `get_soul_tether_config()`. Staff-tunable via admin.

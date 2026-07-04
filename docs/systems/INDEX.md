@@ -1891,6 +1891,12 @@ drain the well by physically visiting and performing an absorb action.
   / `sanctum_dissolve` / `sanctum_absorb` / `sanctum_sever`). `CmdSanctum`
   (`commands/sanctum.py`) is the namespaced telnet surface (`sanctum <subverb>`);
   the web `SanctumViewSet` dispatches the same Actions via `Action().run()`.
+- **Component-gated Sanctification (#707):** both Sanctification `Ritual` rows carry seeded
+  `RitualComponentRequirement` rows (a touchstone-mode row + 3 generic reagent rows, see the
+  magic system doc's "Touchstones + reagents" section). `sanctum_install` validates/consumes
+  them via `resolve_and_consume_ritual_components` before creating the Sanctum. `CmdSanctum`
+  auto-gathers carried items (`_gather_components`); the web `install` endpoint takes an explicit
+  `components` list of `ItemInstance` pks (`SanctifyActionSerializer.components`).
 - **API endpoints** (`world.magic.views_sanctum`):
   - `POST /api/magic/sanctums/install/` — `perform_sanctification` wrapper.
   - `POST /api/magic/sanctums/<id>/dissolve/` — `perform_dissolution`.

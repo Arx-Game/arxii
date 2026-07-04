@@ -32,11 +32,11 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     ResonanceFactory,
     ResonanceTierFactory,
-    RitualComponentRequirementFactory,
 )
 from world.magic.models import SanctumOwnerMode
 from world.magic.seeds_checks import ensure_magic_check_content
 from world.magic.seeds_sanctum import ensure_sanctification_personal_ritual, ensure_sanctum_rituals
+from world.magic.seeds_touchstone_content import ensure_touchstone_content
 from world.room_features.seeds import ensure_sanctum_kind
 
 
@@ -88,18 +88,21 @@ class SanctumInstallActionComponentsTests(TestCase):
         self.tier = ResonanceTierFactory(name="Faint", tier_level=1)
         CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)
 
-        # Sanctification has zero RitualComponentRequirement rows until Task 9
-        # authors them for real — attach a touchstone-mode row here so this test
-        # actually exercises the new validation path.
+        # ensure_sanctum_rituals() (above) now attaches the real touchstone-mode
+        # + reagent RitualComponentRequirement rows to this ritual (#707) — no
+        # manual RitualComponentRequirementFactory call needed here anymore
+        # (that was Task 8-era scaffolding for when the ritual had zero rows).
         self.ritual = ensure_sanctification_personal_ritual()
-        RitualComponentRequirementFactory(
-            ritual=self.ritual, item_template=None, min_touchstone_tier=self.tier
-        )
 
         self.template = ItemTemplateFactory(tied_resonance=self.resonance, resonance_tier=self.tier)
         self.touchstone = ItemInstanceFactory(
             template=self.template, attuned_to_character_sheet=self.sheet
         )
+        # Task 9 (#707) attached real reagent requirements to this same ritual via
+        # ensure_sanctum_rituals() above — supply matching carried reagents so this
+        # test's "install succeeds" path still holds under the now-real requirements.
+        _, reagent_templates = ensure_touchstone_content()
+        self.reagents = [ItemInstanceFactory(template=t) for t in reagent_templates]
 
     def tearDown(self) -> None:
         self._check_patcher.stop()
@@ -122,7 +125,8 @@ class SanctumInstallActionComponentsTests(TestCase):
             room_profile=self.room_profile,
             resonance=self.resonance,
             owner_mode=SanctumOwnerMode.PERSONAL,
-            components_provided=[self.touchstone],
+            components_provided=[self.touchstone, *self.reagents],
         )
         assert result.success
-        assert not ItemInstance.objects.filter(pk=self.touchstone.pk).exists()
+        consumed_pks = [self.touchstone.pk, *[r.pk for r in self.reagents]]
+        assert not ItemInstance.objects.filter(pk__in=consumed_pks).exists()

@@ -201,7 +201,12 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
     def install(self, request):
         """Sanctification entry point — ``POST /api/magic/sanctums/install/``.
 
-        Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
+        Body: ``{ room_profile_id, resonance_type_id, owner_mode, components }``.
+        ``components`` is an optional list of the caller's own ``ItemInstance``
+        pks (the Sanctification Ritual's touchstone/reagent
+        ``RitualComponentRequirement`` rows, #707) — explicit selection,
+        validated to belong to the requesting sheet by
+        ``SanctifyActionSerializer.validate_components``.
         Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
         — action does the heavy validation (room ownership, leader
         standing, physical presence, partial-unique race window). Returns
@@ -209,7 +214,7 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
         """
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-        serializer = SanctifyActionSerializer(data=request.data)
+        serializer = SanctifyActionSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
         if actor is None:
@@ -225,6 +230,7 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
             room_profile=room_profile,
             resonance=resonance,
             owner_mode=serializer.validated_data["owner_mode"],
+            components_provided=serializer.validated_data.get("components", []),
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
