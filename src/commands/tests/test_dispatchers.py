@@ -415,7 +415,12 @@ class CmdLookMessageParityTests(TestCase):
         caller.search = MagicMock(side_effect=fake_search)
         cmd = _make_cmd(CmdLook, caller, args=f" {probe}")
         cmd.func()
-        concealed_message = caller.msg.call_args[0][0]
+        # First call, not the last: the base ArxCommand.func()'s CommandError
+        # handler (hit by the genuinely-absent case below) sends the text via
+        # self.msg(str(err)) and THEN a second, kwargs-only self.msg(command_error=...)
+        # call with no positional args — grabbing the last call (.call_args)
+        # would hit that second, argless call instead of the message text.
+        concealed_message = caller.msg.call_args_list[0][0][0]
 
         # Same probe text, but nothing resolves at all — the genuinely-absent case.
         caller.msg.reset_mock()
@@ -426,7 +431,7 @@ class CmdLookMessageParityTests(TestCase):
         caller.search = MagicMock(side_effect=fake_search_absent)
         absent_cmd = _make_cmd(CmdLook, caller, args=f" {probe}")
         absent_cmd.func()
-        absent_message = caller.msg.call_args[0][0]
+        absent_message = caller.msg.call_args_list[0][0][0]
 
         assert concealed_message == absent_message == f"Could not find '{probe}'."
 
