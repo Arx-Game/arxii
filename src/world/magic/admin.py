@@ -40,6 +40,10 @@ from world.magic.models import (
     RitualCheckConfig,
     RitualComponentRequirement,
     SceneEntryEndorsement,
+    SignatureMotifBonus,
+    SignatureMotifBonusAppliedCondition,
+    SignatureMotifBonusCapabilityGrant,
+    SignatureMotifBonusDamageProfile,
     SoulfrayConfig,
     SoulTetherConfig,
     StandingCapBand,
@@ -841,3 +845,63 @@ class TechniqueGrantAdmin(admin.ModelAdmin):
     list_display = ["technique", "item_template", "ritual", "verb", "acquisition_ap_cost"]
     list_filter = ["verb"]
     autocomplete_fields = ["technique", "item_template", "ritual"]
+
+
+class SignatureMotifBonusCapabilityGrantInline(admin.TabularInline):
+    """Capability-grant payload rows for a SignatureMotifBonus.
+
+    WARNING: these rows are currently INERT. There is no technique-capability-grant
+    cast seam (combat or non-combat) that reads a SignatureMotifBonus's capability
+    grants — authoring a row here has no in-game effect yet.
+    """
+
+    model = SignatureMotifBonusCapabilityGrant
+    extra = 0
+    autocomplete_fields = ["capability"]
+    verbose_name = "Capability Grant (INERT — not applied at cast time)"
+    verbose_name_plural = "Capability Grants (INERT — not applied at cast time)"
+
+
+class SignatureMotifBonusDamageProfileInline(admin.TabularInline):
+    """Damage-profile payload rows for a SignatureMotifBonus.
+
+    NOTE: applied in COMBAT casts only. A standalone (non-combat) cast of a
+    technique carrying a signed bonus deals no damage from these rows.
+    """
+
+    model = SignatureMotifBonusDamageProfile
+    extra = 0
+    autocomplete_fields = ["damage_type"]
+    verbose_name = "Damage Profile (combat casts only)"
+    verbose_name_plural = "Damage Profiles (combat casts only)"
+
+
+class SignatureMotifBonusAppliedConditionInline(admin.TabularInline):
+    """Applied-condition payload rows for a SignatureMotifBonus.
+
+    Fully wired on both cast paths (combat + non-combat) — no caveat needed.
+    """
+
+    model = SignatureMotifBonusAppliedCondition
+    extra = 0
+    autocomplete_fields = ["condition"]
+
+
+@admin.register(SignatureMotifBonus)
+class SignatureMotifBonusAdmin(admin.ModelAdmin):
+    """Staff-authored, Motif-gated additive bonus signed onto a TECHNIQUE thread.
+
+    Payload rows below carry differing wiring status — see each inline's help text
+    before authoring: capability grants are inert (no cast seam yet); damage
+    profiles apply in combat casts only; applied conditions are fully wired.
+    """
+
+    list_display = ["name", "required_facet", "required_resonance", "flat_intensity_delta"]
+    list_filter = ["required_facet", "required_resonance"]
+    search_fields = ["name", "narrative_snippet"]
+    autocomplete_fields = ["required_facet", "required_resonance"]
+    inlines = [
+        SignatureMotifBonusCapabilityGrantInline,
+        SignatureMotifBonusDamageProfileInline,
+        SignatureMotifBonusAppliedConditionInline,
+    ]
