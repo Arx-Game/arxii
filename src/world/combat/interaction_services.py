@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.combat.constants import ClashResolution, EncounterOutcome
-from world.magic.narration import power_outcome_clause
+from world.magic.narration import power_outcome_clause, signature_clause
 from world.scenes.constants import InteractionMode
 from world.scenes.models import Interaction
 
@@ -177,13 +177,14 @@ def _assemble_hit_line(head: str, tail_clauses: list[str], power_clause: str) ->
     return f"{body} {power_clause}." if power_clause else f"{body}."
 
 
-def render_action_outcome_narration(
+def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one narration; cohesive
     *,
     actor_label: str,
     technique_name: str,
     target_label: str | None,
     outcome: ActionOutcome,
     power_ledger: PowerLedger | None = None,
+    signature_snippet: str | None = None,
 ) -> str:
     """Render a one-line, deterministic outcome narration from resolved data.
 
@@ -198,6 +199,11 @@ def render_action_outcome_narration(
     for clean penetration, or "— the place’s resonance swells the working" for
     an environment amplification. Combo and non-magic paths pass ``None`` and
     get no clause, preserving backward compatibility.
+
+    When ``signature_snippet`` is supplied (the caster's technique is signed with
+    a ``SignatureMotifBonus``, #1728), its cosmetic "— <snippet>" clause is
+    appended alongside the power clause — the combat-narration sibling of
+    ``render_cast_outcome_narration``'s signature handling.
 
     Examples:
         "Kira’s Frost Bolt strikes the Pyromancer for 24 damage."
@@ -218,17 +224,20 @@ def render_action_outcome_narration(
         return f"{actor_label} uses {technique_name}."
 
     power_clause = power_outcome_clause(power_ledger)
+    sig_clause = signature_clause(signature_snippet)
+    suffix_parts = [c for c in (power_clause, sig_clause) if c]
+    suffix = " ".join(suffix_parts)
 
     # Targeted action with no damage and no wounds → miss (or warded bounce).
     if total_damage <= 0 and not wounds:
         base = f"{actor_label}’s {technique_name} misses {target_label}"
-        return f"{base} {power_clause}." if power_clause else f"{base}."
+        return f"{base} {suffix}." if suffix else f"{base}."
 
     head = f"{actor_label}’s {technique_name} strikes {target_label} for {total_damage} damage"
     tail = _build_tail_clauses(
         wounds=wounds, defeated=defeated, dying=dying, knocked_out=knocked_out
     )
-    return _assemble_hit_line(head, tail, power_clause)
+    return _assemble_hit_line(head, tail, suffix)
 
 
 def render_flee_outcome_narration(

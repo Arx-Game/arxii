@@ -8509,6 +8509,78 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/signatures/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List available bonuses and set/clear the signature bonus on a Thread.
+     *
+     *     ``list`` runs :class:`SignatureListAction`. ``set``/``clear`` resolve the
+     *     ``Thread`` (scoped to the actor's own threads) and, for ``set``, the
+     *     ``SignatureMotifBonus`` catalog row, then dispatch
+     *     :class:`SignatureSetAction` / :class:`SignatureClearAction`.
+     */
+    get: operations['magic_signatures_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/signatures/clear/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description List available bonuses and set/clear the signature bonus on a Thread.
+     *
+     *     ``list`` runs :class:`SignatureListAction`. ``set``/``clear`` resolve the
+     *     ``Thread`` (scoped to the actor's own threads) and, for ``set``, the
+     *     ``SignatureMotifBonus`` catalog row, then dispatch
+     *     :class:`SignatureSetAction` / :class:`SignatureClearAction`.
+     */
+    post: operations['magic_signatures_clear_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/signatures/set/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description List available bonuses and set/clear the signature bonus on a Thread.
+     *
+     *     ``list`` runs :class:`SignatureListAction`. ``set``/``clear`` resolve the
+     *     ``Thread`` (scoped to the actor's own threads) and, for ``set``, the
+     *     ``SignatureMotifBonus`` catalog row, then dispatch
+     *     :class:`SignatureSetAction` / :class:`SignatureClearAction`.
+     */
+    post: operations['magic_signatures_set_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/soul-tether/{relationship_id}/': {
     parameters: {
       query?: never;
@@ -40209,6 +40281,60 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SceneEntryEndorsement'];
         };
+      };
+    };
+  };
+  magic_signatures_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_signatures_clear_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_signatures_set_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

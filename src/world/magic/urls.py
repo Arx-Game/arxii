@@ -131,6 +131,11 @@ from world.magic.views_sanctum import SanctumViewSet  # noqa: E402
 
 router.register("sanctums", SanctumViewSet, basename="sanctum")
 
+# #1728 Task 4 — Signature Motif Bonus (#1582) web surface
+from world.magic.views_signature import SignatureViewSet  # noqa: E402
+
+router.register("signatures", SignatureViewSet, basename="signature")
+
 
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is

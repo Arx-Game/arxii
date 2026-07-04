@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
@@ -39,6 +38,7 @@ from world.magic.serializers_sanctum import (
     SanctumThreadSerializer,
     WeaveActionSerializer,
 )
+from world.magic.views_actor import PuppetActorMixin
 
 if TYPE_CHECKING:
     from world.scenes.models import Persona
@@ -68,7 +68,7 @@ def _active_persona_for_request(request) -> Persona:
     return active_persona_for_sheet(entry.character_sheet)
 
 
-class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
+class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
     """Read + action endpoints for the player's Sanctum surface.
 
     `list` returns Sanctums the user has standing in (owns or has woven
@@ -129,30 +129,10 @@ class SanctumViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
     # ------------------------------------------------------------------
-    # Actor resolution
-    # ------------------------------------------------------------------
-
-    def _resolve_actor(self, request):
-        """Return the caller's active puppet ObjectDB if they own its sheet.
-
-        Mirrors ``world.relationships.views.RelationshipUpdateViewSet._resolve_actor``.
-        Returns the ObjectDB character (puppet) or ``None`` when resolution
-        fails — caller should respond with HTTP 400.
-        """
-        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
-        if actor is None:
-            return None
-        try:
-            sheet = actor.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            return None
-        if sheet.character.db_account_id != request.user.pk:
-            return None
-        return actor
-
-    # ------------------------------------------------------------------
     # Write endpoints — converge on action.run()
     # ------------------------------------------------------------------
+    # Actor resolution (``_resolve_actor``) is inherited from ``PuppetActorMixin``
+    # (extracted to ``views_actor.py`` in #1728 so ``SignatureViewSet`` can share it).
 
     @action(detail=True, methods=["post"], url_path="homecoming")
     def homecoming(self, request, feature_instance_id=None):

@@ -33,10 +33,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`services/signature.py`): `available_signature_bonuses`, `set_signature_bonus`,
     `clear_signature_bonus`, `signature_bonus_for`. Cast wiring
     (`services/signature_effects.py`): `signature_intensity_delta` + `apply_signature_bonus_conditions`
-    (uses shared `apply_technique_conditions` seam). Narration: `signature_clause` in
-    `narration.py`. Actions: `SignatureSetAction` / `SignatureClearAction` /
-    `SignatureListAction` (REGISTRY). Telnet: `CmdSignature` (`commands/signature.py`,
-    key `"signature"`). E2E: `test_signature_motif_e2e.py`.
+    (uses shared `apply_technique_conditions` seam) + (#1728) `signature_damage_profiles`
+    (combat `_apply_damage` fold) + `resolve_signature_snippet` (shared non-combat/combat
+    cosmetic narration). Narration: `signature_clause` in `narration.py`. Actions:
+    `SignatureSetAction` / `SignatureClearAction` / `SignatureListAction` (REGISTRY).
+    Telnet: `CmdSignature` (`commands/signature.py`, key `"signature"`). Web (#1728):
+    `SignatureViewSet` (`views_signature.py`, routes under `/api/magic/signatures/`).
+    E2E: `test_signature_motif_e2e.py`.
   - **Specialization engine (ADR-0055 — #1578):** `AbstractSpecializedVariant`
     (shared abstract base — the "one specialization engine"), `TechniqueVariant`
     (concrete — resonance-specialized form of a parent `Technique`, `unlock_thread_level`≥3);

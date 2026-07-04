@@ -325,6 +325,8 @@ and DB `CheckConstraint("thread_signature_bonus_technique_only")`. Migrations: 0
 |----------|---------|
 | `signature_intensity_delta(character, technique) -> int` | Returns `bonus.flat_intensity_delta` or 0; added to `use_technique(power_intensity_bonus=…)` on both cast paths |
 | `apply_signature_bonus_conditions(*, character, technique, success_level, eff_intensity, targets_by_kind, source_character)` | Applies `bonus.cached_condition_applications` through the SHARED `apply_technique_conditions` seam (`applied_condition_rows=` param) — NO parallel apply path |
+| `signature_damage_profiles(character, technique) -> list` | (#1728) Returns `bonus.cached_damage_profiles` or `[]`; `CombatTechniqueResolver._apply_damage` (`world/combat/services.py`) appends these to the technique's own profiles before resolving damage |
+| `resolve_signature_snippet(character, technique) -> str \| None` | (#1728) Resolves the cosmetic clause — prefers `bonus.narrative_snippet`, falls back to the first Motif facet name; shared by the non-combat cast pose and the combat OUTCOME narration |
 
 `apply_technique_conditions` gained an optional `applied_condition_rows` param (default
 `None` = use the technique's own rows; when provided, applies those rows instead). This
@@ -336,7 +338,20 @@ behavior change).
 **Non-combat narration** (`narration.py`): `signature_clause(snippet) -> str` builds a
 cosmetic em-dash clause from the bonus's `narrative_snippet`. Used in
 `render_cast_outcome_narration` (standalone cast pose) via the `signature_snippet=`
-param. Combat-path cosmetic narration is a deferred fast-follow.
+param. (#1728) Combat-path cosmetic narration now shares the same snippet resolution via
+`resolve_signature_snippet` (`services/signature_effects.py`), surfaced in
+`render_action_outcome_narration` + `_record_and_broadcast_pc_action`
+(`world/combat/services.py`).
+
+**Web surface (#1728)** (`views_signature.py`): `SignatureViewSet` dispatches
+`SignatureListAction` / `SignatureSetAction` / `SignatureClearAction` through the shared
+`PuppetActorMixin` (`views_actor.py`, also used by `SanctumViewSet`). Routes (`urls.py`,
+basename `signature`): `GET /api/magic/signatures/`, `POST
+/api/magic/signatures/set/`, `POST /api/magic/signatures/clear/`.
+
+**Admin:** `SignatureMotifBonusAdmin` (`admin.py`) with inlines for the three payload
+child models; each inline's `help_text` flags wiring status (capability grants are
+inert — no cast seam yet).
 
 **Actions** (`actions/definitions/signature.py`, REGISTRY, `category="magic"`):
 - `SignatureSetAction` (key `"signature_set"`) — attach a bonus to a thread.
@@ -353,11 +368,12 @@ Motif → weave TECHNIQUE thread → select bonus → cast → assert cosmetic s
 Interaction, intensity delta applied, condition lands on caster. Also tests rejection
 (`SignatureBonusNotAvailable` / `TechniqueNotOwned`) and bonus portability between threads.
 
-**Deferred fast-follows (NOT in #1582):**
-- `damage_profiles` cast seam (combat `_apply_damage` fold).
-- `capability_grants` cast seam (no general technique-authored capability grant seam yet).
-- Combat cosmetic narration (`NARRATIVE_ONLY`-style hook for combat path).
-- Web selection surface (`SignatureViewSet`).
+**Deferred fast-follow (NOT shipped as of #1728):**
+- `capability_grants` cast seam — no general technique-authored capability grant seam
+  exists anywhere yet, so `SignatureMotifBonusCapabilityGrant` rows remain inert.
+
+**Shipped in #1728** (see `docs/adr/0072-...` addendum): the `damage_profiles` combat
+cast seam, combat cosmetic narration, and the web `SignatureViewSet`.
 
 ### Threads as Currency Consumers (Resonance Pivot Spec A §2.1)
 

@@ -30,8 +30,9 @@ if TYPE_CHECKING:
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
-    from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
+    from world.magic.models import FuryTier, Technique
     from world.magic.models.anima import CharacterAnima
+    from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -396,7 +397,7 @@ class CombatTechniqueResolver:
     def _apply_profiles_to_target(  # noqa: PLR0913
         self,
         target: CombatOpponent,
-        profiles: list[TechniqueDamageProfile],
+        profiles: list[AbstractDamageProfile],
         weapon: WeaponContribution | None,
         *,
         sl: int,
@@ -440,6 +441,11 @@ class CombatTechniqueResolver:
         resistance applies independently).  SINGLE / SELF techniques are unchanged
         — only ``focused_opponent_target`` is used.
 
+        Combines the technique's own profiles with its signed
+        SignatureMotifBonus's profiles, if any (#1728) — both are
+        ``AbstractDamageProfile`` subclasses, so weapon-augment, SL-multiplier,
+        property-bonus, and multi-target all apply uniformly to both.
+
         Per opponent:
         - skip if DEFEATED (checked fresh after each preceding write)
         - for each damage profile: compute budget, apply SL multiplier, call
@@ -449,15 +455,18 @@ class CombatTechniqueResolver:
         combination.
         """
         from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
+        from world.magic.services.signature_effects import (  # noqa: PLC0415
+            signature_damage_profiles,
+        )
 
         targets = self._resolved_opponent_targets()
         if not targets:
             return []
 
         technique = self.action.focused_action
-        profiles = list(
-            technique.damage_profiles.select_related("damage_type").all(),
-        )
+        attacker = self.participant.character_sheet.character
+        profiles = list(technique.damage_profiles.select_related("damage_type").all())
+        profiles += signature_damage_profiles(attacker, technique)
         if not profiles:
             return []
 
@@ -466,7 +475,6 @@ class CombatTechniqueResolver:
         if multiplier <= 0:
             return []
 
-        attacker = self.participant.character_sheet.character
         weapon = effective_weapon_profile(attacker)
         any_weapon_landed = False
 
@@ -487,7 +495,7 @@ class CombatTechniqueResolver:
 
     def _profile_damage(  # noqa: PLR0913
         self,
-        profile: TechniqueDamageProfile,
+        profile: AbstractDamageProfile,
         weapon: WeaponContribution | None,
         target: CombatOpponent,
         *,
@@ -3829,13 +3837,17 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
 
             persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
 
+    from world.magic.services.signature_effects import resolve_signature_snippet  # noqa: PLC0415
+
     target_label = target.name if target is not None else None
+    signature_snippet = resolve_signature_snippet(participant.character_sheet.character, technique)
     narration = render_action_outcome_narration(
         actor_label=str(participant),
         technique_name=technique.name,
         target_label=target_label,
         outcome=outcome,
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
+        signature_snippet=signature_snippet,
     )
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
@@ -5813,7 +5825,7 @@ def effective_weapon_profile(character: Character) -> WeaponContribution | None:
 
 
 def _weapon_augmented_budget(
-    profile: TechniqueDamageProfile,
+    profile: AbstractDamageProfile,
     budget: int,
     weapon: WeaponContribution | None,
     sheet: object | None = None,

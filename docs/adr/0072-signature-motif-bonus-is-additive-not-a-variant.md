@@ -85,13 +85,33 @@ technique, not a new form of it.
   fold is a fast-follow).
 - Signature `capability_grants` have no cast-time seam (the technique-authored capability
   grant seam does not exist anywhere yet).
-- Combat cosmetic narration of the bonus (`NARRATIVE_ONLY`-style hook for the combat path
-  is a fast-follow).
+- Combat cosmetic narration of the bonus (a `render_action_outcome_narration`-style hook
+  for the combat path is a fast-follow).
 - Web selection surface (`SignatureViewSet`) — the management UI for players to pick their
   bonus from the web is deferred.
 
 **Supersedes ADR-0056** (which described the resonance-divergence model). The discordant
 resonance idea is closed; if the resonance override ever becomes desirable it must be
 treated as a new, separate design question, not a resumption of ADR-0056.
+
+## Addendum (2026-07-04, #1728)
+
+Three of the four deferred fast-follows above shipped:
+
+- The combat damage seam: `signature_damage_profiles(character, technique)`
+  (`world/magic/services/signature_effects.py`) returns the signed bonus's damage
+  profiles; `CombatTechniqueResolver._apply_damage` (`world/combat/services.py`) folds
+  them in alongside the technique's own.
+- Combat cosmetic narration: `resolve_signature_snippet(character, technique)`
+  (same module, extracted from `world/scenes/cast_services.py`) is now shared by both
+  `render_action_outcome_narration` and `_record_and_broadcast_pc_action`
+  (`world/combat/services.py`), so the signature clause surfaces in combat too.
+- The web selection surface: `SignatureViewSet` (`world/magic/views_signature.py`),
+  routed at `/api/magic/signatures/` (`list`/`set`/`clear`), dispatching the same
+  Actions via the shared `PuppetActorMixin`.
+
+**Still deferred:** the capability-grant cast seam. No technique/signature
+capability-grant cast seam exists anywhere yet, so `SignatureMotifBonusCapabilityGrant`
+rows remain inert (flagged as such in `SignatureMotifBonusAdmin`'s inline help text).
 
 > Status: accepted · Source: #1582 (2026-06-30) · Supersedes: ADR-0056
