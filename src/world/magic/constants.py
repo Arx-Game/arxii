@@ -141,6 +141,14 @@ class RegardPolarity(models.TextChoices):
     NEUTRAL = "neutral", "Neutral / social (empowered by either sign)"
 
 
+COURT_REGARD_PULL_K = 1.0
+"""PLACEHOLDER tuning constant (#1831): empower scale at |regard|=REGARD_MAX.
+
+Court-role pull modulation bonus = base_scaled * (abs(regard) / REGARD_MAX) * K.
+Tunable via playtest.
+"""
+
+
 class VitalBonusTarget(models.TextChoices):
     MAX_HEALTH = "MAX_HEALTH", "Max Health"
     DAMAGE_TAKEN_REDUCTION = "DAMAGE_TAKEN_REDUCTION", "Damage Taken Reduction"
