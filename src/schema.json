@@ -37516,6 +37516,7 @@ components:
             * `loan` - Loan
             * `collection` - Collection
             * `improvement` - Improvement
+            * `court_grant` - Court Grant
         label:
           type: string
           description: UI display text for the menu option.
@@ -37583,6 +37584,7 @@ components:
       - loan
       - collection
       - improvement
+      - court_grant
       type: string
       description: |-
         * `permit` - Permit
@@ -37590,6 +37592,7 @@ components:
         * `loan` - Loan
         * `collection` - Collection
         * `improvement` - Improvement
+        * `court_grant` - Court Grant
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -37606,6 +37609,7 @@ components:
             * `loan` - Loan
             * `collection` - Collection
             * `improvement` - Improvement
+            * `court_grant` - Court Grant
         label:
           type: string
           minLength: 1
@@ -42872,6 +42876,7 @@ components:
             * `loan` - Loan
             * `collection` - Collection
             * `improvement` - Improvement
+            * `court_grant` - Court Grant
         label:
           type: string
           minLength: 1
