@@ -30,8 +30,9 @@ def distinction_earn_rate_for(
 
     One query (join across ``CharacterDistinction -> Distinction ->
     DistinctionResonanceGrant``), scaled by the character's rank in each matching
-    distinction. Callers that loop over many characters (e.g. a daily trickle tick)
-    must call this once per character — this function itself never loops a query.
+    distinction. The live caller (``grant_resonance``) invokes this once per grant
+    call — e.g. once per equipped item facet, not once per character — so this
+    function must never loop a query internally; each call is a single query.
 
     Args:
         character_sheet: The character whose distinctions are being summed.

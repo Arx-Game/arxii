@@ -1161,7 +1161,8 @@ resonance-category skip above). Two consumers read it:
   (`world/magic/services/techniques.py`) scope-matches the target against the technique's
   gift-resonances and folds `get_modifier_breakdown(sheet, target)` into the power ledger.
 - **Thread pulls** — `world.mechanics.services.power_flat_bonus_for_resonance(sheet,
-  resonance_id)` sums matching POWER-category targets (excluding the unscoped
+  resonance_id)` mirrors cast scope semantics: sums POWER-category targets whose
+  `target_resonance` is null (unscoped) or matches `resonance_id` (excluding the unscoped
   `power_multiplier` target) via `get_modifier_total`. `world.magic.services.resonance
   ._fold_distinction_pull_bonus` calls it once per pull (not per thread/tier, since every
   pulled thread shares one resonance) and appends a synthetic `FLAT_BONUS`

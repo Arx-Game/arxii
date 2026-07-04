@@ -292,14 +292,17 @@ def get_modifier_total(
 
 
 def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
-    """Sum resonance-scoped POWER-category flat modifiers (distinctions) for ``resonance_id``.
+    """Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.
 
     A distinction expresses "potency" for a resonance by authoring a ``DistinctionEffect`` on
     a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same seam a
     technique cast reads via ``_partition_power_targets``/``_derive_power``'s FLAT stage
-    (``magic/services/techniques.py``). This helper lets a standalone thread-pull fold that one
-    modifier into its own magnitude (#1834 Task 7). The unscoped ``power_multiplier`` target is
-    excluded — its percent-delta semantics don't apply to a flat pull bonus. "power" is not an
+    (``magic/services/techniques.py``). This helper lets a standalone thread-pull fold those
+    modifiers into its own magnitude (#1834 Task 7). Mirrors cast semantics exactly: a target
+    matches when ``target_resonance_id`` is null (unscoped — applies to every resonance) OR
+    equals ``resonance_id`` (scoped to this resonance specifically); a target scoped to a
+    *different* resonance never matches. The unscoped ``power_multiplier`` target is excluded —
+    its percent-delta semantics don't apply to a flat pull bonus. "power" is not an
     equipment-relevant category, so ``get_modifier_total`` here is always just the eager
     CharacterModifier total.
 
@@ -314,10 +317,11 @@ def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
     Returns:
         Integer total (0 if no matching POWER-category target or no modifier).
     """
-    targets = ModifierTarget.objects.filter(
-        category__name=POWER_CATEGORY_NAME,
-        target_resonance_id=resonance_id,
-    ).exclude(name=POWER_MULTIPLIER_TARGET_NAME)
+    targets = (
+        ModifierTarget.objects.filter(category__name=POWER_CATEGORY_NAME)
+        .filter(Q(target_resonance_id=resonance_id) | Q(target_resonance_id__isnull=True))
+        .exclude(name=POWER_MULTIPLIER_TARGET_NAME)
+    )
     return sum(get_modifier_total(sheet, target) for target in targets)
 
 

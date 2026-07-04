@@ -147,13 +147,15 @@ lockstep.
 above** — a `DistinctionEffect` on a POWER-category `ModifierTarget` (optionally gated by
 `target_resonance`) still writes a normal `CharacterModifier` row through the loop. Two
 consumers read it: a technique cast (`_derive_power`'s FLAT stage, already wired) and a
-standalone thread pull, via `power_flat_bonus_for_resonance(sheet, resonance_id)` — sums
-matching POWER-category, `target_resonance`-scoped modifiers (excluding the unscoped
-`power_multiplier` target) via `get_modifier_total`. See `world/magic/CLAUDE.md`
-"Distinction Potency (POWER axis)" for the pull-side wiring
+standalone thread pull, via `power_flat_bonus_for_resonance(sheet, resonance_id)` — mirrors
+cast scope semantics exactly: sums matching POWER-category modifiers whose
+`target_resonance` is either null (unscoped — applies to every resonance) or equals the
+pull's resonance (excluding the unscoped `power_multiplier` target) via `get_modifier_total`.
+See `world/magic/CLAUDE.md` "Distinction Potency (POWER axis)" for the pull-side wiring
 (`world.magic.services.resonance._fold_distinction_pull_bonus`). The pull path is **not**
 full parity with a cast: `_derive_power`'s FLAT stage also sums condition-sourced POWER
-contributions (`get_condition_modifier_breakdown`), which the pull fold does not include.
+contributions (`get_condition_modifier_breakdown`), which the pull fold does not include —
+that gap is real and remains.
 
 ---
 
