@@ -315,6 +315,8 @@
   - blocks_made <- scenes.Block
   - blocks_received <- scenes.Block
   - mutes_made <- scenes.Mute
+  - treasured_signoffs <- stories.TreasuredSignoff
+  - content_boundaries <- boundaries.PlayerBoundary
   - artist_profile <- evennia_extensions.Artist
   - media <- evennia_extensions.PlayerMedia
   - allow_list <- evennia_extensions.PlayerAllowList
@@ -660,7 +662,8 @@
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' — Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
 - `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None) -> 'Fortification' — Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None, reposition_dx: 'Decimal | None' = None, reposition_dy: 'Decimal | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `eject_vehicle_occupants(*, vehicle: 'BattleVehicle') -> 'None' — Eject every unit/participant embedded on *vehicle*'s place, applying the`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
@@ -668,6 +671,38 @@
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
 - `resolve_battle_beats(battle: 'Battle') -> 'None' — Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' — Set a battle side's tactical posture (#1711).`
+
+
+## world.boundaries
+
+### ContentTheme
+**Pointed to by:**
+  - stake_templates <- stories.StakeTemplate
+  - player_boundaries <- boundaries.PlayerBoundary
+
+### PlayerBoundary
+**Foreign Keys:**
+  - owner -> evennia_extensions.PlayerData [FK]
+  - theme -> boundaries.ContentTheme [FK] (nullable)
+  - visible_to_tenures -> roster.RosterTenure [M2M]
+  - visible_to_groups -> consent.ConsentGroup [M2M]
+  - excluded_tenures -> roster.RosterTenure [M2M]
+
+### TreasuredSubject
+**Foreign Keys:**
+  - owner -> roster.RosterTenure [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - subject_item -> items.ItemInstance [FK] (nullable)
+  - subject_society -> societies.Society [FK] (nullable)
+  - subject_organization -> societies.Organization [FK] (nullable)
+  - visible_to_tenures -> roster.RosterTenure [M2M]
+  - visible_to_groups -> consent.ConsentGroup [M2M]
+  - excluded_tenures -> roster.RosterTenure [M2M]
+**Pointed to by:**
+  - signoffs <- stories.TreasuredSignoff
+
+### Service Functions
+- `scene_lines_and_veils(scene: 'Scene', viewer_tenure: 'RosterTenure') -> 'SceneLinesAndVeils' — A scene's shared "lines & veils" aggregate for ``viewer_tenure``.`
 
 
 ## world.buildings
@@ -1040,6 +1075,7 @@
   - active_alternate_self <- forms.ActiveAlternateSelf
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
+  - treasured_by <- boundaries.TreasuredSubject
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
   - detected_concealments <- conditions.ConditionInstance
@@ -1646,6 +1682,8 @@
   - owner -> roster.RosterTenure [FK]
 **Pointed to by:**
   - members <- consent.ConsentGroupMember
+  - playerboundary_visible <- boundaries.PlayerBoundary
+  - treasuredsubject_visible <- boundaries.TreasuredSubject
   - codexteachingoffer_visible <- codex.CodexTeachingOffer
 
 ### ConsentGroupMember
@@ -4242,6 +4280,11 @@
   - social_consent_whitelist_allowed <- consent.SocialConsentWhitelist
   - social_consent_blacklist_owned <- consent.SocialConsentBlacklist
   - social_consent_blacklist_blocked <- consent.SocialConsentBlacklist
+  - playerboundary_visible <- boundaries.PlayerBoundary
+  - playerboundary_excluded <- boundaries.PlayerBoundary
+  - treasured_subjects <- boundaries.TreasuredSubject
+  - treasuredsubject_visible <- boundaries.TreasuredSubject
+  - treasuredsubject_excluded <- boundaries.TreasuredSubject
   - codex_taught <- codex.CharacterCodexKnowledge
   - codex_teaching_offers <- codex.CodexTeachingOffer
   - codexteachingoffer_visible <- codex.CodexTeachingOffer
@@ -5071,6 +5114,7 @@
   - assistant_claims <- stories.AssistantGMClaim
   - stakes <- stories.Stake
   - stake_activations <- stories.StakeContractActivation
+  - treasured_signoffs <- stories.TreasuredSignoff
   - resolving_encounters <- combat.CombatEncounter
 
 ### EpisodeProgressionRequirement
@@ -5118,17 +5162,20 @@
   - story -> stories.Story [FK]
   - gm_table -> gm.GMTable [FK]
   - current_episode -> stories.Episode [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### GlobalStoryProgress
 **Foreign Keys:**
   - story -> stories.Story [OneToOne]
   - current_episode -> stories.Episode [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### StoryProgress
 **Foreign Keys:**
   - story -> stories.Story [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - current_episode -> stories.Episode [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### StoryNote
 **Foreign Keys:**
@@ -5170,6 +5217,8 @@
 ### RiskCalibration
 
 ### StakeTemplate
+**Foreign Keys:**
+  - content_themes -> boundaries.ContentTheme [M2M]
 **Pointed to by:**
   - stakes <- stories.Stake
 
@@ -5210,6 +5259,12 @@
   - activation -> stories.StakeContractActivation [FK] (nullable)
   - resolution -> stories.StakeResolution [FK] (nullable)
   - resolved_by -> gm.GMProfile [FK] (nullable)
+
+### TreasuredSignoff
+**Foreign Keys:**
+  - beat -> stories.Beat [FK]
+  - player_data -> evennia_extensions.PlayerData [FK]
+  - treasured_subject -> boundaries.TreasuredSubject [FK]
 
 
 ## world.traits

@@ -6,8 +6,9 @@ from world.boundaries.factories import (
     ContentThemeFactory,
     PlayerBoundaryFactory,
     TreasuredSubjectFactory,
+    make_default_content_themes,
 )
-from world.boundaries.models import PlayerBoundary
+from world.boundaries.models import ContentTheme, PlayerBoundary
 
 
 class PlayerBoundaryModelTests(TestCase):
@@ -43,3 +44,21 @@ class TreasuredSubjectModelTests(TestCase):
     def test_treasured_subject_str(self):
         ts = TreasuredSubjectFactory()
         self.assertIn(ts.get_subject_kind_display(), str(ts))
+
+
+class DefaultContentThemesTests(TestCase):
+    """The small starter ContentTheme catalog (#1771 task 8)."""
+
+    def test_creates_the_expected_starter_keys(self):
+        themes = make_default_content_themes()
+        self.assertEqual(
+            set(themes.keys()),
+            {"child-endangerment", "suicide-self-harm", "sexual-violence", "torture"},
+        )
+        for key, theme in themes.items():
+            self.assertEqual(theme.key, key)
+
+    def test_idempotent_no_duplicate_rows(self):
+        make_default_content_themes()
+        make_default_content_themes()
+        self.assertEqual(ContentTheme.objects.count(), 4)
