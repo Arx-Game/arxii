@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from django.db import models, transaction
 from evennia.objects.models import ObjectDB
@@ -12,14 +13,16 @@ from world.classes.models import PathStage
 from world.magic.audere import (
     AUDERE_CONDITION_NAME,
     AUDERE_MAJORA_CONDITION_NAME,
+    SOULFRAY_CONDITION_NAME,
     AbstractPendingOffer,
     _check_intensity_gate,
-    _check_soulfray_gate,
-    soulfray_stage_order_snapshot,
 )
 from world.magic.models.renown_config import RenownAwardConfig
 from world.progression.models.advancement import AbstractClassLevelAdvancement
 from world.progression.selectors import current_path_for_character
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 
 class AudereMajoraThreshold(RenownAwardConfig):
@@ -191,54 +194,80 @@ def eligible_paths_for_threshold(character: ObjectDB, threshold: AudereMajoraThr
     return list(path.child_paths.filter(stage=threshold.target_stage, is_active=True))
 
 
-def check_audere_majora_eligibility(  # noqa: PLR0911
-    character: ObjectDB, runtime_intensity: int
-) -> AudereMajoraThreshold | None:
-    """Check all gates for the Audere Majora offer.
+def _evaluate_majora_gates(  # noqa: PLR0911
+    character: ObjectDB, runtime_intensity: int, sheet: CharacterSheet
+) -> tuple[AudereMajoraThreshold | None, int]:
+    """Run all Audere Majora eligibility gates, returning the threshold + stage.
+
+    Returns ``(threshold, stage_order)`` when every gate passes, or
+    ``(None, 0)`` as soon as any gate fails. The Soulfray query is inlined
+    (mirroring ``_evaluate_audere_gates``) so the ``stage_order`` is captured
+    for the caller to reuse instead of re-querying via
+    ``soulfray_stage_order_snapshot``.
 
     Gates in order:
-    1. Character has a CharacterSheet.
-    2. A threshold exists at boundary_level == sheet.current_level.
-    3. Character has NOT already crossed this threshold.
-    4. Runtime intensity resolves to a tier at or above threshold.minimum_intensity_tier.
-    5. Character has Soulfray at or above threshold.minimum_warp_stage.
-    6. Character has an active CharacterEngagement.
-    7. If threshold.requires_active_audere, character has the Audere condition.
-    8. At least one eligible child path exists.
-
-    Returns the threshold on success, None if any gate fails.
+    1. A threshold exists at boundary_level == sheet.current_level.
+    2. Character has NOT already crossed this threshold.
+    3. Runtime intensity resolves to a tier at or above threshold.minimum_intensity_tier.
+    4. Character has Soulfray at or above threshold.minimum_warp_stage.
+    5. Character has an active CharacterEngagement.
+    6. If threshold.requires_active_audere, character has the Audere condition.
+    7. At least one eligible child path exists.
     """
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
-
-    sheet = CharacterSheet.objects.filter(character=character).first()
-    if sheet is None:
-        return None
 
     threshold = AudereMajoraThreshold.objects.filter(boundary_level=sheet.current_level).first()
     if threshold is None:
-        return None
+        return None, 0
 
     if _has_crossed(sheet, threshold):
-        return None
+        return None, 0
 
     if not _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold):
-        return None
+        return None, 0
 
-    if not _check_soulfray_gate(character, threshold.minimum_warp_stage.stage_order):
-        return None
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+    if soulfray_instance is None or soulfray_instance.current_stage is None:
+        return None, 0
+    stage_order = soulfray_instance.current_stage.stage_order
+    if stage_order < threshold.minimum_warp_stage.stage_order:
+        return None, 0
 
     if not CharacterEngagement.objects.filter(character=character).exists():
-        return None
+        return None, 0
 
     if threshold.requires_active_audere and not _has_active_condition(
         character, AUDERE_CONDITION_NAME
     ):
-        return None
+        return None, 0
 
     if not eligible_paths_for_threshold(character, threshold):
-        return None
+        return None, 0
 
+    return threshold, stage_order
+
+
+def check_audere_majora_eligibility(
+    character: ObjectDB, runtime_intensity: int
+) -> AudereMajoraThreshold | None:
+    """Check all gates for the Audere Majora offer.
+
+    Returns the threshold on success, None if any gate fails.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        return None
+    threshold, _stage_order = _evaluate_majora_gates(character, runtime_intensity, sheet)
     return threshold
 
 
@@ -281,7 +310,7 @@ def _broadcast_manifestation(character: ObjectDB, text: str) -> None:
 
 
 def maybe_create_audere_majora_offer(
-    character: ObjectDB, runtime_intensity: int
+    character: ObjectDB, runtime_intensity: int, *, sheet: CharacterSheet | None = None
 ) -> PendingAudereMajoraOffer | None:
     """Persist a poll-able Audere Majora offer when the crossing gate opens for this cast.
 
@@ -289,21 +318,21 @@ def maybe_create_audere_majora_offer(
     Idempotent: repeated qualifying casts update the single row (update_or_create).
     Broadcast fires only on first creation; re-fires after decline broadcast again;
     refreshes from a still-open gate stay silent.
+
+    Accepts an optional ``sheet`` kwarg to avoid re-fetching the CharacterSheet
+    when the caller already has it (e.g. the Step 8c cast hook). When omitted,
+    falls back to fetching it.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
 
-    threshold = check_audere_majora_eligibility(character, runtime_intensity)
-    if threshold is None:
-        return None
-
-    # Sheet/Soulfray re-fetches duplicate eligibility's reads, mirroring
-    # maybe_create_audere_offer's shape. This path runs only at boundary
-    # levels with every gate open; the identity map serves the sheet.
-    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return None
 
-    stage_order = soulfray_stage_order_snapshot(character)
+    threshold, stage_order = _evaluate_majora_gates(character, runtime_intensity, sheet)
+    if threshold is None:
+        return None
 
     offer, created = PendingAudereMajoraOffer.objects.update_or_create(
         character_sheet=sheet,

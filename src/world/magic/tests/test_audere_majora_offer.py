@@ -215,3 +215,17 @@ class CastHookImportSmokeTest(TestCase):
     def test_techniques_module_imports_cleanly(self) -> None:
         mod = importlib.import_module("world.magic.services.techniques")
         assert mod is not None
+
+
+class AudereMajoraEligibilityQueryCountTests(TestCase):
+    """Regression test: common-case query budget for check_audere_majora_eligibility (#1828)."""
+
+    def test_npc_without_sheet_uses_one_query(self) -> None:
+        """An NPC without a CharacterSheet short-circuits after the sheet fetch.
+
+        Only 1 query: CharacterSheet.objects.filter(...).first(). No threshold,
+        Soulfray, engagement, or path queries fire.
+        """
+        npc = ObjectDB.objects.create(db_key="majora_query_count_npc")
+        with self.assertNumQueries(1):
+            check_audere_majora_eligibility(npc, runtime_intensity=20)

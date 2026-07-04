@@ -134,44 +134,6 @@ def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -
     return runtime_intensity >= minimum_tier_threshold
 
 
-def _check_soulfray_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
-    """Return True if character has Soulfray at the required stage or higher."""
-    from world.conditions.models import ConditionInstance
-
-    soulfray_instance = (
-        ConditionInstance.objects.filter(
-            target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
-        )
-        .select_related("current_stage")
-        .first()
-    )
-    if soulfray_instance is None or soulfray_instance.current_stage is None:
-        return False
-    return soulfray_instance.current_stage.stage_order >= minimum_stage_order
-
-
-def soulfray_stage_order_snapshot(character: ObjectDB) -> int:
-    """Return the character's current Soulfray stage_order, or 0 if absent.
-
-    Shared by ``maybe_create_audere_offer`` and ``maybe_create_audere_majora_offer``
-    to snapshot the Soulfray stage at offer-creation time.
-    """
-    from world.conditions.models import ConditionInstance
-
-    soulfray_instance = (
-        ConditionInstance.objects.filter(
-            target=character,
-            condition__name=SOULFRAY_CONDITION_NAME,
-        )
-        .select_related("current_stage")
-        .first()
-    )
-    if soulfray_instance is None or soulfray_instance.current_stage is None:
-        return 0
-    return soulfray_instance.current_stage.stage_order
-
-
 def _evaluate_audere_gates(
     character: ObjectDB, runtime_intensity: int, threshold: AudereThreshold
 ) -> int | None:
