@@ -42,7 +42,7 @@ def reconcile_sunlight_exposure(character, room) -> None:
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is None or not _has_sunlight_drawback(sheet):
         return
-    outdoor = _room_is_outdoor(room) and not _room_shelters_radiant(room)
+    outdoor = _room_is_outdoor(room) and not _character_shelters_radiant(character, room)
     phase = get_ic_phase()
     should_expose = outdoor and phase in {
         TimePhase.DAY,
@@ -57,14 +57,18 @@ def reconcile_sunlight_exposure(character, room) -> None:
         remove_condition(character, template)
 
 
-def _room_shelters_radiant(room) -> bool:
-    """Whether *room* grants location-shelter against radiant damage (#1744)."""
+def _character_shelters_radiant(character, room) -> bool:
+    """Whether *character* in *room* is sheltered against radiant damage (#1744, #1756).
+
+    Composes room-level cascade shelter with position-level shelter (a tent,
+    table, or alcove the character occupies).
+    """
     if room is None:
         return False
     from world.conditions.factories import ensure_radiant_damage_type  # noqa: PLC0415
-    from world.locations.services import hazard_is_covered  # noqa: PLC0415
+    from world.locations.services import hazard_is_covered_for  # noqa: PLC0415
 
-    return hazard_is_covered(room, ensure_radiant_damage_type())
+    return hazard_is_covered_for(character, room, ensure_radiant_damage_type())
 
 
 def _has_sunlight_drawback(sheet) -> bool:
