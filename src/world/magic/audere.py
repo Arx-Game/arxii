@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from django.db import models, transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 AUDERE_CONDITION_NAME = "Audere"
 AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
@@ -120,17 +124,14 @@ class AudereOfferResult:
 
 
 def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -> bool:
-    """Return True if runtime intensity resolves to a tier at or above minimum."""
-    from world.magic.models import IntensityTier
+    """Return True if runtime intensity resolves to a tier at or above minimum.
 
-    resolved_tier = (
-        IntensityTier.objects.filter(threshold__lte=runtime_intensity)
-        .order_by("-threshold")
-        .first()
-    )
-    if resolved_tier is None:
-        return False
-    return resolved_tier.threshold >= minimum_tier_threshold
+    Mathematically equivalent to ``runtime_intensity >= minimum_tier_threshold``:
+    the resolved tier is the max IntensityTier whose threshold <= runtime_intensity,
+    and that tier's threshold >= minimum iff runtime_intensity >= minimum.
+    The IntensityTier ladder query is therefore unnecessary.
+    """
+    return runtime_intensity >= minimum_tier_threshold
 
 
 def _check_soulfray_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
@@ -171,6 +172,54 @@ def soulfray_stage_order_snapshot(character: ObjectDB) -> int:
     return soulfray_instance.current_stage.stage_order
 
 
+def _evaluate_audere_gates(
+    character: ObjectDB, runtime_intensity: int, threshold: AudereThreshold
+) -> int | None:
+    """Run all Audere eligibility gates cheapest-first.
+
+    Returns the resolved Soulfray ``stage_order`` when every gate passes,
+    or ``None`` as soon as any gate fails. Gates are ordered cheapest-first so
+    the common case (cast below the intensity gate) short-circuits before any
+    query beyond the threshold fetch the caller already made.
+
+    Gates:
+    1. Intensity — zero-query arithmetic (runtime_intensity >= minimum tier)
+    2. Soulfray — 1 query (ConditionInstance + current_stage)
+    3. Engagement — 1 exists() query
+    4. Already-in-Audere — 1 exists() query
+    """
+    from world.conditions.models import ConditionInstance
+    from world.mechanics.engagement import CharacterEngagement
+
+    if not _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold):
+        return None
+
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+    if soulfray_instance is None or soulfray_instance.current_stage is None:
+        return None
+    stage_order = soulfray_instance.current_stage.stage_order
+    if stage_order < threshold.minimum_warp_stage.stage_order:
+        return None
+
+    if not CharacterEngagement.objects.filter(character=character).exists():
+        return None
+
+    if ConditionInstance.objects.filter(
+        target=character,
+        condition__name=AUDERE_CONDITION_NAME,
+    ).exists():
+        return None
+
+    return stage_order
+
+
 def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> bool:
     """Check whether a character meets all gates for Audere activation.
 
@@ -181,25 +230,10 @@ def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> boo
     4. Character has a CharacterEngagement
     5. Character is NOT already in Audere
     """
-    from world.conditions.models import ConditionInstance
-    from world.mechanics.engagement import CharacterEngagement
-
     threshold = AudereThreshold.objects.first()
     if threshold is None:
         return False
-
-    has_engagement = CharacterEngagement.objects.filter(character=character).exists()
-    already_in_audere = ConditionInstance.objects.filter(
-        target=character,
-        condition__name=AUDERE_CONDITION_NAME,
-    ).exists()
-
-    return (
-        _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold)
-        and _check_soulfray_gate(character, threshold.minimum_warp_stage.stage_order)
-        and has_engagement
-        and not already_in_audere
-    )
+    return _evaluate_audere_gates(character, runtime_intensity, threshold) is not None
 
 
 def corruption_advisory_for_character(character: ObjectDB) -> str:
@@ -279,7 +313,11 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
 def end_audere(character: ObjectDB) -> None:
     """End Audere for a character, reverting all bonuses.
 
-    Safe to call even if Audere is not active (no-op).
+    The caller must guarantee Audere is active on ``character`` (typically by
+    pre-filtering on an actual ConditionInstance, as ``cleanup_completed_encounter``
+    does). This function does not check for an active Audere condition before
+    reverting the engagement intensity modifier and anima pool — calling it
+    without an active Audere condition would silently corrupt engagement state.
     """
     from world.conditions.models import ConditionTemplate
     from world.conditions.services import remove_condition
@@ -317,23 +355,32 @@ def end_audere(character: ObjectDB) -> None:
 
 
 def maybe_create_audere_offer(
-    character: ObjectDB, runtime_intensity: int
+    character: ObjectDB, runtime_intensity: int, *, sheet: CharacterSheet | None = None
 ) -> PendingAudereOffer | None:
     """Persist a poll-able offer when the Audere gate opens for this cast.
 
     Returns None (no row) for NPCs without a CharacterSheet or when any
     eligibility gate fails. Idempotent: repeated qualifying casts update the
     single row per character (update_or_create).
+
+    Accepts an optional ``sheet`` kwarg to avoid re-fetching the CharacterSheet
+    when the caller already has it (e.g. the Step 8c cast hook). When omitted,
+    falls back to fetching it.
     """
     from world.character_sheets.models import CharacterSheet
 
-    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return None
-    if not check_audere_eligibility(character, runtime_intensity):
+
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
         return None
 
-    stage_order = soulfray_stage_order_snapshot(character)
+    stage_order = _evaluate_audere_gates(character, runtime_intensity, threshold)
+    if stage_order is None:
+        return None
 
     offer, _created = PendingAudereOffer.objects.update_or_create(
         character_sheet=sheet,
