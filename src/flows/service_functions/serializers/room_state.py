@@ -57,6 +57,7 @@ class SceneDataSerializer(serializers.Serializer):
     name = serializers.CharField()
     description = serializers.CharField(allow_blank=True)
     is_owner = serializers.BooleanField()
+    has_unseen_observer = serializers.BooleanField()
 
     def to_representation(self, instance):
         """Convert scene data to dict representation."""
@@ -99,11 +100,14 @@ class SceneDataSerializer(serializers.Serializer):
         except AttributeError:
             description = ""
 
+        from world.scenes.services import has_unseen_observers  # noqa: PLC0415
+
         return {
             "id": scene_id,
             "name": name,
             "description": description,
             "is_owner": is_owner,
+            "has_unseen_observer": has_unseen_observers(instance),
         }
 
 
@@ -150,6 +154,8 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         list[SerializedObjectState],
         list[SerializedObjectState],
     ]:
+        from world.conditions.services import can_perceive  # noqa: PLC0415
+
         characters = []
         objects = []
         exits = []
@@ -158,12 +164,18 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             if obj is caller:
                 continue
 
+            is_character = self._is_character(obj)
+            if is_character and not can_perceive(caller.obj, obj.obj):
+                # #1225: a concealed-and-undetected character is imperceptible to
+                # this caller — omit entirely rather than merely masking the name.
+                continue
+
             obj_serializer = ObjectStateSerializer(obj, context={"looker": caller})
             serialized = obj_serializer.data
 
             if isinstance(obj, ExitState):
                 exits.append(serialized)
-            elif self._is_character(obj):
+            elif is_character:
                 characters.append(serialized)
             else:
                 objects.append(serialized)

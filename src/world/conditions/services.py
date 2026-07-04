@@ -257,6 +257,98 @@ def is_untargetable(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
     ).exists()
 
 
+def is_concealed(target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """True if *target* holds any active perception-concealing condition.
+
+    Mirrors is_untargetable's derive-on-read pattern (#1225).
+    """
+    return active_concealments(target).exists()
+
+
+def can_perceive(actor: "ObjectDB", target: "ObjectDB") -> bool:  # noqa: OBJECTDB_PARAM
+    """Whether *actor* can perceive *target*.
+
+    Co-located (the pre-#1225 MVP baseline, unchanged), and either target carries no
+    active concealing condition or actor's sheet has detected every concealing
+    instance currently active on target (per-observer, not blanket — #1225).
+    """
+    if target.location not in (actor.location, actor):
+        return False
+    concealments = active_concealments(target)
+    if not concealments.exists():
+        return True
+    actor_sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if actor_sheet is None:
+        return False
+    return not concealments.exclude(detected_by=actor_sheet).exists()
+
+
+def register_detection(
+    observer_sheet: "CharacterSheet",
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Record that observer_sheet has pierced target's active concealment(s) (#1225)."""
+    for instance in active_concealments(target):
+        instance.detected_by.add(observer_sheet)
+
+
+def _register_unseen_observer_if_concealing(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    condition: ConditionTemplate,
+) -> None:
+    """OOC-notice hook (#1225): any conceals_from_perception condition, on apply,
+    registers an unseen-observer grant for the scene at target's location — generic
+    across every current and future concealing condition, no per-mechanism plumbing."""
+    if not condition.category.conceals_from_perception:
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import register_unseen_observer  # noqa: PLC0415
+
+    scene = get_active_scene(getattr(target, "location", None))  # noqa: GETATTR_LITERAL
+    if scene is None:
+        return
+    try:
+        sheet = target.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return
+    register_unseen_observer(scene, sheet, "concealment")
+
+
+def _clear_unseen_observer_if_concealing(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    condition: ConditionTemplate,
+) -> None:
+    """Inverse of _register_unseen_observer_if_concealing (#1225)."""
+    if not condition.category.conceals_from_perception:
+        return
+    if is_concealed(target):
+        # Another independently-applied concealing condition is still active on
+        # target — the OOC banner must stay up until the LAST concealment clears,
+        # not the first (#1225 review fix).
+        return
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import clear_unseen_observer  # noqa: PLC0415
+
+    scene = get_active_scene(getattr(target, "location", None))  # noqa: GETATTR_LITERAL
+    if scene is None:
+        return
+    try:
+        sheet = target.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return
+    clear_unseen_observer(scene, sheet)
+
+
+def active_concealments(target: "ObjectDB") -> QuerySet[ConditionInstance]:  # noqa: OBJECTDB_PARAM
+    return target.condition_instances.filter(
+        condition__category__conceals_from_perception=True,
+        is_suppressed=False,
+        resolved_at__isnull=True,
+    )
+
+
 @dataclass
 class _ApplyConditionParams:
     """Parameters for applying a condition (reduces argument count)."""
@@ -445,7 +537,7 @@ def _check_application_resist(
 
 
 def _process_interactions_from_context(
-    target_id: int,
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     incoming_condition: ConditionTemplate,
     ctx: _BulkConditionContext,
 ) -> InteractionResult:
@@ -455,7 +547,7 @@ def _process_interactions_from_context(
     iterations in bulk_apply_conditions see removals from earlier iterations.
     """
     result = InteractionResult()
-    active_instances = ctx.active_instances_by_target.get(target_id, [])
+    active_instances = ctx.active_instances_by_target.get(target.pk, [])
     active_condition_ids = {i.condition_id for i in active_instances}
 
     for interaction in ctx.application_interactions:
@@ -480,12 +572,15 @@ def _process_interactions_from_context(
 
         if _should_remove_existing(interaction, incoming_condition):
             result.removed.append(existing_instance.condition)
+            removed_condition = existing_instance.condition
+            removed_target_id = existing_instance.target_id
             existing_instance.delete()
+            _clear_unseen_observer_if_concealing(target, removed_condition)
             active_instances.remove(existing_instance)
             active_condition_ids.discard(match_id)
             # Clean existing_pairs so later batch entries don't resurrect it
             ctx.existing_pairs.pop(
-                (existing_instance.target_id, match_id),
+                (removed_target_id, match_id),
                 None,
             )
 
@@ -552,7 +647,7 @@ def _apply_single(
             message=f"{template.name} was prevented by {prevention.name}",
         )
 
-    interaction_results = _process_interactions_from_context(target.pk, template, ctx)
+    interaction_results = _process_interactions_from_context(target, template, ctx)
 
     existing = ctx.get_existing_instance(target.pk, template.pk)
 
@@ -714,6 +809,7 @@ def apply_condition(  # noqa: PLR0913
         _notify_stories_condition_applied(target, result.instance)
         _install_reactive_side_effects(target, condition, result.instance)
         _make_just_installed_triggers_live(target)
+        _register_unseen_observer_if_concealing(target, condition)
 
     if result.instance is not None and target_location is not None:
         emit_event(
@@ -843,6 +939,7 @@ def bulk_apply_conditions(
             _notify_stories_condition_applied(app.target, result.instance)
             _install_reactive_side_effects(app.target, app.template, result.instance)
             _make_just_installed_triggers_live(app.target)
+            _register_unseen_observer_if_concealing(app.target, app.template)
 
         if result.instance is not None and target_location is not None:
             emit_event(
@@ -967,6 +1064,43 @@ def _notify_stories_condition_expired(
     on_condition_expired(sheet, condition)
 
 
+def _teardown_removed_condition_instance(
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
+    instance: ConditionInstance,
+) -> ConditionTemplate:
+    """Fully delete ``instance`` and run every side effect a removal must trigger.
+
+    Shared by ``remove_condition`` (full-stack removal branch), ``remove_conditions_by_category``,
+    and ``clear_all_conditions`` so bulk-clear paths never bypass the CONDITION_REMOVED event,
+    stories re-evaluation, the OOC unseen-observer clear hook (#1225), or deferred-death
+    resolution the way a raw queryset ``.delete()`` would. Always removes the instance outright —
+    callers needing partial-stack reduction (``remove_condition``'s ``remove_all_stacks=False``
+    branch) do not go through this helper.
+    """
+    instance_pk = instance.pk
+    condition = instance.condition
+    source = instance.source_character or instance.source_technique
+    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+
+    instance.delete()
+    _invalidate_condition_handler(target)
+    if target_location is not None:
+        emit_event(
+            EventName.CONDITION_REMOVED,
+            ConditionRemovedPayload(
+                target=target,
+                instance_id=instance_pk,
+                template=condition,
+                source=source,
+            ),
+            location=target_location,
+        )
+    _notify_stories_condition_expired(target, condition)
+    _clear_unseen_observer_if_concealing(target, condition)
+    _resolve_deferred_death_on_expiry(target, condition)
+    return condition
+
+
 @transaction.atomic
 def remove_condition(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
@@ -1018,21 +1152,7 @@ def remove_condition(
         # stories re-evaluation needed until the condition is gone.
         return True
 
-    instance.delete()
-    _invalidate_condition_handler(target)
-    if target_location is not None:
-        emit_event(
-            EventName.CONDITION_REMOVED,
-            ConditionRemovedPayload(
-                target=target,
-                instance_id=instance_pk,
-                template=condition,
-                source=source,
-            ),
-            location=target_location,
-        )
-    _notify_stories_condition_expired(target, condition)
-    _resolve_deferred_death_on_expiry(target, condition)
+    _teardown_removed_condition_instance(target, instance)
     return True
 
 
@@ -1091,14 +1211,14 @@ def remove_conditions_by_category(
 
     Returns:
         List of removed ConditionTemplates
+
+    Reuses ``_teardown_removed_condition_instance`` per instance (the same helper
+    ``remove_condition`` uses) rather than a raw queryset ``.delete()``, so the OOC
+    unseen-observer clear hook (#1225) and every other per-instance teardown side
+    effect fires for a bulk category clear too.
     """
-    instances = get_active_conditions(target, category=category)
-    removed = [i.condition for i in instances]
-    instances.delete()
-    _invalidate_condition_handler(target)
-    for template in removed:
-        _notify_stories_condition_expired(target, template)
-    return removed
+    instances = list(get_active_conditions(target, category=category))
+    return [_teardown_removed_condition_instance(target, instance) for instance in instances]
 
 
 @transaction.atomic
@@ -1220,7 +1340,9 @@ def process_damage_interactions(
         # Handle condition removal
         if interaction.removes_condition:
             result.removed_conditions.append(instance)
+            removed_condition = instance.condition
             instance.delete()
+            _clear_unseen_observer_if_concealing(target, removed_condition)
             del instance_map[interaction.condition_id]
 
         # Handle applying new condition
@@ -1761,7 +1883,9 @@ def _process_duration_and_progression(
             instance.rounds_remaining -= 1
             if instance.rounds_remaining <= 0:
                 result.expired_conditions.append(instance)
+                expired_condition = instance.condition
                 instance.delete()
+                _clear_unseen_observer_if_concealing(target, expired_condition)
                 continue
 
         # Stage progression
@@ -1829,6 +1953,7 @@ def suppress_condition(
         )
     instance.save()
     _invalidate_condition_handler(target)
+    _clear_unseen_observer_if_concealing(target, condition)
     return True
 
 
@@ -1854,9 +1979,11 @@ def unsuppress_condition(
     instance.suppressed_until = None
     instance.save()
     _invalidate_condition_handler(target)
+    _register_unseen_observer_if_concealing(target, condition)
     return True
 
 
+@transaction.atomic
 def clear_all_conditions(
     target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     *,
@@ -1873,6 +2000,12 @@ def clear_all_conditions(
 
     Returns:
         Number of conditions removed
+
+    Reuses ``_teardown_removed_condition_instance`` per instance (the same helper
+    ``remove_condition`` uses) rather than a raw queryset ``.delete()``, so the OOC
+    unseen-observer clear hook (#1225) and every other per-instance teardown side
+    effect fires for a full clear too. Includes suppressed instances, matching the
+    original unfiltered queryset.
     """
     qs = ConditionInstance.objects.filter(target=target)
 
@@ -1882,17 +2015,10 @@ def clear_all_conditions(
     if only_category:
         qs = qs.filter(condition__category=only_category)
 
-    removed_template_ids = list(qs.values_list("condition", flat=True))
-    count = len(removed_template_ids)
-    qs.delete()
-    _invalidate_condition_handler(target)
-    for template_id in removed_template_ids:
-        try:
-            template = ConditionTemplate.objects.get(pk=template_id)
-        except ConditionTemplate.DoesNotExist:
-            continue
-        _notify_stories_condition_expired(target, template)
-    return count
+    instances = list(qs)
+    for instance in instances:
+        _teardown_removed_condition_instance(target, instance)
+    return len(instances)
 
 
 def get_turn_order_modifier(character_sheet: "CharacterSheet") -> int:
@@ -2077,6 +2203,11 @@ def advance_condition_severity(
     persists over threshold). Fail = stage advances normally.
     """
     previous_stage = instance.current_stage
+    # Captured before any mutation below — used to detect the resolved→active
+    # transition (severity re-advancing from zero) so the OOC unseen-observer
+    # hook fires exactly once, on the edge, not on every call (#1225 — ADR-0083
+    # promises this for any future duration/decay-based concealment producer).
+    was_resolved = instance.resolved_at is not None
     instance.severity += amount
 
     # Find the highest severity-threshold stage that's been reached
@@ -2106,6 +2237,8 @@ def advance_condition_severity(
                     update_fields.append("resolved_at")
                 instance.save(update_fields=update_fields)
                 _invalidate_condition_handler(instance.target)
+                if was_resolved and instance.resolved_at is None:
+                    _register_unseen_observer_if_concealing(instance.target, instance.condition)
                 return SeverityAdvanceResult(
                     previous_stage=previous_stage,
                     new_stage=previous_stage,
@@ -2125,6 +2258,9 @@ def advance_condition_severity(
 
     instance.save(update_fields=update_fields)
     _invalidate_condition_handler(instance.target)
+
+    if was_resolved and instance.resolved_at is None:
+        _register_unseen_observer_if_concealing(instance.target, instance.condition)
 
     if stage_changed:
         stage_change_payload = ConditionStageChangedPayload(
@@ -2271,6 +2407,11 @@ def decay_condition_severity(
     preventing double-decrement.
     """
     previous_stage = instance.current_stage
+    # Captured before any mutation below — used to detect the active→resolved
+    # transition (severity decaying to zero) so the OOC unseen-observer hook
+    # fires exactly once, on the edge, not on every call (#1225 — ADR-0083
+    # promises this for any future duration/decay-based concealment producer).
+    previously_resolved = instance.resolved_at is not None
     new_severity = max(0, instance.severity - amount)
 
     new_stage = (
@@ -2293,6 +2434,9 @@ def decay_condition_severity(
 
     instance.save(update_fields=update_fields)
     _invalidate_condition_handler(instance.target)
+
+    if resolved and not previously_resolved:
+        _clear_unseen_observer_if_concealing(instance.target, instance.condition)
 
     if new_stage != previous_stage:
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL

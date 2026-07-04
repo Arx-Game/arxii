@@ -109,6 +109,12 @@ def _seed_stealth() -> None:
     seed_stealth_check_content()
 
 
+def _seed_perception() -> None:
+    from world.seeds.perception_conditions import seed_perception_condition_content  # noqa: PLC0415
+
+    seed_perception_condition_content()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -153,6 +159,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "domain_dev": _seed_domain_dev,
     # Stealth: the act-time concealment skill + check (#1464). After "checks".
     "stealth": _seed_stealth,
+    # Perception: the Concealed condition primitive (#1225) — the seam Stealth
+    # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
+    "perception": _seed_perception,
 }
 
 
@@ -192,6 +201,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from actions.models import ActionTemplate  # noqa: PLC0415
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
@@ -235,4 +245,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "domain_dev": [],
         # Stealth seeds skill/check rows counted under "checks" (#1464).
         "stealth": [],
+        # Perception seeds the Concealed ConditionCategory + ConditionTemplate (#1225).
+        "perception": [ConditionTemplate],
     }

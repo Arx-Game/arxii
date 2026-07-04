@@ -287,8 +287,9 @@ coupled to the action's kwarg names by the base class.
   must have charges remaining. Delegates to `ItemTemplate.is_usable`.
 - **`OnUseTargetPrerequisite`** — enforces `ItemTemplate.on_use_target_kind`: null ⇒
   self-use only (external target rejected); set ⇒ requires a target of that kind,
-  reachable and visible. Visibility is currently a same-location MVP proxy
-  (`_is_visible_to`); a real perception/stealth system will replace it.
+  reachable and visible. Visibility (`_is_visible_to`) now delegates to the real
+  perception/concealment seam, `can_perceive` (`world.conditions.services`, #1225) —
+  see ADR-0083 for the OOC unseen-observer transparency guarantee it composes with.
 
 ## Adding a New Action
 

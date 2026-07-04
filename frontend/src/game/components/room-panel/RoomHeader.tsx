@@ -42,6 +42,11 @@ export function RoomHeader({
               Scene: {scene.name}
             </Badge>
           </Link>
+          {scene.has_unseen_observer && (
+            <Badge variant="destructive" className="text-xs">
+              ⚠ OOC: an unseen observer is present
+            </Badge>
+          )}
           {scene.is_owner && (
             <Button
               variant="ghost"

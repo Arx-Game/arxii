@@ -253,6 +253,45 @@ class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
         unique_together = ["scene", "account"]
 
 
+class SceneUnseenObserver(SharedMemoryModel):
+    """An active unseen-observation grant on a scene (#1225).
+
+    Tracks that *some* mechanism (physical concealment today; a future scrying/
+    remote-viewing feature later) lets `observer` witness `scene` without other
+    participants' characters being aware. `source_label` is an admin/debugging hint,
+    never surfaced to players — the OOC notice this powers is deliberately
+    identity-free (see world.scenes.services.register_unseen_observer).
+    """
+
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="unseen_observers",
+    )
+    observer = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.CASCADE,
+        related_name="unseen_observations",
+    )
+    source_label = models.CharField(
+        max_length=100,
+        help_text="Admin/debugging hint for what granted this (e.g. 'concealment'). "
+        "Never shown to players — the OOC notice never reveals identity or mechanism.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scene", "observer"],
+                name="unique_unseen_observer_per_scene",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"unseen observer on {self.scene_id} ({self.source_label})"
+
+
 class Persona(SharedMemoryModel):
     """A face the character shows the world.
 

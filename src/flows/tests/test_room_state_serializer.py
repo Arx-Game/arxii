@@ -9,7 +9,13 @@ from evennia_extensions.factories import ObjectDBFactory
 from evennia_extensions.models import ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
 from flows.service_functions.serializers.room_state import build_room_state_payload
-from world.roster.factories import PlayerMediaFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.services import register_detection
+from world.roster.factories import PlayerMediaFactory, RosterEntryFactory
 
 
 class RoomStateSerializerCharacterSplitTests(TestCase):
@@ -151,3 +157,68 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
         assert set(payload.keys()) == {"room", "characters", "objects", "exits", "scene", "heat"}
         # Cold persona → the self-only heat field is None (never another player's data).
         assert payload["heat"] is None
+
+
+class RoomStateSerializerConcealmentTests(TestCase):
+    """#1225 — ``can_perceive`` gates the ``characters`` list.
+
+    A concealed-and-undetected character must not leak name/dbref/avatar to other
+    room occupants via the web room-state payload.
+    """
+
+    def setUp(self):
+        self.room = ObjectDBFactory(
+            db_key="shadowed hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+        self.caller_sheet = RosterEntryFactory().character_sheet
+        self.caller = self.caller_sheet.character
+        self.caller.move_to(self.room, quiet=True)
+
+        self.visible_sheet = RosterEntryFactory().character_sheet
+        self.visible = self.visible_sheet.character
+        self.visible.move_to(self.room, quiet=True)
+
+        self.concealed_sheet = RosterEntryFactory().character_sheet
+        self.concealed = self.concealed_sheet.character
+        self.concealed.move_to(self.room, quiet=True)
+
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        self.concealing_condition = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=self.concealed, condition=self.concealing_condition)
+
+        for obj in (self.room, self.caller, self.visible, self.concealed):
+            media = PlayerMediaFactory()
+            ObjectDisplayData.objects.create(object=obj, thumbnail=media)
+
+        self.context = SceneDataManagerFactory()
+        self.room_state = self.context.initialize_state_for_object(self.room)
+        self.caller_state = self.context.initialize_state_for_object(self.caller)
+
+        self._session_patches = []
+        for char in (self.caller, self.visible, self.concealed):
+            p = patch.object(char.sessions, "all", return_value=[MagicMock()])
+            p.start()
+            self._session_patches.append(p)
+
+    def tearDown(self):
+        for p in self._session_patches:
+            p.stop()
+
+    def test_concealed_and_undetected_character_is_omitted(self):
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        char_names = [c["name"] for c in payload["characters"]]
+        assert self.concealed.key not in char_names
+
+    def test_unconcealed_co_located_character_appears(self):
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        char_names = [c["name"] for c in payload["characters"]]
+        assert self.visible.key in char_names
+
+    def test_detected_concealed_character_appears(self):
+        register_detection(self.caller_sheet, self.concealed)
+
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        char_names = [c["name"] for c in payload["characters"]]
+        assert self.concealed.key in char_names

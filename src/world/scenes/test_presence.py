@@ -11,6 +11,11 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerAllowList
 from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
 from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
@@ -139,6 +144,39 @@ class WhoListingPrivacyTests(TestCase):
             entries = who_listing()
         assert len(entries) == 1
         assert entries[0].idle == IDLE_AWAY
+
+
+class WhoListingConcealmentTests(TestCase):
+    """A concealed-and-undetected character is omitted from ``who`` (#1225 review gap).
+
+    Unlike the room-occupant list (per-observer ``can_perceive``), ``who`` is an
+    anonymous global directory with no coherent per-observer detection concept, so
+    omission here is unconditional — mirroring the existing quiet-mode
+    (``hidden_from_viewer``) omission already in ``who_listing``.
+    """
+
+    def _session(self, puppet, *, idle_seconds: float = 60.0):
+        return SimpleNamespace(puppet=puppet, cmd_last_visible=time() - idle_seconds)
+
+    def test_concealed_character_omitted_from_who(self) -> None:
+        sheet = CharacterSheetFactory()
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        condition = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=sheet.character, condition=condition)
+
+        with patch("evennia.SESSION_HANDLER") as handler:
+            handler.get_sessions.return_value = [self._session(sheet.character)]
+            entries = who_listing()
+        assert entries == []
+
+    def test_unconcealed_character_still_appears_in_who(self) -> None:
+        sheet = CharacterSheetFactory()
+
+        with patch("evennia.SESSION_HANDLER") as handler:
+            handler.get_sessions.return_value = [self._session(sheet.character)]
+            entries = who_listing()
+        assert len(entries) == 1
+        assert entries[0].name == sheet.primary_persona.display_ic()
 
 
 class PresenceApiTests(APITestCase):

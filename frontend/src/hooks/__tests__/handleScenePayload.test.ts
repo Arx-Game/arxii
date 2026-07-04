@@ -28,12 +28,14 @@ describe('handleScenePayload', () => {
     id: number,
     name: string,
     description: string = '',
-    is_owner: boolean = false
+    is_owner: boolean = false,
+    has_unseen_observer: boolean = false
   ): SceneSummary => ({
     id,
     name,
     description,
     is_owner,
+    has_unseen_observer,
   });
 
   describe('scene start action', () => {
@@ -61,6 +63,7 @@ describe('handleScenePayload', () => {
         name: 'The Quest Begins',
         description: 'Our heroes gather at the tavern',
         is_owner: true,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'start',
@@ -76,6 +79,7 @@ describe('handleScenePayload', () => {
           name: 'The Quest Begins',
           description: 'Our heroes gather at the tavern',
           is_owner: true,
+          has_unseen_observer: false,
         },
       });
     });
@@ -106,6 +110,7 @@ describe('handleScenePayload', () => {
         name: 'Battle Scene - Round 2',
         description: 'The battle intensifies as reinforcements arrive',
         is_owner: false,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'update',
@@ -121,6 +126,7 @@ describe('handleScenePayload', () => {
           name: 'Battle Scene - Round 2',
           description: 'The battle intensifies as reinforcements arrive',
           is_owner: false,
+          has_unseen_observer: false,
         },
       });
     });
@@ -170,6 +176,7 @@ describe('handleScenePayload', () => {
         name: 'Final Battle',
         description: 'The epic conclusion',
         is_owner: true,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'end',
@@ -193,6 +200,7 @@ describe('handleScenePayload', () => {
           name: 'Should Be Ignored',
           description: 'This entire scene should be ignored',
           is_owner: true,
+          has_unseen_observer: false,
         },
       };
 
@@ -288,6 +296,7 @@ describe('handleScenePayload', () => {
         name: 'Complete Scene',
         description: 'A scene with all fields populated',
         is_owner: true,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'start',
@@ -303,6 +312,7 @@ describe('handleScenePayload', () => {
           name: 'Complete Scene',
           description: 'A scene with all fields populated',
           is_owner: true,
+          has_unseen_observer: false,
         },
       });
     });
@@ -314,6 +324,7 @@ describe('handleScenePayload', () => {
         name: 'Updated Complete Scene',
         description: 'An updated scene with all fields',
         is_owner: false,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'update',
@@ -329,6 +340,7 @@ describe('handleScenePayload', () => {
           name: 'Updated Complete Scene',
           description: 'An updated scene with all fields',
           is_owner: false,
+          has_unseen_observer: false,
         },
       });
     });
@@ -340,6 +352,7 @@ describe('handleScenePayload', () => {
         name: 'Minimal Scene',
         description: '',
         is_owner: false,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'start',
@@ -363,6 +376,7 @@ describe('handleScenePayload', () => {
         name: 'Zero ID Scene',
         description: 'A scene with id 0',
         is_owner: false,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'start',
@@ -386,6 +400,7 @@ describe('handleScenePayload', () => {
         name: 'Large ID Scene',
         description: 'A scene with a very large id',
         is_owner: true,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'update',
@@ -411,6 +426,7 @@ describe('handleScenePayload', () => {
         name: longName,
         description: longDescription,
         is_owner: false,
+        has_unseen_observer: false,
       };
       const payload: ScenePayload = {
         action: 'start',
@@ -536,6 +552,7 @@ describe('handleScenePayload', () => {
           name: 'Grand Performance',
           description: 'A theatrical production in the great hall',
           is_owner: true,
+          has_unseen_observer: false,
         },
       };
 
@@ -548,6 +565,7 @@ describe('handleScenePayload', () => {
           name: 'Grand Performance',
           description: 'A theatrical production in the great hall',
           is_owner: true,
+          has_unseen_observer: false,
         },
       });
     });
@@ -561,6 +579,7 @@ describe('handleScenePayload', () => {
           name: 'Grand Performance',
           description: 'A theatrical production in the great hall',
           is_owner: false,
+          has_unseen_observer: false,
         },
       };
 
@@ -573,6 +592,7 @@ describe('handleScenePayload', () => {
           name: 'Grand Performance',
           description: 'A theatrical production in the great hall',
           is_owner: false,
+          has_unseen_observer: false,
         },
       });
     });

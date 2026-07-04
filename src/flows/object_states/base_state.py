@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
+from evennia.objects.models import ObjectDB
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
 from commands.types import Kwargs
@@ -239,6 +240,21 @@ class BaseState:
 
     def get_display_characters(self, **kwargs: Kwargs) -> str:
         characters = self._get_contents("character")
+        looker = kwargs.get("looker")
+        looker_obj: ObjectDB | None = None
+        if isinstance(looker, BaseState):
+            looker_obj = looker.obj
+        elif isinstance(looker, ObjectDB):
+            looker_obj = looker
+        if looker_obj is not None:
+            from world.conditions.services import can_perceive  # noqa: PLC0415
+
+            # #1225: a concealed-and-undetected character is imperceptible to this
+            # looker — omit entirely, mirroring the web room-state gate. The looker
+            # always perceives themselves regardless of their own concealment.
+            characters = [
+                ch for ch in characters if ch.obj == looker_obj or can_perceive(looker_obj, ch.obj)
+            ]
         names = iter_to_str(
             (ch.get_display_name(**kwargs) for ch in characters),
             endsep=", and",

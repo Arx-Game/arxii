@@ -415,6 +415,30 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
   `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
   `perform_treatment()`
+- **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
+  per-observer concealment detection (`is_concealed()`, `active_concealments()`,
+  `ConditionInstance.detected_by`). Consulted by `OnUseTargetPrerequisite` (item-use targeting),
+  `RoomStatePayloadSerializer._serialize_contents` + telnet `BaseState.get_display_characters`
+  (room-occupant lists omit a concealed-and-undetected character entirely — name, dbref, and
+  avatar never leak), `SearchAction` (the detection roll; a successful detection also pushes
+  a `send_room_state()` refresh to the detecting actor so the target appears without waiting for
+  the next natural refresh), and `LookAction`'s direct-target gate (naming a concealed character
+  directly fails with the same not-found message a genuinely absent target would — `CmdLook`
+  rewrites the message from the player's own raw input so a prefix/case-variant probe can't
+  distinguish "concealed" from "never there"). The global presence directories (`where_listing`,
+  `who_listing`) instead consult the unconditional `is_concealed()` directly (no per-observer
+  detection concept for an anonymous global directory) — a concealed character never appears in
+  `where`/`who`, regardless of who's asking. Every condition-removal path that can end
+  a concealing condition fires the same register/clear teardown `remove_condition`
+  uses, so none of them bypass the OOC unseen-observer hook: the bulk-clear paths
+  (`remove_conditions_by_category`, `clear_all_conditions`), the severity
+  advance/decay paths (`advance_condition_severity` re-advancing from zero,
+  `decay_condition_severity` decaying to zero), the admin-authorable interaction
+  paths (`process_damage_interactions`'s `ConditionDamageInteraction.removes_condition`,
+  `bulk_apply_conditions`'s `ConditionConditionInteraction.removes_condition`), and
+  natural `DurationType.ROUNDS` countdown-to-zero expiry
+  (`_process_duration_and_progression`). See ADR-0083 for the separate OOC
+  unseen-observer transparency guarantee this composes with.
 - **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
   (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
   `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).
@@ -1790,7 +1814,11 @@ crafting framework and check-driven facet/style attachment.
 - **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — action-layer entry
   point routing both telnet and web through prerequisites + `use_item`. kwargs: `item` (held
   instance), optional `target` (validated by `OnUseTargetPrerequisite` against
-  `on_use_target_kind`). Visibility gate is a same-location MVP proxy; no perception system yet.
+  `on_use_target_kind`). Visibility gate routes through the `can_perceive` seam (#1225): same-location
+  plus the `Concealed`-condition producer contract (`ConditionCategory.conceals_from_perception`,
+  per-observer detection via `ConditionInstance.detected_by`) — see ADR-0083 for the OOC
+  unseen-observer transparency guarantee this composes with. Stealth witness-reduction (#1464) and
+  disguise-piercing (forms) remain deferred automated producers of concealment/detection.
   Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `StyleAlreadyAttached`,
   `StyleCapacityExceeded`, `SlotConflict`, `SlotIncompatible`, `ItemNotUsable`,

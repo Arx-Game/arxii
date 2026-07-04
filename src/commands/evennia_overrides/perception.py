@@ -10,6 +10,7 @@ from actions.definitions.perception import (
     LookAction,
     LookAtItemAction,
 )
+from actions.types import ActionResult
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
@@ -77,6 +78,35 @@ class CmdLook(ArxCommand):
             raise CommandError(msg)
         return {"target": target}
 
+    def _execute(self) -> None:
+        """Run the plain-look dispatch, rewriting the concealment-gate failure.
+
+        Evennia's ``search()`` is prefix-matching and case-insensitive, so a
+        probe that resolves to a real-but-concealed character reaches
+        ``LookAction.execute()`` with a genuinely resolved target — its
+        failure message would otherwise echo the object's canonical name
+        (``target.key``), which the player never typed. That's a tell: an
+        equivalent probe against a nonexistent target echoes the player's own
+        unmatched input verbatim (``resolve_action_args``'s ``CommandError``
+        above). Rewriting the message from ``self.args`` here makes the two
+        indistinguishable (#1225 review fix) — only for the plain-look
+        dispatch (``self.action`` is still the default ``LookAction``; the
+        drilled item forms switch ``self.action`` and already fall through to
+        plain search on a concealed owner/container, never reaching this
+        failure path).
+        """
+        args = (self.args or "").strip()
+        kwargs = self.resolve_action_args()
+        result = self.action.run(actor=self.caller, **kwargs)
+        if (
+            not result.success
+            and isinstance(self.action, LookAction)
+            and kwargs.get("target") not in (self.caller, self.caller.location)
+        ):
+            result = ActionResult(success=False, message=f"Could not find '{args}'.")
+        if result.message:
+            self.msg(result.message)
+
     def _try_dispatch_at_owner(
         self,
         owner_name: str,
@@ -93,6 +123,11 @@ class CmdLook(ArxCommand):
         if not results:
             return None
         owner = results[0] if isinstance(results, list) else results
+        if owner != self.caller and not self._can_perceive(owner):
+            # Treat a concealed-and-undetected owner exactly like a nonexistent
+            # one — fall through to the plain-search path so the two are
+            # indistinguishable (#1225; mirrors the LookAction target gate).
+            return None
         # Switch dispatch to LookAtItemAction. Safe because ``func()`` reads
         # ``self.action`` after ``resolve_action_args()``, and Evennia
         # instantiates commands per invocation.
@@ -109,8 +144,18 @@ class CmdLook(ArxCommand):
         if not results:
             return None
         container = results[0] if isinstance(results, list) else results
+        if container != self.caller and not self._can_perceive(container):
+            # Same treatment as the owner path — a concealed container falls
+            # through to plain search rather than dispatching (#1225).
+            return None
         self.action = LookAtItemAction()
         return {"container_id": container.pk, "item_name": item_name}
+
+    def _can_perceive(self, target: Any) -> bool:
+        """Thin wrapper around ``can_perceive`` for the drilled-form dispatch gates."""
+        from world.conditions.services import can_perceive  # noqa: PLC0415
+
+        return can_perceive(self.caller, target)
 
 
 class CmdInventory(ArxCommand):

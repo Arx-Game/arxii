@@ -95,12 +95,17 @@ def where_listing(viewer_account: object | None = None) -> list[WhereEntry]:
     character, keyed on its **active** persona (a TEMPORARY mask shows that face, by design),
     sorted by name. Quiet-mode characters (#1463) are omitted unless ``viewer_account`` is the
     player themselves or on their allowlist — though they still appear to others in the room
-    itself; ``where`` is the at-a-distance surface quiet mode opts out of.
+    itself; ``where`` is the at-a-distance surface quiet mode opts out of. A concealed character
+    (#1225 — any active ``conceals_from_perception`` condition) is omitted unconditionally: unlike
+    the room-occupant list, there is no per-observer "detection" concept for an anonymous global
+    directory, and ``where`` additionally reveals the character's exact room path, so leaving
+    concealment to per-viewer gating here would defeat the concealment system entirely.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
     from evennia import SESSION_HANDLER  # noqa: PLC0415
 
     from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+    from world.conditions.services import is_concealed  # noqa: PLC0415
     from world.scenes.presence import hidden_from_viewer  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
@@ -112,6 +117,8 @@ def where_listing(viewer_account: object | None = None) -> list[WhereEntry]:
             continue
         seen.add(puppet.id)
         if hidden_from_viewer(puppet, viewer_account):
+            continue
+        if is_concealed(puppet):
             continue
         room = puppet.location
         if room is None or not room_is_publicly_listed(room):

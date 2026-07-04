@@ -268,6 +268,7 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - detected_by -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - triggers <- flows.Trigger
   - alteration_events <- magic.MagicalAlterationEvent
@@ -1017,6 +1018,7 @@
   - technique_draft <- magic.TechniqueDraft
   - threads <- magic.Thread
   - thread_weaving_unlocks <- magic.CharacterThreadWeavingUnlock
+  - unseen_observations <- scenes.SceneUnseenObserver
   - personas <- scenes.Persona
   - persona_discoveries <- scenes.PersonaDiscovery
   - scene_round_participations <- scenes.SceneRoundParticipant
@@ -1032,6 +1034,7 @@
   - employments <- currency.CharacterEmployment
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
+  - detected_concealments <- conditions.ConditionInstance
   - modifiers <- mechanics.CharacterModifier
   - consequence_outcomes <- checks.ConsequenceOutcome
   - relationships_as_source <- relationships.CharacterRelationship
@@ -1542,6 +1545,7 @@
   - current_stage -> conditions.ConditionStage [FK] (nullable)
   - source_character -> objects.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
+  - detected_by -> character_sheets.CharacterSheet [M2M]
 **Pointed to by:**
   - triggers <- flows.Trigger
   - alteration_events <- magic.MagicalAlterationEvent
@@ -1580,6 +1584,7 @@
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None — On ascending stage changes, apply the stage's on_entry_conditions.`
 - `batch_chronic_effect_tick() -> world.conditions.types.ChronicTickSummary — Scheduler entry point. Advance long-term (chronic) DoT by one tick.`
 - `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] — Apply multiple conditions in a single transaction with batched queries.`
+- `can_perceive(actor: 'ObjectDB', target: 'ObjectDB') -> bool — Whether *actor* can perceive *target*.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int — Remove all conditions from a target.`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] — Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
@@ -1609,6 +1614,7 @@
 - `get_turn_order_modifier(character_sheet: 'CharacterSheet') -> int — Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
 - `has_death_deferred(character: 'ObjectDB') -> bool — Return True if the character has any active condition granting death_deferred.`
+- `is_concealed(target: 'ObjectDB') -> bool — True if *target* holds any active perception-concealing condition.`
 - `is_untargetable(target: 'ObjectDB') -> bool — True if *target* holds any active intangibility condition.`
 - `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None) -> world.checks.types.CheckResult — Main check resolution function.`
 - `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
@@ -1616,6 +1622,7 @@
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process start-of-round effects for all conditions on a target.`
+- `register_detection(observer_sheet: 'CharacterSheet', target: 'ObjectDB') -> None — Record that observer_sheet has pierced target's active concealment(s) (#1225).`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool — Remove a condition from a target.`
 - `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] — Remove all conditions in a category from a target.`
 - `resolve_damage_type_resistance(character: 'ObjectDB', damage_amount: int, damage_type: 'DamageType | None') -> int — Net damage-type resistance (condition + gift-thread) and return reduced damage (>=0).`
@@ -4252,6 +4259,7 @@
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
   - participations <- scenes.SceneParticipation
+  - unseen_observers <- scenes.SceneUnseenObserver
   - interactions <- scenes.Interaction
   - summary_revisions <- scenes.SceneSummaryRevision
   - check_modifiers <- scenes.SceneCheckModifier
@@ -4276,6 +4284,11 @@
 **Foreign Keys:**
   - scene -> scenes.Scene [FK]
   - account -> accounts.AccountDB [FK]
+
+### SceneUnseenObserver
+**Foreign Keys:**
+  - scene -> scenes.Scene [FK]
+  - observer -> character_sheets.CharacterSheet [FK]
 
 ### Persona
 **Foreign Keys:**
@@ -4562,10 +4575,13 @@
 ### Service Functions
 - `active_persona_for_sheet(sheet: 'CharacterSheet') -> 'Persona' — The face a character is currently presenting as (#981).`
 - `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' — Send scene information to all accounts in the scene's location.`
+- `clear_unseen_observer(scene: 'Scene', observer: 'CharacterSheet') -> 'None' — Clear observer's unseen-observation grant on scene; broadcast if it changed`
 - `create_mask(sheet: 'CharacterSheet', *, name: 'str', disguise_form: 'CharacterForm | None' = None, disguise_kind: 'str | None' = None) -> 'Persona' — Create a TEMPORARY anonymous **mask** — the "put on a mask" path (#1127).`
 - `create_persona(sheet: 'CharacterSheet', *, name: 'str', persona_type: 'str', is_fake_name: 'bool' = False, bypass_cap: 'bool' = False) -> 'Persona' — Create a new ESTABLISHED or TEMPORARY persona for a character (#1127).`
+- `has_unseen_observers(scene: 'Scene') -> 'bool' — Whether any unseen-observation grant is currently active on scene (#1225).`
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 - `persona_for_character(character: 'Character') -> 'Persona' — Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
+- `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' — Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' — Set the character's active face (#981) — the ONLY mutator.`
 - `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, personality: 'str | None' = None, background: 'str | None' = None) -> 'Profile' — Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
 

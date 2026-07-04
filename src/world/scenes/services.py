@@ -290,3 +290,50 @@ def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
             },
         }
         account.msg(scene=((), payload))
+
+
+def register_unseen_observer(scene: Scene, observer: CharacterSheet, source_label: str) -> None:
+    """Record that observer can unseen-witness scene; broadcast the OOC state if new.
+
+    Mechanism-agnostic (#1225): any unseen-observation grant (physical concealment
+    today, a future scrying/remote-viewing feature later) calls this. The broadcast
+    payload never carries observer identity — see _broadcast_unseen_observer_state.
+    """
+    from world.scenes.models import SceneUnseenObserver  # noqa: PLC0415
+
+    _, created = SceneUnseenObserver.objects.get_or_create(
+        scene=scene, observer=observer, defaults={"source_label": source_label}
+    )
+    if created:
+        _broadcast_unseen_observer_state(scene)
+
+
+def clear_unseen_observer(scene: Scene, observer: CharacterSheet) -> None:
+    """Clear observer's unseen-observation grant on scene; broadcast if it changed
+    whether any unseen observer remains (#1225)."""
+    from world.scenes.models import SceneUnseenObserver  # noqa: PLC0415
+
+    deleted, _ = SceneUnseenObserver.objects.filter(scene=scene, observer=observer).delete()
+    if deleted:
+        _broadcast_unseen_observer_state(scene)
+
+
+def has_unseen_observers(scene: Scene) -> bool:
+    """Whether any unseen-observation grant is currently active on scene (#1225)."""
+    from world.scenes.models import SceneUnseenObserver  # noqa: PLC0415
+
+    return SceneUnseenObserver.objects.filter(scene=scene).exists()
+
+
+def _broadcast_unseen_observer_state(scene: Scene) -> None:
+    """Re-send room_state to every occupant of scene's location, so the
+    identity-free ``has_unseen_observer`` flag on the scene payload (#1225) is
+    fresh for everyone present — routes through the same, already-wired
+    ``room_state`` channel every login/move already uses (rather than a bespoke
+    payload key with no frontend consumer and no resend-on-reconnect), so a
+    player who reconnects or walks in while a grant is already active also
+    sees the current state without a separate re-sync mechanism."""
+    location = scene.location
+    if location is None:
+        return
+    location._broadcast_room_state()  # noqa: SLF001

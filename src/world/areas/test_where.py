@@ -1,11 +1,20 @@
 """`where` service (#1463) — coloured area-path rendering with colour inheritance."""
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.areas.services import colored_area_path
+from world.areas.services import colored_area_path, where_listing
+from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionTemplateFactory,
+)
+from world.roster.factories import RosterEntryFactory
 
 
 class ColoredAreaPathTests(TestCase):
@@ -36,3 +45,53 @@ class ColoredAreaPathTests(TestCase):
         path = colored_area_path(profile.objectdb)
         assert "|" not in path
         assert path == profile.objectdb.key
+
+
+class WhereListingConcealmentTests(TestCase):
+    """A concealed-and-undetected character is omitted from ``where`` (#1225 review gap).
+
+    Unlike the room-occupant list (per-observer ``can_perceive``), ``where`` is an
+    anonymous global directory with no coherent per-observer detection concept, so
+    omission here is unconditional — mirroring the existing quiet-mode
+    (``hidden_from_viewer``) omission already in ``where_listing``.
+    """
+
+    def setUp(self) -> None:
+        self.profile = RoomProfileFactory()
+        self.room = self.profile.objectdb
+
+        self.visible_sheet = RosterEntryFactory().character_sheet
+        self.visible = self.visible_sheet.character
+        self.visible.location = self.room
+
+        self.concealed_sheet = RosterEntryFactory().character_sheet
+        self.concealed = self.concealed_sheet.character
+        self.concealed.location = self.room
+
+        cat = ConditionCategoryFactory(conceals_from_perception=True)
+        condition = ConditionTemplateFactory(category=cat)
+        ConditionInstanceFactory(target=self.concealed, condition=condition)
+
+    @staticmethod
+    def _session(puppet: object) -> SimpleNamespace:
+        return SimpleNamespace(puppet=puppet)
+
+    def test_concealed_character_omitted_from_where(self) -> None:
+        with patch("evennia.SESSION_HANDLER") as handler:
+            handler.get_sessions.return_value = [
+                self._session(self.visible),
+                self._session(self.concealed),
+            ]
+            entries = where_listing()
+        names = [entry.persona_name for entry in entries]
+        assert self.concealed_sheet.primary_persona.name not in names
+
+    def test_unconcealed_character_still_appears_in_where(self) -> None:
+        with patch("evennia.SESSION_HANDLER") as handler:
+            handler.get_sessions.return_value = [
+                self._session(self.visible),
+                self._session(self.concealed),
+            ]
+            entries = where_listing()
+        names = [entry.persona_name for entry in entries]
+        assert self.visible_sheet.primary_persona.name in names

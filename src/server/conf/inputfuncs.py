@@ -102,10 +102,11 @@ def _resolve_registry_kwargs(ref: object, raw_kwargs: dict, actor: object) -> "d
     unchanged (no contract).
 
     Resolution is **scoped to objects the actor can perceive** — the same
-    same-location proxy the actions' prerequisites enforce (``_is_visible_to``,
-    #1024). A pk the actor can't perceive returns the *same* "Object not found"
-    error as a non-existent pk, so a client cannot probe arbitrary object
-    existence by pk (#1226). Every registry objectdb-target is a co-located or
+    perception/concealment gate the actions' prerequisites enforce
+    (``_is_visible_to``, which delegates to ``can_perceive``, #1225). A pk the
+    actor can't perceive returns the *same* "Object not found" error as a
+    non-existent pk, so a client cannot probe arbitrary object existence by pk
+    (#1226). Every registry objectdb-target is a co-located-and-perceivable or
     held object, so this rejects nothing a prerequisite would have let through.
 
     Returns the resolved kwargs dict on success, or an error string on failure

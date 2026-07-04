@@ -1,1 +1,1 @@
-0012_conditiontemplate_resist_check_type_and_more
+0013_conditioncategory_conceals_from_perception_and_more

@@ -19,10 +19,12 @@ mechanic," the hard rule wins.
 
 The guarantee is about **OOC knowledge, not IC perception**: a player is never
 watched without knowing it. A *character* may be IC-unaware of a concealed
-watcher, but the *player* always gets an OOC tell that someone is present — e.g.
-**"An invisible presence is here"** in the room. Concealment (a mask, a disguise,
-an invisibility effect) may hide *who* or *what* is there; it never hides *that*
-someone is there.
+watcher, but the *player* always gets an OOC tell that someone is present.
+That tell is delivered on a structurally distinct OOC/system channel — never as
+IC room description or pose text — specifically so no player is tempted to have
+their *character* react to knowledge the character doesn't have. Concealment
+(a mask, a disguise, an invisibility effect) may hide *who* or *what* is there;
+it never hides *that* someone is there. See ADR-0083 for the mechanism.
 
 So there is no hidden-observer mode that conceals presence from the watched
 player — no `staff_only_can_see`, no "system can see hidden characters" backdoor,
@@ -31,9 +33,10 @@ presence (silent lurking, undisclosed scry-from-a-distance, omniscient unseen
 observation) is redesigned around the constraint: surface the presence, or enter
 as a separate (visible) persona to watch a scene without participating.
 
-(The detailed invisibility-as-an-IC-effect mechanic — the exact OOC marker, and
-how concealed traits render to the character who can't see — is TBD. This tenet
-fixes the floor that mechanic must respect.)
+(The mechanism is built in #1225 / ADR-0083: a mechanism-agnostic
+`register_unseen_observer`/`clear_unseen_observer` primitive delivers an
+identity-free, persistent OOC scene-state flag, independent of any IC
+detection check.)
 
 ### Public means public
 

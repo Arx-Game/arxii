@@ -6,6 +6,10 @@ Root term — the primary roleplay-session entity (participants, personas, recor
 **Persona**:
 Root term — the identity a participant wears within a scene (PRIMARY/ESTABLISHED/TEMPORARY), anchored by FK to the source-of-truth CharacterSheet. Not redefined here.
 
+**SceneUnseenObserver**:
+An active unseen-observation grant on a `Scene` — records that some mechanism (concealment today, a future scrying/remote-viewing feature later) lets a `CharacterSheet` witness the scene without other participants' characters being aware. Powers an OOC-only, identity-free "someone is watching" notice (ADR-0083) via `register_unseen_observer`/`clear_unseen_observer`/`has_unseen_observers` — never reveals *who*, only *that* someone is watching.
+_Avoid_: lurker, hidden watcher, silent observer (this system explicitly guarantees no silent/undisclosed observation)
+
 **Guise Sheet**:
 The fabricated bio a non-primary (cover/established) persona presents as its own — its `Persona.profile` (a `character_sheets.Profile`: concept/quote/personality/background), so the *absence* of a bio doesn't out the cover as fake. Distinct from the sheet's `true_profile` (the real face's bio, presented by PRIMARY). Authored via `set_persona_profile`; lineage stays display-only (mechanical reads pin to `true_profile`).
 _Avoid_: fake sheet, alt bio, cover profile (the model is `Profile`; the surface is the Guise Sheet).
