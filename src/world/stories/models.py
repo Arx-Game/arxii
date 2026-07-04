@@ -1529,6 +1529,23 @@ class GroupStoryProgress(SharedMemoryModel):
         choices=ProgressStatus.choices,
         default=ProgressStatus.ACTIVE,
     )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a FORECLOSED thread was wrapped up by staff; null = not yet "
+            "wrapped up. FORECLOSED stays the honest terminal status; a non-null "
+            "resolved_at marks the closure process layered on top."
+        ),
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="group_progress_resolved",
+        help_text="GMProfile that wrapped up this foreclosed thread.",
+    )
 
     class Meta:
         constraints = [
@@ -1585,6 +1602,23 @@ class GlobalStoryProgress(SharedMemoryModel):
         choices=ProgressStatus.choices,
         default=ProgressStatus.ACTIVE,
     )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a FORECLOSED thread was wrapped up by staff; null = not yet "
+            "wrapped up. FORECLOSED stays the honest terminal status; a non-null "
+            "resolved_at marks the closure process layered on top."
+        ),
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="global_progress_resolved",
+        help_text="GMProfile that wrapped up this foreclosed thread.",
+    )
 
     class Meta:
         indexes = [
@@ -1633,6 +1667,23 @@ class StoryProgress(SharedMemoryModel):
         max_length=16,
         choices=ProgressStatus.choices,
         default=ProgressStatus.ACTIVE,
+    )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When a FORECLOSED thread was wrapped up by staff; null = not yet "
+            "wrapped up. FORECLOSED stays the honest terminal status; a non-null "
+            "resolved_at marks the closure process layered on top."
+        ),
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_progress_resolved",
+        help_text="GMProfile that wrapped up this foreclosed thread.",
     )
 
     class Meta:
