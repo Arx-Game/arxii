@@ -202,7 +202,7 @@ class GainSource(models.TextChoices):
     # StakeRewardLine rows).
     STAKE_REWARD = "STAKE_REWARD", "Stake reward"
     # #1834 — distinctions grant resonance
-    DISTINCTION = "distinction", "Distinction"
+    DISTINCTION = "DISTINCTION", "Distinction"
 
 
 # COVENANT_ROLE anchor cap tuning (use-based; issue #517).

@@ -132,7 +132,7 @@ class ResonanceGrant(SharedMemoryModel):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="+",
+        related_name="resonance_grants",
         help_text=(
             "Set when source=DISTINCTION; the CharacterDistinction that "
             "granted this resonance. SET_NULL so deleting the distinction "
@@ -462,7 +462,7 @@ class ResonanceGrant(SharedMemoryModel):
             models.CheckConstraint(
                 name="res_grant_distinction_shape",
                 check=(
-                    Q(source="distinction")
+                    Q(source="DISTINCTION")
                     & Q(source_character_distinction__isnull=False)
                     & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
@@ -476,7 +476,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
                 )
-                | ~Q(source="distinction"),
+                | ~Q(source="DISTINCTION"),
             ),
         ]
 
