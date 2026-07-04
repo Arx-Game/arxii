@@ -24,9 +24,13 @@ from world.stories.constants import (
     BeatKind,               # SITUATION, ENCOUNTER, TASK (default), REQUIREMENT —
                             # what a beat *is*; resolution still flows through
                             # predicate_type
-    ProgressStatus,         # ACTIVE, WAITING_FOR_GM, RESTING, COMPLETED — finer
+    ProgressStatus,         # ACTIVE, WAITING_FOR_GM, RESTING, COMPLETED, FORECLOSED — finer
                             # pointer state; is_active stays True for ACTIVE /
-                            # WAITING_FOR_GM / RESTING; only COMPLETED clears is_active
+                            # WAITING_FOR_GM / RESTING; COMPLETED and FORECLOSED clear
+                            # is_active. FORECLOSED (set by complete_story) is the
+                            # honest terminal state for a run still in flight when its
+                            # story concludes; a nullable resolved_at/resolved_by
+                            # annotation marks a staff wrap-up layered on top.
     BeatPredicateType,      # GM_MARKED, CHARACTER_LEVEL_AT_LEAST, ACHIEVEMENT_HELD,
                             # CONDITION_HELD, CODEX_ENTRY_UNLOCKED, STORY_AT_MILESTONE,
                             # AGGREGATE_THRESHOLD
@@ -374,8 +378,10 @@ Per-character pointer into a CHARACTER-scope story's episode DAG.
 | `story` | FK → Story | `related_name="progress_records"` |
 | `character_sheet` | FK → CharacterSheet | Must equal `story.character_sheet` (clean() enforced) |
 | `current_episode` | FK → Episode (nullable) | Null = not started or frontier |
-| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; only COMPLETED clears it |
-| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED — set by `set_progress_status` / `resolve_frontier` |
+| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; COMPLETED and FORECLOSED clear it |
+| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED / FORECLOSED — set by `set_progress_status` / `resolve_frontier` (FORECLOSED set by `complete_story`) |
+| `resolved_at` | DateTimeField (nullable) | Non-null = a FORECLOSED thread wrapped up by staff (see `resolve_foreclosed_progress`) |
+| `resolved_by` | FK → gm.GMProfile (nullable, SET_NULL) | GMProfile that wrapped up the foreclosed thread |
 | `started_at` | DateTimeField (auto_now_add) | |
 | `last_advanced_at` | DateTimeField (auto_now) | Updated on each advance |
 
@@ -392,8 +398,10 @@ Per-GMTable pointer into a GROUP-scope story's episode DAG. The whole table shar
 | `story` | FK → Story | `related_name="group_progress_records"` |
 | `gm_table` | FK → gm.GMTable | |
 | `current_episode` | FK → Episode (nullable) | |
-| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; only COMPLETED clears it |
-| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED |
+| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; COMPLETED and FORECLOSED clear it |
+| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED / FORECLOSED |
+| `resolved_at` | DateTimeField (nullable) | Non-null = a FORECLOSED thread wrapped up by staff (see `resolve_foreclosed_progress`) |
+| `resolved_by` | FK → gm.GMProfile (nullable, SET_NULL) | GMProfile that wrapped up the foreclosed thread |
 | `started_at` | DateTimeField (auto_now_add) | |
 | `last_advanced_at` | DateTimeField (auto_now) | |
 
@@ -409,8 +417,10 @@ Singleton pointer per GLOBAL-scope story.
 |-------|------|-------|
 | `story` | OneToOneField → Story | `related_name="global_progress"` |
 | `current_episode` | FK → Episode (nullable) | |
-| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; only COMPLETED clears it |
-| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED |
+| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; COMPLETED and FORECLOSED clear it |
+| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED / FORECLOSED |
+| `resolved_at` | DateTimeField (nullable) | Non-null = a FORECLOSED thread wrapped up by staff (see `resolve_foreclosed_progress`) |
+| `resolved_by` | FK → gm.GMProfile (nullable, SET_NULL) | GMProfile that wrapped up the foreclosed thread |
 | `started_at` | DateTimeField (auto_now_add) | |
 | `last_advanced_at` | DateTimeField (auto_now) | |
 
@@ -514,6 +524,7 @@ Stories → narrative integration. Composes and fans out `NarrativeMessage` deli
 |----------|-----------|-------------|
 | `notify_beat_completion` | `(completion, progress) -> None` | Fans out a NarrativeMessage with `category=STORY`, `related_beat_completion` populated, body defaulting to `beat.player_resolution_text` |
 | `notify_episode_resolution` | `(resolution, progress) -> None` | Fans out a NarrativeMessage with `related_episode_resolution` populated, body using `transition.connection_summary` with fallback to `episode.summary` |
+| `notify_foreclosed_resolved` | `(*, progress, resolved_by) -> None` | Fans out an honest closure NarrativeMessage (`category=STORY`, `related_story` set) when a FORECLOSED thread is wrapped up. Body acknowledges the thread ended unresolved — never claims completion. Called from `resolve_foreclosed_progress` |
 
 Called from all three BeatCompletion creation sites (`_evaluate_and_record_beat`, `record_gm_marked_outcome`, `record_aggregate_contribution`) and `resolve_episode`.
 
@@ -547,7 +558,7 @@ Called from all three BeatCompletion creation sites (`_evaluate_and_record_beat`
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `compute_story_status` | `(progress: AnyStoryProgress) -> StoryStatusSummary` | Structured status summary (StoryEpisodeStatus + position + scheduling info); callers render their own labels. The service returns no human-readable strings |
-| `compute_story_status_line` | `(progress: AnyStoryProgress) -> str` | **Added in the authoring backbone** (it did not exist before — earlier doc/plan references to it were aspirational). Player-facing one-liner for the dashboard. Branches on `progress.status` FIRST: WAITING_FOR_GM / RESTING / COMPLETED return deliberately-ambiguous copy that never implies finality at a pause/rest and is reassuring at WAITING_FOR_GM; ACTIVE describes the current position from `compute_story_status`. GM/staff dashboards use the structured status + `last_advanced_at`, not this string |
+| `compute_story_status_line` | `(progress: AnyStoryProgress) -> str` | **Added in the authoring backbone** (it did not exist before — earlier doc/plan references to it were aspirational). Player-facing one-liner for the dashboard. Branches on `progress.status` FIRST: WAITING_FOR_GM / RESTING / COMPLETED return deliberately-ambiguous copy that never implies finality at a pause/rest and is reassuring at WAITING_FOR_GM; FORECLOSED returns an honest nudge (unresolved) or closure (resolved) line — never the ACTIVE fall-through; ACTIVE describes the current position from `compute_story_status`. GM/staff dashboards use the structured status + `last_advanced_at`, not this string |
 
 ---
 

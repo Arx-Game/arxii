@@ -95,3 +95,32 @@ class LoginCatchupStoriesTests(EvenniaTestCase):
         npc = CharacterFactory()
         # No sheet_data — this should not raise.
         catch_up_character_stories(npc)
+
+    def test_foreclosed_thread_produces_no_login_nudge(self) -> None:
+        """A FORECLOSED thread is terminal — login catch-up must NOT emit a
+        nudge message for it (discovery is via the dashboard branch, not the
+        login hook). Regression guard against a re-nudge-on-every-login loop.
+        """
+        from world.narrative.models import NarrativeMessage
+        from world.stories.constants import ProgressStatus
+        from world.stories.services.completion import complete_story
+        from world.stories.types import StoryStatus
+
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(
+            status=StoryStatus.ACTIVE, scope=StoryScope.CHARACTER, character_sheet=sheet
+        )
+        StoryProgressFactory(
+            story=story, character_sheet=sheet, status=ProgressStatus.ACTIVE, is_active=True
+        )
+        complete_story(story=story)  # forecloses the in-flight progress
+
+        fake_session = mock.Mock()
+        character = sheet.character
+        before = NarrativeMessage.objects.count()
+        with (
+            mock.patch.object(character.sessions, "all", return_value=[fake_session]),
+            mock.patch.object(character, "msg"),
+        ):
+            catch_up_character_stories(character)
+        self.assertEqual(NarrativeMessage.objects.count(), before)
