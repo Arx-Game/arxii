@@ -23,6 +23,7 @@ from world.magic.factories import (
     IntensityTierFactory,
     wire_audere_power_multipliers,
 )
+from world.magic.tests.audere_test_helpers import build_audere_gate_fixture
 from world.mechanics.constants import EngagementType
 from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.factories import (
@@ -310,3 +311,23 @@ class AudereConditionPropertyTests(TestCase):
     def test_audere_majora_has_death_deferred(self):
         prop_names = list(self.majora.properties.values_list("name", flat=True))
         self.assertIn("death_deferred", prop_names)
+
+
+class AudereEligibilityQueryCountTests(TestCase):
+    """Regression test: common-case query budget for check_audere_eligibility (#917)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        gate = build_audere_gate_fixture(tier_suffix="qc")
+        cls.threshold = gate.threshold
+
+    def test_below_gate_uses_one_query(self) -> None:
+        """A cast below the intensity gate short-circuits after the threshold fetch.
+
+        Only 1 query: AudereThreshold.objects.first(). The intensity gate is a
+        zero-query arithmetic check that fails, so no Soulfray/engagement/Audere
+        queries fire.
+        """
+        character = ObjectDB.objects.create(db_key="query_count_char")
+        with self.assertNumQueries(1):
+            check_audere_eligibility(character, runtime_intensity=1)
