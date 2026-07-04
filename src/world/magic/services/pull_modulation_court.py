@@ -24,6 +24,21 @@ def _resolve_court_leader_persona(thread: Thread):
     return None
 
 
+def _regard_polarity_matches(polarity: RegardPolarity, regard: int) -> bool:
+    """Whether ``polarity`` matches the sign of a nonzero ``regard`` value.
+
+    Shared by ``court_regard_modulation`` and the picker's
+    ``_court_pull_would_have_effect`` (#1831) so the empower rule can't diverge
+    between the two call sites. Callers are expected to have already
+    short-circuited ``regard == 0`` before calling this.
+    """
+    return (
+        (polarity == RegardPolarity.OFFENSIVE and regard < 0)
+        or (polarity == RegardPolarity.PROTECTIVE and regard > 0)
+        or (polarity == RegardPolarity.NEUTRAL)
+    )
+
+
 def court_regard_modulation(
     thread: Thread,
     target: ObjectDB,
@@ -50,13 +65,7 @@ def court_regard_modulation(
     if regard == 0:
         return base_scaled
 
-    polarity = effect_row.regard_polarity
-    empower = (
-        (polarity == RegardPolarity.OFFENSIVE and regard < 0)
-        or (polarity == RegardPolarity.PROTECTIVE and regard > 0)
-        or (polarity == RegardPolarity.NEUTRAL)
-    )
-    if not empower:
+    if not _regard_polarity_matches(effect_row.regard_polarity, regard):
         return base_scaled
     bonus = round(base_scaled * (abs(regard) / REGARD_MAX) * COURT_REGARD_PULL_K)
     return base_scaled + bonus

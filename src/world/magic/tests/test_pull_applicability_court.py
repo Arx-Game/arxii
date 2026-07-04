@@ -13,6 +13,7 @@ opinion's sign).
 from __future__ import annotations
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
@@ -37,6 +38,13 @@ def _context(target_persona_id: int | None) -> PullActionContext:
         effect_type_id=None,
         target_persona_id=target_persona_id,
         scene_id=None,
+    )
+
+
+def _create_room(key: str = "TestRoom") -> ObjectDB:
+    return ObjectDB.objects.create(
+        db_key=key,
+        db_typeclass_path="typeclasses.rooms.Room",
     )
 
 
@@ -212,6 +220,135 @@ class CourtLeaderNoStakeApplicabilityTests(TestCase):
         context = _context(active_persona_for_sheet(target_sheet).pk)
 
         rows = compute_thread_applicability(servant, context)
+
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].applicable)
+        self.assertIsNone(rows[0].reason)
+
+
+class CourtLeaderNoStakePerceptionGateTests(TestCase):
+    """#1831 security fix: the COURT_LEADER_NO_STAKE signal is an information
+    oracle on the Court leader's private signed regard unless gated on whether
+    the requester can perceive the target persona's character."""
+
+    def _setup_leader_and_role(self) -> tuple:
+        leader_sheet = CharacterSheetFactory()
+        covenant = CovenantFactory(covenant_type=CovenantType.COURT, leader=leader_sheet)
+        role = CovenantRoleFactory(covenant_type=CovenantType.COURT)
+        return leader_sheet, covenant, role
+
+    def _servant_thread(self, *, covenant, role) -> object:
+        servant = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=servant,
+            covenant=covenant,
+            covenant_role=role,
+            engaged=True,
+        )
+        return ThreadFactory(
+            owner=servant,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            target_trait=None,
+        )
+
+    def test_leak_suppressed_when_requester_cannot_perceive_indifferent_target(self) -> None:
+        """The leak case: an OFFENSIVE-only thread against an indifferent
+        (regard=0) target would normally surface COURT_LEADER_NO_STAKE -- but
+        when the requester can't perceive the target, that reason must never
+        surface (it would let a servant enumerate persona PKs to detect when
+        the leader is indifferent vs. has any opinion at all)."""
+        _leader_sheet, covenant, role = self._setup_leader_and_role()
+        thread = self._servant_thread(covenant=covenant, role=role)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=thread.resonance,
+            regard_polarity=RegardPolarity.OFFENSIVE,
+        )
+        thread.owner.character.location = _create_room("RequesterRoom")
+        target_sheet = CharacterSheetFactory()  # no NpcRegard row -> regard 0
+        target_sheet.character.location = _create_room("TargetRoom")
+        context = _context(active_persona_for_sheet(target_sheet).pk)
+
+        rows = compute_thread_applicability(thread.owner, context)
+
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].applicable)
+        self.assertIsNone(rows[0].reason)
+
+    def test_leak_suppressed_when_requester_cannot_perceive_positive_regard_target(
+        self,
+    ) -> None:
+        """Same leak, but with a REAL (nonzero, mismatched-polarity) regard --
+        confirms the gate suppresses regardless of what the hidden regard
+        value actually is, not just the indifferent case."""
+        leader_sheet, covenant, role = self._setup_leader_and_role()
+        thread = self._servant_thread(covenant=covenant, role=role)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=thread.resonance,
+            regard_polarity=RegardPolarity.OFFENSIVE,
+        )
+        thread.owner.character.location = _create_room("RequesterRoom2")
+        target_sheet = CharacterSheetFactory()
+        target_sheet.character.location = _create_room("TargetRoom2")
+        NpcRegardFactory(
+            holder_persona=active_persona_for_sheet(leader_sheet),
+            target_persona=active_persona_for_sheet(target_sheet),
+            value=500,
+        )
+        context = _context(active_persona_for_sheet(target_sheet).pk)
+
+        rows = compute_thread_applicability(thread.owner, context)
+
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].applicable)
+        self.assertIsNone(rows[0].reason)
+
+    def test_perceivable_target_still_yields_correct_signal(self) -> None:
+        """Co-located (perceivable) requester + target: the existing
+        COURT_LEADER_NO_STAKE signal must still fire normally."""
+        _leader_sheet, covenant, role = self._setup_leader_and_role()
+        thread = self._servant_thread(covenant=covenant, role=role)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=thread.resonance,
+            regard_polarity=RegardPolarity.OFFENSIVE,
+        )
+        shared_room = _create_room("SharedRoom")
+        thread.owner.character.location = shared_room
+        target_sheet = CharacterSheetFactory()  # no NpcRegard row -> regard 0
+        target_sheet.character.location = shared_room
+        context = _context(active_persona_for_sheet(target_sheet).pk)
+
+        rows = compute_thread_applicability(thread.owner, context)
+
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0].applicable)
+        self.assertEqual(rows[0].reason, InapplicabilityReason.COURT_LEADER_NO_STAKE.value)
+
+    def test_perceivable_target_with_matching_regard_still_applicable(self) -> None:
+        """Co-located requester + target where the regard sign DOES match the
+        effect's polarity: applicable stays True (unaffected by the gate)."""
+        leader_sheet, covenant, role = self._setup_leader_and_role()
+        thread = self._servant_thread(covenant=covenant, role=role)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=thread.resonance,
+            regard_polarity=RegardPolarity.OFFENSIVE,
+        )
+        shared_room = _create_room("SharedRoom2")
+        thread.owner.character.location = shared_room
+        target_sheet = CharacterSheetFactory()
+        target_sheet.character.location = shared_room
+        NpcRegardFactory(
+            holder_persona=active_persona_for_sheet(leader_sheet),
+            target_persona=active_persona_for_sheet(target_sheet),
+            value=-500,
+        )
+        context = _context(active_persona_for_sheet(target_sheet).pk)
+
+        rows = compute_thread_applicability(thread.owner, context)
 
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0].applicable)

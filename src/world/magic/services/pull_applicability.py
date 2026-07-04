@@ -6,7 +6,7 @@ See docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §5.
 from dataclasses import dataclass
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import InapplicabilityReason, RegardPolarity, TargetKind
+from world.magic.constants import InapplicabilityReason, TargetKind
 from world.magic.models import Thread
 from world.magic.models.techniques import Technique
 
@@ -46,6 +46,10 @@ def compute_thread_applicability(
       empowered by the Court leader's signed regard for that target (leader
       indifferent, or every candidate effect's polarity mismatches the regard
       sign). No-op when no leader is resolvable — the base pull is unmodulated.
+      Gated on perception: the requester must be able to perceive the target
+      persona's character or this never fires (nothing leaks about the
+      leader's private regard for an unperceivable target — see
+      ``_court_pull_would_have_effect``).
 
     The following InapplicabilityReason values are defined in the enum for future
     phases but not yet wired here (their data dependencies are not yet available):
@@ -103,28 +107,42 @@ def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> boo
     Returns False only when a leader IS resolvable and every candidate effect's
     polarity mismatches the sign of the leader's regard for the target (or the
     leader is indifferent — regard 0).
+
+    Perception gate (#1831 security fix): the leader's signed regard for a
+    target is private (ADR-0033/#1717). Before any regard/polarity logic runs,
+    the target persona must resolve to a character the requester can actually
+    perceive (``world.conditions.services.can_perceive`` — same-location and
+    not concealed-and-undetected). When the target can't be resolved, has no
+    character, or isn't perceivable, this returns True (treat as applicable,
+    no special reason) so nothing about the leader's regard leaks through the
+    picker's inapplicability signal.
     """
+    from world.conditions.services import can_perceive  # noqa: PLC0415
     from world.magic.services.pull_effects import get_pull_effects_for_thread  # noqa: PLC0415
     from world.magic.services.pull_modulation_court import (  # noqa: PLC0415
+        _regard_polarity_matches,
         _resolve_court_leader_persona,
     )
     from world.npc_services.regard import get_regard  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
-    leader_persona = _resolve_court_leader_persona(thread)
-    if leader_persona is None:
-        return True
     target_persona = Persona.objects.filter(pk=target_persona_id).first()
     if target_persona is None:
+        return True
+    # character_sheet is a non-null FK and character is its non-null OneToOne PK,
+    # so a resolvable persona always has a character (same access as cast_services).
+    target_character = target_persona.character_sheet.character
+
+    requester_character = thread.owner.character
+    if not can_perceive(requester_character, target_character):
+        return True
+
+    leader_persona = _resolve_court_leader_persona(thread)
+    if leader_persona is None:
         return True
     regard = get_regard(leader_persona, target_persona)
     if regard == 0:
         return False
 
     rows = get_pull_effects_for_thread(thread, min_thread_level__lte=thread.level)
-    return any(
-        (row.regard_polarity == RegardPolarity.OFFENSIVE and regard < 0)
-        or (row.regard_polarity == RegardPolarity.PROTECTIVE and regard > 0)
-        or (row.regard_polarity == RegardPolarity.NEUTRAL)
-        for row in rows
-    )
+    return any(_regard_polarity_matches(row.regard_polarity, regard) for row in rows)
