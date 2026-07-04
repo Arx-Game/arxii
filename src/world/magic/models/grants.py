@@ -3,8 +3,15 @@
 Five sources that grant CharacterRitualKnowledge rows during CG reconciliation
 (Task 1.3). Each is a simple two-FK model mirroring the codex grant pattern
 in world.codex.models (BeginningsCodexGrant, PathCodexGrant, etc.).
+
+Also carries ``DistinctionResonanceGrant`` — the currency-knob sidecar for
+#1834 (distinctions granting resonance): flat seed amount + earn-rate bonus,
+both rank-scaled by the character's rank in the distinction.
 """
 
+from decimal import Decimal
+
+from django.core.validators import MaxValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -149,6 +156,55 @@ class DistinctionRitualGrant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.distinction} grants {self.ritual}"
+
+
+class DistinctionResonanceGrant(SharedMemoryModel):
+    """Currency knobs a Distinction grants in a Resonance (#1834).
+
+    A join between a Distinction and a Resonance carrying the authoring
+    surface for two rank-scaled currency knobs: a flat seed amount and an
+    earn-rate bonus. Both are scaled by the character's rank in the
+    distinction; the scaling itself is applied by consumers of this row, not
+    here. Sidecar lives in ``world.magic`` (per ADR-0010: the general
+    primitive is ``magic.Resonance``, so ``distinctions`` gains no import
+    into ``magic``).
+    """
+
+    distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.CASCADE,
+        related_name="resonance_grants",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="distinction_grants",
+    )
+    flat_amount_per_rank = models.PositiveIntegerField(
+        default=0,
+        help_text="Flat resonance seeded per rank held in the distinction.",
+    )
+    earn_rate_bonus_per_rank = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal(0),
+        validators=[MaxValueValidator(Decimal("5.00"))],
+        help_text="Earn-rate bonus per rank held in the distinction.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["distinction", "resonance"],
+                name="unique_distinction_resonance_grant",
+            ),
+        ]
+        ordering = ["distinction_id", "resonance_id"]
+        verbose_name = "Distinction Resonance Grant"
+        verbose_name_plural = "Distinction Resonance Grants"
+
+    def __str__(self) -> str:
+        return f"{self.distinction} grants {self.resonance}"
 
 
 class TraditionRitualGrant(SharedMemoryModel):

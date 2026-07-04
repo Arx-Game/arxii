@@ -215,6 +215,18 @@ class ResonanceFactory(factory.django.DjangoModelFactory):
         self.properties.add(*extracted)
 
 
+class DistinctionResonanceGrantFactory(factory.django.DjangoModelFactory):
+    """Factory for DistinctionResonanceGrant (#1834 currency-knob sidecar)."""
+
+    class Meta:
+        model = "magic.DistinctionResonanceGrant"
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    flat_amount_per_rank = 0
+    earn_rate_bonus_per_rank = Decimal(0)
+
+
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterAura
