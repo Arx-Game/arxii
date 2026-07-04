@@ -143,6 +143,16 @@ affinity and was never coupled to either path. The legacy `CharacterResonanceTot
 denormalized aggregate was removed in the Spec A pivot — there is no sync step to keep in
 lockstep.
 
+**POWER-category distinction effects (potency, #1834 Task 7) are unaffected by the skip
+above** — a `DistinctionEffect` on a POWER-category `ModifierTarget` (optionally gated by
+`target_resonance`) still writes a normal `CharacterModifier` row through the loop. Two
+consumers read it: a technique cast (`_derive_power`'s FLAT stage, already wired) and a
+standalone thread pull, via `power_flat_bonus_for_resonance(sheet, resonance_id)` — sums
+matching POWER-category, `target_resonance`-scoped modifiers (excluding the unscoped
+`power_multiplier` target) via `get_modifier_total`. See `world/magic/CLAUDE.md`
+"Distinction Potency (POWER axis)" for the pull-side wiring
+(`world.magic.services.resonance._fold_distinction_pull_bonus`).
+
 ---
 
 ## Modifier Target Naming Conventions

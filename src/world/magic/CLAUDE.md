@@ -1119,6 +1119,27 @@ The following models have been removed and replaced:
   (`equipment_walk_total` in `world/mechanics/services.py`) still read/write
   resonance-category `CharacterModifier` rows via `EQUIPMENT_RELEVANT_CATEGORIES`.
 
+### Distinction Potency (POWER axis, #1834 Task 7)
+
+A distinction expresses **potency** for a resonance — as opposed to the identity/currency
+axis above — by authoring a normal `DistinctionEffect` whose `target` is a POWER-category
+`ModifierTarget` gated by `target_resonance` (the same scope-gate seam
+`motif_coherence_bonus` and tier-0 thread-pull FLAT_BONUS rows ride). `create_distinction_modifiers`
+writes this as an ordinary `CharacterModifier` (POWER-category rows are unaffected by the
+resonance-category skip above). Two consumers read it:
+
+- **Casts** — already wired: `_partition_power_targets`/`_derive_power`'s FLAT stage
+  (`world/magic/services/techniques.py`) scope-matches the target against the technique's
+  gift-resonances and folds `get_modifier_breakdown(sheet, target)` into the power ledger.
+- **Thread pulls** — `world.mechanics.services.power_flat_bonus_for_resonance(sheet,
+  resonance_id)` sums matching POWER-category targets (excluding the unscoped
+  `power_multiplier` target) via `get_modifier_total`. `world.magic.services.resonance
+  ._fold_distinction_pull_bonus` calls it once per pull (not per thread/tier, since every
+  pulled thread shares one resonance) and appends a synthetic `FLAT_BONUS`
+  `ResolvedPullEffect`; wired into both `spend_resonance_for_pull` (the charge/commit path —
+  persists into `CombatPullResolvedEffect` for combat, returned ephemerally otherwise) and
+  `preview_resonance_pull` (so the read-only preview matches the eventual commit).
+
 ## Design Docs
 
 - `docs/plans/2026-01-20-magic-system-design.md` - original system design

@@ -30,6 +30,8 @@ from world.magic.models import (
 )
 from world.mechanics.constants import (
     EQUIPMENT_RELEVANT_CATEGORIES,
+    POWER_CATEGORY_NAME,
+    POWER_MULTIPLIER_TARGET_NAME,
     RESONANCE_CATEGORY_NAME,
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_UNKNOWN,
@@ -287,6 +289,32 @@ def get_modifier_total(
     if perceiving_society is not None:
         fashion_total = fashion_outfit_bonus(character, modifier_target, perceiving_society)
     return eager_total + equipment_total + fashion_total
+
+
+def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
+    """Sum resonance-scoped POWER-category flat modifiers (distinctions) for ``resonance_id``.
+
+    A distinction expresses "potency" for a resonance by authoring a ``DistinctionEffect`` on
+    a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same seam a
+    technique cast reads via ``_partition_power_targets``/``_derive_power``'s FLAT stage
+    (``magic/services/techniques.py``). This helper lets a standalone thread-pull fold the
+    identical modifier into its own magnitude (#1834 Task 7), so potency lands uniformly on
+    casts AND pulls. The unscoped ``power_multiplier`` target is excluded — its percent-delta
+    semantics don't apply to a flat pull bonus. "power" is not an equipment-relevant category,
+    so ``get_modifier_total`` here is always just the eager CharacterModifier total.
+
+    Args:
+        sheet: CharacterSheet instance.
+        resonance_id: PK of the Resonance the pull is keyed to.
+
+    Returns:
+        Integer total (0 if no matching POWER-category target or no modifier).
+    """
+    targets = ModifierTarget.objects.filter(
+        category__name=POWER_CATEGORY_NAME,
+        target_resonance_id=resonance_id,
+    ).exclude(name=POWER_MULTIPLIER_TARGET_NAME)
+    return sum(get_modifier_total(sheet, target) for target in targets)
 
 
 def equipment_walk_total(

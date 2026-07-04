@@ -517,6 +517,47 @@ def resolve_pull_effects(
     return resolved
 
 
+def _fold_distinction_pull_bonus(
+    resolved: list[ResolvedPullEffect],
+    *,
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    threads: list[Thread],
+) -> list[ResolvedPullEffect]:
+    """Append a synthetic FLAT_BONUS entry for a distinction's resonance-scoped POWER modifier.
+
+    A distinction expresses potency for ``resonance`` by authoring a ``DistinctionEffect`` on
+    a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same modifier a
+    technique cast already reads via ``_derive_power``'s FLAT stage
+    (``magic/services/techniques.py``). Folds the identical bonus into the pull's own
+    magnitude once per pull (not per thread/tier — every thread here shares ``resonance`` by
+    construction) so a standalone thread-pull is boosted identically to a cast (#1834 Task 7).
+    No-op (returns ``resolved`` unchanged) when there is no matching modifier.
+    """
+    from world.mechanics.services import power_flat_bonus_for_resonance  # noqa: PLC0415
+
+    bonus = power_flat_bonus_for_resonance(character_sheet, resonance.pk)
+    if not bonus:
+        return resolved
+    return [
+        *resolved,
+        ResolvedPullEffect(
+            kind=EffectKind.FLAT_BONUS,
+            authored_value=None,
+            level_multiplier=1,
+            scaled_value=bonus,
+            vital_target=None,
+            source_thread=threads[0],
+            source_thread_level=threads[0].level,
+            source_tier=0,
+            granted_capability=None,
+            narrative_snippet="",
+            target_form=None,
+            resistance_damage_type=None,
+        ),
+    ]
+
+
 def preview_resonance_pull(
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
@@ -582,6 +623,9 @@ def preview_resonance_pull(
 
     in_combat = combat_encounter is not None
     resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = _fold_distinction_pull_bonus(
+        resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
+    )
 
     # Cap detection: sum all INTENSITY_BUMP scaled_values, compare against
     # highest IntensityTier.threshold. If no IntensityTier row exists we
@@ -742,6 +786,9 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912
 
     in_combat = action_context.combat_encounter is not None
     resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = _fold_distinction_pull_bonus(
+        resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
+    )
 
     applicable = [e for e in resolved if not e.inactive]
     if not applicable:
