@@ -2300,7 +2300,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
 - **Action Keys:** `begin_battle_round` / `resolve_battle_round` / `conclude_battle` (GM,
   `target_type=AREA`) · `declare_battle_action` (player, `target_type=SELF`, requires
   `technique_id`; forwards `action_kind`/`target_unit`/`target_ally`/`scope`/
-  `target_place`/`target_side`/`target_fortification` — all 9 `BattleActionKind` values,
+  `target_place`/`target_side`/`target_fortification` — all 11 `BattleActionKind` values,
   including BREACH/FORTIFY, are reachable through this Action, see
   [battles.md](battles.md#sieges-1713)) ·
   `challenge_champion_duel` (player, `target_type=AREA`, #1710)
@@ -2309,7 +2309,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `strike`/`rout`/`rally` also accept `side` or `place <name>` scope tokens (#1710/#1712);
   `breach`/`fortify` require `place <name> fortification <kind>` (#1713).
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
-  `BattleActionKind` (10 values, #1713 adds BREACH/FORTIFY, #1714 adds REPOSITION),
+  `BattleActionKind` (11 values, #1713 adds BREACH/FORTIFY, #1714 adds REPOSITION,
+  #1715 adds SET_ENVIRONMENT),
   `BattleActionScope` (#1710),
   `BattleOutcome`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711),
   `FortificationKind` (WALL/GATE/BATTLEMENT, #1713; HULL added for vehicle hulls, #1714),

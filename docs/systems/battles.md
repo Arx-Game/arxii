@@ -240,7 +240,7 @@ A participant's declared action for one round.
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
 | `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
-| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / REPOSITION (#1714) |
+| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target, or the Surrounded ally being rescued (RESCUE, #1733) |
 | `target_fortification` | FK → `Fortification` (null) | Set when `action_kind` is BREACH or FORTIFY (#1713) |
@@ -591,7 +591,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 10 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action but has no dedicated `CmdBattle` telnet subcommand yet — deferred alongside reposition movement resolution. |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 11 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action but has no dedicated `CmdBattle` telnet subcommand yet — deferred alongside reposition movement resolution. |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -656,7 +656,7 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 | `BattleSideRole` | TextChoices | ATTACKER / DEFENDER |
 | `BattleUnitStatus` | TextChoices | ACTIVE / ROUTED / DESTROYED |
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
-| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / REPOSITION (#1714) |
+| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
 | `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
