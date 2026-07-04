@@ -106,6 +106,7 @@ INSTALLED_APPS += [
     "world.projects.apps.ProjectsConfig",
     "world.npc_services.apps.NPCServicesConfig",
     "world.buildings.apps.BuildingsConfig",
+    "world.ships.apps.ShipsConfig",
     "world.room_features.apps.RoomFeaturesConfig",
     "world.tidings.apps.TidingsConfig",
     "behaviors.apps.BehaviorsConfig",
