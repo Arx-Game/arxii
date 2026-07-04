@@ -440,6 +440,11 @@ class CombatTechniqueResolver:
         resistance applies independently).  SINGLE / SELF techniques are unchanged
         — only ``focused_opponent_target`` is used.
 
+        Combines the technique's own profiles with its signed
+        SignatureMotifBonus's profiles, if any (#1728) — both are
+        ``AbstractDamageProfile`` subclasses, so weapon-augment, SL-multiplier,
+        property-bonus, and multi-target all apply uniformly to both.
+
         Per opponent:
         - skip if DEFEATED (checked fresh after each preceding write)
         - for each damage profile: compute budget, apply SL multiplier, call
@@ -449,15 +454,18 @@ class CombatTechniqueResolver:
         combination.
         """
         from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
+        from world.magic.services.signature_effects import (  # noqa: PLC0415
+            signature_damage_profiles,
+        )
 
         targets = self._resolved_opponent_targets()
         if not targets:
             return []
 
         technique = self.action.focused_action
-        profiles = list(
-            technique.damage_profiles.select_related("damage_type").all(),
-        )
+        attacker = self.participant.character_sheet.character
+        profiles = list(technique.damage_profiles.select_related("damage_type").all())
+        profiles += signature_damage_profiles(attacker, technique)
         if not profiles:
             return []
 
@@ -466,7 +474,6 @@ class CombatTechniqueResolver:
         if multiplier <= 0:
             return []
 
-        attacker = self.participant.character_sheet.character
         weapon = effective_weapon_profile(attacker)
         any_weapon_landed = False
 

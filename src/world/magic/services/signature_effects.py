@@ -13,11 +13,14 @@ payload applies on top of the technique's own payload:
   seam the technique's own conditions use — exposed via
   :func:`apply_signature_bonus_conditions`. No parallel apply path.
 
-Both helpers are NO-OPs when the technique is not signed. Capability grants and
-damage profiles authored on a SignatureMotifBonus are NOT applied here: there is
-no cast-time seam for technique-authored capability grants today, and standalone
-casts deal no damage (the combat damage seam is a fast-follow). Cosmetic narration
-of the bonus is Task 6.
+Damage profiles authored on a SignatureMotifBonus ARE applied — not here (there is
+no cast-time damage seam; standalone casts deal no damage), but at the combat
+damage seam via :func:`signature_damage_profiles`, consumed by
+``CombatTechniqueResolver._apply_damage`` (``world/combat/services.py``), which
+appends the signed technique's bonus profiles to the technique's own before
+resolving damage. Capability grants authored on a SignatureMotifBonus remain
+unapplied: there is no cast-time OR combat seam for technique-authored capability
+grants today. Cosmetic narration of the bonus is Task 6.
 """
 
 from __future__ import annotations
@@ -52,6 +55,26 @@ def signature_intensity_delta(character, technique: Technique) -> int:
     """
     bonus = signature_bonus_for(character, technique)
     return bonus.flat_intensity_delta if bonus is not None else 0
+
+
+def signature_damage_profiles(character, technique: Technique) -> list:
+    """Return the signed technique's SignatureMotifBonusDamageProfile rows, or [].
+
+    Cheap read through the cached ``character.threads`` handler (via
+    :func:`signature_bonus_for`). The combat damage seam (``_apply_damage``)
+    appends these to the technique's own profiles so the bonus's authored damage
+    lands alongside it. NO-OP (``[]``) when the technique is not signed.
+
+    Args:
+        character: The casting game Character (not CharacterSheet).
+        technique: The technique being cast.
+
+    Returns:
+        The active ``SignatureMotifBonus.cached_damage_profiles``, or ``[]`` if
+        the technique is not signed.
+    """
+    bonus = signature_bonus_for(character, technique)
+    return bonus.cached_damage_profiles if bonus is not None else []
 
 
 def apply_signature_bonus_conditions(  # noqa: PLR0913 - cohesive condition-application params
