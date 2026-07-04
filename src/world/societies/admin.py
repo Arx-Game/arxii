@@ -279,8 +279,16 @@ class OrganizationMembershipAdmin(admin.ModelAdmin):
 class OrganizationRankAdmin(admin.ModelAdmin):
     """Admin interface for OrganizationRank management."""
 
-    list_display = ["organization", "name", "tier", "can_invite", "can_kick", "can_manage_ranks"]
-    list_filter = ["organization", "can_invite", "can_kick", "can_manage_ranks"]
+    list_display = [
+        "organization",
+        "name",
+        "tier",
+        "can_invite",
+        "can_kick",
+        "can_manage_ranks",
+        "can_lead_rituals",
+    ]
+    list_filter = ["organization", "can_invite", "can_kick", "can_manage_ranks", "can_lead_rituals"]
     ordering = ["organization", "tier"]
 
 

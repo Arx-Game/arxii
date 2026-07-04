@@ -468,6 +468,17 @@ class OrganizationRank(SharedMemoryModel):
         default=False,
         help_text="Members at this rank can promote/demote others",
     )
+    can_lead_rituals = models.BooleanField(
+        default=False,
+        help_text=(
+            "Members at this rank may lead this organization's group rituals. "
+            "No org-ritual dispatch mechanism consumes this yet for non-Covenant "
+            "organizations — see needs-design follow-up filed alongside #708 "
+            "('Generic organization-ritual dispatch for non-Covenant org kinds'). "
+            "Mirrors CovenantRank.can_lead_rituals, which IS consumed today by "
+            "Covenant Sanctification."
+        ),
+    )
 
     class Meta:
         ordering = ["tier"]
