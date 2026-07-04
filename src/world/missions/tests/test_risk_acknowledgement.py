@@ -226,3 +226,18 @@ class ActivateStakesForInstanceTests(TestCase):
         instance_arg, sheets_arg = mocked.call_args.args
         self.assertEqual(instance_arg.pk, result.object_pk)
         self.assertEqual(list(sheets_arg), [persona.character_sheet])
+
+
+class IssueMissionBeatLinkTests(TestCase):
+    def test_unstaked_linked_beat_sets_source_beat_no_ack(self):
+        _character, persona = _make_pc()
+        offer, _template = _make_mission_offer(risk_tier=MISSION_RISK_ACK_TIER - 1)
+        beat = BeatFactory(risk=RenownRisk.NONE)
+        details = offer.mission_offer_details
+        details.source_beat = beat
+        details.save(update_fields=["source_beat"])
+
+        result = issue_mission(offer, persona)  # no ack: unstaked + low tier
+
+        instance = MissionInstance.objects.get(pk=result.object_pk)
+        self.assertEqual(instance.source_beat_id, beat.pk)

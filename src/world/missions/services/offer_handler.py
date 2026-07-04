@@ -154,6 +154,7 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
         template=template,
         source_offer=offer,
         accepted_as_persona=persona,
+        source_beat=details.source_beat,
         # #885: the NPC interaction happens where the character stands —
         # that room is the run's anchor for ANCHOR-mode nodes.
         anchor_room=anchor_room_for(character),
@@ -165,10 +166,10 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     )
     enter_node(instance, _entry_node(template))
 
-    # #1770 PR4: mission acceptance is the stakes commit moment (pillar 9) —
-    # lock any staked linked beat's contract for the accepting party. A no-op
-    # today for offer-issued runs (no beat link is set by this handler); live
-    # the moment a beat-linked offer path ships.
+    # #1770 PR4 / #1780: mission acceptance is the stakes commit moment
+    # (pillar 9) — lock any staked linked beat's contract for the accepting
+    # party. Live for offer-issued runs whose MissionOfferDetails.source_beat
+    # names a staked beat; a no-op for free or unstaked runs.
     from world.missions.services.beat import activate_stakes_for_instance  # noqa: PLC0415
 
     activate_stakes_for_instance(instance, [persona.character_sheet])
