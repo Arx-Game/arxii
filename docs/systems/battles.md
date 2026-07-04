@@ -490,7 +490,7 @@ RESCUE. ROUT damages an enemy unit's `morale` the same way STRIKE damages `stren
 its mirror on the declarant's own side, restoring `morale` (including already-ROUTED
 units — reaching broken units back to fighting shape is the whole point) and awarding a
 flat `RALLY_VP`. REPEL and HOLD are PLACE-scope only (`PlaceScopeRequiredError` if declared
-with any other scope): REPEL raises a same-round defense bonus at the target front
+with any other scope, same as REPOSITION, #1714): REPEL raises a same-round defense bonus at the target front
 (`REPEL_DEFENSE_BONUS`) that reduces STRIKE attrition against units there, and — because
 the bonus must exist before STRIKE reads it — `resolve_battle_round` resolves every REPEL
 declaration first, ahead of every other action kind, with a stable sort preserving relative
@@ -591,7 +591,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 11 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action but has no dedicated `CmdBattle` telnet subcommand yet — deferred alongside reposition movement resolution. |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 11 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action — its movement resolution is built (`_resolve_reposition_success`) — but has no dedicated `CmdBattle` telnet subcommand yet; that telnet grammar remains deferred. |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -728,7 +728,8 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
     (#1710)
   - `PlaceAlreadyDuelingError` — `BattlePlace.combat_encounter` is already set (#1710;
     also raised by `open_siege_engine_encounter`, #1713)
-  - `PlaceScopeRequiredError` — REPEL/HOLD declared with a scope other than PLACE (#1712)
+  - `PlaceScopeRequiredError` — REPEL/HOLD declared with a scope other than PLACE (#1712);
+    also raised for REPOSITION declared outside PLACE scope (#1714)
   - `FortificationTargetRequiredError` — BREACH/FORTIFY declared with no
     `target_fortification` (#1713)
   - `FortificationOwnershipMismatchError` — BREACH targets your own side's
@@ -812,7 +813,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below); reposition movement resolution and embark actions still deferred (#1714) |
+| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below); a player-facing embark action and a dedicated telnet `CmdBattle` subcommand for REPOSITION still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
@@ -833,8 +834,12 @@ built — see the `declare_battle_action` row in [Services](#services-srcworldba
 below and `NotVehicleCommanderError` in [Exceptions](#exceptions-srcworldbattlesexceptionspy).
 Hull-breach and living-mount-defeat ejection, plus the drowning/falling hazard consequence, are
 also built — see the `eject_vehicle_occupants` row in
-[Services](#services-srcworldbattlesservicespy) above. Reposition movement resolution and embark
-actions remain deferred (#1714).
+[Services](#services-srcworldbattlesservicespy) above. Reposition movement resolution is also
+built — see `_resolve_reposition_success` in `world/battles/resolution.py`. A player-facing embark
+action (setting a unit/participant's `place` FK to a vehicle's place today requires direct model
+manipulation — no Action/telnet command exists) and a dedicated `CmdBattle` telnet subcommand for
+REPOSITION (the underlying `declare_battle_action`/`DeclareBattleActionAction` already supports
+REPOSITION generically) remain deferred (#1714).
 
 ## Command Hierarchy & the Champion (#1710)
 

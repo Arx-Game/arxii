@@ -335,3 +335,36 @@ class CrossVehicleTargetingTests(TestCase):
                 technique=self.technique,
                 target_fortification=self.hull,
             )
+
+    def test_can_strike_vehicles_own_unit_on_overlapping_vehicle(self):
+        """A STRIKE against a vehicle's own BattleUnit (not an occupant) is gated by
+        the same overlap check as BREACH-against-hull (#1714 final review, finding 1):
+        BattleVehicle.unit.place is always None by design, so the check must resolve
+        the unit's paired vehicle's place rather than silently no-op."""
+        self._set_positions(overlapping=True)
+        begin_battle_round(battle=self.battle)
+
+        declaration = declare_battle_action(
+            participant=self.attacker,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=self.defender_ship.unit,
+        )
+
+        self.assertEqual(declaration.target_unit, self.defender_ship.unit)
+
+    def test_cannot_strike_vehicles_own_unit_on_non_overlapping_vehicle(self):
+        """Mirrors test_can_strike_vehicles_own_unit_on_overlapping_vehicle: without
+        overlap, a STRIKE against a distant vehicle's own unit must be rejected —
+        before the finding 1 fix this silently passed because target_unit.place_id
+        is always None for a vehicle's own unit."""
+        self._set_positions(overlapping=False)
+        begin_battle_round(battle=self.battle)
+
+        with self.assertRaises(PlacesDoNotOverlapError):
+            declare_battle_action(
+                participant=self.attacker,
+                action_kind=BattleActionKind.STRIKE,
+                technique=self.technique,
+                target_unit=self.defender_ship.unit,
+            )

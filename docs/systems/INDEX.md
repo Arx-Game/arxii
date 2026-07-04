@@ -2323,7 +2323,8 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `MissingScopeTargetError`, `CannotStrikeOwnSideError` (#1710; guards STRIKE and ROUT
   since #1712), `NotAChampionError`,
   `PlaceAlreadyDuelingError` (#1710; also raised by `open_siege_engine_encounter`, #1713),
-  `PlaceScopeRequiredError` (#1712), `FortificationTargetRequiredError`,
+  `PlaceScopeRequiredError` (#1712; also raised for REPOSITION outside PLACE scope, #1714),
+  `FortificationTargetRequiredError`,
   `FortificationOwnershipMismatchError`, `FortificationAlreadyBreachedError` (#1713),
   `NotVehicleCommanderError` (REPOSITION by a non-commander, #1714),
   `PlacesDoNotOverlapError` (UNIT-scope STRIKE or BREACH targeting a non-overlapping
@@ -2388,14 +2389,18 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (airship/dragon) hazard consequence (ADR-0073) — abstract units take a flat
   strength penalty unless they carry the matching `flying`/`aquatic` `Property`; real
   participants route damage through `resolve_damage_type_resistance` then
-  `process_damage_consequences`. Reposition movement resolution, embark actions, and
-  a dedicated telnet subcommand for REPOSITION remain deferred. See
+  `process_damage_consequences`. Reposition movement resolution is built
+  (`_resolve_reposition_success` in `resolution.py`); a player-facing embark action
+  (setting a unit/participant's `place` FK to a vehicle's place, today only doable
+  by direct model manipulation) and a dedicated telnet subcommand for REPOSITION
+  (the underlying `declare_battle_action`/`DeclareBattleActionAction` already
+  supports REPOSITION generically) remain deferred. See
   [battles.md](battles.md#battlevehicle) for the full mechanism.
-- **Deferred follow-ups:** battle writeup page (#1735); naval/aerial reposition
-  movement resolution, embark actions, and a dedicated REPOSITION telnet subcommand
-  remain deferred (#1714) — the vehicle model, REPOSITION declaration, overlap-gated
-  boarding, and hull-breach/living-mount-defeat ejection are built (see the Vehicles
-  subsection above). Live narration of battle actions (any kind, not vehicle-specific)
+- **Deferred follow-ups:** battle writeup page (#1735); naval/aerial embark actions
+  and a dedicated REPOSITION telnet subcommand remain deferred (#1714) — the vehicle
+  model, REPOSITION declaration and movement resolution, overlap-gated boarding, and
+  hull-breach/living-mount-defeat ejection are built (see the Vehicles subsection
+  above). Live narration of battle actions (any kind, not vehicle-specific)
   is also unbuilt — `push_ephemeral_interaction` requires a player `persona` and
   battle-linked Scenes are created with `location=None`, skipping room-based
   broadcast entirely; see the narration-scope correction note in

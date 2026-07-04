@@ -534,6 +534,15 @@ def _resolve_strike_success(
             from world.battles.models import BattleVehicle  # noqa: PLC0415
             from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
 
+            # is_structural=False only (#1714): a living mount's own BattleUnit
+            # destroyed IS the mount going down, so occupants eject immediately.
+            # A structural vehicle's (ship/airship) unit represents crew/guns —
+            # it can be destroyed/routed (fought to a standstill) without the
+            # hull sinking, exactly as a land Fortification's defenders routing
+            # doesn't auto-breach the wall. Structural vehicles only eject
+            # occupants via a hull Fortification breach (see BREACH handling),
+            # never from this unit-destruction path. This asymmetry is
+            # intentional, not a gap.
             vehicle = BattleVehicle.objects.filter(unit=unit, is_structural=False).first()
             if vehicle is not None:
                 eject_vehicle_occupants(vehicle=vehicle)
@@ -697,7 +706,7 @@ def _resolve_reposition_success(
     SPEED capability magnitude toward the declared delta (#1714).
 
     Distance moved this round is bounded by min(requested distance, SPEED
-    capability value * success_level scaling is intentionally NOT applied here —
+    capability value). success_level scaling is intentionally NOT applied here —
     unlike STRIKE/BREACH, movement is capability-bounded, not check-margin-scaled;
     success_level only determines whether the move happens at all (the check
     already gates that via resolve_battle_technique).
