@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import EffectKind, GainSource, TargetKind
+from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
     CovenantRoleNotEngagedError,
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.distinctions.models import CharacterDistinction
     from world.items.models import ItemFacet
     from world.magic.models import (
         DramaticMomentTag,
@@ -86,10 +87,16 @@ def grant_resonance(  # noqa: PLR0913
     dramatic_moment: DramaticMomentTag | None = None,
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
+    source_character_distinction: CharacterDistinction | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
-    Validates that the typed source kwarg matches the discriminator.
+    Validates that the typed source kwarg matches the discriminator. When
+    ``source`` is one of ``ACCELERATED_GAIN_SOURCES`` (ADR-0041 — the
+    perception/presence gain sources), ``amount`` is scaled up by the
+    character's summed distinction earn-rate bonus for ``resonance`` before
+    it is written; authored/system sources (including DISTINCTION itself)
+    are never accelerated.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -107,6 +114,7 @@ def grant_resonance(  # noqa: PLR0913
         dramatic_moment: Required for DRAMATIC_MOMENT source.
         style_presentation_endorsement: Required for STYLE_PRESENTATION source.
         mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
+        source_character_distinction: Required for DISTINCTION source (#1834).
 
     Returns:
         The updated CharacterResonance instance.
@@ -131,7 +139,17 @@ def grant_resonance(  # noqa: PLR0913
         dramatic_moment=dramatic_moment,
         style_presentation_endorsement=style_presentation_endorsement,
         mission_deed_reward_line=mission_deed_reward_line,
+        source_character_distinction=source_character_distinction,
     )
+
+    if source in ACCELERATED_GAIN_SOURCES:
+        from world.magic.services.distinction_resonance import (  # noqa: PLC0415
+            distinction_earn_rate_for,
+        )
+
+        earn_rate_bonus = distinction_earn_rate_for(character_sheet, resonance)
+        if earn_rate_bonus > 0:
+            amount = int(amount * (1 + earn_rate_bonus / Decimal(100)))
 
     cr, _ = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
@@ -158,6 +176,7 @@ def grant_resonance(  # noqa: PLR0913
         source_dramatic_moment=dramatic_moment,
         source_style_presentation_endorsement=style_presentation_endorsement,
         source_mission_deed_reward_line=mission_deed_reward_line,
+        source_character_distinction=source_character_distinction,
     )
 
     from world.magic.services.aura import (  # noqa: PLC0415
@@ -187,6 +206,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     dramatic_moment: DramaticMomentTag | None = None,
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
+    source_character_distinction: CharacterDistinction | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -207,6 +227,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             dramatic_moment=dramatic_moment,
             style_presentation_endorsement=style_presentation_endorsement,
             mission_deed_reward_line=mission_deed_reward_line,
+            source_character_distinction=source_character_distinction,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -240,6 +261,10 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     GainSource.MISSION_REWARD: lambda **kw: (
         kw["mission_deed_reward_line"],
         "mission_deed_reward_line",
+    ),
+    GainSource.DISTINCTION: lambda **kw: (
+        kw["source_character_distinction"],
+        "source_character_distinction",
     ),
 }
 
@@ -526,6 +551,57 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     return resolved
 
 
+def _fold_distinction_pull_bonus(
+    resolved: list[ResolvedPullEffect],
+    *,
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    threads: list[Thread],
+) -> list[ResolvedPullEffect]:
+    """Append a synthetic FLAT_BONUS entry for a distinction's resonance-scoped POWER modifier.
+
+    A distinction expresses potency for ``resonance`` by authoring a ``DistinctionEffect`` on
+    a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same modifier a
+    technique cast already reads via ``_derive_power``'s FLAT stage
+    (``magic/services/techniques.py``). Folds that one modifier into the pull's own magnitude
+    once per pull (not per thread/tier — every thread here shares ``resonance`` by
+    construction) (#1834 Task 7). No-op (returns ``resolved`` unchanged) when there is no
+    matching modifier.
+
+    Not full parity with a cast: ``_derive_power``'s FLAT stage also sums condition-sourced
+    POWER contributions (``get_condition_modifier_breakdown``), which this fold does not
+    include — only the distinction-authored ``CharacterModifier`` side.
+    """
+    from world.mechanics.services import power_flat_bonus_for_resonance  # noqa: PLC0415
+
+    bonus = power_flat_bonus_for_resonance(character_sheet, resonance.pk)
+    if not bonus:
+        return resolved
+    return [
+        *resolved,
+        ResolvedPullEffect(
+            kind=EffectKind.FLAT_BONUS,
+            authored_value=None,
+            level_multiplier=1,
+            scaled_value=bonus,
+            vital_target=None,
+            # threads[0] is an arbitrary pick (every thread here shares one resonance, so
+            # there's no real per-thread attribution for this synthetic entry) — but it IS
+            # serialized as source_thread_id over the wire
+            # (ResolvedPullEffectSerializer.get_source_thread_id, the pull-preview API).
+            # Any future consumer of that field on this row must not treat it as real
+            # attribution.
+            source_thread=threads[0],
+            source_thread_level=threads[0].level,
+            source_tier=0,
+            granted_capability=None,
+            narrative_snippet="",
+            target_form=None,
+            resistance_damage_type=None,
+        ),
+    ]
+
+
 def preview_resonance_pull(
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
@@ -591,6 +667,9 @@ def preview_resonance_pull(
 
     in_combat = combat_encounter is not None
     resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = _fold_distinction_pull_bonus(
+        resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
+    )
 
     # Cap detection: sum all INTENSITY_BUMP scaled_values, compare against
     # highest IntensityTier.threshold. If no IntensityTier row exists we
@@ -762,6 +841,9 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
         target=action_context.target,
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=beseech_bonus,
+    )
+    resolved = _fold_distinction_pull_bonus(
+        resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
     )
 
     applicable = [e for e in resolved if not e.inactive]

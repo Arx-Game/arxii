@@ -518,8 +518,11 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
 
     Uses bulk operations to avoid per-distinction queries. The chain is:
     1. Bulk-create CharacterDistinction records
-    2. Bulk-create ModifierSource + CharacterModifier records for all effects
-    3. Aggregate and apply resonance total updates
+    2. Bulk-create ModifierSource + CharacterModifier records for all non-resonance-category
+       effects, then reconcile each distinction's resonance grants (standing/currency axis —
+       ``reconcile_distinction_resonance_grants``, the ``DistinctionResonanceGrant`` sidecar;
+       see ``_create_distinction_modifiers_bulk``, #1834)
+    3. Mint a Secret for any ``secret_by_default`` distinction
     """
     from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -583,14 +586,22 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
 
 def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions: list) -> None:
     """
-    Bulk-create ModifierSource and CharacterModifier records for a list of CharacterDistinctions.
+    Bulk-create ModifierSource and CharacterModifier records for a list of CharacterDistinctions,
+    then reconcile each distinction's resonance grants.
 
     Expects the distinction FK on each CharacterDistinction to have effects prefetched.
 
-    Note: resonance-targeted CharacterModifier rows have no live reader today
-    (the aura calc reads CharacterResonance.lifetime_earned via
-    `world.magic.services.recompute_aura` instead; see #1834).
+    Resonance-CATEGORY effects are skipped here — distinction resonance flows through
+    ``reconcile_distinction_resonance_grants`` (the ``DistinctionResonanceGrant`` sidecar),
+    not a resonance-targeted ``CharacterModifier`` row (#1834). Every other effect still
+    materializes a modifier as before. Reconcile runs for every CharacterDistinction
+    regardless of whether it has any effects at all — a distinction can carry a
+    ``DistinctionResonanceGrant`` with no ``DistinctionEffect`` rows.
     """
+    from world.magic.services.distinction_resonance import (  # noqa: PLC0415
+        reconcile_distinction_resonance_grants,
+    )
+    from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
 
     # Build ModifierSource instances for all effects across all distinctions
@@ -598,6 +609,8 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     source_effect_ranks = []  # parallel list: (effect, rank) per source
     for char_dist in char_distinctions:
         for effect in char_dist.distinction.cached_effects:  # prefetched via to_attr
+            if effect.target.category.name == RESONANCE_CATEGORY_NAME:
+                continue
             sources.append(
                 ModifierSource(
                     distinction_effect=effect,
@@ -606,22 +619,23 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
             )
             source_effect_ranks.append((effect, char_dist.rank))
 
-    if not sources:
-        return
+    if sources:
+        created_sources = ModifierSource.objects.bulk_create(sources)
 
-    created_sources = ModifierSource.objects.bulk_create(sources)
+        modifiers = [
+            CharacterModifier(
+                character=sheet,
+                target=effect.target,
+                value=effect.get_value_at_rank(rank),
+                source=source,
+            )
+            for source, (effect, rank) in zip(created_sources, source_effect_ranks, strict=True)
+        ]
 
-    modifiers = [
-        CharacterModifier(
-            character=sheet,
-            target=effect.target,
-            value=effect.get_value_at_rank(rank),
-            source=source,
-        )
-        for source, (effect, rank) in zip(created_sources, source_effect_ranks, strict=True)
-    ]
+        CharacterModifier.objects.bulk_create(modifiers)
 
-    CharacterModifier.objects.bulk_create(modifiers)
+    for char_dist in char_distinctions:
+        reconcile_distinction_resonance_grants(char_dist)
 
 
 def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
@@ -971,7 +985,9 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     Called during finalize_character() after CharacterSheet is created.
     Creates Gift + CharacterGift + Technique + CharacterTechnique from the
     selected cantrip, optionally CharacterTradition, applies tradition codex
-    grants, and creates CharacterAura.
+    grants, and creates CharacterAura — then recomputes it once so any resonance
+    already seeded earlier in finalize (e.g. distinction resonance grants, #1834)
+    is reflected in the starting aura.
     """
     from world.fatigue.services import get_or_create_fatigue_pool  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
@@ -1018,6 +1034,15 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     )
     aura.full_clean()
     aura.save()
+
+    # 4b. Recompute aura now that CharacterAura exists. _apply_character_mechanics
+    # (distinctions, via reconcile_distinction_resonance_grants) runs earlier in
+    # finalize_character, before this row existed, so any resonance it seeded couldn't
+    # write through recompute_aura's no-CharacterAura no-op (#1834). This call catches
+    # the starting aura up to whatever resonance CG has granted so far.
+    from world.magic.services.aura import recompute_aura  # noqa: PLC0415
+
+    recompute_aura(sheet)
 
     # 5. Seed CharacterAnima + FatiguePool (idempotent — skip if already present).
     #    These must exist for Soul Tether sineating/rescue deductions to apply.

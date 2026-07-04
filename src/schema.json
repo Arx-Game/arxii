@@ -12982,6 +12982,7 @@ paths:
         schema:
           type: string
           enum:
+          - DISTINCTION
           - DRAMATIC_MOMENT
           - ENTRY_FLOURISH
           - MISSION_REPORT
@@ -13015,6 +13016,7 @@ paths:
           * `MISSION_REWARD` - Mission reward
           * `MISSION_REPORT` - Mission report style
           * `STAKE_REWARD` - Stake reward
+          * `DISTINCTION` - Distinction
       tags:
       - magic
       security:
@@ -47298,6 +47300,7 @@ components:
             * `MISSION_REWARD` - Mission reward
             * `MISSION_REPORT` - Mission report style
             * `STAKE_REWARD` - Stake reward
+            * `DISTINCTION` - Distinction
         granted_at:
           type: string
           format: date-time
@@ -49866,6 +49869,7 @@ components:
       - MISSION_REWARD
       - MISSION_REPORT
       - STAKE_REWARD
+      - DISTINCTION
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -49883,6 +49887,7 @@ components:
         * `MISSION_REWARD` - Mission reward
         * `MISSION_REPORT` - Mission report style
         * `STAKE_REWARD` - Stake reward
+        * `DISTINCTION` - Distinction
     Specialization:
       type: object
       description: Serializer for Specialization model.

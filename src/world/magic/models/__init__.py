@@ -101,6 +101,7 @@ from world.magic.models.grant import ResonanceGrant
 from world.magic.models.grants import (
     BeginningsRitualGrant,
     CodexEntryRitualGrant,
+    DistinctionResonanceGrant,
     DistinctionRitualGrant,
     PathGiftGrant,
     PathRitualGrant,
@@ -241,6 +242,8 @@ __all__ = [
     "CodexEntryRitualGrant",
     # corruption config (Scope 7 §2.3)
     "CorruptionConfig",
+    # currency-knob sidecar (#1834)
+    "DistinctionResonanceGrant",
     # dramatic moment tagging (#545)
     "DistinctionRitualGrant",
     "DramaticMomentTag",

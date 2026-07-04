@@ -127,6 +127,18 @@ class ResonanceGrant(SharedMemoryModel):
         related_name="resonance_grants",
         help_text="Set when source=MISSION_REWARD.",
     )
+    source_character_distinction = models.ForeignKey(
+        "distinctions.CharacterDistinction",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resonance_grants",
+        help_text=(
+            "Set when source=DISTINCTION; the CharacterDistinction that "
+            "granted this resonance. SET_NULL so deleting the distinction "
+            "does not delete this audit row."
+        ),
+    )
 
     class Meta:
         indexes = [
@@ -156,6 +168,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -175,6 +188,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -195,6 +209,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="MISSION_REPORT"),
             ),
@@ -216,6 +231,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="STAKE_REWARD"),
             ),
@@ -235,6 +251,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -254,6 +271,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
             ),
@@ -273,6 +291,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="OUTFIT_TRICKLE"),
             ),
@@ -295,6 +314,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="SANCTUM_WEAVING"),
             ),
@@ -313,6 +333,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="SANCTUM_OWNER_BONUS"),
             ),
@@ -333,6 +354,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="SANCTUM_DISSOLUTION_RECOVERY"),
             ),
@@ -352,6 +374,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="PROJECT_CONTRIBUTION"),
             ),
@@ -371,6 +394,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="ENTRY_FLOURISH"),
             ),
@@ -390,6 +414,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="DRAMATIC_MOMENT"),
             ),
@@ -409,6 +434,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_mission_deed_reward_line__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="STYLE_PRESENTATION"),
             ),
@@ -428,8 +454,32 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_entry_flourish__isnull=True)
                     & Q(source_dramatic_moment__isnull=True)
                     & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_character_distinction__isnull=True)
                 )
                 | ~Q(source="MISSION_REWARD"),
+            ),
+            # DISTINCTION (#1834): source_character_distinction set at grant creation
+            # by grant_resonance's service-level validation, but allowed to NULL
+            # post-delete via on_delete=SET_NULL — keeping the constraint NOT-NULL
+            # would brick CharacterDistinction.delete() at commit time (mirrors
+            # SANCTUM_WEAVING above).
+            models.CheckConstraint(
+                name="res_grant_distinction_shape",
+                check=(
+                    Q(source="DISTINCTION")
+                    & Q(source_room_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
+                    & Q(source_sanctum_details__isnull=True)
+                    & Q(source_project__isnull=True)
+                    & Q(source_entry_flourish__isnull=True)
+                    & Q(source_dramatic_moment__isnull=True)
+                    & Q(source_style_presentation_endorsement__isnull=True)
+                    & Q(source_mission_deed_reward_line__isnull=True)
+                )
+                | ~Q(source="DISTINCTION"),
             ),
         ]
 

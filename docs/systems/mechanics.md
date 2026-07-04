@@ -116,23 +116,46 @@ for source in breakdown.sources:
 ```python
 from world.mechanics.services import create_distinction_modifiers, delete_distinction_modifiers, update_distinction_rank
 
-# When a CharacterDistinction is granted: create ModifierSource + CharacterModifier per effect
+# When a CharacterDistinction is granted: create ModifierSource + CharacterModifier per
+# non-resonance effect, then reconcile any resonance grants (see below).
 modifiers = create_distinction_modifiers(character_distinction)
-# Resonance-targeting effects are covered by the CharacterModifier rows themselves;
-# no denormalized resonance total is maintained.
 
 # When a CharacterDistinction is removed: cascade-delete all modifiers
 count = delete_distinction_modifiers(character_distinction)
 
-# When rank changes: recalculate modifier values
+# When rank changes: recalculate modifier values (and re-reconcile resonance grants)
 update_distinction_rank(character_distinction)
 ```
 
-The aura percentage calculation (`magic.services.recompute_aura()`) reads
-`CharacterResonance.lifetime_earned` grouped by affinity — it does not read these
-resonance-targeting `CharacterModifier` rows, which currently have no live reader
-(see #1834). The legacy `CharacterResonanceTotal` denormalized aggregate was
-removed in the Spec A pivot — there is no sync step to keep in lockstep.
+**Resonance-targeting distinction effects are handled separately (#1834).** A
+`DistinctionEffect` whose `target.category.name == "resonance"` is skipped entirely by
+the loop above — it never gets a `ModifierSource`/`CharacterModifier` row. Instead,
+`create_distinction_modifiers` and `update_distinction_rank` both call
+`reconcile_distinction_resonance_grants(character_distinction)`
+(`world.magic.services.distinction_resonance`), which reads the `DistinctionResonanceGrant`
+authoring sidecar on the distinction and grants real, rank-scaled `CharacterResonance`
+currency (idempotent — a second call at the same rank grants nothing further). The `resonance`
+`ModifierCategory` itself is not deprecated: non-distinction sources (facet/mantle/motif
+passive bonuses, walked via `equipment_walk_total`) still read/write resonance-category
+`CharacterModifier` rows normally. The aura percentage calculation
+(`magic.services.recompute_aura()`) reads `CharacterResonance.lifetime_earned` grouped by
+affinity and was never coupled to either path. The legacy `CharacterResonanceTotal`
+denormalized aggregate was removed in the Spec A pivot — there is no sync step to keep in
+lockstep.
+
+**POWER-category distinction effects (potency, #1834 Task 7) are unaffected by the skip
+above** — a `DistinctionEffect` on a POWER-category `ModifierTarget` (optionally gated by
+`target_resonance`) still writes a normal `CharacterModifier` row through the loop. Two
+consumers read it: a technique cast (`_derive_power`'s FLAT stage, already wired) and a
+standalone thread pull, via `power_flat_bonus_for_resonance(sheet, resonance_id)` — mirrors
+cast scope semantics exactly: sums matching POWER-category modifiers whose
+`target_resonance` is either null (unscoped — applies to every resonance) or equals the
+pull's resonance (excluding the unscoped `power_multiplier` target) via `get_modifier_total`.
+See `world/magic/CLAUDE.md` "Distinction Potency (POWER axis)" for the pull-side wiring
+(`world.magic.services.resonance._fold_distinction_pull_bonus`). The pull path is **not**
+full parity with a cast: `_derive_power`'s FLAT stage also sums condition-sourced POWER
+contributions (`get_condition_modifier_breakdown`), which the pull fold does not include —
+that gap is real and remains.
 
 ---
 
@@ -174,7 +197,7 @@ removed in the Spec A pivot — there is no sync step to keep in lockstep.
 ## Integration Points
 
 - **Distinctions**: Primary modifier source. `create_distinction_modifiers()` is called when a `CharacterDistinction` is created; `delete_distinction_modifiers()` on removal; `update_distinction_rank()` on rank change.
-- **Magic**: Aura percentages (`magic.services.recompute_aura()`) read `CharacterResonance.lifetime_earned` grouped by affinity — no denormalized aggregate to sync. Resonance-targeting `CharacterModifier` rows have no live reader today (#1834).
+- **Magic**: Aura percentages (`magic.services.recompute_aura()`) read `CharacterResonance.lifetime_earned` grouped by affinity — no denormalized aggregate to sync. Resonance-category `DistinctionEffect`s no longer write a `CharacterModifier` row at all — they flow through `reconcile_distinction_resonance_grants` (the `DistinctionResonanceGrant` sidecar) instead (#1834); see "Distinction Lifecycle" above.
 - **Action Points**: `ActionPointPool._get_ap_modifier()` uses string-based lookup for AP modifier targets (pending target FK when AP system is built).
 - **Progression**: Development rate modifiers use string-based lookup (pending target FK when progression system is built).
 - **Equipment** (future): Will follow the same `ModifierSource` pattern with equipment-specific FK fields.

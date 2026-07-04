@@ -13,7 +13,6 @@ Part of CG Stage 6 (Traits).
 
 ```python
 from world.distinctions.types import (
-    EffectType,            # STAT_MODIFIER, AFFINITY_MODIFIER, RESONANCE_MODIFIER, ROLL_MODIFIER, CODE_HANDLED
     DistinctionOrigin,     # CHARACTER_CREATION, GAMEPLAY
     OtherStatus,           # PENDING_REVIEW, APPROVED, MAPPED
 )
@@ -36,9 +35,23 @@ from world.distinctions.types import (
 | `DistinctionCategory` | Categories like Physical, Mental, Social | `name`, `slug`, `description`, `display_order` |
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
 | `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
-| `DistinctionEffect` | Mechanical effects | `distinction`, `effect_type`, `target`, `value_per_rank`, `scaling_values` |
+| `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `description` |
 | `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
 | `DistinctionMutualExclusion` | Incompatible pairs | `distinction_a`, `distinction_b` |
+
+**There is no `effect_type` enum/column.** `DistinctionEffect` targets a single
+`mechanics.ModifierTarget` row, and the effect's *kind* is derived on read from
+`target.category.name` — not stored as a separate discriminator. The consumer loop
+(`create_distinction_modifiers` / `update_distinction_rank`, `world/mechanics/services.py`)
+branches on `target.category.name`:
+- `category.name == "resonance"` (`RESONANCE_CATEGORY_NAME`) — skipped by the ordinary
+  `ModifierSource`/`CharacterModifier` loop entirely; see "Distinction → Resonance (#1834)"
+  below for how this axis is actually granted.
+- `category.name == "power"` (`POWER_CATEGORY_NAME`), optionally gated by
+  `target.target_resonance` — still writes a normal `CharacterModifier` row (this is the
+  **potency** axis; see below).
+- Everything else (stat, affinity, goal, …) — writes a normal `CharacterModifier` row as
+  always, via `ModifierSource(distinction_effect=effect, character_distinction=...)`.
 
 ### Character Data (models.Model - per-character instances)
 
@@ -46,6 +59,76 @@ from world.distinctions.types import (
 |-------|---------|------------|
 | `CharacterDistinction` | Character's acquired distinctions | `character`, `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character`, `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
+
+---
+
+## Distinctions grant/shape Resonance (#1834)
+
+A distinction can affect a character's `magic.Resonance` standing along **two independent
+axes**. Both are authored per-distinction; neither is automatic.
+
+### Standing / currency axis — `DistinctionResonanceGrant`
+
+`DistinctionResonanceGrant` (`world/magic/models/grants.py` — lives in `world.magic`, not
+`world.distinctions`, per ADR-0010: the general primitive `magic.Resonance` must not import
+back into a dependent app) is a sidecar join authoring two rank-scaled currency knobs for a
+`(distinction, resonance)` pair:
+
+| Field | Purpose |
+|-------|---------|
+| `distinction` | FK → `distinctions.Distinction` |
+| `resonance` | FK → `magic.Resonance` |
+| `flat_amount_per_rank` | Flat resonance seeded per rank held in the distinction |
+| `earn_rate_bonus_per_rank` | Percent bonus to the character's *earn rate* for this resonance, per rank |
+
+Two consumer services in `world/magic/services/distinction_resonance.py`:
+
+- **`reconcile_distinction_resonance_grants(character_distinction)`** — called at grant time
+  by `create_distinction_modifiers` and at rank-change time by `update_distinction_rank`
+  (`world/mechanics/services.py`). For every `DistinctionResonanceGrant` authored on the
+  distinction: `get_or_create`s a `CharacterResonance` row for that resonance (establishing
+  the character in it even before any seed is owed), then tops off a rank-scaled flat seed
+  (`flat_amount_per_rank * rank`) via `grant_resonance(..., source=GainSource.DISTINCTION,
+  source_character_distinction=character_distinction)`. Ledger-idempotent: sums this
+  distinction's prior `DISTINCTION`-source grants for the resonance and only grants the
+  shortfall. A second reconcile at the same rank grants 0; a rank-down never claws back
+  (`CharacterResonance.lifetime_earned` is monotonic).
+- **`distinction_earn_rate_for(character_sheet, resonance)`** — sums
+  `earn_rate_bonus_per_rank * rank` across all of a character's distinctions that grant a
+  bonus for `resonance`. Read by `grant_resonance` (`world/magic/services/resonance.py`) to
+  scale up `amount` **before** writing, but only when `source` is one of
+  `ACCELERATED_GAIN_SOURCES` (ADR-0041 — perception/presence-driven sources a character
+  actively performs to be seen). Authored/system sources — including the `DISTINCTION` seed
+  itself, to avoid a circular self-accelerating grant — are in `NON_ACCELERATED_GAIN_SOURCES`
+  and are never scaled. Every `GainSource` member is asserted to land in exactly one of the
+  two sets (a total-classification test in `world/magic/tests/`).
+
+`GainSource.DISTINCTION` (`world/magic/constants.py`) is the ledger discriminator for the
+seed grants above; `ResonanceGrant.source_character_distinction` is its typed source FK.
+
+Wired at both distinction-acquisition sites: gameplay grant/rank-up
+(`create_distinction_modifiers` / `update_distinction_rank`) and character creation
+(`_create_distinction_modifiers_bulk` in `world/character_creation/services.py`, followed by
+`recompute_aura` after `CharacterAura` is created during `finalize_magic_data`).
+
+### Potency axis — POWER-category `DistinctionEffect`
+
+A distinction expresses **potency** for a resonance (as opposed to standing/currency above)
+using the ordinary authoring surface — a `DistinctionEffect` whose `target` is a
+POWER-category `ModifierTarget`, optionally gated by `target.target_resonance`. This writes a
+normal `CharacterModifier` row (unaffected by the resonance-category skip described in
+"Enums" above). Two consumers read it: a technique cast's FLAT power stage
+(`_derive_power` in `world/magic/services/techniques.py`), and a standalone thread pull via
+`power_flat_bonus_for_resonance` (`world/mechanics/services.py`) folded in by
+`_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`). See
+`docs/systems/mechanics.md` and `src/world/magic/CLAUDE.md` "Distinction Potency (POWER
+axis)" for the full wiring — **note the pull path only folds this one modifier; it does not
+include condition-sourced POWER contributions that a cast's FLAT stage also sums.**
+
+The dead resonance-category `CharacterModifier` write that predated this axis split (the
+distinction wrote a modifier nothing read) was removed from both grant paths as part of
+#1834; the `resonance` `ModifierCategory` itself stays live for non-distinction sources
+(facet/mantle/motif-coherence passive bonuses via `equipment_walk_total`).
 
 ---
 

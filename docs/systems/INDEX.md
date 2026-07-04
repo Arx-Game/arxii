@@ -121,6 +121,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     achievements on authored `AuraAffinityThreshold` crossings; see magic.md
     §"Aura Drift (#1737)" for the full mechanism, including the new
     `GainSource.MISSION_REWARD` deed source.
+  - **Distinctions grant/shape resonance (#1834):** `DistinctionResonanceGrant`
+    (`world/magic/models/grants.py` — sidecar join, `distinctions.Distinction` × `Resonance`,
+    fields `flat_amount_per_rank` / `earn_rate_bonus_per_rank`; lives in `world.magic` per
+    ADR-0010). `GainSource.DISTINCTION` + `ResonanceGrant.source_character_distinction` typed
+    FK. `ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (ADR-0041, total
+    classification test) gate which `GainSource`s get the earn-rate accelerator. See
+    `docs/systems/distinctions.md` "Distinctions grant/shape Resonance" for the two axes
+    (standing/currency vs. potency).
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -141,6 +149,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `commit_combat_pull` (combat cast + clash), `build_cast_pull_declaration`,
     `resolve_pull_from_kwargs`. Non-combat cast calls
     `request_technique_cast(cast_pull=…)` instead.
+  - Distinction → resonance (#1834, `world/magic/services/distinction_resonance.py`):
+    `reconcile_distinction_resonance_grants(character_distinction)` (establish + idempotent
+    seed top-off; called by `create_distinction_modifiers`/`update_distinction_rank`),
+    `distinction_earn_rate_for(character_sheet, resonance) -> Decimal` (summed earn-rate
+    bonus; read by `grant_resonance` for `ACCELERATED_GAIN_SOURCES`). Potency (POWER axis):
+    `power_flat_bonus_for_resonance(sheet, resonance_id) -> int`
+    (`world/mechanics/services.py`) folded into a standalone pull by
+    `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
+    reads the same modifier via `_derive_power`'s FLAT stage.
   - **Target-aware pull modulation (#1831):** `resolve_pull_effects`'s `target` param
     (the live cast/combat target; `PullActionContext.target` in `world/magic/types/pull.py`,
     populated by `commit_combat_pull` and `use_technique`'s `pull_target` kwarg) is fed
@@ -397,7 +414,10 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
 - **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
 - **Enums:** `DistinctionOrigin`, `OtherStatus`
-- **Integrates with:** character_creation (draft storage), traits (stat modifiers)
+- **Integrates with:** character_creation (draft storage), traits (stat modifiers), magic
+  (`DistinctionResonanceGrant` — a distinction can grant/shape `Resonance` standing and
+  potency, #1834; the sidecar model itself lives in `world.magic` per ADR-0010 — see below
+  and [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
 - **Source:** `src/world/distinctions/`
 - **Details:** [distinctions.md](distinctions.md)
 
@@ -1879,7 +1899,12 @@ Unified modifier system — categories, types, sources, and per-character modifi
   — gates the equipment modifier walk in `get_modifier_total`
 - **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Equipment
   bonuses flow through `passive_facet_bonuses` + `covenant_role_bonus` (called inline
-  by `get_modifier_total`, not stored as `CharacterModifier` rows).
+  by `get_modifier_total`, not stored as `CharacterModifier` rows). **Exception (#1834):** a
+  resonance-category `DistinctionEffect` never enters this pattern at all — no
+  `ModifierSource`/`CharacterModifier` row — it flows through
+  `reconcile_distinction_resonance_grants` (the `DistinctionResonanceGrant` sidecar in
+  `world.magic`) instead. A POWER-category `DistinctionEffect` (potency) is unaffected and
+  follows the pattern normally.
 - **EffectType values** (`world/checks/constants.py` — dispatched by `world/mechanics/effect_handlers.py`):
   - Pre-#1018: `APPLY_CONDITION`, `REMOVE_CONDITION`, `ADD_PROPERTY`, `REMOVE_PROPERTY`,
     `DEAL_DAMAGE`, `LAUNCH_ATTACK`, `LAUNCH_FLOW`, `GRANT_CODEX`, `MAGICAL_SCARS`,

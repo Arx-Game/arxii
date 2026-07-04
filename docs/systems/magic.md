@@ -89,9 +89,15 @@ were dropped (no readers beyond Mage Scars, which now uses
 `CharacterSheet`, and `balance` + `lifetime_earned` were added. Row existence
 replaces the old `is_active` flag. `CharacterResonanceTotal` (denormalized
 aggregate) was deleted — aura recompute (`recompute_aura`) reads
-`CharacterResonance.lifetime_earned` grouped by affinity directly. (Distinction
-effects still write resonance-category `CharacterModifier` rows, but nothing
-reads them today — see #1834.)
+`CharacterResonance.lifetime_earned` grouped by affinity directly. Distinction
+effects targeting a resonance-category `ModifierTarget` no longer write a
+`CharacterModifier` row at all (#1834) — `create_distinction_modifiers` and
+`update_distinction_rank` (`world/mechanics/services.py`) skip them and instead call
+`reconcile_distinction_resonance_grants` (`world/magic/services/distinction_resonance.py`),
+which reads the `DistinctionResonanceGrant` authoring sidecar and grants real
+`CharacterResonance`/`ResonanceGrant` currency. The `resonance` `ModifierCategory` is
+still live for non-distinction sources (facet/mantle/motif-coherence passive bonuses via
+`equipment_walk_total`).
 
 ### Techniques (Player-Created Abilities)
 
@@ -896,6 +902,19 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `STAKE_REWARD` — stakes-contract WIN reward line (#1770 PR3); discriminator-only,
   provenance on the stories side (`StakeOutcome` + `StakeRewardLine`); see
   `docs/systems/stakes.md`.
+- `DISTINCTION` — a distinction's authored `DistinctionResonanceGrant` flat seed
+  (#1834); typed source FK `source_character_distinction`. See "Distinction → Resonance
+  (#1834)" in `docs/systems/distinctions.md` for the model + reconcile/accelerator services.
+
+`ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (`world/magic/constants.py`,
+ADR-0041) partition every `GainSource` member (a total-classification test enforces this):
+perception/presence-driven sources a character actively performs to be seen (`POSE_ENDORSEMENT`,
+`SCENE_ENTRY`, `ENTRY_FLOURISH`, `DRAMATIC_MOMENT`, `STYLE_PRESENTATION`, `OUTFIT_TRICKLE`,
+`ROOM_RESIDENCE`) are scaled up by `distinction_earn_rate_for` (a character's summed
+`DistinctionResonanceGrant.earn_rate_bonus_per_rank`) in `grant_resonance` before the amount is
+written; authored/system sources (`STAFF_GRANT`, `MISSION_REWARD`, `MISSION_REPORT`,
+`STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, and `DISTINCTION`
+itself — accelerating a distinction's own seed grant would be circular) are never accelerated.
 
 ### Aura Drift (#1737)
 
