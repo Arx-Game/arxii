@@ -45,10 +45,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   Building.fortification_level investment (#1713). Naval-ship vertical slice shipped
   (#1714): `BattleVehicle` (unit+place pair), REPOSITION declaration gated on vehicle
   commander, overlap-gated cross-vehicle targeting (`places_overlap` — the boarding
-  gate), hull-breach/living-mount-defeat ejection + drowning/falling hazard. Airship/
+  gate), hull-breach/living-mount-defeat ejection + drowning/falling hazard. The
+  persistent half shipped (#1832, ADR-0086): `ShipDetails` (a per-kind `Building`
+  extension — hull IS `fortification_level`) with commission/upgrade/repair Projects
+  and ship-as-sanctum bonuses, `materialize_ship_as_battle_vehicle` snapshotting into
+  #1714's `BattleVehicle` for one `Battle`, and a battle-conclusion hook
+  (`apply_ship_battle_outcome`) writing `needs_repair` back onto the persistent ship
+  when its hull is breached — see [ships.md](../systems/ships.md). Airship/
   dragon/kraken remain data variants (`VehicleKind`) pending their own end-to-end
-  pass — no dedicated content, telnet reposition subcommand, or reposition-movement
-  resolution yet.
+  pass — no dedicated content, telnet reposition subcommand, reposition-movement
+  resolution, or persistent-ship equivalent yet.
   Deferred: battle writeup page (#1735).
 - Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
 

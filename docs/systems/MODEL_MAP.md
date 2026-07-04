@@ -543,6 +543,7 @@
   - units <- battles.BattleUnit
   - rounds <- battles.BattleRound
   - participants <- battles.BattleParticipant
+  - ship_deployments <- ships.ShipDeployment
 
 ### BattleSide
 **Foreign Keys:**
@@ -649,6 +650,8 @@
 **Foreign Keys:**
   - unit -> battles.BattleUnit [OneToOne]
   - place -> battles.BattlePlace [OneToOne]
+**Pointed to by:**
+  - ship_deployment <- ships.ShipDeployment
 
 ### Service Functions
 - `activate_stakes_for_battle(battle: 'Battle') -> 'None' — Lock any staked beats' contracts for this battle's enlisted party.`
@@ -670,6 +673,7 @@
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
 - `resolve_battle_beats(battle: 'Battle') -> 'None' — Resolve every UNSATISFIED OUTCOME_TIER beat linked to a concluded battle.`
+- `run_battle_conclusion_hooks(battle: 'Battle') -> 'None' — Invoke every registered conclusion hook with ``battle``.`
 - `set_battle_side_posture(*, side: 'BattleSide', posture: 'str') -> 'BattleSide' — Set a battle side's tactical posture (#1711).`
 
 
@@ -738,6 +742,7 @@
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
+  - ship_details <- ships.ShipDetails
 
 ### BuildingMaterial
 **Foreign Keys:**
@@ -861,6 +866,7 @@
 - `can_build_style(persona: 'Persona', style: 'ArchitecturalStyle') -> 'bool' — Whether this persona may build in this style (#1469).`
 - `complete_building_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'Building' — Spawn a Building from a completed BUILDING_CONSTRUCTION project.`
 - `contribution_value_for_construction(contribution: 'Contribution') -> 'int' — How much a single contribution is worth toward a BUILDING_CONSTRUCTION project.`
+- `create_entry_room(building: 'Building', name: 'str') -> 'RoomProfile' — Create one Evennia Room ObjectDB + ``RoomProfile`` for *building*, named *name*.`
 - `issue_permit(offer: 'NPCServiceOffer', persona: 'Persona') -> 'EffectResult' — Real PERMIT effect handler — creates the BuildingPermit ItemInstance + details.`
 - `place_decoration(room_profile, kind: 'DecorationKind') -> 'RoomDecoration' — Place a decoration in a room and materialize its comfort modifiers (#1514).`
 - `remove_decoration(decoration: 'RoomDecoration') -> 'None' — Remove a placed decoration and delete its comfort modifiers (#1514).`
@@ -1751,6 +1757,7 @@
   - mentor_bonds <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
   - battle_sides <- battles.BattleSide
+  - constructed_ships <- ships.ShipConstructionDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
 
 ### CovenantRole
@@ -4005,6 +4012,9 @@
   - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance
+  - ship_upgrade_details <- ships.ShipUpgradeDetails
+  - ship_construction_details <- ships.ShipConstructionDetails
+  - ship_repair_details <- ships.ShipRepairDetails
   - room_feature_progression_details <- room_features.RoomFeatureProgressionDetails
 
 ### Contribution
@@ -4443,6 +4453,7 @@
   - materials_contributed <- buildings.BuildingMaterial
   - permits_consumed <- buildings.BuildingPermitDetails
   - construction_projects_led <- buildings.BuildingConstructionDetails
+  - constructed_ships <- ships.ShipConstructionDetails
 
 ### PersonaDiscovery
 **Foreign Keys:**
@@ -4716,6 +4727,58 @@
 - `secrets_explaining(*, roster_entry: 'RosterEntry', legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'QuerySet[SecretKnowledge]' — The secrets a viewer KNOWS that are the hidden truth behind a given act (#1573).`
 - `secrets_owned_by(sheet: 'CharacterSheet', *, sort: 'str' = 'level') -> 'QuerySet[Secret]' — The secrets a character **owns** — its own shelf (#1334).`
 - `set_secret_act_anchor(secret: 'Secret', *, legend_deed: 'LegendEntry | None' = None, mission_deed: 'MissionDeedRecord | None' = None, scene: 'Scene | None' = None) -> 'Secret' — Set (or clear) the recorded act a secret is the hidden truth behind (#1573).`
+
+
+## world.ships
+
+### ShipType
+**Pointed to by:**
+  - ships <- ships.ShipDetails
+  - construction_details <- ships.ShipConstructionDetails
+
+### ShipDetails
+**Foreign Keys:**
+  - building -> buildings.Building [OneToOne]
+  - ship_type -> ships.ShipType [FK]
+**Pointed to by:**
+  - deployments <- ships.ShipDeployment
+  - upgrade_details <- ships.ShipUpgradeDetails
+  - source_construction <- ships.ShipConstructionDetails
+  - repair_details <- ships.ShipRepairDetails
+
+### ShipDeployment
+**Foreign Keys:**
+  - ship -> ships.ShipDetails [FK]
+  - battle -> battles.Battle [FK]
+  - vehicle -> battles.BattleVehicle [OneToOne]
+
+### ShipUpgradeDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - ship -> ships.ShipDetails [FK]
+
+### ShipConstructionDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - ship_type -> ships.ShipType [FK]
+  - owner_persona -> scenes.Persona [FK] (nullable)
+  - owner_covenant -> covenants.Covenant [FK] (nullable)
+  - resulting_ship -> ships.ShipDetails [OneToOne] (nullable)
+
+### ShipRepairDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - ship -> ships.ShipDetails [FK]
+
+### Service Functions
+- `complete_ship_construction(project: 'Project', outcome_tier: 'object | None' = None) -> 'ShipDetails' — Kind handler: spawn the ``Building`` + deck room + ``ShipDetails`` exactly once.`
+- `complete_ship_repair(project: 'Project', outcome_tier: 'object | None' = None) -> 'None' — Kind handler: clear the ship's ``needs_repair`` flag, exactly once.`
+- `complete_ship_upgrade(project: 'Project', outcome_tier: 'object | None' = None) -> 'None' — Kind handler: raise the ship's stat level, exactly once, never downward.`
+- `ensure_ship_kind() -> 'BuildingKind' — Get-or-create the ``Vessel`` maritime ``BuildingKind`` row.`
+- `start_ship_construction(*, persona: 'Persona', ship_type: 'ShipType', name: 'str', covenant: 'Covenant | None' = None) -> 'Project' — Open a ``SHIP_CONSTRUCTION`` Project commissioning a new ship.`
+- `start_ship_hull_upgrade(*, persona: 'Persona', ship: 'ShipDetails', target_level: 'int') -> 'Project' — Open a hull upgrade for *ship*, reusing ``FORTIFICATION_UPGRADE``.`
+- `start_ship_repair(*, persona: 'Persona', ship: 'ShipDetails') -> 'Project' — Open a ``SHIP_REPAIR`` Project clearing *ship*'s ``needs_repair`` flag.`
+- `start_ship_upgrade(*, persona: 'Persona', ship: 'ShipDetails', stat: 'str', target_level: 'int') -> 'Project' — Open a ``SHIP_UPGRADE`` Project raising *ship*'s *stat* to *target_level*.`
 
 
 ## world.skills

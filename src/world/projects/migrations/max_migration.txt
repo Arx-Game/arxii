@@ -1,1 +1,1 @@
-0006_alter_contributionmethod_kind_alter_project_kind
+0007_alter_contributionmethod_kind_alter_project_kind

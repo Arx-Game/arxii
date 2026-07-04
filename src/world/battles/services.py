@@ -15,6 +15,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
+from world.battles.conclusion_hooks import run_battle_conclusion_hooks
 from world.battles.constants import (
     BASE_INTEGRITY,
     DECISIVE_MARGIN,
@@ -784,7 +785,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     BattleOutcomeMapping and completing the beat through the same
     record_outcome_tier_completion seam combat/missions already use. Idempotent:
     if the battle is already concluded, returns it unchanged (resolve_battle_beats
-    does not re-fire).
+    does not re-fire). After beat resolution, runs every hook registered via
+    register_battle_conclusion_hook (#1832) — e.g. ships' apply_ship_battle_outcome.
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -807,6 +809,7 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.save(update_fields=["is_active", "date_finished"])
 
     resolve_battle_beats(battle)
+    run_battle_conclusion_hooks(battle)
 
     return battle
 

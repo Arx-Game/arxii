@@ -189,10 +189,13 @@ Build to the ADR; these are not open questions. See
   Actions/commands (see audit NO-SURFACE). `intent`.
 - **Store / shop / vendor + player↔player trade / barter / auction** — #923, `intent`.
 - **Ship system** — vessels, crew, sea travel, mission integration. Connects to **boats / sea travel /
-  drowning** and the immunity framework (who can't drown). `partial` — **#1714** is the first
-  concrete build: a battle-time-only `BattleVehicle` (ship/airship/dragon/kraken), reachable only
-  inside a `Battle` and discarded with it, no persistence, crew roster, or out-of-combat travel.
-  **#1832** is the follow-up covering persistent upgrades, repair, and ship-as-sanctum.
+  drowning** and the immunity framework (who can't drown). `partial` — **#1714** built the first
+  concrete slice: a battle-time-only `BattleVehicle` (ship/airship/dragon/kraken), reachable only
+  inside a `Battle` and discarded with it. **#1832** shipped the persistent half: `ShipDetails`
+  (a per-kind `Building` extension, ADR-0086) with commission/upgrade/repair Projects,
+  ship-as-sanctum, and `materialize_ship_as_battle_vehicle` bridging into #1714's battle vehicle —
+  see [ships.md](../systems/ships.md). Still `intent`: crew as named NPCs (today `crew_capacity`
+  is a number), out-of-combat sea travel, cargo-as-tracked-goods, and mission integration.
 - **Servant / retriever NPC entity**; **vault security / access lists / theft**;
   **building→neighborhood→domain progression** (#696); **room-feature systems** (Library/Lab/Training
   Room/Command Center/Granary/Cannon Deck — #675, only Sanctum real); **future Project kinds** (#673);

@@ -320,6 +320,10 @@ class ActionRegistryTests(TestCase):
             "signature_list",
             "start_room_feature_project",
             "repair_lab_station",
+            "commission_ship",
+            "upgrade_ship",
+            "repair_ship",
+            "ship_status",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
