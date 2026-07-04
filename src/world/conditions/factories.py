@@ -88,6 +88,24 @@ def ensure_radiant_damage_type() -> DamageType:
     return dt
 
 
+def ensure_drowning_damage_type() -> DamageType:
+    """Idempotently get-or-create the 'Drowning' DamageType (#1714).
+
+    Returns the same pk across calls; safe to invoke from seeds, factories, and tests.
+    """
+    dt, _created = DamageType.objects.get_or_create(name="Drowning")
+    return dt
+
+
+def ensure_falling_damage_type() -> DamageType:
+    """Idempotently get-or-create the 'Falling' DamageType (#1714).
+
+    Returns the same pk across calls; safe to invoke from seeds, factories, and tests.
+    """
+    dt, _created = DamageType.objects.get_or_create(name="Falling")
+    return dt
+
+
 class ConditionTemplateFactory(DjangoModelFactory):
     """Factory for ConditionTemplate."""
 

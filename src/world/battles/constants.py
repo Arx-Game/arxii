@@ -35,6 +35,8 @@ class TerrainType(models.TextChoices):
     ELEVATED = "elevated", "Elevated"
     FLOODED = "flooded", "Flooded"
     URBAN = "urban", "Urban"
+    WATER = "water", "Open water"
+    AERIAL = "aerial", "Open sky"
 
 
 class BattlePosture(models.TextChoices):
@@ -54,6 +56,7 @@ class BattleActionKind(models.TextChoices):
     BREACH = "breach", "Breach a fortification"
     FORTIFY = "fortify", "Fortify a structure"
     SET_ENVIRONMENT = "set_environment", "Set battlefield weather"
+    REPOSITION = "reposition", "Reposition a vehicle"
 
 
 class BattleActionScope(models.TextChoices):
@@ -82,6 +85,16 @@ class FortificationKind(models.TextChoices):
     WALL = "wall", "Wall"
     GATE = "gate", "Gate"
     BATTLEMENT = "battlement", "Battlement"
+    HULL = "hull", "Hull"
+
+
+class VehicleKind(models.TextChoices):
+    """The concrete flavor a BattleVehicle represents (#1714)."""
+
+    SHIP = "ship", "Naval ship"
+    AIRSHIP = "airship", "Airship"
+    DRAGON = "dragon", "Dragon"
+    KRAKEN = "kraken", "Kraken"
 
 
 class BattleOutcome(models.TextChoices):
@@ -182,6 +195,7 @@ BASE_INTEGRITY: dict[str, int] = {
     FortificationKind.WALL: 100,
     FortificationKind.BATTLEMENT: 80,
     FortificationKind.GATE: 60,
+    FortificationKind.HULL: 120,
 }
 FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20
 
@@ -191,3 +205,10 @@ FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20
 # Flat VP like REPEL/HOLD — SET_ENVIRONMENT doesn't move a numeric resource.
 SET_ENVIRONMENT_BASE_ROUNDS = 1
 SET_ENVIRONMENT_VP = 4
+
+# Environmental hazard consequence on vehicle destruction (#1714). Abstract
+# BattleUnits use a flat authored penalty (no per-unit resistance granularity,
+# matching how Property is presence-only for units everywhere else); real PCs
+# route through resolve_damage_type_resistance for immunity = high resistance.
+VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY = 30
+VEHICLE_HAZARD_BASE_DAMAGE = 20

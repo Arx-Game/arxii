@@ -24,6 +24,7 @@ from world.battles.constants import (
     FortificationKind,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
@@ -230,6 +231,23 @@ class BattlePlace(SharedMemoryModel):
         blank=True,
         help_text="Absolute round number this place's weather_override expires at "
         "(#1715). Cleared alongside weather_override at round-boundary expiry.",
+    )
+    x = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        help_text="Position on the battle's internal battle-map coordinate plane "
+        "(#1714). Additive to ADR-0081, which only rejected anchoring BattlePlace "
+        "to the room-level Position/PositionEdge graph — see ADR-0085.",
+    )
+    y = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    footprint_radius = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=1,
+        help_text="How much of the battle-map grid this place occupies (#1714). "
+        "Two places overlap when the distance between their (x, y) centers is "
+        "less than the sum of their footprint_radius values.",
     )
 
     class Meta:
@@ -585,6 +603,20 @@ class BattleActionDeclaration(SharedMemoryModel):
         related_name="declarations",
         help_text="Set when action_kind is BREACH or FORTIFY (#1713).",
     )
+    reposition_dx = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Requested x-axis delta for a REPOSITION declaration (#1714). "
+        "Clamped to the vehicle's SPEED capability magnitude at resolution.",
+    )
+    reposition_dy = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     resolved = models.BooleanField(default=False)
     success_level = models.SmallIntegerField(
         default=0,
@@ -773,3 +805,40 @@ class BattleOutcomeMapping(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"BattleOutcomeMapping({self.get_outcome_display()})"
+
+
+class BattleVehicle(SharedMemoryModel):
+    """A vessel or great mount: pairs one BattleUnit (fights) with one BattlePlace
+    (what units/PCs embed on) as a single in-fiction object (#1714).
+
+    unit.place is intentionally left None — the vehicle's own Unit is not "at"
+    a front, it IS the place other units/participants embed onto via their own
+    place FK. Do not set unit.place to this vehicle's own place.
+    """
+
+    unit = models.OneToOneField(
+        BattleUnit,
+        on_delete=models.CASCADE,
+        related_name="vehicle",
+    )
+    place = models.OneToOneField(
+        BattlePlace,
+        on_delete=models.CASCADE,
+        related_name="vehicle",
+    )
+    vehicle_kind = models.CharField(
+        max_length=20,
+        choices=VehicleKind.choices,
+        default=VehicleKind.SHIP,
+    )
+    is_structural = models.BooleanField(
+        default=True,
+        help_text="True for constructed vessels (ship/airship) — destruction "
+        "goes through a hull Fortification breach. False for living mounts "
+        "(dragon/kraken) — destruction reuses BattleUnitStatus.DESTROYED. "
+        "Authored, not derived from vehicle_kind, so a future design can "
+        "still model a 'living hull' if needed (#1714).",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.get_vehicle_kind_display()} ({self.place.name})"

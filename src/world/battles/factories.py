@@ -13,6 +13,7 @@ from world.battles.constants import (
     BattleSideRole,
     BattleUnitStatus,
     FortificationKind,
+    VehicleKind,
 )
 from world.battles.models import (
     Battle,
@@ -22,6 +23,7 @@ from world.battles.models import (
     BattleRound,
     BattleSide,
     BattleUnit,
+    BattleVehicle,
     Fortification,
     WeatherTypeCapabilityChallenge,
     WeatherTypePropertyEffect,
@@ -83,6 +85,16 @@ class BattleUnitFactory(factory_django.DjangoModelFactory):
     descriptor = "generic"
     strength = 100
     status = BattleUnitStatus.ACTIVE
+
+
+class BattleVehicleFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = BattleVehicle
+
+    unit = factory.SubFactory(BattleUnitFactory)
+    place = factory.SubFactory(BattlePlaceFactory, battle=factory.SelfAttribute("..unit.battle"))
+    vehicle_kind = VehicleKind.SHIP
+    is_structural = True
 
 
 class BattleRoundFactory(factory_django.DjangoModelFactory):

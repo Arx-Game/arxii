@@ -72,6 +72,10 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 | `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0081 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
 | `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition/movement action — not yet filed as an issue; #1712 explicitly did not build this. Data only. |
 | `controlled_by` | FK → `BattleSide` (null, `related_name="controlled_places"`) | Which side holds this front as an objective (#1712); set by a successful HOLD declaration. `None` means uncontrolled/contested. |
+| `weather_override` | FK → `WeatherType` (null, `related_name="overriding_battle_places"`) | Local weather exception at this front (#1715); beats the Battle-level ambient weather here only. Cleared at round-boundary expiry. |
+| `weather_override_expires_round` | PositiveIntegerField (null) | Absolute round number `weather_override` expires at (#1715). Cleared alongside `weather_override` at round-boundary expiry. |
+| `x` / `y` | DecimalField(8, 2) (default 0) | Position on the battle's internal battle-map coordinate plane (#1714). Additive to ADR-0081 — see ADR-0085. |
+| `footprint_radius` | DecimalField(6, 2) (default 1) | How much of the battle-map grid this place occupies (#1714). Two places overlap when the distance between their `(x, y)` centers is less than the sum of their `footprint_radius` values — see `world.battles.services.places_overlap`. |
 
 **Constraint:** unique `(battle, name)`.
 
@@ -87,7 +91,7 @@ independently breachable via its own `integrity`/`max_integrity` (see ADR-0083).
 | `place` | FK → `BattlePlace` (`related_name="fortifications"`) | The front this structure defends |
 | `defending_side` | FK → `BattleSide` (`related_name="fortifications"`) | The side this structure protects; gates BREACH (must differ) vs FORTIFY (must match) |
 | `building` | FK → `buildings.Building` (null, `related_name="battle_fortifications"`) | Optional persistent Building this structure's integrity ceiling derives from; `None` means an ad-hoc, non-persistent structure |
-| `kind` | CharField | `FortificationKind` — WALL / GATE / BATTLEMENT; default WALL. Purely descriptive plus a base-integrity lookup — BREACH/FORTIFY behave identically regardless of kind in this MVP |
+| `kind` | CharField | `FortificationKind` — WALL / GATE / BATTLEMENT / HULL (#1714); default WALL. Purely descriptive plus a base-integrity lookup — BREACH/FORTIFY behave identically regardless of kind in this MVP |
 | `integrity` | PositiveSmallIntegerField | Default 0; attrited by BREACH, restored by FORTIFY (capped at `max_integrity`) |
 | `max_integrity` | PositiveSmallIntegerField | Default 0; snapshotted once at creation from `BASE_INTEGRITY[kind]` plus `building.fortification_level × FORTIFICATION_LEVEL_INTEGRITY_BONUS` if `building` is set — see `world.battles.services.create_fortification` |
 | `breached` | BooleanField | Default False; set True when `integrity` reaches 0 via BREACH. Terminal — a breached structure can no longer be targeted by BREACH or FORTIFY |
@@ -148,6 +152,59 @@ conditions/challenges.
 
 **Constraint:** unique `(unit, capability)`.
 
+### `BattleVehicle`
+
+A vessel or great mount — a naval ship, airship, dragon, or kraken — modeled as a
+single in-fiction object by pairing one `BattleUnit` (the thing that fights: takes
+STRIKE damage, can be destroyed) with one `BattlePlace` (the thing units and
+participants embed on) (#1714). See ADR-0085 for the `BattlePlace` `(x, y)`/
+`footprint_radius` coordinates this shares the battle-map plane with.
+
+| Field | Type | Notes |
+|---|---|---|
+| `unit` | OneToOne → `BattleUnit` (`related_name="vehicle"`) | The vehicle's own fighting stats (strength/morale/status) |
+| `place` | OneToOne → `BattlePlace` (`related_name="vehicle"`) | What other units/participants embed onto |
+| `vehicle_kind` | CharField | `VehicleKind` — SHIP / AIRSHIP / DRAGON / KRAKEN; default SHIP |
+| `is_structural` | BooleanField | Default True. True for constructed vessels (ship/airship) — destruction goes through a hull `Fortification` breach. False for living mounts (dragon/kraken) — destruction reuses `BattleUnitStatus.DESTROYED`. Authored, not derived from `vehicle_kind`, so a future design can still model a "living hull" if needed. |
+
+**`unit.place` stays `None`:** the vehicle's own `BattleUnit` is not "at" a front —
+it IS the front other units/participants embed onto via their own `place` FK
+pointed at `vehicle.place`. Nothing ever sets `unit.place` to the vehicle's own
+`place`; doing so would make the vehicle try to embed onto itself.
+
+**Hull integrity reuses `Fortification`, not new destruction logic:** for a
+structural vehicle (`is_structural=True`), `create_battle_vehicle` creates a hull
+`Fortification` (`FortificationKind.HULL`, see [`Fortification`](#fortification)
+above) at `vehicle.place` rather than inventing a parallel integrity/breach
+mechanism — BREACH/FORTIFY against the hull work exactly as they do against a
+wall or gate (see [Sieges (#1713)](#sieges-1713) below). Non-structural vehicles
+(living mounts) have no hull `Fortification` at all; their destruction is just the
+existing `BattleUnit`-strength path (`BattleUnitStatus.DESTROYED`).
+
+**Boarding is overlap-gated, not free:** `declare_battle_action` rejects a
+UNIT-scope STRIKE against a `target_unit` embedded on a different, non-overlapping
+`BattlePlace`, and rejects a BREACH against a vehicle's hull `Fortification` from a
+non-overlapping place, both via `world.battles.services.places_overlap`
+(`PlacesDoNotOverlapError` if it fails, #1714). This check is independent of
+`world.conditions.services.can_perceive`, which stays room-scoped (see the
+"Conditions" section of [INDEX.md](INDEX.md#conditions)) — it is what
+makes "boarding" mean something: a side must close range onto another vehicle's
+`BattlePlace` with REPOSITION before its units can strike units aboard that
+vehicle, or breach its hull. See the `declare_battle_action` row in
+[Services](#services-srcworldbattlesservicespy) and `PlacesDoNotOverlapError` in
+[Exceptions](#exceptions-srcworldbattlesexceptionspy).
+
+**Narration scope correction:** battle rounds have no generic live-narration path
+today. `push_ephemeral_interaction` requires a player-authored `persona` and
+cannot narrate an abstract `BattleUnit`'s action, and battle-linked encounters
+already skip room-based broadcast entirely (`Battle.save()` creates its backing
+`Scene` with `location=None`). The overlap gate above makes cross-vehicle
+boarding *mechanically* real, but narrating any battle action live to onlookers —
+not specific to vehicles — remains unbuilt and out of scope for #1714. This
+corrects the #1714 spec's "Verified leak analysis" section, which assumed a
+recipients-list broadcast primitive was already reusable here; the primitive
+exists but isn't wired for battles, and wiring it generically is separate work.
+
 ### `BattleRound`
 
 Subclasses `world.scenes.round_models.AbstractRound` (which provides `round_number`,
@@ -183,7 +240,7 @@ A participant's declared action for one round.
 | `battle_round` | FK → `BattleRound` (`related_name="declarations"`) | |
 | `participant` | FK → `BattleParticipant` (`related_name="declarations"`) | |
 | `technique` | FK → `magic.Technique` (`related_name="battle_declarations"`) | The technique cast for this declaration; required |
-| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) |
+| `action_kind` | CharField | `BattleActionKind` — STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) |
 | `target_unit` | FK → `BattleUnit` (null) | Strike target |
 | `target_ally` | FK → `BattleParticipant` (null, `related_name="support_declarations"`) | Support target, or the Surrounded ally being rescued (RESCUE, #1733) |
 | `target_fortification` | FK → `Fortification` (null) | Set when `action_kind` is BREACH or FORTIFY (#1713) |
@@ -433,7 +490,7 @@ RESCUE. ROUT damages an enemy unit's `morale` the same way STRIKE damages `stren
 its mirror on the declarant's own side, restoring `morale` (including already-ROUTED
 units — reaching broken units back to fighting shape is the whole point) and awarding a
 flat `RALLY_VP`. REPEL and HOLD are PLACE-scope only (`PlaceScopeRequiredError` if declared
-with any other scope): REPEL raises a same-round defense bonus at the target front
+with any other scope, same as REPOSITION, #1714): REPEL raises a same-round defense bonus at the target front
 (`REPEL_DEFENSE_BONUS`) that reduces STRIKE attrition against units there, and — because
 the bonus must exist before STRIKE reads it — `resolve_battle_round` resolves every REPEL
 declaration first, ahead of every other action kind, with a stable sort preserving relative
@@ -515,12 +572,15 @@ Multi-write operations use `@transaction.atomic`.
 | `assign_unit_commander` | `(*, unit, commander) -> BattleUnit` | Assigns (or clears, with `commander=None`) a unit's commander (#1711) |
 | `enlist_participant` | `(*, battle, character_sheet, side, place=None) -> BattleParticipant` | Enlists a PC |
 | `begin_battle_round` | `(*, battle) -> BattleRound` | Closes prior round (→ COMPLETED) and opens a new DECLARING round. Raises `BattleConcludedError` if already concluded. |
-| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None, scope=BattleActionScope.UNIT, target_place=None, target_side=None, target_fortification=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. `scope`/`target_place`/`target_side` gate army/unit-scale declarations against command tier (#1710); `target_fortification` gates BREACH/FORTIFY ownership (#1713). Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`, `NoCommandHierarchyError`/`InsufficientCommandTierError`/`MissingScopeTargetError`/`CannotStrikeOwnSideError` for scope violations, `FortificationTargetRequiredError`/`FortificationAlreadyBreachedError`/`FortificationOwnershipMismatchError` for BREACH/FORTIFY violations. |
+| `declare_battle_action` | `(*, participant, action_kind, technique, target_unit=None, target_ally=None, scope=BattleActionScope.UNIT, target_place=None, target_side=None, target_fortification=None) -> BattleActionDeclaration` | Records or updates the participant's action declaration for the current DECLARING round. `scope`/`target_place`/`target_side` gate army/unit-scale declarations against command tier (#1710); `target_fortification` gates BREACH/FORTIFY ownership (#1713). REPOSITION bypasses the command-tier gate entirely — gated instead on `target_place.vehicle.unit.commander` (#1714). A UNIT-scope STRIKE against a `target_unit` at a different, non-overlapping `place`, or a BREACH against a `target_fortification` whose vehicle hull sits at a non-overlapping `place`, is rejected via `places_overlap` regardless of command tier — this is the boarding gate (#1714). Raises `RoundNotOpenError` if no DECLARING round, `CharacterDoesNotKnowTechniqueError` if the character doesn't know `technique`, `TechniqueNotBattleReadyError` if `technique` has no `action_template`, `NoCommandHierarchyError`/`InsufficientCommandTierError`/`MissingScopeTargetError`/`CannotStrikeOwnSideError` for scope violations, `FortificationTargetRequiredError`/`FortificationAlreadyBreachedError`/`FortificationOwnershipMismatchError` for BREACH/FORTIFY violations, `NotVehicleCommanderError` for REPOSITION by a non-commander (#1714), `PlacesDoNotOverlapError` for the cross-place STRIKE/BREACH gate above (#1714). |
 | `open_champion_duel` | `(*, battle_place, challenger_participant, opponent_kwargs, tier=OpponentTier.BOSS) -> CombatEncounter` | Binds `battle_place` to a new lethal duel (reuses `create_lethal_duel` unmodified) if the challenger holds an engaged Champion role (#1710). Raises `NotAChampionError`/`NoCommandHierarchyError`/`PlaceAlreadyDuelingError`. |
 | `open_siege_engine_encounter` | `(*, battle_place, participant, opponent_kwargs, tier=OpponentTier.ELITE) -> CombatEncounter` | Binds `battle_place` to a discrete siege-engine skirmish — same bridge and `create_lethal_duel` call as `open_champion_duel`, no Champion-role requirement (#1713). Raises `PlaceAlreadyDuelingError`. |
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
 | `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
+| `create_battle_vehicle` | `(*, battle, side, place_name, vehicle_kind=VehicleKind.SHIP, is_structural=True) -> BattleVehicle` | Creates a vessel/mount: a paired `BattleUnit` + `BattlePlace`, plus a hull `Fortification` if `is_structural` (#1714). The unit's own `place` stays `None`; other units/participants embed by pointing their own `place` FK at `vehicle.place`. |
+| `places_overlap` | `(place_a, place_b) -> bool` | Whether two `BattlePlace` footprints intersect on the battle map: distance between `(x, y)` centers < sum of `footprint_radius` values (#1714, ADR-0085). |
+| `eject_vehicle_occupants` | `(*, vehicle) -> None` | Clears the `place` FK of every `BattleUnit`/`BattleParticipant` embedded on `vehicle.place` and applies an environmental hazard consequence — drowning (ship/kraken) or falling (airship/dragon) (#1714, ADR-0073). Called from `_resolve_breach_success` when a hull `Fortification` breaches, and from `_resolve_strike_success` when a living-mount vehicle's `BattleUnit` reaches `BattleUnitStatus.DESTROYED`. Abstract `BattleUnit`s take a flat `VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY` strength hit unless they carry the matching presence-only `Property` (`flying`/`aquatic`) — no per-unit resistance math. Real `BattleParticipant`s route `VEHICLE_HAZARD_BASE_DAMAGE` through `conditions.services.resolve_damage_type_resistance` (immunity via high resistance), then debit `CharacterVitals.health` and call `vitals.services.process_damage_consequences`, mirroring `_resolve_failure`'s pattern. Does not touch `vehicle.place` itself — the place persists as the wreck/carcass. |
 
 ## Actions (`src/actions/definitions/battles.py`)
 
@@ -531,7 +591,7 @@ Four REGISTRY actions, all registered in `src/actions/registry.py`:
 | `begin_battle_round` | `BeginBattleRoundAction` | AREA | GM / staff | Opens a new DECLARING round |
 | `resolve_battle_round` | `ResolveBattleRoundAction` | AREA | GM / staff | Resolves current round; auto-concludes if `check_victory` fires |
 | `conclude_battle` | `ConcludeBattleAction` | AREA | GM / staff | Force-concludes; tries natural win → timer → DEFENDER_MARGINAL default |
-| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 9 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action and the `battle declare breach\|fortify` telnet grammar (#1713). |
+| `declare_battle_action` | `DeclareBattleActionAction` | SELF | Player | Records a declaration (`technique_id` plus `action_kind`/`target_unit`/`target_ally`/`scope`/`target_place`/`target_side`/`target_fortification` kwargs) for the current round. All 11 `BattleActionKind` values, including BREACH/FORTIFY, are reachable through this Action (it takes `action_kind` generically, with no per-kind branching) and the `battle declare breach\|fortify` telnet grammar (#1713). REPOSITION (#1714) is reachable through this Action — its movement resolution is built (`_resolve_reposition_success`) — but has no dedicated `CmdBattle` telnet subcommand yet; that telnet grammar remains deferred. |
 
 GM actions are gated by `_actor_may_gm_battle` (staff or `battle.scene.is_gm(account)`).
 The active battle in the actor's room is resolved by `_active_battle_in_room` (newest
@@ -596,12 +656,13 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 | `BattleSideRole` | TextChoices | ATTACKER / DEFENDER |
 | `BattleUnitStatus` | TextChoices | ACTIVE / ROUTED / DESTROYED |
 | `BattleParticipantStatus` | TextChoices | ACTIVE / WITHDRAWN / INCAPACITATED |
-| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) |
+| `BattleActionKind` | TextChoices | STRIKE / SUPPORT / RESCUE (#1733) / ROUT / RALLY / REPEL / HOLD (#1712) / BREACH / FORTIFY (#1713) / SET_ENVIRONMENT (#1715) / REPOSITION (#1714) |
 | `BattleOutcome` | TextChoices | UNRESOLVED / ATTACKER_DECISIVE / ATTACKER_MARGINAL / DEFENDER_MARGINAL / DEFENDER_DECISIVE |
 | `UnitQuality` | TextChoices | MILITIA / LEVY / TRAINED / VETERAN / ELITE (#1711) |
 | `TerrainType` | TextChoices | OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711) |
 | `BattlePosture` | TextChoices | BALANCED / AGGRESSIVE / DEFENSIVE (#1711) |
-| `FortificationKind` | TextChoices | WALL / GATE / BATTLEMENT (#1713) |
+| `FortificationKind` | TextChoices | WALL / GATE / BATTLEMENT (#1713) / HULL (#1714) |
+| `VehicleKind` | TextChoices | SHIP / AIRSHIP / DRAGON / KRAKEN (#1714) |
 
 **Tuning constants:**
 - `DEFAULT_VICTORY_THRESHOLD = 100`
@@ -636,7 +697,8 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
 - `REPEL_DEFENSE_BONUS = 15` — flat reduction applied to STRIKE attrition against units at a
   place with a REPEL declared this round (#1712)
 - `BASE_INTEGRITY` — dict (#1713), starting `Fortification.max_integrity` ceiling per
-  `FortificationKind` before any persistent investment: WALL 100, BATTLEMENT 80, GATE 60
+  `FortificationKind` before any persistent investment: WALL 100, BATTLEMENT 80, GATE 60,
+  HULL 120 (#1714)
 - `FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20` — flat per-level ladder bonus (#1713) applied per
   `Building.fortification_level` when a `Fortification` is created against a persistent `building`
 - `BREACH_INTEGRITY_PER_LEVEL = 10` — BREACH's integrity damage per success level (#1713), mirrors
@@ -666,13 +728,24 @@ list-filtered on `kind`/`breached`; `place`/`defending_side`/`integrity`/`max_in
     (#1710)
   - `PlaceAlreadyDuelingError` — `BattlePlace.combat_encounter` is already set (#1710;
     also raised by `open_siege_engine_encounter`, #1713)
-  - `PlaceScopeRequiredError` — REPEL/HOLD declared with a scope other than PLACE (#1712)
+  - `PlaceScopeRequiredError` — REPEL/HOLD declared with a scope other than PLACE (#1712);
+    also raised for REPOSITION declared outside PLACE scope (#1714)
   - `FortificationTargetRequiredError` — BREACH/FORTIFY declared with no
     `target_fortification` (#1713)
   - `FortificationOwnershipMismatchError` — BREACH targets your own side's
     `Fortification`, or FORTIFY targets the enemy's (#1713)
   - `FortificationAlreadyBreachedError` — BREACH/FORTIFY targets a `Fortification`
     with `breached=True` (#1713)
+  - `NotVehicleCommanderError` — REPOSITION declared by someone other than the target
+    vehicle's `BattleUnit.commander`; bypasses covenant `command_tier` entirely so a
+    non-covenant-backed vessel is still commandable (#1714)
+  - `PlacesDoNotOverlapError` — a UNIT-scope declaration (e.g. STRIKE) targets a unit
+    at a different, non-overlapping `BattlePlace` than the declarer's own, or BREACH
+    targets a vehicle's hull `Fortification` from a non-overlapping place; gated via
+    `world.battles.services.places_overlap`, independent of `can_perceive` (which
+    stays room-scoped) — the mechanism that makes "boarding" mean something: close
+    range with REPOSITION before you can strike units aboard, or breach the hull of,
+    another vehicle (#1714)
 
 ## Legend / Outcome Model and Stakes Wiring (#1785)
 
@@ -740,7 +813,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Naval / aerial variants | #1714 (deferred) |
+| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below); a player-facing embark action and a dedicated telnet `CmdBattle` subcommand for REPOSITION still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
@@ -750,7 +823,23 @@ Campaign propagation (battle outcome → Story + win-gated Legend) is no longer 
 [Stakes / Beat Wiring (#1785)](#stakes--beat-wiring-1785) below. Command hierarchy and the
 Champion are no longer deferred — see
 [Command Hierarchy & the Champion (#1710)](#command-hierarchy--the-champion-1710) below.
-Siege variants are no longer deferred — see [Sieges (#1713)](#sieges-1713) below.
+Siege variants are no longer deferred — see [Sieges (#1713)](#sieges-1713) below. The
+`BattleVehicle` model and `create_battle_vehicle` service (pairing a `BattleUnit` + `BattlePlace`,
+plus a hull `Fortification` for structural vehicles) are built — see
+[`BattleVehicle`](#battlevehicle) above and the `create_battle_vehicle` row in
+[Services](#services-srcworldbattlesservicespy) below. `BattleActionKind.REPOSITION` and its
+vehicle-commander gating (`world.battles.services._validate_vehicle_command`, bypassing the
+covenant `command_tier` check so a non-covenant-backed vessel is still commandable) are also
+built — see the `declare_battle_action` row in [Services](#services-srcworldbattlesservicespy)
+below and `NotVehicleCommanderError` in [Exceptions](#exceptions-srcworldbattlesexceptionspy).
+Hull-breach and living-mount-defeat ejection, plus the drowning/falling hazard consequence, are
+also built — see the `eject_vehicle_occupants` row in
+[Services](#services-srcworldbattlesservicespy) above. Reposition movement resolution is also
+built — see `_resolve_reposition_success` in `world/battles/resolution.py`. A player-facing embark
+action (setting a unit/participant's `place` FK to a vehicle's place today requires direct model
+manipulation — no Action/telnet command exists) and a dedicated `CmdBattle` telnet subcommand for
+REPOSITION (the underlying `declare_battle_action`/`DeclareBattleActionAction` already supports
+REPOSITION generically) remain deferred (#1714).
 
 ## Command Hierarchy & the Champion (#1710)
 

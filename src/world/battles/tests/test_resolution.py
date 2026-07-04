@@ -32,6 +32,7 @@ from world.battles.constants import (
     BattleUnitStatus,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.battles.exceptions import (
     CannotStrikeOwnSideError,
@@ -1288,6 +1289,121 @@ class BreachResolutionTests(TestCase):
         self.fort.refresh_from_db()
         self.assertEqual(self.fort.integrity, 0)
         self.assertTrue(self.fort.breached)
+
+
+class BreachEjectsVehicleOccupantsTests(TestCase):
+    """Hull breach ejects embarked occupants and clears their place (#1714)."""
+
+    def setUp(self) -> None:
+        from world.battles.services import create_battle, create_battle_vehicle
+
+        self.battle = create_battle(name="Hull Breach Ejection Battle")
+        self.attacker_side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
+
+        self.attacker_sheet = CharacterSheetFactory()
+        self.attacker_participant = enlist_participant(
+            battle=self.battle, character_sheet=self.attacker_sheet, side=self.attacker_side
+        )
+
+        self.vehicle = create_battle_vehicle(
+            battle=self.battle, side=self.defender_side, place_name="The Gull"
+        )
+        self.fort = self.vehicle.place.fortifications.get()
+
+        self.passenger = BattleParticipantFactory(
+            battle=self.battle, side=self.defender_side, place=self.vehicle.place
+        )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.attacker_sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.attacker_sheet.character, current=20, maximum=30)
+
+        self.battle_round = begin_battle_round(battle=self.battle)
+
+    def test_breach_to_zero_ejects_embarked_participant(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+
+        declare_battle_action(
+            participant=self.attacker_participant,
+            action_kind=BattleActionKind.BREACH,
+            technique=self.technique,
+            target_fortification=self.fort,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(12)  # 12*10=120 >= 120 hull integrity
+            resolve_battle_round(battle_round=self.battle_round)
+
+        self.fort.refresh_from_db()
+        self.assertTrue(self.fort.breached)
+
+        self.passenger.refresh_from_db()
+        self.assertIsNone(self.passenger.place)
+
+
+class StrikeDestroysLivingMountEjectsOccupantsTests(TestCase):
+    """A living-mount BattleVehicle (dragon/kraken) has no hull Fortification to
+    BREACH — destruction routes through its own BattleUnit hitting strength 0 via
+    STRIKE instead (#1714)."""
+
+    def setUp(self) -> None:
+        from world.battles.services import create_battle, create_battle_vehicle
+
+        self.battle = create_battle(name="Dragon Rider Battle")
+        self.attacker_side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
+
+        self.attacker_sheet = CharacterSheetFactory()
+        self.attacker_participant = enlist_participant(
+            battle=self.battle, character_sheet=self.attacker_sheet, side=self.attacker_side
+        )
+
+        self.vehicle = create_battle_vehicle(
+            battle=self.battle,
+            side=self.defender_side,
+            place_name="The Wyrm",
+            vehicle_kind=VehicleKind.DRAGON,
+            is_structural=False,
+        )
+        self.rider = BattleParticipantFactory(
+            battle=self.battle, side=self.defender_side, place=self.vehicle.place
+        )
+
+        # Drive the mount's own unit down near death so a single STRIKE success
+        # finishes it off (default strength=100; STRIKE_ATTRITION_PER_LEVEL=10).
+        self.vehicle.unit.strength = 5
+        self.vehicle.unit.save(update_fields=["strength"])
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.attacker_sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.attacker_sheet.character, current=20, maximum=30)
+
+        self.battle_round = begin_battle_round(battle=self.battle)
+
+    def test_strike_destroys_living_mount_ejects_rider(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+
+        declare_battle_action(
+            participant=self.attacker_participant,
+            action_kind=BattleActionKind.STRIKE,
+            technique=self.technique,
+            target_unit=self.vehicle.unit,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(5)  # 5*10=50 >= strength 5
+            resolve_battle_round(battle_round=self.battle_round)
+
+        self.vehicle.unit.refresh_from_db()
+        self.assertEqual(self.vehicle.unit.status, BattleUnitStatus.DESTROYED)
+
+        self.rider.refresh_from_db()
+        self.assertIsNone(self.rider.place)
 
 
 class FortifyResolutionTests(TestCase):

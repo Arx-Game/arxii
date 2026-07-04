@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -529,6 +530,23 @@ def _resolve_strike_success(
             result.units_routed.append(unit.pk)
         unit.save(update_fields=["strength", "status"])
 
+        if unit.status == BattleUnitStatus.DESTROYED:
+            from world.battles.models import BattleVehicle  # noqa: PLC0415
+            from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
+
+            # is_structural=False only (#1714): a living mount's own BattleUnit
+            # destroyed IS the mount going down, so occupants eject immediately.
+            # A structural vehicle's (ship/airship) unit represents crew/guns —
+            # it can be destroyed/routed (fought to a standstill) without the
+            # hull sinking, exactly as a land Fortification's defenders routing
+            # doesn't auto-breach the wall. Structural vehicles only eject
+            # occupants via a hull Fortification breach (see BREACH handling),
+            # never from this unit-destruction path. This asymmetry is
+            # intentional, not a gap.
+            vehicle = BattleVehicle.objects.filter(unit=unit, is_structural=False).first()
+            if vehicle is not None:
+                eject_vehicle_occupants(vehicle=vehicle)
+
     side = declaration.participant.side
     base_vp = success_level * STRIKE_VP_PER_LEVEL
     vp_gain = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
@@ -679,6 +697,46 @@ def _resolve_hold_success(
     result.vp_awarded[side.pk] = result.vp_awarded.get(side.pk, 0) + vp_gain
 
 
+def _resolve_reposition_success(
+    declaration: BattleActionDeclaration,
+    result: BattleRoundResult,  # noqa: ARG001 — no VP awarded for movement
+    success_level: int,  # noqa: ARG001 — movement is capability-bounded, not margin-scaled
+) -> None:
+    """Apply REPOSITION success: move the target vehicle's place by up to its
+    SPEED capability magnitude toward the declared delta (#1714).
+
+    Distance moved this round is bounded by min(requested distance, SPEED
+    capability value). success_level scaling is intentionally NOT applied here —
+    unlike STRIKE/BREACH, movement is capability-bounded, not check-margin-scaled;
+    success_level only determines whether the move happens at all (the check
+    already gates that via resolve_battle_technique).
+    """
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+
+    place = declaration.target_place
+    vehicle = getattr(place, "vehicle", None)  # noqa: GETATTR_LITERAL
+    if vehicle is None:
+        return
+    dx = declaration.reposition_dx or 0
+    dy = declaration.reposition_dy or 0
+    requested_distance = (dx * dx + dy * dy) ** Decimal("0.5") if (dx or dy) else Decimal(0)
+    if requested_distance == 0:
+        return
+
+    speed_capability = CapabilityType.objects.filter(name="speed").first()
+    max_distance = Decimal(
+        vehicle.unit.effective_capability(speed_capability) if speed_capability else 0
+    )
+    if requested_distance > max_distance:
+        scale = max_distance / requested_distance
+        dx *= scale
+        dy *= scale
+
+    place.x += dx
+    place.y += dy
+    place.save(update_fields=["x", "y"])
+
+
 def _resolve_breach_success(
     declaration: BattleActionDeclaration,
     result: BattleRoundResult,
@@ -691,6 +749,7 @@ def _resolve_breach_success(
     from world.battles.constants import (  # noqa: PLC0415
         BREACH_INTEGRITY_PER_LEVEL,
         BREACH_VP_PER_LEVEL,
+        FortificationKind,
     )
 
     fort = declaration.target_fortification
@@ -702,6 +761,14 @@ def _resolve_breach_success(
     if fort.integrity == 0:
         fort.breached = True
     fort.save(update_fields=["integrity", "breached"])
+
+    if fort.breached and fort.kind == FortificationKind.HULL:
+        from world.battles.models import BattleVehicle  # noqa: PLC0415
+        from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
+
+        vehicle = BattleVehicle.objects.filter(place=fort.place).first()
+        if vehicle is not None:
+            eject_vehicle_occupants(vehicle=vehicle)
 
     side = declaration.participant.side
     base_vp = success_level * BREACH_VP_PER_LEVEL
@@ -994,6 +1061,9 @@ def _dispatch_success_handler(
             declaration, result, success_level
         ),
         BattleActionKind.FORTIFY: lambda: _resolve_fortify_success(
+            declaration, result, success_level
+        ),
+        BattleActionKind.REPOSITION: lambda: _resolve_reposition_success(
             declaration, result, success_level
         ),
     }

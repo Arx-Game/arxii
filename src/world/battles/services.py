@@ -8,6 +8,7 @@ directly.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -20,6 +21,8 @@ from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     FORTIFICATION_LEVEL_INTEGRITY_BONUS,
+    VEHICLE_HAZARD_BASE_DAMAGE,
+    VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY,
     BattleActionKind,
     BattleActionScope,
     BattleOutcome,
@@ -29,6 +32,7 @@ from world.battles.constants import (
     FortificationKind,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.battles.exceptions import (
     BattleConcludedError,
@@ -43,8 +47,10 @@ from world.battles.exceptions import (
     MissingScopeTargetError,
     NoCommandHierarchyError,
     NotAChampionError,
+    NotVehicleCommanderError,
     PlaceAlreadyDuelingError,
     PlaceScopeRequiredError,
+    PlacesDoNotOverlapError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -57,6 +63,7 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
     BattleUnitCapability,
+    BattleVehicle,
     Fortification,
 )
 from world.combat.constants import OpponentTier
@@ -68,6 +75,7 @@ if TYPE_CHECKING:
     from world.buildings.models import Building
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.conditions.models import DamageType
     from world.covenants.models import Covenant
     from world.magic.models import Technique
     from world.stories.models import Story
@@ -255,6 +263,148 @@ def create_fortification(
     )
 
 
+@transaction.atomic
+def create_battle_vehicle(
+    *,
+    battle: Battle,
+    side: BattleSide,
+    place_name: str,
+    vehicle_kind: str = VehicleKind.SHIP,
+    is_structural: bool = True,
+) -> BattleVehicle:
+    """Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull
+    Fortification if structural (#1714).
+
+    The unit's own `place` is left None (see BattleVehicle's docstring) —
+    other units/participants embed by setting their own `place` FK to
+    `vehicle.place`, not by any relation on `vehicle.unit`.
+
+    Args:
+        battle: The Battle this vehicle belongs to.
+        side: The BattleSide crewing/defending this vehicle.
+        place_name: Display name for the vehicle's BattlePlace (e.g. "The Wave Cutter").
+        vehicle_kind: A VehicleKind value. Defaults to SHIP.
+        is_structural: Whether destruction goes through hull-Fortification breach
+            (True, ship/airship) or BattleUnitStatus.DESTROYED (False, dragon/kraken).
+
+    Returns:
+        The newly created BattleVehicle.
+    """
+    unit = BattleUnit.objects.create(
+        battle=battle,
+        side=side,
+        name=place_name,
+    )
+    default_terrain = (
+        TerrainType.AERIAL
+        if vehicle_kind in (VehicleKind.AIRSHIP, VehicleKind.DRAGON)
+        else TerrainType.WATER
+    )
+    place = BattlePlace.objects.create(
+        battle=battle,
+        name=place_name,
+        terrain_type=default_terrain,
+    )
+    vehicle = BattleVehicle.objects.create(
+        unit=unit,
+        place=place,
+        vehicle_kind=vehicle_kind,
+        is_structural=is_structural,
+    )
+    if is_structural:
+        create_fortification(
+            place=place,
+            defending_side=side,
+            kind=FortificationKind.HULL,
+        )
+    return vehicle
+
+
+def places_overlap(place_a: BattlePlace, place_b: BattlePlace) -> bool:
+    """Whether two BattlePlaces' footprints intersect on the battle map (#1714).
+
+    Distance between centers < sum of radii. Same place always overlaps itself
+    (distance 0).
+    """
+    dx = place_a.x - place_b.x
+    dy = place_a.y - place_b.y
+    distance_squared = dx * dx + dy * dy
+    radius_sum = place_a.footprint_radius + place_b.footprint_radius
+    return distance_squared < radius_sum * radius_sum
+
+
+@transaction.atomic
+def eject_vehicle_occupants(*, vehicle: BattleVehicle) -> None:
+    """Eject every unit/participant embedded on *vehicle*'s place, applying the
+    environmental hazard consequence (#1714). Called when a structural vehicle's
+    hull Fortification breaches, or a living-mount vehicle's unit is DESTROYED.
+
+    Does not delete or touch vehicle.place itself — the place row persists as
+    the wreck/carcass; only occupants' place FKs are cleared.
+    """
+    from world.conditions.factories import (  # noqa: PLC0415
+        ensure_drowning_damage_type,
+        ensure_falling_damage_type,
+    )
+
+    aerial = vehicle.vehicle_kind in (VehicleKind.AIRSHIP, VehicleKind.DRAGON)
+    damage_type = ensure_falling_damage_type() if aerial else ensure_drowning_damage_type()
+    hazard_property_name = "flying" if aerial else "aquatic"
+
+    for unit in BattleUnit.objects.filter(place=vehicle.place):
+        unit.place = None
+        unit.save(update_fields=["place"])
+        _apply_environmental_hazard_to_unit(unit, hazard_property_name)
+
+    for participant in BattleParticipant.objects.filter(place=vehicle.place):
+        participant.place = None
+        participant.save(update_fields=["place"])
+        _apply_environmental_hazard_to_participant(participant, damage_type)
+
+
+def _apply_environmental_hazard_to_unit(unit: BattleUnit, hazard_property_name: str) -> None:
+    """Flat strength penalty for an abstract BattleUnit lacking the relevant
+    presence-only Property (#1714). No per-unit resistance granularity — mirrors
+    how Property is presence-only for units everywhere else."""
+    from world.battles.resolution import _compute_unit_status  # noqa: PLC0415
+
+    if unit.properties.filter(name=hazard_property_name).exists():
+        return
+    unit.strength = max(0, unit.strength - VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY)
+    unit.status = _compute_unit_status(unit.strength, unit.morale)
+    unit.save(update_fields=["strength", "status"])
+
+
+def _apply_environmental_hazard_to_participant(
+    participant: BattleParticipant, damage_type: DamageType
+) -> None:
+    """Real PC drowning/falling damage: resistance -> debit vitals -> consequences,
+    mirroring world.battles.resolution._resolve_failure's battles-native pattern,
+    extended with resolve_damage_type_resistance for a typed hazard (#1714, ADR-0073)."""
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.vitals.services import process_damage_consequences  # noqa: PLC0415
+
+    sheet = participant.character_sheet
+    try:
+        vitals = sheet.vitals
+    except CharacterVitals.DoesNotExist:
+        return
+
+    effective = resolve_damage_type_resistance(
+        sheet.character, VEHICLE_HAZARD_BASE_DAMAGE, damage_type
+    )
+    if effective <= 0:
+        return
+    vitals.health -= effective
+    vitals.save(update_fields=["health"])
+    process_damage_consequences(
+        character_sheet=sheet,
+        damage_dealt=effective,
+        damage_type=damage_type,
+    )
+
+
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
     """Set a battle side's tactical posture (#1711).
 
@@ -356,7 +506,7 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + validation checks
+def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration facets + checks
     *,
     participant: BattleParticipant,
     action_kind: str,
@@ -367,6 +517,8 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
     target_place: BattlePlace | None = None,
     target_side: BattleSide | None = None,
     target_fortification: Fortification | None = None,
+    reposition_dx: Decimal | None = None,
+    reposition_dy: Decimal | None = None,
 ) -> BattleActionDeclaration:
     """Record or update the participant's action declaration for the current round.
 
@@ -387,6 +539,8 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
         target_place: The ``BattlePlace`` affected (scope=PLACE).
         target_side: The ``BattleSide`` affected (scope=SIDE).
         target_fortification: The ``Fortification`` being BREACHed/FORTIFYed (#1713).
+        reposition_dx: Requested x-axis delta for a REPOSITION declaration (#1714).
+        reposition_dy: Requested y-axis delta for a REPOSITION declaration (#1714).
 
     Raises:
         RoundNotOpenError: If the battle has no DECLARING round.
@@ -401,7 +555,8 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
             None, or scope is SIDE and ``target_side`` is None.
         CannotStrikeOwnSideError: If ``action_kind`` is STRIKE or ROUT, scope is SIDE,
             and ``target_side`` is the participant's own side.
-        PlaceScopeRequiredError: If action_kind is REPEL or HOLD and scope is not PLACE.
+        PlaceScopeRequiredError: If action_kind is REPEL, HOLD, or REPOSITION and
+            scope is not PLACE.
         FortificationTargetRequiredError: If action_kind is BREACH/FORTIFY and
             target_fortification is None.
         FortificationAlreadyBreachedError: If target_fortification.breached is True.
@@ -411,6 +566,8 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
             not BATTLE or PLACE.
         MissingEnvironmentTargetError: If action_kind is SET_ENVIRONMENT and
             technique.target_weather_type is None.
+        NotVehicleCommanderError: If action_kind is REPOSITION and the participant
+            is not the target vehicle's BattleUnit.commander.
 
     Returns:
         The created or updated ``BattleActionDeclaration``.
@@ -437,13 +594,18 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
     ):
         raise PlaceScopeRequiredError
 
+    if action_kind == BattleActionKind.REPOSITION and scope != BattleActionScope.PLACE:
+        raise PlaceScopeRequiredError
+
     if action_kind == BattleActionKind.SET_ENVIRONMENT:
         if scope not in (BattleActionScope.BATTLE, BattleActionScope.PLACE):
             raise InvalidEnvironmentScopeError
         if technique.target_weather_type_id is None:
             raise MissingEnvironmentTargetError
 
-    if scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
+    if action_kind == BattleActionKind.REPOSITION:
+        _validate_vehicle_command(participant=participant, target_place=target_place)
+    elif scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
         _validate_command_scope(participant=participant, scope=scope)
 
     if scope == BattleActionScope.PLACE and target_place is None:
@@ -459,12 +621,39 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
     ):
         raise CannotStrikeOwnSideError
 
+    if (
+        scope == BattleActionScope.UNIT
+        and target_unit is not None
+        and participant.place_id is not None
+    ):
+        # A vehicle's own BattleUnit never has place set (see BattleVehicle's
+        # docstring) — resolve its paired vehicle's place so a STRIKE against
+        # the vehicle's own unit is gated the same as a BREACH against its hull.
+        target_unit_place = target_unit.place
+        if target_unit_place is None and hasattr(target_unit, "vehicle"):  # noqa: GETATTR_LITERAL
+            target_unit_place = target_unit.vehicle.place
+        if (
+            target_unit_place is not None
+            and target_unit_place.pk != participant.place_id
+            and not places_overlap(target_unit_place, participant.place)
+        ):
+            raise PlacesDoNotOverlapError
+
     if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
         _validate_fortification_target(
             participant=participant,
             action_kind=action_kind,
             target_fortification=target_fortification,
         )
+        if (
+            action_kind == BattleActionKind.BREACH
+            and target_fortification is not None
+            and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
+            and participant.place_id is not None
+            and target_fortification.place_id != participant.place_id
+            and not places_overlap(target_fortification.place, participant.place)
+        ):
+            raise PlacesDoNotOverlapError
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
@@ -478,6 +667,8 @@ def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + va
             "target_place": target_place,
             "target_side": target_side,
             "target_fortification": target_fortification,
+            "reposition_dx": reposition_dx,
+            "reposition_dy": reposition_dy,
             "resolved": False,
         },
     )
@@ -513,6 +704,22 @@ def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> No
     ).exists()
     if not has_tier:
         raise InsufficientCommandTierError
+
+
+def _validate_vehicle_command(
+    *, participant: BattleParticipant, target_place: BattlePlace | None
+) -> None:
+    """Raise unless *participant* is the target vehicle's declared commander (#1714).
+
+    Deliberately bypasses _validate_command_scope's covenant command_tier check —
+    a ship with no covenant backing (a pirate crew, an ad-hoc vessel) must still
+    be commandable and movable.
+    """
+    if target_place is None:
+        raise MissingScopeTargetError
+    vehicle = getattr(target_place, "vehicle", None)  # noqa: GETATTR_LITERAL
+    if vehicle is None or vehicle.unit.commander_id != participant.character_sheet_id:
+        raise NotVehicleCommanderError
 
 
 def _validate_fortification_target(
