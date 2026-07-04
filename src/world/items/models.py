@@ -579,6 +579,19 @@ class ItemInstance(SharedMemoryModel):
         related_name="crafted_items",
         help_text="The body that crafted this item.",
     )
+    attuned_to_character_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attuned_touchstones",
+        help_text="Character this touchstone instance has been personally attuned to.",
+    )
+    attuned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When attune_touchstone() bound this instance to its character.",
+    )
     crafter_persona_display = models.ForeignKey(
         _PERSONA_FK,
         on_delete=models.SET_NULL,
