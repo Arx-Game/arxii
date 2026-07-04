@@ -19931,7 +19931,7 @@ export interface components {
       readonly started_at: string;
       /** Format: date-time */
       completed_at?: string | null;
-      /** @description Optional: the stories Beat that launched this run. SET_NULL on Beat delete. Engine that flips the Beat at terminal is deferred to a future stories-missions seam design pass (5b.3 stub-records the trigger only). */
+      /** @description Optional: the stories Beat this run resolves. When set, the stakes contract locks at acceptance (activate_stakes_for_instance) and the Beat completes at terminal (on_mission_complete_for_beat). SET_NULL on Beat delete. For offer-issued runs, set from MissionOfferDetails.source_beat at issue_mission (#1780). */
       source_beat?: number | null;
     };
     /**
@@ -20056,6 +20056,8 @@ export interface components {
       /** @description Denormalized from offer.role to enforce (role, mission_template) catalog uniqueness. Kept in sync via save(). */
       readonly role: number;
       mission_template: number;
+      /** @description Optional: the staked Beat this offer resolves. When set, accepting the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4 stakes gate + contract activation. Independent of Beat.required_mission (ADR-0010). SET_NULL on Beat delete. */
+      source_beat?: number | null;
       /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
       weight?: number | null;
       /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
@@ -20076,6 +20078,8 @@ export interface components {
     MissionOfferDetailsRequest: {
       offer: number;
       mission_template: number;
+      /** @description Optional: the staked Beat this offer resolves. When set, accepting the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4 stakes gate + contract activation. Independent of Beat.required_mission (ADR-0010). SET_NULL on Beat delete. */
+      source_beat?: number | null;
       /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
       weight?: number | null;
       /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
@@ -23653,6 +23657,8 @@ export interface components {
     PatchedMissionOfferDetailsRequest: {
       offer?: number;
       mission_template?: number;
+      /** @description Optional: the staked Beat this offer resolves. When set, accepting the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4 stakes gate + contract activation. Independent of Beat.required_mission (ADR-0010). SET_NULL on Beat delete. */
+      source_beat?: number | null;
       /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
       weight?: number | null;
       /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
