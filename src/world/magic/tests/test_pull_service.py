@@ -362,7 +362,11 @@ class SpendResonanceForPullEphemeralTests(TestCase):
             resonance=self.resonance,
             tier=1,
             min_thread_level=0,
-            flat_bonus_amount=3,
+            # amount=10, not 3: thread_level_multiplier(1) == 0.1 (#1718's corrected
+            # ramp), and scaled_value = round(authored * multiplier); an authored
+            # amount below 6 rounds to 0 at level 1, which would defeat this test's
+            # "still active" assertion below. 10 clears that floor with margin.
+            flat_bonus_amount=10,
         )
         # Wire a tier-1 VITAL_BONUS row at min_level=1 so the (kind,res,tier,level)
         # unique key differs from the FLAT_BONUS row above. Both apply to the
@@ -706,9 +710,10 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
           item 2: item_quality=1.0, attachment_quality=3.0 → contributes 3.0
           worn_aggregate = 5.0
 
-        Thread level=2 → multiplier = max(1, 2//10) = 1.
+        Thread level=2 → thread_level_multiplier(2) = Decimal(2) / Decimal(10) = 0.2
+        (#1718 linear ramp; rounds to level_multiplier=0).
         authored_value = 10.
-        Expected scaled_value = 10 × 1 × 5 = 50.
+        Expected scaled_value = round(10 × 0.2 × 5) = round(10.0) = 10.
         """
         self._equip_item_with_quality("1.00", "2.00", body_region=BodyRegion.TORSO)
         self._equip_item_with_quality("1.00", "3.00", body_region=BodyRegion.HEAD)
@@ -738,8 +743,8 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
         self.assertEqual(len(resolved), 1)
         self.assertEqual(resolved[0].kind, EffectKind.FLAT_BONUS)
         self.assertEqual(resolved[0].authored_value, 10)
-        self.assertEqual(resolved[0].level_multiplier, 1)
-        self.assertEqual(resolved[0].scaled_value, 50)
+        self.assertEqual(resolved[0].level_multiplier, 0)
+        self.assertEqual(resolved[0].scaled_value, 10)
 
     def test_facet_effect_skipped_when_no_worn_items(self) -> None:
         """FACET thread with no equipped items bearing the facet skips the effect row."""

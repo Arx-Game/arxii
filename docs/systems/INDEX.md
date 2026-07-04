@@ -1924,9 +1924,20 @@ These two axes are orthogonal — never re-merge them.
     Identifies the master character.
   - **`CourtPact`** (#1589) — per-(Court covenant, servant) sworn-fealty bond. Fields:
     `covenant` FK (PROTECT), `servant_sheet` FK → `CharacterSheet` (PROTECT),
-    `granted_pull_cap` (PositiveSmallIntegerField — master-set thread-pull ceiling),
+    `granted_pull_cap` (PositiveSmallIntegerField — master-set thread-pull ceiling,
+    now negotiable post-swearing, #1718 — see "Court services" below),
     `sworn_at` (auto), `released_at` (null = active). Partial-unique on
     `(covenant, servant_sheet)` when active. Custom queryset: `.active()`.
+  - **`Covenant.court_grant_role`** (#1718) — FK → `npc_services.NPCRole`
+    (`null=True`, `on_delete=SET_NULL`), auto-provisioned by
+    `ensure_court_grant_role`; carries the Court's `OfferKind.COURT_GRANT`
+    petition offer.
+  - **`CourtGrantConfig`** (pk=1 singleton, lazy get-or-created via
+    `get_court_grant_config()`, #1718) — `base_headroom`, `affection_divisor`,
+    `mission_divisor`, `emergency_draw_max_bonus` (max the emergency draw may
+    exceed the ceiling by), `debt_repay_affection_divisor`,
+    `debt_repay_mission_divisor`, `petition_failure_escalation_threshold`,
+    plus nullable `petition_check_type` / `escalation_consequence_pool` FKs.
   - **`MentorBondConfig`** (pk=1 singleton, #1165) — `band_width` (default 2),
     `adjacency_offset` (default 1), `max_sidekicks_per_mentor` (nullable = unlimited).
     Staff-tunable in Django admin.
@@ -1994,6 +2005,23 @@ These two axes are orthogonal — never re-merge them.
       creates an active pact; raises `CourtPactExistsError` if one already exists.
     - `release_court_pact(*, pact) -> None` — sets `released_at = now()`.
     - `active_court_pact_for(*, covenant, servant_sheet) -> CourtPact | None`
+  - **Court grant negotiation** (`world.covenants.court_grant`, #1718):
+    - `court_grant_ceiling(*, covenant, servant_sheet) -> int` — max grant the
+      master is currently willing to formalize; reads affection + completed
+      Court missions, nets against `outstanding_debt(...)`, floored at 0.
+    - `raise_court_pact_grant(*, pact, new_cap) -> CourtPact` — strictly
+      monotonic; raises `CourtGrantNotMonotonicError` on any attempted decrease
+      (equal is a no-op).
+    - `ensure_court_grant_role(covenant) -> NPCRole` — idempotent,
+      `@transaction.atomic` with a `select_for_update()` re-fetch of the
+      `Covenant` row (race-safe); auto-provisions the Court's
+      `OfferKind.COURT_GRANT` petition offer the first time any servant
+      negotiates.
+    - `completed_court_mission_count(*, character_sheet, covenant) -> int`
+    - Emergency thread-bond draw: not a service here — see the
+      "Grant negotiation" section of `docs/systems/covenants.md` for the
+      `beseech=` token / `_resolve_emergency_draw` seam
+      (`world.combat.pull_helpers`).
   - **Court engagement** (`world.covenants.court_missions`, #1589):
     - `has_active_court_mission(*, character_sheet, covenant) -> bool` — True iff
       the character participates in an ACTIVE `MissionInstance` whose
@@ -2025,7 +2053,8 @@ These two axes are orthogonal — never re-merge them.
   `NotAuthorizedToInviteError` (induction draft gate, #1231),
   `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate),
   `CourtGulfViolationError` (servant tier not below leader's, #1589),
-  `CourtPactExistsError` (duplicate active pact for pair, #1589)
+  `CourtPactExistsError` (duplicate active pact for pair, #1589),
+  `CourtGrantNotMonotonicError` (grant raise would lower the cap, #1718)
 - **Action Keys:** `engage_covenant_membership`, `disengage_covenant_membership`,
   `leave_covenant`, `kick_covenant_member`, `assign_covenant_rank`,
   `transfer_covenant_top_rank`, `stand_down_battle_covenant`

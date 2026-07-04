@@ -23,6 +23,8 @@ Active while `released_at IS NULL`; at most one active pact per `(covenant, serv
 Court-role thread pull level. A servant with no active pact has an effective cap of 0 and cannot
 pull their Court-role thread at all; the grant is the gate. Sworn via `swear_court_pact`; released
 via `release_court_pact`; queried via `active_court_pact_for`.
+`granted_pull_cap` is negotiable post-swearing (#1718) via a formal petition
+(`OfferKind.COURT_GRANT`) or an emergency thread-bond draw — both monotonic, never decreasing.
 _Avoid_: mentor bond, patron, indenture.
 
 **Court mission / mission-driven engagement**:

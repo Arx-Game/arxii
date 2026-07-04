@@ -388,3 +388,18 @@ class CourtGulfViolationError(CovenantError):
             "You must be at least one power tier below the Court's leader to swear fealty here.",
         }
     )
+
+
+class CourtGrantNotMonotonicError(CovenantError):
+    """Raised when a grant raise would lower an existing CourtPact.granted_pull_cap.
+
+    A master's promised power can never be revoked (#1718) — raise_court_pact_grant
+    rejects any new_cap below the pact's current granted_pull_cap.
+    """
+
+    user_message = "A Court master's word cannot be taken back — the grant can only rise."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A Court master's word cannot be taken back — the grant can only rise.",
+        }
+    )

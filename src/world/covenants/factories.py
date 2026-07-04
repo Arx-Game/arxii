@@ -34,6 +34,7 @@ from world.items.constants import GearArchetype
 CHARACTER_SHEET_FACTORY = "world.character_sheets.factories.CharacterSheetFactory"
 
 if TYPE_CHECKING:
+    from world.checks.models import CheckType
     from world.conditions.models import CapabilityType
     from world.magic.models import Resonance, ThreadPullEffect
 
@@ -881,11 +882,17 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
     # narrative_snippet="" for FLAT_BONUS, so a snippet here would make the pull
     # un-committable in combat (IntegrityError in _persist_combat_pull). Pull
     # flavour belongs on NARRATIVE_ONLY effects, not the mechanical FLAT_BONUS.
+    #
+    # amount=10, not 3: thread_level_multiplier(1) == 0.1 (#1718's corrected
+    # ramp — see thread.py) and scaled_value = round(authored * multiplier);
+    # an authored amount below 6 rounds to 0 at the level-1 pact-gate boundary,
+    # silently defeating the "a pact grants a real bonus" premise this catalog
+    # exists to demonstrate. 10 clears that floor with margin.
     # ------------------------------------------------------------------
     flat_effects: list[ThreadPullEffect] = []
     pulls = (
-        (res_whisper, 3),
-        (res_garrote, 3),
+        (res_whisper, 10),
+        (res_garrote, 10),
     )
     for resonance, amount in pulls:
         effect, _ = ThreadPullEffect.objects.get_or_create(
@@ -901,6 +908,30 @@ def wire_court_role_powers_catalog() -> "tuple[CovenantRole, list[ThreadPullEffe
         flat_effects.append(effect)
 
     return role, flat_effects
+
+
+def wire_court_grant_petition_content() -> "CheckType":
+    """Idempotent seed: the shared check rolled for every Court grant petition (#1718).
+
+    ONE CheckType across every Court master — the effect layer eases difficulty
+    per-master via the servant's affection, so no per-master authoring is needed.
+    Doubles as integration-test setUp AND staff/seed data (get_or_create keyed on
+    the natural key), mirroring wire_court_role_powers_catalog.
+    """
+    from world.checks.models import CheckCategory, CheckType
+    from world.covenants.services import get_court_grant_config
+
+    category, _ = CheckCategory.objects.get_or_create(name="Social", defaults={"display_order": 20})
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Court Grant Petition",
+        category=category,
+        defaults={"description": "Convincing a Court master to grant more strength."},
+    )
+    config = get_court_grant_config()
+    if config.petition_check_type_id != check_type.pk:
+        config.petition_check_type = check_type
+        config.save(update_fields=["petition_check_type"])
+    return check_type
 
 
 def seed_mentor_bond_defaults() -> MentorBondConfig:

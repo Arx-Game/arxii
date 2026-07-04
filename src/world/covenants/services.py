@@ -32,6 +32,7 @@ from world.covenants.exceptions import (
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CourtGrantConfig,
     CourtPact,
     Covenant,
     CovenantRank,
@@ -1677,6 +1678,13 @@ def get_mentor_bond_config() -> MentorBondConfig:
     if config is None:
         raise MentorBondConfig.DoesNotExist
     return config
+
+
+def get_court_grant_config() -> CourtGrantConfig:
+    """Get-or-create the Court grant negotiation config singleton (pk=1)."""
+    with transaction.atomic():
+        cfg, _ = CourtGrantConfig.objects.get_or_create(pk=1)
+        return cfg
 
 
 @transaction.atomic

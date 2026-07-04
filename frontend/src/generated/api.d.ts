@@ -20755,6 +20755,7 @@ export interface components {
        *     * `loan` - Loan
        *     * `collection` - Collection
        *     * `improvement` - Improvement
+       *     * `court_grant` - Court Grant
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20789,9 +20790,16 @@ export interface components {
      *     * `loan` - Loan
      *     * `collection` - Collection
      *     * `improvement` - Improvement
+     *     * `court_grant` - Court Grant
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan' | 'collection' | 'improvement';
+    NPCServiceOfferKindEnum:
+      | 'permit'
+      | 'mission'
+      | 'loan'
+      | 'collection'
+      | 'improvement'
+      | 'court_grant';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20802,6 +20810,7 @@ export interface components {
        *     * `loan` - Loan
        *     * `collection` - Collection
        *     * `improvement` - Improvement
+       *     * `court_grant` - Court Grant
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -23939,6 +23948,7 @@ export interface components {
        *     * `loan` - Loan
        *     * `collection` - Collection
        *     * `improvement` - Improvement
+       *     * `court_grant` - Court Grant
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
