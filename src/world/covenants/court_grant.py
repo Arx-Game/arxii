@@ -17,7 +17,7 @@ from world.covenants.exceptions import CourtGrantNotMonotonicError
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CourtPact, Covenant
-    from world.npc_services.models import NPCStanding
+    from world.npc_services.models import NPCRole, NPCStanding
 
 
 def completed_court_mission_count(
@@ -104,3 +104,45 @@ def raise_court_pact_grant(*, pact: CourtPact, new_cap: int) -> CourtPact:
     pact.granted_pull_cap = new_cap
     pact.save(update_fields=["granted_pull_cap"])
     return pact
+
+
+def ensure_court_grant_role(covenant: Covenant) -> NPCRole:
+    """Get-or-create the NPCRole carrying covenant's COURT_GRANT petition offer.
+
+    Idempotent — safe to call on every negotiation attempt. Auto-provisions the
+    role + its single petition offer + details row the first time any servant
+    of this Court tries to negotiate; staff never need to hand-author this per
+    master (#1718 design question 4 — NPC-master automation).
+    """
+    from world.covenants.factories import wire_court_grant_petition_content  # noqa: PLC0415
+    from world.covenants.services import get_court_grant_config  # noqa: PLC0415
+    from world.npc_services.constants import OfferKind  # noqa: PLC0415
+    from world.npc_services.models import (  # noqa: PLC0415
+        CourtGrantOfferDetails,
+        NPCRole,
+        NPCServiceOffer,
+    )
+
+    if covenant.court_grant_role_id is not None:
+        return covenant.court_grant_role
+
+    check_type = wire_court_grant_petition_content()
+    config = get_court_grant_config()
+
+    role = NPCRole.objects.create(
+        name=f"{covenant.name} — Court Master's Grant",
+        faction_affiliation=covenant.organization,
+    )
+    offer = NPCServiceOffer.objects.create(
+        role=role,
+        kind=OfferKind.COURT_GRANT,
+        label="Petition for greater strength",
+        is_final=True,
+        check_type=check_type,
+        check_difficulty=config.petition_base_difficulty,
+    )
+    CourtGrantOfferDetails.objects.create(offer=offer, covenant=covenant)
+
+    covenant.court_grant_role = role
+    covenant.save(update_fields=["court_grant_role"])
+    return role

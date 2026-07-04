@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("actions", "0011_actiontemplate_difficulty_tier_modifier"),
         ("checks", "0020_alter_consequenceeffect_position_destination"),
         ("covenants", "0020_covenantrole_command_tier_and_more"),
-        ("npc_services", "0009_npcstanding_consecutive_failed_petitions_and_more"),
+        ("npc_services", "0011_npcstanding_consecutive_failed_petitions_and_more"),
     ]
 
     operations = [

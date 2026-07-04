@@ -755,3 +755,30 @@ class NpcRegard(DiscriminatorMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.holder_persona} -> {self.get_active_target_name()} ({self.value:+d})"
+
+
+class CourtGrantOfferDetails(SharedMemoryModel):
+    """Per-kind details for ``NPCServiceOffer`` rows of kind=COURT_GRANT (#1718).
+
+    Names which Court covenant this petition offer belongs to — the effect
+    handler (``world.npc_services.effects.raise_court_grant``) only receives
+    ``(offer, persona)``, so the covenant can't be derived from the session's
+    ``npc_persona``; it must be explicit here, same shape as
+    ``LoanOfferDetails.creditor_organization``.
+    """
+
+    offer = models.OneToOneField(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="court_grant_offer_details",
+        help_text="The NPCServiceOffer row this details model decorates.",
+    )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="court_grant_offer_details",
+        help_text="The Court covenant this petition raises the servant's grant in.",
+    )
+
+    def __str__(self) -> str:
+        return f"CourtGrantOfferDetails for {self.offer} ({self.covenant})"
