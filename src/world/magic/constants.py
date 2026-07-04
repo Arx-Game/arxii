@@ -318,6 +318,7 @@ class InapplicabilityReason(models.TextChoices):
     PREREQUISITE_UNMET = "prerequisite_unmet", "Prerequisite condition unmet"
     LOCATION_MISMATCH = "location_mismatch", "Location/property mismatch"
     THREAD_RETIRED = "thread_retired", "Thread is retired"
+    COURT_LEADER_NO_STAKE = "court_leader_no_stake", "Court pull has no effect on this target"
     OTHER = "other", "Other (see details)"
 
 

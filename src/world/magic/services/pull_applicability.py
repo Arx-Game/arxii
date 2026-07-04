@@ -6,7 +6,7 @@ See docs/superpowers/specs/2026-05-23-unified-combat-ui-design.md §5.
 from dataclasses import dataclass
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import InapplicabilityReason, TargetKind
+from world.magic.constants import InapplicabilityReason, RegardPolarity, TargetKind
 from world.magic.models import Thread
 from world.magic.models.techniques import Technique
 
@@ -41,6 +41,11 @@ def compute_thread_applicability(
     Current rule set (first match wins):
     - ANCHORED_ON_OTHER_TECHNIQUE: TECHNIQUE-kind threads whose target_technique
       differs from the context technique are inapplicable.
+    - COURT_LEADER_NO_STAKE: COVENANT_ROLE threads (#1831) with a target_persona_id
+      in context are inapplicable when no candidate ThreadPullEffect would be
+      empowered by the Court leader's signed regard for that target (leader
+      indifferent, or every candidate effect's polarity mismatches the regard
+      sign). No-op when no leader is resolvable — the base pull is unmodulated.
 
     The following InapplicabilityReason values are defined in the enum for future
     phases but not yet wired here (their data dependencies are not yet available):
@@ -76,4 +81,50 @@ def _check_applicability(
         if context.technique is None or thread.target_technique_id != context.technique.pk:
             return False, InapplicabilityReason.ANCHORED_ON_OTHER_TECHNIQUE.value
 
+    # Rule: Court-leader-no-stake (#1831). A COVENANT_ROLE thread's pull only
+    # gets a Court-leader-regard empowerment bonus when some candidate effect's
+    # polarity matches the leader's signed regard sign for the live target
+    # (see court_regard_modulation). When no candidate effect would ever be
+    # empowered against this target, flag the thread inapplicable so the
+    # player doesn't spend resonance expecting a boost that won't happen.
+    if thread.target_kind == TargetKind.COVENANT_ROLE and context.target_persona_id is not None:
+        if not _court_pull_would_have_effect(thread, context.target_persona_id):
+            return False, InapplicabilityReason.COURT_LEADER_NO_STAKE.value
+
     return True, None
+
+
+def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> bool:
+    """Whether some candidate pull effect on ``thread`` would be Court-empowered
+    against the persona identified by ``target_persona_id``.
+
+    Returns True (don't block) when no Court leader is resolvable — the base
+    pull is unmodulated in that case, so there is no "no stake" signal to give.
+    Returns False only when a leader IS resolvable and every candidate effect's
+    polarity mismatches the sign of the leader's regard for the target (or the
+    leader is indifferent — regard 0).
+    """
+    from world.magic.services.pull_effects import get_pull_effects_for_thread  # noqa: PLC0415
+    from world.magic.services.pull_modulation_court import (  # noqa: PLC0415
+        _resolve_court_leader_persona,
+    )
+    from world.npc_services.regard import get_regard  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    leader_persona = _resolve_court_leader_persona(thread)
+    if leader_persona is None:
+        return True
+    target_persona = Persona.objects.filter(pk=target_persona_id).first()
+    if target_persona is None:
+        return True
+    regard = get_regard(leader_persona, target_persona)
+    if regard == 0:
+        return False
+
+    rows = get_pull_effects_for_thread(thread, min_thread_level__lte=thread.level)
+    return any(
+        (row.regard_polarity == RegardPolarity.OFFENSIVE and regard < 0)
+        or (row.regard_polarity == RegardPolarity.PROTECTIVE and regard > 0)
+        or (row.regard_polarity == RegardPolarity.NEUTRAL)
+        for row in rows
+    )
