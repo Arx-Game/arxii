@@ -21,7 +21,11 @@ from world.battles.constants import (
     FortificationKind,
     VehicleKind,
 )
-from world.battles.exceptions import FortificationOwnershipMismatchError, NotVehicleCommanderError
+from world.battles.exceptions import (
+    FortificationOwnershipMismatchError,
+    NotVehicleCommanderError,
+    PlacesDoNotOverlapError,
+)
 from world.battles.factories import (
     BattleFactory,
     BattleParticipantFactory,
@@ -265,3 +269,69 @@ class RepositionResolutionTests(TestCase):
 
         self.vehicle.place.refresh_from_db()
         self.assertEqual(self.vehicle.place.x, Decimal("5.00"))
+
+
+class CrossVehicleTargetingTests(TestCase):
+    def setUp(self) -> None:
+        self.battle = BattleFactory(round_limit=10)
+        self.attacker_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = BattleSideFactory(battle=self.battle, role=BattleSideRole.DEFENDER)
+        self.attacker_ship = create_battle_vehicle(
+            battle=self.battle,
+            side=self.attacker_side,
+            place_name="Attacker Ship",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        self.defender_ship = create_battle_vehicle(
+            battle=self.battle,
+            side=self.defender_side,
+            place_name="Defender Ship",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        self.technique = TechniqueFactory(action_template=ActionTemplateFactory())
+        self.attacker = BattleParticipantFactory(
+            battle=self.battle,
+            side=self.attacker_side,
+            place=self.attacker_ship.place,
+        )
+        CharacterTechniqueFactory(character=self.attacker.character_sheet, technique=self.technique)
+        CharacterAnimaFactory(
+            character=self.attacker.character_sheet.character, current=30, maximum=30
+        )
+        self.hull = self.defender_ship.place.fortifications.get(kind=FortificationKind.HULL)
+
+    def _set_positions(self, *, overlapping: bool) -> None:
+        self.defender_ship.place.x = Decimal(0)
+        self.defender_ship.place.y = Decimal(0)
+        self.defender_ship.place.footprint_radius = Decimal(5)
+        self.defender_ship.place.save(update_fields=["x", "y", "footprint_radius"])
+        gap_x = Decimal(6) if overlapping else Decimal(100)
+        self.attacker_ship.place.x = gap_x
+        self.attacker_ship.place.y = Decimal(0)
+        self.attacker_ship.place.footprint_radius = Decimal(5)
+        self.attacker_ship.place.save(update_fields=["x", "y", "footprint_radius"])
+
+    def test_can_breach_hull_on_overlapping_vehicle(self):
+        self._set_positions(overlapping=True)
+        begin_battle_round(battle=self.battle)
+
+        declaration = declare_battle_action(
+            participant=self.attacker,
+            action_kind=BattleActionKind.BREACH,
+            technique=self.technique,
+            target_fortification=self.hull,
+        )
+
+        self.assertEqual(declaration.target_fortification, self.hull)
+
+    def test_cannot_breach_hull_on_non_overlapping_vehicle(self):
+        self._set_positions(overlapping=False)
+        begin_battle_round(battle=self.battle)
+
+        with self.assertRaises(PlacesDoNotOverlapError):
+            declare_battle_action(
+                participant=self.attacker,
+                action_kind=BattleActionKind.BREACH,
+                technique=self.technique,
+                target_fortification=self.hull,
+            )

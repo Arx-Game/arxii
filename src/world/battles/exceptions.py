@@ -81,6 +81,20 @@ class NotVehicleCommanderError(BattleError):
         super().__init__(user_message)
 
 
+class PlacesDoNotOverlapError(BattleError):
+    """Raised when a UNIT-scope declaration targets a unit at a different,
+    non-overlapping place than the declarer's own, or a BREACH targets a
+    vehicle's hull Fortification from a non-overlapping place (#1714) — the
+    general cross-place targeting gate that makes boarding/ship-to-ship combat
+    range-gated without touching can_perceive, which is room-scoped and must
+    stay that way."""
+
+    def __init__(
+        self, user_message: str = "That target is out of range — your places don't overlap."
+    ) -> None:
+        super().__init__(user_message)
+
+
 class MissingScopeTargetError(BattleError):
     """Raised when a PLACE/SIDE-scope declaration has no matching target set."""
 

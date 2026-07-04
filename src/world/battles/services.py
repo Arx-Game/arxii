@@ -50,6 +50,7 @@ from world.battles.exceptions import (
     NotVehicleCommanderError,
     PlaceAlreadyDuelingError,
     PlaceScopeRequiredError,
+    PlacesDoNotOverlapError,
     RoundNotOpenError,
     TechniqueNotBattleReadyError,
 )
@@ -616,12 +617,31 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
     ):
         raise CannotStrikeOwnSideError
 
+    if (
+        scope == BattleActionScope.UNIT
+        and target_unit is not None
+        and target_unit.place_id is not None
+        and participant.place_id is not None
+        and target_unit.place_id != participant.place_id
+        and not places_overlap(target_unit.place, participant.place)
+    ):
+        raise PlacesDoNotOverlapError
+
     if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
         _validate_fortification_target(
             participant=participant,
             action_kind=action_kind,
             target_fortification=target_fortification,
         )
+        if (
+            action_kind == BattleActionKind.BREACH
+            and target_fortification is not None
+            and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
+            and participant.place_id is not None
+            and target_fortification.place_id != participant.place_id
+            and not places_overlap(target_fortification.place, participant.place)
+        ):
+            raise PlacesDoNotOverlapError
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
