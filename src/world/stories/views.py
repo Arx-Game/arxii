@@ -3221,15 +3221,13 @@ class BeatStakeAvailabilityView(APIView):
     (staff or the beat's story owner) since this is a GM planning tool.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsBeatStoryOwnerOrStaffForAvailability]
 
     def get(self, request: Request, beat_id: int) -> Response:
         from world.stories.services.boundaries import stake_availability  # noqa: PLC0415
 
         beat = get_object_or_404(Beat, pk=beat_id)
-        permission = IsBeatStoryOwnerOrStaffForAvailability()
-        if not permission.has_object_permission(request, self, beat):
-            raise PermissionDenied
+        self.check_object_permissions(request, beat)
 
         sheet_ids = request.query_params.getlist("sheets")
         sheets = list(CharacterSheet.objects.filter(pk__in=sheet_ids)) if sheet_ids else []
