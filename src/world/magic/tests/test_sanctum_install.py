@@ -42,6 +42,7 @@ from world.magic.services.sanctum_install import (
     SanctificationFounderHasPersonalSanctumError,
     SanctificationLeaderNotCovenantMemberError,
     SanctificationLeaderNotOwnerError,
+    SanctificationLeaderRankNotAuthorizedError,
     SanctificationRoomAlreadyHasFeatureError,
     SanctificationRoomNotOwnedError,
     _dissolution_recovery_fraction,
@@ -235,10 +236,11 @@ class PerformSanctificationCovenantLeaderGateTests(TestCase):
         room_profile, leader, _covenant, resonance = _setup_covenant_sanctification_room(
             leader_rank_can_lead_rituals=False
         )
-        with self.assertRaises(SanctificationLeaderNotCovenantMemberError):
+        with self.assertRaises(SanctificationLeaderRankNotAuthorizedError) as ctx:
             perform_sanctification(
                 room_profile, leader, resonance, owner_mode=SanctumOwnerMode.COVENANT
             )
+        self.assertIn("ritual-leadership authority", ctx.exception.user_message)
 
     def test_member_with_can_lead_rituals_rank_succeeds(self) -> None:
         room_profile, leader, _covenant, resonance = _setup_covenant_sanctification_room(
@@ -273,6 +275,23 @@ class PerformSanctificationCovenantLeaderGateTests(TestCase):
         with self.assertRaises(SanctificationLeaderNotCovenantMemberError):
             perform_sanctification(
                 room_profile, leader, ResonanceFactory(), owner_mode=SanctumOwnerMode.COVENANT
+            )
+
+    def test_covenant_ownership_not_allowed_by_catalog_rejected(self) -> None:
+        from world.room_features.constants import RoomFeatureOwnerType
+        from world.room_features.models import RoomFeatureKind, RoomFeatureKindOwnerType
+        from world.room_features.seeds import SANCTUM_KIND_NAME
+
+        room_profile, leader, _covenant, resonance = _setup_covenant_sanctification_room(
+            leader_rank_can_lead_rituals=True
+        )
+        sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
+        RoomFeatureKindOwnerType.objects.filter(
+            feature_kind=sanctum_kind, owner_type=RoomFeatureOwnerType.ORGANIZATION_COVENANT
+        ).delete()
+        with self.assertRaises(SanctificationLeaderNotCovenantMemberError):
+            perform_sanctification(
+                room_profile, leader, resonance, owner_mode=SanctumOwnerMode.COVENANT
             )
 
 

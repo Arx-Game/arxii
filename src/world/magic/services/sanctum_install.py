@@ -57,6 +57,12 @@ class SanctificationLeaderNotCovenantMemberError(SanctificationError):
     user_message = "You must be an active covenant member to lead this Sanctification."
 
 
+class SanctificationLeaderRankNotAuthorizedError(SanctificationLeaderNotCovenantMemberError):
+    user_message = (
+        "You are an active covenant member, but your rank doesn't have ritual-leadership authority."
+    )
+
+
 class SanctificationRoomNotOwnedError(SanctificationError):
     user_message = "No owner is recognized for this room; cannot found a Sanctum here."
 
@@ -339,12 +345,18 @@ def _validate_sanctification_leader(ownership, leader_persona: Persona, owner_mo
 
     # COVENANT
     if ownership.holder_type != HolderType.ORGANIZATION:
+        # NOTE: `user_message` (the class attribute below) is what reaches the
+        # player, not this constructed `msg` — kept for exception __str__/logging.
         msg = "Covenant Sanctification requires an organization-owned room."
         raise SanctificationLeaderNotCovenantMemberError(msg)
     if not _covenant_ownership_allowed_for_sanctum():
+        # NOTE: `user_message` (the class attribute below) is what reaches the
+        # player, not this constructed `msg` — kept for exception __str__/logging.
         msg = "This room-feature kind does not permit covenant ownership."
         raise SanctificationLeaderNotCovenantMemberError(msg)
     if ownership.holder_organization.org_type.name != COVENANT_ORG_TYPE_NAME:
+        # NOTE: `user_message` (the class attribute below) is what reaches the
+        # player, not this constructed `msg` — kept for exception __str__/logging.
         msg = "The owning organization is not a Covenant."
         raise SanctificationLeaderNotCovenantMemberError(msg)
     covenant = ownership.holder_organization.covenant
@@ -359,7 +371,7 @@ def _validate_sanctification_leader(ownership, leader_persona: Persona, owner_mo
             f"for covenant {covenant.pk}: requires an active membership whose rank has "
             "ritual-leadership authority."
         )
-        raise SanctificationLeaderNotCovenantMemberError(msg)
+        raise SanctificationLeaderRankNotAuthorizedError(msg)
 
 
 def _covenant_ownership_allowed_for_sanctum() -> bool:
