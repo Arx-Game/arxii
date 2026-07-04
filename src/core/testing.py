@@ -104,28 +104,21 @@ def flush_test_caches() -> None:
         flusher()
 
 
-def _flush_arx_singleton_caches() -> None:
-    """Flush every ArxSharedMemoryManager instance's singleton pk cache.
+def _flush_arx_manager_caches() -> None:
+    """Flush every CachedAllMixin/ArxSharedMemoryManager instance's caches.
 
-    The pk is cached per-manager-instance (on ``self.__dict__``), so we walk
-    the subclass tree to find each concrete manager class, then walk the
-    SharedMemoryModel subclass tree to find instantiated managers.
+    Walks the SharedMemoryModel subclass tree to find instantiated managers.
+    A manager instance is flushed for whichever caches it actually has:
+    ``flush_all_cache()`` (CachedAllMixin -- full-table cache, #1846) and/or
+    ``flush_singleton_cache()`` (ArxSharedMemoryManager -- singleton pk cache,
+    #1741). Some managers (e.g. ModifierTargetManager, IntensityTierManager)
+    mix in CachedAllMixin without being an ArxSharedMemoryManager, so both
+    checks run independently rather than gating on one type.
     """
     from evennia.utils.idmapper.models import SharedMemoryModel  # noqa: PLC0415
 
-    from core.managers import ArxSharedMemoryManager  # noqa: PLC0415
+    from core.managers import ArxSharedMemoryManager, CachedAllMixin  # noqa: PLC0415
 
-    # Collect all ArxSharedMemoryManager subclasses
-    arx_mgr_classes: set[type] = set()
-    queue: list[type] = [ArxSharedMemoryManager]
-    while queue:
-        cls = queue.pop()
-        if cls in arx_mgr_classes:
-            continue
-        arx_mgr_classes.add(cls)
-        queue.extend(cls.__subclasses__())
-
-    # Walk SharedMemoryModel subclasses to find instantiated managers
     seen: set[type] = set()
     smm_queue: list[type] = [SharedMemoryModel]
     while smm_queue:
@@ -134,9 +127,11 @@ def _flush_arx_singleton_caches() -> None:
             continue
         seen.add(cls)
         mgr = getattr(cls, "objects", None)  # noqa: GETATTR_LITERAL
-        if mgr is not None and type(mgr) in arx_mgr_classes:
+        if isinstance(mgr, CachedAllMixin):
+            mgr.flush_all_cache()
+        if isinstance(mgr, ArxSharedMemoryManager):
             mgr.flush_singleton_cache()
         smm_queue.extend(cls.__subclasses__())
 
 
-register_test_cache_flusher(_flush_arx_singleton_caches)
+register_test_cache_flusher(_flush_arx_manager_caches)
