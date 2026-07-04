@@ -54,3 +54,28 @@ class RoomFeaturesConfig(AppConfig):
             RoomFeatureServiceStrategy.TOWN_CRIER,
             handle_town_crier_progression,
         )
+
+        # #675 feature kinds — generic; home app is here.
+        from world.room_features.services import (  # noqa: PLC0415
+            handle_captains_quarters_progression,
+            handle_library_progression,
+            handle_siege_deck_progression,
+            handle_training_room_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.LIBRARY,
+            handle_library_progression,
+        )
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.TRAINING_ROOM,
+            handle_training_room_progression,
+        )
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.SIEGE_DECK,
+            handle_siege_deck_progression,
+        )
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.CAPTAINS_QUARTERS,
+            handle_captains_quarters_progression,
+        )
