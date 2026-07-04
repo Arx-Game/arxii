@@ -2,12 +2,14 @@
 
 The seam runs at authoring time (``StakeSerializer``) and at every
 activation/commit call site (combat encounter creation, mission issue, the
-``declare_stakes`` GM action), so it exists from day one even though the
-screening itself is an allow-all stub. The real implementation — a
-per-player boundary registry (tracked on the boundaries sibling issue of
-#1770, #1771) — will follow the shape of the consent app
-(``world.consent.services``, ADR-0024): explicit per-player preference rows
-consulted by free service functions, no signals.
+``declare_stakes`` GM action). The per-player boundary registry (#1771) is
+now wired: it follows the shape of the consent app
+(``world.consent`` / ``world.boundaries``, ADR-0024/ADR-0086) — explicit
+per-player preference rows consulted by free service functions, no signals.
+At authoring time the participants are unknown (``character_sheets=[]``), so
+the screen short-circuits to ``allowed=True`` there; the real enforcement
+(hard-line block + treasured requires-signoff) fires at each
+activation/commit call site where the party is known.
 
 Call sites gate on ``StakeBoundaryReport.cleared`` (allowed AND no pending
 sign-off), so #1771 can start returning ``requires_signoff`` without

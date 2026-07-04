@@ -269,9 +269,9 @@ class FrontierStoryEntry(TypedDict):
 class StakeBoundaryReport:
     """Result of check_stake_boundaries (world.stories.services.boundaries).
 
-    allowed: the stakes may be presented to this party. The stub always
-        allows; a real boundary registry (see the boundaries sibling issue
-        of #1770) will consult per-player limits.
+    allowed: the stakes may be presented to this party. False when a
+        participant's hard line (a ContentTheme on the stake's template)
+        matches; the boundary registry (#1771) consults per-player limits.
     requires_signoff: character_sheet ids that need an explicit pre-scene
         sign-off before the contract can activate for them.
     blocked_reason_private: why the check blocked, for staff/audit logging
