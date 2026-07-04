@@ -14036,6 +14036,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/resolve-foreclosure/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/resolve-foreclosure/ — wrap up a foreclosed thread.
+     *
+     *     Lead GM on the story (or staff) resolves a FORECLOSED progress record:
+     *     stamps resolved_at/resolved_by and fans out an honest closure message.
+     *     Idempotent. ``resolved_by`` is stamped from the requesting user's
+     *     GMProfile — never accepted from client input.
+     */
+    post: operations['stories_resolve_foreclosure_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/send-ooc/': {
     parameters: {
       query?: never;
@@ -49078,6 +49102,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_resolve_foreclosure_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {

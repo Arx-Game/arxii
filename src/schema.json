@@ -23627,6 +23627,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/StoryDetail'
           description: ''
+  /api/stories/{id}/resolve-foreclosure/:
+    post:
+      operationId: stories_resolve_foreclosure_create
+      description: |-
+        POST /api/stories/{id}/resolve-foreclosure/ — wrap up a foreclosed thread.
+
+        Lead GM on the story (or staff) resolves a FORECLOSED progress record:
+        stamps resolved_at/resolved_by and fans out an honest closure message.
+        Idempotent. ``resolved_by`` is stamped from the requesting user's
+        GMProfile — never accepted from client input.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this story.
+        required: true
+      tags:
+      - stories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoryDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryDetail'
+          description: ''
   /api/stories/{id}/send-ooc/:
     post:
       operationId: stories_send_ooc_create
