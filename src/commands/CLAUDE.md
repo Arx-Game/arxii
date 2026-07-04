@@ -148,7 +148,16 @@ actions, backends, and service functions.
     .emergency_draw_max_bonus`, and any amount past the ceiling incurs debt via
     `incur_npc_debt`; on failure the pull still commits with no bonus. Works whether or
     not the Court master is present — it draws on the servant's own bond, not a live
-    negotiation. Every attempt records `record_petition_outcome`.
+    negotiation. Every attempt records `record_petition_outcome`. **Combat or
+    non-combat**: both entry points call the identical combat-agnostic
+    `_resolve_emergency_draw(sheet, cast_pull)` helper (it takes no
+    `CombatEncounter`/`CombatParticipant`) — the in-combat commit
+    (`commit_combat_pull`) and the non-combat charge
+    (`world.magic.services.techniques._charge_cast_pull`, reached via
+    `request_technique_cast`) each call it directly before
+    `spend_resonance_for_pull`, so a standalone `cast <technique>
+    pull=<thread> resonance=<name> beseech=N` outside any encounter rolls the
+    same petition check and gets the same bonus/debt treatment.
 
     **Fury params** (`fury=<tier>` / `anchor=<name>`, #1454) — single-token values: `fury=`
     names a `FuryTier` by name or depth; `anchor=` names the bonded character whose harm the

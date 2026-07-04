@@ -245,6 +245,11 @@ def _resolve_emergency_draw(
 ) -> tuple[int | None, int]:
     """Roll the Court-grant petition check for an emergency thread-bond draw (#1718).
 
+    Takes only ``sheet`` + ``cast_pull`` — no ``CombatEncounter``/``CombatParticipant`` —
+    so it is combat-agnostic and reused directly by the non-combat cast path
+    (``world.magic.services.techniques._charge_cast_pull``) as well as
+    ``commit_combat_pull`` below. Do not add a combat-only parameter here.
+
     Returns ``(thread_id, applied_bonus)`` — ``(None, 0)`` on failure or when the
     pulled thread isn't a COURT-covenant COVENANT_ROLE thread (nothing to
     beseech), or when the covenant has no configured petition check type. On
