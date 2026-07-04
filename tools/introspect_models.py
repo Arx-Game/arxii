@@ -32,6 +32,7 @@ TARGET_APPS = [
     "world.classes",
     "world.clues",
     "world.codex",
+    "world.companions",
     "world.conditions",
     "world.consent",
     "world.covenants",

@@ -147,6 +147,8 @@
   - modifier_target <- mechanics.ModifierTarget
   - property_damage_modifiers <- mechanics.PropertyDamageModifier
   - consequence_effects <- checks.ConsequenceEffect
+  - position_shelters <- areas.PositionShelter
+  - blueprint_position_shelters <- areas.BlueprintPositionShelter
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
@@ -482,6 +484,7 @@
   - edges_as_a <- areas.PositionEdge
   - edges_as_b <- areas.PositionEdge
   - occupants <- areas.ObjectPosition
+  - shelters <- areas.PositionShelter
   - traps <- room_features.Trap
 
 ### PositionEdge
@@ -502,6 +505,7 @@
 **Pointed to by:**
   - edges_as_a <- areas.BlueprintEdge
   - edges_as_b <- areas.BlueprintEdge
+  - shelters <- areas.BlueprintPositionShelter
 
 ### BlueprintEdge
 **Foreign Keys:**
@@ -514,6 +518,16 @@
 **Foreign Keys:**
   - objectdb -> objects.ObjectDB [OneToOne]
   - position -> areas.Position [FK]
+
+### PositionShelter
+**Foreign Keys:**
+  - position -> areas.Position [FK]
+  - damage_type -> conditions.DamageType [FK]
+
+### BlueprintPositionShelter
+**Foreign Keys:**
+  - blueprint_position -> areas.BlueprintPosition [FK]
+  - damage_type -> conditions.DamageType [FK]
 
 ### Service Functions
 - `colored_area_path(room: 'ObjectDB') -> 'str' — Render a room's full area-hierarchy path with per-area colours (#1463).`
@@ -1088,6 +1102,7 @@
   - purse <- currency.CharacterPurse
   - employments <- currency.CharacterEmployment
   - treasured_by <- boundaries.TreasuredSubject
+  - companions <- companions.Companion
   - secrets <- secrets.Secret
   - secret_grievances <- secrets.SecretGrievance
   - detected_concealments <- conditions.ConditionInstance
@@ -1435,6 +1450,27 @@
   - entry -> codex.CodexEntry [FK]
 
 
+## world.companions
+
+### CompanionArchetype
+**Pointed to by:**
+  - companions <- companions.Companion
+
+### Companion
+**Foreign Keys:**
+  - owner -> character_sheets.CharacterSheet [FK]
+  - archetype -> companions.CompanionArchetype [FK]
+  - granting_gift -> magic.Gift [FK]
+  - objectdb -> objects.ObjectDB [FK] (nullable)
+
+### Service Functions
+- `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Create a bonded Companion + its live CompanionObject in owner's current room.`
+- `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level.`
+- `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' — Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
+- `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
+- `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Companion Capacity currently consumed by character_sheet's active companions via gift.`
+
+
 ## world.conditions
 
 ### ConditionCategory
@@ -1480,6 +1516,8 @@
   - modifier_target <- mechanics.ModifierTarget
   - property_damage_modifiers <- mechanics.PropertyDamageModifier
   - consequence_effects <- checks.ConsequenceEffect
+  - position_shelters <- areas.PositionShelter
+  - blueprint_position_shelters <- areas.BlueprintPositionShelter
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
   - weapon_templates <- items.ItemTemplate
@@ -1763,8 +1801,8 @@
   - mentor_bonds <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
   - battle_sides <- battles.BattleSide
-  - constructed_ships <- ships.ShipConstructionDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
+  - constructed_ships <- ships.ShipConstructionDetails
 
 ### CovenantRole
 **Foreign Keys:**
@@ -2351,6 +2389,7 @@
 - `get_effective_climate(area: 'Area | None') -> 'Climate | None' — Walk up the area hierarchy to the nearest climate assignment (#1522).`
 - `grant_tenancy(*, area: 'Area | None' = None, room_profile: 'RoomProfile | None' = None, tenant_persona: 'Persona | None' = None, tenant_organization: 'Organization | None' = None, ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' — Create a new LocationTenancy row.`
 - `hazard_is_covered(room: 'DefaultObject', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' — Whether *room* grants shelter against *damage_type* (#1744).`
+- `hazard_is_covered_for(character: 'DefaultObject', room: 'DefaultObject | None', damage_type: 'DamageType', *, threshold: 'int' = 1) -> 'bool' — Whether *character* in *room* is sheltered against *damage_type*.`
 - `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
 - `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
 - `maybe_default_residence(persona: 'Persona | None', room_profile: 'RoomProfile | None') -> 'None' — Default a persona's character home to this room when it has none yet (#1514).`
@@ -2474,6 +2513,7 @@
   - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
+  - granted_companions <- companions.Companion
 
 ### CharacterGift
 **Foreign Keys:**
@@ -3459,7 +3499,7 @@
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
-- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' — Sum resonance-scoped POWER-category flat modifiers (distinctions) for ``resonance_id``.`
+- `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' — Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
 - `prerequisites_met(prereqs: 'Iterable[Prerequisite]', caster: 'ObjectDB', target: 'ObjectDB') -> 'bool' — True if target satisfies every one of prereqs (all() semantics; empty = True).`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
@@ -5052,8 +5092,8 @@
   - mission_awards <- missions.MissionRenownAward
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' — Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' — Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' — Sum the legend this character earned that was credited to covenants where they held ``role``.`
