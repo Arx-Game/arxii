@@ -1760,7 +1760,9 @@ resolves a room's hub; crier install places a "Town Crier" `Functionary` via
 
 - **Models** (`world.room_features.models`):
   - `RoomFeatureKind` — open catalog row. Carries `service_strategy`
-    (TextChoices: `SANCTUM`, future kinds), `max_level` (cap on
+    (TextChoices: `SANCTUM`, `LIBRARY`, `TRAINING_ROOM`, `LAB`,
+    `COMMAND_CENTER`, `GRANARY`, `SIEGE_DECK`, `CAPTAINS_QUARTERS`,
+    `NOTICE_BOARD`, `TOWN_CRIER`), `max_level` (cap on
     `RoomFeatureInstance.level`), display copy, install-cost knobs.
   - `RoomFeatureKindInstallRitual` — M2M-shape: which Rituals can install
     this kind. Lets one kind admit multiple install rites
@@ -1888,6 +1890,45 @@ attempts, with a coppers-only repair economy.
   `commands/crafting_station.py`) and `LabStationViewSet`
   (`/api/items/lab-stations/`) converge on the same Actions.
 - **Source:** `src/world/items/crafting/station.py`.
+
+### Library, Training Room, Siege Deck, Captain's Quarters (#675)
+Four Room Feature kinds that **broaden existing systems** via read-time
+bonus lookups (mirrors Sanctum's pattern — `instance.level` is the bonus
+input, no per-kind details model). Install/upgrade reuse the shared
+`_install_or_level_feature` handler + `StartRoomFeatureProjectAction`.
+Genuinely-new-mechanics features (Brig/prisoner, Stables/mount,
+Field+Granary/crop) are split to `needs-design` follow-up issues.
+
+- **Library** (`RoomFeatureServiceStrategy.LIBRARY`, `max_level=10`):
+  discounts codex-learning AP. Consumer hook:
+  `CodexTeachingOffer.accept(room_profile=...)` in
+  `world/codex/models.py` calls `active_library_in(room_profile)` and
+  reduces `learn_cost` by `level * LIBRARY_AP_DISCOUNT_PER_LEVEL` (floor 1).
+- **Training Room** (`TRAINING_ROOM`, `max_level=3`): discounts
+  technique-learning AP. Consumer hook: `learn_technique(..., location=...)`
+  in `world/magic/services/technique_acquisition.py` resolves the room
+  profile from the location, calls `active_training_room_in(room_profile)`,
+  and reduces `ap_cost` by `level * TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL`
+  (floor 0). Callers `learn_technique_from_ritual` and
+  `accept_technique_offer` pass `character.location`.
+- **Siege Deck** (`SIEGE_DECK`, `max_level=5`, renamed from Cannon Deck —
+  pre-gunpowder: ballistae/catapults/scorpions): adds to a ship's effective
+  armament in battle. Maritime-gated via `allowed_building_kinds` (the
+  Vessel `BuildingKind`; airship kinds added as a content edit when they
+  arrive). Consumer hook: `_siege_deck_armament_bonus(ship)` in
+  `world/ships/sanctum_bonus.py` sums `level *
+  SIEGE_DECK_ARMAMENT_PER_LEVEL` across active Siege Decks on the ship's
+  rooms; folded into the `armament` slot of `ShipStatBonus` consumed at
+  `battle_bridge.py:96`.
+- **Captain's Quarters** (`CAPTAINS_QUARTERS`, `max_level=1`):
+  maritime-gated reachability feature (like Command Center). No numeric
+  bonus; its "content" is that surfaces are reachable where it stands.
+  Consumer hook deferred (`needs-design`).
+- **Helpers** (`world/room_features/services.py`): `active_library_in`,
+  `active_training_room_in`, `active_siege_deck_in`,
+  `active_captains_quarters_in` — each filters by `service_strategy` +
+  `.active()`, mirroring `active_hub_feature`.
+- **Source:** `src/world/room_features/seeds.py`, `services.py`, `apps.py`.
 
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
