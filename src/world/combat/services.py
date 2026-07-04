@@ -30,8 +30,9 @@ if TYPE_CHECKING:
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
-    from world.magic.models import FuryTier, Technique, TechniqueDamageProfile
+    from world.magic.models import FuryTier, Technique
     from world.magic.models.anima import CharacterAnima
+    from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
@@ -396,7 +397,7 @@ class CombatTechniqueResolver:
     def _apply_profiles_to_target(  # noqa: PLR0913
         self,
         target: CombatOpponent,
-        profiles: list[TechniqueDamageProfile],
+        profiles: list[AbstractDamageProfile],
         weapon: WeaponContribution | None,
         *,
         sl: int,
@@ -494,7 +495,7 @@ class CombatTechniqueResolver:
 
     def _profile_damage(  # noqa: PLR0913
         self,
-        profile: TechniqueDamageProfile,
+        profile: AbstractDamageProfile,
         weapon: WeaponContribution | None,
         target: CombatOpponent,
         *,
@@ -5824,7 +5825,7 @@ def effective_weapon_profile(character: Character) -> WeaponContribution | None:
 
 
 def _weapon_augmented_budget(
-    profile: TechniqueDamageProfile,
+    profile: AbstractDamageProfile,
     budget: int,
     weapon: WeaponContribution | None,
     sheet: object | None = None,
