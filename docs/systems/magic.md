@@ -852,6 +852,19 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `STAKE_REWARD` — stakes-contract WIN reward line (#1770 PR3); discriminator-only,
   provenance on the stories side (`StakeOutcome` + `StakeRewardLine`); see
   `docs/systems/stakes.md`.
+- `DISTINCTION` — a distinction's authored `DistinctionResonanceGrant` flat seed
+  (#1834); typed source FK `source_character_distinction`. See "Distinction → Resonance
+  (#1834)" in `docs/systems/distinctions.md` for the model + reconcile/accelerator services.
+
+`ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (`world/magic/constants.py`,
+ADR-0041) partition every `GainSource` member (a total-classification test enforces this):
+perception/presence-driven sources a character actively performs to be seen (`POSE_ENDORSEMENT`,
+`SCENE_ENTRY`, `ENTRY_FLOURISH`, `DRAMATIC_MOMENT`, `STYLE_PRESENTATION`, `OUTFIT_TRICKLE`,
+`ROOM_RESIDENCE`) are scaled up by `distinction_earn_rate_for` (a character's summed
+`DistinctionResonanceGrant.earn_rate_bonus_per_rank`) in `grant_resonance` before the amount is
+written; authored/system sources (`STAFF_GRANT`, `MISSION_REWARD`, `MISSION_REPORT`,
+`STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, and `DISTINCTION`
+itself — accelerating a distinction's own seed grant would be circular) are never accelerated.
 
 ### Aura Drift (#1737)
 

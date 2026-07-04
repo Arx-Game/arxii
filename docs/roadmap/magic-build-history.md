@@ -1758,6 +1758,52 @@ as instance seed data). Weights/difficulties are TUNING PLACEHOLDERS for staff.
 
 ---
 
+## Distinctions grant/shape Resonance (#1834) — DONE (2026-07-04)
+
+Closed the "a Predatory distinction should carry that vibe from the start" gap: a
+distinction can now affect `magic.Resonance` along two independent, authored axes —
+neither automatic, both opt-in per distinction.
+
+- **Standing/currency axis** — `DistinctionResonanceGrant` (`world/magic/models/grants.py`,
+  sidecar join to `distinctions.Distinction`; lives in `world.magic` per ADR-0010) authors
+  `flat_amount_per_rank` (seed) + `earn_rate_bonus_per_rank` (percent) per
+  `(distinction, resonance)`. `reconcile_distinction_resonance_grants` (grant-time consumer,
+  `world/magic/services/distinction_resonance.py`) establishes the character's
+  `CharacterResonance` row and tops off a rank-scaled, ledger-idempotent flat seed via
+  `grant_resonance(source=GainSource.DISTINCTION)`; wired into both
+  `create_distinction_modifiers` and `update_distinction_rank`
+  (`world/mechanics/services.py`) and into CG finalization
+  (`_create_distinction_modifiers_bulk` in `world/character_creation/services.py`, run
+  before `recompute_aura` fires in `finalize_magic_data` — the CG aura-ordering fix, so a
+  character's starting aura reflects a distinction-granted resonance on day one).
+  `distinction_earn_rate_for` sums the earn-rate bonus across a character's distinctions;
+  `grant_resonance` applies it as a multiplier, but only for `ACCELERATED_GAIN_SOURCES`
+  (ADR-0041 — perception/presence-driven sources); the `DISTINCTION` seed itself is
+  deliberately non-accelerated (would be circular).
+- **Potency axis (POWER)** — reuses the existing authoring surface: a `DistinctionEffect`
+  targeting a POWER-category `ModifierTarget`, optionally gated by `target_resonance`. Read
+  by a technique cast's FLAT power stage (already wired, unchanged) and, newly, by a
+  standalone thread pull via `power_flat_bonus_for_resonance`
+  (`world/mechanics/services.py`) folded in by `_fold_distinction_pull_bonus`
+  (`world/magic/services/resonance.py`) — wired into both the commit path
+  (`spend_resonance_for_pull`) and the read-only preview (`preview_resonance_pull`).
+- **Dead-code cleanup:** the pre-#1834 resonance-category `DistinctionEffect` write (a
+  `CharacterModifier` row nothing read, since `get_aura_percentages`/`CharacterAffinityTotal`
+  were already removed in #1739/#1836) is gone from both grant paths. The `resonance`
+  `ModifierCategory` itself stays live infrastructure for non-distinction sources
+  (facet/mantle/motif-coherence passive bonuses via `equipment_walk_total`).
+
+Proven end-to-end through the real CG finalization pipeline:
+`FinalizeCharacterDistinctionResonanceTests.test_cg_distinction_seeds_resonance_and_recomputes_starting_aura`
+(`world/character_creation/tests/test_services.py`) drives `finalize_character()` and
+asserts the starting `CharacterAura` reflects a distinction-granted resonance seed.
+
+See `docs/systems/distinctions.md` ("Distinctions grant/shape Resonance"), `docs/systems/mechanics.md`
+("Distinction Lifecycle"), and `src/world/magic/CLAUDE.md` ("Distinction Resonance Grants" /
+"Distinction Potency") for the full reference documentation.
+
+---
+
 ## Notes
 
 ### Cross-reference: Aspect Focus & Path Evolution

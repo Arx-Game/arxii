@@ -151,7 +151,9 @@ standalone thread pull, via `power_flat_bonus_for_resonance(sheet, resonance_id)
 matching POWER-category, `target_resonance`-scoped modifiers (excluding the unscoped
 `power_multiplier` target) via `get_modifier_total`. See `world/magic/CLAUDE.md`
 "Distinction Potency (POWER axis)" for the pull-side wiring
-(`world.magic.services.resonance._fold_distinction_pull_bonus`).
+(`world.magic.services.resonance._fold_distinction_pull_bonus`). The pull path is **not**
+full parity with a cast: `_derive_power`'s FLAT stage also sums condition-sourced POWER
+contributions (`get_condition_modifier_breakdown`), which the pull fold does not include.
 
 ---
 
@@ -193,7 +195,7 @@ matching POWER-category, `target_resonance`-scoped modifiers (excluding the unsc
 ## Integration Points
 
 - **Distinctions**: Primary modifier source. `create_distinction_modifiers()` is called when a `CharacterDistinction` is created; `delete_distinction_modifiers()` on removal; `update_distinction_rank()` on rank change.
-- **Magic**: Aura percentages (`magic.services.recompute_aura()`) read `CharacterResonance.lifetime_earned` grouped by affinity — no denormalized aggregate to sync. Resonance-targeting `CharacterModifier` rows have no live reader today (#1834).
+- **Magic**: Aura percentages (`magic.services.recompute_aura()`) read `CharacterResonance.lifetime_earned` grouped by affinity — no denormalized aggregate to sync. Resonance-category `DistinctionEffect`s no longer write a `CharacterModifier` row at all — they flow through `reconcile_distinction_resonance_grants` (the `DistinctionResonanceGrant` sidecar) instead (#1834); see "Distinction Lifecycle" above.
 - **Action Points**: `ActionPointPool._get_ap_modifier()` uses string-based lookup for AP modifier targets (pending target FK when AP system is built).
 - **Progression**: Development rate modifiers use string-based lookup (pending target FK when progression system is built).
 - **Equipment** (future): Will follow the same `ModifierSource` pattern with equipment-specific FK fields.

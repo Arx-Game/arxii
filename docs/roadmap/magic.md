@@ -25,6 +25,7 @@ the one specialization engine, fall/redemption, Covenant of the Court.
 | Pose / narration into the scene | ✅ wired | `world/scenes/cast_services.py:create_cast_outcome_pose` → `world/magic/narration.py` |
 | Logging — `SceneActionRequest` + `Interaction` + power ledger | ✅ wired | `world/scenes/action_models.py`; `cast_services.py:persist_power_ledger` |
 | Resonance / progression feedback | ✅ by design | earned from RP perception (endorsements), **not** from casting — see "By design" below |
+| Distinctions grant/shape resonance (standing + potency) | ✅ built | `#1834` — `DistinctionResonanceGrant` + `reconcile_distinction_resonance_grants`; see `magic-build-history.md` |
 | **A real character actually being able to cast** | ✅ wired | `#1306` — shared template + per-character check; see below |
 
 The backend cast→pose→log→outcome loop is fully wired and resolves end-to-end (verified

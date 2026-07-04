@@ -529,10 +529,14 @@ def _fold_distinction_pull_bonus(
     A distinction expresses potency for ``resonance`` by authoring a ``DistinctionEffect`` on
     a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same modifier a
     technique cast already reads via ``_derive_power``'s FLAT stage
-    (``magic/services/techniques.py``). Folds the identical bonus into the pull's own
-    magnitude once per pull (not per thread/tier — every thread here shares ``resonance`` by
-    construction) so a standalone thread-pull is boosted identically to a cast (#1834 Task 7).
-    No-op (returns ``resolved`` unchanged) when there is no matching modifier.
+    (``magic/services/techniques.py``). Folds that one modifier into the pull's own magnitude
+    once per pull (not per thread/tier — every thread here shares ``resonance`` by
+    construction) (#1834 Task 7). No-op (returns ``resolved`` unchanged) when there is no
+    matching modifier.
+
+    Not full parity with a cast: ``_derive_power``'s FLAT stage also sums condition-sourced
+    POWER contributions (``get_condition_modifier_breakdown``), which this fold does not
+    include — only the distinction-authored ``CharacterModifier`` side.
     """
     from world.mechanics.services import power_flat_bonus_for_resonance  # noqa: PLC0415
 
@@ -547,6 +551,12 @@ def _fold_distinction_pull_bonus(
             level_multiplier=1,
             scaled_value=bonus,
             vital_target=None,
+            # threads[0] is an arbitrary pick (every thread here shares one resonance, so
+            # there's no real per-thread attribution for this synthetic entry) — but it IS
+            # serialized as source_thread_id over the wire
+            # (ResolvedPullEffectSerializer.get_source_thread_id, the pull-preview API).
+            # Any future consumer of that field on this row must not treat it as real
+            # attribution.
             source_thread=threads[0],
             source_thread_level=threads[0].level,
             source_tier=0,

@@ -1119,6 +1119,35 @@ The following models have been removed and replaced:
   (`equipment_walk_total` in `world/mechanics/services.py`) still read/write
   resonance-category `CharacterModifier` rows via `EQUIPMENT_RELEVANT_CATEGORIES`.
 
+### Distinction Resonance Grants (standing/currency axis, #1834)
+
+`DistinctionResonanceGrant` (`models/grants.py`) — sidecar authoring surface joining a
+`distinctions.Distinction` to a `Resonance` with two rank-scaled currency knobs:
+`flat_amount_per_rank` (seed) and `earn_rate_bonus_per_rank` (percent). Lives in
+`world.magic` (not `world.distinctions`) per ADR-0010 — the general primitive
+(`magic.Resonance`) must not import back into a dependent app.
+
+- `reconcile_distinction_resonance_grants(character_distinction)`
+  (`services/distinction_resonance.py`) — the grant-time consumer, called by both
+  `create_distinction_modifiers` and `update_distinction_rank`
+  (`world/mechanics/services.py`). For every `DistinctionResonanceGrant` on the
+  distinction: establishes a `CharacterResonance` row (`get_or_create`), then tops off a
+  rank-scaled flat seed via `grant_resonance(source=GainSource.DISTINCTION,
+  source_character_distinction=...)`. Ledger-idempotent (sums this distinction's prior
+  `DISTINCTION`-source grants for the resonance, grants only the shortfall); a rank-down
+  never claws back.
+- `distinction_earn_rate_for(character_sheet, resonance)` (`services/distinction_resonance.py`)
+  — sums the earn-rate bonus across a character's distinctions for one resonance. Read by
+  `grant_resonance` (`services/resonance.py`) to scale `amount` up before writing, but only
+  when `source in ACCELERATED_GAIN_SOURCES` (ADR-0041 — perception/presence sources); the
+  `DISTINCTION` seed itself is in `NON_ACCELERATED_GAIN_SOURCES` (accelerating it would be
+  circular). A total-classification test asserts every `GainSource` lands in exactly one set.
+- `GainSource.DISTINCTION` + `ResonanceGrant.source_character_distinction` — ledger
+  discriminator + typed source FK for the seed grants above.
+- Wired at both acquisition sites: gameplay grant/rank-up and character creation
+  (`_create_distinction_modifiers_bulk` in `world/character_creation/services.py`, followed
+  by `recompute_aura` once `CharacterAura` exists in `finalize_magic_data`).
+
 ### Distinction Potency (POWER axis, #1834 Task 7)
 
 A distinction expresses **potency** for a resonance — as opposed to the identity/currency
@@ -1139,6 +1168,12 @@ resonance-category skip above). Two consumers read it:
   `ResolvedPullEffect`; wired into both `spend_resonance_for_pull` (the charge/commit path —
   persists into `CombatPullResolvedEffect` for combat, returned ephemerally otherwise) and
   `preview_resonance_pull` (so the read-only preview matches the eventual commit).
+
+**Not full parity with a cast.** A cast's FLAT stage (`_derive_power`) also sums
+condition-sourced POWER contributions via `get_condition_modifier_breakdown` — the pull fold
+only sums the `CharacterModifier` (distinction) side via `power_flat_bonus_for_resonance`. A
+character with an active condition that boosts POWER for this resonance sees it in a cast but
+not in a standalone pull.
 
 ## Design Docs
 

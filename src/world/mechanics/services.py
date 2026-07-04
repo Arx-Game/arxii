@@ -297,11 +297,15 @@ def power_flat_bonus_for_resonance(sheet: object, resonance_id: int) -> int:
     A distinction expresses "potency" for a resonance by authoring a ``DistinctionEffect`` on
     a POWER-category ``ModifierTarget`` gated by ``target_resonance`` — the same seam a
     technique cast reads via ``_partition_power_targets``/``_derive_power``'s FLAT stage
-    (``magic/services/techniques.py``). This helper lets a standalone thread-pull fold the
-    identical modifier into its own magnitude (#1834 Task 7), so potency lands uniformly on
-    casts AND pulls. The unscoped ``power_multiplier`` target is excluded — its percent-delta
-    semantics don't apply to a flat pull bonus. "power" is not an equipment-relevant category,
-    so ``get_modifier_total`` here is always just the eager CharacterModifier total.
+    (``magic/services/techniques.py``). This helper lets a standalone thread-pull fold that one
+    modifier into its own magnitude (#1834 Task 7). The unscoped ``power_multiplier`` target is
+    excluded — its percent-delta semantics don't apply to a flat pull bonus. "power" is not an
+    equipment-relevant category, so ``get_modifier_total`` here is always just the eager
+    CharacterModifier total.
+
+    Not full parity with a cast: this only sums the distinction-authored ``CharacterModifier``
+    side. ``_derive_power``'s FLAT stage also sums condition-sourced POWER contributions
+    (``get_condition_modifier_breakdown``), which a standalone pull never sees.
 
     Args:
         sheet: CharacterSheet instance.

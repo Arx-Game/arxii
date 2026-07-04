@@ -518,8 +518,11 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
 
     Uses bulk operations to avoid per-distinction queries. The chain is:
     1. Bulk-create CharacterDistinction records
-    2. Bulk-create ModifierSource + CharacterModifier records for all effects
-    3. Aggregate and apply resonance total updates
+    2. Bulk-create ModifierSource + CharacterModifier records for all non-resonance-category
+       effects, then reconcile each distinction's resonance grants (standing/currency axis —
+       ``reconcile_distinction_resonance_grants``, the ``DistinctionResonanceGrant`` sidecar;
+       see ``_create_distinction_modifiers_bulk``, #1834)
+    3. Mint a Secret for any ``secret_by_default`` distinction
     """
     from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415

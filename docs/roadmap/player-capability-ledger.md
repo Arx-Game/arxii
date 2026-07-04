@@ -51,7 +51,7 @@ in-fiction trigger is plausible.
 | Capability | Tier | Evidence / home | MVP? |
 |---|---|---|---|
 | Species as **stat-bonuses** + name hierarchy | ✅ PROVEN | `world/species/models.py` | done |
-| **Distinctions** (effects→modifiers, can grant *rituals*) | ✅ PROVEN | `world/distinctions/models.py` | done |
+| **Distinctions** (effects→modifiers, can grant *rituals*, and can grant/shape **resonance** — standing/currency + potency, #1834) | ✅ PROVEN | `world/distinctions/models.py`; `DistinctionResonanceGrant` (`world/magic/models/grants.py`) + `reconcile_distinction_resonance_grants`; CG wiring + starting-aura assertion in `FinalizeCharacterDistinctionResonanceTests.test_cg_distinction_seeds_resonance_and_recomputes_starting_aura` | done |
 | Paths (models, next-options, path-intent) | ✅ PROVEN | `world/classes`, `world/progression` | done |
 | Species **abilities/traits** beyond stats | ✅ PROVEN (infrastructure) | **ADR-0050** + **#1580**: `SpeciesGiftGrant` + `provision_species_gifts` + GIFT anchor cap (`path_stage × 10`) + RESISTANCE pull-effect; E2E `test_species_gift_e2e.py`. Pending: seed real species Minor Gift data. | now |
 | **khati / vampire / lycan**, lineage / bloodline | 🟡 SUBSTRATE | **ADR-0050** + **#1580** (plumbing built — `SpeciesGiftGrant` + `provision_species_gifts`); no species → Minor Gift data rows seeded yet | now |
