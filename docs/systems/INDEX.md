@@ -1577,6 +1577,62 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   specific→general, ADR-0010).
 - **Source:** `src/world/buildings/`
 
+### Ships (#1832)
+Persistent upgrades + repair + ship-as-sanctum + covenant-scale combat bridge, the
+follow-up to #1714's battle-time-only `BattleVehicle`. A ship is a per-kind
+extension of `buildings.Building` (composition, mirroring `Covenant`↔`Organization`);
+the hull stat IS `Building.fortification_level`, reused not duplicated. Full detail:
+[ships.md](ships.md).
+
+- **Models:** `ShipType` (open catalog: base hull/handling/armament/crew/cargo),
+  `ShipDetails` (OneToOne PK → `Building`; `ship_type`, `handling_level`,
+  `armament_level`, `crew_capacity`, `cargo_capacity`, `needs_repair`;
+  `effective_handling()`/`effective_armament()`/`effective_hull()`),
+  `ShipDeployment` (links a `ShipDetails` to its in-battle `BattleVehicle` for one
+  `Battle` — FK direction ships→battles per ADR-0010), `ShipConstructionDetails` /
+  `ShipUpgradeDetails` / `ShipRepairDetails` (per-Project payload rows, `applied_at`
+  idempotency marker, mirror `FortificationUpgradeDetails`'s shape).
+- **Key functions** (`world.ships.services`): `start_ship_construction` /
+  `complete_ship_construction` (spawns Area+Building+deck room+`ShipDetails`),
+  `start_ship_upgrade` / `complete_ship_upgrade` (`SHIP_UPGRADE` Project,
+  monotonic max-set), `start_ship_hull_upgrade` (thin wrapper over
+  `buildings.fortification_services.start_fortification_upgrade` — no separate
+  hull Project kind), `start_ship_repair` / `complete_ship_repair` (clears
+  `needs_repair`). All four completion handlers registered via
+  `world.projects.services.register_kind_handler` at `ShipsConfig.ready()`.
+- **Ship-as-sanctum** (`world.ships.sanctum_bonus`): `ship_sanctum_bonus(ship) ->
+  ShipStatBonus` / `ship_sanctum_capabilities(ship) -> list[Resonance]` read the
+  ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
+  room per ship for MVP) — snapshotted at materialize time, not read live.
+- **Combat bridge** (`world.ships.battle_bridge`):
+  `materialize_ship_as_battle_vehicle(ship, battle, side, place_name=None) ->
+  BattleVehicle` — one-way snapshot of persistent stats (+ sanctum bonus) into a
+  `create_battle_vehicle`-built `BattleVehicle` (hull integrity, `speed`
+  capability, `strength`, level-3+ sanctum capability rows); links a
+  `ShipDeployment`. From there REPOSITION/BREACH/sinking/ejection run through
+  unmodified `world.battles` machinery — see [battles.md](battles.md#battlevehicle).
+- **Repair writeback** (`world.ships.battle_wiring`): `apply_ship_battle_outcome`
+  registered as a **battle-conclusion hook**
+  (`world.battles.conclusion_hooks.register_battle_conclusion_hook`, new pattern
+  for `battles`) — on `conclude_battle`, flags any deployed ship whose hull ended
+  `breached` as `needs_repair`, gating further investment until a `SHIP_REPAIR`
+  Project clears it. `battles` imports nothing from `ships` (ADR-0010).
+- **Telnet:** `CmdShip` (`ship`, `src/commands/ships.py`) — `ship [status]`,
+  `ship commission ship_type=<name> [covenant=<name>] name=<ship name>`,
+  `ship upgrade stat=handling|armament|hull level=<n>`, `ship repair`.
+- **Actions** (`actions/definitions/ships.py`, REGISTRY, `category="ships"`):
+  `CommissionShipAction` (`commission_ship`), `UpgradeShipAction` (`upgrade_ship`)
+  / `RepairShipAction` (`repair_ship`, both gated `IsShipOwnerPrerequisite`),
+  `ShipStatusAction` (`ship_status`, read-only).
+- **REST API:** `GET /api/ship-types/` (catalog), `GET /api/ships/`
+  (`ShipViewSet` — read-only, scoped to the requester's owned ships, direct or
+  covenant-held).
+- **Cross-app dependencies:** `world.buildings`, `world.areas`, `world.projects`,
+  `world.battles` (ships depends on battles' reusable primitives, never the
+  reverse — ADR-0010), `world.magic` (read-only sanctum/thread reads),
+  `world.locations`, `world.scenes`, `world.covenants`.
+- **Source:** `src/world/ships/`
+
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
 `RoomFeatureInstance` decorates a `RoomProfile` and dispatches per-kind logic
