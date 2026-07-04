@@ -285,10 +285,16 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
 The PR body references the approved spec via `Closes #<issue>` — the spec lives
 in the issue body, so there is no spec-file link to pass.
 
-**Before pushing, run `uv run pre-commit run --all-files`** — this matches CI's
-`pre-commit` job exactly. Committing with hooks only checks *changed* files, so
-ruff-format / Prettier / the custom linters can still reflow or flag untouched files
-that CI then rejects. Running the full pass locally avoids a wasted CI round-trip.
+**Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
+`just regression` / any whole-repo suite) as a pre-push precheck.** Running the
+full pass locally at this stage can crash this devcontainer — a real
+resource/stability limit, not a style preference. The per-file pre-commit hooks
+already ran at each commit, and **CI's `pre-commit` job is the gate** — let it
+catch any untouched-file reflow rather than risking the session. Keep to the
+focused checks each task already used (`just test-fast <app>` for a touched app,
+`ruff check <changed files>`). Only if a branch was built with `--no-verify`
+commits (so hooks never ran), scope the catch-up to just the branch's diff —
+`uv run pre-commit run --from-ref origin/main --to-ref HEAD` — never `--all-files`.
 
 ### 6. CI watch
 
