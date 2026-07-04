@@ -2244,7 +2244,17 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `Fortification` (#1713: a defensible structure — wall/gate/battlement — at a
   `BattlePlace`; `defending_side` FK gates BREACH/FORTIFY ownership; `building` FK →
   `buildings.Building` (nullable) snapshots `max_integrity` from
-  `Building.fortification_level`; `integrity`/`max_integrity`/`breached`)
+  `Building.fortification_level`; `integrity`/`max_integrity`/`breached`);
+  `BattleVehicle` (#1714: a ship/airship/dragon/kraken modeled as one in-fiction
+  object pairing a `unit` O2O → `BattleUnit` (the thing that fights) with a
+  `place` O2O → `BattlePlace` (what other units/participants embed onto via
+  their own `place` FK); `vehicle_kind` (`VehicleKind` SHIP/AIRSHIP/DRAGON/KRAKEN);
+  `is_structural` (default True — structural vehicles get a hull `Fortification`
+  via `create_battle_vehicle`; living mounts route destruction through
+  `BattleUnitStatus.DESTROYED` instead); `BattlePlace.x`/`y`/`footprint_radius`
+  (#1714, ADR-0085) place every `BattlePlace` on a shared battle-map plane —
+  `places_overlap` compares two footprints' center distance against the sum of
+  their radii)
 - **Key Services (`world.battles.services`):**
   - Setup: `create_battle`, `add_side`, `add_place`, `add_unit` (`properties`/
     `capability_values`/`individual_count` kwargs, #1794), `enlist_participant`,
@@ -2252,12 +2262,22 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     `create_fortification` (snapshots `max_integrity` from `Building.fortification_level`
     if a `building` is given, #1713)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
-    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 9
+    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 10
     `BattleActionKind` values; scope/command-tier validated for PLACE/SIDE, #1710;
     REPEL/HOLD require scope=PLACE, #1712; BREACH/FORTIFY validate `target_fortification`
-    ownership, #1713), `open_champion_duel` (binds a `BattlePlace` to a
+    ownership, #1713; REPOSITION bypasses the command-tier gate, validated instead against
+    `target_place.vehicle.unit.commander`, #1714; a UNIT-scope STRIKE against a
+    non-overlapping `target_unit`, or a BREACH against a non-overlapping vehicle hull, is
+    rejected via `places_overlap` regardless of command tier — the boarding gate, #1714),
+    `open_champion_duel` (binds a `BattlePlace` to a
     lethal duel via `create_lethal_duel`, gated on an engaged `is_champion_role`, #1710),
     `open_siege_engine_encounter` (same bridge/duel call, no Champion-role gate, #1713)
+  - Vehicles (#1714): `create_battle_vehicle` (creates a paired `BattleUnit` +
+    `BattlePlace`, plus a hull `Fortification` if `is_structural`), `places_overlap`
+    (predicate: do two `BattlePlace` footprints intersect on the battle map, ADR-0085),
+    `eject_vehicle_occupants` (clears embedded units'/participants' `place` FK and
+    applies a drowning/falling hazard consequence; called from resolution on hull
+    breach or living-mount defeat)
   - Conclusion: `check_victory` (graded outcome: decisive if margin ≥ 50, else marginal),
     `conclude_battle` (sets outcome + ends scene; resolves any linked story beat's stakes
     contract via `resolve_battle_beats`, #1785; still never calls `complete_story`),
@@ -2289,9 +2309,11 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `strike`/`rout`/`rally` also accept `side` or `place <name>` scope tokens (#1710/#1712);
   `breach`/`fortify` require `place <name> fortification <kind>` (#1713).
 - **Enums:** `BattleSideRole`, `BattleUnitStatus`, `BattleParticipantStatus`,
-  `BattleActionKind` (9 values, #1713 adds BREACH/FORTIFY), `BattleActionScope` (#1710),
+  `BattleActionKind` (10 values, #1713 adds BREACH/FORTIFY, #1714 adds REPOSITION),
+  `BattleActionScope` (#1710),
   `BattleOutcome`, `UnitQuality`, `TerrainType`, `BattlePosture` (all #1711),
-  `FortificationKind` (WALL/GATE/BATTLEMENT, #1713)
+  `FortificationKind` (WALL/GATE/BATTLEMENT, #1713; HULL added for vehicle hulls, #1714),
+  `VehicleKind` (SHIP/AIRSHIP/DRAGON/KRAKEN, #1714)
 - **Exceptions:** `BattleError` (base + `user_message`) → `BattleConcludedError`,
   `RoundNotOpenError`, `NotAParticipantError`, `CharacterDoesNotKnowTechniqueError`,
   `TechniqueNotBattleReadyError`, `NoCommandHierarchyError`, `InsufficientCommandTierError`,
@@ -2299,7 +2321,10 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   since #1712), `NotAChampionError`,
   `PlaceAlreadyDuelingError` (#1710; also raised by `open_siege_engine_encounter`, #1713),
   `PlaceScopeRequiredError` (#1712), `FortificationTargetRequiredError`,
-  `FortificationOwnershipMismatchError`, `FortificationAlreadyBreachedError` (#1713)
+  `FortificationOwnershipMismatchError`, `FortificationAlreadyBreachedError` (#1713),
+  `NotVehicleCommanderError` (REPOSITION by a non-commander, #1714),
+  `PlacesDoNotOverlapError` (UNIT-scope STRIKE or BREACH targeting a non-overlapping
+  place — the boarding gate, #1714)
 - **Command Hierarchy & the Champion (#1710):** `CovenantRole.command_tier`
   (NONE/SUBORDINATE/SUPREME) + `.is_champion_role`, settable only on `CovenantType.BATTLE`
   roles; `BattleSide.covenant` links a side to the fielding War Covenant. PLACE/SIDE-scope
@@ -2344,7 +2369,34 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   through `DeclareBattleActionAction` and `CmdBattle`'s telnet grammar, the same as every
   other `BattleActionKind` (#1713). See [battles.md](battles.md#sieges-1713) for the full
   mechanism.
-- **Deferred follow-ups:** naval / aerial (#1714), battle writeup page (#1735).
+- **Vehicles (#1714):** `BattleVehicle` pairs a `BattleUnit` (fights, takes STRIKE
+  damage, can be destroyed) with a `BattlePlace` (what other units/participants embed
+  onto). `create_battle_vehicle` builds the pair, plus a hull `Fortification` for
+  structural vehicles (ship/airship) — living mounts (dragon/kraken) have none and
+  route destruction through `BattleUnitStatus.DESTROYED` instead. `REPOSITION` moves
+  a vehicle's `BattlePlace` on the shared `(x, y)` battle-map plane (ADR-0085),
+  gated on `target_place.vehicle.unit.commander` rather than covenant `command_tier`.
+  `places_overlap` then range-gates cross-vehicle targeting: a UNIT-scope STRIKE or a
+  BREACH against another vehicle's hull is rejected (`PlacesDoNotOverlapError`) unless
+  the acting side's place overlaps the target's — the mechanism that makes "boarding"
+  mean something, independent of the room-scoped `can_perceive`. On hull breach or
+  living-mount defeat, `eject_vehicle_occupants` clears every embedded unit's/
+  participant's `place` FK and applies a drowning (ship/kraken) or falling
+  (airship/dragon) hazard consequence (ADR-0073) — abstract units take a flat
+  strength penalty unless they carry the matching `flying`/`aquatic` `Property`; real
+  participants route damage through `resolve_damage_type_resistance` then
+  `process_damage_consequences`. Reposition movement resolution, embark actions, and
+  a dedicated telnet subcommand for REPOSITION remain deferred. See
+  [battles.md](battles.md#battlevehicle) for the full mechanism.
+- **Deferred follow-ups:** battle writeup page (#1735); naval/aerial reposition
+  movement resolution, embark actions, and a dedicated REPOSITION telnet subcommand
+  remain deferred (#1714) — the vehicle model, REPOSITION declaration, overlap-gated
+  boarding, and hull-breach/living-mount-defeat ejection are built (see the Vehicles
+  subsection above). Live narration of battle actions (any kind, not vehicle-specific)
+  is also unbuilt — `push_ephemeral_interaction` requires a player `persona` and
+  battle-linked Scenes are created with `location=None`, skipping room-based
+  broadcast entirely; see the narration-scope correction note in
+  [battles.md](battles.md#battlevehicle).
 - **Test coverage:** unit + integration tests in `src/world/battles/tests/`
   (including `test_siege.py`'s three E2E siege journeys, #1713) and
   `src/world/buildings/tests/test_fortification_upgrade_kind.py` (#1713); E2E journeys

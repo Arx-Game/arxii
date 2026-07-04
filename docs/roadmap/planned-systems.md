@@ -23,10 +23,15 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   by sunlight, fire-immune species, etc. `partial` — **#1740/#1588** built the core unified seam
   (`resolve_damage_type_resistance`; combat/traps/DoT-tick net condition + gift-thread resistance
   against a `damage_type`, immunity = high resistance not boolean, ADR-0073) plus the first live
-  trigger (Sunlight Exposure). Aquatic ("can't drown") and other species-specific triggers beyond
-  sunlight are still unbuilt. The companion mitigation layer (an ally or a location granting cover
-  against a hazard) shipped as **#1744** (ADR-0069): Succor maneuver + location `DAMAGE_TYPE`
-  cascade axis.
+  trigger (Sunlight Exposure). Aquatic ("can't drown") is now built via **#1714**: vehicle
+  hull-breach/living-mount-defeat ejection routes real participants' drowning/falling damage
+  through `resolve_damage_type_resistance` against a `Drowning`/`Falling` `DamageType`
+  (`ensure_drowning_damage_type`/`ensure_falling_damage_type`), so a species/gift with high
+  resistance to that damage type is effectively immune; abstract `BattleUnit`s instead check a
+  flat presence-only `flying`/`aquatic` `Property`. Other species-specific triggers beyond
+  sunlight and the vehicle-hazard pair are still unbuilt. The companion mitigation layer (an
+  ally or a location granting cover against a hazard) shipped as **#1744** (ADR-0069): Succor
+  maneuver + location `DAMAGE_TYPE` cascade axis.
 - **Perception-override / altered-reality scene mode** — "who perceives what is real." Reused by
   dreamstates, illusions, and disguise/guise. A scene variety over the `SceneRound` seam. `intent`.
 
@@ -184,7 +189,10 @@ Build to the ADR; these are not open questions. See
   Actions/commands (see audit NO-SURFACE). `intent`.
 - **Store / shop / vendor + player↔player trade / barter / auction** — #923, `intent`.
 - **Ship system** — vessels, crew, sea travel, mission integration. Connects to **boats / sea travel /
-  drowning** and the immunity framework (who can't drown). `intent`, partly recorded.
+  drowning** and the immunity framework (who can't drown). `partial` — **#1714** is the first
+  concrete build: a battle-time-only `BattleVehicle` (ship/airship/dragon/kraken), reachable only
+  inside a `Battle` and discarded with it, no persistence, crew roster, or out-of-combat travel.
+  **#1832** is the follow-up covering persistent upgrades, repair, and ship-as-sanctum.
 - **Servant / retriever NPC entity**; **vault security / access lists / theft**;
   **building→neighborhood→domain progression** (#696); **room-feature systems** (Library/Lab/Training
   Room/Command Center/Granary/Cannon Deck — #675, only Sanctum real); **future Project kinds** (#673);

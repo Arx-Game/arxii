@@ -42,8 +42,14 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   + win-gated Legend shipped (#1785). Battle-flow actions (rout/rally/repel/hold, second
   BattleUnit.morale resource, BattlePlace.controlled_by objective) shipped (#1712). Siege
   warfare: Fortification objectives + BREACH/FORTIFY + persistent
-  Building.fortification_level investment (#1713).
-  Deferred: naval/aerial (#1714), battle writeup page (#1735).
+  Building.fortification_level investment (#1713). Naval-ship vertical slice shipped
+  (#1714): `BattleVehicle` (unit+place pair), REPOSITION declaration gated on vehicle
+  commander, overlap-gated cross-vehicle targeting (`places_overlap` — the boarding
+  gate), hull-breach/living-mount-defeat ejection + drowning/falling hazard. Airship/
+  dragon/kraken remain data variants (`VehicleKind`) pending their own end-to-end
+  pass — no dedicated content, telnet reposition subcommand, or reposition-movement
+  resolution yet.
+  Deferred: battle writeup page (#1735).
 - Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
 
 ## Reserved term: "clash"
