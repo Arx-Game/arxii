@@ -15,6 +15,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
+from world.battles.conclusion_hooks import run_battle_conclusion_hooks
 from world.battles.constants import (
     BASE_INTEGRITY,
     DECISIVE_MARGIN,
@@ -807,6 +808,7 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     scene.save(update_fields=["is_active", "date_finished"])
 
     resolve_battle_beats(battle)
+    run_battle_conclusion_hooks(battle)
 
     return battle
 
