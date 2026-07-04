@@ -47,6 +47,17 @@ class Room(ObjectParent, DefaultRoom):
         names = [f.display_name for f in functionaries_in_room(get_room_profile(self))]
         if names:
             text = f"{text}\n|wHere you can speak with:|n {', '.join(names)}"
+        # #1450 — a Notice Board is a feature, not an object, so hint it on look
+        # (a Town Crier already surfaces via the functionaries line above).
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.services import active_hub_feature
+
+        hub = active_hub_feature(get_room_profile(self))
+        if hub is not None and (
+            hub.feature_kind.service_strategy == RoomFeatureServiceStrategy.NOTICE_BOARD
+        ):
+            # PLACEHOLDER flavor line (Apostate rewrite pass; keep dash-free).
+            text = f"{text}\n|wA notice board stands here; try |ctidings local|w.|n"
         # #1765 — the looker's own pursuit heat here (self-only; None when SAFE).
         from world.justice.display import room_heat_line
 
@@ -130,6 +141,7 @@ class Room(ObjectParent, DefaultRoom):
         super().at_object_receive(obj, source_location, **kwargs)
         self._broadcast_room_state(exclude=obj)
         self._echo_public_gossip(obj)
+        self._echo_hub_tidings(obj)
 
     def _echo_public_gossip(self, obj) -> None:
         """Let a character arriving at a social hub overhear its public gossip (#1572).
@@ -144,6 +156,37 @@ class Room(ObjectParent, DefaultRoom):
         lines = public_gossip_lines(self)
         if lines:
             obj.msg("\n".join(lines))
+
+    def _echo_hub_tidings(self, obj) -> None:
+        """Give an arriving character a taste of the civic hub's freshest tidings (#1450).
+
+        Only fires in rooms carrying an active hub feature (Notice Board / Town Crier),
+        so ordinary moves short-circuit on one cheap feature lookup. Echoes the two
+        freshest items; ``tidings local`` is the full read.
+        """
+        if not obj.is_typeclass("typeclasses.characters.Character", exact=False):
+            return
+        from world.areas.services import get_room_profile
+        from world.room_features.constants import RoomFeatureServiceStrategy
+        from world.room_features.services import active_hub_feature
+
+        feature = active_hub_feature(get_room_profile(self))
+        if feature is None:
+            return
+        from world.tidings.services import hub_feed_for_room
+
+        feed = hub_feed_for_room(self, limit=2)
+        if not feed:
+            return
+        is_crier = feature.feature_kind.service_strategy == RoomFeatureServiceStrategy.TOWN_CRIER
+        # PLACEHOLDER flavor lines (Apostate rewrite pass; keep dash-free).
+        lead = (
+            "|wA crier's voice carries over the square:|n"
+            if is_crier
+            else "|wFresh postings crowd the notice board here:|n"
+        )
+        lines = [lead, *(f"  {item.subject}: {item.headline}" for item in feed)]
+        obj.msg("\n".join(lines))
 
     def at_object_leave(self, obj, target_location, **kwargs):
         """Notify occupants when an object leaves.

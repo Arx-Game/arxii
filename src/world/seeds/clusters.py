@@ -115,6 +115,16 @@ def _seed_perception() -> None:
     seed_perception_condition_content()
 
 
+def _seed_civic_hubs() -> None:
+    from world.room_features.seeds import (  # noqa: PLC0415
+        ensure_notice_board_kind,
+        ensure_town_crier_kind,
+    )
+
+    ensure_notice_board_kind()
+    ensure_town_crier_kind()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -162,6 +172,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
     "perception": _seed_perception,
+    # Civic hubs: the Notice Board / Town Crier RoomFeatureKinds + the crier
+    # NPCRole (#1450). Instances (which room carries one) are world data.
+    "civic_hubs": _seed_civic_hubs,
 }
 
 
@@ -207,6 +220,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
+    from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
@@ -247,4 +261,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "stealth": [],
         # Perception seeds the Concealed ConditionCategory + ConditionTemplate (#1225).
         "perception": [ConditionTemplate],
+        # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).
+        "civic_hubs": [RoomFeatureKind],
     }

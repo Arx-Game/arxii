@@ -39,3 +39,18 @@ class RoomFeaturesConfig(AppConfig):
             RoomFeatureServiceStrategy.COMMAND_CENTER,
             handle_command_center_progression,
         )
+
+        # Civic-hub readers (#1450) are likewise generic — home app is here.
+        from world.room_features.services import (  # noqa: PLC0415
+            handle_notice_board_progression,
+            handle_town_crier_progression,
+        )
+
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.NOTICE_BOARD,
+            handle_notice_board_progression,
+        )
+        register_room_feature_strategy(
+            RoomFeatureServiceStrategy.TOWN_CRIER,
+            handle_town_crier_progression,
+        )

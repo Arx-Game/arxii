@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { startScene, finishScene } from '@/scenes/queries';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionScene } from '@/store/gameSlice';
-import type { RoomStateObject, SceneSummary } from '@/hooks/types';
+import type { HubTidings, RoomStateObject, SceneSummary } from '@/hooks/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { dispatchRoomBuilder } from '@/buildings/api';
@@ -17,6 +17,7 @@ import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { ObjectsList } from './room-panel/ObjectsList';
 import { RoomEditorPanel } from './room-panel/RoomEditorPanel';
+import { HubTidingsPanel } from './room-panel/HubTidingsPanel';
 
 export interface RoomData {
   id: number;
@@ -28,6 +29,7 @@ export interface RoomData {
   exits: RoomStateObject[];
   is_owner: boolean;
   is_public: boolean;
+  hub: HubTidings | null;
 }
 
 interface RoomPanelProps {
@@ -178,6 +180,8 @@ export function RoomPanel({
       )}
 
       {room.description && <RoomDescription description={room.description} />}
+
+      {room.hub && <HubTidingsPanel hub={room.hub} />}
 
       <CharactersList characters={room.characters} onCharacterClick={onCharacterClick} />
       <ExitsList exits={room.exits} onExit={handleExit} />

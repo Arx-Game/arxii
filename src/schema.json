@@ -45310,6 +45310,9 @@ components:
         occurred_at:
           type: string
           format: date-time
+        category:
+          type: string
+          nullable: true
       required:
       - headline
       - kind

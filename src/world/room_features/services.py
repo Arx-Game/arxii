@@ -15,11 +15,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from world.room_features.constants import RoomFeatureServiceStrategy
+
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
+    from evennia_extensions.models import RoomProfile
     from world.checks.types import CheckOutcome
     from world.projects.models import Project
+    from world.room_features.models import RoomFeatureInstance, RoomFeatureProgressionDetails
     from world.scenes.models import Persona
 
 
@@ -122,17 +126,11 @@ def can_modify_room_features(persona: Persona, room: DefaultObject) -> bool:
     return is_owner(persona, room) or is_tenant(persona, room)
 
 
-def handle_command_center_progression(
-    project: Project,
-    target_level: int,
-    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
-) -> None:
-    """COMMAND_CENTER strategy (#930): install or level the feature instance.
+def _install_or_level_feature(project: Project, target_level: int) -> RoomFeatureProgressionDetails:
+    """Shared row-only progression: create the instance at L1 or bump its level.
 
-    Unlike Sanctum (ritual-installed), a Command Center installs through the
-    plain ROOM_FEATURE_PROGRESSION project — level 1 creates the instance,
-    higher targets bump it. Its 'content' is reachability: the family books
-    surface where a Command Center stands.
+    Returns the project's progression details so kind-specific handlers can hang
+    side effects (e.g. the Town Crier's functionary placement) off the target room.
     """
     from django.utils import timezone as _tz  # noqa: PLC0415
 
@@ -158,8 +156,77 @@ def handle_command_center_progression(
             feature_kind=details.target_feature_kind,
             level=max(1, target_level),
         )
-        return
+        return details
     if target_level > instance.level:
         instance.level = target_level
         instance.last_upgraded_at = _tz.now()
         instance.save(update_fields=["level", "last_upgraded_at"])
+    return details
+
+
+def handle_command_center_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """COMMAND_CENTER strategy (#930): install or level the feature instance.
+
+    Unlike Sanctum (ritual-installed), a Command Center installs through the
+    plain ROOM_FEATURE_PROGRESSION project — level 1 creates the instance,
+    higher targets bump it. Its 'content' is reachability: the family books
+    surface where a Command Center stands.
+    """
+    _install_or_level_feature(project, target_level)
+
+
+def handle_notice_board_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """NOTICE_BOARD strategy (#1450): row-only install.
+
+    The board's 'content' is reachability — where one stands, the room carries
+    the local tidings slice (arrival echo, ``tidings local``, web hub panel).
+    """
+    _install_or_level_feature(project, target_level)
+
+
+def handle_town_crier_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """TOWN_CRIER strategy (#1450): install the row AND place the crier NPC.
+
+    The crier is a Functionary of the seeded "Town Crier" NPCRole, placed
+    idempotently in the target room — the visible IC anchor for the same
+    local-tidings reader the Notice Board provides.
+    """
+    from world.npc_services.functionaries import place_functionary  # noqa: PLC0415
+    from world.room_features.seeds import ensure_town_crier_role  # noqa: PLC0415
+
+    details = _install_or_level_feature(project, target_level)
+    place_functionary(role=ensure_town_crier_role(), room=details.target_room_profile)
+
+
+def active_hub_feature(room_profile: RoomProfile) -> RoomFeatureInstance | None:
+    """The room's active civic-hub feature (Notice Board or Town Crier), or None.
+
+    ``RoomFeatureInstance`` is a OneToOne per room, so a room carries at most one
+    hub surface — board XOR crier. Callers gate every hub read on this.
+    """
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    return (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy__in=(
+                RoomFeatureServiceStrategy.NOTICE_BOARD,
+                RoomFeatureServiceStrategy.TOWN_CRIER,
+            ),
+        )
+        .select_related("feature_kind")
+        .active()
+        .first()
+    )

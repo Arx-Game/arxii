@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type {
   GameMessage,
+  HubTidings,
   InteractionWsPayload,
   RoomStateObject,
   SceneSummary,
@@ -18,6 +19,8 @@ interface RoomData {
   exits: RoomStateObject[];
   is_owner: boolean;
   is_public: boolean;
+  /** Civic-hub tidings block; null when no board/crier stands here (#1450). */
+  hub: HubTidings | null;
 }
 
 interface Session {
