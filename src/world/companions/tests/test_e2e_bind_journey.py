@@ -76,6 +76,7 @@ class CompanionBindJourneyTests(EvenniaTestCase):
             actor=self.owner, gift_id=self.gift.pk, archetype_id=direwolf.pk, name="Ghost"
         )
         self.assertFalse(result.success)
+        self.assertIn("enough Companion Capacity", result.message)
         self.assertFalse(Companion.objects.filter(name="Ghost").exists())
 
         # Release the Wolf — object gone, row persists with released_at set.
