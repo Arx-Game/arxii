@@ -10,6 +10,7 @@ import { PlaceBar } from '../components/PlaceBar';
 import { RoomPositionsPanel } from '../components/RoomPositionsPanel';
 import { HighlightReel } from '../components/HighlightReel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
+import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVeilsCard';
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
@@ -124,6 +125,7 @@ export function SceneDetailPage() {
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
+        {scene && <SceneLinesAndVeilsCard sceneId={id} />}
         <PlaceBar sceneId={id} />
         <RoomPositionsPanel sceneId={id} />
         <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
