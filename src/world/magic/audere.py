@@ -120,17 +120,14 @@ class AudereOfferResult:
 
 
 def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -> bool:
-    """Return True if runtime intensity resolves to a tier at or above minimum."""
-    from world.magic.models import IntensityTier
+    """Return True if runtime intensity resolves to a tier at or above minimum.
 
-    resolved_tier = (
-        IntensityTier.objects.filter(threshold__lte=runtime_intensity)
-        .order_by("-threshold")
-        .first()
-    )
-    if resolved_tier is None:
-        return False
-    return resolved_tier.threshold >= minimum_tier_threshold
+    Mathematically equivalent to ``runtime_intensity >= minimum_tier_threshold``:
+    the resolved tier is the max IntensityTier whose threshold <= runtime_intensity,
+    and that tier's threshold >= minimum iff runtime_intensity >= minimum.
+    The IntensityTier ladder query is therefore unnecessary.
+    """
+    return runtime_intensity >= minimum_tier_threshold
 
 
 def _check_soulfray_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
