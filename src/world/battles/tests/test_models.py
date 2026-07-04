@@ -9,12 +9,14 @@ from world.battles.constants import (
     FortificationKind,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.battles.factories import (
     BattleFactory,
     BattlePlaceFactory,
     BattleSideFactory,
     BattleUnitFactory,
+    BattleVehicleFactory,
     FortificationFactory,
 )
 from world.battles.models import (
@@ -240,3 +242,19 @@ class FortificationModelTests(TestCase):
             place=self.place, defending_side=self.side, kind=FortificationKind.GATE
         )
         self.assertEqual(self.place.fortifications.count(), 2)
+
+
+class BattleVehicleTests(TestCase):
+    def test_pairs_one_unit_and_one_place(self):
+        unit = BattleUnitFactory()
+        place = BattlePlaceFactory(battle=unit.battle)
+        vehicle = BattleVehicleFactory(unit=unit, place=place, vehicle_kind=VehicleKind.SHIP)
+
+        self.assertEqual(vehicle.unit, unit)
+        self.assertEqual(vehicle.place, place)
+        self.assertTrue(vehicle.is_structural)
+
+    def test_dragon_defaults_to_non_structural(self):
+        vehicle = BattleVehicleFactory(vehicle_kind=VehicleKind.DRAGON, is_structural=False)
+
+        self.assertFalse(vehicle.is_structural)

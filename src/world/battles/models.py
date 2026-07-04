@@ -24,6 +24,7 @@ from world.battles.constants import (
     FortificationKind,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
@@ -773,3 +774,40 @@ class BattleOutcomeMapping(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"BattleOutcomeMapping({self.get_outcome_display()})"
+
+
+class BattleVehicle(SharedMemoryModel):
+    """A vessel or great mount: pairs one BattleUnit (fights) with one BattlePlace
+    (what units/PCs embed on) as a single in-fiction object (#1714).
+
+    unit.place is intentionally left None — the vehicle's own Unit is not "at"
+    a front, it IS the place other units/participants embed onto via their own
+    place FK. Do not set unit.place to this vehicle's own place.
+    """
+
+    unit = models.OneToOneField(
+        BattleUnit,
+        on_delete=models.CASCADE,
+        related_name="vehicle",
+    )
+    place = models.OneToOneField(
+        BattlePlace,
+        on_delete=models.CASCADE,
+        related_name="vehicle",
+    )
+    vehicle_kind = models.CharField(
+        max_length=20,
+        choices=VehicleKind.choices,
+        default=VehicleKind.SHIP,
+    )
+    is_structural = models.BooleanField(
+        default=True,
+        help_text="True for constructed vessels (ship/airship) — destruction "
+        "goes through a hull Fortification breach. False for living mounts "
+        "(dragon/kraken) — destruction reuses BattleUnitStatus.DESTROYED. "
+        "Authored, not derived from vehicle_kind, so a future design can "
+        "still model a 'living hull' if needed (#1714).",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.get_vehicle_kind_display()} ({self.place.name})"
