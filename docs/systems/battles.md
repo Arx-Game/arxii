@@ -72,6 +72,10 @@ A named front or zone within a battle (e.g. "The Main Gates", "Eastern Flank").
 | `terrain_type` | CharField | `TerrainType` — OPEN / DIFFICULT / FORTIFIED / ELEVATED / FLOODED / URBAN (#1711); default OPEN. See ADR-0081 for why terrain lives here rather than on the room `Position`/`PositionEdge` graph. |
 | `movement_cost` | PositiveSmallIntegerField | Default 1 (#1711). Authored cost for a future reposition/movement action — not yet filed as an issue; #1712 explicitly did not build this. Data only. |
 | `controlled_by` | FK → `BattleSide` (null, `related_name="controlled_places"`) | Which side holds this front as an objective (#1712); set by a successful HOLD declaration. `None` means uncontrolled/contested. |
+| `weather_override` | FK → `WeatherType` (null, `related_name="overriding_battle_places"`) | Local weather exception at this front (#1715); beats the Battle-level ambient weather here only. Cleared at round-boundary expiry. |
+| `weather_override_expires_round` | PositiveIntegerField (null) | Absolute round number `weather_override` expires at (#1715). Cleared alongside `weather_override` at round-boundary expiry. |
+| `x` / `y` | DecimalField(8, 2) (default 0) | Position on the battle's internal battle-map coordinate plane (#1714). Additive to ADR-0081 — see ADR-0085. |
+| `footprint_radius` | DecimalField(6, 2) (default 1) | How much of the battle-map grid this place occupies (#1714). Two places overlap when the distance between their `(x, y)` centers is less than the sum of their `footprint_radius` values — see `world.battles.services.places_overlap`. |
 
 **Constraint:** unique `(battle, name)`.
 
@@ -521,6 +525,8 @@ Multi-write operations use `@transaction.atomic`.
 | `check_victory` | `(*, battle) -> BattleOutcome \| None` | Returns the graded outcome if any side has reached its threshold, else None. Decisive if margin ≥ `DECISIVE_MARGIN` (50). |
 | `conclude_battle` | `(*, battle, outcome) -> Battle` | Sets outcome + `concluded_at`; ends the backing scene (`is_active=False`); resolves any linked story beat's stakes contract via `resolve_battle_beats` (#1785). Does NOT call `complete_story` — a war arc spans multiple battles, so one battle's conclusion must not auto-close the whole campaign story. Idempotent. |
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
+| `create_battle_vehicle` | `(*, battle, side, place_name, vehicle_kind=VehicleKind.SHIP, is_structural=True) -> BattleVehicle` | Creates a vessel/mount: a paired `BattleUnit` + `BattlePlace`, plus a hull `Fortification` if `is_structural` (#1714). The unit's own `place` stays `None`; other units/participants embed by pointing their own `place` FK at `vehicle.place`. |
+| `places_overlap` | `(place_a, place_b) -> bool` | Whether two `BattlePlace` footprints intersect on the battle map: distance between `(x, y)` centers < sum of `footprint_radius` values (#1714, ADR-0085). |
 
 ## Actions (`src/actions/definitions/battles.py`)
 

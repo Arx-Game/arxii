@@ -6,6 +6,8 @@ begin_battle_round, and the BattleError exception hierarchy.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import TestCase
 from evennia import create_object
 
@@ -40,6 +42,7 @@ from world.battles.services import (
     create_fortification,
     open_champion_duel,
     open_siege_engine_encounter,
+    places_overlap,
 )
 from world.buildings.factories import BuildingFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -602,3 +605,27 @@ class CreateBattleVehicleTests(TestCase):
 
         self.assertFalse(vehicle.is_structural)
         self.assertEqual(vehicle.place.fortifications.count(), 0)
+
+
+class PlacesOverlapTests(TestCase):
+    def test_overlapping_footprints(self):
+        battle = BattleFactory()
+        a = BattlePlaceFactory(
+            battle=battle, x=Decimal(0), y=Decimal(0), footprint_radius=Decimal(5)
+        )
+        b = BattlePlaceFactory(
+            battle=battle, x=Decimal(6), y=Decimal(0), footprint_radius=Decimal(5)
+        )
+
+        self.assertTrue(places_overlap(a, b))
+
+    def test_non_overlapping_footprints(self):
+        battle = BattleFactory()
+        a = BattlePlaceFactory(
+            battle=battle, x=Decimal(0), y=Decimal(0), footprint_radius=Decimal(1)
+        )
+        b = BattlePlaceFactory(
+            battle=battle, x=Decimal(100), y=Decimal(0), footprint_radius=Decimal(1)
+        )
+
+        self.assertFalse(places_overlap(a, b))

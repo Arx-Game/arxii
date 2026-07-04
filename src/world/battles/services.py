@@ -314,6 +314,19 @@ def create_battle_vehicle(
     return vehicle
 
 
+def places_overlap(place_a: BattlePlace, place_b: BattlePlace) -> bool:
+    """Whether two BattlePlaces' footprints intersect on the battle map (#1714).
+
+    Distance between centers < sum of radii. Same place always overlaps itself
+    (distance 0).
+    """
+    dx = place_a.x - place_b.x
+    dy = place_a.y - place_b.y
+    distance_squared = dx * dx + dy * dy
+    radius_sum = place_a.footprint_radius + place_b.footprint_radius
+    return distance_squared < radius_sum * radius_sum
+
+
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
     """Set a battle side's tactical posture (#1711).
 

@@ -232,6 +232,23 @@ class BattlePlace(SharedMemoryModel):
         help_text="Absolute round number this place's weather_override expires at "
         "(#1715). Cleared alongside weather_override at round-boundary expiry.",
     )
+    x = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        help_text="Position on the battle's internal battle-map coordinate plane "
+        "(#1714). Additive to ADR-0081, which only rejected anchoring BattlePlace "
+        "to the room-level Position/PositionEdge graph — see ADR-0085.",
+    )
+    y = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    footprint_radius = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=1,
+        help_text="How much of the battle-map grid this place occupies (#1714). "
+        "Two places overlap when the distance between their (x, y) centers is "
+        "less than the sum of their footprint_radius values.",
+    )
 
     class Meta:
         ordering = ["battle", "name"]
