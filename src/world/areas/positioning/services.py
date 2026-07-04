@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from django.db.models import Q
@@ -21,6 +22,7 @@ from world.areas.positioning.models import (
     Position,
     PositionBlueprint,
     PositionEdge,
+    PositionShelter,
 )
 from world.mechanics.models import ChallengeInstance
 
@@ -28,6 +30,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.conditions.models import DamageType
     from world.mechanics.models import ChallengeTemplate
 
 
@@ -676,3 +679,35 @@ def maybe_emit_fall(objectdb: ObjectDB, position: Position) -> bool:
         location=objectdb.location,
     )
     return True
+
+
+# ---------------------------------------------------------------------------
+# Position shelter
+# ---------------------------------------------------------------------------
+
+
+def position_shelter_value(position: Position, damage_type: DamageType) -> int:
+    """Sum of all PositionShelter.current_value() for (position, damage_type).
+
+    Returns 0 if no shelter rows exist. Multiple rows stack additively.
+    """
+    return sum(ps.current_value() for ps in position.shelters.filter(damage_type=damage_type))
+
+
+def cleanup_position_shelters(*, now: datetime | None = None) -> int:
+    """Delete PositionShelter rows whose current_value() has decayed to zero.
+
+    Iterates rows with non-zero ``change_per_day`` (zero-rate rows never
+    decay), computes ``current_value()`` in Python, and deletes those whose
+    value has crossed zero. Returns the count of rows deleted.
+
+    Mirrors ``world.locations.services.cleanup_decayed_modifiers``.
+    """
+    from django.db import transaction
+
+    with transaction.atomic():
+        candidates = PositionShelter.objects.exclude(change_per_day=0).select_for_update()
+        to_delete_ids: list[int] = [row.pk for row in candidates if row.current_value(now=now) == 0]
+        if to_delete_ids:
+            PositionShelter.objects.filter(pk__in=to_delete_ids).delete()
+        return len(to_delete_ids)

@@ -12,8 +12,10 @@ from world.areas.positioning.models import (
 )
 from world.areas.positioning.services import (
     add_blueprint_position,
+    cleanup_position_shelters,
     create_blueprint,
     instantiate_blueprint,
+    position_shelter_value,
 )
 from world.conditions.factories import ensure_radiant_damage_type
 
@@ -100,3 +102,65 @@ class BlueprintPositionShelterModelTests(TestCase):
             BlueprintPositionShelter.objects.create(
                 blueprint_position=self.bp_pos, damage_type=self.radiant, value=75
             )
+
+
+class PositionShelterValueTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.radiant = ensure_radiant_damage_type()
+        cls.blueprint = create_blueprint("Tavern")
+        cls.bp_pos = add_blueprint_position(cls.blueprint, "Under the Table")
+        cls.room_profile = RoomProfileFactory()
+        cls.positions = instantiate_blueprint(cls.blueprint, cls.room_profile.objectdb)
+        cls.pos = cls.positions[0]
+
+    def test_no_shelter_rows_returns_zero(self):
+        """A position with no shelter rows returns 0."""
+        self.assertEqual(position_shelter_value(self.pos, self.radiant), 0)
+
+    def test_single_shelter_row(self):
+        """A single shelter row returns its value."""
+        PositionShelter.objects.create(position=self.pos, damage_type=self.radiant, value=100)
+        self.assertEqual(position_shelter_value(self.pos, self.radiant), 100)
+
+    def test_multiple_shelter_rows_stack(self):
+        """Multiple shelter rows on the same position sum additively."""
+        PositionShelter.objects.create(position=self.pos, damage_type=self.radiant, value=30)
+        PositionShelter.objects.create(
+            position=self.pos, damage_type=self.radiant, value=70, source="ward"
+        )
+        self.assertEqual(position_shelter_value(self.pos, self.radiant), 100)
+
+
+class CleanupPositionSheltersTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.radiant = ensure_radiant_damage_type()
+        cls.blueprint = create_blueprint("Tavern")
+        cls.bp_pos = add_blueprint_position(cls.blueprint, "Under the Table")
+        cls.room_profile = RoomProfileFactory()
+        cls.positions = instantiate_blueprint(cls.blueprint, cls.room_profile.objectdb)
+        cls.pos = cls.positions[0]
+
+    def test_static_shelter_not_deleted(self):
+        """A zero-rate shelter is never deleted."""
+        PositionShelter.objects.create(
+            position=self.pos, damage_type=self.radiant, value=100, change_per_day=0
+        )
+        deleted = cleanup_position_shelters()
+        self.assertEqual(deleted, 0)
+        self.assertEqual(PositionShelter.objects.count(), 1)
+
+    def test_decayed_shelter_deleted(self):
+        """A shelter that has decayed to zero is deleted."""
+        now = timezone.now()
+        PositionShelter.objects.create(
+            position=self.pos,
+            damage_type=self.radiant,
+            value=10,
+            change_per_day=-10,
+            applied_at=now - timedelta(days=5),
+        )
+        deleted = cleanup_position_shelters(now=now)
+        self.assertEqual(deleted, 1)
+        self.assertEqual(PositionShelter.objects.count(), 0)
