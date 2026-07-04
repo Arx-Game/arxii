@@ -785,7 +785,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     BattleOutcomeMapping and completing the beat through the same
     record_outcome_tier_completion seam combat/missions already use. Idempotent:
     if the battle is already concluded, returns it unchanged (resolve_battle_beats
-    does not re-fire).
+    does not re-fire). After beat resolution, runs every hook registered via
+    register_battle_conclusion_hook (#1832) — e.g. ships' apply_ship_battle_outcome.
 
     Args:
         battle: The ``Battle`` to conclude.
