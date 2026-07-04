@@ -569,6 +569,53 @@ class FortificationUpgradeDetails(SharedMemoryModel):
         return f"Fortification upgrade -> level {self.target_level} for building {self.building_id}"
 
 
+class BuildingRenovationDetails(SharedMemoryModel):
+    """Per-(BUILDING_RENOVATION Project) details payload (#1858).
+
+    Re-points an existing Building to a different admin-authored
+    ``BuildingKind`` on completion, changing its descriptive flag set
+    (e.g. a residential manor becomes an "Occult Manor"). Set-once semantics
+    — mirrors ``FortificationUpgradeDetails``: the handler assigns
+    ``Building.kind`` exactly once via the ``applied_at`` idempotency
+    marker. Does not change ``target_size`` / ``space_budget`` (use
+    ``BUILDING_EXTENSION`` / ``BUILDING_UPGRADE`` for those).
+
+    See ``world/buildings/AGENT_GLOSSARY.md``: the nine boolean flags
+    (``is_occult`` etc.) are catalog-level cosmetic/filter tags on
+    ``BuildingKind``, not per-instance state — so a renovation swaps the
+    catalog row rather than mutating flags on ``Building`` itself.
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="building_renovation_details",
+        primary_key=True,
+    )
+    building = models.ForeignKey(
+        "buildings.Building",
+        on_delete=models.CASCADE,
+        related_name="renovation_details",
+    )
+    target_kind = models.ForeignKey(
+        "buildings.BuildingKind",
+        on_delete=models.PROTECT,
+        related_name="renovation_targets",
+        help_text="The catalog BuildingKind this building is re-pointed to on completion.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the kind was re-pointed; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Building renovation details"
+
+    def __str__(self) -> str:
+        return f"Renovation -> kind {self.target_kind_id} for building {self.building_id}"
+
+
 class InteriorDesignDetails(SharedMemoryModel):
     """Per-(INTERIOR_DESIGN Project) details payload (#670).
 

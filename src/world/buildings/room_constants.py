@@ -41,3 +41,9 @@ EXTENSION_THRESHOLD_PER_UNIT = 100
 # pending the economy pass (mirrors EXTENSION_THRESHOLD_PER_UNIT above).
 MAX_FORTIFICATION_LEVEL = 5
 FORTIFICATION_UPGRADE_THRESHOLD_PER_LEVEL = 150
+
+# Building renovation (#1858). Re-points a Building to a different
+# admin-authored BuildingKind on completion, changing its flag set. Flat
+# PLACEHOLDER threshold pending the economy pass (renovations don't scale
+# by units/levels like extension/fortification; a single reclassification cost).
+RENOVATION_THRESHOLD = 150
