@@ -16,6 +16,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import (
     EffectKind,
+    RegardPolarity,
     SanctumSlotKind,
     TargetKind,
     VitalBonusTarget,
@@ -159,6 +160,15 @@ class ThreadPullEffect(SharedMemoryModel):
         help_text=(
             "Gift-specific pull effect (GIFT target_kind only). Null = applies to all "
             "threads matching the lookup key (existing covenant/sanctum behavior)."
+        ),
+    )
+    regard_polarity = models.CharField(
+        max_length=16,
+        choices=RegardPolarity.choices,
+        default=RegardPolarity.NEUTRAL,
+        help_text=(
+            "How Court-role (COVENANT_ROLE) pull modulation responds to the leader's "
+            "signed regard for the target. Ignored for other thread kinds."
         ),
     )
 

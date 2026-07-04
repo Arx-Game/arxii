@@ -131,6 +131,16 @@ class EffectKind(models.TextChoices):
     RESISTANCE = "RESISTANCE", "Damage-Type Resistance"
 
 
+class RegardPolarity(models.TextChoices):
+    """How a pull effect responds to the reference persona's signed regard for the
+    target (#1831). OFFENSIVE empowered by negative regard, PROTECTIVE by positive,
+    NEUTRAL by either. Only consulted by Court-role (COVENANT_ROLE) pull modulation."""
+
+    OFFENSIVE = "offensive", "Offensive (empowered vs. disfavored target)"
+    PROTECTIVE = "protective", "Protective (empowered vs. favored target)"
+    NEUTRAL = "neutral", "Neutral / social (empowered by either sign)"
+
+
 class VitalBonusTarget(models.TextChoices):
     MAX_HEALTH = "MAX_HEALTH", "Max Health"
     DAMAGE_TAKEN_REDUCTION = "DAMAGE_TAKEN_REDUCTION", "Damage Taken Reduction"
