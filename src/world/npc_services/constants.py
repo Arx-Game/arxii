@@ -52,3 +52,11 @@ MISSION_POOL_ORG_COUNT_BANDS: tuple[tuple[int, int], ...] = (
     (7, 4),  # honored
     (8, 5),  # revered
 )
+
+
+class RegardTargetType(models.TextChoices):
+    """Discriminator for what an ``NpcRegard`` row's opinion targets."""
+
+    PERSONA = "persona", "Persona"
+    ORGANIZATION = "organization", "Organization"
+    SOCIETY = "society", "Society"
