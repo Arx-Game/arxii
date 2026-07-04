@@ -412,6 +412,167 @@ class InstallEndpointTests(SanctumViewSetTestBase):
 
 
 # ===========================================================================
+# install — components ownership (Finding 1, #707 review fix)
+#
+# Unlike ``InstallEndpointTests`` above (which mocks ``SanctumInstallAction``
+# entirely), these tests run the REAL action end-to-end through the web
+# ``install`` endpoint so the component-ownership check is exercised for
+# real: a legitimately-owned component gets consumed on success, and a
+# component belonging to someone else's inventory is rejected before the
+# Action ever runs (so it is never touched/consumed).
+# ===========================================================================
+
+
+def _mock_check_success_components() -> object:
+    """Return a fake CheckResult whose outcome tier maps to SUCCESS (success_level=1).
+
+    Mirrors ``test_sanctum_install_action_components.py``'s helper — the
+    Sanctification check is patched deterministic so these tests exercise
+    the component-ownership seam, not the check-roll RNG.
+    """
+    outcome = type("Outcome", (), {"success_level": 1})()
+    return type("CheckResult", (), {"outcome": outcome})()
+
+
+class InstallComponentsOwnershipEndpointTests(SanctumViewSetTestBase):
+    """Real (unmocked) install through the web endpoint, component ownership."""
+
+    def setUp(self) -> None:
+        super().setUp()
+
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+        from world.locations.constants import HolderType, LocationParentType
+        from world.locations.factories import LocationOwnershipFactory
+        from world.magic.factories import CharacterResonanceFactory, ResonanceTierFactory
+        from world.magic.seeds_checks import ensure_magic_check_content
+        from world.magic.seeds_sanctum import (
+            ensure_sanctification_personal_ritual,
+            ensure_sanctum_rituals,
+        )
+        from world.magic.seeds_touchstone_content import ensure_touchstone_content
+        from world.room_features.models import RoomFeatureKind
+        from world.room_features.seeds import SANCTUM_KIND_NAME, ensure_sanctum_kind
+
+        # The base class's ``setUp`` already created a generic SANCTUM-strategy
+        # RoomFeatureKind via ``_personal_sanctum()`` (for the mocked-out
+        # endpoint tests above). ``ensure_sanctum_kind()`` get_or_creates by
+        # ``service_strategy`` — it would find that row and leave its name
+        # alone, but ``perform_sanctification`` looks the kind up by
+        # ``name=SANCTUM_KIND_NAME``. Normalize the name so both resolve the
+        # same row.
+        RoomFeatureKind.objects.filter(
+            service_strategy=self.sanctum.feature_instance.feature_kind.service_strategy
+        ).update(name=SANCTUM_KIND_NAME)
+        ensure_sanctum_kind()
+        ensure_sanctum_rituals()
+        ensure_magic_check_content()
+
+        self._check_patcher = patch("world.checks.services.perform_check")
+        mock_check = self._check_patcher.start()
+        mock_check.return_value = _mock_check_success_components()
+        self.addCleanup(self._check_patcher.stop)
+
+        self.install_room_profile = RoomProfileFactory()
+        self.character.db_location = self.install_room_profile.objectdb
+        self.character.save(update_fields=["db_location"])
+
+        # Room ownership: the founder's PRIMARY persona holds the deed.
+        LocationOwnershipFactory(
+            parent_type=LocationParentType.ROOM,
+            area=None,
+            room_profile=self.install_room_profile,
+            holder_type=HolderType.PERSONA,
+            holder_persona=self.sheet.primary_persona,
+            holder_organization=None,
+        )
+
+        self.install_resonance = ResonanceFactory(name="Praedari")
+        self.tier = ResonanceTierFactory(name="Faint", tier_level=1)
+        CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.install_resonance)
+
+        self.ritual = ensure_sanctification_personal_ritual()
+        self.template = ItemTemplateFactory(
+            tied_resonance=self.install_resonance, resonance_tier=self.tier
+        )
+        self.touchstone = ItemInstanceFactory(
+            template=self.template,
+            attuned_to_character_sheet=self.sheet,
+            holder_character_sheet=self.sheet,
+        )
+        _, reagent_templates = ensure_touchstone_content()
+        self.reagents = [
+            ItemInstanceFactory(template=t, holder_character_sheet=self.sheet)
+            for t in reagent_templates
+        ]
+        self.all_component_pks = [self.touchstone.pk, *[r.pk for r in self.reagents]]
+
+        # Real AccountDB + puppet wiring, mirroring ``InstallEndpointTests.setUp``
+        # above — the install path (persona resolution, deed-holder checks) needs
+        # ``request.user`` to be an actual ``AccountDB``, not a bare
+        # ``SimpleNamespace``.
+        from evennia_extensions.factories import AccountFactory
+
+        self.account = AccountFactory()
+        self.character.db_account_id = self.account.pk
+        self.character.save(update_fields=["db_account_id"])
+        puppet_patcher = patch.object(
+            type(self.account), "puppet", new_callable=PropertyMock, return_value=self.character
+        )
+        puppet_patcher.start()
+        self.addCleanup(puppet_patcher.stop)
+
+    def _post_install_components(self, puppet, component_pks):
+        return self._list_post(
+            "install",
+            puppet,
+            {
+                "room_profile_id": self.install_room_profile.pk,
+                "resonance_type_id": self.install_resonance.pk,
+                "owner_mode": "PERSONAL",
+                "components": component_pks,
+            },
+        )
+
+    def test_install_with_owned_components_succeeds_and_consumes_them(self) -> None:
+        """Legitimately-owned components: install succeeds and they're consumed."""
+        from world.items.models import ItemInstance
+
+        resp = self._post_install_components(self.account, self.all_component_pks)
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(resp.data["fizzled"])
+        self.assertFalse(
+            ItemInstance.objects.filter(pk__in=self.all_component_pks).exists(),
+            "Owned components should have been consumed by the real install action.",
+        )
+
+    def test_install_with_other_characters_component_is_rejected(self) -> None:
+        """A component belonging to a DIFFERENT character's inventory is rejected.
+
+        The submitted item must be rejected with 400 and left untouched — it
+        must never reach ``SanctumInstallAction`` (and therefore never get
+        consumed), regardless of the account-wide roster state that the old,
+        buggy serializer-level check used to (mis)consult.
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.models import ItemInstance
+
+        other_character = CharacterFactory()
+        other_sheet = CharacterSheetFactory(character=other_character)
+        foreign_touchstone = self.touchstone
+        foreign_touchstone.holder_character_sheet = other_sheet
+        foreign_touchstone.save(update_fields=["holder_character_sheet"])
+
+        with patch(f"{_VIEWS}.SanctumInstallAction") as mock_cls:
+            resp = self._post_install_components(self.account, self.all_component_pks)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not in your inventory", resp.data["detail"].lower())
+        mock_cls.return_value.run.assert_not_called()
+        self.assertTrue(ItemInstance.objects.filter(pk=foreign_touchstone.pk).exists())
+
+
+# ===========================================================================
 # dissolve
 # ===========================================================================
 

@@ -117,15 +117,20 @@ class SanctifyActionSerializer(serializers.Serializer):
     )
 
     def validate_components(self, value: list[int]) -> list:
-        """Resolve component PKs to ItemInstances, validated against the requesting sheet.
+        """Resolve component PKs to ItemInstances (existence only).
 
         Mirrors ``RitualPerformRequestSerializer.validate_components``
         (``world/magic/serializers.py``) — explicit item-ID selection for the
         web surface, as opposed to the telnet surface's auto-gather-from-
         inventory (``commands.sanctum.CmdSanctum._gather_components``).
-        Ownership is checked against ``ItemInstance.holder_character_sheet``
-        (the body owns the item — #684), not the requesting account, since a
-        player may act as any of their own characters' sheets.
+
+        Ownership (``ItemInstance.holder_character_sheet`` against the body
+        actually acting in this request — #684) is deliberately NOT checked
+        here: the serializer has no reliable way to determine "the actor for
+        this specific request" (a per-request puppet, not account-wide
+        roster state). That check lives in ``SanctumViewSet.install``, right
+        alongside the same ``_resolve_actor`` every other check in that view
+        already trusts.
         """
         from world.items.models import ItemInstance  # noqa: PLC0415
 
@@ -137,21 +142,6 @@ class SanctifyActionSerializer(serializers.Serializer):
         if missing:
             msg = f"ItemInstance(s) not found: {sorted(missing)}."
             raise serializers.ValidationError(msg)
-
-        request = self.context.get("request")
-        sheet = None
-        if request is not None and request.user.is_authenticated:
-            from world.roster.models import RosterEntry  # noqa: PLC0415
-
-            entry = RosterEntry.objects.for_account(request.user).first()
-            sheet = entry.character_sheet if entry else None
-        if sheet is not None:
-            not_owned = [
-                inst.pk for inst in instances if inst.holder_character_sheet_id != sheet.pk
-            ]
-            if not_owned:
-                msg = f"ItemInstance(s) not in your inventory: {sorted(not_owned)}."
-                raise serializers.ValidationError(msg)
         return instances
 
 
