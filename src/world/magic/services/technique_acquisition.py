@@ -31,13 +31,14 @@ if TYPE_CHECKING:
 
 
 @transaction.atomic
-def learn_technique(
+def learn_technique(  # noqa: PLR0913
     learner: CharacterSheet,
     technique: Technique,
     *,
     source: AccessChangeSource,
     ap_cost: int = 0,
     xp_cost: int = 0,
+    location: object | None = None,
 ) -> CharacterTechnique:
     """Learn a technique from an owned gift (non-teaching path).
 
@@ -51,6 +52,9 @@ def learn_technique(
         source: The AccessChangeSource for the announce message.
         ap_cost: AP to spend (0 = free).
         xp_cost: XP to spend (0 = free; not yet implemented — deferred).
+        location: Optional room object the learner is in. When provided,
+            an active Training Room feature in that room discounts the AP
+            cost (#675).
 
     Returns:
         The new CharacterTechnique.
@@ -86,11 +90,30 @@ def learn_technique(
     if ap_cost > 0:
         from world.magic.exceptions import MagicError  # noqa: PLC0415
 
+        effective_ap_cost = ap_cost
+        if location is not None:
+            from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+            from world.room_features.constants import (  # noqa: PLC0415
+                TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL,
+            )
+            from world.room_features.services import (  # noqa: PLC0415
+                active_training_room_in,
+            )
+
+            room_profile = RoomProfile.objects.filter(objectdb=location).first()
+            if room_profile is not None:
+                training_room = active_training_room_in(room_profile)
+                if training_room is not None:
+                    effective_ap_cost = max(
+                        0,
+                        ap_cost - training_room.level * TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL,
+                    )
+
         pool = ActionPointPool.get_or_create_for_character(learner.character)
-        if not pool.can_afford(ap_cost):
-            msg = f"Insufficient action points (need {ap_cost}, have {pool.current})."
+        if not pool.can_afford(effective_ap_cost):
+            msg = f"Insufficient action points (need {effective_ap_cost}, have {pool.current})."
             raise MagicError(msg)
-        pool.spend(ap_cost)
+        pool.spend(effective_ap_cost)
 
     # TODO(#1732-deferred): XP spend when xp_cost > 0 — needs XPTransaction wiring.
     _ = xp_cost
@@ -132,4 +155,5 @@ def learn_technique_from_ritual(*, character_sheet, ritual, **_kwargs):
         source=AccessChangeSource.TECHNIQUE_GRANT,
         ap_cost=grant.acquisition_ap_cost,
         xp_cost=grant.acquisition_xp_cost,
+        location=character_sheet.character.location,
     )

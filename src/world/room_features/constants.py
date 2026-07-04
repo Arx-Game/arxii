@@ -61,3 +61,8 @@ class RoomFeatureOwnerType(models.TextChoices):
     ORGANIZATION_CRIMINAL = "ORG_CRIMINAL", "Organization — Criminal Gang"
     ORGANIZATION_COVENANT = "ORG_COVENANT", "Organization — Covenant"
     ORGANIZATION_DEVOTIONAL = "ORG_DEVOTIONAL", "Organization — Devotional Order"
+
+
+#: Per-level AP discount a Training Room grants to technique learning (#675).
+#: PLACEHOLDER — pending content pass.
+TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL = 1
