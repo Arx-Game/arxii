@@ -241,3 +241,42 @@ class IssueMissionBeatLinkTests(TestCase):
 
         instance = MissionInstance.objects.get(pk=result.object_pk)
         self.assertEqual(instance.source_beat_id, beat.pk)
+
+
+class IssueMissionStakedBeatGateTests(TestCase):
+    def _staked_offer(self):
+        # low template tier so ONLY the beat's stakes can trip the gate
+        offer, _template = _make_mission_offer(risk_tier=MISSION_RISK_ACK_TIER - 1)
+        beat = BeatFactory(risk=RenownRisk.HIGH, target_level=1)
+        StakeFactory(
+            beat=beat,
+            severity=StakeSeverity.GRAVE,
+            player_summary="Your name dies with this job.",
+        )
+        details = offer.mission_offer_details
+        details.source_beat = beat
+        details.save(update_fields=["source_beat"])
+        return offer, beat
+
+    def test_staked_beat_gates_and_carries_summaries(self):
+        _character, persona = _make_pc()
+        offer, _beat = self._staked_offer()
+
+        with self.assertRaises(MissionRiskUnacknowledgedError) as ctx:
+            issue_mission(offer, persona)
+
+        self.assertIn("Your name dies with this job.", ctx.exception.stake_summaries)
+        self.assertFalse(MissionInstance.objects.exists())
+
+    def test_acknowledged_staked_beat_issues_and_activates_contract(self):
+        _character, persona = _make_pc()
+        offer, beat = self._staked_offer()
+
+        acknowledge_mission_risk(offer, persona)
+        result = issue_mission(offer, persona)
+
+        instance = MissionInstance.objects.get(pk=result.object_pk)
+        self.assertEqual(instance.source_beat_id, beat.pk)
+        from world.stories.services.stakes import get_open_activation
+
+        self.assertIsNotNone(get_open_activation(beat))

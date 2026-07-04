@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.missions.models import MissionNode, MissionTemplate
-    from world.npc_services.models import NPCServiceOffer
+    from world.npc_services.models import MissionOfferDetails, NPCServiceOffer
     from world.scenes.models import Persona
 
 
@@ -46,9 +46,9 @@ class MissionRiskUnacknowledgedError(ResolveOfferError):
     """A risky mission was accepted without an on-record acknowledgement (#1770 PR4).
 
     Carries the template's ``risk_tier`` and the player-visible stake
-    summaries (empty today — offers carry no beat link yet, see
-    ``_require_risk_acknowledgement``) so the player surface can show what
-    is being committed to and instruct re-running with
+    summaries — populated from the linked ``source_beat``'s stakes when it is
+    staked (``risk != RenownRisk.NONE``, #1780) — so the player surface can
+    show what is being committed to and instruct re-running with
     ``acknowledge_risk=yes``.
     """
 
@@ -92,26 +92,35 @@ def acknowledge_mission_risk(
 def _require_risk_acknowledgement(
     offer: NPCServiceOffer,
     persona: Persona,
-    template: MissionTemplate,
+    details: MissionOfferDetails,
 ) -> None:
-    """The mission-accept risk gate (#1770 PR4).
+    """The mission-accept risk gate (#1770 PR4, extended #1780).
 
-    A template at or above ``MISSION_RISK_ACK_TIER`` requires a
-    ``MissionRiskAcknowledgement`` row before the run is created. Offers
-    carry no story-beat link today (``source_beat`` is only set on
-    beat-launched runs, never by this handler), so the "linked beat has
-    stakes" leg of the gate has nothing to check at offer time — it lives in
-    ``activate_stakes_for_instance``, which runs whenever a beat link exists.
+    Acknowledgement is required when EITHER the template is at/above
+    ``MISSION_RISK_ACK_TIER`` OR the linked ``source_beat`` is staked
+    (``risk != NONE`` — ADR-0067). The error carries the beat's player-visible
+    stake summaries so the opt-in surface shows what is wagered.
     """
-    if template.risk_tier < MISSION_RISK_ACK_TIER:
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+
+    template = details.mission_template
+    beat = details.source_beat
+    beat_is_staked = beat is not None and beat.risk != RenownRisk.NONE
+    if template.risk_tier < MISSION_RISK_ACK_TIER and not beat_is_staked:
         return
     if MissionRiskAcknowledgement.objects.filter(offer=offer, persona=persona).exists():
         return
-    msg = (
-        f"Offer {offer.pk} (template {template.pk!r}, risk_tier {template.risk_tier}) "
-        f"requires a MissionRiskAcknowledgement from persona {persona.pk}."
+    summaries = (
+        tuple(beat.stakes.values_list("player_summary", flat=True)) if beat_is_staked else ()
     )
-    raise MissionRiskUnacknowledgedError(msg, risk_tier=template.risk_tier)
+    msg = (
+        f"Offer {offer.pk} (template {template.pk!r}, risk_tier {template.risk_tier}, "
+        f"staked_beat={beat.pk if beat_is_staked else None}) requires a "
+        f"MissionRiskAcknowledgement from persona {persona.pk}."
+    )
+    raise MissionRiskUnacknowledgedError(
+        msg, risk_tier=template.risk_tier, stake_summaries=summaries
+    )
 
 
 def _entry_node(template: MissionTemplate) -> MissionNode:
@@ -148,7 +157,7 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     # #1770 PR4: risky work needs an on-record acknowledgement BEFORE any
     # state is written (the atomic block would roll back anyway; gating first
     # keeps the state machine honest).
-    _require_risk_acknowledgement(offer, persona, template)
+    _require_risk_acknowledgement(offer, persona, details)
 
     instance = MissionInstance.objects.create(
         template=template,
