@@ -404,10 +404,12 @@ class ResonanceGrantOutfitTrickleTests(TestCase):
 
 
 class ResonanceGrantDistinctionShapeTests(TestCase):
-    def test_distinction_grant_requires_character_distinction_fk(self) -> None:
-        # source=DISTINCTION without source_character_distinction must fail check constraint
-        from django.db import IntegrityError
-
+    def test_distinction_grant_allows_null_character_distinction_fk(self) -> None:
+        # source_character_distinction is on_delete=SET_NULL — the audit row must
+        # survive CharacterDistinction.delete() with the FK nulled out. The DB
+        # constraint therefore does NOT require the FK non-null at the row level
+        # (mirrors res_grant_sanctum_weaving_shape); creation-time correctness is
+        # enforced by the service layer (grant_resonance always passes the FK).
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
         from world.magic.factories import ResonanceFactory
@@ -415,14 +417,14 @@ class ResonanceGrantDistinctionShapeTests(TestCase):
 
         sheet = CharacterSheetFactory()
         resonance = ResonanceFactory()
-        with self.assertRaises(IntegrityError):
-            ResonanceGrant.objects.create(
-                character_sheet=sheet,
-                resonance=resonance,
-                amount=1,
-                source=GainSource.DISTINCTION,
-                # missing source_character_distinction
-            )
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=resonance,
+            amount=1,
+            source=GainSource.DISTINCTION,
+            # no source_character_distinction — legal (post-delete-SET_NULL shape)
+        )
+        self.assertIsNone(grant.source_character_distinction)
 
     def test_distinction_grant_with_character_distinction_fk_saves(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory

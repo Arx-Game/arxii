@@ -155,6 +155,45 @@ class ReconcileDistinctionResonanceGrantsTests(TestCase):
         self.assertEqual(allure_grants.count(), 1)
         self.assertEqual(predatory_grants.count(), 1)
 
+    def test_distinction_delete_survives_with_null_source_fk(self) -> None:
+        """CharacterDistinction.delete() must not raise IntegrityError (#1834 review finding).
+
+        source_character_distinction is on_delete=SET_NULL — the audit row is meant to
+        survive the distinction's deletion. The res_grant_distinction_shape CheckConstraint
+        previously required source_character_distinction__isnull=False whenever
+        source="DISTINCTION", so the SET_NULL cascade UPDATE violated the CHECK and the
+        delete raised IntegrityError. The constraint now omits that self-requirement
+        (mirroring res_grant_sanctum_weaving_shape), so the ledger row survives with a
+        null FK instead.
+        """
+        sheet = CharacterSheetFactory()
+        distinction = DistinctionFactory()
+        resonance = ResonanceFactory()
+        DistinctionResonanceGrantFactory(
+            distinction=distinction, resonance=resonance, flat_amount_per_rank=10
+        )
+        character_distinction = CharacterDistinctionFactory(
+            character=sheet.character, distinction=distinction, rank=1
+        )
+        reconcile_distinction_resonance_grants(character_distinction)
+        grant = ResonanceGrant.objects.get(
+            source=GainSource.DISTINCTION,
+            source_character_distinction=character_distinction,
+            resonance=resonance,
+        )
+
+        character_distinction.delete()
+
+        # The collector's SET_NULL cascade is a bulk raw UPDATE that bypasses the
+        # idmapper identity-map cache (see AGENT memory:
+        # reference-idmapper-cache-survives-collector-set-null) — flush the cache
+        # before re-reading so we observe the real DB row, not the stale cached one.
+        ResonanceGrant.flush_instance_cache(force=True)
+        grant = ResonanceGrant.objects.get(pk=grant.pk)
+        self.assertIsNone(grant.source_character_distinction)
+        self.assertEqual(grant.source, GainSource.DISTINCTION)
+        self.assertEqual(grant.amount, 10)
+
     def test_rank_down_never_debits(self) -> None:
         sheet = CharacterSheetFactory()
         distinction = DistinctionFactory()

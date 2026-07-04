@@ -458,12 +458,15 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="MISSION_REWARD"),
             ),
-            # DISTINCTION (#1834): exactly source_character_distinction populated, others null
+            # DISTINCTION (#1834): source_character_distinction set at grant creation
+            # by grant_resonance's service-level validation, but allowed to NULL
+            # post-delete via on_delete=SET_NULL — keeping the constraint NOT-NULL
+            # would brick CharacterDistinction.delete() at commit time (mirrors
+            # SANCTUM_WEAVING above).
             models.CheckConstraint(
                 name="res_grant_distinction_shape",
                 check=(
                     Q(source="DISTINCTION")
-                    & Q(source_character_distinction__isnull=False)
                     & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
