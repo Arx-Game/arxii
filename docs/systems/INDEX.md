@@ -1566,7 +1566,11 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   INTERIOR_DESIGN payload — `template` FK ProjectTemplate, `building`, nullable
   `room` target, `applied_at`), `FortificationUpgradeDetails` (#1713:
   FORTIFICATION_UPGRADE payload — `building`, `target_level`, `applied_at`
-  idempotency marker; monotonic max-set on completion, not additive).
+  idempotency marker; monotonic max-set on completion, not additive),
+  `BuildingRenovationDetails` (#1858: BUILDING_RENOVATION payload — `building`,
+  `target_kind` FK BuildingKind, `applied_at` idempotency marker; re-points
+  `Building.kind` to a different catalog kind on completion, set-once — does
+  not mutate per-building flags, which are catalog-level per the glossary).
 - **Key functions** (`world.buildings.services`):
   - `issue_permit(offer, persona) -> EffectResult` — real PERMIT effect handler
     (replaces Plan 2's stub; registered via `BuildingsConfig.ready()`)
@@ -1588,6 +1592,15 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   so completion order never regresses it. Consumed by `world.battles.services
   .create_fortification`, which snapshots the level once into a new `Fortification`'s
   `max_integrity` — see [battles.md](battles.md#sieges-1713).
+- **Building renovation** (`world.buildings.renovation_services`, #1858):
+  `start_building_renovation(persona, building, target_kind) -> Project` — opens
+  a BUILDING_RENOVATION Project (owner-gated; raises `RoomBuildError` for a
+  no-op reassignment to the building's current kind);
+  `complete_building_renovation(project)` — kind handler, re-points
+  `Building.kind` to the target catalog `BuildingKind` exactly once via the
+  `applied_at` marker. Flags stay catalog-level per the glossary — a renovation
+  swaps the catalog row, it does not mutate per-building flags. Slice #1 of
+  epic #673 (future ProjectKind values).
 - **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
