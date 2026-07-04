@@ -944,6 +944,145 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
         assert char_distinctions.first().distinction == self.simple_distinction
 
 
+class FinalizeCharacterDistinctionResonanceTests(FinalizationTestMixin, TestCase):
+    """CG wiring of distinction resonance grants + the aura-ordering fix (#1834, US3).
+
+    "A Predatory distinction means you carry that vibe from the start, it shows in
+    your aura" — a distinction carrying a ``DistinctionResonanceGrant`` must, at CG,
+    claim the character's resonance, write a DISTINCTION seed ledger row, and (since
+    ``CharacterAura`` is created later in ``finalize_magic_data``, after distinctions
+    are materialized) have that seed reflected in the starting aura.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+        from world.distinctions.models import DistinctionEffect
+        from world.magic.factories import (
+            AffinityFactory,
+            DistinctionResonanceGrantFactory,
+            ResonanceFactory,
+        )
+        from world.mechanics.constants import RESONANCE_CATEGORY_NAME
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        cls.dist_category = DistinctionCategoryFactory(name="Resonance Test Category")
+
+        # "Predatory": seeds an Abyssal resonance via the DistinctionResonanceGrant
+        # sidecar — no DistinctionEffect involved, so this exercises the reconcile
+        # wiring on its own.
+        cls.abyssal_affinity = AffinityFactory(name="Abyssal")
+        cls.abyssal_resonance = ResonanceFactory(name="Predation", affinity=cls.abyssal_affinity)
+        cls.predatory_distinction = DistinctionFactory(
+            name="Predatory",
+            category=cls.dist_category,
+            cost_per_rank=5,
+            max_rank=1,
+            is_active=True,
+        )
+        DistinctionResonanceGrantFactory(
+            distinction=cls.predatory_distinction,
+            resonance=cls.abyssal_resonance,
+            flat_amount_per_rank=10,
+        )
+
+        # "Serene": a resonance-CATEGORY-targeted DistinctionEffect (the dead #1834
+        # write path) — must produce no CharacterModifier at CG.
+        resonance_category = ModifierCategoryFactory(name=RESONANCE_CATEGORY_NAME)
+        cls.serenity_resonance = ResonanceFactory(name="Serenity", affinity=cls.abyssal_affinity)
+        cls.serenity_target = ModifierTargetFactory(
+            name="Serenity Target",
+            category=resonance_category,
+            target_resonance=cls.serenity_resonance,
+        )
+        cls.serene_distinction = DistinctionFactory(
+            name="Serene",
+            category=cls.dist_category,
+            cost_per_rank=5,
+            max_rank=1,
+            is_active=True,
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.serene_distinction,
+            target=cls.serenity_target,
+            value_per_rank=10,
+        )
+
+        cls._setup_finalization_base(cls, prefix="Resonance Test", height_min=1500, height_max=1600)
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username=f"resonancetest_{id(self)}")
+
+    def _create_complete_draft(self):
+        return self._create_base_draft(first_name="ResonanceTest", skills={}, specializations={})
+
+    def test_cg_distinction_seeds_resonance_and_recomputes_starting_aura(self):
+        """A CG distinction carrying a resonance grant claims the resonance, writes a
+        DISTINCTION seed ledger row, and the starting CharacterAura reflects it — the
+        load-bearing assertion proving the CG aura-ordering fix.
+        """
+        from world.distinctions.models import CharacterDistinction
+        from world.magic.constants import GainSource
+        from world.magic.models import CharacterAura, CharacterResonance, ResonanceGrant
+        from world.mechanics.constants import RESONANCE_CATEGORY_NAME
+        from world.mechanics.models import CharacterModifier
+
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.predatory_distinction.id,
+                "distinction_name": self.predatory_distinction.name,
+                "distinction_slug": self.predatory_distinction.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 1,
+                "cost": 5,
+                "notes": "",
+            },
+            {
+                "distinction_id": self.serene_distinction.id,
+                "distinction_name": self.serene_distinction.name,
+                "distinction_slug": self.serene_distinction.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 1,
+                "cost": 5,
+                "notes": "",
+            },
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+
+        char_dist = CharacterDistinction.objects.get(
+            character=character, distinction=self.predatory_distinction
+        )
+
+        # The CharacterResonance is claimed.
+        character_resonance = CharacterResonance.objects.get(
+            character_sheet=sheet, resonance=self.abyssal_resonance
+        )
+        assert character_resonance.lifetime_earned == 10
+
+        # The DISTINCTION seed ledger row exists.
+        assert ResonanceGrant.objects.filter(
+            source=GainSource.DISTINCTION,
+            source_character_distinction=char_dist,
+            resonance=self.abyssal_resonance,
+        ).exists()
+
+        # The stored CharacterAura reflects the seeded resonance.
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.abyssal > 0
+
+        # The resonance-category-targeted DistinctionEffect on "Serene" produces NO
+        # resonance-category CharacterModifier at CG (dead write path removed).
+        assert not CharacterModifier.objects.filter(
+            character=sheet,
+            target__category__name=RESONANCE_CATEGORY_NAME,
+        ).exists()
+
+
 class FinalizeMagicDataCantripTests(TestCase):
     """Test that finalize_magic_data creates magic models from cantrip selection."""
 
