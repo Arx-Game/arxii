@@ -263,6 +263,20 @@ def instantiate_blueprint(
                 gating_challenge=gating_challenge,
             )
 
+        # Clone shelter templates into live PositionShelter rows.
+        for bp_pos in blueprint_positions:
+            live_pos = live_map[bp_pos.name]
+            shelter_rows = [
+                PositionShelter(
+                    position=live_pos,
+                    damage_type=bp_shelter.damage_type,
+                    value=bp_shelter.value,
+                )
+                for bp_shelter in bp_pos.shelters.all()
+            ]
+            if shelter_rows:
+                PositionShelter.objects.bulk_create(shelter_rows)
+
         return list(live_map.values())
 
 
