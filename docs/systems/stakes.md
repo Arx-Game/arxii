@@ -594,7 +594,7 @@ be presented" failure (ADR-0033 privacy).
 | PvP duel entry | `combat.duels.create_pvp_duel` → `combat.beat_wiring.activate_stakes_for_scene` | both duelists' sheets |
 | Lethal duel entry | `combat.duels.create_lethal_duel` → same | the PC's sheet |
 | Hostile cast seed/feed | `combat.cast_seed.seed_or_feed_encounter_from_cast` → same | caster + target sheets |
-| Mission acceptance | `missions.services.offer_handler.issue_mission` → `missions.services.beat.activate_stakes_for_instance` | accepting persona's sheet (no-op until an offer path sets `source_beat`) |
+| Mission acceptance | `missions.services.offer_handler.issue_mission` → `missions.services.beat.activate_stakes_for_instance` | accepting persona's sheet (no-op for a free run or an offer whose `MissionOfferDetails.source_beat` is null; live for a staked linked beat since #1780 — see ADR-0085) |
 | Freeform scene | `declare_stakes` GM action (`actions/definitions/gm_stories.py`) | the scene's active participants' sheets |
 | Battle round 1 opening | `battles.services.begin_battle_round` → `battles.beat_wiring.activate_stakes_for_battle` | all enlisted ACTIVE participants' sheets, `scale_by_party_level=False` (see [Effective Risk](#effective-risk)) |
 
@@ -615,6 +615,14 @@ The two-phase opt-in lives inside the `npc_resolve` action
 web `POST /api/npc-services/interactions/resolve/` with
 `acknowledge_risk: true`). `InteractionOfferSerializer.risk_tier` surfaces the
 tier pre-accept.
+
+Since #1780, the gate also fires when the offer's `MissionOfferDetails.source_beat` is itself
+staked (`beat.risk != RenownRisk.NONE`), regardless of the template's own `risk_tier` — a
+low-tier template attached to a high-stakes beat still requires acknowledgement.
+`MissionRiskUnacknowledgedError` carries that beat's `player_summary` stake lines
+(`beat.stakes.values_list("player_summary", ...)`) so the opt-in surface can show what is being
+wagered before the player re-runs with `acknowledge_risk=yes`. See ADR-0085 for why the FK lives
+on `MissionOfferDetails` rather than `NPCServiceOffer`.
 
 ### `declare_stakes` (GM action, key `"declare_stakes"`)
 

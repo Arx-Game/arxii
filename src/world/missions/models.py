@@ -1079,10 +1079,11 @@ class MissionInstance(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
         help_text=(
-            "Optional: the stories Beat that launched this run. SET_NULL on "
-            "Beat delete. Engine that flips the Beat at terminal is deferred "
-            "to a future stories-missions seam design pass (5b.3 stub-records "
-            "the trigger only)."
+            "Optional: the stories Beat this run resolves. When set, the stakes "
+            "contract locks at acceptance (activate_stakes_for_instance) and the "
+            "Beat completes at terminal (on_mission_complete_for_beat). SET_NULL "
+            "on Beat delete. For offer-issued runs, set from "
+            "MissionOfferDetails.source_beat at issue_mission (#1780)."
         ),
     )
     # #686: the NPCServiceOffer that produced this instance (via the MISSION
