@@ -77,6 +77,7 @@ from world.magic.services.threads import (
     update_thread_narrative,
     weave_thread,
 )
+from world.magic.services.touchstones import attune_touchstone
 from world.mechanics.services import (
     coherence_cache_scope,
 )
@@ -88,6 +89,8 @@ __all__ = [
     # threads
     "accept_thread_weaving_unlock",
     "apply_damage_reduction_from_threads",
+    # touchstones
+    "attune_touchstone",
     # techniques
     "calculate_effective_anima_cost",
     # soulfray
