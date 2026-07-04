@@ -6,6 +6,17 @@
 - ``complete_ship_construction`` — the ``SHIP_CONSTRUCTION`` kind handler
   (registered in ``world.ships.apps.ready``): spawns the ``Building`` +
   entry (deck) room + ``ShipDetails`` exactly once.
+- ``start_ship_upgrade``/``complete_ship_upgrade`` — a persistent
+  handling/armament investment (``SHIP_UPGRADE`` Project), monotonic
+  max-set on completion, mirroring
+  ``buildings.fortification_services.start_fortification_upgrade``.
+- ``start_ship_hull_upgrade`` — a ship's hull is just
+  ``Building.fortification_level``, so this is a thin wrapper delegating to
+  the existing ``start_fortification_upgrade`` (``FORTIFICATION_UPGRADE``
+  kind) rather than a new kind.
+- ``start_ship_repair``/``complete_ship_repair`` — clears
+  ``ShipDetails.needs_repair`` (``SHIP_REPAIR`` Project), gating further
+  upgrades until resolved.
 
 A ship is a ``buildings.Building`` (maritime ``BuildingKind``) decorated by
 ``ShipDetails`` — the same composition pattern ``Covenant`` uses over
@@ -29,7 +40,9 @@ from world.ships.constants import (
     SHIP_BUILDING_TARGET_GRANDEUR,
     SHIP_BUILDING_TARGET_SIZE,
     SHIP_CONSTRUCTION_THRESHOLD,
+    ShipUpgradeStat,
 )
+from world.ships.exceptions import ShipNeedsRepairError
 from world.ships.seeds import ensure_ship_kind
 
 if TYPE_CHECKING:
@@ -158,3 +171,186 @@ def complete_ship_construction(
     details.resulting_ship = ship
     details.save(update_fields=["resulting_ship"])
     return ship
+
+
+def start_ship_upgrade(
+    *, persona: Persona, ship: ShipDetails, stat: str, target_level: int
+) -> Project:
+    """Open a ``SHIP_UPGRADE`` Project raising *ship*'s *stat* to *target_level*.
+
+    Args:
+        persona: The funding persona (project owner).
+        ship: The ``ShipDetails`` whose handling/armament level this upgrades.
+        stat: A ``ShipUpgradeStat`` value (``"handling"`` or ``"armament"``).
+        target_level: The level this upgrade targets on completion. Must
+            exceed the ship's current level for *stat*.
+
+    Raises:
+        ShipNeedsRepairError: If ``ship.needs_repair`` — a damaged ship must
+            be repaired before further investment.
+        ValueError: If *stat* isn't a valid ``ShipUpgradeStat``, or
+            *target_level* doesn't exceed the current level for *stat*.
+
+    Returns:
+        The newly created Project.
+    """
+    from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
+    from world.projects.models import Project  # noqa: PLC0415
+    from world.ships.constants import SHIP_UPGRADE_THRESHOLD_PER_LEVEL  # noqa: PLC0415
+    from world.ships.models import ShipUpgradeDetails  # noqa: PLC0415
+
+    if ship.needs_repair:
+        raise ShipNeedsRepairError
+
+    if stat not in ShipUpgradeStat.values:
+        msg = f"'{stat}' is not a valid ShipUpgradeStat."
+        raise ValueError(msg)
+
+    current_level = getattr(ship, f"{stat}_level")
+    if target_level <= current_level:
+        msg = f"target_level must exceed the ship's current {stat}_level."
+        raise ValueError(msg)
+
+    now = timezone.now()
+    with transaction.atomic():
+        project = Project.objects.create(
+            kind=ProjectKind.SHIP_UPGRADE,
+            completion_mode=CompletionMode.SINGLE_THRESHOLD,
+            owner_persona=persona,
+            started_at=now,
+            time_limit=now + timedelta(days=30),
+            threshold_target=target_level * SHIP_UPGRADE_THRESHOLD_PER_LEVEL,
+            description=f"Raise {ship}'s {stat} level to {target_level}",
+        )
+        ShipUpgradeDetails.objects.create(
+            project=project,
+            ship=ship,
+            stat=stat,
+            target_level=target_level,
+        )
+    return project
+
+
+@transaction.atomic
+def complete_ship_upgrade(
+    project: Project,
+    outcome_tier: object | None = None,  # noqa: ARG001
+) -> None:
+    """Kind handler: raise the ship's stat level, exactly once, never downward.
+
+    Registered with ``world.projects.services.register_kind_handler`` at
+    app-ready time. Signature matches the framework's ``KindHandler``
+    callable (project, outcome_tier).
+
+    Idempotent via the ``ShipUpgradeDetails.applied_at`` claim idiom (mirrors
+    ``buildings.fortification_services.complete_fortification_upgrade``): the
+    ``filter(applied_at__isnull=True).update(...)`` hits the DB directly, so a
+    second call on an already-completed project sees the non-null
+    ``applied_at`` and returns without re-applying anything.
+    """
+    from world.ships.models import ShipUpgradeDetails  # noqa: PLC0415
+
+    now = timezone.now()
+    claimed = ShipUpgradeDetails.objects.filter(project=project, applied_at__isnull=True).update(
+        applied_at=now
+    )
+    if not claimed:
+        return
+    details = ShipUpgradeDetails.objects.select_related("ship").get(project=project)
+    # The .update() above is a raw SQL write — the idmapper identity map keeps
+    # `details` as the same cached Python instance regardless, so its in-memory
+    # applied_at wouldn't reflect that write unless set directly here too.
+    details.applied_at = now
+
+    ship = details.ship
+    field_name = f"{details.stat}_level"
+    current_level = getattr(ship, field_name)
+    setattr(ship, field_name, max(current_level, details.target_level))
+    ship.save(update_fields=[field_name])
+
+
+def start_ship_hull_upgrade(*, persona: Persona, ship: ShipDetails, target_level: int) -> Project:
+    """Open a hull upgrade for *ship*, reusing ``FORTIFICATION_UPGRADE``.
+
+    A ship's hull IS ``Building.fortification_level`` — there's no separate
+    hull stat or details model. This is a thin wrapper (after the shared
+    ``needs_repair`` gate) delegating to
+    ``buildings.fortification_services.start_fortification_upgrade``.
+
+    Raises:
+        ShipNeedsRepairError: If ``ship.needs_repair`` — a damaged ship must
+            be repaired before further investment.
+    """
+    from world.buildings.fortification_services import (  # noqa: PLC0415
+        start_fortification_upgrade,
+    )
+
+    if ship.needs_repair:
+        raise ShipNeedsRepairError
+
+    return start_fortification_upgrade(
+        persona=persona, building=ship.building, target_level=target_level
+    )
+
+
+def start_ship_repair(*, persona: Persona, ship: ShipDetails) -> Project:
+    """Open a ``SHIP_REPAIR`` Project clearing *ship*'s ``needs_repair`` flag.
+
+    Args:
+        persona: The funding persona (project owner).
+        ship: The ``ShipDetails`` to repair.
+
+    Returns:
+        The newly created Project.
+    """
+    from world.projects.constants import CompletionMode, ProjectKind  # noqa: PLC0415
+    from world.projects.models import Project  # noqa: PLC0415
+    from world.ships.constants import SHIP_REPAIR_THRESHOLD  # noqa: PLC0415
+    from world.ships.models import ShipRepairDetails  # noqa: PLC0415
+
+    now = timezone.now()
+    with transaction.atomic():
+        project = Project.objects.create(
+            kind=ProjectKind.SHIP_REPAIR,
+            completion_mode=CompletionMode.SINGLE_THRESHOLD,
+            owner_persona=persona,
+            started_at=now,
+            time_limit=now + timedelta(days=30),
+            threshold_target=SHIP_REPAIR_THRESHOLD,
+            description=f"Repair {ship}",
+        )
+        ShipRepairDetails.objects.create(project=project, ship=ship)
+    return project
+
+
+@transaction.atomic
+def complete_ship_repair(
+    project: Project,
+    outcome_tier: object | None = None,  # noqa: ARG001
+) -> None:
+    """Kind handler: clear the ship's ``needs_repair`` flag, exactly once.
+
+    Registered with ``world.projects.services.register_kind_handler`` at
+    app-ready time. Signature matches the framework's ``KindHandler``
+    callable (project, outcome_tier).
+
+    Idempotent via the ``ShipRepairDetails.applied_at`` claim idiom (mirrors
+    ``complete_ship_upgrade``/``complete_ship_construction``).
+    """
+    from world.ships.models import ShipRepairDetails  # noqa: PLC0415
+
+    now = timezone.now()
+    claimed = ShipRepairDetails.objects.filter(project=project, applied_at__isnull=True).update(
+        applied_at=now
+    )
+    if not claimed:
+        return
+    details = ShipRepairDetails.objects.select_related("ship").get(project=project)
+    # The .update() above is a raw SQL write — the idmapper identity map keeps
+    # `details` as the same cached Python instance regardless, so its in-memory
+    # applied_at wouldn't reflect that write unless set directly here too.
+    details.applied_at = now
+
+    ship = details.ship
+    ship.needs_repair = False
+    ship.save(update_fields=["needs_repair"])
