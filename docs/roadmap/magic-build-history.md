@@ -1758,6 +1758,42 @@ as instance seed data). Weights/difficulties are TUNING PLACEHOLDERS for staff.
 
 ---
 
+## Target-aware thread pulls + Court regard modulation (#1831) — DONE (2026-07-04)
+
+Thread pulls are no longer target-blind. The live target a pull's action is directed
+at (combat's focused target, or the non-combat cast's resolved target) now flows into
+`resolve_pull_effects(..., target=...)` via `PullActionContext.target`
+(`world/magic/types/pull.py`) — populated by `commit_combat_pull`
+(`world/combat/pull_helpers.py`) and by `use_technique`'s new `pull_target` kwarg
+(`world/magic/services/techniques.py`).
+
+Shipped:
+
+- **Modulation seam** — `apply_target_modulation(thread, target, effect_row,
+  base_scaled)` (`world/magic/services/pull_modulation.py`): single dispatch on
+  `thread.target_kind`, no-op unless a rule is registered. This is the extension point
+  for a future RELATIONSHIP_TRACK rule (deferred; noted in the module docstring, not
+  built).
+- **`ThreadPullEffect.regard_polarity`** (`RegardPolarity`: OFFENSIVE / PROTECTIVE /
+  NEUTRAL, default NEUTRAL) — authored per pull-effect row; ignored outside
+  COVENANT_ROLE.
+- **Court regard rule** — `court_regard_modulation(...)`
+  (`world/magic/services/pull_modulation_court.py`): empowers a COVENANT_ROLE pull by
+  the Court leader's signed `NpcRegard` (#1717) for the target, sign-directed by
+  `regard_polarity`. Tuning constant `COURT_REGARD_PULL_K` (placeholder, `1.0`).
+- **Picker signal** — `compute_thread_applicability`
+  (`world/magic/services/pull_applicability.py`) reports
+  `InapplicabilityReason.COURT_LEADER_NO_STAKE` when no candidate effect on a
+  COVENANT_ROLE thread would ever be empowered against the given target, so the
+  player isn't offered a pull that won't actually do anything extra.
+- E2E-tested: a full cast/combat journey exercising Court pull regard modulation.
+
+See `docs/systems/magic.md` ("Target-Aware Pulls — Court Regard Modulation") and
+`docs/roadmap/covenants.md` ("Magic Integration: COVENANT_ROLE Thread Anchors") for
+the reference detail, and ADR-0086 for the design rationale.
+
+---
+
 ## Notes
 
 ### Cross-reference: Aspect Focus & Path Evolution

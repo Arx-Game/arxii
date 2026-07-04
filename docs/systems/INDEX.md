@@ -135,11 +135,27 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult`,
     `spend_resonance_for_pull(...)` (low-level spend; called by the pull helpers),
     `preview_resonance_pull(...) -> PullPreviewResult` (read-only preview, unchanged),
-    `resolve_pull_effects(...)`, `cross_thread_xp_lock(character_sheet, thread, level)`.
+    `resolve_pull_effects(threads, tier, *, in_combat, target=None)`,
+    `cross_thread_xp_lock(character_sheet, thread, level)`.
     Pull commit is routed through `world/combat/pull_helpers.py`:
     `commit_combat_pull` (combat cast + clash), `build_cast_pull_declaration`,
     `resolve_pull_from_kwargs`. Non-combat cast calls
     `request_technique_cast(cast_pull=…)` instead.
+  - **Target-aware pull modulation (#1831):** `resolve_pull_effects`'s `target` param
+    (the live cast/combat target; `PullActionContext.target` in `world/magic/types/pull.py`,
+    populated by `commit_combat_pull` and `use_technique`'s `pull_target` kwarg) is fed
+    through `apply_target_modulation(thread, target, effect_row, base_scaled)`
+    (`world/magic/services/pull_modulation.py`) — the per-`target_kind` modulation seam
+    (no-op unless a rule is registered for `thread.target_kind`; the extension point for a
+    future RELATIONSHIP_TRACK rule, deferred). Today's only rule:
+    `court_regard_modulation(...)` (`world/magic/services/pull_modulation_court.py`) empowers
+    a COVENANT_ROLE pull by the Court leader's signed `NpcRegard` (#1717) for the target,
+    sign-directed by `ThreadPullEffect.regard_polarity` (`RegardPolarity`: OFFENSIVE /
+    PROTECTIVE / NEUTRAL, `world/magic/constants.py`). Tuning constant
+    `COURT_REGARD_PULL_K` (placeholder, `1.0`). The combat-UI picker
+    (`compute_thread_applicability`, `world/magic/services/pull_applicability.py`) surfaces
+    `InapplicabilityReason.COURT_LEADER_NO_STAKE` when no candidate effect on a COVENANT_ROLE
+    thread would ever be empowered against the given `target_persona_id`.
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`
