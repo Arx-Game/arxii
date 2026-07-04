@@ -375,7 +375,12 @@ class CombatCastWebPullTests(TestCase):
 
     def test_web_pull_visible_to_intensity_read_path(self) -> None:
         """compute_intensity_for_clash reflects the CombatPull from a web-form cast pull."""
-        data = _make_web_pull_setup(effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=2)
+        # amount=10, not 2: the thread is fixed at level=5 (see _make_web_pull_setup),
+        # so thread_level_multiplier(5) == 0.5 (#1718's corrected ramp) and
+        # scaled_value = round(authored * multiplier); an authored amount of 2
+        # rounds to 1, which no longer clears this test's "+2" assertion floor
+        # below. 10 clears it with margin: round(10 * 0.5) = 5.
+        data = _make_web_pull_setup(effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=10)
         action = self._import_cast_action()
 
         action.round_declaration(
@@ -515,7 +520,12 @@ class ClashWebPullTests(TestCase):
         """compute_intensity_for_clash returns a higher value with a web-form clash pull."""
         from world.combat.pull_helpers import commit_combat_pull, resolve_pull_from_kwargs
 
-        data = _make_web_pull_setup(effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=2)
+        # amount=10, not 2: the thread is fixed at level=5 (see _make_web_pull_setup),
+        # so thread_level_multiplier(5) == 0.5 (#1718's corrected ramp) and
+        # scaled_value = round(authored * multiplier); an authored amount of 2
+        # rounds to 1, which no longer clears this test's "+2" assertion floor
+        # below. 10 clears it with margin: round(10 * 0.5) = 5.
+        data = _make_web_pull_setup(effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=10)
 
         round_action = CombatRoundActionFactory(
             participant=data["participant"],
