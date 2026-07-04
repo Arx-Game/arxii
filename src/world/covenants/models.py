@@ -482,6 +482,10 @@ class CovenantRank(SharedMemoryModel):
     can_manage_ranks = models.BooleanField(
         default=False, help_text="May edit the ladder and assign members."
     )
+    can_lead_rituals = models.BooleanField(
+        default=False,
+        help_text="May lead this covenant's group rituals (e.g. Covenant Sanctification).",
+    )
 
     class Meta:
         ordering = ["covenant", "tier"]

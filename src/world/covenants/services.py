@@ -121,6 +121,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
             can_invite=False,
             can_kick=False,
             can_manage_ranks=False,
+            can_lead_rituals=False,
         )
         return member_rank, member_rank
 
@@ -131,6 +132,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
         can_invite=True,
         can_kick=True,
         can_manage_ranks=True,
+        can_lead_rituals=True,
     )
     member_rank = CovenantRank.objects.create(
         covenant=covenant,
@@ -139,6 +141,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
         can_invite=False,
         can_kick=False,
         can_manage_ranks=False,
+        can_lead_rituals=False,
     )
     return founder_rank, member_rank
 
@@ -261,6 +264,7 @@ def _ensure_base_rank(covenant: Covenant) -> CovenantRank:
         can_invite=False,
         can_kick=False,
         can_manage_ranks=False,
+        can_lead_rituals=False,
     )
 
 

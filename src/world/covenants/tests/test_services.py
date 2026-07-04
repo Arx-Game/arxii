@@ -106,11 +106,13 @@ class CreateCovenantTests(TestCase):
         self.assertTrue(founder_rank.can_invite)
         self.assertTrue(founder_rank.can_kick)
         self.assertTrue(founder_rank.can_manage_ranks)
+        self.assertTrue(founder_rank.can_lead_rituals)
         self.assertEqual(member_rank.name, DEFAULT_MEMBER_RANK_NAME)
         self.assertEqual(member_rank.tier, 2)
         self.assertFalse(member_rank.can_invite)
         self.assertFalse(member_rank.can_kick)
         self.assertFalse(member_rank.can_manage_ranks)
+        self.assertFalse(member_rank.can_lead_rituals)
 
         m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
         m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
@@ -136,6 +138,7 @@ class CreateCovenantTests(TestCase):
         self.assertEqual(len(ranks), 1)
         self.assertEqual(ranks[0].name, DEFAULT_MEMBER_RANK_NAME)
         self.assertFalse(ranks[0].can_manage_ranks)
+        self.assertFalse(ranks[0].can_lead_rituals)
 
         m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
         m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
