@@ -226,6 +226,96 @@ def grant_loan(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
 OFFER_EFFECT_HANDLERS[OfferKind.LOAN.value] = grant_loan
 
 
+def raise_court_grant(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    """COURT_GRANT effect handler (#1718): petition the master for a permanent raise.
+
+    Rolls offer.check_type/check_difficulty (eased by the master's affection
+    toward the servant), and on success raises the servant's CourtPact.granted_pull_cap
+    up to court_grant_ceiling(...). Every attempt (success or failure) records the
+    petition outcome on the servant<->master NPCStanding row; crossing the
+    consecutive-failure threshold fires the master's escalation ConsequencePool.
+    """
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_pool_for_tier,
+    )
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.covenants.court_grant import (  # noqa: PLC0415
+        court_grant_ceiling,
+        raise_court_pact_grant,
+    )
+    from world.covenants.services import (  # noqa: PLC0415
+        active_court_pact_for,
+        get_court_grant_config,
+    )
+    from world.npc_services.models import NPCStanding  # noqa: PLC0415
+    from world.npc_services.services import record_petition_outcome  # noqa: PLC0415
+
+    details = offer.court_grant_offer_details
+    covenant = details.covenant
+    servant_sheet = persona.character_sheet
+    pact = active_court_pact_for(covenant=covenant, servant_sheet=servant_sheet)
+    if pact is None:
+        return EffectResult(
+            kind=OfferKind.COURT_GRANT.value,
+            message="You hold no sworn pact with this Court to petition on.",
+            payload={"offer_pk": offer.pk},
+        )
+
+    config = get_court_grant_config()
+    ceiling = court_grant_ceiling(covenant=covenant, servant_sheet=servant_sheet)
+    master_persona = covenant.leader.primary_persona
+    standing, _ = NPCStanding.objects.get_or_create(persona=persona, npc_persona=master_persona)
+
+    ease = standing.affection // config.affection_divisor
+    check_result = perform_check(
+        persona.character_sheet.character,
+        offer.check_type,
+        target_difficulty=offer.check_difficulty,
+        extra_modifiers=ease,
+    )
+    # CheckResult.success_level (world.checks.types) safely returns 0 when
+    # outcome is None — no separate None-check needed.
+    succeeded = check_result.success_level > 0
+    crossed = record_petition_outcome(
+        standing,
+        succeeded=succeeded,
+        escalation_threshold=config.petition_failure_escalation_threshold,
+    )
+    if crossed and config.escalation_consequence_pool_id is not None:
+        apply_pool_for_tier(
+            pool=config.escalation_consequence_pool,
+            outcome_tier=check_result.outcome,
+            context=ResolutionContext(
+                character=persona.character_sheet.character,
+                target=persona.character_sheet.character,
+            ),
+        )
+
+    if not succeeded:
+        return EffectResult(
+            kind=OfferKind.COURT_GRANT.value,
+            message="Your master is unmoved — this is not the time to ask for more.",
+            payload={"offer_pk": offer.pk, "ceiling": ceiling},
+        )
+
+    raised = raise_court_pact_grant(pact=pact, new_cap=ceiling)
+    message = (
+        "Your master grants you greater strength — your cap now stands at "
+        f"{raised.granted_pull_cap}."
+    )
+    return EffectResult(
+        kind=OfferKind.COURT_GRANT.value,
+        object_pk=raised.pk,
+        object_label=f"Court grant raised to {raised.granted_pull_cap}",
+        message=message,
+        payload={"granted_pull_cap": raised.granted_pull_cap},
+    )
+
+
+OFFER_EFFECT_HANDLERS[OfferKind.COURT_GRANT.value] = raise_court_grant
+
+
 def run_collection(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     """COLLECTION effect handler (#930): dispatch a collector across the org's pools.
 
