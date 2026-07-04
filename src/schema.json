@@ -30445,6 +30445,9 @@ components:
         can_manage_ranks:
           type: boolean
           description: May edit the ladder and assign members.
+        can_lead_rituals:
+          type: boolean
+          description: May lead this covenant's group rituals (e.g. Covenant Sanctification).
       required:
       - covenant
       - id
@@ -30502,6 +30505,9 @@ components:
         can_manage_ranks:
           type: boolean
           description: May edit the ladder and assign members.
+        can_lead_rituals:
+          type: boolean
+          description: May lead this covenant's group rituals (e.g. Covenant Sanctification).
       required:
       - covenant
       - name
@@ -42953,6 +42959,9 @@ components:
         can_manage_ranks:
           type: boolean
           description: May edit the ladder and assign members.
+        can_lead_rituals:
+          type: boolean
+          description: May lead this covenant's group rituals (e.g. Covenant Sanctification).
     PatchedEncounterDetailRequest:
       type: object
       description: Full encounter state with covenant-filtered action visibility.

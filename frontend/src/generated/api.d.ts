@@ -17374,6 +17374,8 @@ export interface components {
       can_kick?: boolean;
       /** @description May edit the ladder and assign members. */
       can_manage_ranks?: boolean;
+      /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
+      can_lead_rituals?: boolean;
     };
     /**
      * @description Minimal nested representation of a CovenantRank (id, name, tier) for embedding
@@ -17405,6 +17407,8 @@ export interface components {
       can_kick?: boolean;
       /** @description May edit the ladder and assign members. */
       can_manage_ranks?: boolean;
+      /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
+      can_lead_rituals?: boolean;
     };
     /** @description Read-only serializer for CovenantRite authored definitions. */
     CovenantRite: {
@@ -23974,6 +23978,8 @@ export interface components {
       can_kick?: boolean;
       /** @description May edit the ladder and assign members. */
       can_manage_ranks?: boolean;
+      /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
+      can_lead_rituals?: boolean;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {
