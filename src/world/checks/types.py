@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
     from world.checks.models import CheckType, Consequence
-    from world.mechanics.models import ChallengeInstance
+    from world.mechanics.models import ChallengeApproach, ChallengeInstance
     from world.missions.models import MissionInstance
     from world.scenes.models import Persona, Scene
     from world.stories.models import Beat, Story
@@ -76,6 +76,10 @@ class ResolutionContext:
     # applied against a known tier rather than a freshly-rolled check (beat auto-wire,
     # mission routes). None when the caller rolls its own check via select_consequence().
     outcome_tier: CheckOutcome | None = None
+    # The mission-challenge approach the player declared (#1824) — how they chose
+    # to do the thing. Effects read it for act-shape: a Stealth approach makes a
+    # LEGEND_AWARD deed concealed (the "do it sneakily" declaration surface).
+    chosen_approach: ChallengeApproach | None = None
 
     @property
     def location(self) -> ObjectDB:

@@ -686,10 +686,18 @@ Social structures, organizations, reputation, and legend tracking.
   successfully-contained scandalous acts mint an act-anchored contained
   `Secret` (blackmail material); public news/leaks set `societies_aware`,
   fire `apply_archetype_society_reputation`, and scale `spread_multiplier`
-  by the involved personas' fame (`FAME_SPREAD_FACTORS`). Containment =
-  Household Command for own-household witnesses, else best-of Con/Intimidation
-  by stat (ruled 2026-07-03); Stealth (new skill, seeded)
-  is the act-time leg, wiring later. Untagged deeds skip the fork.
+  by the involved personas' fame (`FAME_SPREAD_FACTORS`). Containment (#1824):
+  a declared `WitnessApproach` (`WITNESS_APPROACHES` registry — intimidation /
+  seduction / manipulation→Con-or-Deceive / bribery / household;
+  `witness_approaches_for(character, household=)` is the one eligibility
+  predicate; a declared bribery attempt tags the deed with the `bribery`
+  CrimeKind), else the legacy auto-pick (Household Command for own-household
+  witnesses, Con/Intimidation by stat). Act-time Stealth is wired:
+  `concealed=True` on the deed services rolls `reduce_witnesses_by_stealth`
+  (weakest link on group events; full success sheds all outsiders AND
+  auto-contains via `fully_concealed`); a Stealth mission `ChallengeApproach`
+  declares it (`ResolutionContext.chosen_approach` → `_legend_award`).
+  Untagged deeds skip the fork.
 - **`Organization`/`Society` as `NpcRegard` target (#1717):** either can now be the *target* (not
   holder) of a notable NPC's external opinion — see the Regard bullet in the NPC Services
   section above.

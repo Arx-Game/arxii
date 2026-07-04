@@ -16,9 +16,12 @@ At scene-deed birth the fork runs (``route_deed_reach``):
   ``PersonaDeedKnowledge``; society awareness never fires.
 - **Public room, not scandalous** → news: the realm walk's societies become
   aware, reputation fires, spread scales with fame.
-- **Public room, scandalous** → a containment check (best of the actor's
-  social tools; difficulty grows with the crowd). Success = contained Secret;
-  failure = the scandal leaks (aware + reputation + fame-scaled spread).
+- **Public room, scandalous** → a containment check (a declared witness-
+  handling approach when one was chosen — the #1824 capability list — else
+  the actor's best social tool; difficulty grows with the crowd). Success =
+  contained Secret; failure = the scandal leaks (aware + reputation +
+  fame-scaled spread). An act-time Stealth declaration (#1824) sheds
+  witnesses before the fork; a full concealment success auto-contains.
 
 Mechanics stay tribal: thresholds/difficulties live in constants, never in
 player-facing docs.
@@ -30,6 +33,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from world.societies.constants import (
+    CONCEALMENT_FULL_LEVEL,
+    CONCEALMENT_PARTIAL_LEVEL,
     CONTAINMENT_BASE_DIFFICULTY,
     CONTAINMENT_DIFFICULTY_PER_WITNESS,
     FAME_SPREAD_FACTORS,
@@ -39,6 +44,9 @@ from world.societies.constants import (
 from world.societies.renown import _archetype_dot_product
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.checks.models import CheckType
     from world.scenes.models import Persona, Scene
     from world.societies.models import LegendEntry, PhilosophicalArchetype, Society
 
@@ -115,32 +123,161 @@ def _witnesses_are_own_household(actor_persona, witnesses) -> bool:
     return True
 
 
-def _run_containment_check(character, witness_count: int, *, household: bool = False) -> bool:
-    """The hush-it-up roll: the actor's best social tool against the crowd size.
+@dataclass(frozen=True)
+class WitnessApproach:
+    """One entry of the witness-handling capability list (#1824, ratified 2026-07-03).
 
-    Own-household witnesses → Household Command (presence + Leadership +
-    Stewardship — you are obeyed, not believed; Apostate 2026-07-03).
-    Otherwise auto-picks between Con (charm + Persuasion + Manipulation) and
-    Intimidation (presence + Persuasion + Intimidation) by the stronger stat —
-    "a range of skills based on character capability"; the interactive
-    approach-fanned surface is a later slice. Unseeded worlds fail closed
+    ``check_type_name`` of None means the approach resolves between Con and
+    Deceive by the actor's stronger social stat (the #1811 charm/presence
+    split). ``mints_crime_slug`` marks approaches whose *attempt* is itself a
+    crime (bribery — the compounding risk): the deed gets that CrimeKind tag
+    at declaration, latent while contained, soaking heat if it ever leaks.
+    """
+
+    key: str
+    label: str
+    check_type_name: str | None
+    household_only: bool = False
+    mints_crime_slug: str | None = None
+
+
+# Ordered as ratified on #1824. Extensible: a new tool is a new entry (and a
+# seeded CheckType), never a new code path.
+WITNESS_APPROACHES: tuple[WitnessApproach, ...] = (
+    WitnessApproach(key="intimidation", label="Intimidation", check_type_name="Intimidation"),
+    WitnessApproach(key="seduction", label="Seduction", check_type_name="Seduction"),
+    WitnessApproach(key="manipulation", label="Manipulation", check_type_name=None),
+    WitnessApproach(
+        key="bribery", label="Bribery", check_type_name="Bribery", mints_crime_slug="bribery"
+    ),
+    WitnessApproach(
+        key="household",
+        label="Household Command",
+        check_type_name="Household Command",
+        household_only=True,
+    ),
+)
+
+
+def _resolve_approach_check_type(approach: WitnessApproach, character) -> CheckType | None:
+    """The approach's CheckType row, or None when the world hasn't seeded it."""
+    from world.checks.models import CheckType  # noqa: PLC0415
+
+    name = approach.check_type_name
+    if name is None:
+        # Manipulation ("they didn't see what they saw") is deception — the
+        # #1811 split: Con rides charm, Deceive rides presence.
+        handler = character.traits
+        charm = handler.get_trait_value("charm")
+        presence = handler.get_trait_value("presence")
+        name = "Con" if charm >= presence else "Deceive"
+    return CheckType.objects.filter(name__iexact=name).first()
+
+
+def witness_approaches_for(character, *, household: bool = False) -> list[WitnessApproach]:
+    """The capability list: which witness-handling tools this character can bring.
+
+    One predicate drives visibility AND selectability: an approach is offered
+    when its CheckType is seeded (and, for Household Command, when every
+    witness is the actor's own household). Social stats are universal, so
+    capability shapes the odds, not the menu.
+    """
+    return [
+        approach
+        for approach in WITNESS_APPROACHES
+        if (household or not approach.household_only)
+        and _resolve_approach_check_type(approach, character) is not None
+    ]
+
+
+def _approach_for_key(key: str | None) -> WitnessApproach | None:
+    if key is None:
+        return None
+    for approach in WITNESS_APPROACHES:
+        if approach.key == key:
+            return approach
+    return None
+
+
+def reduce_witnesses_by_stealth(
+    characters: list[ObjectDB], actor_personas: list[Persona], witnesses: list[Persona]
+) -> tuple[list[Persona], bool]:
+    """Act-time concealment (#1824): roll Stealth against the crowd, shed watchers.
+
+    Group jobs are weakest-link: every acting character rolls and the worst
+    result governs. Returns ``(witnesses, fully_concealed)``: a full success
+    leaves only the actors in the witness set AND flags the act unwitnessed
+    (the reach fork auto-contains — even a public room holds no one who saw);
+    a partial sheds half the outsiders; a failure changes nothing. Unseeded
+    worlds (no Stealth CheckType) change nothing.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    if not characters:
+        return witnesses, False
+    check_type = CheckType.objects.filter(name__iexact="Stealth").first()
+    if check_type is None:
+        return witnesses, False
+    actor_pks = {actor.pk for actor in actor_personas}
+    outsider_count = sum(1 for w in witnesses if w.pk not in actor_pks)
+    worst: int | None = None
+    for character in characters:
+        result = perform_check(
+            character,
+            check_type,
+            target_difficulty=_containment_difficulty(outsider_count),
+        )
+        level = result.outcome.success_level if result.outcome is not None else 0
+        worst = level if worst is None else min(worst, level)
+    if worst is None or worst < CONCEALMENT_PARTIAL_LEVEL:
+        return witnesses, False
+    if worst >= CONCEALMENT_FULL_LEVEL:
+        return [w for w in witnesses if w.pk in actor_pks], True
+    # Partial: half the outsiders never noticed. Deterministic (pk order) so
+    # tests and re-runs agree; which half is flavor, not fairness.
+    outsiders = sorted((w for w in witnesses if w.pk not in actor_pks), key=lambda w: w.pk)
+    kept_outsiders = outsiders[: len(outsiders) // 2]
+    kept_pks = actor_pks | {w.pk for w in kept_outsiders}
+    return [w for w in witnesses if w.pk in kept_pks], False
+
+
+def _run_containment_check(
+    character,
+    witness_count: int,
+    *,
+    household: bool = False,
+    approach_key: str | None = None,
+) -> bool:
+    """The hush-it-up roll: a declared tool, or the actor's best one.
+
+    A declared ``approach_key`` (from ``WITNESS_APPROACHES``) resolves to its
+    CheckType — the #1824 capability surface. With no declaration (or an
+    unknown/unseeded key) the legacy auto-pick stands: own-household witnesses
+    → Household Command (you are obeyed, not believed; Apostate 2026-07-03),
+    else Con vs Intimidation by the stronger stat. Unseeded worlds fail closed
     (nothing to roll → the scandal leaks).
     """
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.checks.services import perform_check  # noqa: PLC0415
 
-    handler = character.traits  # ObjectDB typeclass extension (checks/services idiom)
-    charm = handler.get_trait_value("charm")
-    presence = handler.get_trait_value("presence")
-    if household:
-        preferred = "Household Command"
-    else:
-        preferred = "Con" if charm >= presence else "Intimidation"
-    check_type = (
-        CheckType.objects.filter(name__iexact=preferred).first()
-        or CheckType.objects.filter(name__iexact="Intimidation").first()
-        or CheckType.objects.filter(name__iexact="Con").first()
-    )
+    check_type = None
+    declared = _approach_for_key(approach_key)
+    if declared is not None and (household or not declared.household_only):
+        check_type = _resolve_approach_check_type(declared, character)
+    if check_type is None:
+        handler = character.traits  # ObjectDB typeclass extension (checks/services idiom)
+        charm = handler.get_trait_value("charm")
+        presence = handler.get_trait_value("presence")
+        if household:
+            preferred = "Household Command"
+        else:
+            preferred = "Con" if charm >= presence else "Intimidation"
+        check_type = (
+            CheckType.objects.filter(name__iexact=preferred).first()
+            or CheckType.objects.filter(name__iexact="Intimidation").first()
+            or CheckType.objects.filter(name__iexact="Con").first()
+        )
     if check_type is None:
         return False
     result = perform_check(
@@ -200,17 +337,38 @@ def _mint_contained_secret(
     return secret.pk
 
 
-def route_deed_reach(
+def _tag_approach_crime(entry: LegendEntry, approach: WitnessApproach) -> None:
+    """Bribery's compounding risk: the attempt itself is a crime (#1824).
+
+    Tagged at declaration, before the roll — a contained scandal keeps the tag
+    latent (heat only accrues as knowledge spreads), a leak compounds. Missing
+    seed rows are a silent no-op (unseeded worlds have no law to break).
+    """
+    from world.justice.models import CrimeKind  # noqa: PLC0415
+    from world.justice.services import tag_deed_crimes  # noqa: PLC0415
+
+    kind = CrimeKind.objects.filter(slug=approach.mints_crime_slug).first()
+    if kind is not None:
+        tag_deed_crimes(entry, [kind])
+
+
+def route_deed_reach(  # noqa: PLR0913
     *,
     entry: LegendEntry,
     scene: Scene | None,
     actor_persona: Persona,
     witnesses: list[Persona],
+    containment_approach: str | None = None,
+    fully_concealed: bool = False,
 ) -> DeedReachResult:
     """The #1464 birth fork. Called after witness knowledge is granted.
 
     No scene, no room, or an untagged deed → legacy no-op (nothing minted,
-    nothing aware — exactly the pre-#1464 behavior).
+    nothing aware — exactly the pre-#1464 behavior). ``containment_approach``
+    (#1824) is a declared ``WitnessApproach.key``; None keeps the auto-pick.
+    ``fully_concealed`` (#1824) is the act-time Stealth full success: nobody
+    saw, so a scandal auto-contains without a hush-up roll. (An empty witness
+    list alone does NOT auto-contain — a public room holds an ambient crowd.)
     """
     from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
     from world.areas.services import societies_for_scene  # noqa: PLC0415
@@ -229,10 +387,17 @@ def route_deed_reach(
     is_public = room_is_publicly_listed(scene.location)
 
     if scandal_dots:
-        contained = not is_public or _run_containment_check(
+        declared = _approach_for_key(containment_approach)
+        needs_hush = is_public and not fully_concealed
+        if declared is not None and declared.mints_crime_slug and needs_hush:
+            # Only a *used* tool mints the crime — a private or fully
+            # concealed act never reached the bribing stage.
+            _tag_approach_crime(entry, declared)
+        contained = not needs_hush or _run_containment_check(
             actor_persona.character_sheet.character,
             len(witnesses),
             household=_witnesses_are_own_household(actor_persona, witnesses),
+            approach_key=containment_approach,
         )
         if contained:
             worst = min(scandal_dots.values())

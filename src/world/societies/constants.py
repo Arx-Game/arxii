@@ -227,6 +227,12 @@ SCANDAL_THRESHOLD = -10
 CONTAINMENT_BASE_DIFFICULTY = 0
 CONTAINMENT_DIFFICULTY_PER_WITNESS = 2
 
+# Act-time concealment (#1824): a declared-sneaky deed rolls Stealth against
+# the crowd before witnesses are minted. success_level at/past FULL removes
+# every witness but the actor; at/past PARTIAL drops half. PLACEHOLDER tuning.
+CONCEALMENT_FULL_LEVEL = 3
+CONCEALMENT_PARTIAL_LEVEL = 1
+
 # Contained-scandal Secret level scales with how badly the act reads
 # (|worst dot| at or past each floor, descending). (level, |dot| floor).
 SCANDAL_SECRET_LEVEL_FLOORS: tuple[tuple[int, int], ...] = (

@@ -161,3 +161,204 @@ class HouseholdContainmentTests(ScandalForkTestCase):
             entry = self._mint(scene, [self.vile], persona=persona)
         self.assertEqual(captured.get("check"), "Household Command")
         self.assertTrue(Secret.objects.filter(legend_deed=entry).exists())
+
+
+class WitnessApproachTests(ScandalForkTestCase):
+    """#1824 — the declared capability list replaces the auto-pick."""
+
+    def _mint_with_approach(self, approach_key, *, persona=None, success_level=1):
+        from unittest.mock import patch
+
+        from world.societies.factories import LegendSourceTypeFactory
+
+        persona = persona or self._persona()
+        captured = {}
+        from world.checks import services as check_services
+
+        real_perform = check_services.perform_check
+
+        def spy(character, check_type, **kwargs):
+            captured["check"] = check_type.name
+            return real_perform(character, check_type, **kwargs)
+
+        outcome = CheckOutcomeFactory(name=f"wa_{approach_key}", success_level=success_level)
+        with (
+            patch("world.checks.services.perform_check", side_effect=spy),
+            force_check_outcome(outcome),
+        ):
+            entry = create_solo_deed(
+                persona,
+                "PLACEHOLDER: the deed in question",
+                LegendSourceTypeFactory(),
+                10,
+                scene=self._scene(public=True),
+                archetypes=[self.vile],
+                containment_approach=approach_key,
+            )
+        return entry, captured
+
+    def test_declared_intimidation_uses_intimidation(self):
+        _, captured = self._mint_with_approach("intimidation")
+        self.assertEqual(captured.get("check"), "Intimidation")
+
+    def test_declared_seduction_uses_seduction(self):
+        CheckTypeFactory(name="Seduction")
+        _, captured = self._mint_with_approach("seduction")
+        self.assertEqual(captured.get("check"), "Seduction")
+
+    def test_declared_manipulation_resolves_con_or_deceive(self):
+        # charm == presence (equal traits) → the charm branch → Con.
+        CheckTypeFactory(name="Deceive")
+        _, captured = self._mint_with_approach("manipulation")
+        self.assertEqual(captured.get("check"), "Con")
+
+    def test_declared_bribery_tags_the_deed_even_when_contained(self):
+        from world.justice.models import CrimeKind, DeedCrimeTag
+
+        CheckTypeFactory(name="Bribery")
+        CrimeKind.objects.create(slug="bribery", name="Bribery")
+        entry, captured = self._mint_with_approach("bribery", success_level=1)
+        self.assertEqual(captured.get("check"), "Bribery")
+        self.assertTrue(Secret.objects.filter(legend_deed=entry).exists())
+        self.assertTrue(
+            DeedCrimeTag.objects.filter(deed=entry, crime_kind__slug="bribery").exists()
+        )
+
+    def test_unknown_approach_falls_back_to_auto_pick(self):
+        # Equal charm/presence → the legacy Con branch, exactly as undeclared.
+        _, captured = self._mint_with_approach("interpretive-dance")
+        self.assertEqual(captured.get("check"), "Con")
+
+    def test_capability_list_gates_household_and_unseeded_tools(self):
+        from world.societies.scandal import witness_approaches_for
+
+        CheckTypeFactory(name="Seduction")
+        CheckTypeFactory(name="Household Command")
+        character = self._persona().character_sheet.character
+        keys = [a.key for a in witness_approaches_for(character, household=False)]
+        # Bribery unseeded here → dropped; household tool needs household=True.
+        self.assertIn("intimidation", keys)
+        self.assertIn("seduction", keys)
+        self.assertIn("manipulation", keys)
+        self.assertNotIn("bribery", keys)
+        self.assertNotIn("household", keys)
+        household_keys = [a.key for a in witness_approaches_for(character, household=True)]
+        self.assertIn("household", household_keys)
+
+
+class ActTimeConcealmentTests(ScandalForkTestCase):
+    """#1824 — the declared-sneaky Stealth roll sheds witnesses before minting."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        CheckTypeFactory(name="Stealth")
+
+    def _mint_concealed(self, *, success_level, witnesses, persona):
+        from unittest.mock import patch
+
+        from world.societies.factories import LegendSourceTypeFactory
+
+        outcome = CheckOutcomeFactory(name=f"sneak_{success_level}", success_level=success_level)
+        with (
+            patch(
+                "world.societies.knowledge_services.scene_witness_personas",
+                return_value=witnesses,
+            ),
+            force_check_outcome(outcome),
+        ):
+            return create_solo_deed(
+                persona,
+                "PLACEHOLDER: the deed in question",
+                LegendSourceTypeFactory(),
+                10,
+                scene=self._scene(public=True),
+                archetypes=[self.vile],
+                concealed=True,
+            )
+
+    def test_full_success_leaves_no_outside_knowledge_and_auto_contains(self):
+        from world.societies.models import PersonaDeedKnowledge
+
+        persona = self._persona()
+        bystander = self._persona()
+        # Forced outcome governs BOTH the stealth roll and any containment roll,
+        # so a full success (3) proves auto-containment only via knowledge count.
+        entry = self._mint_concealed(
+            success_level=3, witnesses=[persona, bystander], persona=persona
+        )
+        knowers = set(
+            PersonaDeedKnowledge.objects.filter(deed=entry).values_list("persona_id", flat=True)
+        )
+        self.assertNotIn(bystander.pk, knowers)
+        self.assertTrue(Secret.objects.filter(legend_deed=entry).exists())
+        self.assertEqual(entry.societies_aware.count(), 0)
+
+    def test_failure_changes_nothing(self):
+        from world.societies.models import PersonaDeedKnowledge
+
+        persona = self._persona()
+        bystander = self._persona()
+        # success_level=0 fails the stealth roll AND the containment roll → leak.
+        entry = self._mint_concealed(
+            success_level=0, witnesses=[persona, bystander], persona=persona
+        )
+        knowers = set(
+            PersonaDeedKnowledge.objects.filter(deed=entry).values_list("persona_id", flat=True)
+        )
+        self.assertIn(bystander.pk, knowers)
+        self.assertFalse(Secret.objects.filter(legend_deed=entry).exists())
+        self.assertGreater(entry.societies_aware.count(), 0)
+
+    def test_partial_success_sheds_half_the_outsiders(self):
+        from world.societies.scandal import reduce_witnesses_by_stealth
+
+        persona = self._persona()
+        outsiders = [self._persona() for _ in range(4)]
+        outcome = CheckOutcomeFactory(name="sneak_partial", success_level=1)
+        with force_check_outcome(outcome):
+            kept, fully = reduce_witnesses_by_stealth(
+                [persona.character_sheet.character], [persona], [persona, *outsiders]
+            )
+        self.assertFalse(fully)
+        kept_outsiders = [w for w in kept if w.pk != persona.pk]
+        self.assertEqual(len(kept_outsiders), 2)
+
+    def test_group_concealment_is_weakest_link(self):
+        from unittest.mock import patch
+
+        from world.societies.scandal import reduce_witnesses_by_stealth
+
+        actor_a = self._persona()
+        actor_b = self._persona()
+        bystander = self._persona()
+        good = CheckOutcomeFactory(name="sneak_good", success_level=3)
+        bad = CheckOutcomeFactory(name="sneak_bad", success_level=0)
+        from world.checks import services as check_services
+
+        real_perform = check_services.perform_check
+        outcomes = iter([good, bad])
+
+        def alternating(character, check_type, **kwargs):
+            result = real_perform(character, check_type, **kwargs)
+            forced = next(outcomes)
+            return type(result)(
+                check_type=result.check_type,
+                outcome=forced,
+                chart=result.chart,
+                roller_rank=result.roller_rank,
+                target_rank=result.target_rank,
+                rank_difference=result.rank_difference,
+                trait_points=result.trait_points,
+                aspect_bonus=result.aspect_bonus,
+                total_points=result.total_points,
+            )
+
+        with patch("world.checks.services.perform_check", side_effect=alternating):
+            kept, fully = reduce_witnesses_by_stealth(
+                [actor_a.character_sheet.character, actor_b.character_sheet.character],
+                [actor_a, actor_b],
+                [actor_a, actor_b, bystander],
+            )
+        self.assertFalse(fully)
+        self.assertIn(bystander, kept)
