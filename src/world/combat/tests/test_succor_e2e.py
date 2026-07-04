@@ -14,7 +14,8 @@ reduces/blocks the DoT that would otherwise apply. Mirrors
 NOTE — real-lifecycle timing gap discovered while writing this test, since closed:
 ``CombatRoundContext.get_cover_for`` only grants cover while
 ``encounter.status == RESOLVING``. Sunlight Exposure's ``ConditionDamageOverTime``
-originally ticked at ``DamageTickTiming.START_OF_ROUND`` (the model default), but
+originally ticked at ``DamageTickTiming.START_OF_ROUND`` (then the model field's
+default, flipped to ``END_OF_ROUND`` in #1762), but
 combat's real START tick (``begin_declaration_phase``) fires while status is still
 ``DECLARING`` — before that round's Succor could even be declared — so Succor could
 never cover a START-tagged hazard. Sunlight Exposure now ticks

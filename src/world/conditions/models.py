@@ -916,7 +916,14 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
     tick_timing = models.CharField(
         max_length=20,
         choices=DamageTickTiming.choices,
-        default=DamageTickTiming.START_OF_ROUND,
+        default=DamageTickTiming.END_OF_ROUND,
+        help_text=(
+            "When this DoT ticks. END_OF_ROUND is the convention (poison, sunlight) and the "
+            "safe default. START_OF_ROUND means damage that lands BEFORE any action resolves "
+            "this round, so it is intentionally un-shieldable by Succor/Interpose in combat "
+            "AND currently inert in non-combat scene rounds (no scene-round START tick "
+            "exists) — choose it deliberately. See docs/systems/conditions.md."
+        ),
     )
     is_long_term = models.BooleanField(
         default=False,

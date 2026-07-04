@@ -21,7 +21,7 @@ A boolean flag on `ConditionCategory` marking conditions that make the bearer im
 _Avoid_: is_invisible, is_hidden, is_stealthed (the flag is about perceptibility, not any one source of it)
 
 **DoT**:
-Periodic damage dealt by a condition (`ConditionDamageOverTime`: damage type, base damage, scaling, tick timing). Acute DoT ticks per combat/scene round; long-term (chronic) DoT is flagged `is_long_term`, skipped by the per-round tick, and advanced instead by the daily chronic-effect batch with a non-lethal clamp.
+Periodic damage dealt by a condition (`ConditionDamageOverTime`: damage type, base damage, scaling, tick timing). Acute DoT ticks per combat/scene round; long-term (chronic) DoT is flagged `is_long_term`, skipped by the per-round tick, and advanced instead by the daily chronic-effect batch with a non-lethal clamp. `tick_timing` defaults to `END_OF_ROUND` (the convention — shieldable by Succor, ticks in combat and scene rounds); `START_OF_ROUND` is a deliberate, guarded opt-in for unpreventable top-of-round damage that is intentionally un-shieldable and currently inert in non-combat scene rounds (#1762 — see `docs/systems/conditions.md`).
 _Avoid_: damage tick, bleed, poison (for the general mechanism)
 
 **Capability effect channel**:
