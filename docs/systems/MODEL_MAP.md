@@ -660,7 +660,8 @@
 - `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' — Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
 - `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None) -> 'Fortification' — Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
-- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None, reposition_dx: 'Decimal | None' = None, reposition_dy: 'Decimal | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
+- `eject_vehicle_occupants(*, vehicle: 'BattleVehicle') -> 'None' — Eject every unit/participant embedded on *vehicle*'s place, applying the`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
@@ -5135,17 +5136,20 @@
   - story -> stories.Story [FK]
   - gm_table -> gm.GMTable [FK]
   - current_episode -> stories.Episode [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### GlobalStoryProgress
 **Foreign Keys:**
   - story -> stories.Story [OneToOne]
   - current_episode -> stories.Episode [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### StoryProgress
 **Foreign Keys:**
   - story -> stories.Story [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - current_episode -> stories.Episode [FK] (nullable)
+  - resolved_by -> gm.GMProfile [FK] (nullable)
 
 ### StoryNote
 **Foreign Keys:**
