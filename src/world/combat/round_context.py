@@ -30,7 +30,7 @@ rather than silently picking the first arbitrary DB row.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
@@ -40,6 +40,7 @@ from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import ParticipantStatus
 from world.combat.models import (
+    CombatEncounter,
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
@@ -47,6 +48,9 @@ from world.combat.models import (
     RoundChallengeDeclaration,
 )
 from world.scenes.constants import RoundStatus
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
 _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
@@ -56,6 +60,51 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
         RoundStatus.BETWEEN_ROUNDS,
     }
 )
+
+
+def resolve_focused_target_objectdb(
+    encounter: CombatEncounter,
+    kwargs: dict[str, Any],
+) -> ObjectDB | None:
+    """Resolve the live focused-target ``ObjectDB`` from raw declaration kwargs (#1831).
+
+    Reads ``focused_opponent_target_id`` / ``focused_ally_target_id`` straight off
+    *kwargs* (the same keys ``_resolve_focused_targets`` reads once the declaration
+    itself is recorded), scoped to *encounter* so a forged/stale id from another
+    encounter cannot resolve. The focused OPPONENT wins over the focused ALLY when
+    both are somehow present — this only decides *which* live target feeds pull
+    modulation; ``court_regard_modulation`` reads directionality off the effect
+    row's ``RegardPolarity``, not off which kwarg fired.
+
+    Shared by both combat-pull commit seams (``CastTechniqueAction._commit_combat_pull``
+    and ``_dispatch_clash_contribution``'s cast-pull leg) so the resolution logic is
+    not duplicated. Unlike ``_resolve_focused_targets``, an unresolvable id here
+    silently returns ``None`` rather than raising — this call happens at pull-commit
+    time, before the declaration's own id validation runs, and feeds a bonus
+    modulation input rather than gating anything.
+
+    Args:
+        encounter: The encounter to scope target lookups to.
+        kwargs: Raw declaration kwargs; only the two focused-target id keys are read.
+
+    Returns:
+        The resolved target's ``ObjectDB``, or ``None`` when neither kwarg is
+        present, or the id does not resolve within *encounter*.
+    """
+    opponent_id = kwargs.get("focused_opponent_target_id")
+    if opponent_id is not None:
+        opponent = CombatOpponent.objects.filter(pk=opponent_id, encounter=encounter).first()
+        if opponent is not None and opponent.objectdb is not None:
+            return opponent.objectdb
+
+    ally_id = kwargs.get("focused_ally_target_id")
+    if ally_id is not None:
+        ally = CombatParticipant.objects.filter(pk=ally_id, encounter=encounter).first()
+        if ally is not None:
+            return ally.character_sheet.character
+
+    return None
+
 
 # kwargs key for effort level — used as a guard and a lookup in _record_combat_declaration.
 _EFFORT_LEVEL_KEY: str = "effort_level"
