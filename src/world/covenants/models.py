@@ -15,6 +15,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -905,14 +906,17 @@ class CovenantRiteParticipant(SharedMemoryModel):
 class MentorBondConfig(SharedMemoryModel):
     """Singleton (pk=1): global parameters for Mentor's Vow bond scaling (#1165).
 
-    Seeded by seed_mentor_bond_defaults() in factories.py. Services use get(pk=1)
-    and let DoesNotExist propagate loudly. Updated via Django admin.
+    Seeded by seed_mentor_bond_defaults() in factories.py. Services use
+    cached_singleton() and let DoesNotExist propagate loudly. Updated via
+    Django admin.
 
     Fields:
     - band_width: level-range half-width for eligible mentor/sidekick pairs.
     - adjacency_offset: additional level offset applied when computing adjacency.
     - max_sidekicks_per_mentor: cap on sidekick count; null means unlimited.
     """
+
+    objects = ArxSharedMemoryManager()
 
     band_width = models.PositiveSmallIntegerField(
         default=MENTOR_BOND_BAND_WIDTH,

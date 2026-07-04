@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.magic.constants import GiftKind
 
 
@@ -172,6 +173,8 @@ class GiftAcquisitionConfig(SharedMemoryModel):
     Fields are staff-tunable via admin; lazy-created by
     ``get_gift_acquisition_config()`` in services/gift_acquisition.py.
     """
+
+    objects = ArxSharedMemoryManager()
 
     techniques_per_thread_level = models.PositiveIntegerField(
         default=3,

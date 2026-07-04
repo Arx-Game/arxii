@@ -37,7 +37,9 @@ if TYPE_CHECKING:
 
 def get_gift_acquisition_config() -> GiftAcquisitionConfig:
     """Lazily create and return the singleton GiftAcquisitionConfig (pk=1)."""
-    config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
+    config = GiftAcquisitionConfig.objects.cached_singleton()
+    if config is None:
+        config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
     return config
 
 

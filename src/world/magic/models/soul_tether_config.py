@@ -3,6 +3,8 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 
 class SoulTetherConfig(SharedMemoryModel):
     """Singleton tuning surface (pk=1).
@@ -33,6 +35,8 @@ class SoulTetherConfig(SharedMemoryModel):
     - ``rescue_budget_success_mult_tenths``: success-level multiplier in tenths (default 5 → 0.5).
     - ``rescue_budget_thread_mult_hundredths``: thread-level multiplier in hundredths (5 → 0.05).
     """
+
+    objects = ArxSharedMemoryManager()
 
     # --- Sineating ---
     anima_cost_per_unit = models.PositiveSmallIntegerField(default=2)

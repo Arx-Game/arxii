@@ -13,10 +13,14 @@ from decimal import Decimal
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 
 class TechniqueBudgetConfig(SharedMemoryModel):
     """Singleton (pk=1) of power-cost-per-unit knobs. Access via
     ``get_technique_budget_config()`` in ``services/technique_builder.py``."""
+
+    objects = ArxSharedMemoryManager()
 
     intensity_unit_cost = models.PositiveIntegerField(default=1)
     control_unit_cost = models.PositiveIntegerField(default=1)

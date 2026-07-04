@@ -105,23 +105,38 @@ def flush_test_caches() -> None:
 
 
 def _flush_arx_singleton_caches() -> None:
-    """Flush every ArxSharedMemoryManager subclass's singleton pk cache.
+    """Flush every ArxSharedMemoryManager instance's singleton pk cache.
 
-    Walks the subclass tree (mirroring ``_flush_sharedmemorymodel_caches``)
-    so each test starts with a fresh singleton cache, matching the
-    fresh-process semantics of production.
+    The pk is cached per-manager-instance (on ``self.__dict__``), so we walk
+    the subclass tree to find each concrete manager class, then walk the
+    SharedMemoryModel subclass tree to find instantiated managers.
     """
+    from evennia.utils.idmapper.models import SharedMemoryModel  # noqa: PLC0415
+
     from core.managers import ArxSharedMemoryManager  # noqa: PLC0415
 
-    seen: set[type] = set()
+    # Collect all ArxSharedMemoryManager subclasses
+    arx_mgr_classes: set[type] = set()
     queue: list[type] = [ArxSharedMemoryManager]
     while queue:
         cls = queue.pop()
+        if cls in arx_mgr_classes:
+            continue
+        arx_mgr_classes.add(cls)
+        queue.extend(cls.__subclasses__())
+
+    # Walk SharedMemoryModel subclasses to find instantiated managers
+    seen: set[type] = set()
+    smm_queue: list[type] = [SharedMemoryModel]
+    while smm_queue:
+        cls = smm_queue.pop()
         if cls in seen:
             continue
         seen.add(cls)
-        cls.flush_singleton_cache()
-        queue.extend(cls.__subclasses__())
+        mgr = getattr(cls, "objects", None)  # noqa: GETATTR_LITERAL
+        if mgr is not None and type(mgr) in arx_mgr_classes:
+            mgr.flush_singleton_cache()
+        smm_queue.extend(cls.__subclasses__())
 
 
 register_test_cache_flusher(_flush_arx_singleton_caches)

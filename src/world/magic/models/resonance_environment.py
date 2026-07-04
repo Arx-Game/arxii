@@ -19,6 +19,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.manager import SharedMemoryManager
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
@@ -224,6 +225,8 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
     Access via ``get_resonance_environment_config()`` in
     ``world.magic.services.resonance_environment``.
     """
+
+    objects = ArxSharedMemoryManager()
 
     base_coefficient = models.DecimalField(
         max_digits=6,
