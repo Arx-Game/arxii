@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.covenants.exceptions import CourtGrantNotMonotonicError
 
 if TYPE_CHECKING:
@@ -106,6 +108,7 @@ def raise_court_pact_grant(*, pact: CourtPact, new_cap: int) -> CourtPact:
     return pact
 
 
+@transaction.atomic
 def ensure_court_grant_role(covenant: Covenant) -> NPCRole:
     """Get-or-create the NPCRole carrying covenant's COURT_GRANT petition offer.
 
@@ -113,8 +116,20 @@ def ensure_court_grant_role(covenant: Covenant) -> NPCRole:
     role + its single petition offer + details row the first time any servant
     of this Court tries to negotiate; staff never need to hand-author this per
     master (#1718 design question 4 — NPC-master automation).
+
+    Locks the covenant row via ``select_for_update`` so concurrent negotiation
+    attempts for the same covenant can't both pass the ``court_grant_role_id is
+    None`` check (mirrors ``activate_permit`` in
+    ``world/buildings/services.py``): the second caller blocks until the first
+    commits, then re-reads and returns the role the first caller created
+    instead of colliding on the unique ``NPCRole.name``. The whole provisioning
+    sequence is one atomic unit, so a failure partway through (e.g. between
+    creating the role and saving it onto the covenant) rolls back entirely —
+    it never leaves an orphaned ``NPCRole`` that would permanently break every
+    later call with an ``IntegrityError``.
     """
     from world.covenants.factories import wire_court_grant_petition_content  # noqa: PLC0415
+    from world.covenants.models import Covenant  # noqa: PLC0415
     from world.covenants.services import get_court_grant_config  # noqa: PLC0415
     from world.npc_services.constants import OfferKind  # noqa: PLC0415
     from world.npc_services.models import (  # noqa: PLC0415
@@ -123,6 +138,11 @@ def ensure_court_grant_role(covenant: Covenant) -> NPCRole:
         NPCServiceOffer,
     )
 
+    # Lock the covenant row for the duration of the transaction and re-read
+    # court_grant_role_id from that lock — not from the caller's possibly
+    # stale in-memory `covenant` — so we don't act on state that another
+    # concurrent call is in the middle of writing.
+    covenant = Covenant.objects.select_for_update().get(pk=covenant.pk)
     if covenant.court_grant_role_id is not None:
         return covenant.court_grant_role
 
