@@ -42,7 +42,7 @@ from world.ships.constants import (
     SHIP_CONSTRUCTION_THRESHOLD,
     ShipUpgradeStat,
 )
-from world.ships.exceptions import ShipNeedsRepairError
+from world.ships.exceptions import ShipNeedsRepairError, ShipUpgradeError
 from world.ships.seeds import ensure_ship_kind
 
 if TYPE_CHECKING:
@@ -188,7 +188,7 @@ def start_ship_upgrade(
     Raises:
         ShipNeedsRepairError: If ``ship.needs_repair`` — a damaged ship must
             be repaired before further investment.
-        ValueError: If *stat* isn't a valid ``ShipUpgradeStat``, or
+        ShipUpgradeError: If *stat* isn't a valid ``ShipUpgradeStat``, or
             *target_level* doesn't exceed the current level for *stat*.
 
     Returns:
@@ -203,13 +203,13 @@ def start_ship_upgrade(
         raise ShipNeedsRepairError
 
     if stat not in ShipUpgradeStat.values:
-        msg = f"'{stat}' is not a valid ShipUpgradeStat."
-        raise ValueError(msg)
+        msg = f"'{stat}' is not a valid stat."
+        raise ShipUpgradeError(msg)
 
     current_level = getattr(ship, f"{stat}_level")
     if target_level <= current_level:
-        msg = f"target_level must exceed the ship's current {stat}_level."
-        raise ValueError(msg)
+        msg = f"That upgrade must target a higher {stat} level than the ship currently has."
+        raise ShipUpgradeError(msg)
 
     now = timezone.now()
     with transaction.atomic():

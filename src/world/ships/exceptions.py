@@ -34,3 +34,11 @@ class ShipOwnershipError(ShipError):
 
     def __init__(self, user_message: str = "You do not own or command this ship.") -> None:
         super().__init__(user_message)
+
+
+class ShipUpgradeError(ShipError):
+    """Raised when a ship-upgrade request names an invalid stat or a
+    non-increasing ``target_level``."""
+
+    def __init__(self, user_message: str = "That upgrade is not valid.") -> None:
+        super().__init__(user_message)

@@ -159,8 +159,8 @@ class UpgradeShipAction(Action):
                 return ActionResult(success=False, message=f"'{stat}' is not a valid stat.")
         except ShipError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except ValueError as exc:
-            return ActionResult(success=False, message=str(exc))
+        except ValueError:
+            return ActionResult(success=False, message="That upgrade is not valid.")
         return ActionResult(
             success=True,
             message=f"{stat.title()} upgrade to level {target_level} begins "

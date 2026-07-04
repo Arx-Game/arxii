@@ -8,7 +8,7 @@ from world.projects.constants import ProjectKind
 from world.projects.services import get_kind_handler
 from world.scenes.factories import PersonaFactory
 from world.ships.constants import ShipUpgradeStat
-from world.ships.exceptions import ShipNeedsRepairError
+from world.ships.exceptions import ShipNeedsRepairError, ShipUpgradeError
 from world.ships.factories import ShipDetailsFactory
 from world.ships.models import ShipRepairDetails, ShipUpgradeDetails
 from world.ships.services import (
@@ -56,7 +56,7 @@ class StartShipUpgradeTests(TestCase):
             )
 
     def test_raises_on_invalid_stat(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ShipUpgradeError):
             start_ship_upgrade(
                 persona=self.persona,
                 ship=self.ship,
@@ -65,7 +65,7 @@ class StartShipUpgradeTests(TestCase):
             )
 
     def test_raises_when_target_not_greater_than_current(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ShipUpgradeError):
             start_ship_upgrade(
                 persona=self.persona,
                 ship=self.ship,
