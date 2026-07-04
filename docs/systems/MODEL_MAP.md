@@ -1578,6 +1578,7 @@
 ### PenetrationOutcomeFactor
 
 ### Service Functions
+- `active_concealments(target: 'ObjectDB') -> django.db.models.query.QuerySet`
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult — Increment a condition's severity and advance stage if threshold crossed.`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
 - `apply_condition_by_name(*, payload: object, condition_name: str) -> None — Apply a named condition to the character carried by the event payload.`
@@ -3110,6 +3111,7 @@
 - `calculate_affinity_breakdown(resonances: 'QuerySet[ResonanceModel]') -> 'dict[str, int]' — Derive affinity counts from a set of resonances.`
 - `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int', strain_commitment: 'int' = 0, lethal: 'bool' = True) -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
 - `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig', *, lethal: 'bool' = True) -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
+- `coherence_cache_scope() — Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
 - `compute_anchor_cap(thread: 'Thread') -> 'int' — Return the anchor-side cap for this thread (Spec A §2.4).`
 - `compute_effective_cap(thread: 'Thread') -> 'int' — Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
 - `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' — Return the path-side cap for a character (Spec A §2.4).`
@@ -3370,6 +3372,7 @@
 ### Service Functions
 - `begin_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'CharacterEngagement' — Ensure the character has an engagement; create one if none exists.`
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
+- `coherence_cache_scope() — Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
 - `covenant_level_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the authored covenant-level passive bonus across engaged memberships (#762).`
 - `covenant_role_base_total(sheet: 'object', target: 'ModifierTarget') -> 'int' — Raw engaged-covenant-role bonus for ``target`` — no per-gear marginal blend (#1174).`
 - `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
@@ -3670,6 +3673,13 @@
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - creditor_organization -> societies.Organization [FK] (nullable)
+
+### NpcRegard
+**Foreign Keys:**
+  - holder_persona -> scenes.Persona [FK]
+  - target_persona -> scenes.Persona [FK] (nullable)
+  - target_organization -> societies.Organization [FK] (nullable)
+  - target_society -> societies.Society [FK] (nullable)
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
@@ -4365,6 +4375,8 @@
   - standings_held_by <- npc_services.NPCStanding
   - offer_cooldowns <- npc_services.OfferCooldown
   - role_cooldowns <- npc_services.NPCRoleCooldown
+  - regards_held <- npc_services.NpcRegard
+  - regards_as_target <- npc_services.NpcRegard
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial
@@ -4729,6 +4741,7 @@
   - hosted_events <- events.Event
   - event_invitations <- events.EventInvitation
   - gemits <- narrative.Gemit
+  - regards_as_target <- npc_services.NpcRegard
 
 ### OrganizationType
 **Pointed to by:**
@@ -4764,6 +4777,7 @@
   - gemits <- narrative.Gemit
   - npc_roles <- npc_services.NPCRole
   - loan_offers <- npc_services.LoanOfferDetails
+  - regards_as_target <- npc_services.NpcRegard
 
 ### OrganizationRank
 **Foreign Keys:**

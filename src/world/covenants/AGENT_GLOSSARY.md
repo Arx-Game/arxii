@@ -26,11 +26,16 @@ via `release_court_pact`; queried via `active_court_pact_for`.
 _Avoid_: mentor bond, patron, indenture.
 
 **Court mission / mission-driven engagement**:
-The engagement gate for a Court servant: `has_active_court_mission(character_sheet, covenant)` is
-True iff the character is a participant in an ACTIVE `MissionInstance` whose
-`source_offer.role.faction_affiliation` matches the Court's backing organization. A servant may
-only engage their Court role while on active business for the Court's org — mission-driven, not
-presence-driven.
+The engagement gate for a Court servant: `can_engage_membership` is True iff EITHER (a)
+`has_active_court_mission(character_sheet, covenant)` — the character is a
+participant in an ACTIVE `MissionInstance` whose `source_offer.role.faction_affiliation`
+matches the Court's backing organization — OR (b)
+`has_regarded_target_present(character_sheet, covenant)` — a persona the
+Court's leader holds a nonzero `NpcRegard` opinion of (favorable or hostile) is
+co-present in the servant's current scene (#1717). Both are scene-wide, not
+per-technique or per-target — a servant may only engage their Court role while
+on active business for the Court's org, or while someone their master cares
+about is right there with them.
 _Avoid_: mission assignment (use "Court mission").
 
 **Covenant Role**:

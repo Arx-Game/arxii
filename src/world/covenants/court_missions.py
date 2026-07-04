@@ -1,10 +1,13 @@
-"""Mission-driven engagement predicate for Court covenants (#1589 Task 5).
+"""Court covenant engagement predicates (#1589 Task 5, #1717).
 
-A Court vow ENGAGES only while the member is "on the master's business" — a
-participant in an active mission given by the Court's backing organization.
-The mission, not co-presence, is the gate.
+A Court vow ENGAGES while the member is "on the master's business" — EITHER (a)
+a participant in an active mission given by the Court's backing organization
+(``has_active_court_mission``), OR (b) a persona the Court's leader holds a
+nonzero opinion of is co-present in the servant's current scene
+(``has_regarded_target_present``, #1717). Both are scene-wide checks, not
+per-technique or per-target.
 
-The join chain (verified against code):
+The join chain for ``has_active_court_mission`` (verified against code):
   ``MissionInstance.participants`` (related_name) -> ``MissionParticipant.character``
     (FK -> ``objects.ObjectDB``, hence the filter is on ``character_sheet.character``)
   ``MissionInstance.status == MissionStatus.ACTIVE``
@@ -38,3 +41,37 @@ def has_active_court_mission(*, character_sheet: CharacterSheet, covenant: Coven
         status=MissionStatus.ACTIVE,
         source_offer__role__faction_affiliation_id=covenant.organization_id,
     ).exists()
+
+
+def has_regarded_target_present(*, character_sheet: CharacterSheet, covenant: Covenant) -> bool:
+    """Whether a persona ``covenant.leader`` holds a nonzero opinion of is co-present.
+
+    Scene-level, same granularity as ``has_active_court_mission`` — checks the
+    whole scene, not a specific technique's target. Any nonzero regard counts,
+    positive or negative (a courting target counts the same as a hated enemy);
+    see #1717 for why per-action-type filtering isn't built here. Presence uses
+    the currently-shown persona (``active_persona_for_sheet``), so a disguised
+    target correctly does not trigger this — the servant's allies wouldn't
+    recognize them either.
+    """
+    from world.npc_services.regard import get_regard  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    if covenant.leader_id is None:
+        return False
+    leader_persona = covenant.leader.primary_persona
+
+    char = character_sheet.character
+    location = char.location
+    if location is None or get_active_scene(location) is None:
+        return False
+
+    for obj in location.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is None or sheet == character_sheet:
+            continue
+        target_persona = active_persona_for_sheet(sheet)
+        if get_regard(leader_persona, target_persona) != 0:
+            return True
+    return False

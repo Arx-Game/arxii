@@ -17,10 +17,12 @@ fields + the real effect handler body.
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.npc_services.constants import DrawMode, OfferKind
+from core.mixins import DiscriminatorMixin
+from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType
 
 # Cross-app FK string for the Persona model, referenced by several fields below.
 # Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
@@ -604,3 +606,108 @@ class LoanOfferDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"LoanOffer: {self.offer.label} ({self.principal} @ {self.interest_bps_monthly}bps)"
+
+
+REGARD_MIN = -1000
+REGARD_MAX = 1000
+regard_validators = [MinValueValidator(REGARD_MIN), MaxValueValidator(REGARD_MAX)]
+
+
+class NpcRegard(DiscriminatorMixin, SharedMemoryModel):
+    """A notable NPC's signed opinion of a persona, an Organization, or a Society.
+
+    General opinion axis — positive is favor, negative is hostility. There is
+    no separate "enemy" flag; a strongly negative row IS the enemy declaration.
+    Deliberately kept separate from NPCStanding (PC-target-only, offer-eligibility
+    gating value with different callers) — see ADR-0085.
+
+    Historical rows (``ended_at IS NOT NULL``) are kept as audit trail, mirroring
+    ``LocationOwnership``/``CourtPact``. Uses three separate partial-unique
+    constraints (one per target column) rather than one compound constraint,
+    because Postgres never treats ``NULL = NULL`` as a match — a single
+    constraint across all three nullable columns would let duplicates through.
+    """
+
+    DISCRIMINATOR_FIELD = "target_type"
+    DISCRIMINATOR_MAP = {
+        RegardTargetType.PERSONA: "target_persona",
+        RegardTargetType.ORGANIZATION: "target_organization",
+        RegardTargetType.SOCIETY: "target_society",
+    }
+
+    holder_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.PROTECT,
+        related_name="regards_held",
+        help_text="The notable NPC's persona whose opinion this is.",
+    )
+    target_type = models.CharField(
+        max_length=12,
+        choices=RegardTargetType.choices,
+        help_text="Selects which target FK (persona, organization, society) is active.",
+    )
+    target_persona = models.ForeignKey(
+        _PERSONA_FK,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="regards_as_target",
+        help_text="Any persona (PC or NPC) this opinion is about. Set iff target_type=PERSONA.",
+    )
+    target_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="regards_as_target",
+        help_text="Set iff target_type=ORGANIZATION.",
+    )
+    target_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="regards_as_target",
+        help_text="Set iff target_type=SOCIETY.",
+    )
+    value = models.IntegerField(
+        default=0,
+        validators=regard_validators,
+        help_text=f"Signed opinion ({REGARD_MIN} to {REGARD_MAX}). Negative = hostile.",
+    )
+    reason = models.TextField(
+        blank=True,
+        help_text="Narrative/GM-facing flavor for why this opinion exists.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this opinion was resolved/retracted. NULL = currently active.",
+    )
+
+    class Meta:
+        verbose_name = "NPC Regard"
+        verbose_name_plural = "NPC Regards"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["holder_persona", "target_persona"],
+                condition=models.Q(target_persona__isnull=False) & models.Q(ended_at__isnull=True),
+                name="unique_active_regard_target_persona",
+            ),
+            models.UniqueConstraint(
+                fields=["holder_persona", "target_organization"],
+                condition=(
+                    models.Q(target_organization__isnull=False) & models.Q(ended_at__isnull=True)
+                ),
+                name="unique_active_regard_target_organization",
+            ),
+            models.UniqueConstraint(
+                fields=["holder_persona", "target_society"],
+                condition=models.Q(target_society__isnull=False) & models.Q(ended_at__isnull=True),
+                name="unique_active_regard_target_society",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.holder_persona} -> {self.get_active_target_name()} ({self.value:+d})"

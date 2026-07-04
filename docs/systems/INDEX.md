@@ -671,6 +671,9 @@ Social structures, organizations, reputation, and legend tracking.
   Household Command for own-household witnesses, else best-of Con/Intimidation
   by stat (ruled 2026-07-03); Stealth (new skill, seeded)
   is the act-time leg, wiring later. Untagged deeds skip the fork.
+- **`Organization`/`Society` as `NpcRegard` target (#1717):** either can now be the *target* (not
+  holder) of a notable NPC's external opinion — see the Regard bullet in the NPC Services
+  section above.
 - **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
@@ -1280,7 +1283,9 @@ register as additional kinds.
   `PermitOfferDetails` (1:1 per-kind details; mirrors `ItemFacet` composition),
   `NPCStanding` (per-(PC persona, NPC persona); relocated from `world.missions.MissionGiverStanding`),
   `Functionary` (#1766 — a class-1 NPC placement = `NPCRole` + `room` FK; the non-piloted room-feature
-  anchor for gameplay loops; see ADR-0070 for the Functionary/Standing NPC/Story NPC ontology)
+  anchor for gameplay loops; see ADR-0070 for the Functionary/Standing NPC/Story NPC ontology),
+  `NpcRegard` (#1717 — a notable NPC's signed opinion of a persona/Organization/Society;
+  see the Regard bullet below and ADR-0085)
 - **NPC ontology (ADR-0070):** **Functionary** (class-1, abstracted, room-anchored via its own FK) /
   **Standing NPC** (class-2, named Persona + object) / **Story NPC** (class-3/4, object + sheet, piloted).
   Presence: `functionaries_in_room` / `functionary_in_location` (`world.npc_services.functionaries`);
@@ -1307,6 +1312,12 @@ register as additional kinds.
 - **Allegiance (#1590):** `derive_allegiance(opponent, encounter)` derives `ENEMY` /
   `ALLY_OF_CASTER` / `NEUTRAL` from active `alters_behavior` conditions (charm/calm);
   consumed by combat's `select_npc_actions` per opponent.
+- **Regard (#1717):** `NpcRegard` — a notable NPC's signed opinion
+  (`-1000`..`1000`) of a persona/Organization/Society, mirroring
+  `LocationOwnership`'s discriminator pattern. Read via `get_regard(holder_persona,
+  target)`. Deliberately separate from `NPCStanding` (see ADR-0085). Consumed by
+  Covenant of the Court's `has_regarded_target_present` engagement gate
+  (`world/covenants/court_missions.py`).
 - **Interaction state machine:** ephemeral `InteractionSession` (lives in caller's
   session for one interaction). `start_interaction(role, persona, character, npc_persona=None)`
   → `available_offers(session)` (single-predicate filtered) → `resolve_offer(session, offer)`

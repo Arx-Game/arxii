@@ -6,10 +6,11 @@ from django.utils import timezone
 import factory
 from factory.django import DjangoModelFactory
 
-from world.npc_services.constants import DrawMode, OfferKind
+from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType
 from world.npc_services.models import (
     Functionary,
     MissionOfferDetails,
+    NpcRegard,
     NPCRole,
     NPCRoleCooldown,
     NPCServiceOffer,
@@ -127,3 +128,29 @@ class MissionOfferDetailsFactory(DjangoModelFactory):
     weight = None
     requirements_override = factory.LazyFunction(dict)
     role_cooldown_duration = None
+
+
+class NpcRegardFactory(DjangoModelFactory):
+    """A notable NPC's opinion of a persona (default), an Organization, or a Society."""
+
+    class Meta:
+        model = NpcRegard
+
+    holder_persona = factory.SubFactory(_PERSONA_FACTORY)
+    target_type = RegardTargetType.PERSONA
+    target_persona = factory.SubFactory(_PERSONA_FACTORY)
+    target_organization = None
+    target_society = None
+    value = 0
+
+    class Params:
+        on_organization = factory.Trait(
+            target_type=RegardTargetType.ORGANIZATION,
+            target_persona=None,
+            target_organization=factory.SubFactory("world.societies.factories.OrganizationFactory"),
+        )
+        on_society = factory.Trait(
+            target_type=RegardTargetType.SOCIETY,
+            target_persona=None,
+            target_society=factory.SubFactory("world.societies.factories.SocietyFactory"),
+        )

@@ -1,10 +1,11 @@
-"""Tests for mission-driven Court engagement (#1589 Task 5).
+"""Tests for Court engagement predicates (#1589 Task 5, #1717).
 
-A Court vow ENGAGES only while the member is conducting an active mission
-*for the Court's backing organization* — "on the master's business." The gate
-is the mission, not co-presence.
+A Court vow ENGAGES while the member is "on the master's business" — EITHER
+conducting an active mission *for the Court's backing organization*
+(``CourtEngagementTests``), OR co-present with a persona the Court's leader
+holds a nonzero opinion of (``CourtRegardEngagementTests``, #1717).
 
-Confirmed join chain (verified against code):
+Confirmed join chain for the mission-driven gate (verified against code):
   MissionInstance.participants (related_name) -> MissionParticipant.character
     (FK -> objects.ObjectDB, so filter by character_sheet.character)
   MissionInstance.status == MissionStatus.ACTIVE
@@ -14,8 +15,10 @@ Confirmed join chain (verified against code):
 
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
-from world.covenants.court_missions import has_active_court_mission
+from world.covenants.court_missions import has_active_court_mission, has_regarded_target_present
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -25,7 +28,10 @@ from world.covenants.handlers import can_engage_membership
 from world.covenants.services import evaluate_scene_engagement
 from world.missions.constants import MissionStatus
 from world.missions.factories import MissionInstanceFactory, MissionParticipantFactory
-from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
+from world.npc_services.factories import NpcRegardFactory, NPCRoleFactory, NPCServiceOfferFactory
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.services import set_active_persona
 
 
 class CourtEngagementTests(TestCase):
@@ -149,3 +155,153 @@ class CourtEngagementTests(TestCase):
         evaluate_scene_engagement(character_sheet=membership.character_sheet, room=room)
         membership.refresh_from_db()
         self.assertTrue(membership.engaged)
+
+
+def _make_room(key: str = "CourtRegardTestRoom"):
+    return ObjectDBFactory(db_key=key, db_typeclass_path="typeclasses.rooms.Room")
+
+
+def _place_character_in_room(character, room) -> None:
+    character.db_location = room
+    character.save(update_fields=["db_location"])
+
+
+class CourtRegardEngagementTests(TestCase):
+    """A Court servant's vow also engages when a regarded persona is present (#1717)."""
+
+    def _court_membership_with_leader(self):
+        leader_sheet = CharacterSheetFactory()
+        covenant = CovenantFactory(covenant_type=CovenantType.COURT, leader=leader_sheet)
+        role = CovenantRoleFactory(covenant_type=CovenantType.COURT)
+        membership = CharacterCovenantRoleFactory(covenant=covenant, covenant_role=role)
+        return covenant, membership, leader_sheet
+
+    def test_no_leader_is_not_engageable_via_regard(self):
+        covenant = CovenantFactory(covenant_type=CovenantType.COURT)  # leader=None
+        role = CovenantRoleFactory(covenant_type=CovenantType.COURT)
+        membership = CharacterCovenantRoleFactory(covenant=covenant, covenant_role=role)
+
+        self.assertFalse(
+            has_regarded_target_present(
+                character_sheet=membership.character_sheet, covenant=covenant
+            )
+        )
+
+    def test_regarded_persona_present_makes_engageable(self):
+        covenant, membership, leader_sheet = self._court_membership_with_leader()
+        room = _make_room()
+        _place_character_in_room(membership.character_sheet.character, room)
+        SceneFactory(location=room, is_active=True)
+
+        target_sheet = CharacterSheetFactory()
+        _place_character_in_room(target_sheet.character, room)
+        NpcRegardFactory(
+            holder_persona=leader_sheet.primary_persona,
+            target_persona=target_sheet.primary_persona,
+            value=-800,
+        )
+
+        self.assertTrue(
+            has_regarded_target_present(
+                character_sheet=membership.character_sheet, covenant=covenant
+            )
+        )
+        self.assertTrue(can_engage_membership(membership))
+
+    def test_favorably_regarded_persona_present_also_engages(self):
+        """Positive regard (a courting target, not just an enemy) also engages."""
+        covenant, membership, leader_sheet = self._court_membership_with_leader()
+        room = _make_room()
+        _place_character_in_room(membership.character_sheet.character, room)
+        SceneFactory(location=room, is_active=True)
+
+        target_sheet = CharacterSheetFactory()
+        _place_character_in_room(target_sheet.character, room)
+        NpcRegardFactory(
+            holder_persona=leader_sheet.primary_persona,
+            target_persona=target_sheet.primary_persona,
+            value=600,
+        )
+
+        self.assertTrue(
+            has_regarded_target_present(
+                character_sheet=membership.character_sheet, covenant=covenant
+            )
+        )
+
+    def test_unregarded_persona_present_is_not_engageable(self):
+        covenant, membership, _leader_sheet = self._court_membership_with_leader()
+        room = _make_room()
+        _place_character_in_room(membership.character_sheet.character, room)
+        SceneFactory(location=room, is_active=True)
+
+        stranger_sheet = CharacterSheetFactory()
+        _place_character_in_room(stranger_sheet.character, room)
+        # No NpcRegard row authored — a stranger, not a regarded target.
+
+        self.assertFalse(
+            has_regarded_target_present(
+                character_sheet=membership.character_sheet, covenant=covenant
+            )
+        )
+        self.assertFalse(can_engage_membership(membership))
+
+    def test_regarded_persona_absent_from_scene_is_not_engageable(self):
+        covenant, membership, leader_sheet = self._court_membership_with_leader()
+        room = _make_room()
+        _place_character_in_room(membership.character_sheet.character, room)
+        SceneFactory(location=room, is_active=True)
+
+        # Regarded target exists but is NOT placed in the room.
+        target_sheet = CharacterSheetFactory()
+        NpcRegardFactory(
+            holder_persona=leader_sheet.primary_persona,
+            target_persona=target_sheet.primary_persona,
+            value=-800,
+        )
+
+        self.assertFalse(
+            has_regarded_target_present(
+                character_sheet=membership.character_sheet, covenant=covenant
+            )
+        )
+
+    def test_disguised_regarded_target_present_is_not_engageable(self):
+        """A regard row targets the PRIMARY persona; the wearer is showing a mask (#1717).
+
+        ``has_regarded_target_present`` reads ``active_persona_for_sheet``, not
+        ``primary_persona`` directly, so a target physically present but currently
+        showing a different face than the one the regard row names must NOT engage.
+        """
+        covenant, membership, leader_sheet = self._court_membership_with_leader()
+        room = _make_room()
+        _place_character_in_room(membership.character_sheet.character, room)
+        SceneFactory(location=room, is_active=True)
+
+        target_sheet = CharacterSheetFactory()
+        _place_character_in_room(target_sheet.character, room)
+        NpcRegardFactory(
+            holder_persona=leader_sheet.primary_persona,
+            target_persona=target_sheet.primary_persona,
+            value=-800,
+        )
+
+        mask = PersonaFactory(character_sheet=target_sheet, persona_type=PersonaType.TEMPORARY)
+        set_active_persona(target_sheet, mask)
+
+        self.assertFalse(
+            has_regarded_target_present(
+                character_sheet=membership.character_sheet, covenant=covenant
+            )
+        )
+        self.assertFalse(can_engage_membership(membership))
+
+    def test_mission_still_engages_without_any_regard(self):
+        """Regression: the pre-existing mission-driven engagement path still works."""
+        covenant, membership, _leader_sheet = self._court_membership_with_leader()
+        npc_role = NPCRoleFactory(faction_affiliation=covenant.organization)
+        offer = NPCServiceOfferFactory(role=npc_role)
+        instance = MissionInstanceFactory(status=MissionStatus.ACTIVE, source_offer=offer)
+        MissionParticipantFactory(instance=instance, character=membership.character_sheet.character)
+
+        self.assertTrue(can_engage_membership(membership))
