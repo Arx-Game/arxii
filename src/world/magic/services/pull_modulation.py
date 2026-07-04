@@ -24,13 +24,15 @@ def apply_target_modulation(
     thread: Thread,
     target: ObjectDB | None,
     effect_row: ThreadPullEffect,
-    base_scaled: int,
-) -> int:
+    base_scaled: int | None,
+) -> int | None:
     """Modulate ``base_scaled`` for the live ``target``, or pass it through unchanged.
 
-    No-op (returns ``base_scaled`` as-is) when there is no target or the thread's
-    ``target_kind`` has no modulation rule.
+    No-op (returns ``base_scaled`` as-is) when there is no numeric payload, no
+    target, or the thread's ``target_kind`` has no modulation rule.
     """
+    if base_scaled is None:
+        return base_scaled
     if target is None:
         return base_scaled
     if thread.target_kind == TargetKind.COVENANT_ROLE:
