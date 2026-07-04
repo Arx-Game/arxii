@@ -313,7 +313,11 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
 def end_audere(character: ObjectDB) -> None:
     """End Audere for a character, reverting all bonuses.
 
-    Safe to call even if Audere is not active (no-op).
+    The caller must guarantee Audere is active on ``character`` (typically by
+    pre-filtering on an actual ConditionInstance, as ``cleanup_completed_encounter``
+    does). This function does not check for an active Audere condition before
+    reverting the engagement intensity modifier and anima pool — calling it
+    without an active Audere condition would silently corrupt engagement state.
     """
     from world.conditions.models import ConditionTemplate
     from world.conditions.services import remove_condition
