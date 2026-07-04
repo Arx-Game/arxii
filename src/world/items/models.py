@@ -247,6 +247,22 @@ class ItemTemplate(SharedMemoryModel):
         related_name="minimum_for_templates",
         help_text="Minimum quality tier this item can be crafted at.",
     )
+    tied_resonance = models.ForeignKey(
+        RESONANCE_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tied_item_templates",
+        help_text="Resonance this item archetype is thematically tied to (a touchstone).",
+    )
+    resonance_tier = models.ForeignKey(
+        "magic.ResonanceTier",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Potency tier, required together with tied_resonance.",
+    )
     image = models.ForeignKey(
         "evennia_extensions.PlayerMedia",
         on_delete=models.SET_NULL,
@@ -371,6 +387,16 @@ class ItemTemplate(SharedMemoryModel):
                 ),
                 name="items_armor_soak_requires_armor_archetype",
             ),
+            models.CheckConstraint(
+                check=(
+                    (models.Q(tied_resonance__isnull=True) & models.Q(resonance_tier__isnull=True))
+                    | (
+                        models.Q(tied_resonance__isnull=False)
+                        & models.Q(resonance_tier__isnull=False)
+                    )
+                ),
+                name="itemtemplate_resonance_tier_together",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -384,6 +410,11 @@ class ItemTemplate(SharedMemoryModel):
             raise ValidationError(
                 {"on_use_difficulty": "Only valid when on_use_check_type is set."}
             )
+        has_resonance = self.tied_resonance_id is not None
+        has_tier = self.resonance_tier_id is not None
+        if has_resonance != has_tier:
+            msg = "tied_resonance and resonance_tier must be set together, or both left unset."
+            raise ValidationError(msg)
 
     @property
     def is_usable(self) -> bool:

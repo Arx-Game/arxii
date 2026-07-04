@@ -1,1 +1,1 @@
-0023_labstationdetails_craftingrecipe_requires_station
+0024_itemtemplate_resonance_tier_and_more
