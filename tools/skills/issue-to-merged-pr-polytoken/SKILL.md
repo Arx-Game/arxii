@@ -180,8 +180,11 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
 
 The PR body references the approved spec via `Closes #<issue>`.
 
-**Before pushing, run `uv run pre-commit run --all-files`** — matches CI's
-`pre-commit` job exactly (committing with hooks only checks changed files).
+**Do NOT run `uv run pre-commit run --all-files` (or whole-repo test suites) as a
+pre-push precheck — it can crash this devcontainer.** The per-file hooks already
+ran at commit; CI's `pre-commit` job is the gate. Only if the branch used
+`--no-verify` commits, scope the catch-up to the diff (never `--all-files`):
+`uv run pre-commit run --from-ref origin/main --to-ref HEAD`.
 
 ### 6. CI watch
 

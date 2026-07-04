@@ -275,6 +275,10 @@ iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
 **For PR work, prefer `just test-affected`** — it diffs against `origin/main`
 and runs only the apps your branch touches plus import dependents, so you don't
 waste time on unrelated suites. For a single app, use `just test-fast <app>`.
+(Use `test-affected` for *mid-work* iteration on a multi-app change — but at the
+**final pre-push moment** keep to the focused per-app `just test-fast <app>` and
+skip whole-repo passes; running everything at once can crash the devcontainer.
+See "Completing a Unit of Work.")
 
 Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
 fixing what CI catches. **CI is the full-regression gate** — run a local
@@ -300,7 +304,11 @@ rule: see the `running-tests` skill.
   *in this PR*. A code change that leaves its docs stale is incomplete.
 - **Update the roadmap** — mark completed phases/items in the relevant
   `docs/roadmap/*.md`; document what was built, not just that it's done.
-- **Run the fast SQLite tier** for the apps you touched (`just test-affected`
-  or `just test-fast <app>`).
+- **Run the fast SQLite tier** for the apps you touched (`just test-fast <app>`).
+  At this final pre-push moment keep it to the focused per-app run — **do NOT run
+  `pre-commit run --all-files`, a broad `just test-affected`, or `just regression`
+  as a precheck; the whole-repo pass can crash this devcontainer** (per-file hooks
+  already ran at commit, and CI is the gate). If you must re-run hooks locally,
+  scope to the diff: `uv run pre-commit run --from-ref origin/main --to-ref HEAD`.
 - **Push and let CI gate regression** — CI runs the Postgres parity suite on every
   PR; monitor the PR and fix failures there.

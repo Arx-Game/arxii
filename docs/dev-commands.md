@@ -59,7 +59,9 @@ Django-only command that doesn't fully initialize Evennia.
 - `ruff check .` — Run Python linting (import sorting, flake8 rules, and more)
 - `ruff check . --fix` — Auto-fix Python linting issues where possible
 - `ruff format .` — Format Python code (replaces black/isort, line length 100)
-- `pre-commit run --all-files` — Run all pre-commit hooks (uses ruff)
+- `pre-commit run --all-files` — Run all pre-commit hooks (uses ruff). **Heavy —
+  whole-repo; can crash the devcontainer. Not for pre-push prechecks (see caution
+  below); prefer the diff-scoped `--from-ref origin/main --to-ref HEAD` form.**
 
 **Always commit with hooks — never `--no-verify`.** `--no-verify` skips this
 repo's **custom linters** (`getattr-literal`, `string-literal`, `objectdb-param`,
@@ -68,10 +70,17 @@ cover, so a `--no-verify` commit looks clean locally and then fails CI's
 `pre-commit` job — a wasted round trip. It also skips `ty` (the project-wide
 type checker) and `ruff-format` (a separate hook from `ruff check`), so running
 just `ty check` + `ruff check` by hand afterward is not equivalent to the real
-hook set. If a branch was ever built via `--no-verify` commits, run the full
-`uv run pre-commit run --all-files` (matches CI's `pre-commit` job) before
-push and confirm every hook passes — `uv run pre-commit run --from-ref
-origin/main --to-ref HEAD` scopes it to just the branch's changes.
+hook set. If a branch was ever built via `--no-verify` commits, run the
+**diff-scoped** catch-up `uv run pre-commit run --from-ref origin/main --to-ref
+HEAD` before push and confirm every hook passes.
+
+**Avoid `pre-commit run --all-files` as a pre-push precheck.** The whole-repo
+pass (ty/ruff over thousands of files) can crash this devcontainer — a real
+stability limit, not a style preference. The per-file hooks already run at each
+commit and **CI's `pre-commit` job is the authoritative gate**; let it catch any
+untouched-file reflow rather than risking the session. Use the diff-scoped
+`--from-ref origin/main --to-ref HEAD` form above when you genuinely need to
+re-run hooks locally.
 
 ### CI Quality Gates (SonarCloud)
 
