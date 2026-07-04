@@ -1089,7 +1089,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     # gate. NPCs without sheets and ineligible characters are no-ops inside.
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 
-    maybe_create_audere_offer(character, stats.intensity)
+    maybe_create_audere_offer(character, stats.intensity, sheet=sheet)
 
     from world.magic.audere_majora import maybe_create_audere_majora_offer  # noqa: PLC0415
 

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from django.db import models, transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 AUDERE_CONDITION_NAME = "Audere"
 AUDERE_MAJORA_CONDITION_NAME = "Audere Majora"
@@ -347,23 +351,32 @@ def end_audere(character: ObjectDB) -> None:
 
 
 def maybe_create_audere_offer(
-    character: ObjectDB, runtime_intensity: int
+    character: ObjectDB, runtime_intensity: int, *, sheet: CharacterSheet | None = None
 ) -> PendingAudereOffer | None:
     """Persist a poll-able offer when the Audere gate opens for this cast.
 
     Returns None (no row) for NPCs without a CharacterSheet or when any
     eligibility gate fails. Idempotent: repeated qualifying casts update the
     single row per character (update_or_create).
+
+    Accepts an optional ``sheet`` kwarg to avoid re-fetching the CharacterSheet
+    when the caller already has it (e.g. the Step 8c cast hook). When omitted,
+    falls back to fetching it.
     """
     from world.character_sheets.models import CharacterSheet
 
-    sheet = CharacterSheet.objects.filter(character=character).first()
+    if sheet is None:
+        sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return None
-    if not check_audere_eligibility(character, runtime_intensity):
+
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
         return None
 
-    stage_order = soulfray_stage_order_snapshot(character)
+    stage_order = _evaluate_audere_gates(character, runtime_intensity, threshold)
+    if stage_order is None:
+        return None
 
     offer, _created = PendingAudereOffer.objects.update_or_create(
         character_sheet=sheet,
