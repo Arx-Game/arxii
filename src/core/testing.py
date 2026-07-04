@@ -102,3 +102,26 @@ def flush_test_caches() -> None:
     _flush_sharedmemorymodel_caches()
     for flusher in _custom_cache_flushers:
         flusher()
+
+
+def _flush_arx_singleton_caches() -> None:
+    """Flush every ArxSharedMemoryManager subclass's singleton pk cache.
+
+    Walks the subclass tree (mirroring ``_flush_sharedmemorymodel_caches``)
+    so each test starts with a fresh singleton cache, matching the
+    fresh-process semantics of production.
+    """
+    from core.managers import ArxSharedMemoryManager  # noqa: PLC0415
+
+    seen: set[type] = set()
+    queue: list[type] = [ArxSharedMemoryManager]
+    while queue:
+        cls = queue.pop()
+        if cls in seen:
+            continue
+        seen.add(cls)
+        cls.flush_singleton_cache()
+        queue.extend(cls.__subclasses__())
+
+
+register_test_cache_flusher(_flush_arx_singleton_caches)
