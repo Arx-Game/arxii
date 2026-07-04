@@ -530,6 +530,14 @@ def _resolve_strike_success(
             result.units_routed.append(unit.pk)
         unit.save(update_fields=["strength", "status"])
 
+        if unit.status == BattleUnitStatus.DESTROYED:
+            from world.battles.models import BattleVehicle  # noqa: PLC0415
+            from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
+
+            vehicle = BattleVehicle.objects.filter(unit=unit, is_structural=False).first()
+            if vehicle is not None:
+                eject_vehicle_occupants(vehicle=vehicle)
+
     side = declaration.participant.side
     base_vp = success_level * STRIKE_VP_PER_LEVEL
     vp_gain = round(base_vp * BATTLE_POSTURE_VP_MULTIPLIER.get(side.posture, 1.0))
@@ -732,6 +740,7 @@ def _resolve_breach_success(
     from world.battles.constants import (  # noqa: PLC0415
         BREACH_INTEGRITY_PER_LEVEL,
         BREACH_VP_PER_LEVEL,
+        FortificationKind,
     )
 
     fort = declaration.target_fortification
@@ -743,6 +752,14 @@ def _resolve_breach_success(
     if fort.integrity == 0:
         fort.breached = True
     fort.save(update_fields=["integrity", "breached"])
+
+    if fort.breached and fort.kind == FortificationKind.HULL:
+        from world.battles.models import BattleVehicle  # noqa: PLC0415
+        from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
+
+        vehicle = BattleVehicle.objects.filter(place=fort.place).first()
+        if vehicle is not None:
+            eject_vehicle_occupants(vehicle=vehicle)
 
     side = declaration.participant.side
     base_vp = success_level * BREACH_VP_PER_LEVEL

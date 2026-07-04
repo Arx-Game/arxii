@@ -21,6 +21,8 @@ from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     FORTIFICATION_LEVEL_INTEGRITY_BONUS,
+    VEHICLE_HAZARD_BASE_DAMAGE,
+    VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY,
     BattleActionKind,
     BattleActionScope,
     BattleOutcome,
@@ -72,6 +74,7 @@ if TYPE_CHECKING:
     from world.buildings.models import Building
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.conditions.models import DamageType
     from world.covenants.models import Covenant
     from world.magic.models import Technique
     from world.stories.models import Story
@@ -327,6 +330,77 @@ def places_overlap(place_a: BattlePlace, place_b: BattlePlace) -> bool:
     distance_squared = dx * dx + dy * dy
     radius_sum = place_a.footprint_radius + place_b.footprint_radius
     return distance_squared < radius_sum * radius_sum
+
+
+def eject_vehicle_occupants(*, vehicle: BattleVehicle) -> None:
+    """Eject every unit/participant embedded on *vehicle*'s place, applying the
+    environmental hazard consequence (#1714). Called when a structural vehicle's
+    hull Fortification breaches, or a living-mount vehicle's unit is DESTROYED.
+
+    Does not delete or touch vehicle.place itself — the place row persists as
+    the wreck/carcass; only occupants' place FKs are cleared.
+    """
+    from world.conditions.factories import (  # noqa: PLC0415
+        ensure_drowning_damage_type,
+        ensure_falling_damage_type,
+    )
+
+    aerial = vehicle.vehicle_kind in (VehicleKind.AIRSHIP, VehicleKind.DRAGON)
+    damage_type = ensure_falling_damage_type() if aerial else ensure_drowning_damage_type()
+    hazard_property_name = "flying" if aerial else "aquatic"
+
+    for unit in BattleUnit.objects.filter(place=vehicle.place):
+        unit.place = None
+        unit.save(update_fields=["place"])
+        _apply_environmental_hazard_to_unit(unit, hazard_property_name)
+
+    for participant in BattleParticipant.objects.filter(place=vehicle.place):
+        participant.place = None
+        participant.save(update_fields=["place"])
+        _apply_environmental_hazard_to_participant(participant, damage_type)
+
+
+def _apply_environmental_hazard_to_unit(unit: BattleUnit, hazard_property_name: str) -> None:
+    """Flat strength penalty for an abstract BattleUnit lacking the relevant
+    presence-only Property (#1714). No per-unit resistance granularity — mirrors
+    how Property is presence-only for units everywhere else."""
+    from world.battles.resolution import _compute_unit_status  # noqa: PLC0415
+
+    if unit.properties.filter(name=hazard_property_name).exists():
+        return
+    unit.strength = max(0, unit.strength - VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY)
+    unit.status = _compute_unit_status(unit.strength, unit.morale)
+    unit.save(update_fields=["strength", "status"])
+
+
+def _apply_environmental_hazard_to_participant(
+    participant: BattleParticipant, damage_type: DamageType
+) -> None:
+    """Real PC drowning/falling damage: resistance -> debit vitals -> consequences,
+    mirroring world.battles.resolution._resolve_failure's battles-native pattern,
+    extended with resolve_damage_type_resistance for a typed hazard (#1714, ADR-0073)."""
+    from world.conditions.services import resolve_damage_type_resistance  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+    from world.vitals.services import process_damage_consequences  # noqa: PLC0415
+
+    sheet = participant.character_sheet
+    try:
+        vitals = sheet.vitals
+    except CharacterVitals.DoesNotExist:
+        return
+
+    effective = resolve_damage_type_resistance(
+        sheet.character, VEHICLE_HAZARD_BASE_DAMAGE, damage_type
+    )
+    if effective <= 0:
+        return
+    vitals.health -= effective
+    vitals.save(update_fields=["health"])
+    process_damage_consequences(
+        character_sheet=sheet,
+        damage_dealt=effective,
+        damage_type=damage_type,
+    )
 
 
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:

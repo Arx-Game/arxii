@@ -205,3 +205,10 @@ FORTIFICATION_LEVEL_INTEGRITY_BONUS = 20
 # Flat VP like REPEL/HOLD — SET_ENVIRONMENT doesn't move a numeric resource.
 SET_ENVIRONMENT_BASE_ROUNDS = 1
 SET_ENVIRONMENT_VP = 4
+
+# Environmental hazard consequence on vehicle destruction (#1714). Abstract
+# BattleUnits use a flat authored penalty (no per-unit resistance granularity,
+# matching how Property is presence-only for units everywhere else); real PCs
+# route through resolve_damage_type_resistance for immunity = high resistance.
+VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY = 30
+VEHICLE_HAZARD_BASE_DAMAGE = 20

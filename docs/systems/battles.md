@@ -556,6 +556,7 @@ Multi-write operations use `@transaction.atomic`.
 | `maybe_conclude_on_timer` | `(*, battle) -> BattleOutcome \| None` | Fires when no active round exists and `completed_round_count >= round_limit`. Timeout rule: defender holds unless attacker meets threshold. |
 | `create_battle_vehicle` | `(*, battle, side, place_name, vehicle_kind=VehicleKind.SHIP, is_structural=True) -> BattleVehicle` | Creates a vessel/mount: a paired `BattleUnit` + `BattlePlace`, plus a hull `Fortification` if `is_structural` (#1714). The unit's own `place` stays `None`; other units/participants embed by pointing their own `place` FK at `vehicle.place`. |
 | `places_overlap` | `(place_a, place_b) -> bool` | Whether two `BattlePlace` footprints intersect on the battle map: distance between `(x, y)` centers < sum of `footprint_radius` values (#1714, ADR-0085). |
+| `eject_vehicle_occupants` | `(*, vehicle) -> None` | Clears the `place` FK of every `BattleUnit`/`BattleParticipant` embedded on `vehicle.place` and applies an environmental hazard consequence — drowning (ship/kraken) or falling (airship/dragon) (#1714, ADR-0073). Called from `_resolve_breach_success` when a hull `Fortification` breaches, and from `_resolve_strike_success` when a living-mount vehicle's `BattleUnit` reaches `BattleUnitStatus.DESTROYED`. Abstract `BattleUnit`s take a flat `VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY` strength hit unless they carry the matching presence-only `Property` (`flying`/`aquatic`) — no per-unit resistance math. Real `BattleParticipant`s route `VEHICLE_HAZARD_BASE_DAMAGE` through `conditions.services.resolve_damage_type_resistance` (immunity via high resistance), then debit `CharacterVitals.health` and call `vitals.services.process_damage_consequences`, mirroring `_resolve_failure`'s pattern. Does not touch `vehicle.place` itself — the place persists as the wreck/carcass. |
 
 ## Actions (`src/actions/definitions/battles.py`)
 
@@ -779,7 +780,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 | What | Issue |
 |---|---|
 | Battle writeup / React page | #1735 |
-| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating, see below); reposition movement resolution, embark actions, hull-breach ejection, and drowning/falling hazards still deferred (#1714) |
+| Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below); reposition movement resolution and embark actions still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
 Peril / rescue and the AFK knob are no longer deferred — see
@@ -798,8 +799,10 @@ vehicle-commander gating (`world.battles.services._validate_vehicle_command`, by
 covenant `command_tier` check so a non-covenant-backed vessel is still commandable) are also
 built — see the `declare_battle_action` row in [Services](#services-srcworldbattlesservicespy)
 below and `NotVehicleCommanderError` in [Exceptions](#exceptions-srcworldbattlesexceptionspy).
-Reposition movement resolution, embark actions, hull-breach ejection, and drowning/falling
-hazards remain deferred (#1714).
+Hull-breach and living-mount-defeat ejection, plus the drowning/falling hazard consequence, are
+also built — see the `eject_vehicle_occupants` row in
+[Services](#services-srcworldbattlesservicespy) above. Reposition movement resolution and embark
+actions remain deferred (#1714).
 
 ## Command Hierarchy & the Champion (#1710)
 

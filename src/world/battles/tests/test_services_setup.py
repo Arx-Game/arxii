@@ -36,10 +36,12 @@ from world.battles.factories import (
     BattleParticipantFactory,
     BattlePlaceFactory,
     BattleSideFactory,
+    BattleUnitFactory,
 )
 from world.battles.services import (
     create_battle_vehicle,
     create_fortification,
+    eject_vehicle_occupants,
     open_champion_duel,
     open_siege_engine_encounter,
     places_overlap,
@@ -52,7 +54,9 @@ from world.covenants.constants import CovenantType
 from world.covenants.factories import CovenantFactory, CovenantRankFactory, CovenantRoleFactory
 from world.covenants.models import CharacterCovenantRole
 from world.covenants.services import set_engaged_membership
+from world.mechanics.factories import PropertyFactory
 from world.scenes.constants import RoundStatus
+from world.vitals.factories import CharacterVitalsFactory
 
 
 class CreateBattleTests(TestCase):
@@ -629,3 +633,45 @@ class PlacesOverlapTests(TestCase):
         )
 
         self.assertFalse(places_overlap(a, b))
+
+
+class EjectVehicleOccupantsTests(TestCase):
+    def test_ejects_units_and_participants_and_clears_their_place(self):
+        side = BattleSideFactory()
+        vehicle = create_battle_vehicle(
+            battle=side.battle,
+            side=side,
+            place_name="The Gull",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        passenger_unit = BattleUnitFactory(battle=side.battle, side=side, place=vehicle.place)
+        passenger = BattleParticipantFactory(battle=side.battle, side=side, place=vehicle.place)
+        CharacterVitalsFactory(
+            character_sheet=passenger.character_sheet, health=100, max_health=100
+        )
+
+        eject_vehicle_occupants(vehicle=vehicle)
+
+        passenger_unit.refresh_from_db()
+        passenger.refresh_from_db()
+        self.assertIsNone(passenger_unit.place)
+        self.assertIsNone(passenger.place)
+        self.assertLess(passenger.character_sheet.vitals.health, 100)
+
+    def test_aquatic_unit_skips_hazard(self):
+        side = BattleSideFactory()
+        vehicle = create_battle_vehicle(
+            battle=side.battle,
+            side=side,
+            place_name="The Gull",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+        aquatic = PropertyFactory(name="aquatic")
+        passenger_unit = BattleUnitFactory(battle=side.battle, side=side, place=vehicle.place)
+        passenger_unit.properties.add(aquatic)
+        original_strength = passenger_unit.strength
+
+        eject_vehicle_occupants(vehicle=vehicle)
+
+        passenger_unit.refresh_from_db()
+        self.assertEqual(passenger_unit.strength, original_strength)

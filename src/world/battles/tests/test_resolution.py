@@ -1290,6 +1290,59 @@ class BreachResolutionTests(TestCase):
         self.assertTrue(self.fort.breached)
 
 
+class BreachEjectsVehicleOccupantsTests(TestCase):
+    """Hull breach ejects embarked occupants and clears their place (#1714)."""
+
+    def setUp(self) -> None:
+        from world.battles.services import create_battle, create_battle_vehicle
+
+        self.battle = create_battle(name="Hull Breach Ejection Battle")
+        self.attacker_side = add_side(battle=self.battle, role=BattleSideRole.ATTACKER)
+        self.defender_side = add_side(battle=self.battle, role=BattleSideRole.DEFENDER)
+
+        self.attacker_sheet = CharacterSheetFactory()
+        self.attacker_participant = enlist_participant(
+            battle=self.battle, character_sheet=self.attacker_sheet, side=self.attacker_side
+        )
+
+        self.vehicle = create_battle_vehicle(
+            battle=self.battle, side=self.defender_side, place_name="The Gull"
+        )
+        self.fort = self.vehicle.place.fortifications.get()
+
+        self.passenger = BattleParticipantFactory(
+            battle=self.battle, side=self.defender_side, place=self.vehicle.place
+        )
+
+        self.technique = TechniqueFactory(
+            action_template=ActionTemplateFactory(), damage_profile=False
+        )
+        CharacterTechniqueFactory(character=self.attacker_sheet, technique=self.technique)
+        CharacterAnimaFactory(character=self.attacker_sheet.character, current=20, maximum=30)
+
+        self.battle_round = begin_battle_round(battle=self.battle)
+
+    def test_breach_to_zero_ejects_embarked_participant(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+
+        declare_battle_action(
+            participant=self.attacker_participant,
+            action_kind=BattleActionKind.BREACH,
+            technique=self.technique,
+            target_fortification=self.fort,
+        )
+
+        with patch("world.battles.resolution.perform_check") as mock_check:
+            mock_check.return_value = _success_result(12)  # 12*10=120 >= 120 hull integrity
+            resolve_battle_round(battle_round=self.battle_round)
+
+        self.fort.refresh_from_db()
+        self.assertTrue(self.fort.breached)
+
+        self.passenger.refresh_from_db()
+        self.assertIsNone(self.passenger.place)
+
+
 class FortifyResolutionTests(TestCase):
     def setUp(self) -> None:
         self.battle = BattleFactory()
