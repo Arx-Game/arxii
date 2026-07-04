@@ -8,6 +8,7 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
 from django.db import models, transaction
 from django.db.models import Count, Manager, Prefetch, QuerySet
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -20,6 +21,8 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
+from evennia_extensions.models import PlayerData
+from world.character_sheets.models import CharacterSheet
 from world.narrative.permissions import IsStoryLeadGMOrStaff
 from world.stories.constants import (
     AssistantClaimStatus,
@@ -84,6 +87,7 @@ from world.stories.models import (
     TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
+    TreasuredSignoff,
 )
 from world.stories.pagination import (
     LargeResultsSetPagination,
@@ -102,6 +106,7 @@ from world.stories.permissions import (
     CanViewBeatStakesSummary,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
+    IsBeatStoryOwnerOrStaffForAvailability,
     IsBulletinReplyAuthorOrStaff,
     IsChapterStoryOwnerOrStaff,
     IsClaimantOrLeadGMOrStaff,
@@ -123,6 +128,7 @@ from world.stories.permissions import (
     IsReviewerOrStoryOwnerOrStaff,
     IsSessionRequestGMOrStaff,
     IsSessionRequestParticipantOrStaff,
+    IsSignoffOwner,
     IsStaffOrReadOnly,
     IsStakeBeatStoryOwnerOrStaff,
     IsStakeResolutionBeatStoryOwnerOrStaff,
@@ -174,6 +180,7 @@ from world.stories.serializers import (
     RiskCalibrationSerializer,
     SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
+    StakeAvailabilitySerializer,
     StakeContractActivationSerializer,
     StakeOutcomeSerializer,
     StakeResolutionSerializer,
@@ -194,6 +201,7 @@ from world.stories.serializers import (
     TableBulletinReplySerializer,
     TransitionRequiredOutcomeSerializer,
     TransitionSerializer,
+    TreasuredSignoffSerializer,
     UpdateBulletinPostInputSerializer,
     UpdateBulletinReplyInputSerializer,
     WithdrawOfferInputSerializer,
@@ -3133,3 +3141,97 @@ class StakeContractActivationViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["locked_at"]
     ordering = ["-locked_at"]
+
+
+# ---------------------------------------------------------------------------
+# #1771 task 6: sign-off grant/withdraw + GM stake-availability
+#
+# These operate on stories-owned models (Beat, TreasuredSignoff) and call
+# world.stories.services.boundaries — living here (not world.boundaries.views)
+# keeps that app free of a world.stories import (ADR-0010 FK direction
+# specific->general; stories depends on boundaries, never the reverse). See
+# world/stories/serializers.py's matching comment on TreasuredSignoffSerializer
+# / StakeAvailabilitySerializer, and Task 5's identical call for the
+# underlying service functions.
+# ---------------------------------------------------------------------------
+
+
+class TreasuredSignoffViewSet(viewsets.ModelViewSet):
+    """ViewSet for a player's own pre-scene ``TreasuredSignoff`` grants (#1771).
+
+    Self-authored consent: ``get_queryset`` scopes to the requesting
+    player's own sign-offs. ``create()`` grants (or reactivates) via
+    ``grant_treasured_signoff``; the ``withdraw`` action soft-withdraws via
+    ``withdraw_treasured_signoff``. Never hard-deletes (``destroy`` is not
+    exposed) — story-significant data, per repo convention.
+    """
+
+    http_method_names = ["get", "post", "head", "options"]
+    serializer_class = TreasuredSignoffSerializer
+    permission_classes = [IsSignoffOwner]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["beat", "treasured_subject"]
+    pagination_class = StandardResultsSetPagination
+    ordering = ["beat", "pk"]
+
+    def get_queryset(self) -> QuerySet[TreasuredSignoff]:
+        """Scope queryset to the requesting player's own sign-offs."""
+        try:
+            return TreasuredSignoff.objects.filter(
+                player_data=self.request.user.player_data,
+            ).order_by("beat", "pk")
+        except AttributeError:
+            return TreasuredSignoff.objects.none()
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Grant (or reactivate) a sign-off via ``grant_treasured_signoff``."""
+        from world.stories.services.boundaries import grant_treasured_signoff  # noqa: PLC0415
+
+        if not hasattr(request.user, "player_data"):
+            raise PermissionDenied
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        player_data = cast(PlayerData, request.user.player_data)
+        signoff = grant_treasured_signoff(
+            beat=serializer.validated_data["beat"],
+            player_data=player_data,
+            treasured_subject=serializer.validated_data["treasured_subject"],
+        )
+        output = self.get_serializer(signoff)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def withdraw(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/treasured-signoffs/{id}/withdraw/ — soft-withdraw (idempotent)."""
+        from world.stories.services.boundaries import withdraw_treasured_signoff  # noqa: PLC0415
+
+        signoff = self.get_object()
+        withdraw_treasured_signoff(signoff)
+        signoff.refresh_from_db()
+        return Response(self.get_serializer(signoff).data)
+
+
+class BeatStakeAvailabilityView(APIView):
+    """GET /api/beats/{beat_id}/stake-availability/?sheets={id}&sheets={id} (#1771).
+
+    GM-facing counts-only tally of how ``beat``'s candidate stakes screen for
+    the given party — reuses ``stake_availability``. Never a reason, never
+    which stake or player (ADR-0033): the response is exactly
+    ``{available, blocked, needs_signoff}``. Access mirrors ``BeatViewSet``
+    (staff or the beat's story owner) since this is a GM planning tool.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request: Request, beat_id: int) -> Response:
+        from world.stories.services.boundaries import stake_availability  # noqa: PLC0415
+
+        beat = get_object_or_404(Beat, pk=beat_id)
+        permission = IsBeatStoryOwnerOrStaffForAvailability()
+        if not permission.has_object_permission(request, self, beat):
+            raise PermissionDenied
+
+        sheet_ids = request.query_params.getlist("sheets")
+        sheets = list(CharacterSheet.objects.filter(pk__in=sheet_ids)) if sheet_ids else []
+        availability = stake_availability(beat, sheets)
+        return Response(StakeAvailabilitySerializer(availability).data)
