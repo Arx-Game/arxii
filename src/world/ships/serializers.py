@@ -46,7 +46,9 @@ class ShipDetailsSerializer(serializers.ModelSerializer):
     effective_handling = serializers.SerializerMethodField()
     effective_armament = serializers.SerializerMethodField()
     effective_hull = serializers.SerializerMethodField()
-    owner_persona_id = serializers.IntegerField(source="building.owner_persona_id", read_only=True)
+    owner_persona_id = serializers.IntegerField(
+        source="building.owner_persona_id", read_only=True, allow_null=True
+    )
     owner_persona_name = serializers.SerializerMethodField()
     owner_covenant_id = serializers.SerializerMethodField()
     owner_covenant_name = serializers.SerializerMethodField()

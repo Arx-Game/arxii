@@ -48079,6 +48079,7 @@ components:
         owner_persona_id:
           type: integer
           readOnly: true
+          nullable: true
         owner_persona_name:
           type: string
           nullable: true

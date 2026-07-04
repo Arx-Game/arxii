@@ -26575,7 +26575,7 @@ export interface components {
       readonly cargo_capacity: number;
       /** @description Set when the ship's battle vehicle is breached; gates a SHIP_REPAIR Project. */
       readonly needs_repair: boolean;
-      readonly owner_persona_id: number;
+      readonly owner_persona_id: number | null;
       readonly owner_persona_name: string | null;
       readonly owner_covenant_id: number | null;
       readonly owner_covenant_name: string | null;

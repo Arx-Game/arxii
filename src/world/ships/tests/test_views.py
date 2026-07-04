@@ -110,6 +110,9 @@ class ShipViewSetTests(TestCase):
         result_ids = {row["id"] for row in response.data["results"]}
         self.assertIn(covenant_ship.pk, result_ids)
         self.assertEqual(response.data["results"][0].get("owner_covenant_name") is not None, True)
+        # #1832: a covenant-owned ship has no persona owner — must serialize as
+        # null, not be coerced/omitted (owner_persona_id is nullable on Building).
+        self.assertIsNone(response.data["results"][0]["owner_persona_id"])
 
     def test_pagination_present(self) -> None:
         response = self.client.get("/api/ships/ships/")
