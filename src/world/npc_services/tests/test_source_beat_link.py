@@ -24,3 +24,8 @@ class MissionOfferDetailsSourceBeatTests(TestCase):
         MissionOfferDetails.flush_instance_cache()
         details.refresh_from_db()
         self.assertIsNone(details.source_beat_id)  # SET_NULL keeps the detail row
+
+    def test_serializer_exposes_source_beat(self):
+        from world.npc_services.serializers import MissionOfferDetailsSerializer
+
+        self.assertIn("source_beat", MissionOfferDetailsSerializer().fields)
