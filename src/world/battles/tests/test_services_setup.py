@@ -21,6 +21,7 @@ from world.battles.constants import (
     FortificationKind,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.battles.exceptions import (
     BattleConcludedError,
@@ -35,6 +36,7 @@ from world.battles.factories import (
     BattleSideFactory,
 )
 from world.battles.services import (
+    create_battle_vehicle,
     create_fortification,
     open_champion_duel,
     open_siege_engine_encounter,
@@ -570,3 +572,33 @@ class CreateFortificationTests(TestCase):
         building = BuildingFactory(fortification_level=0)
         fort = create_fortification(place=self.place, defending_side=self.side, building=building)
         self.assertEqual(fort.max_integrity, BASE_INTEGRITY[FortificationKind.WALL])
+
+
+class CreateBattleVehicleTests(TestCase):
+    def test_structural_vehicle_gets_hull_fortification(self):
+        side = BattleSideFactory()
+        vehicle = create_battle_vehicle(
+            battle=side.battle,
+            side=side,
+            place_name="The Wave Cutter",
+            vehicle_kind=VehicleKind.SHIP,
+        )
+
+        self.assertTrue(vehicle.is_structural)
+        self.assertEqual(vehicle.unit.place, None)
+        hull = vehicle.place.fortifications.get(kind=FortificationKind.HULL)
+        self.assertEqual(hull.defending_side, side)
+        self.assertEqual(hull.integrity, hull.max_integrity)
+
+    def test_living_mount_gets_no_fortification(self):
+        side = BattleSideFactory()
+        vehicle = create_battle_vehicle(
+            battle=side.battle,
+            side=side,
+            place_name="Skytalon",
+            vehicle_kind=VehicleKind.DRAGON,
+            is_structural=False,
+        )
+
+        self.assertFalse(vehicle.is_structural)
+        self.assertEqual(vehicle.place.fortifications.count(), 0)

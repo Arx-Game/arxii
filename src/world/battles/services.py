@@ -29,6 +29,7 @@ from world.battles.constants import (
     FortificationKind,
     TerrainType,
     UnitQuality,
+    VehicleKind,
 )
 from world.battles.exceptions import (
     BattleConcludedError,
@@ -57,6 +58,7 @@ from world.battles.models import (
     BattleSide,
     BattleUnit,
     BattleUnitCapability,
+    BattleVehicle,
     Fortification,
 )
 from world.combat.constants import OpponentTier
@@ -253,6 +255,63 @@ def create_fortification(
         integrity=max_integrity,
         max_integrity=max_integrity,
     )
+
+
+@transaction.atomic
+def create_battle_vehicle(
+    *,
+    battle: Battle,
+    side: BattleSide,
+    place_name: str,
+    vehicle_kind: str = VehicleKind.SHIP,
+    is_structural: bool = True,
+) -> BattleVehicle:
+    """Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull
+    Fortification if structural (#1714).
+
+    The unit's own `place` is left None (see BattleVehicle's docstring) —
+    other units/participants embed by setting their own `place` FK to
+    `vehicle.place`, not by any relation on `vehicle.unit`.
+
+    Args:
+        battle: The Battle this vehicle belongs to.
+        side: The BattleSide crewing/defending this vehicle.
+        place_name: Display name for the vehicle's BattlePlace (e.g. "The Wave Cutter").
+        vehicle_kind: A VehicleKind value. Defaults to SHIP.
+        is_structural: Whether destruction goes through hull-Fortification breach
+            (True, ship/airship) or BattleUnitStatus.DESTROYED (False, dragon/kraken).
+
+    Returns:
+        The newly created BattleVehicle.
+    """
+    unit = BattleUnit.objects.create(
+        battle=battle,
+        side=side,
+        name=place_name,
+    )
+    default_terrain = (
+        TerrainType.AERIAL
+        if vehicle_kind in (VehicleKind.AIRSHIP, VehicleKind.DRAGON)
+        else TerrainType.WATER
+    )
+    place = BattlePlace.objects.create(
+        battle=battle,
+        name=place_name,
+        terrain_type=default_terrain,
+    )
+    vehicle = BattleVehicle.objects.create(
+        unit=unit,
+        place=place,
+        vehicle_kind=vehicle_kind,
+        is_structural=is_structural,
+    )
+    if is_structural:
+        create_fortification(
+            place=place,
+            defending_side=side,
+            kind=FortificationKind.HULL,
+        )
+    return vehicle
 
 
 def set_battle_side_posture(*, side: BattleSide, posture: str) -> BattleSide:
