@@ -280,3 +280,34 @@ class IssueMissionStakedBeatGateTests(TestCase):
         from world.stories.services.stakes import get_open_activation
 
         self.assertIsNotNone(get_open_activation(beat))
+
+
+class RiskPromptMessageTests(TestCase):
+    """The player-facing consent prompt (#1780): named stakes speak for
+    themselves; the numeric template tier is not foregrounded when it would
+    understate a staked beat."""
+
+    def test_prompt_leads_with_stakes_not_low_template_tier(self):
+        from actions.definitions.npc_services import _risk_prompt_message
+
+        exc = MissionRiskUnacknowledgedError(
+            "gated by staked beat",
+            risk_tier=MISSION_RISK_ACK_TIER - 1,
+            stake_summaries=("Your name dies with this job.",),
+        )
+        msg = _risk_prompt_message(exc)
+
+        self.assertIn("Your name dies with this job.", msg)
+        self.assertNotIn(f"risk tier {MISSION_RISK_ACK_TIER - 1}", msg)
+
+    def test_prompt_keeps_tier_number_when_no_named_stakes(self):
+        from actions.definitions.npc_services import _risk_prompt_message
+
+        exc = MissionRiskUnacknowledgedError(
+            "gated by template tier",
+            risk_tier=MISSION_RISK_ACK_TIER,
+            stake_summaries=(),
+        )
+        msg = _risk_prompt_message(exc)
+
+        self.assertIn(f"risk tier {MISSION_RISK_ACK_TIER}", msg)
