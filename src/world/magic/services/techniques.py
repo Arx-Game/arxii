@@ -1034,7 +1034,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         character=character,
         anima=anima,
         deficit=deficit,
-        soulfray_config=SoulfrayConfig.objects.first(),
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
         check_result=effective_check_result,
         lethal=lethal,
     )
