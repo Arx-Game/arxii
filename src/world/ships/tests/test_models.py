@@ -44,12 +44,23 @@ class ShipDetailsTests(TestCase):
         self.assertEqual(deployment.vehicle, vehicle)
 
     def test_ship_type_ordering_is_by_name(self) -> None:
-        ShipTypeFactory(name="Zeta Class")
-        ShipTypeFactory(name="Alpha Class")
+        # Names are deliberately same-case and unambiguously alphabetical so
+        # the assertion holds under both Postgres locale collation and
+        # SQLite/Python codepoint ordering. Do not use the factory's default
+        # lowercase "ship-type-N" name here — it sorts differently under the
+        # two collations. Filter to just these three rows so cls.ship_type's
+        # (unrelated, factory-default-named) row doesn't participate.
+        ShipTypeFactory(name="Zephyr")
+        ShipTypeFactory(name="Aardvark")
+        ShipTypeFactory(name="Manticore")
 
-        names = list(ShipType.objects.values_list("name", flat=True))
+        names = list(
+            ShipType.objects.filter(name__in=["Aardvark", "Manticore", "Zephyr"]).values_list(
+                "name", flat=True
+            )
+        )
 
-        self.assertEqual(names, sorted(names))
+        self.assertEqual(names, ["Aardvark", "Manticore", "Zephyr"])
 
     def test_ship_upgrade_project_kind_exists(self) -> None:
         self.assertEqual(ProjectKind.SHIP_UPGRADE.value, "SHIP_UPGRADE")
