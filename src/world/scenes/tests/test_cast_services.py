@@ -11,6 +11,7 @@ from evennia import create_object
 
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import RoomProfileFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     EncounterType,
     OpponentStatus,
@@ -25,11 +26,19 @@ from world.combat.models import (
     EncounterRiskAcknowledgement,
 )
 from world.combat.services import acknowledge_encounter_risk
+from world.covenants.constants import CovenantType
+from world.covenants.factories import (
+    CharacterCovenantRoleFactory,
+    CovenantFactory,
+    CovenantRoleFactory,
+)
 from world.magic.constants import (
     AffinityInteractionAggressor,
     AffinityInteractionKind,
+    EffectKind,
     LedgerOp,
     PowerStage,
+    RegardPolarity,
     ResonanceValence,
     TargetKind,
 )
@@ -39,17 +48,22 @@ from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
     GiftFactory,
     ResonanceFactory,
+    TechniqueAppliedConditionFactory,
     TechniqueFactory,
     ThreadFactory,
+    ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
+from world.magic.models.techniques import ConditionTargetKind
 from world.magic.services.gain import tag_room_resonance
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.magic.types.power_ledger import PowerLedgerBuilder
 from world.magic.types.pull import CastPullDeclaration
+from world.npc_services.factories import NpcRegardFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import respond_to_action_request
@@ -61,7 +75,8 @@ from world.scenes.cast_services import (
 )
 from world.scenes.constants import InteractionMode, RoundStatus
 from world.scenes.factories import PersonaFactory, SceneFactory
-from world.scenes.models import Interaction, Scene
+from world.scenes.models import Interaction, Persona, Scene
+from world.scenes.services import active_persona_for_sheet
 from world.scenes.tests.cast_test_helpers import (
     CastScenarioMixin,
     attach_behavior_altering_condition,
@@ -72,6 +87,7 @@ from world.scenes.tests.cast_test_helpers import (
 )
 from world.scenes.types import CastResult, EnhancedSceneActionResult
 from world.traits.factories import CheckSystemSetupFactory
+from world.vitals.models import CharacterVitals
 
 
 class TestDeriveCastDifficulty(TestCase):
@@ -928,3 +944,131 @@ class HostileCastRiskGateTests(CastScenarioMixin):
         self.assertEqual(cast.encounter.pk, encounter.pk)
         encounter.refresh_from_db()
         self.assertEqual(encounter.status, RoundStatus.DECLARING)
+
+
+class TestCastPullCourtRegardModulationE2E(CastScenarioMixin):
+    """#1831 Task 5b: Court regard pull-modulation activates on the real cast path.
+
+    ``use_technique`` gained a ``pull_target`` param (decoupled from ``targets``, which
+    also drives TECHNIQUE_AFFECTED reactive events). This proves the two production
+    non-combat callers actually wire it: driving a real benign cast at another PC
+    through ``request_technique_cast`` -> ``_resolve_cast`` -> ``use_technique`` with a
+    COVENANT_ROLE pull declared, a Court leader's signed regard for the live cast
+    target amplifies the NEUTRAL FLAT_BONUS pull-effect — not just when
+    ``_charge_cast_pull`` is called directly (see ``test_pull_cast_target.py``).
+    """
+
+    PULL_TIER = 1
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.resonance = ResonanceFactory()
+        self.leader_sheet = CharacterSheetFactory()
+        self.covenant = CovenantFactory(
+            covenant_type=CovenantType.COURT,
+            leader=self.leader_sheet,
+        )
+        self.role = CovenantRoleFactory(covenant_type=CovenantType.COURT)
+        ThreadPullCostFactory(tier=self.PULL_TIER, resonance_cost=1, anima_per_thread=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.COVENANT_ROLE,
+            resonance=self.resonance,
+            tier=self.PULL_TIER,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=10,
+            regard_polarity=RegardPolarity.NEUTRAL,
+        )
+
+    def _cast_against(self, target_persona: Persona) -> int:
+        """Cast a benign technique from a fresh engaged Court servant at *target_persona*.
+
+        Returns the resolved check's ``total_points`` — deterministic (unlike the
+        graded outcome roll), it folds in the pull's FLAT_BONUS via ``extra_modifiers``,
+        so a strictly higher value proves the amplified pull reached the check.
+        """
+        servant = PersonaFactory()
+        CharacterAnimaFactory(character=servant.character_sheet.character, current=20, maximum=30)
+        CharacterVitals.objects.create(
+            character_sheet=servant.character_sheet,
+            health=50,
+            max_health=50,
+            base_max_health=50,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=servant.character_sheet,
+            covenant=self.covenant,
+            covenant_role=self.role,
+            engaged=True,
+        )
+        thread = ThreadFactory(
+            owner=servant.character_sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=self.role,
+            target_trait=None,
+        )
+        CharacterResonanceFactory(
+            character_sheet=servant.character_sheet, resonance=self.resonance, balance=20
+        )
+        technique = make_benign_castable_technique()
+        # ALLY relationship (so it can target another PC at all — the SELF fallback
+        # would otherwise reject an other-PC target) without alters_behavior, so
+        # cast_requires_consent stays False and the cast resolves immediately
+        # instead of routing to the PENDING consent path.
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            target_kind=ConditionTargetKind.ALLY,
+        )
+        grant_technique(servant, technique)
+        cast_pull = CastPullDeclaration(
+            resonance=self.resonance, tier=self.PULL_TIER, threads=(thread,)
+        )
+
+        cast = request_technique_cast(
+            scene=self.scene,
+            initiator_persona=servant,
+            target_persona=target_persona,
+            technique=technique,
+            cast_pull=cast_pull,
+        )
+
+        self.assertEqual(cast.request.status, ActionRequestStatus.RESOLVED)
+        assert cast.result is not None
+        assert cast.result.action_resolution.main_result is not None
+        return cast.result.action_resolution.main_result.check_result.total_points
+
+    def test_regarded_target_amplifies_pull_through_real_cast_path(self) -> None:
+        """A Court leader's regard for the live cast target amplifies the pull's
+        FLAT_BONUS through request_technique_cast — the real production entrypoint —
+        not merely when _charge_cast_pull is invoked directly."""
+        indifferent_target = PersonaFactory()
+        CharacterVitals.objects.create(
+            character_sheet=indifferent_target.character_sheet,
+            health=50,
+            max_health=50,
+            base_max_health=50,
+        )
+        baseline_points = self._cast_against(indifferent_target)
+
+        regarded_target = PersonaFactory()
+        CharacterVitals.objects.create(
+            character_sheet=regarded_target.character_sheet,
+            health=50,
+            max_health=50,
+            base_max_health=50,
+        )
+        NpcRegardFactory(
+            holder_persona=active_persona_for_sheet(self.leader_sheet),
+            target_persona=active_persona_for_sheet(regarded_target.character_sheet),
+            value=500,
+        )
+        amplified_points = self._cast_against(regarded_target)
+
+        self.assertGreater(
+            amplified_points,
+            baseline_points,
+            "Court leader's regard for the live cast target must amplify the "
+            "NEUTRAL COVENANT_ROLE pull's FLAT_BONUS through the production "
+            "request_technique_cast -> _resolve_cast -> use_technique path.",
+        )

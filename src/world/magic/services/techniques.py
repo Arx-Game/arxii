@@ -887,6 +887,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     strain_commitment: int = 0,
     applicable_threads: Sequence[ApplicableThread] | None = None,
     cast_pull: CastPullDeclaration | None = None,
+    pull_target: ObjectDB | None = None,
     power_intensity_bonus: int = 0,
     lethal: bool = True,
     control_penalty: int = 0,
@@ -916,6 +917,13 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
     flows into both ``calculate_effective_anima_cost`` (raises effective cost) and
     ``_resolve_control_mishap`` (increases mishap likelihood). Defaults to ``0`` so
     all existing callers are unaffected.
+
+    ``pull_target`` is the live cast target forwarded to ``_charge_cast_pull`` (which
+    threads it onto ``PullActionContext.target`` for ``court_regard_modulation``,
+    #1831). It is decoupled from ``targets`` on purpose: ``targets`` also drives
+    TECHNIQUE_AFFECTED reactive events below, and non-combat casts must not start
+    firing those just to activate pull modulation. When omitted, falls back to
+    ``targets[0]`` (Task 5 behavior) so existing callers/tests are unaffected.
 
     Emits reactive events:
     - TECHNIQUE_PRE_CAST (cancellable) — before anima deduction
@@ -1022,7 +1030,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
             technique=technique,
             cast_pull=cast_pull,
             effective_power=effective_power,
-            target=targets[0] if targets else None,
+            target=pull_target or (targets[0] if targets else None),
         )
 
     # Step 4: Deduct anima
