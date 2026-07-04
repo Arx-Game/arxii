@@ -325,15 +325,34 @@ preserved.
   technique itself carried it; a non-behavior-altering signature condition (e.g.
   Entangled) stays consent-free. The non-combat cast routes (`world/scenes/cast_services.py`)
   pass `caster=initiator_persona.character_sheet.character` at all three consent gates.
+- **Combat damage seam (#1728)** (`services/signature_effects.py`):
+  `signature_damage_profiles(character, technique)` returns the signed bonus's
+  `cached_damage_profiles` (or `[]` if unsigned); `CombatTechniqueResolver._apply_damage`
+  (`world/combat/services.py`) appends these to the technique's own profiles before
+  resolving damage — the bonus's authored damage now lands in combat.
 - **Non-combat narration** (`narration.py`): `signature_clause(snippet)` builds the
   em-dash cosmetic line; folded into `render_cast_outcome_narration`.
+- **Combat narration (#1728)**: `resolve_signature_snippet(character, technique)`
+  (`services/signature_effects.py`) resolves the cosmetic clause (preferring
+  `bonus.narrative_snippet`, falling back to the first Motif facet name), shared by the
+  non-combat cast pose and the combat path — `render_action_outcome_narration` +
+  `_record_and_broadcast_pc_action` (`world/combat/services.py`) now surface it.
 - **Actions** (`actions/definitions/signature.py`): `SignatureSetAction` (key
   `"signature_set"`), `SignatureClearAction` (key `"signature_clear"`),
   `SignatureListAction` (key `"signature_list"`).
 - **Telnet:** `CmdSignature` (`commands/signature.py`, key `"signature"`) — namespaced
   subverbs (`set`/`clear`/`list`) to avoid bare-key collisions.
-- **Deferred (fast-follow):** `damage_profiles` combat seam; capability-grant cast seam;
-  combat cosmetic narration; web `SignatureViewSet`.
+- **Web (#1728):** `SignatureViewSet` (`views_signature.py`) dispatches the same
+  Actions via the shared `PuppetActorMixin` (`views_actor.py`, also used by
+  `SanctumViewSet`). Routes (`urls.py`, basename `signature`): `GET
+  /api/magic/signatures/`, `POST /api/magic/signatures/set/`, `POST
+  /api/magic/signatures/clear/`.
+- **Admin:** `SignatureMotifBonusAdmin` with inlines for the three payload child models;
+  each inline's `help_text` flags its wiring status (capability grants are inert — no
+  cast seam yet).
+- **Deferred (fast-follow):** the capability-grant cast seam — no technique/signature
+  capability-grant cast seam exists anywhere yet, so `SignatureMotifBonusCapabilityGrant`
+  rows remain inert.
 
 ### Motif System
 
