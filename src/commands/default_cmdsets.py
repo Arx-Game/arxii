@@ -94,6 +94,7 @@ from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
 from commands.setstage import CmdSetStage
+from commands.ships import CmdShip
 from commands.signature import CmdSignature
 from commands.social.blocking import (
     CmdBlock,
@@ -308,6 +309,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdBattle,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
+            # #1832 — ship commission/upgrade/repair/status namespace.
+            CmdShip,
         )
         for command_cls in command_classes:
             self.add(command_cls())

@@ -347,3 +347,67 @@ class PendingRitualEffectPrerequisite(Prerequisite):
         if not exists:
             return False, f"You must perform {self.ritual_name} first."
         return True, ""
+
+
+@dataclass
+class IsShipOwnerPrerequisite(Prerequisite):
+    """The actor's active persona must own the target ship (#1832).
+
+    Resolves the ship from the ``ship`` (a ``ShipDetails`` instance) or
+    ``ship_id`` kwarg (the kwargs-via-context convention) when present, else
+    the ship whose room the actor stands in — ``ShipDetails`` whose
+    building's ``entry_room`` is ``actor.location`` (a ship currently has
+    exactly one room, the deck).
+
+    Ownership is either direct (``ShipDetails.building.owner_persona`` — set
+    for every commissioning persona regardless of covenant, see
+    ``world.ships.services.complete_ship_construction``) or covenant-held
+    (``is_owner`` walks the ship's entry room's ``LocationOwnership``
+    cascade, set by ``transfer_ownership`` when a covenant is the
+    deed-holder — covers any of its current members).
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.locations.services import is_owner  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+        from world.ships.models import ShipDetails  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        ship = kwargs.get("ship")
+        if ship is None:
+            ship_id = kwargs.get("ship_id")
+            if ship_id:
+                ship = (
+                    ShipDetails.objects.filter(pk=ship_id)
+                    .select_related("building__entry_room")
+                    .first()
+                )
+            else:
+                room = actor.location
+                ship = (
+                    ShipDetails.objects.filter(building__entry_room__objectdb=room)
+                    .select_related("building__entry_room")
+                    .first()
+                    if room is not None
+                    else None
+                )
+        if ship is None:
+            return False, "No such ship."
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "Only characters can do that."
+        persona = active_persona_for_sheet(sheet)
+        if ship.building.owner_persona_id == persona.pk:
+            return True, ""
+        entry_room = ship.building.entry_room
+        if entry_room is not None and is_owner(persona, entry_room.objectdb):
+            return True, ""
+        return False, "You don't own this ship."

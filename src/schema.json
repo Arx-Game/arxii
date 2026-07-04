@@ -22147,6 +22147,96 @@ paths:
               schema:
                 $ref: '#/components/schemas/SessionRequest'
           description: ''
+  /api/ships/ship-types/:
+    get:
+      operationId: ships_ship_types_list
+      description: Read-only catalog of authored ``ShipType`` rows.
+      tags:
+      - ships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShipType'
+          description: ''
+  /api/ships/ship-types/{id}/:
+    get:
+      operationId: ships_ship_types_retrieve
+      description: Read-only catalog of authored ``ShipType`` rows.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this ship type.
+        required: true
+      tags:
+      - ships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipType'
+          description: ''
+  /api/ships/ships/:
+    get:
+      operationId: ships_ships_list
+      description: Read endpoints for the player's "My Ships" surface.
+      parameters:
+      - in: query
+        name: needs_repair
+        schema:
+          type: boolean
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: ship_type
+        schema:
+          type: integer
+      tags:
+      - ships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedShipDetailsList'
+          description: ''
+  /api/ships/ships/{id}/:
+    get:
+      operationId: ships_ships_retrieve
+      description: Read endpoints for the player's "My Ships" surface.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - ships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShipDetails'
+          description: ''
   /api/skills/path-skill-suggestions/:
     get:
       operationId: skills_path_skill_suggestions_list
@@ -41539,6 +41629,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionRequest'
+    PaginatedShipDetailsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipDetails'
     PaginatedSineatingPendingOfferList:
       type: object
       required:
@@ -48878,6 +48991,125 @@ components:
           minimum: 1
       required:
       - alternate_self_id
+    ShipDetails:
+      type: object
+      description: |-
+        Read-shape for a ship on the player's "My Ships" view.
+
+        ``owner_covenant_id``/``owner_covenant_name`` resolve the ship's Area
+        ownership cascade (see ``world.locations.services.transfer_ownership`` —
+        ``complete_ship_construction`` transfers Area ownership to the
+        commissioning covenant's ``Organization``, when one is given). A ship
+        with no covenant deed-holder has both as ``None``.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        ship_type:
+          allOf:
+          - $ref: '#/components/schemas/ShipType'
+          readOnly: true
+        effective_handling:
+          type: integer
+          readOnly: true
+        effective_armament:
+          type: integer
+          readOnly: true
+        effective_hull:
+          type: integer
+          readOnly: true
+        handling_level:
+          type: integer
+          readOnly: true
+          description: Persistent handling investment, raised via a SHIP_UPGRADE Project.
+        armament_level:
+          type: integer
+          readOnly: true
+          description: Persistent armament investment, raised via a SHIP_UPGRADE Project.
+        crew_capacity:
+          type: integer
+          readOnly: true
+        cargo_capacity:
+          type: integer
+          readOnly: true
+        needs_repair:
+          type: boolean
+          readOnly: true
+          description: Set when the ship's battle vehicle is breached; gates a SHIP_REPAIR
+            Project.
+        owner_persona_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        owner_persona_name:
+          type: string
+          nullable: true
+          readOnly: true
+        owner_covenant_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        owner_covenant_name:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - armament_level
+      - cargo_capacity
+      - crew_capacity
+      - effective_armament
+      - effective_handling
+      - effective_hull
+      - handling_level
+      - id
+      - needs_repair
+      - owner_covenant_id
+      - owner_covenant_name
+      - owner_persona_id
+      - owner_persona_name
+      - ship_type
+    ShipType:
+      type: object
+      description: Read-shape for the authored ``ShipType`` catalog.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        base_hull:
+          type: integer
+          readOnly: true
+          description: PLACEHOLDER baseline hull stat.
+        base_handling:
+          type: integer
+          readOnly: true
+          description: PLACEHOLDER baseline handling stat.
+        base_armament:
+          type: integer
+          readOnly: true
+          description: PLACEHOLDER baseline armament stat.
+        base_crew_capacity:
+          type: integer
+          readOnly: true
+          description: PLACEHOLDER baseline crew capacity.
+        base_cargo_capacity:
+          type: integer
+          readOnly: true
+          description: PLACEHOLDER baseline cargo capacity.
+      required:
+      - base_armament
+      - base_cargo_capacity
+      - base_crew_capacity
+      - base_handling
+      - base_hull
+      - description
+      - id
+      - name
     SignEnum:
       enum:
       - positive

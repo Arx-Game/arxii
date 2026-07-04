@@ -202,6 +202,12 @@ from actions.definitions.scene_reactions import (
     ToggleReactionAction,
 )
 from actions.definitions.scenes import FinishSceneAction, StartSceneAction
+from actions.definitions.ships import (
+    CommissionShipAction,
+    RepairShipAction,
+    ShipStatusAction,
+    UpgradeShipAction,
+)
 from actions.definitions.signature import (
     SignatureClearAction,
     SignatureListAction,
@@ -407,6 +413,10 @@ _ALL_ACTIONS: list[Action] = [
     SignatureListAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
+    CommissionShipAction(),
+    UpgradeShipAction(),
+    RepairShipAction(),
+    ShipStatusAction(),
 ]
 
 # Lookup by key
