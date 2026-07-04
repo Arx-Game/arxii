@@ -14,8 +14,8 @@ _Avoid_: room NPC, giver, class-1 NPC (for the surface term), nameless functiona
 **Standing NPC**:
 A **class-2** NPC — a named `scenes.Persona` on an unpuppeted Character object, permanently in a room.
 Has persistent `NPCStanding` (per-PC affection). Room comes from its object, not a placement FK.
-`NPCStanding` is kept separate from `NpcRegard` (which covers an NPC's opinion of orgs/societies
-and is not scoped to PC targets) — `NPCStanding` is specifically the
+`NPCStanding` is kept separate from `NpcRegard` (which covers an NPC's opinion of any
+persona — PC or NPC — plus Organizations and Societies) — `NPCStanding` is specifically the
 PC-persona-vs-NPC-persona offer-eligibility gate; see ADR-0085.
 _Avoid_: class-2 NPC, named NPC.
 
