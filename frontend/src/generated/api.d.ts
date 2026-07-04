@@ -3226,6 +3226,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/companions/companion-archetypes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only catalog of authored CompanionArchetype rows. */
+    get: operations['companions_companion_archetypes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companion-archetypes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only catalog of authored CompanionArchetype rows. */
+    get: operations['companions_companion_archetypes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read endpoints for the player's own active companions. */
+    get: operations['companions_companions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read endpoints for the player's own active companions. */
+    get: operations['companions_companions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/conditions/capabilities/': {
     parameters: {
       query?: never;
@@ -17043,6 +17111,25 @@ export interface components {
      * @enum {string}
      */
     CommentTypeEnum: 'message' | 'status_change';
+    Companion: {
+      readonly id: number;
+      readonly name: string;
+      readonly archetype: components['schemas']['CompanionArchetype'];
+      /** Format: date-time */
+      readonly bonded_at: string;
+      /** Format: date-time */
+      readonly released_at: string | null;
+    };
+    CompanionArchetype: {
+      readonly id: number;
+      readonly domain: components['schemas']['DomainEnum'];
+      readonly name: string;
+      readonly description: string;
+      /** @description Feeds perform_check's target_difficulty for the bind attempt. */
+      readonly bind_difficulty: number;
+      /** @description Companion Capacity consumed while this archetype is bonded. */
+      readonly capacity_cost: number;
+    };
     /** @description Serializer for condition categories. */
     ConditionCategory: {
       readonly id: number;
@@ -17859,6 +17946,15 @@ export interface components {
       /** @description URL-safe identifier for this tag. */
       readonly slug: string;
     };
+    /**
+     * @description * `BEAST` - Beast
+     *     * `UNDEAD` - Undead
+     *     * `ELEMENTAL` - Elemental
+     *     * `CONSTRUCT` - Construct
+     *     * `SPIRIT` - Spirit
+     * @enum {string}
+     */
+    DomainEnum: 'BEAST' | 'UNDEAD' | 'ELEMENTAL' | 'CONSTRUCT' | 'SPIRIT';
     /** @description Serializer for draft applications (list view). */
     DraftApplication: {
       readonly id: number;
@@ -21852,6 +21948,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CharacterRelationshipList'][];
+    };
+    PaginatedCompanionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['Companion'][];
     };
     PaginatedConsequenceOutcomeList: {
       /** @example 123 */
@@ -33894,6 +34005,99 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DuelChallenge'];
+        };
+      };
+    };
+  };
+  companions_companion_archetypes_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CompanionArchetype'][];
+        };
+      };
+    };
+  };
+  companions_companion_archetypes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion Archetype. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CompanionArchetype'];
+        };
+      };
+    };
+  };
+  companions_companions_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `BEAST` - Beast
+         *     * `UNDEAD` - Undead
+         *     * `ELEMENTAL` - Elemental
+         *     * `CONSTRUCT` - Construct
+         *     * `SPIRIT` - Spirit
+         */
+        archetype__domain?: 'BEAST' | 'CONSTRUCT' | 'ELEMENTAL' | 'SPIRIT' | 'UNDEAD';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCompanionList'];
+        };
+      };
+    };
+  };
+  companions_companions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
         };
       };
     };
