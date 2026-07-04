@@ -104,7 +104,7 @@ class SignatureMotifBonus(SharedMemoryModel):
 
         To invalidate: ``del instance.cached_damage_profiles``.
         """
-        return list(self.damage_profiles.all())
+        return list(self.damage_profiles.select_related("damage_type").all())
 
     @cached_property
     def cached_condition_applications(self) -> list:
@@ -112,7 +112,7 @@ class SignatureMotifBonus(SharedMemoryModel):
 
         To invalidate: ``del instance.cached_condition_applications``.
         """
-        return list(self.condition_applications.all())
+        return list(self.condition_applications.select_related("condition__category").all())
 
     # ------------------------------------------------------------------
     # Gate predicate

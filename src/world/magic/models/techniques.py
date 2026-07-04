@@ -677,6 +677,22 @@ class AbstractDamageProfile(SharedMemoryModel):
         ),
     )
 
+    def compute_damage_budget(
+        self,
+        *,
+        effective_power: int,
+        success_level: int,
+    ) -> int:
+        """Per-formula damage value before SL multiplier and soak."""
+        return _scale_by_power_and_sl(
+            self.base_damage,
+            self.damage_intensity_multiplier,
+            effective_power,
+            self.damage_per_extra_sl,
+            success_level,
+            self.minimum_success_level,
+        )
+
     class Meta:
         abstract = True
 
@@ -983,19 +999,3 @@ class TechniqueDamageProfile(AbstractDamageProfile):
     def __str__(self) -> str:
         type_str = self.damage_type.name if self.damage_type else "untyped"
         return f"{self.technique.name} → {self.base_damage} {type_str}"
-
-    def compute_damage_budget(
-        self,
-        *,
-        effective_power: int,
-        success_level: int,
-    ) -> int:
-        """Per-formula damage value before SL multiplier and soak."""
-        return _scale_by_power_and_sl(
-            self.base_damage,
-            self.damage_intensity_multiplier,
-            effective_power,
-            self.damage_per_extra_sl,
-            success_level,
-            self.minimum_success_level,
-        )
