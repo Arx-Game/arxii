@@ -67,6 +67,37 @@ class NPCStanding(SharedMemoryModel):
             "and functionary contexts to surface 'why we left off where we did'."
         ),
     )
+    debt = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Outstanding debt owed to this NPC from over-ceiling emergency draws "
+            "(#1718). Generic: any future petition-style NPC feature may reuse this "
+            "field, not just Court grant negotiation."
+        ),
+    )
+    debt_baseline_affection = models.IntegerField(
+        default=0,
+        help_text=(
+            "Snapshot of `affection` at the moment `debt` was last incurred. Debt "
+            "repays on read as affection grows past this baseline (#1718)."
+        ),
+    )
+    debt_baseline_missions_completed = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Snapshot of the caller-supplied completed-mission count at the moment "
+            "`debt` was last incurred. Debt repays on read as that count grows past "
+            "this baseline (#1718)."
+        ),
+    )
+    consecutive_failed_petitions = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Consecutive failed/botched petition-style checks against this NPC "
+            "(#1718). Increments on failure, resets to 0 on success. Mirrors "
+            "`Contract.consecutive_missed` (world.currency)."
+        ),
+    )
     last_changed_at = models.DateTimeField(auto_now=True)
 
     class Meta:
