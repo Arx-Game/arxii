@@ -205,6 +205,40 @@ class GainSource(models.TextChoices):
     DISTINCTION = "DISTINCTION", "Distinction"
 
 
+# ADR-0041 total classification of GainSource: which sources are eligible for the
+# distinction earn-rate accelerator (perception/presence-driven gains a character
+# actively performs to be seen/witnessed) vs. which are not (authored/system grants,
+# including the DISTINCTION seed itself — accelerating a distinction's own seed grant
+# would be circular). `grant_resonance` (services/resonance.py) reads this split;
+# a total-classification test guards that every GainSource member lands in exactly
+# one of the two sets.
+ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.POSE_ENDORSEMENT,
+        GainSource.SCENE_ENTRY,
+        GainSource.ENTRY_FLOURISH,
+        GainSource.DRAMATIC_MOMENT,
+        GainSource.STYLE_PRESENTATION,
+        GainSource.OUTFIT_TRICKLE,
+        GainSource.ROOM_RESIDENCE,
+    }
+)
+
+NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.DISTINCTION,
+        GainSource.STAFF_GRANT,
+        GainSource.MISSION_REWARD,
+        GainSource.MISSION_REPORT,
+        GainSource.STAKE_REWARD,
+        GainSource.PROJECT_CONTRIBUTION,
+        GainSource.SANCTUM_WEAVING,
+        GainSource.SANCTUM_OWNER_BONUS,
+        GainSource.SANCTUM_DISSOLUTION_RECOVERY,
+    }
+)
+
+
 # COVENANT_ROLE anchor cap tuning (use-based; issue #517).
 # Additive: covenant component + legend-in-role // legend_divisor + days-held // days_divisor.
 ANCHOR_CAP_COVENANT_LEVEL_MULTIPLIER: int = 10

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import EffectKind, GainSource, TargetKind
+from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
     CovenantRoleNotEngagedError,
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.distinctions.models import CharacterDistinction
     from world.items.models import ItemFacet
     from world.magic.models import (
         DramaticMomentTag,
@@ -84,10 +85,16 @@ def grant_resonance(  # noqa: PLR0913
     dramatic_moment: DramaticMomentTag | None = None,
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
+    source_character_distinction: CharacterDistinction | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
-    Validates that the typed source kwarg matches the discriminator.
+    Validates that the typed source kwarg matches the discriminator. When
+    ``source`` is one of ``ACCELERATED_GAIN_SOURCES`` (ADR-0041 — the
+    perception/presence gain sources), ``amount`` is scaled up by the
+    character's summed distinction earn-rate bonus for ``resonance`` before
+    it is written; authored/system sources (including DISTINCTION itself)
+    are never accelerated.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -105,6 +112,7 @@ def grant_resonance(  # noqa: PLR0913
         dramatic_moment: Required for DRAMATIC_MOMENT source.
         style_presentation_endorsement: Required for STYLE_PRESENTATION source.
         mission_deed_reward_line: Required for MISSION_REWARD source (#1737).
+        source_character_distinction: Required for DISTINCTION source (#1834).
 
     Returns:
         The updated CharacterResonance instance.
@@ -129,7 +137,17 @@ def grant_resonance(  # noqa: PLR0913
         dramatic_moment=dramatic_moment,
         style_presentation_endorsement=style_presentation_endorsement,
         mission_deed_reward_line=mission_deed_reward_line,
+        source_character_distinction=source_character_distinction,
     )
+
+    if source in ACCELERATED_GAIN_SOURCES:
+        from world.magic.services.distinction_resonance import (  # noqa: PLC0415
+            distinction_earn_rate_for,
+        )
+
+        earn_rate_bonus = distinction_earn_rate_for(character_sheet, resonance)
+        if earn_rate_bonus > 0:
+            amount = int(amount * (1 + earn_rate_bonus / Decimal(100)))
 
     cr, _ = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
@@ -156,6 +174,7 @@ def grant_resonance(  # noqa: PLR0913
         source_dramatic_moment=dramatic_moment,
         source_style_presentation_endorsement=style_presentation_endorsement,
         source_mission_deed_reward_line=mission_deed_reward_line,
+        source_character_distinction=source_character_distinction,
     )
 
     from world.magic.services.aura import (  # noqa: PLC0415
@@ -185,6 +204,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
     dramatic_moment: DramaticMomentTag | None = None,
     style_presentation_endorsement: StylePresentationEndorsement | None = None,
     mission_deed_reward_line: MissionDeedRewardLine | None = None,
+    source_character_distinction: CharacterDistinction | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs.
 
@@ -205,6 +225,7 @@ def _validate_grant_source_shape(  # noqa: PLR0913
             dramatic_moment=dramatic_moment,
             style_presentation_endorsement=style_presentation_endorsement,
             mission_deed_reward_line=mission_deed_reward_line,
+            source_character_distinction=source_character_distinction,
         )
         if value is None:
             msg = f"{source} source requires {name}= kwarg."
@@ -238,6 +259,10 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     GainSource.MISSION_REWARD: lambda **kw: (
         kw["mission_deed_reward_line"],
         "mission_deed_reward_line",
+    ),
+    GainSource.DISTINCTION: lambda **kw: (
+        kw["source_character_distinction"],
+        "source_character_distinction",
     ),
 }
 
