@@ -240,8 +240,12 @@ Build to the ADR; these are not open questions. See
   fame-scaled spread). **Civic-hub reader BUILT (#1450, closes the epic):** Notice Board / Town
   Crier RoomFeatureKinds gate a local tidings slice (`hub_feed_for_room`: room → area →
   `societies_for_area`) surfaced as arrival echo, `tidings local`, and a web room-panel block;
-  crier install places a Functionary. Still open (separate issues): act-time Stealth
-  witness-reduction wiring; interactive approach-fanned containment; venue vitality (PC-owned
+  crier install places a Functionary. **Witness handling BUILT (#1824):** the declared
+  capability list (`WITNESS_APPROACHES` + `witness_approaches_for`) replaces the containment
+  auto-pick when an approach is declared (bribery attempt tags its own CrimeKind); act-time
+  Stealth witness-reduction is wired end-to-end via the mission approach fan (a Stealth
+  `ChallengeApproach` → `concealed` deed). Still open: an async prompted-choice containment
+  UX at fork time (service param is live; needs its own design); venue vitality (PC-owned
   RP hubs) is its own future umbrella.
 - **Roster release / end-tenure**; **events RSVP-accept** (invitee response); **projects activation
   service** — small but real gaps where one half of a loop is unbuilt. `intent`.

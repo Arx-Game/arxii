@@ -76,6 +76,29 @@ class LegendAwardHandlerCreateEventTests(TestCase):
 
         assert "1 participant" in result.description
 
+    def test_stealth_approach_threads_concealed_into_the_deed(self) -> None:
+        """#1824 — a Stealth mission approach is the 'do it sneakily' declaration."""
+        from unittest.mock import patch
+
+        from world.checks.factories import CheckTypeFactory
+        from world.mechanics.factories import ChallengeApproachFactory
+
+        stealth_approach = ChallengeApproachFactory(check_type=CheckTypeFactory(name="Stealth"))
+        loud_approach = ChallengeApproachFactory(check_type=CheckTypeFactory(name="Oratory"))
+        consequence = ConsequenceFactory()
+        effect = _make_legend_effect(consequence, self.source_type, template="Done quietly.")
+
+        for approach, expected in ((stealth_approach, True), (loud_approach, False), (None, False)):
+            context = ResolutionContext(
+                character=self.character,
+                participants=[self.persona_a],
+                chosen_approach=approach,
+            )
+            with patch("world.societies.services.create_legend_event") as spy:
+                spy.return_value = (MagicMock(), [])
+                apply_effect(effect, context)
+            self.assertEqual(spy.call_args.kwargs.get("concealed"), expected)
+
     def test_routes_via_apply_all_effects(self) -> None:
         """apply_all_effects routes LEGEND_AWARD through the handler."""
         consequence = ConsequenceFactory()

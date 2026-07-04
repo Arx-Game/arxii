@@ -57,8 +57,12 @@ A per-society judgment, never a taxonomy: an act whose archetype dot-product aga
 _Avoid_: scandal type, scandal category, outrage score
 
 **Containment**:
-The after-the-act half of concealment (#1464): a check of the actor's best social tool against the crowd size that routes a public scandalous act to a contained Secret instead of society awareness. Distinct from act-time concealment (Stealth/magic reducing who witnesses at all).
+The after-the-act half of concealment (#1464): a check against the crowd size that routes a public scandalous act to a contained Secret instead of society awareness. Rolled with a declared Witness Approach when one was chosen (#1824), else the actor's best social tool. Distinct from act-time concealment (Stealth/magic reducing who witnesses at all).
 _Avoid_: cover-up roll (informal), suppression (that's gossip heat)
+
+**Witness Approach**:
+One entry of the #1824 capability list — a named tool for dealing with witnesses (intimidation, seduction, manipulation, bribery, household command), each resolving to a seeded CheckType; bribery's attempt also tags the deed with the `bribery` CrimeKind. `witness_approaches_for` is the single eligibility predicate (visibility = selectability).
+_Avoid_: containment option, hush method.
 
 **Reach (act)**:
 Where knowledge of an act lands at birth — contained (a Secret) or the realm walk's societies — always derived from room privacy + containment + the fame of those involved, never authored per act (ADR-0082). Continental/world are escalation (gemit, common knowledge, legend), never minted.

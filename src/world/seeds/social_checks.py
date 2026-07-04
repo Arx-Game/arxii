@@ -53,6 +53,10 @@ _SOCIAL_CHECK_COMPOSITION: dict[str, tuple[str, str, str | None]] = {
     "Seduction": ("charm", "Persuasion", "Seduction"),
     "Performance": ("presence", "Performance", None),
     "Gossip": ("charm", "Persuasion", "Gossip"),  # #1572 — the gossip plant/seek/suppress check
+    # #1824 — the witness-handling bribery approach (pay them off; the attempt
+    # itself is a CrimeKind). Bare Persuasion: no existing spec fits a plain
+    # transaction — FLAGGED as a possible spec-list hole for the skills audit.
+    "Bribery": ("charm", "Persuasion", None),
 }
 
 

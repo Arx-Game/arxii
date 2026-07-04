@@ -38,6 +38,22 @@ if TYPE_CHECKING:
     from world.covenants.models import CovenantRole
 
 
+def _shed_witnesses_if_concealed(
+    concealed: bool, personas: list[Persona], witnesses: list[Persona]
+) -> tuple[list[Persona], bool]:
+    """#1824 — a declared-sneaky act rolls Stealth before anyone "saw" it.
+
+    Group acts are weakest-link: every actor rolls and the worst result
+    governs how many outsiders noticed. Undeclared acts pass through.
+    """
+    if not concealed:
+        return witnesses, False
+    from world.societies.scandal import reduce_witnesses_by_stealth  # noqa: PLC0415
+
+    characters = [p.character_sheet.character for p in personas if p.character_sheet]
+    return reduce_witnesses_by_stealth(characters, personas, witnesses)
+
+
 @transaction.atomic
 def create_solo_deed(  # noqa: PLR0913
     persona: Persona,
@@ -50,6 +66,8 @@ def create_solo_deed(  # noqa: PLR0913
     story: Story | None = None,
     crime_kinds: list | None = None,
     archetypes: list | None = None,
+    concealed: bool = False,
+    containment_approach: str | None = None,
 ) -> LegendEntry:
     """Create a legend deed not tied to a shared event.
 
@@ -67,6 +85,10 @@ def create_solo_deed(  # noqa: PLR0913
         archetypes: Optional ``PhilosophicalArchetype`` rows framing the act
             (#1464) — deed sources SHOULD tag; untagged deeds can never read as
             scandal (missed tags = missed scandals) and skip the reach fork.
+        concealed: #1824 — the act was declared sneaky: a Stealth roll sheds
+            witnesses before knowledge is minted.
+        containment_approach: #1824 — a declared ``WitnessApproach.key`` for
+            the hush-up roll; None keeps the auto-pick.
 
     Returns:
         The created LegendEntry.
@@ -97,6 +119,7 @@ def create_solo_deed(  # noqa: PLR0913
         )
 
         witnesses = scene_witness_personas(scene)
+        witnesses, fully_concealed = _shed_witnesses_if_concealed(concealed, [persona], witnesses)
         grant_deed_knowledge(
             deed=entry,
             personas=witnesses,
@@ -106,7 +129,14 @@ def create_solo_deed(  # noqa: PLR0913
         # #1464 — the reach fork: contained Secret vs society awareness.
         from world.societies.scandal import route_deed_reach  # noqa: PLC0415
 
-        route_deed_reach(entry=entry, scene=scene, actor_persona=persona, witnesses=witnesses)
+        route_deed_reach(
+            entry=entry,
+            scene=scene,
+            actor_persona=persona,
+            witnesses=witnesses,
+            containment_approach=containment_approach,
+            fully_concealed=fully_concealed,
+        )
     new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
     from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
@@ -129,6 +159,8 @@ def create_legend_event(  # noqa: PLR0913
     created_by: AccountDB | None = None,
     crime_kinds: list | None = None,
     archetypes: list | None = None,
+    concealed: bool = False,
+    containment_approach: str | None = None,
 ) -> tuple[LegendEvent, list[LegendEntry]]:
     """Create a shared event and individual deeds for each participant.
 
@@ -147,6 +179,11 @@ def create_legend_event(  # noqa: PLR0913
         archetypes: Optional ``PhilosophicalArchetype`` rows framing the shared
             act (#1464) — every participant's entry carries them; the reach
             fork routes each entry (each participant hushes their own part).
+        concealed: #1824 — the act was declared sneaky: every actor rolls
+            Stealth (weakest link governs) to shed witnesses before knowledge
+            is minted.
+        containment_approach: #1824 — a declared ``WitnessApproach.key`` for
+            each entry's hush-up roll; None keeps the auto-pick.
 
     Returns:
         Tuple of (LegendEvent, list of LegendEntry instances).
@@ -198,6 +235,9 @@ def create_legend_event(  # noqa: PLR0913
         from world.societies.scandal import route_deed_reach  # noqa: PLC0415
 
         witnesses = scene_witness_personas(scene)
+        witnesses, fully_concealed = _shed_witnesses_if_concealed(
+            concealed, list(personas), witnesses
+        )
         for e in entries:
             grant_deed_knowledge(
                 deed=e,
@@ -206,7 +246,14 @@ def create_legend_event(  # noqa: PLR0913
                 room=scene.location,
             )
             # #1464 — each participant routes (and hushes) their own part.
-            route_deed_reach(entry=e, scene=scene, actor_persona=e.persona, witnesses=witnesses)
+            route_deed_reach(
+                entry=e,
+                scene=scene,
+                actor_persona=e.persona,
+                witnesses=witnesses,
+                containment_approach=containment_approach,
+                fully_concealed=fully_concealed,
+            )
     all_credits: list[CovenantLegendCredit] = []
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))

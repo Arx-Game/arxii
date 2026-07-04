@@ -370,6 +370,10 @@ def _tier_multiplier(success_level: int) -> float:
     return 1.0 + max(0, success_level) / 5
 
 
+# #1824 — the CheckType whose declared mission approach marks a deed as sneaky.
+_STEALTH_CHECK_NAME = "stealth"
+
+
 def _legend_award(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
@@ -424,6 +428,12 @@ def _legend_award(
     # LegendEvent.title has max_length=200 (AbstractLegendRecord).
     title = description[:200]
 
+    # #1824 — choosing a Stealth approach for the challenge IS the "do it
+    # sneakily" declaration: the resulting deed rolls act-time concealment.
+    concealed = (
+        context.chosen_approach is not None
+        and context.chosen_approach.check_type.name.lower() == _STEALTH_CHECK_NAME
+    )
     event, entries = create_legend_event(
         title,
         effect.legend_source_type,
@@ -432,6 +442,7 @@ def _legend_award(
         description=description,
         scene=context.scene,
         story=context.story,
+        concealed=concealed,
     )
     return AppliedEffect(
         effect_type=EffectType.LEGEND_AWARD,
