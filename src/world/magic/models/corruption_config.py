@@ -3,6 +3,8 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 
 class CorruptionConfig(SharedMemoryModel):
     """Singleton tuning surface (pk=1).
@@ -10,6 +12,8 @@ class CorruptionConfig(SharedMemoryModel):
     All coefficients are integer-tenths (× 0.1 in formula) to avoid float
     precision. Mirrors SoulfrayConfig and ResonanceGainConfig patterns.
     """
+
+    objects = ArxSharedMemoryManager()
 
     celestial_coefficient = models.PositiveSmallIntegerField(default=0)
     primal_coefficient = models.PositiveSmallIntegerField(default=2)

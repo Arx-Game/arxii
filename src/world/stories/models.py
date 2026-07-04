@@ -2066,6 +2066,14 @@ class StakeTemplate(SharedMemoryModel):
     )
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    content_themes = models.ManyToManyField(
+        "boundaries.ContentTheme",
+        blank=True,
+        related_name="stake_templates",
+        help_text=(
+            "Content themes this template's staking would involve — matched against hard lines."
+        ),
+    )
 
     class Meta:
         ordering = ["subject_kind", "severity", "name"]
@@ -2425,3 +2433,39 @@ class StakeOutcome(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"StakeOutcome(stake={self.stake_id}, {self.column}, {self.method})"
+
+
+class TreasuredSignoff(SharedMemoryModel):
+    """A player's explicit pre-scene consent to stake one of their treasured
+    subjects on a beat. Soft-withdrawal only (story-significant; never
+    hard-deleted). Withdrawal mid-story routes the affected stake to the
+    WITHDRAWAL column at completion."""
+
+    beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.CASCADE,
+        related_name="treasured_signoffs",
+    )
+    player_data = models.ForeignKey(
+        "evennia_extensions.PlayerData",
+        on_delete=models.CASCADE,
+        related_name="treasured_signoffs",
+    )
+    treasured_subject = models.ForeignKey(
+        "boundaries.TreasuredSubject",
+        on_delete=models.CASCADE,
+        related_name="signoffs",
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["beat", "player_data"]
+
+    @property
+    def active(self) -> bool:
+        return self.withdrawn_at is None
+
+    def __str__(self) -> str:
+        status = "active" if self.active else "withdrawn"
+        return f"TreasuredSignoff(beat={self.beat_id}, player={self.player_data_id}, {status})"

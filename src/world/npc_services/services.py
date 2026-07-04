@@ -672,6 +672,85 @@ def adjust_npc_affection(pc_persona, npc_persona, *, delta: int) -> int:
 
 
 @transaction.atomic
+def incur_npc_debt(
+    standing: NPCStanding,
+    amount: int,
+    *,
+    current_affection: int,
+    current_missions_completed: int,
+) -> NPCStanding:
+    """Add ``amount`` to ``standing.debt`` and re-stamp the repayment baseline.
+
+    Generic: any petition-style feature (not just Court grant negotiation) that
+    lets a PC over-draw an NPC's goodwill can call this. Mirrors
+    ``adjust_npc_affection``'s ``F()``-based update + idmapper cache flush.
+    """
+    NPCStanding.objects.filter(pk=standing.pk).update(
+        debt=F("debt") + amount,
+        debt_baseline_affection=current_affection,
+        debt_baseline_missions_completed=current_missions_completed,
+    )
+    standing.flush_from_cache(force=True)
+    standing.refresh_from_db()
+    return standing
+
+
+def outstanding_debt(
+    standing: NPCStanding,
+    *,
+    current_affection: int,
+    current_missions_completed: int,
+    affection_divisor: int,
+    mission_divisor: int,
+) -> int:
+    """Derive-on-read: net ``standing.debt`` against progress since the baseline.
+
+    Pure function, no writes. ``current_affection``/``current_missions_completed``
+    are passed in by the caller rather than re-derived here, so this stays
+    domain-agnostic (the caller decides what "missions" means for their feature).
+    """
+    if standing.debt == 0:
+        return 0
+    affection_credit = max(0, current_affection - standing.debt_baseline_affection) // (
+        affection_divisor or 1
+    )
+    mission_credit = max(
+        0, current_missions_completed - standing.debt_baseline_missions_completed
+    ) // (mission_divisor or 1)
+    return max(0, standing.debt - affection_credit - mission_credit)
+
+
+@transaction.atomic
+def record_petition_outcome(
+    standing: NPCStanding,
+    *,
+    succeeded: bool,
+    escalation_threshold: int,
+) -> bool:
+    """Increment/reset ``consecutive_failed_petitions``; report threshold crossing.
+
+    Mirrors ``Contract.consecutive_missed`` / ``_update_contract_status``
+    (``world/currency/services.py``): a success resets the streak to 0; a
+    failure increments it and, at ``escalation_threshold``, the caller should
+    fire its own escalation consequence (this function only reports whether
+    that threshold was crossed — it has no opinion on what "escalation" means).
+    The crossing report is level-triggered (``>= escalation_threshold``), not
+    edge-triggered — it returns ``True`` on every failure at or past the
+    threshold, not just the first one that crosses it. This is intentional:
+    the caller's escalation fires again on each subsequent failure.
+    """
+    if succeeded:
+        if standing.consecutive_failed_petitions:
+            standing.consecutive_failed_petitions = 0
+            standing.save(update_fields=["consecutive_failed_petitions"])
+        return False
+
+    standing.consecutive_failed_petitions += 1
+    standing.save(update_fields=["consecutive_failed_petitions"])
+    return standing.consecutive_failed_petitions >= escalation_threshold
+
+
+@transaction.atomic
 def end_interaction(session: InteractionSession) -> None:
     """Close the session and persist final affection for class 2-4 NPCs.
 

@@ -57,6 +57,7 @@ from world.stories.models import (
     TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
+    TreasuredSignoff,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -2962,3 +2963,65 @@ def stakes_summary_for_beat(beat: Beat) -> dict:
             "stakes": beat.stakes.all(),
         }
     ).data
+
+
+# ---------------------------------------------------------------------------
+# #1771 task 6: sign-off grant/withdraw + GM stake-availability
+#
+# These live here (rather than world.boundaries.serializers) because they
+# operate on stories-owned models (Beat, TreasuredSignoff) and call
+# world.stories.services.boundaries — putting them in world.boundaries would
+# make that app import world.stories, which ADR-0010's FK direction
+# (specific->general) forbids. Task 5 made the identical call for the
+# underlying service functions themselves.
+# ---------------------------------------------------------------------------
+
+
+class TreasuredSignoffSerializer(serializers.ModelSerializer):
+    """A player's pre-scene sign-off to stake one of their treasured subjects.
+
+    ``player_data`` is never client-writable — the viewset sets it from the
+    requesting player, so a player can only sign off as themselves.
+    ``treasured_subject`` must belong to one of the requesting player's own
+    tenures (validated below) — a player cannot sign off on someone else's
+    treasured subject.
+    """
+
+    active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = TreasuredSignoff
+        fields = (
+            "id",
+            "beat",
+            "player_data",
+            "treasured_subject",
+            "granted_at",
+            "withdrawn_at",
+            "active",
+        )
+        read_only_fields = ("id", "player_data", "granted_at", "withdrawn_at", "active")
+
+    def validate_treasured_subject(self, treasured_subject: Any) -> Any:
+        """Ensure the treasured subject belongs to the requesting player's own tenure."""
+        request = self.context.get("request")
+        if request is not None and hasattr(request.user, "player_data"):
+            player_data = request.user.player_data
+            if treasured_subject.owner.player_data_id != player_data.pk:
+                msg = "You may only sign off on your own treasured subjects."
+                raise serializers.ValidationError(msg)
+        return treasured_subject
+
+
+class StakeAvailabilitySerializer(serializers.Serializer):
+    """GM-facing counts-only wire shape for ``world.stories.types.StakeAvailability``.
+
+    Deliberately exactly three integer fields — ``available``/``blocked``/
+    ``needs_signoff`` — and NOTHING else. ``blocked_reason_private`` must
+    NEVER be added here (ADR-0033): a GM sees "3 available, 1 blocked, 2 need
+    sign-off", never which stake or why.
+    """
+
+    available = serializers.IntegerField(read_only=True)
+    blocked = serializers.IntegerField(read_only=True)
+    needs_signoff = serializers.IntegerField(read_only=True)

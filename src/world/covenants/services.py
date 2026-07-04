@@ -32,6 +32,7 @@ from world.covenants.exceptions import (
 )
 from world.covenants.models import (
     CharacterCovenantRole,
+    CourtGrantConfig,
     CourtPact,
     Covenant,
     CovenantRank,
@@ -1669,11 +1670,21 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
 def get_mentor_bond_config() -> MentorBondConfig:
     """Return the seeded MentorBondConfig singleton (#1165).
 
-    Uses get() — never get_or_create — because this is authored content; a
-    fabricated row would silently break bond-scaling resolution.
+    Uses cached_singleton() — never get_or_create — because this is authored
+    content; a fabricated row would silently break bond-scaling resolution.
     DoesNotExist propagates loudly. Mirrors get_flee_config.
     """
-    return MentorBondConfig.objects.get(pk=1)
+    config = MentorBondConfig.objects.cached_singleton()
+    if config is None:
+        raise MentorBondConfig.DoesNotExist
+    return config
+
+
+def get_court_grant_config() -> CourtGrantConfig:
+    """Get-or-create the Court grant negotiation config singleton (pk=1)."""
+    with transaction.atomic():
+        cfg, _ = CourtGrantConfig.objects.get_or_create(pk=1)
+        return cfg
 
 
 @transaction.atomic

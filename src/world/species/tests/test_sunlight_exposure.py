@@ -123,7 +123,7 @@ class ReconcileSunlightExposureTest(TestCase):
             # Shelter (#1744) is a separate axis covered by its own real-fixture test class
             # below; these mocked rooms have no real RoomProfile/AreaClosure to resolve it against.
             patch(
-                "world.species.services._room_shelters_radiant",
+                "world.species.services._character_shelters_radiant",
                 return_value=False,
             ),
         ]
@@ -175,6 +175,36 @@ class ReconcileSunlightExposureLocationShelterTest(TestCase):
             damage_type=radiant,
             value=1,
         )
+        with patch(
+            "world.species.services.get_ic_phase",
+            return_value=TimePhase.DAY,
+        ):
+            reconcile_sunlight_exposure(self.vampire_character, self.outdoor_room)
+        self.assertFalse(has_condition(self.vampire_character, self.template))
+
+    def test_position_shelter_suppresses_sunlight_exposure(self):
+        """A character at a sheltering position (tent) in an outdoor room is not
+        exposed to sunlight (#1756).
+        """
+        from world.areas.positioning.models import PositionShelter
+        from world.areas.positioning.services import (
+            add_blueprint_position,
+            create_blueprint,
+            instantiate_blueprint,
+            place_in_position,
+        )
+        from world.conditions.factories import ensure_radiant_damage_type
+
+        radiant = ensure_radiant_damage_type()
+        bp = create_blueprint("Courtyard")
+        add_blueprint_position(bp, "Tent")
+        positions = instantiate_blueprint(bp, self.outdoor_room)
+        tent_pos = positions[0]
+
+        # Tent shelters from radiant
+        PositionShelter.objects.create(position=tent_pos, damage_type=radiant, value=100)
+        place_in_position(self.vampire_character, tent_pos)
+
         with patch(
             "world.species.services.get_ic_phase",
             return_value=TimePhase.DAY,

@@ -9,6 +9,8 @@ from django.db import models, transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
@@ -28,6 +30,8 @@ class AudereThreshold(SharedMemoryModel):
     2. Active Soulfray condition at or above minimum_warp_stage
     3. Active CharacterEngagement (character must be in stakes)
     """
+
+    objects = ArxSharedMemoryManager()
 
     minimum_intensity_tier = models.ForeignKey(
         "magic.IntensityTier",
@@ -192,7 +196,7 @@ def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> boo
     4. Character has a CharacterEngagement
     5. Character is NOT already in Audere
     """
-    threshold = AudereThreshold.objects.first()
+    threshold = AudereThreshold.objects.cached_singleton()
     if threshold is None:
         return False
     return _evaluate_audere_gates(character, runtime_intensity, threshold) is not None
@@ -241,7 +245,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     if not accept:
         return AudereOfferResult(accepted=False, advisory_text=advisory)
 
-    threshold = AudereThreshold.objects.first()
+    threshold = AudereThreshold.objects.cached_singleton()
     if threshold is None:
         return AudereOfferResult(accepted=False, advisory_text=advisory)
 
@@ -292,7 +296,7 @@ def end_audere(character: ObjectDB) -> None:
     if audere_template is None:
         return
 
-    threshold = AudereThreshold.objects.first()
+    threshold = AudereThreshold.objects.cached_singleton()
 
     with transaction.atomic():
         # Remove condition
@@ -336,7 +340,7 @@ def maybe_create_audere_offer(
     if sheet is None:
         return None
 
-    threshold = AudereThreshold.objects.first()
+    threshold = AudereThreshold.objects.cached_singleton()
     if threshold is None:
         return None
 

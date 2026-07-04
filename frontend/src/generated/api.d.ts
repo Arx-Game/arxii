@@ -702,6 +702,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/beats/{beat_id}/stake-availability/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/beats/{beat_id}/stake-availability/?sheets={id}&sheets={id} (#1771).
+     *
+     *     GM-facing counts-only tally of how ``beat``'s candidate stakes screen for
+     *     the given party — reuses ``stake_availability``. Never a reason, never
+     *     which stake or player (ADR-0033): the response is exactly
+     *     ``{available, blocked, needs_signoff}``. Access mirrors ``BeatViewSet``
+     *     (staff or the beat's story owner) since this is a GM planning tool.
+     */
+    get: operations['beats_stake_availability_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/beats/{id}/': {
     parameters: {
       query?: never;
@@ -859,6 +884,223 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/boundaries/content-themes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only viewset for the staff-authored content theme catalog.
+     *
+     *     Every authenticated player reads the same shared catalog to pick hard
+     *     lines / tag advisories from — only staff configure it (via admin).
+     */
+    get: operations['boundaries_content_themes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boundaries/content-themes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only viewset for the staff-authored content theme catalog.
+     *
+     *     Every authenticated player reads the same shared catalog to pick hard
+     *     lines / tag advisories from — only staff configure it (via admin).
+     */
+    get: operations['boundaries_content_themes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boundaries/player-boundaries/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for a player's own content boundaries (hard lines + advisories).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to the requesting player's
+     *     own rows, so another player's hard-line ``detail`` (or any row at all)
+     *     is structurally unreachable through this endpoint — 404, not a filtered
+     *     field.
+     */
+    get: operations['boundaries_player_boundaries_list'];
+    put?: never;
+    /**
+     * @description ViewSet for a player's own content boundaries (hard lines + advisories).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to the requesting player's
+     *     own rows, so another player's hard-line ``detail`` (or any row at all)
+     *     is structurally unreachable through this endpoint — 404, not a filtered
+     *     field.
+     */
+    post: operations['boundaries_player_boundaries_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boundaries/player-boundaries/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for a player's own content boundaries (hard lines + advisories).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to the requesting player's
+     *     own rows, so another player's hard-line ``detail`` (or any row at all)
+     *     is structurally unreachable through this endpoint — 404, not a filtered
+     *     field.
+     */
+    get: operations['boundaries_player_boundaries_retrieve'];
+    /**
+     * @description ViewSet for a player's own content boundaries (hard lines + advisories).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to the requesting player's
+     *     own rows, so another player's hard-line ``detail`` (or any row at all)
+     *     is structurally unreachable through this endpoint — 404, not a filtered
+     *     field.
+     */
+    put: operations['boundaries_player_boundaries_update'];
+    post?: never;
+    /**
+     * @description ViewSet for a player's own content boundaries (hard lines + advisories).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to the requesting player's
+     *     own rows, so another player's hard-line ``detail`` (or any row at all)
+     *     is structurally unreachable through this endpoint — 404, not a filtered
+     *     field.
+     */
+    delete: operations['boundaries_player_boundaries_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for a player's own content boundaries (hard lines + advisories).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to the requesting player's
+     *     own rows, so another player's hard-line ``detail`` (or any row at all)
+     *     is structurally unreachable through this endpoint — 404, not a filtered
+     *     field.
+     */
+    patch: operations['boundaries_player_boundaries_partial_update'];
+    trace?: never;
+  };
+  '/api/boundaries/scenes/{scene_id}/lines-and-veils/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/boundaries/scenes/{scene_id}/lines-and-veils/?tenure={id}
+     *
+     *     Read-only scene aggregate (#1771): the anonymized union of the scene's
+     *     participants' shared ADVISORY boundaries + shared treasured subjects,
+     *     filtered to what ``tenure`` (the requester's own tenure, validated
+     *     below) is allowed to see. Hard lines are structurally excluded by the
+     *     service layer, never by a filter here.
+     */
+    get: operations['boundaries_scenes_lines_and_veils_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boundaries/treasured-subjects/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for a player's own treasured subjects (per-tenure attachments).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+     *     requesting player.
+     */
+    get: operations['boundaries_treasured_subjects_list'];
+    put?: never;
+    /**
+     * @description ViewSet for a player's own treasured subjects (per-tenure attachments).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+     *     requesting player.
+     */
+    post: operations['boundaries_treasured_subjects_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/boundaries/treasured-subjects/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for a player's own treasured subjects (per-tenure attachments).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+     *     requesting player.
+     */
+    get: operations['boundaries_treasured_subjects_retrieve'];
+    /**
+     * @description ViewSet for a player's own treasured subjects (per-tenure attachments).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+     *     requesting player.
+     */
+    put: operations['boundaries_treasured_subjects_update'];
+    post?: never;
+    /**
+     * @description ViewSet for a player's own treasured subjects (per-tenure attachments).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+     *     requesting player.
+     */
+    delete: operations['boundaries_treasured_subjects_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for a player's own treasured subjects (per-tenure attachments).
+     *
+     *     Self-authoring only: ``get_queryset`` scopes to tenures owned by the
+     *     requesting player.
+     */
+    patch: operations['boundaries_treasured_subjects_partial_update'];
     trace?: never;
   };
   '/api/buildings/decoration-templates/': {
@@ -14996,6 +15238,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/treasured-signoffs/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for a player's own pre-scene ``TreasuredSignoff`` grants (#1771).
+     *
+     *     Self-authored consent: ``get_queryset`` scopes to the requesting
+     *     player's own sign-offs. ``create()`` grants (or reactivates) via
+     *     ``grant_treasured_signoff``; the ``withdraw`` action soft-withdraws via
+     *     ``withdraw_treasured_signoff``. Never hard-deletes (``destroy`` is not
+     *     exposed) — story-significant data, per repo convention.
+     */
+    get: operations['treasured_signoffs_list'];
+    put?: never;
+    /** @description Grant (or reactivate) a sign-off via ``grant_treasured_signoff``. */
+    post: operations['treasured_signoffs_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/treasured-signoffs/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for a player's own pre-scene ``TreasuredSignoff`` grants (#1771).
+     *
+     *     Self-authored consent: ``get_queryset`` scopes to the requesting
+     *     player's own sign-offs. ``create()`` grants (or reactivates) via
+     *     ``grant_treasured_signoff``; the ``withdraw`` action soft-withdraws via
+     *     ``withdraw_treasured_signoff``. Never hard-deletes (``destroy`` is not
+     *     exposed) — story-significant data, per repo convention.
+     */
+    get: operations['treasured_signoffs_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/treasured-signoffs/{id}/withdraw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/treasured-signoffs/{id}/withdraw/ — soft-withdraw (idempotent). */
+    post: operations['treasured_signoffs_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/user/': {
     parameters: {
       query?: never;
@@ -16924,6 +17234,15 @@ export interface components {
       name: string;
       /** @description GM authoring context for this pool. */
       description?: string;
+    };
+    /** @description Read-only serializer for the staff-authored content theme catalog. */
+    ContentTheme: {
+      readonly id: number;
+      readonly key: string;
+      readonly name: string;
+      readonly description: string;
+      readonly display_order: number;
+      readonly is_active: boolean;
     };
     ContributionRow: {
       id: number;
@@ -20755,6 +21074,7 @@ export interface components {
        *     * `loan` - Loan
        *     * `collection` - Collection
        *     * `improvement` - Improvement
+       *     * `court_grant` - Court Grant
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -20789,9 +21109,16 @@ export interface components {
      *     * `loan` - Loan
      *     * `collection` - Collection
      *     * `improvement` - Improvement
+     *     * `court_grant` - Court Grant
      * @enum {string}
      */
-    NPCServiceOfferKindEnum: 'permit' | 'mission' | 'loan' | 'collection' | 'improvement';
+    NPCServiceOfferKindEnum:
+      | 'permit'
+      | 'mission'
+      | 'loan'
+      | 'collection'
+      | 'improvement'
+      | 'court_grant';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -20802,6 +21129,7 @@ export interface components {
        *     * `loan` - Loan
        *     * `collection` - Collection
        *     * `improvement` - Improvement
+       *     * `court_grant` - Court Grant
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -21471,6 +21799,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ConsequenceOutcome'][];
+    };
+    PaginatedContentThemeList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ContentTheme'][];
     };
     PaginatedCovenantList: {
       /** @example 123 */
@@ -22478,6 +22821,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PlayerAction'][];
     };
+    PaginatedPlayerBoundaryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PlayerBoundary'][];
+    };
     PaginatedPlayerFeedbackDetailList: {
       /** @example 123 */
       count: number;
@@ -23152,6 +23510,36 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['TransitionRequiredOutcome'][];
+    };
+    PaginatedTreasuredSignoffList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TreasuredSignoff'][];
+    };
+    PaginatedTreasuredSubjectList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['TreasuredSubject'][];
     };
     PaginatedUserCategoryMuteList: {
       /** @example 123 */
@@ -23939,6 +24327,7 @@ export interface components {
        *     * `loan` - Loan
        *     * `collection` - Collection
        *     * `improvement` - Improvement
+       *     * `court_grant` - Court Grant
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -24015,6 +24404,38 @@ export interface components {
     PatchedPermitOfferDetailsRequest: {
       /** @description The NPCServiceOffer row this details model decorates. */
       offer?: number;
+    };
+    /**
+     * @description Owner-authored ``PlayerBoundary`` CRUD shape.
+     *
+     *     ``owner`` is never client-writable — the viewset sets it from the
+     *     requesting player's own ``PlayerData`` on create, so a player can never
+     *     author a boundary for anyone else. Mounted behind an owner-scoped
+     *     queryset (see ``PlayerBoundaryViewSet.get_queryset``), so this serializer
+     *     is only ever handed rows the requester already owns; there is no
+     *     non-owner read path through this class.
+     */
+    PatchedPlayerBoundaryRequest: {
+      kind?: components['schemas']['PlayerBoundaryKindEnum'];
+      /** @description Required for HARD_LINE (the machine-matched category); optional for ADVISORY. */
+      theme?: number | null;
+      /** @description Free-text nuance. For HARD_LINE this is staff/audit-only and never surfaced. */
+      detail?: string;
+      /**
+       * @description Who can see this content.
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `characters` - Specific Characters
+       *     * `groups` - Consent Groups
+       */
+      visibility_mode?: components['schemas']['VisibilityModeEnum'];
+      /** @description Tenures who can see this (if mode is 'characters'). */
+      visible_to_tenures?: number[];
+      /** @description Consent groups who can see this (if mode is 'groups'). */
+      visible_to_groups?: number[];
+      /** @description Tenures explicitly excluded even if otherwise visible. */
+      excluded_tenures?: number[];
     };
     /** @description Read serializer for staff review. */
     PatchedPlayerFeedbackDetailRequest: {
@@ -24467,6 +24888,44 @@ export interface components {
         | components['schemas']['BlankEnum'];
     };
     /**
+     * @description Owner-authored ``TreasuredSubject`` CRUD shape.
+     *
+     *     ``owner`` (a ``RosterTenure``) IS client-writable — a player may have
+     *     several tenures (characters) — but ``validate()`` rejects any tenure not
+     *     belonging to the requesting player, mirroring
+     *     ``world.consent.serializers``' ``owner_tenure`` validation pattern.
+     */
+    PatchedTreasuredSubjectRequest: {
+      owner?: number;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK / LOCATION, or flavor). */
+      subject_label?: string;
+      detail?: string;
+      /**
+       * @description Who can see this content.
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `characters` - Specific Characters
+       *     * `groups` - Consent Groups
+       */
+      visibility_mode?: components['schemas']['VisibilityModeEnum'];
+      /** @description Tenures who can see this (if mode is 'characters'). */
+      visible_to_tenures?: number[];
+      /** @description Consent groups who can see this (if mode is 'groups'). */
+      visible_to_groups?: number[];
+      /** @description Tenures explicitly excluded even if otherwise visible. */
+      excluded_tenures?: number[];
+    };
+    /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *
      *     Only the post author (Lead GM of the table) or staff may edit.
@@ -24881,6 +25340,80 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_anchors: components['schemas']['AnchorOption'][];
+    };
+    /**
+     * @description Owner-authored ``PlayerBoundary`` CRUD shape.
+     *
+     *     ``owner`` is never client-writable — the viewset sets it from the
+     *     requesting player's own ``PlayerData`` on create, so a player can never
+     *     author a boundary for anyone else. Mounted behind an owner-scoped
+     *     queryset (see ``PlayerBoundaryViewSet.get_queryset``), so this serializer
+     *     is only ever handed rows the requester already owns; there is no
+     *     non-owner read path through this class.
+     */
+    PlayerBoundary: {
+      readonly id: number;
+      readonly owner: number;
+      kind: components['schemas']['PlayerBoundaryKindEnum'];
+      /** @description Required for HARD_LINE (the machine-matched category); optional for ADVISORY. */
+      theme?: number | null;
+      /** @description Free-text nuance. For HARD_LINE this is staff/audit-only and never surfaced. */
+      detail?: string;
+      /**
+       * @description Who can see this content.
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `characters` - Specific Characters
+       *     * `groups` - Consent Groups
+       */
+      visibility_mode?: components['schemas']['VisibilityModeEnum'];
+      /** @description Tenures who can see this (if mode is 'characters'). */
+      visible_to_tenures?: number[];
+      /** @description Consent groups who can see this (if mode is 'groups'). */
+      visible_to_groups?: number[];
+      /** @description Tenures explicitly excluded even if otherwise visible. */
+      excluded_tenures?: number[];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `hard_line` - Hard line
+     *     * `advisory` - Advisory
+     * @enum {string}
+     */
+    PlayerBoundaryKindEnum: 'hard_line' | 'advisory';
+    /**
+     * @description Owner-authored ``PlayerBoundary`` CRUD shape.
+     *
+     *     ``owner`` is never client-writable — the viewset sets it from the
+     *     requesting player's own ``PlayerData`` on create, so a player can never
+     *     author a boundary for anyone else. Mounted behind an owner-scoped
+     *     queryset (see ``PlayerBoundaryViewSet.get_queryset``), so this serializer
+     *     is only ever handed rows the requester already owns; there is no
+     *     non-owner read path through this class.
+     */
+    PlayerBoundaryRequest: {
+      kind: components['schemas']['PlayerBoundaryKindEnum'];
+      /** @description Required for HARD_LINE (the machine-matched category); optional for ADVISORY. */
+      theme?: number | null;
+      /** @description Free-text nuance. For HARD_LINE this is staff/audit-only and never surfaced. */
+      detail?: string;
+      /**
+       * @description Who can see this content.
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `characters` - Specific Characters
+       *     * `groups` - Consent Groups
+       */
+      visibility_mode?: components['schemas']['VisibilityModeEnum'];
+      /** @description Tenures who can see this (if mode is 'characters'). */
+      visible_to_tenures?: number[];
+      /** @description Consent groups who can see this (if mode is 'groups'). */
+      visible_to_groups?: number[];
+      /** @description Tenures explicitly excluded even if otherwise visible. */
+      excluded_tenures?: number[];
     };
     /**
      * @description Write serializer - player creates feedback.
@@ -28500,6 +29033,118 @@ export interface components {
         | components['schemas']['BlankEnum'];
     };
     /**
+     * @description A player's pre-scene sign-off to stake one of their treasured subjects.
+     *
+     *     ``player_data`` is never client-writable — the viewset sets it from the
+     *     requesting player, so a player can only sign off as themselves.
+     *     ``treasured_subject`` must belong to one of the requesting player's own
+     *     tenures (validated below) — a player cannot sign off on someone else's
+     *     treasured subject.
+     */
+    TreasuredSignoff: {
+      readonly id: number;
+      beat: number;
+      readonly player_data: number;
+      treasured_subject: number;
+      /** Format: date-time */
+      readonly granted_at: string;
+      /** Format: date-time */
+      readonly withdrawn_at: string | null;
+      readonly active: boolean;
+    };
+    /**
+     * @description A player's pre-scene sign-off to stake one of their treasured subjects.
+     *
+     *     ``player_data`` is never client-writable — the viewset sets it from the
+     *     requesting player, so a player can only sign off as themselves.
+     *     ``treasured_subject`` must belong to one of the requesting player's own
+     *     tenures (validated below) — a player cannot sign off on someone else's
+     *     treasured subject.
+     */
+    TreasuredSignoffRequest: {
+      beat: number;
+      treasured_subject: number;
+    };
+    /**
+     * @description Owner-authored ``TreasuredSubject`` CRUD shape.
+     *
+     *     ``owner`` (a ``RosterTenure``) IS client-writable — a player may have
+     *     several tenures (characters) — but ``validate()`` rejects any tenure not
+     *     belonging to the requesting player, mirroring
+     *     ``world.consent.serializers``' ``owner_tenure`` validation pattern.
+     */
+    TreasuredSubject: {
+      readonly id: number;
+      owner: number;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK / LOCATION, or flavor). */
+      subject_label?: string;
+      detail?: string;
+      /**
+       * @description Who can see this content.
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `characters` - Specific Characters
+       *     * `groups` - Consent Groups
+       */
+      visibility_mode?: components['schemas']['VisibilityModeEnum'];
+      /** @description Tenures who can see this (if mode is 'characters'). */
+      visible_to_tenures?: number[];
+      /** @description Consent groups who can see this (if mode is 'groups'). */
+      visible_to_groups?: number[];
+      /** @description Tenures explicitly excluded even if otherwise visible. */
+      excluded_tenures?: number[];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Owner-authored ``TreasuredSubject`` CRUD shape.
+     *
+     *     ``owner`` (a ``RosterTenure``) IS client-writable — a player may have
+     *     several tenures (characters) — but ``validate()`` rejects any tenure not
+     *     belonging to the requesting player, mirroring
+     *     ``world.consent.serializers``' ``owner_tenure`` validation pattern.
+     */
+    TreasuredSubjectRequest: {
+      owner: number;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK / LOCATION, or flavor). */
+      subject_label?: string;
+      detail?: string;
+      /**
+       * @description Who can see this content.
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `characters` - Specific Characters
+       *     * `groups` - Consent Groups
+       */
+      visibility_mode?: components['schemas']['VisibilityModeEnum'];
+      /** @description Tenures who can see this (if mode is 'characters'). */
+      visible_to_tenures?: number[];
+      /** @description Consent groups who can see this (if mode is 'groups'). */
+      visible_to_groups?: number[];
+      /** @description Tenures explicitly excluded even if otherwise visible. */
+      excluded_tenures?: number[];
+    };
+    /**
      * @description One candidate treatment a helper may offer a target persona (#1486).
      *
      *     Describes the shape returned by ``TreatmentCandidateViewSet.list`` so
@@ -28752,6 +29397,14 @@ export interface components {
      * @enum {string}
      */
     VisibilityFdaEnum: 'private' | 'shared' | 'gossip' | 'public';
+    /**
+     * @description * `public` - Public
+     *     * `private` - Private
+     *     * `characters` - Specific Characters
+     *     * `groups` - Consent Groups
+     * @enum {string}
+     */
+    VisibilityModeEnum: 'public' | 'private' | 'characters' | 'groups';
     /**
      * @description The active character's own visibility prefs (#1484). Starts with ``appear_offline``.
      *
@@ -29789,6 +30442,26 @@ export interface operations {
       };
     };
   };
+  beats_stake_availability_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        beat_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   beats_retrieve: {
     parameters: {
       query?: never;
@@ -30040,6 +30713,376 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Block'];
+        };
+      };
+    };
+  };
+  boundaries_content_themes_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        key?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedContentThemeList'];
+        };
+      };
+    };
+  };
+  boundaries_content_themes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Content Theme. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ContentTheme'];
+        };
+      };
+    };
+  };
+  boundaries_player_boundaries_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `hard_line` - Hard line
+         *     * `advisory` - Advisory
+         */
+        kind?: 'advisory' | 'hard_line';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        theme?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlayerBoundaryList'];
+        };
+      };
+    };
+  };
+  boundaries_player_boundaries_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlayerBoundaryRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerBoundary'];
+        };
+      };
+    };
+  };
+  boundaries_player_boundaries_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Player Boundary. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerBoundary'];
+        };
+      };
+    };
+  };
+  boundaries_player_boundaries_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Player Boundary. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlayerBoundaryRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerBoundary'];
+        };
+      };
+    };
+  };
+  boundaries_player_boundaries_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Player Boundary. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  boundaries_player_boundaries_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Player Boundary. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPlayerBoundaryRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerBoundary'];
+        };
+      };
+    };
+  };
+  boundaries_scenes_lines_and_veils_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        scene_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  boundaries_treasured_subjects_list: {
+    parameters: {
+      query?: {
+        owner?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /**
+         * @description * `personal_jeopardy` - Personal jeopardy
+         *     * `npc_fate` - NPC fate
+         *     * `location` - Location
+         *     * `faction` - Faction relationship
+         *     * `item` - Item
+         *     * `campaign_track` - Campaign track
+         *     * `custom` - Custom (trust-gated)
+         */
+        subject_kind?:
+          | 'campaign_track'
+          | 'custom'
+          | 'faction'
+          | 'item'
+          | 'location'
+          | 'npc_fate'
+          | 'personal_jeopardy';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTreasuredSubjectList'];
+        };
+      };
+    };
+  };
+  boundaries_treasured_subjects_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TreasuredSubjectRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSubject'];
+        };
+      };
+    };
+  };
+  boundaries_treasured_subjects_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Treasured Subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSubject'];
+        };
+      };
+    };
+  };
+  boundaries_treasured_subjects_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Treasured Subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TreasuredSubjectRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSubject'];
+        };
+      };
+    };
+  };
+  boundaries_treasured_subjects_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Treasured Subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  boundaries_treasured_subjects_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Treasured Subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedTreasuredSubjectRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSubject'];
         };
       };
     };
@@ -50644,6 +51687,105 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Transition'];
+        };
+      };
+    };
+  };
+  treasured_signoffs_list: {
+    parameters: {
+      query?: {
+        beat?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        treasured_subject?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTreasuredSignoffList'];
+        };
+      };
+    };
+  };
+  treasured_signoffs_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TreasuredSignoffRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSignoff'];
+        };
+      };
+    };
+  };
+  treasured_signoffs_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this treasured signoff. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSignoff'];
+        };
+      };
+    };
+  };
+  treasured_signoffs_withdraw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this treasured signoff. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TreasuredSignoffRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TreasuredSignoff'];
         };
       };
     };

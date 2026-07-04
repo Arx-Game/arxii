@@ -253,7 +253,12 @@ class CombatCastRoundDeclarationPullTests(TestCase):
         """compute_intensity_for_clash reflects the committed CombatPull's INTENSITY_BUMP effect."""
         from world.combat.factories import CombatRoundActionFactory
 
-        data = _make_pull_setup(effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=2)
+        # amount=10, not 2: the thread is fixed at level=5 (see _make_pull_setup),
+        # so thread_level_multiplier(5) == 0.5 (#1718's corrected ramp) and
+        # scaled_value = round(authored * multiplier); an authored amount of 2
+        # rounds to 1, which no longer clears this test's "+2" assertion floor
+        # below. 10 clears it with margin: round(10 * 0.5) = 5.
+        data = _make_pull_setup(effect_kind=EffectKind.INTENSITY_BUMP, intensity_bump_amount=10)
         action = _import_cast_action()
 
         action.round_declaration(
@@ -272,7 +277,7 @@ class CombatCastRoundDeclarationPullTests(TestCase):
         data["sheet"].character.combat_pulls.invalidate()
 
         intensity = compute_intensity_for_clash(data["participant"], round_action)
-        # Base is technique.intensity (≥0); pull should add 2.
+        # Base is technique.intensity (≥0); pull should add at least 2 (actual: 5).
         self.assertGreaterEqual(
             intensity,
             data["technique"].intensity + 2,

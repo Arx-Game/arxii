@@ -162,7 +162,7 @@ def apply_anima_ritual_outcome(
 
     character = character_sheet.character
 
-    config = SoulfrayConfig.objects.first()
+    config = SoulfrayConfig.objects.cached_singleton()
     budget = _budget_for_outcome(outcome, config)
 
     anima = CharacterAnima.objects.select_for_update().get(character=character)

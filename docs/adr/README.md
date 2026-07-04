@@ -122,6 +122,7 @@ treat those names as hints to confirm, not gospel.
 - [0083 — Concealment carries an OOC-only, identity-free "someone is watching" guarantee, separate from IC detection](0083-concealment-ooc-observer-transparency.md) (see also ADR-0026)
 - [0084 — Battle environment reads ambient weather via Battle.region, not the room graph](0084-battle-environment-reads-ambient-weather-via-battle-region.md)
 - [0085 — BattlePlace gains internal battle-map coordinates, additive to ADR-0081](0085-battleplace-internal-battle-map-coordinates.md)
+- [0085 — NPCStanding carries debt and petition-failure-streak, not CourtPact](0085-npcstanding-debt-and-petition-streak-are-generic.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

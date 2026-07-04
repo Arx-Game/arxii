@@ -839,11 +839,18 @@ def _charge_cast_pull(
     ``court_regard_modulation`` for COVENANT_ROLE pulls. ``None`` for untargeted
     casts.
 
+    When ``cast_pull.beseech_bonus > 0``, resolves the shared emergency
+    thread-bond draw (``world.combat.pull_helpers._resolve_emergency_draw``,
+    #1718) before spending — the identical helper the in-combat path
+    (``commit_combat_pull``) uses, so a non-combat ``beseech=N`` cast rolls the
+    same Court-grant petition check and gets the same bonus/debt treatment.
+
     Returns ``(pull_flat_bonus, effective_power, resolved_effects)`` so callers
     can apply further post-resolution steps (e.g. ASSUME_ALTERNATE_SELF) without
     re-resolving.  Extracting this block reduces ``use_technique``'s cognitive
     complexity (C901).
     """
+    from world.combat.pull_helpers import _resolve_emergency_draw  # noqa: PLC0415
     from world.magic.constants import EffectKind  # noqa: PLC0415
     from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
     from world.magic.types.pull import PullActionContext  # noqa: PLC0415
@@ -852,6 +859,11 @@ def _charge_cast_pull(
     pull_sheet = _get_character_sheet(character)
     if pull_sheet is None:
         return pull_flat_bonus, effective_power, []
+
+    beseech_bonus_thread_id = None
+    applied_bonus = 0
+    if cast_pull.beseech_bonus > 0:
+        beseech_bonus_thread_id, applied_bonus = _resolve_emergency_draw(pull_sheet, cast_pull)
 
     pull_result = spend_resonance_for_pull(
         pull_sheet,
@@ -863,6 +875,8 @@ def _charge_cast_pull(
             involved_techniques=(technique.pk,),
             target=target,
         ),
+        beseech_bonus_thread_id=beseech_bonus_thread_id,
+        beseech_bonus=applied_bonus,
     )
     pull_intensity_bonus = 0
     for eff in pull_result.resolved_effects:
@@ -1050,7 +1064,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
         character=character,
         anima=anima,
         deficit=deficit,
-        soulfray_config=SoulfrayConfig.objects.first(),
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
         check_result=effective_check_result,
         lethal=lethal,
     )
