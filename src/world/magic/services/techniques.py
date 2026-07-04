@@ -63,24 +63,23 @@ logger = logging.getLogger(__name__)
 
 
 def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
-    """Look up technique_stat ModifierTargets in a single query.
+    """Look up technique_stat ModifierTargets from the cached catalog (#1846).
 
     Returns a dict mapping target name to ModifierTarget instance.
     Missing keys mean no modifiers are configured for that stat.
     """
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
+    wanted = {TECHNIQUE_STAT_INTENSITY, TECHNIQUE_STAT_CONTROL}
     return {
         t.name: t
-        for t in ModifierTarget.objects.filter(
-            category__name=TECHNIQUE_STAT_CATEGORY_NAME,
-            name__in=[TECHNIQUE_STAT_INTENSITY, TECHNIQUE_STAT_CONTROL],
-        ).select_related("category")
+        for t in ModifierTarget.objects.cached_all()
+        if t.category.name == TECHNIQUE_STAT_CATEGORY_NAME and t.name in wanted
     }
 
 
 def _get_power_targets() -> list[ModifierTarget]:
-    """Look up all 'power'-category ModifierTargets in a single query.
+    """Look up all 'power'-category ModifierTargets from the cached catalog (#1846).
 
     Returns all power targets (global, resonance-scoped, and damage-type-scoped).
     Caller filters by the technique's resonances and damage types.
@@ -88,11 +87,9 @@ def _get_power_targets() -> list[ModifierTarget]:
     from world.mechanics.constants import POWER_CATEGORY_NAME  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
-    return list(
-        ModifierTarget.objects.filter(category__name=POWER_CATEGORY_NAME).select_related(
-            "category", "target_resonance", "target_damage_type"
-        )
-    )
+    return [
+        t for t in ModifierTarget.objects.cached_all() if t.category.name == POWER_CATEGORY_NAME
+    ]
 
 
 def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
@@ -117,17 +114,14 @@ def _get_social_safety_bonus() -> int:
 def _get_intensity_tier_control_modifier(runtime_intensity: int) -> int:
     """Look up the IntensityTier for a given intensity and return its control_modifier.
 
-    Finds the highest tier whose threshold is <= runtime_intensity.
-    Returns 0 if no tier matches.
+    Finds the highest tier whose threshold is <= runtime_intensity, scanning
+    the cached catalog (#1846) in Python instead of an ORDER BY ... LIMIT 1
+    query per call. Returns 0 if no tier matches.
     """
-    tier = (
-        IntensityTier.objects.filter(threshold__lte=runtime_intensity)
-        .order_by("-threshold")
-        .first()
-    )
-    if tier is None:
+    candidates = [t for t in IntensityTier.objects.cached_all() if t.threshold <= runtime_intensity]
+    if not candidates:
         return 0
-    return tier.control_modifier
+    return max(candidates, key=lambda t: t.threshold).control_modifier
 
 
 def _character_is_in_audere(character: ObjectDB) -> bool:

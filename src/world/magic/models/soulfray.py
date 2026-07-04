@@ -72,6 +72,8 @@ class MishapPoolTier(SharedMemoryModel):
     Control mishap pools must never contain character_loss consequences.
     """
 
+    objects = ArxSharedMemoryManager()
+
     min_deficit = models.PositiveIntegerField(
         help_text="Minimum control deficit for this tier (inclusive).",
     )

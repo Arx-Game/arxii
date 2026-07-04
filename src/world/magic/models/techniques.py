@@ -19,6 +19,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory, ActionTargetType
+from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.achievements.models import DiscoverableContent
 from world.magic.constants import TechniqueReach
@@ -181,6 +182,10 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
         return list(self.allowed_effect_types.all())
 
 
+class IntensityTierManager(CachedAllMixin, NaturalKeyManager):
+    """Manager for IntensityTier with natural key support, plus cached_all() (#1846)."""
+
+
 class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
     """
     Configurable thresholds for power intensity effects.
@@ -212,7 +217,7 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
         help_text="Staff-only notes about this tier.",
     )
 
-    objects = NaturalKeyManager()
+    objects = IntensityTierManager()
 
     class NaturalKeyConfig:
         fields = ["name"]
