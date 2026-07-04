@@ -65,10 +65,12 @@ class ResolveAndConsumeRitualComponentsTouchstoneModeTests(TestCase):
         instance = self._touchstone_instance(
             resonance=self.praedari, tier=self.tier1, attuned_to=None
         )
-        with self.assertRaises(RitualComponentError):
+        with self.assertRaises(RitualComponentError) as ctx:
             resolve_and_consume_ritual_components(
                 ritual=self.ritual, components=[instance], performer_sheet=self.performer
             )
+        assert "attuned touchstone" in ctx.exception.user_message.lower()
+        assert self.ritual.name in ctx.exception.user_message
         assert ItemInstance.objects.filter(pk=instance.pk).exists()
 
     def test_wrong_resonance_does_not_satisfy_without_context(self) -> None:
@@ -140,11 +142,13 @@ class ResolveAndConsumeRitualComponentsTouchstoneModeTests(TestCase):
             resonance=self.praedari, tier=self.tier1, attuned_to=self.performer
         )
         reagent_instance = ItemInstanceFactory(template=reagent_template, quantity=1)
-        with self.assertRaises(RitualComponentError):
+        with self.assertRaises(RitualComponentError) as ctx:
             resolve_and_consume_ritual_components(
                 ritual=self.ritual,
                 components=[touchstone_instance, reagent_instance],
                 performer_sheet=self.performer,
             )
+        assert "requires 2x" in ctx.exception.user_message
+        assert "only 1 provided" in ctx.exception.user_message
         assert ItemInstance.objects.filter(pk=touchstone_instance.pk).exists()
         assert ItemInstance.objects.filter(pk=reagent_instance.pk).exists()

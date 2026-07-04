@@ -65,11 +65,12 @@ def _resolve_touchstone_pks(
             )
         ]
         if not candidates:
-            msg = (
+            exc = RitualComponentError()
+            exc.user_message = (
                 f"Ritual '{req.ritual.name}' requires an attuned touchstone "
                 f"(tier >= {req.min_touchstone_tier.name}) that you don't have."
             )
-            raise RitualComponentError(msg)
+            raise exc
         matched_pks.append(candidates[0].pk)
 
     return matched_pks
@@ -115,11 +116,12 @@ def resolve_and_consume_ritual_components(
         template_pks = gather_consumable_pks(available=components, requirements=template_reqs)
     except InsufficientMaterials as exc:
         req = exc.requirement
-        msg = (
+        component_exc = RitualComponentError()
+        component_exc.user_message = (
             f"Ritual '{ritual.name}' requires {req.quantity}x "
             f"'{req.item_template}' but only {exc.provided_qty} provided."
         )
-        raise RitualComponentError(msg) from exc
+        raise component_exc from exc
 
     touchstone_pks = _resolve_touchstone_pks(
         available=components,
