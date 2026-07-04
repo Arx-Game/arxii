@@ -4,7 +4,9 @@ Public surface is preserved for the flat-module era: importers that use
 ``from world.magic.services import <name>`` continue to work unchanged.
 Submodules:
 
-- ``aura``        — affinity breakdown, aura percentage calculations
+- ``aura``        — CharacterAura recompute + threshold-crossing achievements
+  (not re-exported here; ``resonance.py`` imports ``recompute_aura`` /
+  ``fire_aura_threshold_crossings`` directly)
 - ``anima``       — anima deduction (and future ritual / regen services)
 - ``techniques``  — runtime-stat resolution and ``use_technique`` orchestration
 - ``alterations`` — Mage Scar pending / resolution / library services
@@ -31,10 +33,6 @@ from world.magic.services.anima import (
     get_character_anima_ritual,
     get_character_cast_check,
     provision_player_anima_ritual,
-)
-from world.magic.services.aura import (
-    calculate_affinity_breakdown,
-    get_aura_percentages,
 )
 from world.magic.services.resonance import (
     _anchor_in_action,  # external: world.magic.tests.test_pull_service
@@ -89,8 +87,6 @@ __all__ = [
     # threads
     "accept_thread_weaving_unlock",
     "apply_damage_reduction_from_threads",
-    # aura
-    "calculate_affinity_breakdown",
     # techniques
     "calculate_effective_anima_cost",
     # soulfray
@@ -105,7 +101,6 @@ __all__ = [
     "cross_thread_xp_lock",
     # anima
     "deduct_anima",
-    "get_aura_percentages",
     "get_character_anima_ritual",
     "get_character_cast_check",
     "get_imbue_cost_multiplier",

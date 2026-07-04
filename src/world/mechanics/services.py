@@ -858,9 +858,9 @@ def create_distinction_modifiers(
         # Calculate value at current rank
         value = effect.get_value_at_rank(rank)
 
-        # Create the modifier. CharacterModifier rows targeting resonances are
-        # the source of truth for the aura calc (see magic.services.get_aura_percentages);
-        # no denormalized resonance-total update is needed.
+        # Create the modifier. Resonance-targeted CharacterModifier rows have no
+        # live reader today (the aura calc reads CharacterResonance.lifetime_earned
+        # via magic.services.recompute_aura instead; see #1834).
         modifier = CharacterModifier.objects.create(
             character=character,
             target=effect.target,

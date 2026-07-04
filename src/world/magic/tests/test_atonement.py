@@ -1,15 +1,17 @@
 """Tests for the Atonement Rite service (Scope #7 Phase 8)."""
 
+from decimal import Decimal
+
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     AffinityFactory,
     AtonementRitualFactory,
+    CharacterAuraFactory,
     ResonanceFactory,
     with_corruption_at_stage,
 )
-from world.magic.models import CharacterAffinityTotal
 from world.magic.services.atonement import (
     ATONEMENT_REDUCE_AMOUNT,
     AtonementAffinityRefused,
@@ -29,21 +31,14 @@ def _call(*, performer_sheet, target_sheet, resonance):
 
 
 def _set_dominant_affinity(sheet, affinity_name: str) -> None:
-    """Wire a CharacterAffinityTotal row so dominant affinity resolves correctly."""
-    affinity = AffinityFactory(name=affinity_name)
-    CharacterAffinityTotal.objects.update_or_create(
-        character=sheet,
-        affinity=affinity,
-        defaults={"total": 100},
-    )
-    # Make other affinities lower so this one dominates
-    for name in {"Celestial", "Primal", "Abyssal"} - {affinity_name}:
-        other = AffinityFactory(name=name)
-        CharacterAffinityTotal.objects.update_or_create(
-            character=sheet,
-            affinity=other,
-            defaults={"total": 1},
-        )
+    """Wire a CharacterAura row so dominant affinity resolves correctly."""
+    percentages = {
+        "celestial": Decimal("5.00"),
+        "primal": Decimal("5.00"),
+        "abyssal": Decimal("5.00"),
+    }
+    percentages[affinity_name.lower()] = Decimal("90.00")
+    CharacterAuraFactory(character=sheet.character, **percentages)
 
 
 class TestAtonementRiteHappyPath(TestCase):
@@ -77,14 +72,14 @@ class TestAtonementRiteHappyPath(TestCase):
         self.assertIsInstance(result, AtonementResult)
         self.assertEqual(result.stage_before, 1)
 
-    def test_no_affinity_totals_defaults_to_non_abyssal(self) -> None:
-        """A sheet with no affinity data falls through without AtonementAffinityRefused."""
+    def test_no_aura_defaults_to_non_abyssal(self) -> None:
+        """A sheet with no CharacterAura row falls through without AtonementAffinityRefused."""
         sheet = CharacterSheetFactory()
         primal_affinity = AffinityFactory(name="Primal")
         resonance = ResonanceFactory(affinity=primal_affinity)
         with_corruption_at_stage(sheet, resonance, stage=1)
 
-        # No CharacterAffinityTotal rows — should not raise
+        # No CharacterAura row — should not raise
         result = _call(performer_sheet=sheet, target_sheet=sheet, resonance=resonance)
 
         self.assertIsInstance(result, AtonementResult)

@@ -6,7 +6,7 @@ Public names are re-exported here so external callers continue to use
 
 Submodules (see Scope 6 §4.4):
 - affinity: Affinity, Resonance
-- aura: CharacterAura, CharacterResonance, CharacterAffinityTotal
+- aura: CharacterAura, CharacterResonance
 - anima: CharacterAnima, AnimaRitualPerformance
 - gifts: Gift, CharacterGift, Tradition, CharacterTradition
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
@@ -67,7 +67,6 @@ from world.magic.models.anima import (
 )
 from world.magic.models.aura import (
     AuraAffinityThreshold,
-    CharacterAffinityTotal,
     CharacterAura,
     CharacterResonance,
 )
@@ -226,8 +225,6 @@ __all__ = [
     "BeginningsRitualGrant",
     # cantrips
     "Cantrip",
-    # aura
-    "CharacterAffinityTotal",
     "CharacterAnima",
     "CharacterAura",
     # gifts

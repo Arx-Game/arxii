@@ -86,19 +86,16 @@ class AtonementResult:
 def _get_dominant_affinity_name(performer_sheet: CharacterSheet) -> str:
     """Return the dominant affinity name (lower-case) for a character sheet.
 
-    Reads CharacterAffinityTotal rows; falls back to 'primal' if no rows
-    exist (neutral character without affinity data — treat as non-Abyssal
-    so gate is not accidentally over-restrictive for data-incomplete sheets).
+    Reads the performer's stored CharacterAura; falls back to 'primal' if the
+    sheet has no CharacterAura row (not magically active — treat as non-Abyssal
+    so the gate is not accidentally over-restrictive for data-incomplete sheets).
     """
-    from world.magic.models.aura import CharacterAffinityTotal  # noqa: PLC0415
+    from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
 
-    totals = list(
-        CharacterAffinityTotal.objects.filter(character=performer_sheet).select_related("affinity")
-    )
-    if not totals:
+    aura = magical_profile(performer_sheet)
+    if aura is None:
         return _FALLBACK_AFFINITY_NAME  # safe neutral fallback
-    dominant = max(totals, key=lambda t: t.total)
-    return dominant.affinity.name.lower()
+    return aura.dominant_affinity
 
 
 def perform_atonement_rite(
