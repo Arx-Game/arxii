@@ -93,8 +93,14 @@ def release_companion(companion: Companion) -> None:
     The Companion row is never hard-deleted — released_at is set and
     objectdb is cleared.
     """
+    from world.companions.models import Companion  # noqa: PLC0415 — avoid circular import
+
     if companion.objectdb is not None:
         companion.objectdb.delete()
     companion.released_at = timezone.now()
     companion.objectdb = None
     companion.save(update_fields=["released_at", "objectdb"])
+    # objectdb.delete()'s SET_NULL collector runs a bulk QuerySet.update() at the DB
+    # level, outside any single instance's .save() path — any other process-cached
+    # Companion for this pk would otherwise keep reporting a stale non-null objectdb.
+    Companion.flush_instance_cache()
