@@ -29,27 +29,58 @@ def _sanctum_for_ship(ship: ShipDetails) -> SanctumDetails | None:
 
 
 def ship_sanctum_bonus(ship: ShipDetails) -> ShipStatBonus:
-    """Sum active woven SANCTUM thread levels into a ``ShipStatBonus``.
+    """Sum active woven SANCTUM thread levels + Siege Deck armament into a ``ShipStatBonus``.
 
     PLACEHOLDER mapping: ``hull = handling = armament = total_levels`` — a
     per-resonance split is a later content pass. Returns ``ShipStatBonus()``
-    (all zeros) when the ship has no sanctum or no active woven threads.
+    (all zeros) when the ship has no sanctum, no active woven threads, and no
+    Siege Deck.
     """
     sanctum = _sanctum_for_ship(ship)
-    if sanctum is None:
+    total_levels = 0
+    if sanctum is not None:
+        total_levels = (
+            Thread.objects.filter(
+                target_sanctum_details=sanctum,
+                retired_at__isnull=True,
+            ).aggregate(total=Sum("level"))["total"]
+            or 0
+        )
+
+    # Siege Deck armament bonus (#675): any active Siege Deck on the ship's
+    # rooms adds to armament. Mirrors the _sanctum_for_ship area filter.
+    siege_deck_bonus = _siege_deck_armament_bonus(ship)
+
+    if not total_levels and not siege_deck_bonus:
         return ShipStatBonus()
 
-    total_levels = (
-        Thread.objects.filter(
-            target_sanctum_details=sanctum,
-            retired_at__isnull=True,
-        ).aggregate(total=Sum("level"))["total"]
-        or 0
+    return ShipStatBonus(
+        hull=total_levels,
+        handling=total_levels,
+        armament=total_levels + siege_deck_bonus,
     )
-    if not total_levels:
-        return ShipStatBonus()
 
-    return ShipStatBonus(hull=total_levels, handling=total_levels, armament=total_levels)
+
+def _siege_deck_armament_bonus(ship: ShipDetails) -> int:
+    """Total armament bonus from active Siege Decks on the ship's rooms (#675).
+
+    A ship's rooms are the ``RoomProfile``s whose ``area`` matches the ship's
+    backing ``Building``'s area. There can be at most one feature per room
+    (RoomFeatureInstance is OneToOne), but multiple rooms in the area could
+    each carry a Siege Deck — sum them all.
+    """
+    from world.room_features.constants import (  # noqa: PLC0415
+        RoomFeatureServiceStrategy,
+    )
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+    from world.ships.constants import SIEGE_DECK_ARMAMENT_PER_LEVEL  # noqa: PLC0415
+
+    instances = RoomFeatureInstance.objects.filter(
+        room_profile__area=ship.building.area,
+        feature_kind__service_strategy=RoomFeatureServiceStrategy.SIEGE_DECK,
+        dissolved_at__isnull=True,
+    )
+    return sum(inst.level * SIEGE_DECK_ARMAMENT_PER_LEVEL for inst in instances)
 
 
 def ship_sanctum_capabilities(ship: ShipDetails) -> list[Resonance]:
