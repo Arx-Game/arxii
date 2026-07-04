@@ -118,3 +118,23 @@ class BindCompanionActionTests(TestCase):
         from world.companions.models import Companion
 
         self.assertTrue(Companion.objects.filter(name="Skree", owner=self.sheet).exists())
+
+    def test_bind_fails_with_forced_failure_outcome(self) -> None:
+        from actions.definitions.companions import BindCompanionAction
+        from world.checks.test_helpers import force_check_outcome
+        from world.traits.factories import CheckOutcomeFactory
+
+        failure = CheckOutcomeFactory(name="Forced Bind Failure", success_level=-1)
+        with force_check_outcome(failure):
+            result = BindCompanionAction().run(
+                actor=self.sheet.character,
+                gift_id=self.gift.pk,
+                archetype_id=self.archetype.pk,
+                name="Ghost",
+            )
+
+        self.assertFalse(result.success)
+        self.assertIn("resists your attempt to bind it", result.message)
+        from world.companions.models import Companion
+
+        self.assertFalse(Companion.objects.filter(name="Ghost").exists())

@@ -38,8 +38,6 @@ class CompanionViewSetTests(APITestCase):
 
 class CompanionArchetypeViewSetTests(APITestCase):
     def test_lists_catalog(self) -> None:
-        from world.roster.factories import RosterTenureFactory
-
         tenure = RosterTenureFactory()
         archetype = CompanionArchetypeFactory()
 

@@ -411,9 +411,12 @@ class Character(ObjectParent, DefaultCharacter):
             )
 
             # Companions follow their owner (#672 spec, Decision #9).
-            for companion in self.companions.active():
-                if companion.objectdb is not None:
-                    companion.objectdb.move_to(self.location, quiet=True)
+            def _companion_follow_on_move() -> None:
+                for companion in self.companions.active():
+                    if companion.objectdb is not None:
+                        companion.objectdb.move_to(self.location, quiet=True)
+
+            run_safely("companion_follow_on_move", _companion_follow_on_move, actor=self)
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.

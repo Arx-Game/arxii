@@ -425,6 +425,7 @@ class HasCompanionCapacityPrerequisite(Prerequisite):
     def is_met(self, actor, target=None, context=None) -> tuple[bool, str]:
         from world.companions.models import CompanionArchetype  # noqa: PLC0415
         from world.companions.services import (  # noqa: PLC0415
+            NoCompanionThreadError,
             companion_capacity,
             used_companion_capacity,
         )
@@ -444,7 +445,10 @@ class HasCompanionCapacityPrerequisite(Prerequisite):
         sheet = resolve_actor_sheet(actor)
         if sheet is None:
             return False, "You have no character sheet."
-        remaining = companion_capacity(sheet, gift) - used_companion_capacity(sheet, gift)
+        try:
+            remaining = companion_capacity(sheet, gift) - used_companion_capacity(sheet, gift)
+        except NoCompanionThreadError:
+            return False, "You don't have that gift's Companion Capacity available."
         if remaining < archetype.capacity_cost:
             return False, f"You don't have enough Companion Capacity to bind a {archetype.name}."
         return True, ""
