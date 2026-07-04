@@ -22,6 +22,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.captivity.constants import CaptivityStatus
 
 _MISSION_TEMPLATE_FK = "missions.MissionTemplate"
@@ -131,6 +132,8 @@ class CaptivityConfig(SharedMemoryModel):
     deployment's own voice — nothing here ships prose.
     """
 
+    objects = ArxSharedMemoryManager()
+
     captive_template = models.ForeignKey(
         _MISSION_TEMPLATE_FK,
         on_delete=models.SET_NULL,
@@ -180,7 +183,9 @@ class CaptivityConfig(SharedMemoryModel):
     @classmethod
     def load(cls) -> CaptivityConfig:
         """Fetch (or lazily create) the singleton row."""
-        obj, _ = cls.objects.get_or_create(pk=1)
+        obj = cls.objects.cached_singleton()
+        if obj is None:
+            obj, _ = cls.objects.get_or_create(pk=1)
         return obj
 
     def __str__(self) -> str:

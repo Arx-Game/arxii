@@ -10,6 +10,8 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
+
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
@@ -1333,6 +1335,8 @@ class StrainConfig(SharedMemoryModel):
     can contribute.
     """
 
+    objects = ArxSharedMemoryManager()
+
     conversion_base = models.PositiveIntegerField(
         default=10,
         help_text="Base anima units required per +1 modifier step.",
@@ -1391,6 +1395,8 @@ class ClashConfig(SharedMemoryModel):
     - ``botch_backfire_fraction``: fraction of power fed back as a negative delta
       on a botch (handled by the caller, not by ``quality_multiplier_for``).
     """
+
+    objects = ArxSharedMemoryManager()
 
     affinity_tilt_coefficient = models.DecimalField(
         max_digits=5,
@@ -1514,9 +1520,11 @@ class ClashConfig(SharedMemoryModel):
 class FleeConfig(SharedMemoryModel):
     """Singleton (pk=1): authored flee-check wiring (#878).
 
-    Seeded authored content — services use get(pk=1) and let DoesNotExist
+    Seeded authored content — services use cached_singleton() and let DoesNotExist
     propagate loudly (mirrors get_penetration_check_type's no-fabrication rule).
     """
+
+    objects = ArxSharedMemoryManager()
 
     check_type = models.ForeignKey(
         CHECK_TYPE_MODEL,

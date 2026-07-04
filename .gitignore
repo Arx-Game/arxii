@@ -150,3 +150,4 @@ src/schema.json
 # this file is for project-specific token prefixes that shouldn't be
 # shared across machines.
 tools/skills/workflow-friction-audit/secret-patterns.txt
+.plan.md

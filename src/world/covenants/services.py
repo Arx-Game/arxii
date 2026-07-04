@@ -1669,11 +1669,14 @@ def perform_covenant_rite(*, session: RitualSession) -> CovenantRiteInstance:
 def get_mentor_bond_config() -> MentorBondConfig:
     """Return the seeded MentorBondConfig singleton (#1165).
 
-    Uses get() — never get_or_create — because this is authored content; a
-    fabricated row would silently break bond-scaling resolution.
+    Uses cached_singleton() — never get_or_create — because this is authored
+    content; a fabricated row would silently break bond-scaling resolution.
     DoesNotExist propagates loudly. Mirrors get_flee_config.
     """
-    return MentorBondConfig.objects.get(pk=1)
+    config = MentorBondConfig.objects.cached_singleton()
+    if config is None:
+        raise MentorBondConfig.DoesNotExist
+    return config
 
 
 @transaction.atomic

@@ -2223,7 +2223,7 @@ class PendingAudereOfferSerializer(_PendingOfferCharacterMixin, serializers.Mode
         from world.magic.audere import AudereThreshold  # noqa: PLC0415
 
         if not hasattr(self, "_threshold_cache"):
-            self._threshold_cache = AudereThreshold.objects.first()
+            self._threshold_cache = AudereThreshold.objects.cached_singleton()
         return self._threshold_cache
 
     def get_intensity_bonus(self, obj: object) -> int:  # noqa: ARG002
