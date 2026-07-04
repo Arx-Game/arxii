@@ -987,7 +987,6 @@
   - alteration_events <- magic.MagicalAlterationEvent
   - anima_ritual_participations <- magic.AnimaRitualPerformance
   - resonances <- magic.CharacterResonance
-  - affinity_totals <- magic.CharacterAffinityTotal
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - poseendorsement_given <- magic.PoseEndorsement
   - poseendorsement_received <- magic.PoseEndorsement
@@ -2346,7 +2345,6 @@
   - resonances <- magic.Resonance
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
-  - character_totals <- magic.CharacterAffinityTotal
   - interactions_as_source <- magic.AffinityInteraction
   - interactions_as_environment <- magic.AffinityInteraction
   - modifier_target <- mechanics.ModifierTarget
@@ -2584,11 +2582,6 @@
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
   - resonance -> magic.Resonance [FK]
-
-### CharacterAffinityTotal
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [FK]
-  - affinity -> magic.Affinity [FK]
 
 ### AuraAffinityThreshold
 **Foreign Keys:**
@@ -3108,7 +3101,6 @@
 ### Service Functions
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' — Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
 - `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' — Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
-- `calculate_affinity_breakdown(resonances: 'QuerySet[ResonanceModel]') -> 'dict[str, int]' — Derive affinity counts from a set of resonances.`
 - `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int', strain_commitment: 'int' = 0, lethal: 'bool' = True) -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
 - `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig', *, lethal: 'bool' = True) -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
 - `coherence_cache_scope() — Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
@@ -3119,7 +3111,6 @@
 - `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False) -> 'PendingAlterationResult' — Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' — Pay XP to unlock an XP-locked level boundary on a thread.`
 - `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' — Deduct anima from character, returning the overburn deficit.`
-- `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
 - `get_character_anima_ritual(character) — The character's authored SCENE_ACTION ritual (with check_config), or None.`
 - `get_character_cast_check(character) — The CheckType a character's technique casts roll, or None for fallback.`
 - `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' — Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`

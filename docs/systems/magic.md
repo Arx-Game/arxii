@@ -81,7 +81,6 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterTechnique` | Known techniques | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
 | `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
-| `CharacterAffinityTotal` | Cached affinity totals | `character`, `affinity`, `total` | FK via character |
 
 **CharacterResonance reshape note.** Prior to Spec A, `CharacterResonance`
 carried `scope`, `strength`, `is_active`, and FK'd `ObjectDB`. Those fields
@@ -89,8 +88,10 @@ were dropped (no readers beyond Mage Scars, which now uses
 `character.resonances.most_recently_earned()`), `character` was re-FK'd to
 `CharacterSheet`, and `balance` + `lifetime_earned` were added. Row existence
 replaces the old `is_active` flag. `CharacterResonanceTotal` (denormalized
-aggregate) was deleted — aura recompute now reads `CharacterModifier` rows
-whose target category is `resonance` directly.
+aggregate) was deleted — aura recompute (`recompute_aura`) reads
+`CharacterResonance.lifetime_earned` grouped by affinity directly. (Distinction
+effects still write resonance-category `CharacterModifier` rows, but nothing
+reads them today — see #1834.)
 
 ### Techniques (Player-Created Abilities)
 
@@ -854,9 +855,9 @@ calls `grant_resonance(..., source=GainSource.MISSION_REWARD)`. This closes the
 RESONANCE half of `docs/plans/2026-05-18-missions-design.md` §13.3 (LEGEND_POINTS
 remains a separate, still-open stub).
 
-Note: `get_aura_percentages()`/`CharacterAffinityTotal` (also in this file/app) are
-unrelated, unwired legacy code from before `CharacterAura`'s stored-percentage
-mechanism existed — see #1739. `recompute_aura` does not use them.
+Note: `get_aura_percentages()`/`CharacterAffinityTotal` — unwired legacy code from
+before `CharacterAura`'s stored-percentage mechanism existed — were removed in
+#1739. `recompute_aura` never used them.
 
 ### Resonance-Environment Interaction (universal path — 2026-05-16)
 

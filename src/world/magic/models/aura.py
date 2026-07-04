@@ -3,8 +3,6 @@
 CharacterAura tracks a character's soul-state percentages across the three
 affinities. CharacterResonance is the per-character per-resonance row that
 doubles as identity anchor and spendable resonance currency.
-CharacterAffinityTotal is the aggregate total, updated when affinity sources
-change.
 """
 
 from decimal import Decimal
@@ -15,7 +13,7 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.magic.models.affinity import Affinity, Resonance
+from world.magic.models.affinity import Resonance
 from world.magic.types import AffinityType
 
 
@@ -158,35 +156,6 @@ class CharacterResonance(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.resonance.name} on {self.character_sheet}"
-
-
-class CharacterAffinityTotal(SharedMemoryModel):
-    """
-    Aggregate affinity total for a character.
-
-    Updated when affinity sources change (distinctions, conditions, etc.).
-    Used to calculate aura percentages dynamically.
-    """
-
-    character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
-        on_delete=models.CASCADE,
-        related_name="affinity_totals",
-    )
-    affinity = models.ForeignKey(
-        Affinity,
-        on_delete=models.PROTECT,
-        related_name="character_totals",
-    )
-    total = models.IntegerField(default=0)
-
-    class Meta:
-        unique_together = [("character", "affinity")]
-        verbose_name = "Character Affinity Total"
-        verbose_name_plural = "Character Affinity Totals"
-
-    def __str__(self) -> str:
-        return f"{self.character}: {self.affinity.name} = {self.total}"
 
 
 class AuraAffinityThreshold(SharedMemoryModel):

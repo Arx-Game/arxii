@@ -1,9 +1,11 @@
 """Tests for distinction resonance integration via CharacterModifier rows.
 
 After Phase 2 of the resonance pivot, `CharacterResonanceTotal` was removed and
-the aura recompute path now reads `CharacterModifier` rows whose target's
-category is `resonance` directly. These tests assert on those rows (and on the
-aura percentages they produce) instead of the deleted denormalized aggregate.
+distinction effects targeting a Resonance now write directly to `CharacterModifier`
+rows whose target's category is `resonance`. These tests assert on those rows
+instead of the deleted denormalized aggregate. (These rows currently have no live
+reader — the aura calc reads `CharacterResonance.lifetime_earned` via
+`recompute_aura` instead; see #1834.)
 """
 
 from django.test import TestCase
@@ -15,7 +17,6 @@ from world.distinctions.factories import (
     DistinctionFactory,
 )
 from world.magic.factories import AffinityFactory, ResonanceFactory
-from world.magic.services import get_aura_percentages
 from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
@@ -339,25 +340,3 @@ class DistinctionResonanceIntegrationTest(TestCase):
             _resonance_modifier_total(self.character_sheet, self.serenity),
             15,  # scaling_values[1] for rank 2
         )
-
-    def test_resonance_modifier_feeds_aura_percentages(self):
-        """End-to-end: a resonance modifier flows into get_aura_percentages output."""
-        patient = DistinctionFactory(name="PatientAura", max_rank=3)
-        DistinctionEffectFactory(
-            distinction=patient,
-            target=self.serenity_target,
-            value_per_rank=100,
-        )
-
-        char_dist = CharacterDistinctionFactory(
-            character=self.character,
-            distinction=patient,
-            rank=1,
-        )
-        create_distinction_modifiers(char_dist)
-
-        result = get_aura_percentages(self.character_sheet)
-        # Serenity → Abyssal affinity, 100 value, no other contributions.
-        self.assertEqual(result.abyssal, 100.0)
-        self.assertEqual(result.celestial, 0.0)
-        self.assertEqual(result.primal, 0.0)

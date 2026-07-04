@@ -587,9 +587,9 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
 
     Expects the distinction FK on each CharacterDistinction to have effects prefetched.
 
-    Note: aura percentages are computed live from these CharacterModifier rows by
-    `world.magic.services.get_aura_percentages`, so no denormalized resonance-total
-    bookkeeping is needed.
+    Note: resonance-targeted CharacterModifier rows have no live reader today
+    (the aura calc reads CharacterResonance.lifetime_earned via
+    `world.magic.services.recompute_aura` instead; see #1834).
     """
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
 

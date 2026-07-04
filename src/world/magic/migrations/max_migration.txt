@@ -1,1 +1,1 @@
-0078_technique_target_weather_type
+0079_delete_characteraffinitytotal

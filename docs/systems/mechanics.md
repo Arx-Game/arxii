@@ -128,10 +128,11 @@ count = delete_distinction_modifiers(character_distinction)
 update_distinction_rank(character_distinction)
 ```
 
-The aura percentage calculation in `magic.services.get_aura_percentages()` reads
-`CharacterModifier` rows whose `target` falls in the `resonance` category directly.
-The legacy `CharacterResonanceTotal` denormalized aggregate was removed in the
-Spec A pivot — there is no sync step to keep in lockstep.
+The aura percentage calculation (`magic.services.recompute_aura()`) reads
+`CharacterResonance.lifetime_earned` grouped by affinity — it does not read these
+resonance-targeting `CharacterModifier` rows, which currently have no live reader
+(see #1834). The legacy `CharacterResonanceTotal` denormalized aggregate was
+removed in the Spec A pivot — there is no sync step to keep in lockstep.
 
 ---
 
@@ -173,7 +174,7 @@ Spec A pivot — there is no sync step to keep in lockstep.
 ## Integration Points
 
 - **Distinctions**: Primary modifier source. `create_distinction_modifiers()` is called when a `CharacterDistinction` is created; `delete_distinction_modifiers()` on removal; `update_distinction_rank()` on rank change.
-- **Magic**: Aura percentages in `magic.services.get_aura_percentages()` read `CharacterModifier` rows whose `target` is in the `resonance` category directly — no denormalized aggregate to sync.
+- **Magic**: Aura percentages (`magic.services.recompute_aura()`) read `CharacterResonance.lifetime_earned` grouped by affinity — no denormalized aggregate to sync. Resonance-targeting `CharacterModifier` rows have no live reader today (#1834).
 - **Action Points**: `ActionPointPool._get_ap_modifier()` uses string-based lookup for AP modifier targets (pending target FK when AP system is built).
 - **Progression**: Development rate modifiers use string-based lookup (pending target FK when progression system is built).
 - **Equipment** (future): Will follow the same `ModifierSource` pattern with equipment-specific FK fields.
