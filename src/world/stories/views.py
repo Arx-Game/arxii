@@ -168,6 +168,7 @@ from world.stories.serializers import (
     RejectClaimInputSerializer,
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
+    ResolveForeclosureInputSerializer,
     ResolveSessionRequestInputSerializer,
     ResolveStakeInputSerializer,
     RiskCalibrationSerializer,
@@ -648,6 +649,38 @@ class StoryViewSet(viewsets.ModelViewSet):
 
         story = self.get_object()
         complete_story(story=story)
+        serializer = self.get_serializer(story)
+        return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="resolve-foreclosure",
+        permission_classes=[IsLeadGMOnStoryOrStaff],
+    )
+    def resolve_foreclosure(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/resolve-foreclosure/ — wrap up a foreclosed thread.
+
+        Lead GM on the story (or staff) resolves a FORECLOSED progress record:
+        stamps resolved_at/resolved_by and fans out an honest closure message.
+        Idempotent. ``resolved_by`` is stamped from the requesting user's
+        GMProfile — never accepted from client input.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.services.completion import (  # noqa: PLC0415
+            resolve_foreclosed_progress,
+        )
+
+        story = self.get_object()
+        ser = ResolveForeclosureInputSerializer(data=request.data, context={"story": story})
+        ser.is_valid(raise_exception=True)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            # Staff acting without a GMProfile: the closure still fires; the
+            # audit trail is carried by the NarrativeMessage sender_account.
+            gm_profile = None
+        resolve_foreclosed_progress(progress=ser.validated_data["progress"], resolved_by=gm_profile)
         serializer = self.get_serializer(story)
         return Response(serializer.data)
 

@@ -138,7 +138,7 @@ def _render_episode_resolution_text(resolution: EpisodeResolution) -> str:
 def notify_foreclosed_resolved(
     *,
     progress: AnyStoryProgress,
-    resolved_by: GMProfile,
+    resolved_by: GMProfile | None,
 ) -> None:
     """Fan out an honest closure message for a wrapped-up FORECLOSED thread.
 
@@ -155,6 +155,6 @@ def notify_foreclosed_resolved(
         body=_DEFAULT_FORECLOSED_TEXT,
         category=NarrativeCategory.STORY,
         related_story=story,
-        sender_account=resolved_by.account,
+        sender_account=resolved_by.account if resolved_by is not None else None,
         ooc_note="Foreclosed thread wrapped up by staff.",
     )

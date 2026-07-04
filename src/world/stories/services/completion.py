@@ -78,7 +78,7 @@ def _dissolve_linked_campaigns(story: Story) -> None:
 def resolve_foreclosed_progress(
     *,
     progress: AnyStoryProgress,
-    resolved_by: GMProfile,
+    resolved_by: GMProfile | None,
 ) -> AnyStoryProgress:
     """Wrap up a FORECLOSED progress record.
 
@@ -86,6 +86,10 @@ def resolve_foreclosed_progress(
     layered on the terminal FORECLOSED outcome, never a reclassification to
     COMPLETED. Idempotent: a no-op (no re-notify) if already resolved. Does
     not touch ``status`` or ``is_active``.
+
+    ``resolved_by`` may be ``None`` when a staff user without a GMProfile
+    performs the action (the closure still fires; the audit trail is carried
+    by the NarrativeMessage's sender_account instead).
 
     Defensive programmer-error guard only: ``progress`` must be FORECLOSED.
     User-input validation (the record exists, is foreclosed, belongs to the
