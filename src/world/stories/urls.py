@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from world.stories.views import (
     AggregateBeatContributionViewSet,
     AssistantGMClaimViewSet,
+    BeatStakeAvailabilityView,
     BeatViewSet,
     ChapterViewSet,
     EpisodeProgressionRequirementViewSet,
@@ -33,6 +34,7 @@ from world.stories.views import (
     TableBulletinReplyViewSet,
     TransitionRequiredOutcomeViewSet,
     TransitionViewSet,
+    TreasuredSignoffViewSet,
 )
 
 router = DefaultRouter()
@@ -71,6 +73,8 @@ router.register(r"stake-resolutions", StakeResolutionViewSet)
 # #1770 PR3: Two-sided contract — authored win-reward lines
 router.register(r"stake-reward-lines", StakeRewardLineViewSet)
 router.register(r"stake-activations", StakeContractActivationViewSet)
+# #1771 task 6: sign-off + boundary-availability surfaces
+router.register(r"treasured-signoffs", TreasuredSignoffViewSet, basename="treasuredsignoff")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).
@@ -88,6 +92,12 @@ urlpatterns = [
         "api/stories/expire-overdue-beats/",
         ExpireOverdueBeatsView.as_view(),
         name="stories-expire-overdue-beats",
+    ),
+    # #1771 task 6: GM-facing stake-availability read (APIView, not paginated).
+    path(
+        "api/beats/<int:beat_id>/stake-availability/",
+        BeatStakeAvailabilityView.as_view(),
+        name="beat-stake-availability",
     ),
     path("api/", include(router.urls)),
 ]

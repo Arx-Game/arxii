@@ -1184,7 +1184,8 @@ and paying authored win-reward lines through an anti-farming activation gate
   `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
   `LifecycleState.DEAD` to the roster lifecycle.
 - **Opt-in surfaces (PR4):** `check_stake_boundaries`
-  (`world.stories.services.boundaries`, allow-all stub → registry is #1771;
+  (`world.stories.services.boundaries` — real hard-line/treasured-subject
+  registry since #1771, see [Boundaries](#boundaries) below;
   `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
   staff-only, ADR-0033); `stakes_summary_for_beat` +
   `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
@@ -1217,6 +1218,63 @@ and paying authored win-reward lines through an anti-farming activation gate
   scenes / missions / actions (PR4 opt-in surfaces)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
+
+### Boundaries
+Player-private content-boundary registry backing `check_stake_boundaries` (#1771):
+hard lines (auto-blocked `ContentTheme` matches, always private) and treasured
+subjects (specific entities requiring an explicit pre-scene sign-off), plus a
+consent-style sharing layer, a scene "lines & veils" aggregate, and a privacy-safe
+GM availability read. ADR-0086 (extends ADR-0024, ADR-0033).
+
+- **Models:** `ContentTheme` (NaturalKey on `key`, staff-authored),
+  `PlayerBoundary` (owner `PlayerData`; `kind` HARD_LINE/ADVISORY; `theme` FK,
+  `PROTECT`; `detail`; + `VisibilityMixin`), `TreasuredSubject` (owner
+  `RosterTenure`; `subject_kind`; typed subject FKs mirroring `Stake` —
+  `character_sheets.CharacterSheet` / `items.ItemInstance` / `societies.Society` /
+  `societies.Organization`, all `SET_NULL`; `subject_label`; + `VisibilityMixin`).
+  Stories-side: `StakeTemplate.content_themes` (M2M → `ContentTheme`),
+  `TreasuredSignoff` (beat/player_data/treasured_subject FKs; `active` property).
+- **Enums:** `BoundaryKind` (HARD_LINE/ADVISORY), `TreasuredSubjectKind` (mirrors
+  `StakeSubjectKind` values verbatim, no `stories` import — ADR-0010).
+- **Two matching mechanisms:** hard lines are a coarse `ContentTheme` intersection
+  (player hard-line ∩ `StakeTemplate.content_themes` blocks the whole contract);
+  treasured subjects are a fine specific-entity identity match
+  (`_subject_identity`, shared by the enforcement check and the withdrawal
+  override) requiring a `TreasuredSignoff`, not a block.
+- **Key Services (`world.boundaries.services`):** `scene_lines_and_veils(scene,
+  viewer_tenure) -> SceneLinesAndVeils` — anonymized, hard-line-free scene
+  aggregate (`world.boundaries.types`: `SharedAdvisoryBoundary`,
+  `SharedTreasuredSubject`, `SceneLinesAndVeils`).
+- **Key Services (`world.stories.services.boundaries`, per ADR-0010 dependency
+  direction — `boundaries` never imports `stories`):** `check_stake_boundaries`
+  (real registry since #1771, unchanged contract), `grant_treasured_signoff`,
+  `withdraw_treasured_signoff`, `stake_availability(beat, character_sheets) ->
+  StakeAvailability` (`world.stories.types`: `available`/`blocked`/
+  `needs_signoff` counts only). Resolution override:
+  `resolve_stakes_for_completion` routes a withdrawn treasured stake to
+  `StakeResolutionColumn.WITHDRAWAL` at ordinary completion (siblings unaffected).
+- **API:** `/api/boundaries/` — `content-themes` (read-only), `player-boundaries`,
+  `treasured-subjects` (owner-scoped `ModelViewSet`s, no staff carve-out),
+  `scenes/{id}/lines-and-veils/`; `/api/treasured-signoffs/` +
+  `/api/beats/{id}/stake-availability/` (mounted on the stories router, same
+  dependency-direction reason).
+- **Frontend:** `frontend/src/boundaries/` — `BoundariesPage`
+  (`/profile/boundaries`, a Profile tab): boundary authoring, treasured-subject
+  flagging, pre-scene sign-off; `SceneLinesAndVeilsCard` on `SceneDetailPage`.
+- **Privacy invariant (ADR-0033/ADR-0086):** hard-line `theme`/`detail` and
+  `blocked_reason_private` never reach a player- or GM-facing surface —
+  structurally (owner-scoped querysets, hard-line-only-ever-excluded queries,
+  counts-only value objects), not by convention.
+- **Seed data:** `world.boundaries.factories.make_default_content_themes()` — a
+  small starter `ContentTheme` set (child endangerment, suicide/self-harm, sexual
+  violence, torture); not yet wired into a `world/seeds/clusters.py` cluster.
+- **Integrates with:** stories (stakes contract enforcement + resolution), consent
+  (`VisibilityMixin` reuse), roster (`RosterTenure` ownership), character_sheets /
+  items / societies (typed subject FKs), scenes (`persona_handler` participant
+  resolution for the lines-&-veils aggregate).
+- **Source:** `src/world/boundaries/`; enforcement/sign-off/availability in
+  `src/world/stories/services/boundaries.py`
+- **Details:** [boundaries.md](boundaries.md)
 
 ### Narrative
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.

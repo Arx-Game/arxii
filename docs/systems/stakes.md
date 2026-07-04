@@ -358,7 +358,9 @@ mission acceptance, and the freeform `declare_stakes` GM action; see the
 (`world.stories.services.beats._create_completion_and_fire_pool`, after the
 completion's consequence pool and the per-stake resolver run). Scene
 *grading* rides #1748; the player-boundary registry behind
-`check_stake_boundaries` is sibling #1771.
+`check_stake_boundaries` shipped in #1771 — see
+[Boundary seam](#boundary-seam-worldstoriesservicesboundaries) below and
+`docs/systems/boundaries.md`.
 
 ## Resolution (PR2)
 
@@ -581,11 +583,14 @@ Exposed at:
 (`StakeSerializer` screens existing stakes plus the candidate write) and at
 every activation/commit call site (the wiring-map rows below). Call sites
 gate on `report.cleared` — allowed AND no pending sign-off — so the #1771
-registry can start returning `requires_signoff` without any call-site change.
-Allow-all stub today; the per-player boundary registry is sibling **#1771**
-(pattern: the consent app, ADR-0024). `blocked_reason_private` is staff/audit
-only — a blocked contract surfaces exclusively as a generic "stakes could not
-be presented" failure (ADR-0033 privacy).
+registry could start returning `requires_signoff` without any call-site change,
+and now does. **Shipped in #1771**: a real per-player boundary registry
+(`world.boundaries` — `ContentTheme`/`PlayerBoundary` hard lines,
+`TreasuredSubject`/`TreasuredSignoff` requires-signoff), replacing the PR4
+allow-all stub. `blocked_reason_private` is staff/audit only — a blocked
+contract surfaces exclusively as a generic "stakes could not be presented"
+failure (ADR-0033 privacy, extended by ADR-0086). Full model/service/API
+detail: `docs/systems/boundaries.md`.
 
 ### Activation wiring map (who calls `activate_stakes_contract`)
 
@@ -705,7 +710,7 @@ issues:
 |---|---|
 | Win-column reward wiring (reward lines, banding, anti-farming payout gate) | **SHIPPED in PR3** — see [Two-sided Contract](#two-sided-contract--win-rewards-pr3); deliberately does NOT route through `apply_deed_rewards` despite the spec text (reasons recorded there) |
 | Opt-in player-facing surfaces + the scene-start activation triggers | **SHIPPED in PR4** — see [Opt-in & Visibility Surfaces](#opt-in--visibility-surfaces-1770-pr4) |
-| Player-boundary registry backing `check_stake_boundaries` | Sibling **#1771** (the seam ships allow-all) |
+| Player-boundary registry backing `check_stake_boundaries` | **SHIPPED in #1771** — see `docs/systems/boundaries.md` |
 | Scene *grading* | **#1748** |
 | Battle (war-scale) activation + outcome grading | **SHIPPED in #1785** — see `world.battles.beat_wiring` |
 
@@ -797,7 +802,8 @@ issues:
   (incl. `_reward_band_problems`)
 - `services/stake_resolution.py` — per-stake resolution, GM pick, writers,
   pillar-12 payload validation, `_apply_stake_rewards` (PR3)
-- `services/boundaries.py` — the PR4 boundary seam (`check_stake_boundaries`)
+- `services/boundaries.py` — the boundary seam (`check_stake_boundaries`,
+  real registry since #1771) + sign-off grant/withdraw + `stake_availability`
 - `types.py` — `StakesReadinessReport`, `StakePayloadProblem`
 - `serializers.py` — the stake serializers (search `#1770`)
 - `views.py` / `urls.py` — the ViewSets + `StakeViewSet.resolve`

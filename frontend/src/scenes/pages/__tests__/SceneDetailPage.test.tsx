@@ -180,6 +180,12 @@ vi.mock('../../components/ConsentPrompt', () => ({
   ConsentPrompt: () => <div data-testid="consent-prompt">ConsentPrompt</div>,
 }));
 
+vi.mock('@/boundaries/components/SceneLinesAndVeilsCard', () => ({
+  SceneLinesAndVeilsCard: () => (
+    <div data-testid="lines-and-veils-card">SceneLinesAndVeilsCard</div>
+  ),
+}));
+
 vi.mock('../../components/HighlightReel', () => ({
   HighlightReel: () => <div data-testid="highlight-reel">HighlightReel</div>,
 }));

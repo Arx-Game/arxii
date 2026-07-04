@@ -269,9 +269,9 @@ class FrontierStoryEntry(TypedDict):
 class StakeBoundaryReport:
     """Result of check_stake_boundaries (world.stories.services.boundaries).
 
-    allowed: the stakes may be presented to this party. The stub always
-        allows; a real boundary registry (see the boundaries sibling issue
-        of #1770) will consult per-player limits.
+    allowed: the stakes may be presented to this party. False when a
+        participant's hard line (a ContentTheme on the stake's template)
+        matches; the boundary registry (#1771) consults per-player limits.
     requires_signoff: character_sheet ids that need an explicit pre-scene
         sign-off before the contract can activate for them.
     blocked_reason_private: why the check blocked, for staff/audit logging
@@ -294,6 +294,21 @@ class StakeBoundaryReport:
         site changing.
         """
         return self.allowed and not self.requires_signoff
+
+
+@dataclass(frozen=True)
+class StakeAvailability:
+    """GM-facing tally of how a beat's candidate stakes screen for a party (#1771).
+
+    Produced by ``world.stories.services.boundaries.stake_availability``, one
+    ``check_stake_boundaries`` call per candidate stake. COUNTS ONLY — no
+    reason, no player/theme identifier (ADR-0033): a GM sees "3 available, 1
+    blocked, 2 need sign-off", never which stake or why.
+    """
+
+    available: int = 0
+    blocked: int = 0
+    needs_signoff: int = 0
 
 
 @dataclass(frozen=True)
