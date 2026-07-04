@@ -12,7 +12,8 @@ class OfferKind(models.TextChoices):
     # #930 — the domain-running loop: dispatch a collection / invest in the domain.
     COLLECTION = "collection", "Collection"
     IMPROVEMENT = "improvement", "Improvement"
-    # Future kinds: training/favors/marriage/attunement.
+    COURT_GRANT = "court_grant", "Court Grant"
+    # Future kinds: training/marriage/attunement.
 
 
 class DrawMode(models.TextChoices):

@@ -39,6 +39,7 @@ urlpatterns = [
     path("api/player-submissions/", include("world.player_submissions.urls")),
     path("api/staff-inbox/", include("world.staff_inbox.urls")),
     path("api/consent/", include("world.consent.urls")),
+    path("api/boundaries/", include("world.boundaries.urls")),
     path("api/gm/", include("world.gm.urls")),
     path("api/narrative/", include("world.narrative.urls")),
     path("", include("world.scenes.urls")),

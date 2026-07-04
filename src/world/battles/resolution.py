@@ -1098,6 +1098,7 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
 
     declarations = list(
         battle_round.declarations.filter(resolved=False).select_related(
+            "participant__character_sheet__character",
             "participant__character_sheet",
             "participant__side",
             "target_unit",

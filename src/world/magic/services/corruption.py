@@ -59,7 +59,9 @@ _TIER_COEF_ATTRS = {
 
 def get_corruption_config() -> CorruptionConfig:
     """Lazy-create the CorruptionConfig singleton at pk=1."""
-    config, _ = CorruptionConfig.objects.get_or_create(pk=1)
+    config = CorruptionConfig.objects.cached_singleton()
+    if config is None:
+        config, _ = CorruptionConfig.objects.get_or_create(pk=1)
     return config
 
 

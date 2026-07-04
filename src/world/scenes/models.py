@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import LedgerOp, PowerStage
 from world.scenes.constants import (
@@ -1328,6 +1329,8 @@ class SceneRound(AbstractRound):
 class SceneRoundDefaultsConfig(SharedMemoryModel):
     """Singleton (pk=1) staff-tunable defaults for new scene rounds."""
 
+    objects = ArxSharedMemoryManager()
+
     default_mode = models.CharField(
         max_length=20, choices=SceneRoundMode.choices, default=SceneRoundMode.POSE_ORDER
     )
@@ -1363,7 +1366,9 @@ class SceneRoundDefaultsConfig(SharedMemoryModel):
 
 
 def get_scene_round_defaults_config() -> SceneRoundDefaultsConfig:
-    obj, _ = SceneRoundDefaultsConfig.objects.get_or_create(pk=1)
+    obj = SceneRoundDefaultsConfig.objects.cached_singleton()
+    if obj is None:
+        obj, _ = SceneRoundDefaultsConfig.objects.get_or_create(pk=1)
     return obj
 
 

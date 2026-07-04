@@ -39,8 +39,10 @@ DEFAULT_TIER_REPRESENTATIVE_LEVEL = {1: 1, 2: 6, 3: 11, 4: 16, 5: 21}
 def get_technique_budget_config() -> TechniqueBudgetConfig:
     """Get-or-create the budget config singleton (pk=1)."""
     with transaction.atomic():
+        cfg = TechniqueBudgetConfig.objects.cached_singleton()
+    if cfg is None:
         cfg, _ = TechniqueBudgetConfig.objects.get_or_create(pk=1)
-        return cfg
+    return cfg
 
 
 def get_technique_tier_budget(tier: int) -> TechniqueTierBudget:

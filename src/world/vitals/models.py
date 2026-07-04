@@ -3,6 +3,7 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.vitals.constants import (
     DEATH_BASE_DIFFICULTY,
     DEATH_SCALING_PER_PERCENT,
@@ -92,6 +93,8 @@ class CharacterVitals(SharedMemoryModel):
 class VitalsConsequenceConfig(SharedMemoryModel):
     """Singleton (pk=1): global knockout pool + default wound/death pools used
     when a DamageType doesn't specify its own. Authored via admin."""
+
+    objects = ArxSharedMemoryManager()
 
     knockout_pool = models.ForeignKey(
         _CONSEQUENCE_POOL_FK,

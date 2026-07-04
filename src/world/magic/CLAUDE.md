@@ -498,7 +498,9 @@ thread's own resonance (dress the part for the resonance you invested in → har
   (baseline is 0 when absent).
 - `survivability_baseline(character, vital_target) -> int` — `round(cap × S / (S + half))`
   where `S = coefficient × Σ depth(t) × coherence_factor(t)` over owned (non-retired)
-  threads, `depth(t) = max(1, thread.level // 10)`, and
+  threads, `depth(t) = thread_level_multiplier(thread.level)` (#1718 — `Decimal(level // 10)`
+  unchanged for level ≥ 10, `Decimal(1)` at level 0, a linear ramp from 0.1 to 1.0 for
+  levels 1-9), and
   `coherence_factor(t) = min(coherence_max_multiplier, 1 + motif_coherence_bonus(sheet,
   thread.resonance) / coherence_scale)` (factor 1.0 when `coherence_scale` is 0). An
   uncoordinated wardrobe yields factor 1.0 — no penalty (dilution-only rule); a lone wolf

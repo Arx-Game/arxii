@@ -1436,3 +1436,46 @@ class CanAccessStoryNotes(permissions.BasePermission):
         """Apply the access rule to the note's story (governs retrieve)."""
         story_note = cast(StoryNote, obj)
         return _user_can_access_story_notes(request.user, story_note.story)
+
+
+class IsSignoffOwner(permissions.BasePermission):
+    """Object access only for the player who granted a ``TreasuredSignoff`` (#1771).
+
+    Self-authored consent, mirroring ``world.consent``'s tenure-owner
+    permission classes — no staff carve-out, since granting/withdrawing a
+    sign-off is the player's own act.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        from world.stories.models import TreasuredSignoff  # noqa: PLC0415
+
+        signoff = cast(TreasuredSignoff, obj)
+        if not hasattr(request.user, "player_data"):
+            return False
+        return signoff.player_data_id == request.user.player_data.pk
+
+
+class IsBeatStoryOwnerOrStaffForAvailability(permissions.BasePermission):
+    """Access gate for the GM stake-availability read (#1771 task 6).
+
+    Deliberately NOT ``IsBeatStoryOwnerOrStaff`` itself: that class's GET path
+    delegates to ``IsStoryOwnerOrStaff._can_read_story`` (the permissive
+    player-read rule — public stories, participants, invite-only trust),
+    which is the right rule for reading a Beat's own fields but far too wide
+    for a GM planning tool. Stake availability is GM-only regardless of HTTP
+    method, so this always uses the WRITE-side ownership walk
+    (``user_owns_beat_story``), staff bypass included.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        return user_owns_beat_story(request.user, cast(Beat, obj))

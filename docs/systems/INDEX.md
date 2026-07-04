@@ -1204,7 +1204,8 @@ and paying authored win-reward lines through an anti-farming activation gate
   `roster.set_lifecycle_state`; `vitals._mark_dead` now propagates
   `LifecycleState.DEAD` to the roster lifecycle.
 - **Opt-in surfaces (PR4):** `check_stake_boundaries`
-  (`world.stories.services.boundaries`, allow-all stub → registry is #1771;
+  (`world.stories.services.boundaries` — real hard-line/treasured-subject
+  registry since #1771, see [Boundaries](#boundaries) below;
   `StakeBoundaryReport` in `world.stories.types`; `blocked_reason_private` is
   staff-only, ADR-0033); `stakes_summary_for_beat` +
   `StakesSummarySerializer`/`StakeSummarySerializer` (pillar 9 — branch contents
@@ -1237,6 +1238,63 @@ and paying authored win-reward lines through an anti-farming activation gate
   scenes / missions / actions (PR4 opt-in surfaces)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
+
+### Boundaries
+Player-private content-boundary registry backing `check_stake_boundaries` (#1771):
+hard lines (auto-blocked `ContentTheme` matches, always private) and treasured
+subjects (specific entities requiring an explicit pre-scene sign-off), plus a
+consent-style sharing layer, a scene "lines & veils" aggregate, and a privacy-safe
+GM availability read. ADR-0086 (extends ADR-0024, ADR-0033).
+
+- **Models:** `ContentTheme` (NaturalKey on `key`, staff-authored),
+  `PlayerBoundary` (owner `PlayerData`; `kind` HARD_LINE/ADVISORY; `theme` FK,
+  `PROTECT`; `detail`; + `VisibilityMixin`), `TreasuredSubject` (owner
+  `RosterTenure`; `subject_kind`; typed subject FKs mirroring `Stake` —
+  `character_sheets.CharacterSheet` / `items.ItemInstance` / `societies.Society` /
+  `societies.Organization`, all `SET_NULL`; `subject_label`; + `VisibilityMixin`).
+  Stories-side: `StakeTemplate.content_themes` (M2M → `ContentTheme`),
+  `TreasuredSignoff` (beat/player_data/treasured_subject FKs; `active` property).
+- **Enums:** `BoundaryKind` (HARD_LINE/ADVISORY), `TreasuredSubjectKind` (mirrors
+  `StakeSubjectKind` values verbatim, no `stories` import — ADR-0010).
+- **Two matching mechanisms:** hard lines are a coarse `ContentTheme` intersection
+  (player hard-line ∩ `StakeTemplate.content_themes` blocks the whole contract);
+  treasured subjects are a fine specific-entity identity match
+  (`_subject_identity`, shared by the enforcement check and the withdrawal
+  override) requiring a `TreasuredSignoff`, not a block.
+- **Key Services (`world.boundaries.services`):** `scene_lines_and_veils(scene,
+  viewer_tenure) -> SceneLinesAndVeils` — anonymized, hard-line-free scene
+  aggregate (`world.boundaries.types`: `SharedAdvisoryBoundary`,
+  `SharedTreasuredSubject`, `SceneLinesAndVeils`).
+- **Key Services (`world.stories.services.boundaries`, per ADR-0010 dependency
+  direction — `boundaries` never imports `stories`):** `check_stake_boundaries`
+  (real registry since #1771, unchanged contract), `grant_treasured_signoff`,
+  `withdraw_treasured_signoff`, `stake_availability(beat, character_sheets) ->
+  StakeAvailability` (`world.stories.types`: `available`/`blocked`/
+  `needs_signoff` counts only). Resolution override:
+  `resolve_stakes_for_completion` routes a withdrawn treasured stake to
+  `StakeResolutionColumn.WITHDRAWAL` at ordinary completion (siblings unaffected).
+- **API:** `/api/boundaries/` — `content-themes` (read-only), `player-boundaries`,
+  `treasured-subjects` (owner-scoped `ModelViewSet`s, no staff carve-out),
+  `scenes/{id}/lines-and-veils/`; `/api/treasured-signoffs/` +
+  `/api/beats/{id}/stake-availability/` (mounted on the stories router, same
+  dependency-direction reason).
+- **Frontend:** `frontend/src/boundaries/` — `BoundariesPage`
+  (`/profile/boundaries`, a Profile tab): boundary authoring, treasured-subject
+  flagging, pre-scene sign-off; `SceneLinesAndVeilsCard` on `SceneDetailPage`.
+- **Privacy invariant (ADR-0033/ADR-0086):** hard-line `theme`/`detail` and
+  `blocked_reason_private` never reach a player- or GM-facing surface —
+  structurally (owner-scoped querysets, hard-line-only-ever-excluded queries,
+  counts-only value objects), not by convention.
+- **Seed data:** `world.boundaries.factories.make_default_content_themes()` — a
+  small starter `ContentTheme` set (child endangerment, suicide/self-harm, sexual
+  violence, torture); not yet wired into a `world/seeds/clusters.py` cluster.
+- **Integrates with:** stories (stakes contract enforcement + resolution), consent
+  (`VisibilityMixin` reuse), roster (`RosterTenure` ownership), character_sheets /
+  items / societies (typed subject FKs), scenes (`persona_handler` participant
+  resolution for the lines-&-veils aggregate).
+- **Source:** `src/world/boundaries/`; enforcement/sign-off/availability in
+  `src/world/stories/services/boundaries.py`
+- **Details:** [boundaries.md](boundaries.md)
 
 ### Narrative
 General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
@@ -1949,9 +2007,20 @@ These two axes are orthogonal — never re-merge them.
     Identifies the master character.
   - **`CourtPact`** (#1589) — per-(Court covenant, servant) sworn-fealty bond. Fields:
     `covenant` FK (PROTECT), `servant_sheet` FK → `CharacterSheet` (PROTECT),
-    `granted_pull_cap` (PositiveSmallIntegerField — master-set thread-pull ceiling),
+    `granted_pull_cap` (PositiveSmallIntegerField — master-set thread-pull ceiling,
+    now negotiable post-swearing, #1718 — see "Court services" below),
     `sworn_at` (auto), `released_at` (null = active). Partial-unique on
     `(covenant, servant_sheet)` when active. Custom queryset: `.active()`.
+  - **`Covenant.court_grant_role`** (#1718) — FK → `npc_services.NPCRole`
+    (`null=True`, `on_delete=SET_NULL`), auto-provisioned by
+    `ensure_court_grant_role`; carries the Court's `OfferKind.COURT_GRANT`
+    petition offer.
+  - **`CourtGrantConfig`** (pk=1 singleton, lazy get-or-created via
+    `get_court_grant_config()`, #1718) — `base_headroom`, `affection_divisor`,
+    `mission_divisor`, `emergency_draw_max_bonus` (max the emergency draw may
+    exceed the ceiling by), `debt_repay_affection_divisor`,
+    `debt_repay_mission_divisor`, `petition_failure_escalation_threshold`,
+    plus nullable `petition_check_type` / `escalation_consequence_pool` FKs.
   - **`MentorBondConfig`** (pk=1 singleton, #1165) — `band_width` (default 2),
     `adjacency_offset` (default 1), `max_sidekicks_per_mentor` (nullable = unlimited).
     Staff-tunable in Django admin.
@@ -2019,6 +2088,23 @@ These two axes are orthogonal — never re-merge them.
       creates an active pact; raises `CourtPactExistsError` if one already exists.
     - `release_court_pact(*, pact) -> None` — sets `released_at = now()`.
     - `active_court_pact_for(*, covenant, servant_sheet) -> CourtPact | None`
+  - **Court grant negotiation** (`world.covenants.court_grant`, #1718):
+    - `court_grant_ceiling(*, covenant, servant_sheet) -> int` — max grant the
+      master is currently willing to formalize; reads affection + completed
+      Court missions, nets against `outstanding_debt(...)`, floored at 0.
+    - `raise_court_pact_grant(*, pact, new_cap) -> CourtPact` — strictly
+      monotonic; raises `CourtGrantNotMonotonicError` on any attempted decrease
+      (equal is a no-op).
+    - `ensure_court_grant_role(covenant) -> NPCRole` — idempotent,
+      `@transaction.atomic` with a `select_for_update()` re-fetch of the
+      `Covenant` row (race-safe); auto-provisions the Court's
+      `OfferKind.COURT_GRANT` petition offer the first time any servant
+      negotiates.
+    - `completed_court_mission_count(*, character_sheet, covenant) -> int`
+    - Emergency thread-bond draw: not a service here — see the
+      "Grant negotiation" section of `docs/systems/covenants.md` for the
+      `beseech=` token / `_resolve_emergency_draw` seam
+      (`world.combat.pull_helpers`).
   - **Court engagement** (`world.covenants.court_missions`, #1589):
     - `has_active_court_mission(*, character_sheet, covenant) -> bool` — True iff
       the character participates in an ACTIVE `MissionInstance` whose
@@ -2050,7 +2136,8 @@ These two axes are orthogonal — never re-merge them.
   `NotAuthorizedToInviteError` (induction draft gate, #1231),
   `MentorBondError` (bond creation/cap), `VowGateError` (membership level gate),
   `CourtGulfViolationError` (servant tier not below leader's, #1589),
-  `CourtPactExistsError` (duplicate active pact for pair, #1589)
+  `CourtPactExistsError` (duplicate active pact for pair, #1589),
+  `CourtGrantNotMonotonicError` (grant raise would lower the cap, #1718)
 - **Action Keys:** `engage_covenant_membership`, `disengage_covenant_membership`,
   `leave_covenant`, `kick_covenant_member`, `assign_covenant_rank`,
   `transfer_covenant_top_rank`, `stand_down_battle_covenant`

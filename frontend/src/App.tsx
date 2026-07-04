@@ -143,6 +143,9 @@ const MuteSettingsPage = lazy(() =>
 const PrivacyPage = lazy(() =>
   import('@/consent/pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))
 );
+const BoundariesPage = lazy(() =>
+  import('@/boundaries/pages/BoundariesPage').then((m) => ({ default: m.BoundariesPage }))
+);
 
 // ---------------------------------------------------------------------------
 // Lazy-loaded covenants pages
@@ -283,6 +286,14 @@ function App() {
             element={
               <Suspense fallback={<PageLoadingFallback />}>
                 <PrivacyPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="boundaries"
+            element={
+              <Suspense fallback={<PageLoadingFallback />}>
+                <BoundariesPage />
               </Suspense>
             }
           />

@@ -101,7 +101,9 @@ def coherence_cache_scope():
 
 def get_aesthetic_config() -> AestheticAxisConfig:
     """Lazy-create and return the singleton aesthetic-axis config (pk=1)."""
-    config, _ = AestheticAxisConfig.objects.get_or_create(pk=1)
+    config = AestheticAxisConfig.objects.cached_singleton()
+    if config is None:
+        config, _ = AestheticAxisConfig.objects.get_or_create(pk=1)
     return config
 
 

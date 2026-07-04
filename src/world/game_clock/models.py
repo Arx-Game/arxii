@@ -7,6 +7,7 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.game_clock.constants import DEFAULT_TIME_RATIO
 
 
@@ -19,6 +20,8 @@ class GameClock(SharedMemoryModel):
     Uses SharedMemoryModel to cache the singleton in-process, since this
     model is read on nearly every IC time query but rarely modified.
     """
+
+    objects = ArxSharedMemoryManager()
 
     anchor_real_time = models.DateTimeField(
         help_text="Real-world timestamp when the clock was last set."
@@ -54,7 +57,7 @@ class GameClock(SharedMemoryModel):
     @classmethod
     def get_active(cls) -> "GameClock | None":
         """Return the singleton GameClock instance, or None if not yet created."""
-        return cls.objects.first()
+        return cls.objects.cached_singleton()
 
     def get_ic_now(self, *, real_now: datetime | None = None) -> datetime:
         """Derive the current IC datetime from the anchor and elapsed real time.

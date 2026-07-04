@@ -181,6 +181,15 @@ def commit_combat_pull(
     (``CastTechniqueAction``) and the clash-contribution path
     (``_dispatch_clash_contribution``) so the commit logic is not duplicated.
 
+    When ``cast_pull.beseech_bonus > 0``, rolls the shared Court-grant petition
+    check (#1718) before committing: success applies the bonus to this pull's
+    resolution (via ``resolve_pull_effects``'s per-thread override) and, if the
+    bonus exceeds the servant's current ``court_grant_ceiling`` for the thread's
+    covenant, calls ``incur_npc_debt`` for the excess; failure commits the pull
+    with NO bonus (the base pull still resolves normally). Either way,
+    ``record_court_grant_petition_outcome`` fires (recording the streak and,
+    on threshold-crossing, the master's escalation ConsequencePool).
+
     Args:
         cast_pull: The ``CastPullDeclaration`` carrying resonance, tier, and threads.
         participant: The ``CombatParticipant`` making the pull.
@@ -210,6 +219,11 @@ def commit_combat_pull(
         involved_techniques=(technique_id,),
     )
 
+    beseech_bonus_thread_id = None
+    applied_bonus = 0
+    if cast_pull.beseech_bonus > 0:
+        beseech_bonus_thread_id, applied_bonus = _resolve_emergency_draw(sheet, cast_pull)
+
     try:
         spend_resonance_for_pull(
             character_sheet=sheet,
@@ -217,8 +231,116 @@ def commit_combat_pull(
             tier=cast_pull.tier,
             threads=list(cast_pull.threads),
             action_context=action_context,
+            beseech_bonus_thread_id=beseech_bonus_thread_id,
+            beseech_bonus=applied_bonus,
         )
     except IntegrityError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_ALREADY_COMMITTED) from exc
     except MagicError as exc:
         raise ActionDispatchError(ActionDispatchError.PULL_INVALID) from exc
+
+
+def _resolve_emergency_draw(
+    sheet: CharacterSheet,
+    cast_pull: CastPullDeclaration,
+) -> tuple[int | None, int]:
+    """Roll the Court-grant petition check for an emergency thread-bond draw (#1718).
+
+    Takes only ``sheet`` + ``cast_pull`` — no ``CombatEncounter``/``CombatParticipant`` —
+    so it is combat-agnostic and reused directly by the non-combat cast path
+    (``world.magic.services.techniques._charge_cast_pull``) as well as
+    ``commit_combat_pull`` below. Do not add a combat-only parameter here.
+
+    Returns ``(thread_id, applied_bonus)`` — ``(None, 0)`` on failure or when the
+    pulled thread isn't a COURT-covenant COVENANT_ROLE thread (nothing to
+    beseech), or when the covenant has no configured petition check type. On
+    success, the requested bonus is clamped so it may exceed the servant's
+    current ``court_grant_ceiling`` by at most
+    ``CourtGrantConfig.emergency_draw_max_bonus`` (per that field's authored
+    meaning — see ``world/covenants/models.py::CourtGrantConfig``); any amount
+    past the ceiling incurs debt via ``incur_npc_debt``.
+    """
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.court_grant import (  # noqa: PLC0415
+        completed_court_mission_count,
+        court_grant_ceiling,
+        court_grant_petition_ease,
+        record_court_grant_petition_outcome,
+    )
+    from world.covenants.models import Covenant  # noqa: PLC0415
+    from world.covenants.services import get_court_grant_config  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.npc_services.models import NPCStanding  # noqa: PLC0415
+    from world.npc_services.services import incur_npc_debt  # noqa: PLC0415
+
+    court_thread = next(
+        (
+            t
+            for t in cast_pull.threads
+            if t.target_kind == TargetKind.COVENANT_ROLE
+            and t.target_covenant_role.covenant_type == CovenantType.COURT
+        ),
+        None,
+    )
+    if court_thread is None:
+        return None, 0
+
+    covenant = Covenant.objects.filter(
+        covenant_type=CovenantType.COURT,
+        leader__isnull=False,
+        memberships__character_sheet=sheet,
+        memberships__covenant_role=court_thread.target_covenant_role,
+        memberships__left_at__isnull=True,
+    ).first()
+    if covenant is None or covenant.leader_id is None:
+        return None, 0
+
+    config = get_court_grant_config()
+    if config.petition_check_type_id is None:
+        return None, 0
+
+    master_persona = covenant.leader.primary_persona
+    servant_persona = sheet.primary_persona
+    standing, _ = NPCStanding.objects.get_or_create(
+        persona=servant_persona, npc_persona=master_persona
+    )
+    ease = court_grant_petition_ease(standing=standing, config=config)
+    check_result = perform_check(
+        sheet.character,
+        config.petition_check_type,
+        target_difficulty=config.petition_base_difficulty,
+        extra_modifiers=ease,
+    )
+    # CheckResult.success_level (world.checks.types) safely returns 0 when
+    # outcome is None — no separate None-check needed.
+    succeeded = check_result.success_level > 0
+    # record_court_grant_petition_outcome (not the bare record_petition_outcome)
+    # so this channel fires the master's escalation ConsequencePool on
+    # threshold-crossing too (#1718 final-review Finding 2) — previously this
+    # channel recorded the streak but never fired escalation, so a servant who
+    # only ever used emergency draws could never trigger the master's wrath.
+    record_court_grant_petition_outcome(
+        standing,
+        succeeded=succeeded,
+        check_result=check_result,
+        character=sheet.character,
+        config=config,
+    )
+    if not succeeded:
+        return None, 0
+
+    # emergency_draw_max_bonus bounds how far the draw may exceed the ceiling
+    # (its authored meaning), not the raw requested bonus — so clamp against
+    # ceiling + max_bonus, not max_bonus alone.
+    ceiling = court_grant_ceiling(covenant=covenant, servant_sheet=sheet)
+    bonus = min(cast_pull.beseech_bonus, ceiling + config.emergency_draw_max_bonus)
+    if bonus > ceiling:
+        completed_missions = completed_court_mission_count(character_sheet=sheet, covenant=covenant)
+        incur_npc_debt(
+            standing,
+            bonus - ceiling,
+            current_affection=standing.affection,
+            current_missions_completed=completed_missions,
+        )
+    return court_thread.pk, bonus

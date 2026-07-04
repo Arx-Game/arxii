@@ -452,8 +452,10 @@ def evaluate_resonance_environment(
 def get_resonance_environment_config() -> ResonanceEnvironmentConfig:
     """Get-or-create the resonance environment config singleton (pk=1)."""
     with transaction.atomic():
+        cfg = ResonanceEnvironmentConfig.objects.cached_singleton()
+    if cfg is None:
         cfg, _ = ResonanceEnvironmentConfig.objects.get_or_create(pk=1)
-        return cfg
+    return cfg
 
 
 def clear_resonance_alignment(*, character_sheet: CharacterSheet) -> None:

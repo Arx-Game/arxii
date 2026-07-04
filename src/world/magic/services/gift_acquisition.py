@@ -19,6 +19,7 @@ from world.magic.models import (
     GiftAcquisitionConfig,
 )
 from world.magic.services.alterations import enforce_advancement_gate
+from world.magic.services.threads import thread_level_multiplier
 from world.progression.models import XPTransaction
 from world.progression.selectors import current_path_for_character
 from world.progression.services.awards import get_or_create_xp_tracker
@@ -37,7 +38,9 @@ if TYPE_CHECKING:
 
 def get_gift_acquisition_config() -> GiftAcquisitionConfig:
     """Lazily create and return the singleton GiftAcquisitionConfig (pk=1)."""
-    config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
+    config = GiftAcquisitionConfig.objects.cached_singleton()
+    if config is None:
+        config, _ = GiftAcquisitionConfig.objects.get_or_create(pk=1)
     return config
 
 
@@ -169,8 +172,16 @@ def count_techniques_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
 def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
     """Depth of the character's GIFT thread for ``gift`` (0 if none).
 
-    depth = max(1, thread.level // 10) when a thread exists; 0 otherwise.
-    A level-0 thread (freshly provisioned) has depth max(1, 0) = 1.
+    depth = max(1, round(thread_level_multiplier(thread.level))) (#1718) when a
+    thread exists; 0 otherwise. This is a discrete technique-count multiplier,
+    not the continuous combat-scaling factor `thread_level_multiplier` was
+    designed for — `thread_level_multiplier` ramps linearly from 0.1 to 1.0
+    across levels 1-9 (for smooth effect-magnitude scaling), which rounds to 0
+    for levels 1-5. The `max(1, ...)` floor preserves this function's own
+    invariant (stated above and previously true for all levels 1-25 under the
+    old `max(1, level // 10)` formula): once a GIFT thread exists at level >= 1,
+    depth never drops below 1. A freshly provisioned level-0 thread has depth
+    round(thread_level_multiplier(0)) = round(1) = 1.
     """
     character = sheet.character
     thread = next(
@@ -183,7 +194,12 @@ def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
     )
     if thread is None:
         return 0
-    return max(1, thread.level // 10)
+    # round(), not int() truncation: consistent with the site-wide #1718 decision
+    # (see resonance.py); the return type here is `int` (a technique-count cap).
+    # max(1, ...): depth is a discrete count multiplier that must never drop
+    # below 1 for an existing thread, unlike the continuous combat-scaling use
+    # of thread_level_multiplier elsewhere (see docstring above).
+    return max(1, round(thread_level_multiplier(thread.level)))
 
 
 def get_technique_cap_for_gift(sheet: CharacterSheet, gift: Gift) -> int:

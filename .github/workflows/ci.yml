@@ -113,12 +113,12 @@ jobs:
           #                   + world.checks (190) + world.vitals (149) + world.fatigue (117)
           #                   + core_management (94) + world.achievements (68) + world.secrets (63)
           #                   + world.action_points (40) + evennia_extensions (34) + typeclasses (25)
-          #                   + behaviors (6)
+          #                   + behaviors (6) + world.boundaries (new, #1771)
           - name: shard-3
             apps: >-
               world.stories world.mechanics world.checks world.vitals world.fatigue
               core_management world.achievements world.secrets world.action_points
-              evennia_extensions typeclasses behaviors
+              evennia_extensions typeclasses behaviors world.boundaries
               integration_tests.pipeline integration_tests.game_content
           # shard-4 (~2,545): world.scenes (892) + world.items (529) + world.conditions (326)
           #                   + world.areas (224) + world.buildings (135) + world.forms (114)

@@ -15,6 +15,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.covenants.constants import (
     MENTOR_BOND_ADJACENCY_OFFSET,
     MENTOR_BOND_BAND_WIDTH,
@@ -126,6 +127,19 @@ class Covenant(SharedMemoryModel):
         related_name="led_courts",
         help_text=(
             "Court covenants only: the puissant this Court is sworn to. Empty for other types."
+        ),
+    )
+    court_grant_role = models.ForeignKey(
+        "npc_services.NPCRole",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Court covenants only (#1718): the auto-provisioned NPCRole carrying "
+            "this Court's OfferKind.COURT_GRANT petition offer. Null until the "
+            "servant's first petition attempt lazily provisions it via "
+            "ensure_court_grant_role()."
         ),
     )
 
@@ -905,14 +919,17 @@ class CovenantRiteParticipant(SharedMemoryModel):
 class MentorBondConfig(SharedMemoryModel):
     """Singleton (pk=1): global parameters for Mentor's Vow bond scaling (#1165).
 
-    Seeded by seed_mentor_bond_defaults() in factories.py. Services use get(pk=1)
-    and let DoesNotExist propagate loudly. Updated via Django admin.
+    Seeded by seed_mentor_bond_defaults() in factories.py. Services use
+    cached_singleton() and let DoesNotExist propagate loudly. Updated via
+    Django admin.
 
     Fields:
     - band_width: level-range half-width for eligible mentor/sidekick pairs.
     - adjacency_offset: additional level offset applied when computing adjacency.
     - max_sidekicks_per_mentor: cap on sidekick count; null means unlimited.
     """
+
+    objects = ArxSharedMemoryManager()
 
     band_width = models.PositiveSmallIntegerField(
         default=MENTOR_BOND_BAND_WIDTH,
@@ -942,6 +959,81 @@ class MentorBondConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"MentorBondConfig(pk={self.pk})"
+
+
+# =============================================================================
+# CourtGrantConfig — singleton config for Court grant negotiation (#1718)
+# =============================================================================
+
+
+class CourtGrantConfig(SharedMemoryModel):
+    """Singleton (pk=1): tuning knobs for Court grant negotiation (#1718).
+
+    Lazy get-or-created via get_court_grant_config() — unlike MentorBondConfig
+    (strict .get(pk=1), authored content), this config has no per-instance
+    authored content of its own; only petition_check_type/escalation_consequence_pool
+    point at authored content (seeded by wire_court_grant_petition_content(),
+    Task 5), and those two FKs are nullable so the config itself never needs a
+    migration-time seed.
+    """
+
+    base_headroom = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Ceiling floor before any affection/mission credit is added.",
+    )
+    affection_divisor = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Master's NPCStanding.affection // this = ceiling bonus.",
+    )
+    mission_divisor = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Completed Court missions for the master's org // this = ceiling bonus.",
+    )
+    emergency_draw_max_bonus = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Max a single emergency thread-bond draw may exceed the ceiling by.",
+    )
+    debt_repay_affection_divisor = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Affection gained since debt was incurred // this = debt repaid.",
+    )
+    debt_repay_mission_divisor = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Missions completed since debt was incurred // this = debt repaid.",
+    )
+    petition_failure_escalation_threshold = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="Consecutive failed petitions before the master's wrath fires.",
+    )
+    petition_check_type = models.ForeignKey(
+        "checks.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Shared check rolled for every Court grant petition/emergency draw.",
+    )
+    petition_base_difficulty = models.SmallIntegerField(
+        default=0,
+        help_text="Base target_difficulty for petition_check_type before affection easing.",
+    )
+    escalation_consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Fires when a servant's consecutive-failed-petition streak crosses the threshold."
+        ),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"CourtGrantConfig(pk={self.pk})"
 
 
 # =============================================================================
