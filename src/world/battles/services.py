@@ -352,14 +352,19 @@ def eject_vehicle_occupants(*, vehicle: BattleVehicle) -> None:
     damage_type = ensure_falling_damage_type() if aerial else ensure_drowning_damage_type()
     hazard_property_name = "flying" if aerial else "aquatic"
 
-    for unit in BattleUnit.objects.filter(place=vehicle.place):
+    battle = vehicle.unit.battle
+    old_place_id = vehicle.place_id
+
+    for unit in battle.state_cache.units_on_place(old_place_id):
         unit.place = None
         unit.save(update_fields=["place"])
+        battle.state_cache.move_unit_place(unit, old_place_id=old_place_id)
         _apply_environmental_hazard_to_unit(unit, hazard_property_name)
 
-    for participant in BattleParticipant.objects.filter(place=vehicle.place):
+    for participant in battle.state_cache.participants_on_place(old_place_id):
         participant.place = None
         participant.save(update_fields=["place"])
+        battle.state_cache.move_participant_place(participant, old_place_id=old_place_id)
         _apply_environmental_hazard_to_participant(participant, damage_type)
 
 
