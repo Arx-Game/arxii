@@ -14,6 +14,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from actions.definitions import sanctum as sanctum_actions
+from world.magic.seeds_sanctum import ensure_sanctification_personal_ritual
 
 
 class SanctumActionBaseTests(TestCase):
@@ -73,9 +74,17 @@ class SanctumWeaveActionTests(TestCase):
 
 
 class SanctumInstallActionTests(TestCase):
+    def setUp(self):
+        # execute() now resolves the Sanctification Ritual row (#707, Task 8)
+        # to validate/consume components before dispatching to
+        # perform_sanctification (which is fully mocked below). No
+        # RitualComponentRequirement rows exist here, so with no
+        # components_provided kwarg this is a no-op past the row lookup.
+        ensure_sanctification_personal_ritual()
+
     def test_install_fizzle_returns_fizzle_data(self):
         action = sanctum_actions.SanctumInstallAction()
-        fake_persona = type("P", (), {})()
+        fake_persona = type("P", (), {"character_sheet": None})()
         fake_result = type(
             "R", (), {"fizzled": True, "success_level": -1, "tier": "fail", "sanctum_id": None}
         )()
@@ -107,7 +116,7 @@ class SanctumInstallActionTests(TestCase):
 
     def test_install_success_returns_sanctum_id(self):
         action = sanctum_actions.SanctumInstallAction()
-        fake_persona = type("P", (), {})()
+        fake_persona = type("P", (), {"character_sheet": None})()
         fake_result = type(
             "R", (), {"fizzled": False, "success_level": 2, "tier": "success", "sanctum_id": 42}
         )()
@@ -136,7 +145,7 @@ class SanctumInstallActionTests(TestCase):
         from world.magic.services.sanctum_install import SanctificationError
 
         action = sanctum_actions.SanctumInstallAction()
-        fake_persona = type("P", (), {})()
+        fake_persona = type("P", (), {"character_sheet": None})()
         exc = SanctificationError("bad room")
         exc.user_message = "This room cannot be sanctified."
         with (

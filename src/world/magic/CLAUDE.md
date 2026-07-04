@@ -1077,7 +1077,13 @@ The sanctum subsystem is a 7-op surface shared by telnet (`CmdSanctum`) and web
   (`_covenant_ownership_allowed_for_sanctum()`, reading `RoomFeatureKindOwnerType` —
   staff can revoke covenant eligibility there), and that the leader holds an active
   (`left_at IS NULL`) `CharacterCovenantRole` whose `CovenantRank.can_lead_rituals` is
-  `True` — mere active membership is no longer sufficient (#708).
+  `True` — mere active membership is no longer sufficient (#708). Also validates/consumes the
+  Sanctification Ritual's `RitualComponentRequirement` rows (#707) via
+  `resolve_and_consume_ritual_components` (`kwargs["components_provided"]`,
+  `resonance_context=kwargs["resonance"]` — a touchstone must match THIS Sanctum's own founding
+  Resonance) BEFORE calling `perform_sanctification`. This is the one Ritual that does NOT
+  dispatch through the generic `PerformRitualAction` seam (`client_hosted=True`), so this Action
+  calls the shared helper directly rather than relying on `PerformRitualAction`'s own wiring.
 - `sanctum_homecoming` — Ritual of Homecoming: sacrifice resonance to grow the Sanctum's
   Homecoming reservoir (wraps `perform_homecoming_ritual`).
 - `sanctum_purging` — Ritual of Purging: change the Sanctum's consecrated resonance type,

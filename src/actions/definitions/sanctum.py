@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.types import ActionResult, TargetType
-from world.magic.exceptions import ResonanceInsufficient
+from world.magic.exceptions import ResonanceInsufficient, RitualComponentError
+from world.magic.models import Ritual, SanctumOwnerMode
 from world.magic.services.sanctum_install import (
     AbsorbError,
     DissolutionError,
@@ -139,15 +140,42 @@ class SanctumInstallAction(SanctumActionBase):
     icon: str = "home"
 
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.magic.seeds_sanctum import (  # noqa: PLC0415
+            SANCTIFICATION_COVENANT_RITUAL_NAME,
+            SANCTIFICATION_PERSONAL_RITUAL_NAME,
+        )
+        from world.magic.services.ritual_components import (  # noqa: PLC0415
+            resolve_and_consume_ritual_components,
+        )
+
         persona = self._persona(actor)
         if persona is None:
             return self._fail(_MSG_NO_ACTIVE_CHARACTER)
+
+        owner_mode = kwargs["owner_mode"]
+        ritual_name = (
+            SANCTIFICATION_PERSONAL_RITUAL_NAME
+            if owner_mode == SanctumOwnerMode.PERSONAL
+            else SANCTIFICATION_COVENANT_RITUAL_NAME
+        )
+        ritual = Ritual.objects.get(name=ritual_name)
+        components = kwargs.get("components_provided", [])
+        try:
+            resolve_and_consume_ritual_components(
+                ritual=ritual,
+                components=components,
+                performer_sheet=persona.character_sheet,
+                resonance_context=kwargs["resonance"],
+            )
+        except RitualComponentError as exc:
+            return self._fail(exc.user_message)
+
         try:
             result = perform_sanctification(
                 kwargs["room_profile"],
                 persona,
                 kwargs["resonance"],
-                owner_mode=kwargs["owner_mode"],
+                owner_mode=owner_mode,
             )
         except SANCTUM_EXC as exc:
             return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
