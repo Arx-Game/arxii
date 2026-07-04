@@ -14,6 +14,9 @@ _Avoid_: room NPC, giver, class-1 NPC (for the surface term), nameless functiona
 **Standing NPC**:
 A **class-2** NPC — a named `scenes.Persona` on an unpuppeted Character object, permanently in a room.
 Has persistent `NPCStanding` (per-PC affection). Room comes from its object, not a placement FK.
+`NPCStanding` is kept separate from `NpcRegard` (which covers an NPC's opinion of orgs/societies
+and is not scoped to PC targets) — `NPCStanding` is specifically the
+PC-persona-vs-NPC-persona offer-eligibility gate; see ADR-0085.
 _Avoid_: class-2 NPC, named NPC.
 
 **Story NPC**:
@@ -30,3 +33,13 @@ one. Not the placement itself.
 One offerable thing on a role, of a `kind` (`OfferKind`: PERMIT, MISSION, …) with a per-kind details
 model + effect handler. The single "ask an NPC for a thing" surface, ridden via the `hire` /
 `InteractionSession` loop. Building-permit approval is `kind=PERMIT`.
+
+**NpcRegard** — A notable NPC's signed opinion (`-1000`..`1000`) of another
+persona (PC or NPC), an Organization, or a Society. General axis: positive is
+favor, negative is hostility — there is no separate "enemy" model. Holder is
+always a notable NPC's `Persona` (v1; org/society-as-holder is a future
+extension of the same discriminator, not built). Deliberately separate from
+`NPCStanding` — see that entry's cross-reference and ADR-0085.
+_Avoid: "NpcEnmity" (collides with the dead `ThreadAxis.ENMITY`), "grudge" as a
+model name (implies negative-only; fine as informal narration of a strongly
+negative row)._
