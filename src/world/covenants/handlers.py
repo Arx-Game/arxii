@@ -188,8 +188,9 @@ def can_engage_membership(membership: CharacterCovenantRole) -> bool:
       battle covenant cannot be engaged — vows lie latent until a "call the
       banners" rise ritual brings the covenant back (Slice E).
     - COURT: the servant is "on the master's business" — a participant in an
-      active mission given by the Court's backing organization (#1589 Task 5).
-      Co-presence is irrelevant; the mission is the gate.
+      active mission given by the Court's backing organization (#1589 Task 5),
+      OR a persona the master holds a nonzero opinion of (positive or negative)
+      is present in the servant's current scene (#1717). Either gate engages.
     - DURANCE: the character is in a room with an active scene AND at least one
       other active member of the same covenant is co-present in that room.
 
@@ -197,7 +198,10 @@ def can_engage_membership(membership: CharacterCovenantRole) -> bool:
     the Slice B spec — no .filter() on related managers.
     """
     from world.covenants.constants import CovenantType  # noqa: PLC0415
-    from world.covenants.court_missions import has_active_court_mission  # noqa: PLC0415
+    from world.covenants.court_missions import (  # noqa: PLC0415
+        has_active_court_mission,
+        has_regarded_target_present,
+    )
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
     covenant = membership.covenant
@@ -205,6 +209,8 @@ def can_engage_membership(membership: CharacterCovenantRole) -> bool:
         return not covenant.is_dormant
     if covenant.covenant_type == CovenantType.COURT:
         return has_active_court_mission(
+            character_sheet=membership.character_sheet, covenant=covenant
+        ) or has_regarded_target_present(
             character_sheet=membership.character_sheet, covenant=covenant
         )
 
