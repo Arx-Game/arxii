@@ -537,7 +537,7 @@ def _check_application_resist(
 
 
 def _process_interactions_from_context(
-    target_id: int,
+    target: "ObjectDB",  # noqa: OBJECTDB_PARAM
     incoming_condition: ConditionTemplate,
     ctx: _BulkConditionContext,
 ) -> InteractionResult:
@@ -547,7 +547,7 @@ def _process_interactions_from_context(
     iterations in bulk_apply_conditions see removals from earlier iterations.
     """
     result = InteractionResult()
-    active_instances = ctx.active_instances_by_target.get(target_id, [])
+    active_instances = ctx.active_instances_by_target.get(target.pk, [])
     active_condition_ids = {i.condition_id for i in active_instances}
 
     for interaction in ctx.application_interactions:
@@ -572,12 +572,15 @@ def _process_interactions_from_context(
 
         if _should_remove_existing(interaction, incoming_condition):
             result.removed.append(existing_instance.condition)
+            removed_condition = existing_instance.condition
+            removed_target_id = existing_instance.target_id
             existing_instance.delete()
+            _clear_unseen_observer_if_concealing(target, removed_condition)
             active_instances.remove(existing_instance)
             active_condition_ids.discard(match_id)
             # Clean existing_pairs so later batch entries don't resurrect it
             ctx.existing_pairs.pop(
-                (existing_instance.target_id, match_id),
+                (removed_target_id, match_id),
                 None,
             )
 
@@ -644,7 +647,7 @@ def _apply_single(
             message=f"{template.name} was prevented by {prevention.name}",
         )
 
-    interaction_results = _process_interactions_from_context(target.pk, template, ctx)
+    interaction_results = _process_interactions_from_context(target, template, ctx)
 
     existing = ctx.get_existing_instance(target.pk, template.pk)
 
@@ -1337,7 +1340,9 @@ def process_damage_interactions(
         # Handle condition removal
         if interaction.removes_condition:
             result.removed_conditions.append(instance)
+            removed_condition = instance.condition
             instance.delete()
+            _clear_unseen_observer_if_concealing(target, removed_condition)
             del instance_map[interaction.condition_id]
 
         # Handle applying new condition
@@ -1878,7 +1883,9 @@ def _process_duration_and_progression(
             instance.rounds_remaining -= 1
             if instance.rounds_remaining <= 0:
                 result.expired_conditions.append(instance)
+                expired_condition = instance.condition
                 instance.delete()
+                _clear_unseen_observer_if_concealing(target, expired_condition)
                 continue
 
         # Stage progression

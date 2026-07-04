@@ -428,13 +428,17 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   distinguish "concealed" from "never there"). The global presence directories (`where_listing`,
   `who_listing`) instead consult the unconditional `is_concealed()` directly (no per-observer
   detection concept for an anonymous global directory) — a concealed character never appears in
-  `where`/`who`, regardless of who's asking. Bulk condition-clear paths
-  (`remove_conditions_by_category`, `clear_all_conditions`) and the severity
+  `where`/`who`, regardless of who's asking. Every condition-removal path that can end
+  a concealing condition fires the same register/clear teardown `remove_condition`
+  uses, so none of them bypass the OOC unseen-observer hook: the bulk-clear paths
+  (`remove_conditions_by_category`, `clear_all_conditions`), the severity
   advance/decay paths (`advance_condition_severity` re-advancing from zero,
-  `decay_condition_severity` decaying to zero) all route through the same
-  register/clear teardown `remove_condition` uses, so none of them bypass the OOC
-  unseen-observer hook. See ADR-0083 for the separate OOC unseen-observer transparency
-  guarantee this composes with.
+  `decay_condition_severity` decaying to zero), the admin-authorable interaction
+  paths (`process_damage_interactions`'s `ConditionDamageInteraction.removes_condition`,
+  `bulk_apply_conditions`'s `ConditionConditionInteraction.removes_condition`), and
+  natural `DurationType.ROUNDS` countdown-to-zero expiry
+  (`_process_duration_and_progression`). See ADR-0083 for the separate OOC
+  unseen-observer transparency guarantee this composes with.
 - **Charm/Calm content (#1590):** `ensure_charm_content()` seeds the `Charm` `ConditionCategory`
   (`alters_behavior=True`) + `Charmed`/`Calm` templates; `derive_allegiance()` reads active
   `alters_behavior` conditions to compute `Allegiance` (see combat + ADR-0058).

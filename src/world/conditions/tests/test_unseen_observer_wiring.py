@@ -1,10 +1,16 @@
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.conditions.constants import (
+    ConditionInteractionOutcome,
+    ConditionInteractionTrigger,
+)
 from world.conditions.factories import (
     ConditionCategoryFactory,
-    ConditionInstanceFactory,
+    ConditionConditionInteractionFactory,
+    ConditionDamageInteractionFactory,
     ConditionTemplateFactory,
+    DamageTypeFactory,
 )
 from world.conditions.services import (
     advance_condition_severity,
@@ -12,6 +18,8 @@ from world.conditions.services import (
     bulk_apply_conditions,
     clear_all_conditions,
     decay_condition_severity,
+    process_damage_interactions,
+    process_round_end,
     remove_condition,
     remove_conditions_by_category,
     suppress_condition,
@@ -129,10 +137,15 @@ class ConcealmentOOCWiringTests(TestCase):
         banner exactly like ``remove_condition`` does. Currently inert in production
         (the seeded ``Concealed`` template has no ``passive_decay_per_day``, so
         ``decay_all_conditions_tick`` never reaches this path today) but ADR-0083
-        promises the hook for any future duration/decay-based concealment producer."""
-        instance = ConditionInstanceFactory(
+        promises the hook for any future duration/decay-based concealment producer.
+
+        Uses ``apply_condition`` (not a raw ``ConditionInstanceFactory`` row) so the
+        register hook actually fires before decay — a bare factory-created instance
+        was never registered in the first place, which would make the opening
+        assertion pass for the wrong reason (or fail outright)."""
+        instance = apply_condition(
             target=self.character, condition=self.template, severity=1
-        )
+        ).instance
         self.assertTrue(has_unseen_observers(self.scene))
 
         decay_condition_severity(instance, amount=1)
@@ -144,9 +157,9 @@ class ConcealmentOOCWiringTests(TestCase):
     def test_decay_that_holds_above_zero_does_not_clear_banner(self) -> None:
         """A partial decay that leaves severity above zero must NOT clear the OOC
         banner — only a full decay-to-zero (natural expiry) does."""
-        instance = ConditionInstanceFactory(
+        instance = apply_condition(
             target=self.character, condition=self.template, severity=3
-        )
+        ).instance
         self.assertTrue(has_unseen_observers(self.scene))
 
         decay_condition_severity(instance, amount=1)
@@ -158,9 +171,9 @@ class ConcealmentOOCWiringTests(TestCase):
     def test_advance_from_zero_reregisters_unseen_observer(self) -> None:
         """Inverse of the decay-to-zero case — a resolved concealing condition
         re-advancing from zero severity must re-register the OOC banner (#1225)."""
-        instance = ConditionInstanceFactory(
+        instance = apply_condition(
             target=self.character, condition=self.template, severity=1
-        )
+        ).instance
         self.assertTrue(has_unseen_observers(self.scene))
         decay_condition_severity(instance, amount=1)
         self.assertFalse(has_unseen_observers(self.scene))
@@ -170,3 +183,59 @@ class ConcealmentOOCWiringTests(TestCase):
         self.assertEqual(instance.severity, 1)
         self.assertIsNone(instance.resolved_at)
         self.assertTrue(has_unseen_observers(self.scene))
+
+    def test_condition_condition_interaction_removal_clears_unseen_observer(
+        self,
+    ) -> None:
+        """bulk_apply_conditions's condition-condition interaction removal path
+        (final-review gap) previously deleted the losing instance via a raw
+        ``existing_instance.delete()`` inside ``_process_interactions_from_context``,
+        bypassing the OOC clear hook entirely. Applying an incoming condition that
+        removes the concealing one via interaction must clear the banner."""
+        incoming = ConditionTemplateFactory()
+        ConditionConditionInteractionFactory(
+            condition=self.template,
+            other_condition=incoming,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.REMOVE_SELF,
+        )
+
+        apply_condition(target=self.character, condition=self.template)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        bulk_apply_conditions([BulkConditionApplication(target=self.character, template=incoming)])
+
+        self.assertFalse(has_unseen_observers(self.scene))
+
+    def test_damage_interaction_removal_clears_unseen_observer(self) -> None:
+        """process_damage_interactions (final-review gap) previously deleted a
+        ``removes_condition=True`` instance directly, bypassing the OOC clear
+        hook. This is reachable today through the existing, already-shipped
+        ConditionDamageInteraction admin form — not hypothetical."""
+        force = DamageTypeFactory()
+        ConditionDamageInteractionFactory(
+            condition=self.template,
+            damage_type=force,
+            removes_condition=True,
+        )
+
+        apply_condition(target=self.character, condition=self.template)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        process_damage_interactions(self.character, force)
+
+        self.assertFalse(has_unseen_observers(self.scene))
+
+    def test_rounds_duration_expiry_clears_unseen_observer(self) -> None:
+        """_process_duration_and_progression's ROUNDS-duration countdown-to-zero
+        expiry path (final-review gap) previously deleted the instance directly,
+        bypassing the OOC clear hook. Currently inert in production (the seeded
+        ``Concealed`` template is PERMANENT-duration) but mirrors the
+        decay/advance fix — the same producer class round 4 pre-emptively closed
+        for natural severity decay was missed for natural ROUNDS expiry."""
+        apply_condition(target=self.character, condition=self.template, duration_rounds=1)
+        self.assertTrue(has_unseen_observers(self.scene))
+
+        process_round_end(self.character)
+
+        self.assertFalse(has_unseen_observers(self.scene))
