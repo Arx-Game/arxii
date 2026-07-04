@@ -131,6 +131,24 @@ class EffectKind(models.TextChoices):
     RESISTANCE = "RESISTANCE", "Damage-Type Resistance"
 
 
+class RegardPolarity(models.TextChoices):
+    """How a pull effect responds to the reference persona's signed regard for the
+    target (#1831). OFFENSIVE empowered by negative regard, PROTECTIVE by positive,
+    NEUTRAL by either. Only consulted by Court-role (COVENANT_ROLE) pull modulation."""
+
+    OFFENSIVE = "offensive", "Offensive (empowered vs. disfavored target)"
+    PROTECTIVE = "protective", "Protective (empowered vs. favored target)"
+    NEUTRAL = "neutral", "Neutral / social (empowered by either sign)"
+
+
+COURT_REGARD_PULL_K = 1.0
+"""PLACEHOLDER tuning constant (#1831): empower scale at |regard|=REGARD_MAX.
+
+Court-role pull modulation bonus = base_scaled * (abs(regard) / REGARD_MAX) * K.
+Tunable via playtest.
+"""
+
+
 class VitalBonusTarget(models.TextChoices):
     MAX_HEALTH = "MAX_HEALTH", "Max Health"
     DAMAGE_TAKEN_REDUCTION = "DAMAGE_TAKEN_REDUCTION", "Damage Taken Reduction"
@@ -336,6 +354,7 @@ class InapplicabilityReason(models.TextChoices):
     PREREQUISITE_UNMET = "prerequisite_unmet", "Prerequisite condition unmet"
     LOCATION_MISMATCH = "location_mismatch", "Location/property mismatch"
     THREAD_RETIRED = "thread_retired", "Thread is retired"
+    COURT_LEADER_NO_STAKE = "court_leader_no_stake", "Court pull has no effect on this target"
     OTHER = "other", "Other (see details)"
 
 

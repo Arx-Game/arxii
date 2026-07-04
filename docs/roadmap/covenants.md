@@ -178,6 +178,19 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   only when the character is currently engaged with a covenant where they
   hold the anchored role. Mismatch raises `CovenantRoleNotEngagedError`
   (subclass of `InvalidImbueAmount`). Out-of-context, the Thread is dormant.
+- **Court regard modulation (#1831) — SHIPPED.** For Court (`COVENANT_ROLE`)
+  threads specifically, a pull's numeric payload can additionally be empowered
+  by the covenant leader's signed `NpcRegard` (#1717) for the pull's live
+  target: `court_regard_modulation` (`world/magic/services/pull_modulation_court.py`)
+  resolves the leader's persona for the servant's engaged Court membership
+  anchored on the thread, reads their regard for the target, and empowers the
+  pull when the effect row's `ThreadPullEffect.regard_polarity` matches the
+  regard's sign (OFFENSIVE ⇔ disfavored target, PROTECTIVE ⇔ favored target,
+  NEUTRAL ⇔ either). This rides the magic app's target-aware pull seam
+  (`apply_target_modulation`, dispatched on `thread.target_kind`) — see
+  `docs/systems/magic.md` for the full mechanism. The combat-UI picker flags a
+  Court thread `COURT_LEADER_NO_STAKE` when no candidate effect would ever be
+  empowered against the chosen target.
 
 ### Constraints (cross-cutting)
 

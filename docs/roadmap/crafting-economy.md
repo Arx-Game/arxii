@@ -117,7 +117,10 @@ coppers-only repair economy. Fully playable end-to-end (telnet + web).
 - Player housing — room purchase/construction, decoration system, room stats from decor
 - Store/business system — player-run shops, inventory management, pricing
 - Holdings — large constructions with defensive stats, research labs, special bonuses
-- Ship system — vessel models, upgrades, crew, integration with missions
+- Ship system — vessel models, upgrades, crew, integration with missions. `partial` — #1714
+  (battle-time-only vehicle) + #1832 (persistent `ShipDetails`: commission/upgrade/repair,
+  ship-as-sanctum, combat-bridge materialize) shipped; crew-as-NPCs, sea travel, cargo-as-goods,
+  and mission integration remain. See [ships.md](../systems/ships.md).
 - Domain management — noble territory models, material generation, imports/exports
 - Trade system — player-to-player and NPC trade mechanics
 - Economy balancing — currency flow, material scarcity, price stabilization

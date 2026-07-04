@@ -169,6 +169,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
         strain_commitment=strain_commitment,
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
+        pull_target=target,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
         apply_variant=apply_variant,

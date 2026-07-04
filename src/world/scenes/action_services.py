@@ -934,6 +934,7 @@ def _resolve_enhanced_action(  # noqa: PLR0913
         strain_commitment=strain_commitment,
         applicable_threads=applicable_threads,
         cast_pull=cast_pull,
+        pull_target=context.target,
         control_penalty=fury_res.control_penalty if fury_res else 0,
         power_intensity_bonus=fury_res.intensity_bonus if fury_res else 0,
     )

@@ -13210,6 +13210,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/ships/ship-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only catalog of authored ``ShipType`` rows. */
+    get: operations['ships_ship_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ships/ship-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only catalog of authored ``ShipType`` rows. */
+    get: operations['ships_ship_types_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ships/ships/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read endpoints for the player's "My Ships" surface. */
+    get: operations['ships_ships_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ships/ships/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read endpoints for the player's "My Ships" surface. */
+    get: operations['ships_ships_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/skills/path-skill-suggestions/': {
     parameters: {
       query?: never;
@@ -23076,6 +23144,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['SessionRequest'][];
     };
+    PaginatedShipDetailsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ShipDetails'][];
+    };
     PaginatedSineatingPendingOfferList: {
       /** @example 123 */
       count: number;
@@ -27002,6 +27085,50 @@ export interface components {
     /** @description POST body for the alternate-self shift endpoint. */
     ShiftFormRequestRequest: {
       alternate_self_id: number;
+    };
+    /**
+     * @description Read-shape for a ship on the player's "My Ships" view.
+     *
+     *     ``owner_covenant_id``/``owner_covenant_name`` resolve the ship's Area
+     *     ownership cascade (see ``world.locations.services.transfer_ownership`` —
+     *     ``complete_ship_construction`` transfers Area ownership to the
+     *     commissioning covenant's ``Organization``, when one is given). A ship
+     *     with no covenant deed-holder has both as ``None``.
+     */
+    ShipDetails: {
+      readonly id: number;
+      readonly ship_type: components['schemas']['ShipType'];
+      readonly effective_handling: number;
+      readonly effective_armament: number;
+      readonly effective_hull: number;
+      /** @description Persistent handling investment, raised via a SHIP_UPGRADE Project. */
+      readonly handling_level: number;
+      /** @description Persistent armament investment, raised via a SHIP_UPGRADE Project. */
+      readonly armament_level: number;
+      readonly crew_capacity: number;
+      readonly cargo_capacity: number;
+      /** @description Set when the ship's battle vehicle is breached; gates a SHIP_REPAIR Project. */
+      readonly needs_repair: boolean;
+      readonly owner_persona_id: number | null;
+      readonly owner_persona_name: string | null;
+      readonly owner_covenant_id: number | null;
+      readonly owner_covenant_name: string | null;
+    };
+    /** @description Read-shape for the authored ``ShipType`` catalog. */
+    ShipType: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /** @description PLACEHOLDER baseline hull stat. */
+      readonly base_hull: number;
+      /** @description PLACEHOLDER baseline handling stat. */
+      readonly base_handling: number;
+      /** @description PLACEHOLDER baseline armament stat. */
+      readonly base_armament: number;
+      /** @description PLACEHOLDER baseline crew capacity. */
+      readonly base_crew_capacity: number;
+      /** @description PLACEHOLDER baseline cargo capacity. */
+      readonly base_cargo_capacity: number;
     };
     /**
      * @description * `positive` - Positive
@@ -48675,6 +48802,92 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SessionRequest'];
+        };
+      };
+    };
+  };
+  ships_ship_types_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ShipType'][];
+        };
+      };
+    };
+  };
+  ships_ship_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this ship type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ShipType'];
+        };
+      };
+    };
+  };
+  ships_ships_list: {
+    parameters: {
+      query?: {
+        needs_repair?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        ship_type?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedShipDetailsList'];
+        };
+      };
+    };
+  };
+  ships_ships_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ShipDetails'];
         };
       };
     };

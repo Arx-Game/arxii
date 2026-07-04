@@ -45,6 +45,7 @@ from world.locations.constants import KeyType, LocationParentType, StatKey
 from world.locations.models import LocationValueModifier
 
 if TYPE_CHECKING:
+    from evennia_extensions.models import RoomProfile
     from world.areas.models import Area
     from world.items.models import ItemInstance
     from world.npc_services.effects import EffectResult
@@ -502,15 +503,18 @@ def complete_building_construction(
     return building
 
 
-def _generate_entry_room(building: Building) -> None:
-    """Create the building's entry Room and point ``Building.entry_room`` at it.
+def create_entry_room(building: Building, name: str) -> RoomProfile:
+    """Create one Evennia Room ObjectDB + ``RoomProfile`` for *building*, named *name*.
 
-    Construction creates exactly ONE Evennia Room ObjectDB so the Building
-    is immediately enterable; owners lay out the rest with the Room Builder
-    (dig/resize/drop, #670) against the space budget. The entry room gets
-    the default size tier (seeded ``Modest``; NULL if seeds are absent) and
-    the map origin (0, 0, floor 0). Its "Entry Hall" name is PLACEHOLDER —
-    owners rename it like any other room.
+    Shared low-level step behind construction flows that need exactly one
+    immediately-enterable room in a freshly created ``Building``: house
+    construction's fixed "Entry Hall" (``_generate_entry_room`` below) and ship
+    construction's deck room (``world.ships.services.complete_ship_construction``).
+    The room gets the default size tier (seeded ``Modest``; NULL if seeds are
+    absent) and the map origin (0, 0, floor 0).
+
+    Does NOT set ``Building.entry_room`` — callers assign that themselves (and
+    ``.save()``) so they control their own field list / logging.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
@@ -518,7 +522,7 @@ def _generate_entry_room(building: Building) -> None:
     from evennia_extensions.seeds import DEFAULT_ROOM_SIZE_NAME  # noqa: PLC0415
 
     room = ObjectDB.objects.create(
-        db_key="Entry Hall",
+        db_key=name,
         db_typeclass_path="typeclasses.rooms.Room",
     )
     profile, _ = RoomProfile.objects.update_or_create(
@@ -532,6 +536,18 @@ def _generate_entry_room(building: Building) -> None:
             "floor": 0,
         },
     )
+    return profile
+
+
+def _generate_entry_room(building: Building) -> None:
+    """Create the building's entry Room and point ``Building.entry_room`` at it.
+
+    Construction creates exactly ONE Evennia Room ObjectDB so the Building
+    is immediately enterable; owners lay out the rest with the Room Builder
+    (dig/resize/drop, #670) against the space budget. Its "Entry Hall" name is
+    PLACEHOLDER — owners rename it like any other room.
+    """
+    profile = create_entry_room(building, "Entry Hall")
     building.entry_room = profile
     building.save(update_fields=["entry_room"])
     logger.info(

@@ -143,7 +143,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult`,
     `spend_resonance_for_pull(...)` (low-level spend; called by the pull helpers),
     `preview_resonance_pull(...) -> PullPreviewResult` (read-only preview, unchanged),
-    `resolve_pull_effects(...)`, `cross_thread_xp_lock(character_sheet, thread, level)`.
+    `resolve_pull_effects(threads, tier, *, in_combat, target=None)`,
+    `cross_thread_xp_lock(character_sheet, thread, level)`.
     Pull commit is routed through `world/combat/pull_helpers.py`:
     `commit_combat_pull` (combat cast + clash), `build_cast_pull_declaration`,
     `resolve_pull_from_kwargs`. Non-combat cast calls
@@ -157,6 +158,21 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`world/mechanics/services.py`) folded into a standalone pull by
     `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
     reads the same modifier via `_derive_power`'s FLAT stage.
+  - **Target-aware pull modulation (#1831):** `resolve_pull_effects`'s `target` param
+    (the live cast/combat target; `PullActionContext.target` in `world/magic/types/pull.py`,
+    populated by `commit_combat_pull` and `use_technique`'s `pull_target` kwarg) is fed
+    through `apply_target_modulation(thread, target, effect_row, base_scaled)`
+    (`world/magic/services/pull_modulation.py`) — the per-`target_kind` modulation seam
+    (no-op unless a rule is registered for `thread.target_kind`; the extension point for a
+    future RELATIONSHIP_TRACK rule, deferred). Today's only rule:
+    `court_regard_modulation(...)` (`world/magic/services/pull_modulation_court.py`) empowers
+    a COVENANT_ROLE pull by the Court leader's signed `NpcRegard` (#1717) for the target,
+    sign-directed by `ThreadPullEffect.regard_polarity` (`RegardPolarity`: OFFENSIVE /
+    PROTECTIVE / NEUTRAL, `world/magic/constants.py`). Tuning constant
+    `COURT_REGARD_PULL_K` (placeholder, `1.0`). The combat-UI picker
+    (`compute_thread_applicability`, `world/magic/services/pull_applicability.py`) surfaces
+    `InapplicabilityReason.COURT_LEADER_NO_STAKE` when no candidate effect on a COVENANT_ROLE
+    thread would ever be empowered against the given `target_persona_id`.
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`
@@ -1654,6 +1670,62 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   the dependency runs one-way, buildings→battles direction avoided (FK direction
   specific→general, ADR-0010).
 - **Source:** `src/world/buildings/`
+
+### Ships (#1832)
+Persistent upgrades + repair + ship-as-sanctum + covenant-scale combat bridge, the
+follow-up to #1714's battle-time-only `BattleVehicle`. A ship is a per-kind
+extension of `buildings.Building` (composition, mirroring `Covenant`↔`Organization`);
+the hull stat IS `Building.fortification_level`, reused not duplicated. Full detail:
+[ships.md](ships.md).
+
+- **Models:** `ShipType` (open catalog: base hull/handling/armament/crew/cargo),
+  `ShipDetails` (OneToOne PK → `Building`; `ship_type`, `handling_level`,
+  `armament_level`, `crew_capacity`, `cargo_capacity`, `needs_repair`;
+  `effective_handling()`/`effective_armament()`/`effective_hull()`),
+  `ShipDeployment` (links a `ShipDetails` to its in-battle `BattleVehicle` for one
+  `Battle` — FK direction ships→battles per ADR-0010), `ShipConstructionDetails` /
+  `ShipUpgradeDetails` / `ShipRepairDetails` (per-Project payload rows, `applied_at`
+  idempotency marker, mirror `FortificationUpgradeDetails`'s shape).
+- **Key functions** (`world.ships.services`): `start_ship_construction` /
+  `complete_ship_construction` (spawns Area+Building+deck room+`ShipDetails`),
+  `start_ship_upgrade` / `complete_ship_upgrade` (`SHIP_UPGRADE` Project,
+  monotonic max-set), `start_ship_hull_upgrade` (thin wrapper over
+  `buildings.fortification_services.start_fortification_upgrade` — no separate
+  hull Project kind), `start_ship_repair` / `complete_ship_repair` (clears
+  `needs_repair`). All four completion handlers registered via
+  `world.projects.services.register_kind_handler` at `ShipsConfig.ready()`.
+- **Ship-as-sanctum** (`world.ships.sanctum_bonus`): `ship_sanctum_bonus(ship) ->
+  ShipStatBonus` / `ship_sanctum_capabilities(ship) -> list[Resonance]` read the
+  ship's installed `SanctumDetails`' woven SANCTUM threads (at most one sanctum
+  room per ship for MVP) — snapshotted at materialize time, not read live.
+- **Combat bridge** (`world.ships.battle_bridge`):
+  `materialize_ship_as_battle_vehicle(ship, battle, side, place_name=None) ->
+  BattleVehicle` — one-way snapshot of persistent stats (+ sanctum bonus) into a
+  `create_battle_vehicle`-built `BattleVehicle` (hull integrity, `speed`
+  capability, `strength`, level-3+ sanctum capability rows); links a
+  `ShipDeployment`. From there REPOSITION/BREACH/sinking/ejection run through
+  unmodified `world.battles` machinery — see [battles.md](battles.md#battlevehicle).
+- **Repair writeback** (`world.ships.battle_wiring`): `apply_ship_battle_outcome`
+  registered as a **battle-conclusion hook**
+  (`world.battles.conclusion_hooks.register_battle_conclusion_hook`, new pattern
+  for `battles`) — on `conclude_battle`, flags any deployed ship whose hull ended
+  `breached` as `needs_repair`, gating further investment until a `SHIP_REPAIR`
+  Project clears it. `battles` imports nothing from `ships` (ADR-0010).
+- **Telnet:** `CmdShip` (`ship`, `src/commands/ships.py`) — `ship [status]`,
+  `ship commission ship_type=<name> [covenant=<name>] name=<ship name>`,
+  `ship upgrade stat=handling|armament|hull level=<n>`, `ship repair`.
+- **Actions** (`actions/definitions/ships.py`, REGISTRY, `category="ships"`):
+  `CommissionShipAction` (`commission_ship`), `UpgradeShipAction` (`upgrade_ship`)
+  / `RepairShipAction` (`repair_ship`, both gated `IsShipOwnerPrerequisite`),
+  `ShipStatusAction` (`ship_status`, read-only).
+- **REST API:** `GET /api/ship-types/` (catalog), `GET /api/ships/`
+  (`ShipViewSet` — read-only, scoped to the requester's owned ships, direct or
+  covenant-held).
+- **Cross-app dependencies:** `world.buildings`, `world.areas`, `world.projects`,
+  `world.battles` (ships depends on battles' reusable primitives, never the
+  reverse — ADR-0010), `world.magic` (read-only sanctum/thread reads),
+  `world.locations`, `world.scenes`, `world.covenants`.
+- **Source:** `src/world/ships/`
 
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a

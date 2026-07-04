@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         ),
         ("evennia_extensions", "0008_remove_roomprofile_tenant_persona"),
         ("items", "0023_labstationdetails_craftingrecipe_requires_station"),
-        ("magic", "0081_distinctionresonancegrant"),
+        ("magic", "0082_distinctionresonancegrant"),
         ("missions", "0022_alter_missioninstance_source_beat"),
         ("projects", "0006_alter_contributionmethod_kind_alter_project_kind"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

@@ -43,6 +43,7 @@ from world.magic.types import (
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
+    from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
     from world.character_sheets.models import CharacterSheet
@@ -420,11 +421,12 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     return False
 
 
-def resolve_pull_effects(
+def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; both target (#1831) and beseech (#1718) params are required
     threads: list[Thread],
     tier: int,
     *,
     in_combat: bool,
+    target: ObjectDB | None = None,
     beseech_bonus_thread_id: int | None = None,
     beseech_bonus: int = 0,
 ) -> list[ResolvedPullEffect]:
@@ -434,12 +436,19 @@ def resolve_pull_effects(
     context are flagged ``inactive`` with ``scaled_value=0`` per spec §7.4
     lines 1981–1989; the caller still pays full cost.
 
+    ``target`` is the live target this pull's action is directed at (#1831);
+    ``None`` for ephemeral / untargeted pulls. Fed through ``apply_target_modulation``
+    for numeric-payload rows — a no-op unless a per-``target_kind`` rule exists
+    (currently only COVENANT_ROLE / Court-role pulls).
+
     ``beseech_bonus_thread_id``/``beseech_bonus`` (#1718): when set, the named
     thread's level is treated as ``(thread.level + beseech_bonus)`` for THIS
     resolution's multiplier only — ``ResolvedPullEffect.source_thread_level``
     still reports the thread's REAL level (the bonus is a resolution-time
     override, never a persisted fact).
     """
+    from world.magic.services.pull_modulation import apply_target_modulation  # noqa: PLC0415
+
     resolved: list[ResolvedPullEffect] = []
     for t in threads:
         effective_level = t.level
@@ -506,6 +515,9 @@ def resolve_pull_effects(
                     base_scaled = (
                         round((authored or 0) * multiplier) if has_numeric_payload else None
                     )
+
+                if has_numeric_payload:
+                    base_scaled = apply_target_modulation(t, target, row, base_scaled)
 
                 # VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot
                 # lives on CombatPullResolvedEffect and is read on the combat damage
@@ -826,6 +838,7 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
         threads,
         tier,
         in_combat=in_combat,
+        target=action_context.target,
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=beseech_bonus,
     )

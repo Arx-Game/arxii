@@ -23,6 +23,9 @@ class ProjectKind(models.TextChoices):
     ROOM_FEATURE_PROGRESSION = "ROOM_FEATURE_PROGRESSION", "Room Feature Progression"
     RESEARCH = "RESEARCH", "Research"
     RANSOM = "RANSOM", "Ransom"
+    SHIP_CONSTRUCTION = "SHIP_CONSTRUCTION", "Ship Construction"
+    SHIP_UPGRADE = "SHIP_UPGRADE", "Ship Upgrade"
+    SHIP_REPAIR = "SHIP_REPAIR", "Ship Repair"
     TEST_KIND = "TEST_KIND", "Test Kind (framework tests only)"
 
 

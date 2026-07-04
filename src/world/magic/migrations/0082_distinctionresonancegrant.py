@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
             "distinctions",
             "0004_remove_characterdistinction_visibility_override_and_more",
         ),
-        ("magic", "0080_remove_resonancegrant_res_grant_residence_shape_and_more"),
+        ("magic", "0081_remove_resonancegrant_res_grant_residence_shape_and_more"),
     ]
 
     operations = [
