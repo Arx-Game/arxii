@@ -826,12 +826,18 @@ def _charge_cast_pull(
     technique: Technique,
     cast_pull: CastPullDeclaration,
     effective_power: int,
+    target: ObjectDB | None = None,
 ) -> tuple[int, int, list[ResolvedPullEffect]]:
     """Charge a non-combat cast pull and return resolved effects.
 
     Spends the resonance, iterates resolved effects, accumulates FLAT_BONUS into
     *pull_flat_bonus* (forwarded to ``resolve_fn`` as ``extra_modifiers``), and
     adds INTENSITY_BUMP to *effective_power* in-place.
+
+    ``target`` is the live target this cast is directed at (#1831); threaded onto
+    ``PullActionContext.target`` so ``resolve_pull_effects`` can apply
+    ``court_regard_modulation`` for COVENANT_ROLE pulls. ``None`` for untargeted
+    casts.
 
     Returns ``(pull_flat_bonus, effective_power, resolved_effects)`` so callers
     can apply further post-resolution steps (e.g. ASSUME_ALTERNATE_SELF) without
@@ -855,6 +861,7 @@ def _charge_cast_pull(
         PullActionContext(
             combat_encounter=None,
             involved_techniques=(technique.pk,),
+            target=target,
         ),
     )
     pull_intensity_bonus = 0
@@ -1015,6 +1022,7 @@ def use_technique(  # noqa: PLR0913  — orchestrator; multiple small responsibi
             technique=technique,
             cast_pull=cast_pull,
             effective_power=effective_power,
+            target=targets[0] if targets else None,
         )
 
     # Step 4: Deduct anima
