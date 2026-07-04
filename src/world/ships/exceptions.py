@@ -16,9 +16,11 @@ class ShipError(Exception):
 
 
 class ShipNeedsRepairError(ShipError):
-    """Raised when an action requires a ship that isn't damaged/in-need-of-repair."""
+    """Raised when an action requires an undamaged ship but the ship needs repair."""
 
-    def __init__(self, user_message: str = "This ship does not need repair.") -> None:
+    def __init__(
+        self, user_message: str = "This ship needs repair before it can be upgraded."
+    ) -> None:
         super().__init__(user_message)
 
 

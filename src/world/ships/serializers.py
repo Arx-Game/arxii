@@ -8,9 +8,14 @@ the player's "my ships" surface. Effective stats are computed via
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers
 
 from world.ships.models import ShipDetails, ShipType
+
+if TYPE_CHECKING:
+    from world.covenants.models import Covenant
 
 
 class ShipTypeSerializer(serializers.ModelSerializer):
@@ -53,6 +58,10 @@ class ShipDetailsSerializer(serializers.ModelSerializer):
     owner_covenant_id = serializers.SerializerMethodField()
     owner_covenant_name = serializers.SerializerMethodField()
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._covenant_ownership_cache: dict[int, Covenant | None] = {}
+
     class Meta:
         model = ShipDetails
         fields = [
@@ -86,7 +95,17 @@ class ShipDetailsSerializer(serializers.ModelSerializer):
         persona = obj.building.owner_persona
         return persona.name if persona is not None else None
 
-    def _covenant_ownership(self, obj: ShipDetails):
+    def _covenant_ownership(self, obj: ShipDetails) -> Covenant | None:
+        """Resolve (and memoize) the owning covenant for ``obj``.
+
+        Called by both ``get_owner_covenant_id`` and ``get_owner_covenant_name``
+        for the same row; caching on the instance avoids running the ownership
+        query twice per ship.
+        """
+        cache = self._covenant_ownership_cache
+        if obj.building_id in cache:
+            return cache[obj.building_id]
+
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
         from world.locations.constants import HolderType, LocationParentType  # noqa: PLC0415
@@ -103,11 +122,15 @@ class ShipDetailsSerializer(serializers.ModelSerializer):
             .first()
         )
         if row is None:
-            return None
-        try:
-            return row.holder_organization.covenant
-        except ObjectDoesNotExist:
-            return None
+            covenant = None
+        else:
+            try:
+                covenant = row.holder_organization.covenant
+            except ObjectDoesNotExist:
+                covenant = None
+
+        cache[obj.building_id] = covenant
+        return covenant
 
     def get_owner_covenant_id(self, obj: ShipDetails) -> int | None:
         covenant = self._covenant_ownership(obj)

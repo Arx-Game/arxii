@@ -47,13 +47,15 @@ class StartShipUpgradeTests(TestCase):
         self.ship.needs_repair = True
         self.ship.save(update_fields=["needs_repair"])
 
-        with self.assertRaises(ShipNeedsRepairError):
+        with self.assertRaises(ShipNeedsRepairError) as ctx:
             start_ship_upgrade(
                 persona=self.persona,
                 ship=self.ship,
                 stat=ShipUpgradeStat.HANDLING,
                 target_level=3,
             )
+
+        self.assertIn("repair", ctx.exception.user_message.lower())
 
     def test_raises_on_invalid_stat(self) -> None:
         with self.assertRaises(ShipUpgradeError):
@@ -155,12 +157,14 @@ class StartShipHullUpgradeTests(TestCase):
     def test_raises_when_ship_needs_repair(self) -> None:
         ship = ShipDetailsFactory(needs_repair=True)
 
-        with self.assertRaises(ShipNeedsRepairError):
+        with self.assertRaises(ShipNeedsRepairError) as ctx:
             start_ship_hull_upgrade(
                 persona=self.persona,
                 ship=ship,
                 target_level=ship.building.fortification_level + 1,
             )
+
+        self.assertIn("repair", ctx.exception.user_message.lower())
 
 
 class ShipRepairTests(TestCase):
