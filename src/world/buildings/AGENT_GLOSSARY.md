@@ -41,6 +41,16 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
 - **Building Extension** — the `BUILDING_EXTENSION` project kind: grow
   `space_budget` through the funded contribution pipe. Rooms *within* budget
   are instant and free.
+- **Building Renovation** — the `BUILDING_RENOVATION` project kind (#1858):
+  re-point an existing Building to a different admin-authored `BuildingKind`
+  on completion, changing its descriptive flag set (e.g. a residential manor
+  becomes an "Occult Manor"). Funded, owner-gated, `SINGLE_THRESHOLD`. Does
+  not change `target_size` / `space_budget` (use `BUILDING_EXTENSION` /
+  `BUILDING_UPGRADE`). A renovation swaps the *catalog row* (`Building.kind`),
+  not per-building flags — the nine boolean flags are catalog-level cosmetic
+  tags (see `BuildingKind`), so single-flag deltas are out of scope. Slice #1
+  of epic #673. _Avoid:_ reclassify (ambiguous); use "renovation" for the
+  catalog-kind swap specifically.
 - **Interior Design (commission)** — the `INTERIOR_DESIGN` project kind:
   commission an admin-authored polish `ProjectTemplate` against the building or
   one room; completion applies the template's polish increments. _Avoid:_

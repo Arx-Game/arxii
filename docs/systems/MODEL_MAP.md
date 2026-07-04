@@ -771,6 +771,12 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
 
+### BuildingRenovationDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
+  - target_kind -> buildings.BuildingKind [FK] (PROTECT)
+
 ### InteriorDesignDetails
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
@@ -4018,6 +4024,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
+  - building_renovation_details <- buildings.BuildingRenovationDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance
   - ship_upgrade_details <- ships.ShipUpgradeDetails

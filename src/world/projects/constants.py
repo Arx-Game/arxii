@@ -18,6 +18,7 @@ class ProjectKind(models.TextChoices):
 
     BUILDING_CONSTRUCTION = "BUILDING_CONSTRUCTION", "Building Construction"
     BUILDING_EXTENSION = "BUILDING_EXTENSION", "Building Extension"
+    BUILDING_RENOVATION = "BUILDING_RENOVATION", "Building Renovation"
     FORTIFICATION_UPGRADE = "FORTIFICATION_UPGRADE", "Fortification Upgrade"
     INTERIOR_DESIGN = "INTERIOR_DESIGN", "Interior Design"
     ROOM_FEATURE_PROGRESSION = "ROOM_FEATURE_PROGRESSION", "Room Feature Progression"
