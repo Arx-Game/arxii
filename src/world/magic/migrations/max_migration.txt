@@ -1,1 +1,1 @@
-0079_delete_characteraffinitytotal
+0080_remove_resonancegrant_res_grant_residence_shape_and_more

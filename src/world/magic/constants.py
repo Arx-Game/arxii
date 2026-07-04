@@ -201,6 +201,8 @@ class GainSource(models.TextChoices):
     # MISSION_REPORT); provenance lives on the stories side (StakeOutcome +
     # StakeRewardLine rows).
     STAKE_REWARD = "STAKE_REWARD", "Stake reward"
+    # #1834 — distinctions grant resonance
+    DISTINCTION = "distinction", "Distinction"
 
 
 # COVENANT_ROLE anchor cap tuning (use-based; issue #517).

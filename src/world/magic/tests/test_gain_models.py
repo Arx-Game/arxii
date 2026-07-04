@@ -401,3 +401,68 @@ class ResonanceGrantOutfitTrickleTests(TestCase):
                 source=GainSource.STAFF_GRANT,
                 outfit_item_facet=item_facet,
             )
+
+
+class ResonanceGrantDistinctionShapeTests(TestCase):
+    def test_distinction_grant_requires_character_distinction_fk(self) -> None:
+        # source=DISTINCTION without source_character_distinction must fail check constraint
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=resonance,
+                amount=1,
+                source=GainSource.DISTINCTION,
+                # missing source_character_distinction
+            )
+
+    def test_distinction_grant_with_character_distinction_fk_saves(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.factories import CharacterDistinctionFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        character_distinction = CharacterDistinctionFactory()
+
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=resonance,
+            amount=1,
+            source=GainSource.DISTINCTION,
+            source_character_distinction=character_distinction,
+        )
+        self.assertEqual(grant.source_character_distinction, character_distinction)
+        self.assertEqual(grant.source, GainSource.DISTINCTION)
+
+    def test_character_distinction_only_with_distinction_source(self) -> None:
+        # Setting source_character_distinction on a non-DISTINCTION grant must fail.
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.factories import CharacterDistinctionFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        character_distinction = CharacterDistinctionFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=resonance,
+                amount=1,
+                source=GainSource.STAFF_GRANT,
+                source_character_distinction=character_distinction,
+            )
