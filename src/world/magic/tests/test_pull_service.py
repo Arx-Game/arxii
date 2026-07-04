@@ -706,9 +706,10 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
           item 2: item_quality=1.0, attachment_quality=3.0 → contributes 3.0
           worn_aggregate = 5.0
 
-        Thread level=2 → multiplier = max(1, 2//10) = 1.
+        Thread level=2 → thread_level_multiplier(2) = 1 + (1/9)(1/10) ≈ 1.011111
+        (#1718 smoothed low-level curve; rounds to level_multiplier=1).
         authored_value = 10.
-        Expected scaled_value = 10 × 1 × 5 = 50.
+        Expected scaled_value = round(10 × 1.011111 × 5) = round(50.5556) = 51.
         """
         self._equip_item_with_quality("1.00", "2.00", body_region=BodyRegion.TORSO)
         self._equip_item_with_quality("1.00", "3.00", body_region=BodyRegion.HEAD)
@@ -739,7 +740,7 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
         self.assertEqual(resolved[0].kind, EffectKind.FLAT_BONUS)
         self.assertEqual(resolved[0].authored_value, 10)
         self.assertEqual(resolved[0].level_multiplier, 1)
-        self.assertEqual(resolved[0].scaled_value, 50)
+        self.assertEqual(resolved[0].scaled_value, 51)
 
     def test_facet_effect_skipped_when_no_worn_items(self) -> None:
         """FACET thread with no equipped items bearing the facet skips the effect row."""

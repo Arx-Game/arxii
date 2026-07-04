@@ -19,6 +19,7 @@ from world.magic.models import (
     GiftAcquisitionConfig,
 )
 from world.magic.services.alterations import enforce_advancement_gate
+from world.magic.services.threads import thread_level_multiplier
 from world.progression.models import XPTransaction
 from world.progression.selectors import current_path_for_character
 from world.progression.services.awards import get_or_create_xp_tracker
@@ -169,8 +170,9 @@ def count_techniques_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
 def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
     """Depth of the character's GIFT thread for ``gift`` (0 if none).
 
-    depth = max(1, thread.level // 10) when a thread exists; 0 otherwise.
-    A level-0 thread (freshly provisioned) has depth max(1, 0) = 1.
+    depth = thread_level_multiplier(thread.level) (#1718) when a thread exists;
+    0 otherwise. A freshly provisioned level-0 thread has depth
+    thread_level_multiplier(0) = 1.
     """
     character = sheet.character
     thread = next(
@@ -183,7 +185,9 @@ def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
     )
     if thread is None:
         return 0
-    return max(1, thread.level // 10)
+    # round(), not int() truncation: consistent with the site-wide #1718 decision
+    # (see resonance.py); the return type here is `int` (a technique-count cap).
+    return round(thread_level_multiplier(thread.level))
 
 
 def get_technique_cap_for_gift(sheet: CharacterSheet, gift: Gift) -> int:

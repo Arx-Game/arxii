@@ -8,10 +8,11 @@ Math reference (happy path):
   item_quality.stat_multiplier = 2.00
   attachment_quality.stat_multiplier = 3.00
   worn_aggregate = 2.00 × 3.00 = 6.00
-  thread.level = 2 → level_multiplier = max(1, 2//10) = 1
+  thread.level = 2 → thread_level_multiplier(2) = 1 + (1/9)(1/10) ≈ 1.011111
+  (#1718 smoothed low-level curve; rounds to level_multiplier=1)
 
-  tier-0 effect: authored=5, scaled = int(5 × 1 × 6.0) = 30
-  tier-1 effect: authored=10, scaled = int(10 × 1 × 6.0) = 60
+  tier-0 effect: authored=5, scaled = round(5 × 1.011111 × 6.0) = round(30.333) = 30
+  tier-1 effect: authored=10, scaled = round(10 × 1.011111 × 6.0) = round(60.667) = 61
 """
 
 from __future__ import annotations
@@ -164,9 +165,9 @@ class FacetThreadPullCombatTests(TestCase):
 
         Math:
           worn_aggregate = item_quality(2.0) × attach_quality(3.0) = 6.0
-          level_multiplier = max(1, 2//10) = 1
-          tier-0 effect: int(5 × 1 × 6.0) = 30
-          tier-1 effect: int(10 × 1 × 6.0) = 60
+          thread_level_multiplier(2) ≈ 1.011111 (#1718); rounds to level_multiplier=1
+          tier-0 effect: round(5 × 1.011111 × 6.0) = round(30.333) = 30
+          tier-1 effect: round(10 × 1.011111 × 6.0) = round(60.667) = 61
         """
         pre_balance = CharacterResonance.objects.get(
             character_sheet=self.sheet,
@@ -209,7 +210,7 @@ class FacetThreadPullCombatTests(TestCase):
         tier1_row = resolved_db.get(source_tier=1)
         self.assertEqual(tier1_row.authored_value, 10)
         self.assertEqual(tier1_row.level_multiplier, 1)
-        self.assertEqual(tier1_row.scaled_value, 60)
+        self.assertEqual(tier1_row.scaled_value, 61)
 
         # Balance decreased by the resonance cost.
         post_cr = CharacterResonance.objects.get(
@@ -222,7 +223,7 @@ class FacetThreadPullCombatTests(TestCase):
         scaled_values = sorted(
             r.scaled_value for r in result.resolved_effects if r.scaled_value is not None
         )
-        self.assertEqual(scaled_values, [30, 60])
+        self.assertEqual(scaled_values, [30, 61])
 
 
 class FacetThreadPullNoItemTests(TestCase):

@@ -17,6 +17,7 @@ from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 from world.magic.models.techniques import Technique
 from world.magic.services.pull_effects import get_pull_effects_for_thread
+from world.magic.services.threads import thread_level_multiplier
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
@@ -97,8 +98,8 @@ class CharacterThreadHandler:
 
         Aggregates passive (tier-0) VITAL_BONUS rows for every thread the
         character owns, filtered by ``vital_target``. Scaling uses the same
-        formula as active pulls: ``level_multiplier = max(1, thread.level // 10)``
-        times the authored ``vital_bonus_amount``. ``min_thread_level``
+        formula as active pulls: ``level_multiplier = thread_level_multiplier(thread.level)``
+        (#1718) times the authored ``vital_bonus_amount``. ``min_thread_level``
         filters rows that require a higher thread investment.
 
         Anchor-in-scope filter: §5.8 requires that only threads "whose anchor
@@ -164,7 +165,7 @@ class CharacterThreadHandler:
                 vital_target=vital_target,
             )
             level = t.level
-            multiplier = max(1, level // 10)
+            multiplier = thread_level_multiplier(level)
             for row in rows:
                 if row.min_thread_level > level or row.vital_bonus_amount is None:
                     continue
@@ -175,9 +176,13 @@ class CharacterThreadHandler:
             level = thread_level.get((row.target_kind, row.resonance_id), 0)
             if row.min_thread_level > level:
                 continue
-            multiplier = max(1, level // 10)
+            multiplier = thread_level_multiplier(level)
             total += row.vital_bonus_amount * multiplier
-        return total
+        # round(), not int() truncation: thread_level_multiplier (#1718) returns a
+        # fractional Decimal for levels 1-9, so `total` may now be a Decimal;
+        # rounding to the nearest int is fairer to the player than flooring, and
+        # this method's return type is `int`.
+        return round(total)
 
     def passive_damage_type_resistance(self, damage_type: DamageType) -> int:
         """Sum flat tier-0 RESISTANCE for one damage type across owned threads (#1580).

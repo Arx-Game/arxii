@@ -32,6 +32,7 @@ from world.magic.services.threads import (
     get_imbue_cost_multiplier,
     get_pull_cost,
     recompute_max_health_with_threads,
+    thread_level_multiplier,
 )
 from world.magic.types import (
     PullPreviewResult,
@@ -408,7 +409,7 @@ def resolve_pull_effects(
     """
     resolved: list[ResolvedPullEffect] = []
     for t in threads:
-        multiplier = max(1, t.level // 10)
+        multiplier = thread_level_multiplier(t.level)
         for effect_tier in range(tier + 1):
             rows = get_pull_effects_for_thread(
                 t,
@@ -456,13 +457,19 @@ def resolve_pull_effects(
                         for item_facet in matching
                     ]
                     worn_aggregate = sum(items_aggregate, Decimal(0))
+                    # round(), not int() truncation: thread_level_multiplier (#1718)
+                    # now returns a fractional Decimal for levels 1-9, and rounding to
+                    # the nearest int is fairer to the player than always flooring.
                     base_scaled = (
-                        int((authored or 0) * multiplier * worn_aggregate)
+                        round((authored or 0) * multiplier * worn_aggregate)
                         if has_numeric_payload
                         else None
                     )
                 else:
-                    base_scaled = (authored or 0) * multiplier if has_numeric_payload else None
+                    # See the FACET-branch comment above re: round() vs int().
+                    base_scaled = (
+                        round((authored or 0) * multiplier) if has_numeric_payload else None
+                    )
 
                 # VITAL_BONUS and RESISTANCE are combat-only consumers: their snapshot
                 # lives on CombatPullResolvedEffect and is read on the combat damage
@@ -475,7 +482,11 @@ def resolve_pull_effects(
                     ResolvedPullEffect(
                         kind=row.effect_kind,
                         authored_value=authored,
-                        level_multiplier=multiplier,
+                        # ResolvedPullEffect.level_multiplier is int-typed (persisted
+                        # to CombatPullResolvedEffect.level_multiplier, a
+                        # PositiveSmallIntegerField); round() the transient Decimal
+                        # multiplier to an int for the snapshot (#1718).
+                        level_multiplier=round(multiplier),
                         scaled_value=0 if inactive else base_scaled,
                         vital_target=row.vital_target,
                         source_thread=t,

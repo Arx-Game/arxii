@@ -57,6 +57,28 @@ if TYPE_CHECKING:
     from world.magic.models.gifts import Gift
 
 
+def thread_level_multiplier(level: int) -> Decimal:
+    """The shared level-bucketing multiplier for thread-pull-effect scaling (#1718).
+
+    Smoothly interpolates across levels 1-9 (today's flat floor of 1, the
+    coarseness #1718 flags — a grant of 1 and a grant of 9 used to feel
+    identical) up to the existing anchor value of 1 at level 10, exactly
+    ``max(1, level // 10)`` for level >= 10 unchanged. Single source of truth
+    for what were 5 duplicated ``max(1, level // 10)`` call sites.
+    """
+    if level >= 10:  # noqa: PLR2004 — the existing 10-per-tier thread-level scale
+        return Decimal(level // 10)
+    # Linear interpolation from 1.0 at level<=1 to 1.0 at level==10, i.e. every
+    # point below 10 now differs from its neighbors instead of all reading "1".
+    # (level - 1) / 9 spans 0.0 (level=1) to 1.0 (level=10); the multiplier is
+    # 1 + a small fractional bump per level so 1-9 are distinct while level 10
+    # still lands on exactly 1 (no discontinuity at the boundary).
+    if level <= 1:
+        return Decimal(1)
+    step = (Decimal(1) / Decimal(9)) * Decimal(level - 1) / Decimal(10)
+    return Decimal(1) + step
+
+
 def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
     """Return True iff ``path`` (or any of its MRO base paths) is in ``registry``.
 
@@ -835,9 +857,10 @@ def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
     resonance (#1252).
 
     S = coefficient × Σ depth(t) × coherence_factor(t) over owned (non-retired)
-    threads, where depth(t) = max(1, thread.level // 10) and coherence_factor(t) =
-    min(coherence_max_multiplier, 1 + motif_coherence_bonus(sheet, thread.resonance) /
-    coherence_scale). An uncoordinated wardrobe yields factor 1.0 (no penalty).
+    threads, where depth(t) = thread_level_multiplier(thread.level) (#1718) and
+    coherence_factor(t) = min(coherence_max_multiplier, 1 +
+    motif_coherence_bonus(sheet, thread.resonance) / coherence_scale). An
+    uncoordinated wardrobe yields factor 1.0 (no penalty).
     baseline = round(cap × S / (S + half_saturation)); 0 with no tuning row or
     no threads.
     """
@@ -851,7 +874,7 @@ def survivability_baseline(character: ObjectDB, vital_target: str) -> int:
     score = Decimal(0)
     coherence_by_resonance: dict[int, int] = {}
     for t in threads:
-        depth = max(1, t.level // 10)
+        depth = thread_level_multiplier(t.level)
         factor = Decimal(1)
         if tuning.coherence_scale:
             if t.resonance_id not in coherence_by_resonance:
