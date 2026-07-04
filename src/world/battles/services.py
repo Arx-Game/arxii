@@ -332,6 +332,7 @@ def places_overlap(place_a: BattlePlace, place_b: BattlePlace) -> bool:
     return distance_squared < radius_sum * radius_sum
 
 
+@transaction.atomic
 def eject_vehicle_occupants(*, vehicle: BattleVehicle) -> None:
     """Eject every unit/participant embedded on *vehicle*'s place, applying the
     environmental hazard consequence (#1714). Called when a structural vehicle's
