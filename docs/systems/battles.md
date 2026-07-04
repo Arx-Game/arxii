@@ -361,6 +361,31 @@ Returns a `BattleRoundResult` dataclass:
 - `units_routed: list[int]` — routed unit pks
 - `casualties: list[int]` — participant pks who took damage
 
+### `BattleStateCache` (`src/world/battles/state_cache.py`, #1846)
+
+Every `BattleUnit`/`BattleParticipant`/`BattleSide`/`BattlePlace`/`Fortification`/
+`BattleVehicle` is a `SharedMemoryModel`, so once loaded the live Python instance
+always reflects current state — mutations are followed by `.save()`, same as
+before this cache existed. `BattleStateCache` (one instance per live `Battle`,
+`battle.state_cache`) answers "which units are on this side/place" from
+pk/side/place-indexed dicts instead of re-running a SQL `WHERE` clause per
+declaration. It is populated automatically by `save()` overrides on the six
+models above (fires once, on creation, regardless of whether the row came from
+a `services.py` function, a factory, or the admin) and is never
+re-queried except as a cold-start fallback for a `Battle` instance whose cache
+was evicted (e.g. after a server restart). There is no `unregister_*()` —
+nothing hard-deletes these rows; a unit/participant that leaves play is marked
+`DESTROYED`/`ROUTED`/etc. via `status`, never deleted. The one FK that changes
+post-creation is `place` (nulled by `eject_vehicle_occupants` on vehicle
+ejection) — that explicit, known mutation calls `move_unit_place()`/
+`move_participant_place()` alongside its own `.save()`.
+
+`resolve_battle_round`'s scope-resolution helpers (`_scope_target_units`,
+`_scope_target_participants`), `commander_bonus_for_side_at_place`,
+`_is_isolated`, and `select_surrounded_terminal_pool` all read through
+`battle.state_cache` rather than issuing `BattleUnit.objects.filter(...)` /
+`BattleParticipant.objects.filter(...)` per declaration.
+
 ## Modifier Stack (#1711)
 
 `BattleTechniqueResolver._battle_modifier_stack()` (`src/world/battles/resolution.py`)
@@ -371,10 +396,10 @@ BALANCED posture all contribute nothing:
 
 | Source | Helper | Authored / looked up |
 |---|---|---|
-| Property affinity | `_property_affinity_modifier(technique, unit)` | Sums every `TechniquePropertyAffinity` row matching one of `unit`'s `properties` (#1794); 0 if none match |
-| Terrain effect | `_terrain_property_modifier(unit.place, unit)` | Sums every `TerrainPropertyEffect` row matching one of `unit`'s `properties` for `unit.place.terrain_type` (#1794); 0 if the unit has no place or no row matches |
+| Property affinity | `_property_affinity_modifier(technique, unit)` | Sums every `TechniquePropertyAffinity` row matching one of `unit`'s `properties` (#1794), read from `ArxSharedMemoryManager.cached_all()` (#1846) — the whole table loads once per process, not once per declaration; 0 if none match |
+| Terrain effect | `_terrain_property_modifier(unit.place, unit)` | Sums every `TerrainPropertyEffect` row matching one of `unit`'s `properties` for `unit.place.terrain_type` (#1794), read from `cached_all()` (#1846); 0 if the unit has no place or no row matches |
 | Unit quality | `_quality_modifier(unit.quality)` | `UNIT_QUALITY_STRIKE_MODIFIER` dict in `constants.py` — a flat ladder from MILITIA (+10, easier to hit) to ELITE (−20, harder to hit) |
-| Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place; 0 if none commanded |
+| Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place, read from `battle.state_cache` (#1846); 0 if none commanded |
 | Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
 
 The first three sources only apply to STRIKE declarations (they read `declaration.target_unit`,
