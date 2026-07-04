@@ -1,5 +1,6 @@
 """Service tests for gift acquisition (#1587)."""
 
+import itertools
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -152,6 +153,59 @@ class TechniqueCapTest(TestCase):
         )
         # depth = max(1, 25 // 10) = 2, cap = 3 * 2 = 6
         self.assertEqual(get_technique_cap_for_gift(self.sheet, self.gift), 6)
+
+    def test_cap_never_drops_to_zero_for_levels_1_through_9(self):
+        """Regression (#1718 final-review Finding 1).
+
+        thread_level_multiplier(level) ramps linearly 0.1..0.9 across levels
+        1-9 for continuous combat-scaling use; round()'d naively that lands on
+        0 for levels 1-5, which would drop the technique cap to 0 for a
+        character who just advanced a Gift thread off level 0 — strictly
+        worse than owning no thread progress at all. Depth must stay >= 1 for
+        every level >= 1.
+        """
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import Thread
+
+        resonance = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=1,
+        )
+        for level in range(1, 10):
+            thread.level = level
+            thread.save()
+            cap = get_technique_cap_for_gift(self.sheet, self.gift)
+            self.assertGreaterEqual(
+                cap,
+                3,
+                f"cap dropped below the level-1 floor at thread level {level}",
+            )
+
+    def test_cap_monotonically_non_decreasing_across_levels_0_to_10(self):
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import Thread
+
+        resonance = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=resonance,
+            target_kind=TargetKind.GIFT,
+            target_gift=self.gift,
+            level=0,
+        )
+        caps = []
+        for level in range(11):
+            thread.level = level
+            thread.save()
+            caps.append(get_technique_cap_for_gift(self.sheet, self.gift))
+        for earlier, later in itertools.pairwise(caps):
+            self.assertLessEqual(earlier, later, f"caps regressed across levels: {caps}")
 
 
 class AcceptTechniqueOfferTest(TestCase):

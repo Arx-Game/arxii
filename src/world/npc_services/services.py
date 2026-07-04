@@ -734,6 +734,10 @@ def record_petition_outcome(
     failure increments it and, at ``escalation_threshold``, the caller should
     fire its own escalation consequence (this function only reports whether
     that threshold was crossed — it has no opinion on what "escalation" means).
+    The crossing report is level-triggered (``>= escalation_threshold``), not
+    edge-triggered — it returns ``True`` on every failure at or past the
+    threshold, not just the first one that crosses it. This is intentional:
+    the caller's escalation fires again on each subsequent failure.
     """
     if succeeded:
         if standing.consecutive_failed_petitions:

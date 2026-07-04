@@ -187,7 +187,8 @@ def commit_combat_pull(
     bonus exceeds the servant's current ``court_grant_ceiling`` for the thread's
     covenant, calls ``incur_npc_debt`` for the excess; failure commits the pull
     with NO bonus (the base pull still resolves normally). Either way,
-    ``record_petition_outcome`` fires.
+    ``record_court_grant_petition_outcome`` fires (recording the streak and,
+    on threshold-crossing, the master's escalation ConsequencePool).
 
     Args:
         cast_pull: The ``CastPullDeclaration`` carrying resonance, tier, and threads.
@@ -264,15 +265,14 @@ def _resolve_emergency_draw(
     from world.covenants.court_grant import (  # noqa: PLC0415
         completed_court_mission_count,
         court_grant_ceiling,
+        court_grant_petition_ease,
+        record_court_grant_petition_outcome,
     )
     from world.covenants.models import Covenant  # noqa: PLC0415
     from world.covenants.services import get_court_grant_config  # noqa: PLC0415
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.npc_services.models import NPCStanding  # noqa: PLC0415
-    from world.npc_services.services import (  # noqa: PLC0415
-        incur_npc_debt,
-        record_petition_outcome,
-    )
+    from world.npc_services.services import incur_npc_debt  # noqa: PLC0415
 
     court_thread = next(
         (
@@ -305,7 +305,7 @@ def _resolve_emergency_draw(
     standing, _ = NPCStanding.objects.get_or_create(
         persona=servant_persona, npc_persona=master_persona
     )
-    ease = standing.affection // config.affection_divisor
+    ease = court_grant_petition_ease(standing=standing, config=config)
     check_result = perform_check(
         sheet.character,
         config.petition_check_type,
@@ -315,10 +315,17 @@ def _resolve_emergency_draw(
     # CheckResult.success_level (world.checks.types) safely returns 0 when
     # outcome is None — no separate None-check needed.
     succeeded = check_result.success_level > 0
-    record_petition_outcome(
+    # record_court_grant_petition_outcome (not the bare record_petition_outcome)
+    # so this channel fires the master's escalation ConsequencePool on
+    # threshold-crossing too (#1718 final-review Finding 2) — previously this
+    # channel recorded the streak but never fired escalation, so a servant who
+    # only ever used emergency draws could never trigger the master's wrath.
+    record_court_grant_petition_outcome(
         standing,
         succeeded=succeeded,
-        escalation_threshold=config.petition_failure_escalation_threshold,
+        check_result=check_result,
+        character=sheet.character,
+        config=config,
     )
     if not succeeded:
         return None, 0

@@ -17,8 +17,10 @@ from django.db import transaction
 from world.covenants.exceptions import CourtGrantNotMonotonicError
 
 if TYPE_CHECKING:
+    from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
-    from world.covenants.models import CourtPact, Covenant
+    from world.checks.types import CheckResult
+    from world.covenants.models import CourtGrantConfig, CourtPact, Covenant
     from world.npc_services.models import NPCRole, NPCStanding
 
 
@@ -90,6 +92,56 @@ def court_grant_ceiling(*, covenant: Covenant, servant_sheet: CharacterSheet) ->
         )
         ceiling -= debt
     return max(0, ceiling)
+
+
+def court_grant_petition_ease(*, standing: NPCStanding | None, config: CourtGrantConfig) -> int:
+    """Check-ease bonus from the master's affection toward the servant (#1718).
+
+    Shared by both grant channels (formal petition in
+    ``world.npc_services.effects.raise_court_grant`` and the emergency draw in
+    ``world.combat.pull_helpers._resolve_emergency_draw``) so the ease formula
+    lives in exactly one place. ``standing`` may be ``None`` for a brand-new
+    servant with no NPCStanding row yet (treated as 0 affection).
+    """
+    affection = standing.affection if standing is not None else 0
+    return affection // config.affection_divisor
+
+
+def record_court_grant_petition_outcome(
+    standing: NPCStanding,
+    *,
+    succeeded: bool,
+    check_result: CheckResult,
+    character: Character,
+    config: CourtGrantConfig,
+) -> bool:
+    """Record a Court-grant petition outcome; fire escalation on threshold-crossing (#1718).
+
+    Shared by both grant channels (formal petition + emergency draw) so "call
+    ``record_petition_outcome``, and on crossing call ``apply_pool_for_tier``"
+    lives in exactly one place — the emergency-draw channel previously
+    recorded the outcome but never fired escalation, decoupling the master's
+    wrath from that channel. Returns whether the failure streak crossed
+    ``config.petition_failure_escalation_threshold`` (mirrors
+    ``record_petition_outcome``'s own return value).
+    """
+    from world.checks.consequence_resolution import apply_pool_for_tier  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.npc_services.services import record_petition_outcome  # noqa: PLC0415
+
+    crossed = record_petition_outcome(
+        standing,
+        succeeded=succeeded,
+        escalation_threshold=config.petition_failure_escalation_threshold,
+    )
+    outcome = check_result.outcome
+    if crossed and config.escalation_consequence_pool_id is not None and outcome is not None:
+        apply_pool_for_tier(
+            pool=config.escalation_consequence_pool,
+            outcome_tier=outcome,
+            context=ResolutionContext(character=character, target=character),
+        )
+    return crossed
 
 
 def raise_court_pact_grant(*, pact: CourtPact, new_cap: int) -> CourtPact:

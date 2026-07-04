@@ -235,21 +235,18 @@ def raise_court_grant(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     petition outcome on the servant<->master NPCStanding row; crossing the
     consecutive-failure threshold fires the master's escalation ConsequencePool.
     """
-    from world.checks.consequence_resolution import (  # noqa: PLC0415
-        apply_pool_for_tier,
-    )
     from world.checks.services import perform_check  # noqa: PLC0415
-    from world.checks.types import ResolutionContext  # noqa: PLC0415
     from world.covenants.court_grant import (  # noqa: PLC0415
         court_grant_ceiling,
+        court_grant_petition_ease,
         raise_court_pact_grant,
+        record_court_grant_petition_outcome,
     )
     from world.covenants.services import (  # noqa: PLC0415
         active_court_pact_for,
         get_court_grant_config,
     )
     from world.npc_services.models import NPCStanding  # noqa: PLC0415
-    from world.npc_services.services import record_petition_outcome  # noqa: PLC0415
 
     details = offer.court_grant_offer_details
     covenant = details.covenant
@@ -265,9 +262,16 @@ def raise_court_grant(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     config = get_court_grant_config()
     ceiling = court_grant_ceiling(covenant=covenant, servant_sheet=servant_sheet)
     master_persona = covenant.leader.primary_persona
-    standing, _ = NPCStanding.objects.get_or_create(persona=persona, npc_persona=master_persona)
+    # Key off the servant's primary_persona, matching court_grant_ceiling's
+    # internal master-standing lookup and _resolve_emergency_draw (#1718 final-
+    # review Finding 3) — not the raw interaction-session `persona`, which may
+    # be a non-primary persona and would silently decouple this write from the
+    # ceiling read.
+    standing, _ = NPCStanding.objects.get_or_create(
+        persona=servant_sheet.primary_persona, npc_persona=master_persona
+    )
 
-    ease = standing.affection // config.affection_divisor
+    ease = court_grant_petition_ease(standing=standing, config=config)
     check_result = perform_check(
         persona.character_sheet.character,
         offer.check_type,
@@ -277,20 +281,13 @@ def raise_court_grant(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     # CheckResult.success_level (world.checks.types) safely returns 0 when
     # outcome is None — no separate None-check needed.
     succeeded = check_result.success_level > 0
-    crossed = record_petition_outcome(
+    record_court_grant_petition_outcome(
         standing,
         succeeded=succeeded,
-        escalation_threshold=config.petition_failure_escalation_threshold,
+        check_result=check_result,
+        character=persona.character_sheet.character,
+        config=config,
     )
-    if crossed and config.escalation_consequence_pool_id is not None:
-        apply_pool_for_tier(
-            pool=config.escalation_consequence_pool,
-            outcome_tier=check_result.outcome,
-            context=ResolutionContext(
-                character=persona.character_sheet.character,
-                target=persona.character_sheet.character,
-            ),
-        )
 
     if not succeeded:
         return EffectResult(

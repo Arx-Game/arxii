@@ -170,9 +170,16 @@ def count_techniques_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
 def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
     """Depth of the character's GIFT thread for ``gift`` (0 if none).
 
-    depth = thread_level_multiplier(thread.level) (#1718) when a thread exists;
-    0 otherwise. A freshly provisioned level-0 thread has depth
-    thread_level_multiplier(0) = 1.
+    depth = max(1, round(thread_level_multiplier(thread.level))) (#1718) when a
+    thread exists; 0 otherwise. This is a discrete technique-count multiplier,
+    not the continuous combat-scaling factor `thread_level_multiplier` was
+    designed for — `thread_level_multiplier` ramps linearly from 0.1 to 1.0
+    across levels 1-9 (for smooth effect-magnitude scaling), which rounds to 0
+    for levels 1-5. The `max(1, ...)` floor preserves this function's own
+    invariant (stated above and previously true for all levels 1-25 under the
+    old `max(1, level // 10)` formula): once a GIFT thread exists at level >= 1,
+    depth never drops below 1. A freshly provisioned level-0 thread has depth
+    round(thread_level_multiplier(0)) = round(1) = 1.
     """
     character = sheet.character
     thread = next(
@@ -187,7 +194,10 @@ def _gift_thread_depth(sheet: CharacterSheet, gift: Gift) -> int:
         return 0
     # round(), not int() truncation: consistent with the site-wide #1718 decision
     # (see resonance.py); the return type here is `int` (a technique-count cap).
-    return round(thread_level_multiplier(thread.level))
+    # max(1, ...): depth is a discrete count multiplier that must never drop
+    # below 1 for an existing thread, unlike the continuous combat-scaling use
+    # of thread_level_multiplier elsewhere (see docstring above).
+    return max(1, round(thread_level_multiplier(thread.level)))
 
 
 def get_technique_cap_for_gift(sheet: CharacterSheet, gift: Gift) -> int:
