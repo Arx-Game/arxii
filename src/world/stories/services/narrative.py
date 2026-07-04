@@ -22,11 +22,16 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.character_sheets.models import CharacterSheet
+    from world.gm.models import GMProfile
     from world.stories.models import BeatCompletion, EpisodeResolution, Story
     from world.stories.types import AnyStoryProgress
 
 _DEFAULT_BEAT_TEXT = "A beat has resolved in your story."
 _DEFAULT_EPISODE_TEXT = "Your story advances to a new episode."
+_DEFAULT_FORECLOSED_TEXT = (
+    "A thread of your story has been closed. It ended without reaching its "
+    "intended conclusion, but its part in your story is acknowledged and laid to rest."
+)
 
 
 def notify_beat_completion(
@@ -128,3 +133,28 @@ def _render_episode_resolution_text(resolution: EpisodeResolution) -> str:
     if episode_summary:
         return episode_summary
     return _DEFAULT_EPISODE_TEXT
+
+
+def notify_foreclosed_resolved(
+    *,
+    progress: AnyStoryProgress,
+    resolved_by: GMProfile | None,
+) -> None:
+    """Fan out an honest closure message for a wrapped-up FORECLOSED thread.
+
+    Body acknowledges the thread ended unresolved (never claims completion).
+    ``resolved_by.account`` is the message sender (staff-sourced). Mirrors
+    ``notify_episode_resolution``: reuses ``_recipients_for_progress`` for
+    scope-appropriate recipients; ``related_story`` is set so mute suppression
+    applies.
+    """
+    story = progress.story
+    recipients = list(_recipients_for_progress(story, progress))
+    send_narrative_message(
+        recipients=recipients,
+        body=_DEFAULT_FORECLOSED_TEXT,
+        category=NarrativeCategory.STORY,
+        related_story=story,
+        sender_account=resolved_by.account if resolved_by is not None else None,
+        ooc_note="Foreclosed thread wrapped up by staff.",
+    )

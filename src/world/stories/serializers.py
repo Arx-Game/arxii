@@ -13,6 +13,7 @@ from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
+    ProgressStatus,
     SessionRequestStatus,
     StakeResolutionColumn,
     StakeRewardSink,
@@ -2382,6 +2383,57 @@ class StakeOutcomeSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class ResolveForeclosureInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/resolve-foreclosure/.
+
+    Context required:
+        story (Story): the story whose foreclosed thread is being wrapped up.
+
+    Validates (Layer 2): scope matches the story, the target discriminator is
+    correct for the scope, and the resolved progress record is FORECLOSED and
+    not already resolved. Surfaces violations as 400. ``resolved_by`` is
+    stamped from the requesting user's GMProfile in the view — never accepted
+    from client input.
+    """
+
+    scope = serializers.ChoiceField(choices=StoryScope.choices)
+    character_sheet = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.all(), required=False, allow_null=True
+    )
+    gm_table = serializers.PrimaryKeyRelatedField(
+        queryset=GMTable.objects.all(), required=False, allow_null=True
+    )
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        story: Story = self.context["story"]
+        scope = attrs["scope"]
+        if scope != story.scope:
+            msg = f"Scope {scope!r} does not match this story's scope {story.scope!r}."
+            raise serializers.ValidationError({"scope": msg})
+        progress = self._resolve_progress(story, scope, attrs)
+        if progress is None:
+            msg = "No progress record found for this story and scope."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        if progress.status != ProgressStatus.FORECLOSED:
+            msg = "This thread is not foreclosed."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        attrs["progress"] = progress
+        return attrs
+
+    def _resolve_progress(self, story: Story, scope: str, attrs: Any) -> AnyStoryProgress | None:
+        if scope == StoryScope.CHARACTER:
+            if attrs.get("character_sheet") is None:
+                msg = "character_sheet is required for CHARACTER scope."
+                raise serializers.ValidationError({"character_sheet": msg})
+            return story.progress_records.filter(character_sheet=attrs["character_sheet"]).first()
+        if scope == StoryScope.GROUP:
+            if attrs.get("gm_table") is None:
+                msg = "gm_table is required for GROUP scope."
+                raise serializers.ValidationError({"gm_table": msg})
+            return story.group_progress_records.filter(gm_table=attrs["gm_table"]).first()
+        return story.global_progress if hasattr(story, "global_progress") else None
 
 
 class ResolveStakeInputSerializer(serializers.Serializer):

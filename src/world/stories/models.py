@@ -43,6 +43,33 @@ if TYPE_CHECKING:
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
 CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
 
+# Foreclosure wrap-up annotation: the nullable resolved_at/resolved_by pair shared
+# by all three progress models (StoryProgress / GroupStoryProgress / GlobalStoryProgress).
+# FORECLOSED stays the honest terminal status; a non-null resolved_at marks a staff
+# wrap-up layered on top. Factored to avoid triplicated field literals (SonarCloud
+# duplication gate). `related_name` differs per model.
+_RESOLVED_AT_HELP = (
+    "When a FORECLOSED thread was wrapped up by staff; null = not yet wrapped up. "
+    "FORECLOSED stays the honest terminal status; a non-null resolved_at marks "
+    "the closure process layered on top."
+)
+_RESOLVED_BY_HELP = "GMProfile that wrapped up this foreclosed thread."
+
+
+def _foreclosure_resolution_fields(related_name: str) -> dict[str, object]:
+    """Build the resolved_at + resolved_by field pair for a progress model."""
+    return {
+        "resolved_at": models.DateTimeField(null=True, blank=True, help_text=_RESOLVED_AT_HELP),
+        "resolved_by": models.ForeignKey(
+            "gm.GMProfile",
+            null=True,
+            blank=True,
+            on_delete=models.SET_NULL,
+            related_name=related_name,
+            help_text=_RESOLVED_BY_HELP,
+        ),
+    }
+
 
 class TrustCategory(SharedMemoryModel):
     """
@@ -1529,6 +1556,7 @@ class GroupStoryProgress(SharedMemoryModel):
         choices=ProgressStatus.choices,
         default=ProgressStatus.ACTIVE,
     )
+    resolved_at, resolved_by = _foreclosure_resolution_fields("group_progress_resolved").values()
 
     class Meta:
         constraints = [
@@ -1585,6 +1613,7 @@ class GlobalStoryProgress(SharedMemoryModel):
         choices=ProgressStatus.choices,
         default=ProgressStatus.ACTIVE,
     )
+    resolved_at, resolved_by = _foreclosure_resolution_fields("global_progress_resolved").values()
 
     class Meta:
         indexes = [
@@ -1634,6 +1663,9 @@ class StoryProgress(SharedMemoryModel):
         choices=ProgressStatus.choices,
         default=ProgressStatus.ACTIVE,
     )
+    resolved_at, resolved_by = _foreclosure_resolution_fields(
+        "character_progress_resolved"
+    ).values()
 
     class Meta:
         constraints = [
