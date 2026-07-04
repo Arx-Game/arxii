@@ -2262,13 +2262,15 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
     `create_fortification` (snapshots `max_integrity` from `Building.fortification_level`
     if a `building` is given, #1713)
   - Lifecycle: `begin_battle_round` (opens DECLARING round; raises `BattleConcludedError`),
-    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 10
+    `declare_battle_action` (requires `technique`; update_or_create; now dispatches 11
     `BattleActionKind` values; scope/command-tier validated for PLACE/SIDE, #1710;
     REPEL/HOLD require scope=PLACE, #1712; BREACH/FORTIFY validate `target_fortification`
-    ownership, #1713; REPOSITION bypasses the command-tier gate, validated instead against
-    `target_place.vehicle.unit.commander`, #1714; a UNIT-scope STRIKE against a
-    non-overlapping `target_unit`, or a BREACH against a non-overlapping vehicle hull, is
-    rejected via `places_overlap` regardless of command tier — the boarding gate, #1714),
+    ownership, #1713; SET_ENVIRONMENT requires scope=BATTLE or PLACE and a
+    `technique.target_weather_type`, #1715; REPOSITION bypasses the command-tier gate,
+    validated instead against `target_place.vehicle.unit.commander`, #1714; a UNIT-scope
+    STRIKE against a non-overlapping `target_unit`, or a BREACH against a non-overlapping
+    vehicle hull, is rejected via `places_overlap` regardless of command tier — the
+    boarding gate, #1714),
     `open_champion_duel` (binds a `BattlePlace` to a
     lethal duel via `create_lethal_duel`, gated on an engaged `is_champion_role`, #1710),
     `open_siege_engine_encounter` (same bridge/duel call, no Champion-role gate, #1713)
