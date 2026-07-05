@@ -130,3 +130,43 @@ class SanctumInstallActionComponentsTests(TestCase):
         assert result.success
         consumed_pks = [self.touchstone.pk, *[r.pk for r in self.reagents]]
         assert not ItemInstance.objects.filter(pk__in=consumed_pks).exists()
+
+    def test_perform_sanctification_failure_after_consumption_rolls_back(self) -> None:
+        """Regression (final-review Finding 1): a SANCTUM_EXC raised by
+        ``perform_sanctification`` AFTER ``resolve_and_consume_ritual_components``
+        has already consumed the submitted components must roll back that
+        consumption too — not leave the player's touchstone/reagents deleted with
+        no Sanctum created.
+
+        Triggers ``SanctificationRoomAlreadyHasFeatureError`` (the easiest
+        ``SANCTUM_EXC`` member to force deterministically) by pre-creating a
+        ``RoomFeatureInstance`` on the target room before the install attempt --
+        components are otherwise fully valid, so consumption itself would
+        succeed if not for the wrapping transaction.
+        """
+        from world.room_features.models import RoomFeatureInstance
+        from world.room_features.seeds import ensure_sanctum_kind
+
+        RoomFeatureInstance.objects.create(
+            room_profile=self.room_profile, feature_kind=ensure_sanctum_kind(), level=1
+        )
+
+        # Capture pks BEFORE execute() — Django's delete collector sets
+        # ``.pk = None`` on every instance it collects (even under a bulk
+        # queryset .delete()), and since these are idmapper-cached objects,
+        # ``self.touchstone``/``self.reagents`` are the SAME Python instances
+        # the collector touches. Reading ``.pk`` after execute() would see
+        # ``None`` regardless of whether the DB-level delete was rolled back.
+        consumed_pks = [self.touchstone.pk, *[r.pk for r in self.reagents]]
+
+        action = SanctumInstallAction()
+        result = action.execute(
+            self.character,
+            room_profile=self.room_profile,
+            resonance=self.resonance,
+            owner_mode=SanctumOwnerMode.PERSONAL,
+            components_provided=[self.touchstone, *self.reagents],
+        )
+        assert not result.success
+
+        assert ItemInstance.objects.filter(pk__in=consumed_pks).count() == len(consumed_pks)

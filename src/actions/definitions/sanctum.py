@@ -140,6 +140,8 @@ class SanctumInstallAction(SanctumActionBase):
     icon: str = "home"
 
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
         from world.magic.seeds_sanctum import (  # noqa: PLC0415
             SANCTIFICATION_COVENANT_RITUAL_NAME,
             SANCTIFICATION_PERSONAL_RITUAL_NAME,
@@ -160,23 +162,31 @@ class SanctumInstallAction(SanctumActionBase):
         )
         ritual = Ritual.objects.get(name=ritual_name)
         components = kwargs.get("components_provided", [])
+
+        # Both the component consumption AND perform_sanctification's own
+        # validation must live in ONE transaction: perform_sanctification does
+        # its own @transaction.atomic, but that only wraps ITS body — by the
+        # time it's called, the consumption above would already be committed
+        # if not for this outer atomic block. A downstream SANCTUM_EXC (e.g.
+        # "room already has a feature installed") must roll back the
+        # already-consumed touchstone/reagents, not just fail cleanly while
+        # leaving them deleted.
         try:
-            resolve_and_consume_ritual_components(
-                ritual=ritual,
-                components=components,
-                performer_sheet=persona.character_sheet,
-                resonance_context=kwargs["resonance"],
-            )
+            with transaction.atomic():
+                resolve_and_consume_ritual_components(
+                    ritual=ritual,
+                    components=components,
+                    performer_sheet=persona.character_sheet,
+                    resonance_context=kwargs["resonance"],
+                )
+                result = perform_sanctification(
+                    kwargs["room_profile"],
+                    persona,
+                    kwargs["resonance"],
+                    owner_mode=owner_mode,
+                )
         except RitualComponentError as exc:
             return self._fail(exc.user_message)
-
-        try:
-            result = perform_sanctification(
-                kwargs["room_profile"],
-                persona,
-                kwargs["resonance"],
-                owner_mode=owner_mode,
-            )
         except SANCTUM_EXC as exc:
             return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         if result.fizzled:
