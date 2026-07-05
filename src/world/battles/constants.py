@@ -95,6 +95,7 @@ class VehicleKind(models.TextChoices):
     AIRSHIP = "airship", "Airship"
     DRAGON = "dragon", "Dragon"
     KRAKEN = "kraken", "Kraken"
+    COMPANION = "companion", "Companion"
 
 
 class BattleOutcome(models.TextChoices):
