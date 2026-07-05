@@ -1,9 +1,14 @@
 """Search-related API views."""
 
 from evennia.accounts.models import AccountDB
+from rest_framework import status
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from evennia_extensions.models import RoomProfile
+from world.missions.constants import GiverKind
+from world.missions.target_queries import environmental_detail_candidates
 from world.roster.models import RosterEntry
 
 
@@ -56,3 +61,73 @@ class RoomCharacterSearchAPIView(APIView):
             if not term or term in name.lower():
                 results.append({"value": name, "label": name})
         return Response(results)
+
+
+class MissionGiverTargetSearchAPIView(APIView):
+    """Staff-only search for MissionGiver.target candidates (#882).
+
+    Results are constrained per ``kind`` to the same typeclass shape
+    ``MissionGiver.clean()`` enforces (world/missions/models.py): ROOM_TRIGGER
+    offers Room rows via the RoomProfile 1:1 (every Room gets one at creation,
+    so no separate typeclass check is needed here); ENVIRONMENTAL_DETAIL uses
+    ``environmental_detail_candidates()``, which mirrors the same
+    Character/Room/Exit exclusion ``clean()`` enforces.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    RESULT_CAP = 20
+
+    def get(self, request, *args, **kwargs):
+        """Return matching {id, name, hint} rows, or a single row for ?id=."""
+        kind = request.query_params.get("kind", "")  # noqa: USE_FILTERSET
+        if kind not in (GiverKind.ROOM_TRIGGER, GiverKind.ENVIRONMENTAL_DETAIL):
+            return Response(
+                {"detail": "kind must be 'room_trigger' or 'environmental_detail'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_id = request.query_params.get("id")  # noqa: USE_FILTERSET
+        term = request.query_params.get("search", "")  # noqa: USE_FILTERSET
+
+        if kind == GiverKind.ROOM_TRIGGER:
+            rows = self._room_rows(target_id, term)
+        else:
+            rows = self._environmental_detail_rows(target_id, term)
+
+        if target_id is not None:
+            if not rows:
+                return Response(status=status.HTTP_404_NOT_FOUND)
+            return Response(rows[0])
+        return Response(rows)
+
+    def _room_rows(self, target_id: str | None, term: str) -> list[dict]:
+        qs = RoomProfile.objects.select_related("objectdb", "area")
+        if target_id is not None:
+            qs = qs.filter(objectdb_id=target_id)
+        elif term:
+            qs = qs.filter(objectdb__db_key__icontains=term)
+        qs = qs.order_by("objectdb__db_key")[: self.RESULT_CAP]
+        return [
+            {
+                "id": rp.objectdb_id,
+                "name": rp.objectdb.db_key,
+                "hint": rp.area.name if rp.area_id else "",
+            }
+            for rp in qs
+        ]
+
+    def _environmental_detail_rows(self, target_id: str | None, term: str) -> list[dict]:
+        qs = environmental_detail_candidates().select_related("db_location")
+        if target_id is not None:
+            qs = qs.filter(pk=target_id)
+        elif term:
+            qs = qs.filter(db_key__icontains=term)
+        qs = qs.order_by("db_key")[: self.RESULT_CAP]
+        return [
+            {
+                "id": obj.pk,
+                "name": obj.db_key,
+                "hint": obj.db_location.db_key if obj.db_location_id else "",
+            }
+            for obj in qs
+        ]

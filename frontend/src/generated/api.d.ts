@@ -9787,6 +9787,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/mission-giver-targets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return matching {id, name, hint} rows, or a single row for ?id=. */
+    get: operations['mission_giver_targets_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/categories/': {
     parameters: {
       query?: never;
@@ -43020,6 +43037,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SituationTemplateDetail'];
         };
+      };
+    };
+  };
+  mission_giver_targets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
