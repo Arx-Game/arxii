@@ -58,7 +58,7 @@ class ContainerAccessPolicyTests(TestCase):
     def _container(
         self,
         *,
-        owner_sheet: CharacterSheet,
+        owner_sheet: CharacterSheet | None,
         policy: str = ContainerAccessPolicy.OPEN,
     ) -> ItemInstance:
         template = ItemTemplateFactory(name="AccessPolicyBox", is_container=True)
@@ -203,3 +203,42 @@ class ContainerAccessPolicyTests(TestCase):
         item_state = self._item_in_container(container, holder=self.owner_sheet)
         with self.assertRaises(ContainerAccessDenied):
             take_out(self.actor_state, item_state)
+
+    # ------------------------------------------------------------------
+    # Unowned container: no owner -> policy cannot bar anyone, even OWNER_ONLY.
+    # ------------------------------------------------------------------
+
+    def test_unowned_owner_only_container_is_still_takeable_from(self) -> None:
+        container = self._container(owner_sheet=None, policy=ContainerAccessPolicy.OWNER_ONLY)
+        item_state = self._item_in_container(container, holder=None)
+        take_out(self.actor_state, item_state)
+        item_state.instance.game_object.refresh_from_db()
+        self.assertEqual(item_state.instance.game_object.location, self.actor)
+
+    # ------------------------------------------------------------------
+    # Sheet-less actor (GM/staff/companion tooling): the gate must not crash
+    # on a character with no CharacterSheet — legacy free-take applies, since
+    # theft consequence machinery is sheet-anchored (#1909 review fix).
+    # ------------------------------------------------------------------
+
+    def test_sheetless_actor_pick_up_of_owned_item_does_not_raise(self) -> None:
+        sheetless = CharacterFactory(db_key="AccessPolicySheetless", location=self.room)
+        sheetless_state = CharacterState(sheetless, context=MagicMock())
+        item_state = self._room_item(holder=self.owner_sheet)
+        pick_up(sheetless_state, item_state)
+        item_state.instance.refresh_from_db()
+        item_state.instance.game_object.refresh_from_db()
+        self.assertEqual(item_state.instance.game_object.location, sheetless)
+        # Ownership is preserved — pick_up never reassigns an owned item.
+        self.assertEqual(item_state.instance.holder_character_sheet, self.owner_sheet)
+
+    def test_sheetless_actor_take_out_from_owner_only_container_does_not_raise(self) -> None:
+        sheetless = CharacterFactory(db_key="AccessPolicySheetless2", location=self.room)
+        sheetless_state = CharacterState(sheetless, context=MagicMock())
+        container = self._container(
+            owner_sheet=self.owner_sheet, policy=ContainerAccessPolicy.OWNER_ONLY
+        )
+        item_state = self._item_in_container(container, holder=self.owner_sheet)
+        take_out(sheetless_state, item_state)
+        item_state.instance.game_object.refresh_from_db()
+        self.assertEqual(item_state.instance.game_object.location, sheetless)

@@ -52,7 +52,11 @@ def _active_tenure_for_sheet(sheet: CharacterSheet) -> RosterTenure | None:
 
 
 def _container_policy_denies(taker_sheet: CharacterSheet, container_instance: ItemInstance) -> bool:
-    """True when the container's access policy bars ``taker_sheet`` from its contents."""
+    """True when the container's access policy bars ``taker_sheet`` from its contents.
+
+    Only the IMMEDIATE ``contained_in`` container's policy governs — no ancestor
+    chaining up nested containers (per the #1909 spec).
+    """
     from world.items.constants import ContainerAccessPolicy  # noqa: PLC0415
 
     owner_sheet = container_instance.holder_character_sheet
@@ -73,13 +77,18 @@ def _container_policy_denies(taker_sheet: CharacterSheet, container_instance: It
     return not is_friend(owner_tenure=owner_tenure, friend_tenure=taker_tenure)
 
 
-def take_requires_steal(taker_sheet: CharacterSheet, item_instance: ItemInstance) -> bool:
+def take_requires_steal(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
     """The one ownership/policy test (#1909): True → only ``steal`` may move it.
 
     Room item owned by someone else → steal. Container item: the container's
     policy decides; policy pass → plain take even if the item belongs to the
     container's owner (sanctioned borrowing).
     """
+    if taker_sheet is None:
+        # Sheet-less actors (GM/staff/companion tooling) keep legacy free-take
+        # behavior — theft consequence machinery is sheet-anchored and cannot
+        # apply to them.
+        return False
     container = item_instance.contained_in
     if container is not None:
         return _container_policy_denies(taker_sheet, container)
@@ -120,10 +129,16 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     ownership is preserved. If the item is in an open container in the
     room, ``contained_in`` is cleared so the item ends up plainly in the
     character's inventory.
+
+    The #1909 ownership/policy gate runs before any mutation: a room item
+    owned by someone else raises ``OwnedByAnother``; a container item barred
+    by the container's access policy raises ``ContainerAccessDenied``. Steal
+    (a later task) is the deliberate bypass.
     """
     if not item.can_take(taker=character):
         raise NotReachable
-    if take_requires_steal(character.obj.sheet_data, item.instance):
+    taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if take_requires_steal(taker_sheet, item.instance):
         if item.instance.contained_in is not None:
             raise ContainerAccessDenied
         raise OwnedByAnother
@@ -319,12 +334,17 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     rejects closed containers) and that it actually has a ``contained_in``
     set. Clears ``contained_in`` and moves the underlying ``ObjectDB`` to
     the character.
+
+    The #1909 gate runs before any mutation: if the container's access
+    policy bars this taker, raises ``ContainerAccessDenied``. Steal (a
+    later task) is the deliberate bypass.
     """
     if not item.can_take(taker=character):
         raise NotReachable
     if item.instance.contained_in is None:
         raise NotInContainer
-    if take_requires_steal(character.obj.sheet_data, item.instance):
+    taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if take_requires_steal(taker_sheet, item.instance):
         raise ContainerAccessDenied
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
