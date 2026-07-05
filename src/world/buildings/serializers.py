@@ -11,7 +11,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from evennia_extensions.models import RoomSizeTier
-from world.buildings.models import ProjectTemplate
+from world.buildings.models import ArchitecturalStyle, BuildingKind, ProjectTemplate
 
 
 class CharacterContextRequestSerializer(serializers.Serializer):
@@ -62,6 +62,7 @@ class ManagerBuildingSerializer(serializers.Serializer):
     name = serializers.CharField()
     kind = serializers.CharField()
     style = serializers.CharField(allow_null=True)
+    renovation_cost = serializers.IntegerField(allow_null=True)
     space_budget = serializers.IntegerField()
     space_used = serializers.IntegerField()
     space_remaining = serializers.IntegerField()
@@ -118,6 +119,47 @@ class DecorationTemplateSerializer(serializers.ModelSerializer):
             "increments",
             "tier_prerequisites",
         ]
+
+
+class BuildingKindSerializer(serializers.ModelSerializer):
+    """An authorable building category for the renovation picker (#1882).
+
+    Open catalog — rows authored by staff. Each row carries non-exclusive
+    descriptive flags the picker badges (a fortified witch-king manor is
+    ``residential + fortified + occult + aerial``).
+    """
+
+    class Meta:
+        model = BuildingKind
+        fields = [
+            "id",
+            "name",
+            "description",
+            "is_residential",
+            "is_commercial",
+            "is_fortified",
+            "is_occult",
+            "is_maritime",
+            "is_agrarian",
+            "is_aerial",
+            "is_subterranean",
+            "is_secret",
+        ]
+
+
+class ArchitecturalStyleSerializer(serializers.ModelSerializer):
+    """An authorable architectural style for the builder picker (#1882).
+
+    The player-facing lore lives in the linked ``CodexSubject`` — knowing that
+    subject is what gates throwback styles (``can_build_style``). The description
+    is surfaced inline here so the picker needn't hit the Codex app.
+    """
+
+    description = serializers.CharField(source="codex_subject.description", allow_null=True)
+
+    class Meta:
+        model = ArchitecturalStyle
+        fields = ["id", "name", "description", "is_default", "prestige_bonus", "cost_multiplier"]
 
 
 class ExposureAxisSerializer(serializers.Serializer):

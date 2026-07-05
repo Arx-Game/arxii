@@ -29,14 +29,19 @@ from rest_framework.response import Response
 
 from evennia_extensions.models import ObjectDisplayData, RoomProfile, RoomSizeTier
 from world.buildings.models import (
+    ArchitecturalStyle,
     Building,
+    BuildingKind,
     DecorationKind,
     ProjectTemplate,
     ProjectTemplatePolishIncrement,
     RoomDecoration,
 )
+from world.buildings.room_constants import RENOVATION_THRESHOLD
 from world.buildings.room_services import building_exits, building_for_room, space_used
 from world.buildings.serializers import (
+    ArchitecturalStyleSerializer,
+    BuildingKindSerializer,
     BuildingManagerSerializer,
     CharacterContextRequestSerializer,
     DecorationTemplateSerializer,
@@ -147,6 +152,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
                 "style": (
                     building.architectural_style.name if building.architectural_style_id else None
                 ),
+                "renovation_cost": RENOVATION_THRESHOLD * 100,
                 "space_budget": building.space_budget,
                 "space_used": used,
                 "space_remaining": max(0, building.space_budget - used),
@@ -330,3 +336,67 @@ class DecorationTemplateViewSet(viewsets.ReadOnlyModelViewSet):
             )
             .order_by("name")
         )
+
+
+@extend_schema(tags=["buildings"])
+class BuildingKindViewSet(viewsets.ReadOnlyModelViewSet):
+    """The admin-authored BuildingKind catalog for the renovation picker (#1882).
+
+    Public read — BuildingKind is an open author-authored catalog (no owner
+    gating needed for listing). The frontend excludes the building's current
+    kind client-side (it knows the kind from the manager payload).
+    """
+
+    queryset = BuildingKind.objects.order_by("name")
+    serializer_class = BuildingKindSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = BuildingsCatalogPagination
+    filter_backends = [SearchFilter]
+    search_fields = ["name", "description"]
+
+
+@extend_schema(tags=["buildings"], parameters=[_CHARACTER_ID_PARAM])
+class ArchitecturalStyleViewSet(viewsets.ReadOnlyModelViewSet):
+    """The ArchitecturalStyle catalog for the builder picker, per-viewer filtered (#1882).
+
+    ``set_building_style`` is knowledge-gated (``can_build_style``): default
+    styles are open, throwback styles require codex knowledge. This endpoint
+    returns only styles the requesting persona can build, so unlearned throwback
+    styles never reach the picker.
+    """
+
+    serializer_class = ArchitecturalStyleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = BuildingsCatalogPagination
+    filter_backends = [SearchFilter]
+    search_fields = ["name"]
+
+    def get_queryset(self):
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+        from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+
+        persona = _viewer_persona(self.request)
+        if persona is None:
+            return ArchitecturalStyle.objects.none()
+        # Replicate can_build_style at the queryset level so SearchFilter +
+        # pagination compose correctly. Default styles are open; throwback
+        # styles require a KNOWN codex entry under their codex_subject.
+        # can_build_style also returns False for inactive styles and for
+        # non-default styles with no codex_subject — both are excluded here
+        # (is_active filter + codex_subject_id__in handles the latter).
+        try:
+            roster_entry = persona.character_sheet.roster_entry
+        except (AttributeError, ObjectDoesNotExist):
+            roster_entry = None
+        if roster_entry is not None:
+            known_subject_ids = CharacterCodexKnowledge.objects.filter(
+                roster_entry=roster_entry,
+                status=CodexKnowledgeStatus.KNOWN,
+            ).values_list("entry__subject_id", flat=True)
+            return ArchitecturalStyle.objects.filter(is_active=True).filter(
+                Q(is_default=True) | Q(codex_subject_id__in=known_subject_ids)
+            )
+        # No roster entry — only default styles are buildable.
+        return ArchitecturalStyle.objects.filter(is_active=True, is_default=True)

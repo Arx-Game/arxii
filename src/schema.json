@@ -1775,6 +1775,139 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/buildings/architectural-styles/:
+    get:
+      operationId: buildings_architectural_styles_list
+      description: |-
+        The ArchitecturalStyle catalog for the builder picker, per-viewer filtered (#1882).
+
+        ``set_building_style`` is knowledge-gated (``can_build_style``): default
+        styles are open, throwback styles require codex knowledge. This endpoint
+        returns only styles the requesting persona can build, so unlearned throwback
+        styles never reach the picker.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedArchitecturalStyleList'
+          description: ''
+  /api/buildings/architectural-styles/{id}/:
+    get:
+      operationId: buildings_architectural_styles_retrieve
+      description: |-
+        The ArchitecturalStyle catalog for the builder picker, per-viewer filtered (#1882).
+
+        ``set_building_style`` is knowledge-gated (``can_build_style``): default
+        styles are open, throwback styles require codex knowledge. This endpoint
+        returns only styles the requesting persona can build, so unlearned throwback
+        styles never reach the picker.
+      parameters:
+      - in: query
+        name: character_id
+        schema:
+          type: integer
+        description: ObjectDB id of the viewing character (must be your own).
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchitecturalStyle'
+          description: ''
+  /api/buildings/building-kinds/:
+    get:
+      operationId: buildings_building_kinds_list
+      description: |-
+        The admin-authored BuildingKind catalog for the renovation picker (#1882).
+
+        Public read — BuildingKind is an open author-authored catalog (no owner
+        gating needed for listing). The frontend excludes the building's current
+        kind client-side (it knows the kind from the manager payload).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBuildingKindList'
+          description: ''
+  /api/buildings/building-kinds/{id}/:
+    get:
+      operationId: buildings_building_kinds_retrieve
+      description: |-
+        The admin-authored BuildingKind catalog for the renovation picker (#1882).
+
+        Public read — BuildingKind is an open author-authored catalog (no owner
+        gating needed for listing). The frontend excludes the building's current
+        kind client-side (it knows the kind from the manager payload).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this building kind.
+        required: true
+      tags:
+      - buildings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildingKind'
+          description: ''
   /api/buildings/decoration-templates/:
     get:
       operationId: buildings_decoration_templates_list
@@ -26891,6 +27024,46 @@ components:
       description: |-
         * `major` - Major Arcana
         * `minor` - Minor Arcana
+    ArchitecturalStyle:
+      type: object
+      description: |-
+        An authorable architectural style for the builder picker (#1882).
+
+        The player-facing lore lives in the linked ``CodexSubject`` — knowing that
+        subject is what gates throwback styles (``can_build_style``). The description
+        is surfaced inline here so the picker needn't hit the Codex app.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+        is_default:
+          type: boolean
+          description: 'Default-available (living-realm tier). Non-default styles
+            are the discoverable throwback tier (#1469): buildable only once the persona''s
+            character KNOWS an entry under codex_subject (research-unlocked).'
+        prestige_bonus:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Base dwelling-prestige addend for a building wearing this style
+            (#1469 throwback tier). PLACEHOLDER magnitudes pending the tuning pass.
+        cost_multiplier:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,3})?$
+          description: Construction/renovation cost knob for this style (#1469). Data
+            only for now — charging awaits the economy pass (Phase E cost deduction
+            is unwired).
+      required:
+      - description
+      - id
+      - name
     AreaList:
       type: object
       properties:
@@ -27913,6 +28086,45 @@ components:
           description: Whether available in character creation
       required:
       - display_name
+      - name
+    BuildingKind:
+      type: object
+      description: |-
+        An authorable building category for the renovation picker (#1882).
+
+        Open catalog — rows authored by staff. Each row carries non-exclusive
+        descriptive flags the picker badges (a fortified witch-king manor is
+        ``residential + fortified + occult + aerial``).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          description: Admin-editable flavor describing what this kind is.
+        is_residential:
+          type: boolean
+        is_commercial:
+          type: boolean
+        is_fortified:
+          type: boolean
+        is_occult:
+          type: boolean
+        is_maritime:
+          type: boolean
+        is_agrarian:
+          type: boolean
+        is_aerial:
+          type: boolean
+        is_subterranean:
+          type: boolean
+        is_secret:
+          type: boolean
+      required:
+      - id
       - name
     BuildingManager:
       type: object
@@ -36833,6 +37045,9 @@ components:
         style:
           type: string
           nullable: true
+        renovation_cost:
+          type: integer
+          nullable: true
         space_budget:
           type: integer
         space_used:
@@ -36852,6 +37067,7 @@ components:
       - id
       - kind
       - name
+      - renovation_cost
       - space_budget
       - space_remaining
       - space_used
@@ -39767,6 +39983,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlternateSelf'
+    PaginatedArchitecturalStyleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArchitecturalStyle'
     PaginatedAreaListList:
       type: object
       required:
@@ -39905,6 +40144,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BugReportDetail'
+    PaginatedBuildingKindList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuildingKind'
     PaginatedChallengeInstanceList:
       type: object
       required:
