@@ -124,6 +124,7 @@ from actions.definitions.locations import (
     RoomEditAction,
     SetBuildingStyleAction,
     SetPrimaryHomeAction,
+    StartBuildingRenovationAction,
     StartExtensionAction,
     UnlinkRoomsAction,
 )
@@ -263,6 +264,7 @@ _ALL_ACTIONS: list[Action] = [
     SetPrimaryHomeAction(),
     CommissionDecorationAction(),
     StartExtensionAction(),
+    StartBuildingRenovationAction(),
     DonateToProjectAction(),
     CheckContributeAction(),
     StoryContributeAction(),
