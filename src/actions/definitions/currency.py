@@ -98,7 +98,7 @@ class DepositCoinsAction(Action):
     icon: str = "coins"
     category: str = "items"
     action_category: ActionCategory = ActionCategory.PHYSICAL
-    target_type: TargetType = TargetType.SELF
+    target_type: TargetType = TargetType.SINGLE
 
     objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 

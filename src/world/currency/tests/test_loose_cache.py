@@ -19,7 +19,9 @@ from world.currency.services import (
     redeem_instrument,
     transfer,
 )
+from world.items.constants import OwnershipEventType
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+from world.items.models import OwnershipEvent
 
 
 class LooseCacheTests(TestCase):
@@ -103,3 +105,44 @@ class LooseCachePhysicalTests(TestCase):
         self.assertEqual(CurrencyInstrumentDetails.objects.count(), 0)
         self.purse.refresh_from_db()
         self.assertEqual(self.purse.balance, 1_000)
+
+    def test_provenance_survives_redemption(self):
+        """OwnershipEvent rows outlive the redeemed coin (#1025 provenance, SET_NULL).
+
+        Pins the deletion-order/FK behavior the redeem path relies on: deleting
+        the game_object CASCADE-removes the ItemInstance, and the event's
+        ``item_instance`` FK nulls out while the from/to sheet audit trail stays
+        intact.
+        """
+        giver_sheet = CharacterSheetFactory()
+        instance = mint_loose_cache(amount=350, holder_sheet=self.sheet, from_purse=self.purse)
+        # Direct row creation matching the give service writer's shape
+        # (flows.service_functions.inventory.give).
+        event = OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.GIVEN,
+            from_character_sheet=giver_sheet,
+            to_character_sheet=self.sheet,
+            from_persona_display=giver_sheet.primary_persona,
+            to_persona_display=self.sheet.primary_persona,
+        )
+
+        redeem_instrument(instance=instance, to_purse=self.purse)
+
+        # Read raw column values — SharedMemoryModel's identity map makes
+        # refresh_from_db() a no-op (the re-fetch returns the same cached
+        # instance; the loaddata-can't-update quirk, #946).
+        row = (
+            OwnershipEvent.objects.filter(pk=event.pk)
+            .values(
+                "item_instance_id",
+                "event_type",
+                "from_character_sheet_id",
+                "to_character_sheet_id",
+            )
+            .get()
+        )
+        self.assertIsNone(row["item_instance_id"])  # SET_NULL, row not cascaded
+        self.assertEqual(row["event_type"], OwnershipEventType.GIVEN)
+        self.assertEqual(row["from_character_sheet_id"], giver_sheet.pk)
+        self.assertEqual(row["to_character_sheet_id"], self.sheet.pk)
