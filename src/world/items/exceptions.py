@@ -258,6 +258,17 @@ class ContainerAccessDenied(InventoryError):
     )
 
 
+class TheftNotPermitted(InventoryError):
+    """Raised when ``steal`` is refused: no ownership gate to bypass, or consent denies it.
+
+    Covers both "this item doesn't require steal" (steal is not a synonym for
+    take) and "the owner's consent settings exclude this actor" (#1909).
+    """
+
+    user_message = "You can't bring yourself to take that."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You can't bring yourself to take that."})
+
+
 # ---------------------------------------------------------------------------
 # Material consumption errors (services/materials.py)
 # ---------------------------------------------------------------------------

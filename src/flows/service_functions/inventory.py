@@ -27,6 +27,7 @@ from world.items.exceptions import (
     NotReachable,
     OwnedByAnother,
     RecipientNotAdjacent,
+    TheftNotPermitted,
 )
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
@@ -34,7 +35,9 @@ from world.items.services import equip_item, unequip_item
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
+    from world.justice.models import CrimeKind
     from world.roster.models import RosterTenure
+    from world.societies.models import LegendSourceType
 
 
 def _active_tenure_for_sheet(sheet: CharacterSheet) -> RosterTenure | None:
@@ -353,3 +356,145 @@ def take_out(character: CharacterState, item: ItemState) -> None:
         raise NotReachable
     # Item now located on character — invalidate so the next read sees it.
     character.obj.carried_items.invalidate()
+
+
+def _theft_crime_kind() -> CrimeKind:
+    """Lazy CrimeKind row (repo bans seed migrations; _instrument_template precedent)."""
+    from world.justice.models import CrimeKind  # noqa: PLC0415
+
+    kind, _ = CrimeKind.objects.get_or_create(
+        slug="theft",
+        defaults={"name": "Theft", "description": "Taking what belongs to another."},
+    )
+    return kind
+
+
+def _theft_source_type() -> LegendSourceType:
+    """Lazy ``LegendSourceType`` row for personal antagonistic acts (#1909).
+
+    ``LegendSourceType`` has no fixed enum of members — rows are normally
+    admin/fixture-seeded data (fixtures aren't in version control, ADR-0013
+    bans seed migrations), so no committed "existing member" can be grepped.
+    Mirrors the ``_theft_crime_kind`` / ``theft_category`` lazy-row idiom
+    already established for this exact situation: get-or-create a general
+    "Crime" bucket (deliberately not a bespoke "Theft" source type, so future
+    non-theft misdeeds land in the same category instead of fragmenting it).
+    """
+    from world.societies.models import LegendSourceType  # noqa: PLC0415
+
+    source_type, _ = LegendSourceType.objects.get_or_create(
+        name="Crime",
+        defaults={"description": "Personal antagonistic acts against another persona."},
+    )
+    return source_type
+
+
+def _record_theft_deed(character: CharacterState, item: ItemState) -> None:
+    """Birth the crime-tagged, concealed deed for a completed theft (#1909).
+
+    Called synchronously inside ``steal``'s atomic transaction — matches
+    ``create_solo_deed``'s own callers (e.g. ``societies/scandal.py``'s
+    ``route_deed_reach``/``_tag_approach_crime``), none of which defer via
+    ``transaction.on_commit``; ``create_solo_deed`` is itself fully
+    synchronous (its own ``@transaction.atomic``), so there is nothing to
+    protect by deferring here. No active scene at the room -> ``scene=None``
+    and the theft spreads cold (spec behavior, #1909 Step 1c).
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+    from world.societies.services import create_solo_deed  # noqa: PLC0415
+
+    taker_sheet = character.obj.sheet_data
+    persona = active_persona_for_sheet(taker_sheet)
+    scene = get_active_scene(character.obj.location)
+    create_solo_deed(
+        persona,
+        f"Theft of {item.instance.display_name}",
+        _theft_source_type(),
+        10,
+        scene=scene,
+        crime_kinds=[_theft_crime_kind()],
+        concealed=True,
+    )
+
+
+def steal_permitted(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
+    """Target-side-only availability (#1909): NPC-owned always; players by consent."""
+    if not take_requires_steal(taker_sheet, item_instance):
+        return False
+    # take_requires_steal returns False for a None sheet (checked above), so
+    # taker_sheet is guaranteed non-None past this point — narrowed explicitly
+    # for the type checker, which can't see across the function call.
+    if taker_sheet is None:  # pragma: no cover - unreachable, narrows for ty
+        return False
+    owner_sheet = item_instance.holder_character_sheet
+    guarded_sheet = owner_sheet
+    if guarded_sheet is None and item_instance.contained_in is not None:
+        guarded_sheet = item_instance.contained_in.holder_character_sheet
+    if guarded_sheet is None:
+        return True
+    owner_tenure = _active_tenure_for_sheet(guarded_sheet)
+    if owner_tenure is None:
+        return True  # NPC/org holdings: always antagonism-allowed (spec decision 5)
+    from world.consent.services import consent_blocks_targeting, theft_category  # noqa: PLC0415
+
+    taker_tenure = _active_tenure_for_sheet(taker_sheet)
+    return not consent_blocks_targeting(
+        owner_tenure=owner_tenure, category=theft_category(), actor_tenure=taker_tenure
+    )
+
+
+@transaction.atomic
+def steal(character: CharacterState, item: ItemState) -> None:
+    """Take an item that plain take refuses (#1909) — with consequences.
+
+    Ownership transfers (STOLEN provenance, never destroyed, #1025) and the
+    act births a crime-tagged deed for the thief's presented persona;
+    ``concealed=True`` rolls Stealth to shed witnesses (#1824), so an
+    unwitnessed theft spreads cold until discovered.
+    """
+    if not item.can_take(taker=character):
+        raise NotReachable
+    # getattr, not direct access: sheet-less actors (GM/staff/companion tooling)
+    # have no reverse CharacterSheet row and must reach ``steal_permitted`` with
+    # None rather than raise DoesNotExist — steal_permitted then delegates to
+    # take_requires_steal, which returns False for a None sheet, so a
+    # sheet-less actor always ends up refused here (they free-take instead).
+    taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if not steal_permitted(taker_sheet, item.instance):
+        raise TheftNotPermitted
+    previous_holder_sheet = item.instance.holder_character_sheet
+    if item.instance.contained_in is not None:
+        item.instance.contained_in = None
+        item.instance.save(update_fields=["contained_in"])
+    if not item.instance.game_object.move_to(character.obj, quiet=True):
+        raise NotReachable
+    item.instance.holder_character_sheet = taker_sheet
+    item.instance.save(update_fields=["holder_character_sheet"])
+    OwnershipEvent.objects.create(
+        item_instance=item.instance,
+        event_type=OwnershipEventType.STOLEN,
+        from_character_sheet=previous_holder_sheet,
+        to_character_sheet=taker_sheet,
+        from_persona_display=(
+            previous_holder_sheet.primary_persona if previous_holder_sheet else None
+        ),
+        to_persona_display=taker_sheet.primary_persona,
+    )
+    character.obj.carried_items.invalidate()
+    _record_theft_deed(character, item)
+    _fire_item_acquisition_triggers(character, item)
+
+
+@transaction.atomic
+def set_container_policy(character: CharacterState, container: ItemState, policy: str) -> None:
+    """Owner-only: set who may take from this container (#1909)."""
+    from world.items.constants import ContainerAccessPolicy  # noqa: PLC0415
+
+    if not container.instance.template.is_container:
+        raise NotAContainer
+    owner = container.instance.holder_character_sheet
+    if owner is None or owner.pk != character.obj.sheet_data.pk:
+        raise NotInPossession
+    container.instance.access_policy = ContainerAccessPolicy(policy)
+    container.instance.save(update_fields=["access_policy"])
