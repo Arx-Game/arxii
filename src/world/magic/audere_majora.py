@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -180,6 +181,52 @@ def _has_active_condition(character: ObjectDB, condition_name: str) -> bool:
     return ConditionInstance.objects.filter(
         target=character,
         condition__name=condition_name,
+    ).exists()
+
+
+def is_mid_audere_majora_crossing(character_sheet: CharacterSheet) -> bool:
+    """True while a character's Audere Majora crossing is unresolved or ongoing.
+
+    Covers both windows: the open-but-undecided offer (PendingAudereMajoraOffer
+    exists — the gate has opened, the player hasn't accepted/declined yet) and
+    the post-crossing power-spike aftermath (an active "Audere Majora"
+    ConditionInstance — cleared only at full encounter completion). Single-
+    character check — used by the disconnect-pause services (one lookup, one
+    character). For the round-resolution hard block, use
+    ``any_character_mid_audere_majora_crossing`` instead (batched).
+    """
+    if PendingAudereMajoraOffer.objects.filter(character_sheet=character_sheet).exists():
+        return True
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character_sheet.character,
+        condition__name=AUDERE_MAJORA_CONDITION_NAME,
+    ).exists()
+
+
+def any_character_mid_audere_majora_crossing(
+    character_sheets: Iterable[CharacterSheet],
+) -> bool:
+    """Batched sibling of ``is_mid_audere_majora_crossing`` — one pair of
+    ``__in=`` queries covering every given character, not one query pair per
+    character. Required for the round-resolution hard block (#1899): a large
+    battle can have 10+ active participants, and this spec's whole point for
+    large battles is to keep resolution cheap — looping the single-character
+    check per participant would reintroduce the N+1 this spec's scale
+    exception exists to avoid.
+    """
+    sheets = list(character_sheets)
+    if not sheets:
+        return False
+    if PendingAudereMajoraOffer.objects.filter(character_sheet__in=sheets).exists():
+        return True
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+    characters = [s.character for s in sheets]
+    return ConditionInstance.objects.filter(
+        target__in=characters,
+        condition__name=AUDERE_MAJORA_CONDITION_NAME,
     ).exists()
 
 
