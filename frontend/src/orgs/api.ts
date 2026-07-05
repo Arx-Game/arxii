@@ -26,3 +26,17 @@ export async function fetchOrganizationByName(name: string): Promise<Organizatio
   const data = (await res.json()) as PaginatedOrganizations;
   return data.results[0] ?? null;
 }
+
+/**
+ * Fetch a single organization by id, for the org detail stub page (#1446).
+ * GET /api/societies/organizations/{id}/
+ *
+ * Members-only: the backend excludes non-member requesters, so a 404 here is
+ * expected and normal — callers should treat query errors as "render the
+ * not-yet-public placeholder," not a hard failure.
+ */
+export async function fetchOrganizationById(id: number): Promise<Organization> {
+  const res = await apiFetch(`/api/societies/organizations/${id}/`);
+  if (!res.ok) throw new Error('Failed to load organization');
+  return (await res.json()) as Organization;
+}
