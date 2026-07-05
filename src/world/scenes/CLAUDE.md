@@ -175,6 +175,13 @@ Key service functions for scene round lifecycle:
   A single cheap room-bound query short-circuits ordinary rooms. Rescue (the bleed-out cleared via
   `remove_condition`/`perform_treatment`) before either trigger leaves no acute-peril instance, so
   `resolve_abandonment` no-ops — rescue beats the check.
+- `maybe_finish_empty_scene(room, *, leaving=None)` (#1361): the scene-lifecycle
+  sibling of `resolve_solo_abandoned_victims` — finishes the room's active
+  `Scene` (via `finish_scene_full`) once no PC other than `leaving` remains in
+  `room.contents`. Wired into `Room.at_object_leave` (movement) and
+  `Character.at_post_unpuppet` (disconnect, after Evennia's own base-class
+  relocation — see typeclasses/characters.py — has already removed the
+  character from the room).
 - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None`: ensures an active scene round
   for the character's room (enrolling everyone present). When none is active, creates a STRICT
   `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller

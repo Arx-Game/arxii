@@ -473,6 +473,16 @@ from world.scenes.scene_admin_services import finish_scene_full
 finish_scene_full(scene, by_account=None) -> None
 ```
 
+```python
+from world.scenes.round_services import maybe_finish_empty_scene
+
+# Auto-close (#1361): finishes room's active scene via finish_scene_full if no
+# PC other than `leaving` remains in room.contents. No-ops if no active scene.
+# Called from Room.at_object_leave (movement) and Character.at_post_unpuppet
+# (disconnect, after Evennia's own base-class relocation has already run).
+maybe_finish_empty_scene(room, *, leaving=None) -> None
+```
+
 ### Lifecycle Actions
 
 **`StartSceneAction`** (`key="start_scene"`, `src/actions/definitions/scenes.py`)
