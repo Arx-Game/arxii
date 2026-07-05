@@ -7,7 +7,9 @@
  * land in a future phase.
  */
 
+import type { EntitySearchResult } from '@/components/EntitySearchField';
 import { apiFetch } from '@/evennia_replacements/api';
+
 import type {
   BeatView,
   JournalEntry,
@@ -26,6 +28,8 @@ import type {
   PaginatedResponse,
   ResolvedBeat,
 } from './types';
+
+export type { EntitySearchResult };
 
 const BASE_URL = '/api/missions';
 
@@ -379,6 +383,31 @@ export async function patchGiver(
 export async function deleteGiver(id: number): Promise<void> {
   const res = await apiFetch(`${BASE_URL}/givers/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete giver ${id}`);
+}
+
+const GIVER_TARGET_SEARCH_URL = '/api/mission-giver-targets/';
+
+export async function searchMissionGiverTargets(
+  kind: string,
+  query: string
+): Promise<EntitySearchResult[]> {
+  const res = await apiFetch(
+    `${GIVER_TARGET_SEARCH_URL}?kind=${encodeURIComponent(kind)}&search=${encodeURIComponent(query)}`
+  );
+  if (!res.ok) throw new Error('Failed to search mission giver targets');
+  return res.json();
+}
+
+export async function resolveMissionGiverTarget(
+  kind: string,
+  id: number
+): Promise<EntitySearchResult | null> {
+  const res = await apiFetch(
+    `${GIVER_TARGET_SEARCH_URL}?kind=${encodeURIComponent(kind)}&id=${id}`
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to resolve mission giver target');
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------
