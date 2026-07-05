@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
+
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers, status, viewsets
@@ -64,6 +66,9 @@ from world.missions.serializers import (
     MissionCategorySerializer,
     MissionGiverSerializer,
     MissionInstanceSerializer,
+    MissionInviteRequestSerializer,
+    MissionInviteRespondSerializer,
+    MissionInviteResultSerializer,
     MissionNodeSerializer,
     MissionOptionRouteCandidateSerializer,
     MissionOptionRouteRewardSerializer,
@@ -421,6 +426,16 @@ def _puppet_character(request: Request) -> "ObjectDB":
     return puppet
 
 
+def _resolve_character_sheet(character_id: int) -> "CharacterSheet | None":
+    """Resolve a character ObjectDB pk to its ``CharacterSheet`` (#887).
+
+    Returns ``None`` if no CharacterSheet is attached (the caller surfaces 404).
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    return CharacterSheet.objects.filter(pk=character_id).first()
+
+
 class MissionJournalViewSet(viewsets.ViewSet):
     """#885 — the player's mission journal + beat play loop.
 
@@ -654,3 +669,103 @@ class MissionJournalViewSet(viewsets.ViewSet):
         except BeatActionError as exc:
             raise ValidationError(exc.user_message) from exc
         return Response(GroupBeatResultSerializer(result).data)
+
+    @extend_schema(
+        request=MissionInviteRequestSerializer,
+        responses={
+            201: MissionInviteResultSerializer,
+            400: OpenApiResponse(
+                description="Not the contract holder / not active / already a participant."
+            ),
+            404: OpenApiResponse(
+                description="Not a participant / no such mission / no such character."
+            ),
+        },
+    )
+    @action(detail=True, methods=("POST",))
+    def invite(self, request: Request, pk: str | None = None) -> Response:
+        """#887 — invite a co-located character to join this mission run."""
+        from rest_framework.exceptions import NotFound, ValidationError  # noqa: PLC0415
+
+        from world.missions.services.run import InviteError, invite_to_mission  # noqa: PLC0415
+
+        body = MissionInviteRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        instance, character = self._instance_for(request, pk)
+        holder_persona = character.sheet_data.primary_persona
+
+        invitee_sheet = _resolve_character_sheet(body.validated_data["invitee_character_id"])
+        if invitee_sheet is None:
+            msg = "No such character."
+            raise NotFound(msg)
+        invitee_persona = invitee_sheet.primary_persona
+
+        try:
+            invite = invite_to_mission(instance, holder_persona, invitee_persona)
+        except InviteError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(
+            MissionInviteResultSerializer(
+                {
+                    "invite_id": invite.pk,
+                    "response": invite.response,
+                    "instance_id": instance.pk,
+                }
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        request=MissionInviteRespondSerializer,
+        responses={
+            200: MissionInviteResultSerializer,
+            400: OpenApiResponse(description="Already responded / run not active / bad response."),
+            404: OpenApiResponse(description="No such invitation for your persona."),
+        },
+    )
+    @action(detail=False, methods=("POST",), url_path="respond")
+    def respond(self, request: Request) -> Response:
+        """#887 — accept or decline a pending mission invitation.
+
+        The invitee is NOT a participant yet, so this is detail=False with the
+        invite_id in the body (not _instance_for, which would 404).
+        """
+        from rest_framework.exceptions import NotFound, ValidationError  # noqa: PLC0415
+
+        from world.missions.models import MissionInvite  # noqa: PLC0415
+        from world.missions.services.run import (  # noqa: PLC0415
+            InviteError,
+            respond_to_mission_invite,
+        )
+
+        body = MissionInviteRespondSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+
+        character = _puppet_character(request)
+        persona = character.sheet_data.primary_persona
+
+        invite = MissionInvite.objects.filter(
+            pk=body.validated_data["invite_id"], target_persona=persona
+        ).first()
+        if invite is None:
+            msg = "No such invitation for your persona."
+            raise NotFound(msg)
+
+        decision = (
+            MissionInvite.Response.ACCEPTED
+            if body.validated_data["response"] == "accept"  # noqa: STRING_LITERAL
+            else MissionInvite.Response.DECLINED
+        )
+        try:
+            respond_to_mission_invite(invite, decision)
+        except InviteError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(
+            MissionInviteResultSerializer(
+                {
+                    "invite_id": invite.pk,
+                    "response": invite.response,
+                    "instance_id": invite.instance_id,
+                }
+            ).data
+        )
