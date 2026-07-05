@@ -29,6 +29,19 @@ iptables -t mangle -F
 iptables -t mangle -X
 ipset destroy allowed-domains 2>/dev/null || true
 
+# Re-run safety: `iptables -F` clears rules but NOT the default policy. On a
+# fresh container start the policy is ACCEPT, so the pre-lockdown fetches in
+# step 3 (curl to GitHub/Fastly/Cloudflare) work. But when this script is
+# re-run inside an already-firewalled container (e.g. by hand to refresh a
+# stale allowlist), a prior run left OUTPUT/INPUT at DROP — and that DROP
+# silently blocks step 3's own curls, so the script dies at the first fetch
+# AFTER flushing, leaving the container locked out with no allowlist rule
+# installed. Reset both chains to ACCEPT here so setup always starts open;
+# step 4 flips them back to DROP once the allowlist is built. Fail-open during
+# setup only.
+iptables -P INPUT ACCEPT
+iptables -P OUTPUT ACCEPT
+
 # ---------------------------------------------------------------------------
 # 2. Baseline ACCEPT rules (must come before default-deny policies).
 # ---------------------------------------------------------------------------
