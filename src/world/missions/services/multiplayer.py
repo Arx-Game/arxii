@@ -49,6 +49,8 @@ from world.missions.services.resolution import (
     resolve_option,
 )
 from world.missions.services.rewards import emit_candidate_rewards, emit_terminal_rewards
+from world.narrative.constants import NarrativeCategory
+from world.narrative.services import emit_ambient_room_stir, send_narrative_message
 
 if TYPE_CHECKING:
     from world.mechanics.models import ChallengeApproach
@@ -166,7 +168,48 @@ def resolve_group_node(
             option, actor = _tally_group_winner(ballots)
             deeds = _resolve_single_winner(instance, node, presented, option, actor)
         MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
+    # Per-actor STORY + ambient stir (#887). Emitted OUTSIDE the atomic block
+    # so narrative side-effects don't roll back with a partial-resolution retry;
+    # both the play surface and the cron sweep (``resolve_expired_group_votes``)
+    # reach here, so timed-out resolutions emit the same prose.
+    _emit_group_resolution_narrative(instance, presented, deeds)
     return deeds
+
+
+def _emit_group_resolution_narrative(
+    instance: MissionInstance,
+    presented: list[PresentedOption],
+    deeds: list[MissionDeedRecord],
+) -> None:
+    """Per-actor STORY + source-ambiguous ambient stir on group resolution (#887).
+
+    Each acting participant gets their own deed's ``outcome_text`` as a STORY
+    message (the actor/audience split the solo path established at
+    ``resolve_beat_option``). Non-acting participants and room bystanders get
+    the ambient stir. Best-effort and quiet: a sheet-less actor or a run with no
+    anchor room emits nothing.
+    """
+    from world.missions.services.play import _story_text_for  # noqa: PLC0415
+
+    template_name = instance.template.name
+    presented_by_owner_option = {(p.owner.pk, p.option.pk): p for p in presented}
+    for deed in deeds:
+        presented_opt = presented_by_owner_option.get((deed.actor_id, deed.option_id))
+        if presented_opt is None:
+            continue
+        story_text = _story_text_for(presented_opt, deed, template_name)
+        actor = deed.actor
+        sheet = getattr(actor, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        if sheet is not None:
+            send_narrative_message(
+                recipients=[sheet],
+                body=story_text,
+                category=NarrativeCategory.STORY,
+                ooc_note=f"Mission group beat resolved (instance #{instance.pk}).",
+            )
+    anchor_room = instance.anchor_room
+    if anchor_room is not None:
+        emit_ambient_room_stir(anchor_room)
 
 
 def _tally_group_winner(

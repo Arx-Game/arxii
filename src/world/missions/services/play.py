@@ -397,21 +397,49 @@ def _group_beat_view(
 def _resolved_group_result(instance: MissionInstance, character: ObjectDB) -> GroupBeatResult:
     """Build the resolved-beat payload after a group node advances/terminates.
 
-    The per-actor STORY/ambient narrative split is the group-UX concern of
-    #887; this slice surfaces the mechanical result (outcome + next beat). The
-    instance position/status was updated in-place by ``resolve_group_node``.
+    The per-actor STORY/ambient narrative split was emitted inside
+    ``resolve_group_node`` (#887); this builds the requesting character's
+    ``ResolvedBeat``: their own deed's ``outcome_text`` if they acted, else a
+    generic ambient line (they already received the stir). The instance
+    position/status was updated in-place by ``resolve_group_node``.
     """
     is_terminal = instance.current_node_id is None
+    story_text = _group_resolution_story_text(instance, character)
     resolved = ResolvedBeat(
         instance_id=instance.pk,
         outcome_name=None,
-        # PLACEHOLDER — group resolution prose lands with the #887 group beat UX.
-        story_text=f"PLACEHOLDER — {instance.template.name}: the party commits and acts.",
+        story_text=story_text,
         is_terminal=is_terminal,
         next_beat=None if is_terminal else beat_for(instance, character),
         epilogue=instance.template.epilogue if is_terminal else "",
     )
     return GroupBeatResult(group_beat=None, resolved=resolved)
+
+
+def _group_resolution_story_text(instance: MissionInstance, character: ObjectDB) -> str:
+    """The requesting character's STORY prose after a group node resolves (#887).
+
+    If they were an acting participant, their own deed's ``outcome_text``;
+    otherwise a generic ambient line (non-actors received the source-ambiguous
+    stir already).
+    """
+    node = instance.current_node
+    deed_qs = instance.deeds.filter(actor=character)
+    if node is not None:
+        deed_qs = deed_qs.filter(node=node)
+    deed = deed_qs.order_by("-applied_at").first()
+    if deed is None:
+        return f"The party's effort resolves. (Mission #{instance.pk}.)"
+    # The deed's own node is the resolved node (instance.current_node may be
+    # None on a terminal resolution); build the presented list from it.
+    presented = build_group_option_list(instance, deed.node)
+    own_presented = next(
+        (p for p in presented if p.owner.pk == character.pk and p.option.pk == deed.option_id),
+        None,
+    )
+    if own_presented is None:
+        return f"The party's effort resolves. (Mission #{instance.pk}.)"
+    return _story_text_for(own_presented, deed, instance.template.name)
 
 
 def group_beat(instance: MissionInstance, character: ObjectDB) -> GroupBeatResult:
