@@ -24,6 +24,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNPCDependency,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
@@ -34,6 +35,16 @@ from world.stories.models import (
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
+
+
+class StoryNPCDependencyInline(admin.TabularInline):
+    """Inline for declaring story-critical NPCs on a story (#1874)."""
+
+    model = StoryNPCDependency
+    extra = 1
+    fields = ("npc_sheet", "beat", "is_active", "notes", "created_at")
+    readonly_fields = ("created_at",)
+    raw_id_fields = ("npc_sheet", "beat")
 
 
 @admin.register(Story)
@@ -51,6 +62,7 @@ class StoryAdmin(admin.ModelAdmin):
     search_fields = ["title", "description"]
     filter_horizontal = ["owners", "active_gms"]
     readonly_fields = ["created_at", "updated_at"]
+    inlines = [StoryNPCDependencyInline]
 
     fieldsets = (
         (None, {"fields": ("title", "description", "status", "privacy", "scope")}),
