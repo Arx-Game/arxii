@@ -11,6 +11,7 @@ from actions.base import Action
 from actions.constants import ActionCategory
 from actions.definitions.item_helpers import resolve_item_instance
 from actions.prerequisites import (
+    CanStealPrerequisite,
     HoldsItemPrerequisite,
     ItemUsablePrerequisite,
     OnUseTargetPrerequisite,
@@ -20,7 +21,15 @@ from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from flows.service_functions.inventory import equip, put_in, take_out, unequip
+from flows.service_functions.inventory import (
+    equip,
+    put_in,
+    set_container_policy,
+    steal,
+    take_out,
+    unequip,
+)
+from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import InventoryError, ItemError
 from world.items.services.usage import use_item
 
@@ -221,6 +230,112 @@ class TakeOutAction(Action):
             actor_state,
             "$You() $conj(take) {target} out.",
             mapping={"target": item_state},
+        )
+
+        return ActionResult(success=True)
+
+
+@dataclass
+class StealAction(Action):
+    """Take an item that plain take/take_out refuses — with consequences (#1909).
+
+    ``CanStealPrerequisite`` gates availability on the same target-side
+    ``steal_permitted`` predicate the ``steal`` service re-checks at
+    execution time (visibility = eligibility).
+    """
+
+    key: str = "steal"
+    name: str = "Steal"
+    icon: str = "hand-grab"
+    category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    intent_event: str | None = "before_steal"
+    result_event: str | None = "steal"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CanStealPrerequisite()]
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        target = kwargs.get("target")
+        if target is None:
+            return ActionResult(success=False, message="Steal what?")
+
+        item_instance = resolve_item_instance(target)
+        if item_instance is None:
+            return ActionResult(success=False, message="That can't be stolen.")
+
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        item_state = ItemState(item_instance, context=sdm)
+
+        try:
+            steal(actor_state, item_state)
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        message_location(
+            actor_state,
+            "$You() $conj(take) {target}.",
+            mapping={"target": item_state},
+        )
+
+        return ActionResult(success=True)
+
+
+@dataclass
+class SetContainerPolicyAction(Action):
+    """Owner-only: set who may take items out of a container (#1909)."""
+
+    key: str = "set_container_policy"
+    name: str = "Set Container Policy"
+    icon: str = "lock"
+    category: str = "items"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        target = kwargs.get("target")
+        policy = kwargs.get("policy")
+        if target is None or not policy:
+            return ActionResult(success=False, message="Set the access policy on what?")
+
+        item_instance = resolve_item_instance(target)
+        if item_instance is None:
+            return ActionResult(success=False, message="That isn't a container.")
+
+        valid_policies = {choice.value for choice in ContainerAccessPolicy}
+        if policy not in valid_policies:
+            return ActionResult(success=False, message="That's not a valid access policy.")
+
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        container_state = ItemState(item_instance, context=sdm)
+
+        try:
+            set_container_policy(actor_state, container_state, policy)
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        message_location(
+            actor_state,
+            "$You() $conj(set) {container}'s access policy.",
+            mapping={"container": container_state},
         )
 
         return ActionResult(success=True)

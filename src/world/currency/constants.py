@@ -9,6 +9,7 @@ units — see ``world.currency.models.CurrencyInstrumentDetails``.
 """
 
 from decimal import Decimal
+import re
 
 from django.db import models
 
@@ -63,6 +64,35 @@ def format_coppers(amount: int) -> str:
     if not parts:
         return "0c"  # noqa: STRING_LITERAL - display literal, not an identifier
     return sign + " ".join(parts)
+
+
+_COIN_TOKEN = re.compile(r"^(\d+)\s*(g|s|c)$", re.IGNORECASE)
+
+_UNIT_COPPERS = {"g": COPPERS_PER_GOLD, "s": COPPERS_PER_SILVER, "c": 1}
+
+
+def parse_coppers(text: str) -> int | None:
+    """Parse "1g 2s 3c"-style amounts to coppers; None when it isn't money.
+
+    Tokens may appear in any order, case-insensitively, but each unit
+    (g/s/c) may only appear once. Rejects item-ish text (no unit match),
+    negative amounts (the regex has no sign), and an all-zero total.
+    """
+    tokens = text.strip().split()
+    if not tokens:
+        return None
+    total = 0
+    seen: set[str] = set()
+    for token in tokens:
+        match = _COIN_TOKEN.match(token)
+        if match is None:
+            return None
+        unit = match.group(2).lower()
+        if unit in seen:
+            return None
+        seen.add(unit)
+        total += int(match.group(1)) * _UNIT_COPPERS[unit]
+    return total if total > 0 else None
 
 
 class IncomeStreamKind(models.TextChoices):
