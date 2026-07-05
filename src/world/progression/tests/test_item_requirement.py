@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.classes.factories import CharacterClassFactory
+from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
@@ -15,6 +15,10 @@ from world.magic.factories import (
     ResonanceTierFactory,
 )
 from world.progression.models import ClassLevelUnlock, ItemRequirement
+from world.progression.services.spends import (
+    check_requirements_for_unlock,
+    get_available_unlocks_for_character,
+)
 
 
 class ItemRequirementConstraintTests(TestCase):
@@ -187,3 +191,49 @@ class ItemRequirementTouchstoneModePossessionTests(TestCase):
         )
         met, _message = req.is_met_by_character(self.character)
         assert met is False
+
+
+class ItemRequirementWiringTests(TestCase):
+    """Proves ItemRequirement reaches check_requirements_for_unlock's real callers."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character_class = CharacterClassFactory()
+        cls.unlock = ClassLevelUnlock.objects.create(
+            character_class=cls.character_class, target_level=4
+        )
+        cls.template = ItemTemplateFactory()
+        ItemRequirement.objects.create(
+            class_level_unlock=cls.unlock, item_template=cls.template, quantity=1
+        )
+
+    def setUp(self) -> None:
+        self.character = CharacterFactory()
+        self.sheet = CharacterSheetFactory(character=self.character)
+        CharacterClassLevelFactory(
+            character=self.character,
+            character_class=self.character_class,
+            level=3,
+            is_primary=True,
+        )
+
+    def test_check_requirements_for_unlock_blocks_without_item(self) -> None:
+        met, failed = check_requirements_for_unlock(self.character, self.unlock)
+        assert met is False
+        assert any("Need 1x" in msg for msg in failed)
+
+    def test_check_requirements_for_unlock_passes_with_item(self) -> None:
+        ItemInstanceFactory(template=self.template, holder_character_sheet=self.sheet)
+        met, failed = check_requirements_for_unlock(self.character, self.unlock)
+        assert met is True
+        assert failed == []
+
+    def test_get_available_unlocks_surfaces_locked_reason(self) -> None:
+        result = get_available_unlocks_for_character(self.character)
+        locked_entry = next(
+            e
+            for e in result["locked"]
+            if e["unlock"].character_class_id == self.character_class.pk
+            and e["unlock"].target_level == 4
+        )
+        assert any("Need 1x" in msg for msg in locked_entry["failed_requirements"])
