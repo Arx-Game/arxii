@@ -356,3 +356,40 @@ class GroupVoteRegressionTests(TestCase):
         self.assertIsNotNone(res.resolved)
         instance.refresh_from_db()
         self.assertEqual(instance.current_node_id, dest.pk)
+
+
+class GroupVotePauseGateTests(TestCase):
+    """Regression (#1899 whole-branch review): the play-surface ``is not None``
+    ⇔ "really resolved" contract must hold under pause.
+
+    ``resolve_group_node`` returns ``[]`` (not ``None``) when the instance is
+    paused — a sentinel needed by the cron sweep, which calls it directly.
+    Before the fix, ``_resolve_group_if_ready``/``_resolve_if_expired`` passed
+    that ``[]`` straight through to their callers, and every play-surface
+    caller (``group_beat``/``submit_group_pick``/``cast_group_vote``) treats
+    any non-None return as "the beat resolved" — so a paused instance whose
+    ballots satisfied the ready condition would falsely tell the still-connected
+    co-participant the beat resolved, even though the mission is frozen.
+    """
+
+    def test_paused_instance_cast_group_vote_reports_not_resolved(self):
+        instance, holder, p2, opt_a, _opt_b, _dest_a, _dest_b = _group("pause-vote")
+        entry_node_id = instance.current_node_id
+        # Both pick, opening the vote phase — resolution WOULD fire once both
+        # vote, absent the pause.
+        submit_group_pick(instance, holder, option_id=opt_a.pk)
+        submit_group_pick(instance, p2, option_id=opt_a.pk)
+        instance.is_paused = True
+        instance.save(update_fields=["is_paused"])
+
+        cast_group_vote(instance, holder, option_id=opt_a.pk)
+        res = cast_group_vote(instance, p2, option_id=opt_a.pk)  # all voted → would resolve
+
+        # The correct branch is "not ready yet" (group_beat set), NOT "resolved".
+        self.assertIsNone(res.resolved)
+        self.assertIsNotNone(res.group_beat)
+        # The mission never actually advanced, and the ballots survive
+        # untouched (resolve_group_node's atomic resolve+delete never ran).
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node_id, entry_node_id)
+        self.assertTrue(MissionGroupBallot.objects.filter(instance=instance).exists())

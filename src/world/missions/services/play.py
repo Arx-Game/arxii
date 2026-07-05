@@ -314,7 +314,19 @@ def _resolve_group_if_ready(
     "Done" is mode-specific: GROUP_VOTE needs every participant to have *voted*
     (stage 2); JOINT has no vote stage, so it resolves once every participant has
     *picked*. The timeout backstops both.
+
+    Paused instances short-circuit to None BEFORE ever calling
+    ``resolve_group_node`` (#1899 whole-branch review). ``resolve_group_node``
+    itself also returns ``[]`` when paused (for the cron sweep, which calls it
+    directly and only cares "did anything resolve"), but ``[] is not None`` —
+    every one of this module's five play-surface callers treats a non-None
+    return as "the beat really resolved." Without this early return, a paused
+    instance whose ballots satisfy the ready condition would fool the caller
+    into telling the player the beat resolved, when the mission is actually
+    frozen.
     """
+    if instance.is_paused:
+        return None
     ballots = MissionGroupBallot.objects.filter(instance=instance, node=node)
     if not ballots.exists():
         return None
@@ -342,7 +354,12 @@ def _resolve_if_expired(
     before it's even recorded, so the only reason to resolve up front is a window
     that already expired (someone returning after the party left). The full
     readiness check (``_resolve_group_if_ready``) runs after the write.
+
+    Paused instances short-circuit to None first — see ``_resolve_group_if_ready``'s
+    docstring for why this must happen before ``resolve_group_node`` is ever reached.
     """
+    if instance.is_paused:
+        return None
     deadline = _group_window_deadline(instance, node)
     if deadline is not None and timezone.now() >= deadline:
         return resolve_group_node(instance, node)

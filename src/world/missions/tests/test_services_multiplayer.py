@@ -934,11 +934,14 @@ class ResolveGroupIfReadyPauseGateTests(TestCase, _PausableJointNodeMixin):
 
         # Every participant has picked (JOINT "unanimity"), so absent the pause
         # gate this would resolve via ``resolve_group_node`` and return deeds.
-        # The gate makes ``resolve_group_node`` short-circuit to ``[]`` instead
-        # of ``None`` — the "not ready yet" sentinel — because the call still
-        # reaches (and returns from) ``resolve_group_node``; what matters is
-        # that no deeds were produced and the ballot survives untouched.
-        assert result == []
+        # Regression (#1899 whole-branch review): ``_resolve_group_if_ready``
+        # must short-circuit to ``None`` — the "not ready yet" sentinel every
+        # play-surface caller (group_beat/submit_group_pick/cast_group_vote)
+        # relies on — BEFORE ever calling ``resolve_group_node``. Previously
+        # this returned resolve_group_node's own ``[]`` pause sentinel, which
+        # is ``not None`` and so every caller wrongly reported the beat as
+        # resolved. The ballot must also survive untouched either way.
+        assert result is None
         assert MissionGroupBallot.objects.filter(pk=ballot.pk).exists()  # not resolved/deleted
 
 
