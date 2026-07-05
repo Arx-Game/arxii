@@ -855,3 +855,112 @@ class GroupOptionListLocationTests(TestCase):
         presented = build_group_option_list(instance, node)
         owners = {entry.owner for entry in presented if entry.option == option}
         self.assertEqual(owners, {char_a, char_b})
+
+
+class ResolveGroupNodePauseGateTests(TestCase):
+    """The pause gate (#1899) is the first line of ``resolve_group_node`` —
+    both the lazy on-access path and the cron backstop sweep call into this
+    single function, so gating here covers both callers.
+    """
+
+    def test_paused_instance_returns_empty_list(self) -> None:
+        instance = MissionInstanceFactory(is_paused=True)
+        node = MissionNodeFactory()
+
+        result = resolve_group_node(instance, node)
+
+        assert result == []
+
+    def test_unpaused_instance_with_no_ballots_returns_empty_list(self) -> None:
+        """Baseline: confirms the pause check doesn't break the pre-existing
+        no-ballots-means-nothing-to-resolve behavior."""
+        instance = MissionInstanceFactory(is_paused=False)
+        node = MissionNodeFactory()
+
+        result = resolve_group_node(instance, node)
+
+        assert result == []
+
+
+class _PausableJointNodeMixin:
+    """Builds a JOINT node whose single-participant pick WOULD fully resolve
+    (CHECK option + outcome-tier route + patched perform_check) when unpaused.
+
+    Deviation from the task-10 brief's literal snippet: the brief's
+    ``MissionOptionFactory(node=node)`` default (a BRANCH/AUTHORED option with
+    no routes) can never reach ``_combined_route`` successfully under JOINT —
+    it raises ``ValueError`` ("route-set incompleteness") before the pause
+    gate is even relevant, which would make the failing-test step fail for
+    the wrong reason and the passing-test step trivially/coincidentally
+    "pass" without the gate doing any work. This mixin gives JOINT a resolvable
+    CHECK option + route so the *only* thing standing between "ballot intact"
+    and "ballot resolved+deleted" is the pause gate itself.
+    """
+
+    def _build_pausable_joint_fixture(self, *, is_paused: bool):
+        template = MissionTemplateFactory(name=f"pause-gate-{is_paused}")
+        success = CheckOutcomeFactory(name=f"PauseGateSuccess-{is_paused}", success_level=3)
+        check_type = CheckTypeFactory(name=f"PauseGateCheck-{is_paused}")
+        win_node = MissionNodeFactory(template=template, key="win")
+        node = MissionNodeFactory(
+            template=template,
+            key="joint",
+            conflict_mode=ConflictMode.JOINT,
+            joint_combine=JointCombine.ANY,
+        )
+        option = MissionOptionFactory(
+            node=node,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=check_type,
+        )
+        MissionOptionRouteFactory(option=option, outcome_tier=success, target_node=win_node)
+        instance = MissionInstanceFactory(template=template, is_paused=is_paused)
+        participant = MissionParticipantFactory(instance=instance, is_contract_holder=True)
+        ballot = MissionGroupBallot.objects.create(
+            instance=instance, node=node, participant=participant, picked_option=option
+        )
+        return instance, node, ballot, success
+
+
+class ResolveGroupIfReadyPauseGateTests(TestCase, _PausableJointNodeMixin):
+    def test_paused_instance_never_resolves_via_unanimity_path(self) -> None:
+        from world.missions.services.play import _resolve_group_if_ready
+
+        instance, node, ballot, success = self._build_pausable_joint_fixture(is_paused=True)
+
+        with patch(_PERFORM_CHECK, return_value=_result_for(None, success)):
+            result = _resolve_group_if_ready(instance, node)
+
+        # Every participant has picked (JOINT "unanimity"), so absent the pause
+        # gate this would resolve via ``resolve_group_node`` and return deeds.
+        # The gate makes ``resolve_group_node`` short-circuit to ``[]`` instead
+        # of ``None`` — the "not ready yet" sentinel — because the call still
+        # reaches (and returns from) ``resolve_group_node``; what matters is
+        # that no deeds were produced and the ballot survives untouched.
+        assert result == []
+        assert MissionGroupBallot.objects.filter(pk=ballot.pk).exists()  # not resolved/deleted
+
+
+class ResolveExpiredGroupVotesPauseGateTests(TestCase, _PausableJointNodeMixin):
+    def test_paused_instance_not_resolved_by_cron_sweep(self) -> None:
+        """Regression (#1899 spec review): the cron sweep bypasses
+        _resolve_group_if_ready entirely and calls resolve_group_node
+        directly — must be covered by the same gate."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.missions.constants import GROUP_VOTE_TIMEOUT_SECONDS
+        from world.missions.services.cron import resolve_expired_group_votes
+
+        instance, node, ballot, success = self._build_pausable_joint_fixture(is_paused=True)
+        instance.current_node = node
+        instance.save(update_fields=["current_node"])
+        ballot.created_at = timezone.now() - timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS + 60)
+        ballot.save(update_fields=["created_at"])
+
+        with patch(_PERFORM_CHECK, return_value=_result_for(None, success)):
+            resolve_expired_group_votes()
+
+        assert MissionGroupBallot.objects.filter(pk=ballot.pk).exists()  # not resolved/deleted
