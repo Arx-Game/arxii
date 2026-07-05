@@ -277,6 +277,11 @@ to enhance mundane social actions with magical techniques.
 ### Phase 5.7: Situation Runtime
 The Situation and Challenge models exist but there is no runtime lifecycle.
 
+**Traps: solved (#1625).** `SituationTrapLink` + `instantiate_situation()`
+(`world/mechanics/situation_services.py`) mint authored traps into real
+`room_features.Trap` rows. The remaining open questions below are about
+Challenges and the runtime trigger mechanism, not traps.
+
 **Needs design (open question #5):**
 - When and how SituationInstances are created (GM trigger? event-driven? room entry?)
 - How Challenges are revealed to players (all visible? progressive discovery?)

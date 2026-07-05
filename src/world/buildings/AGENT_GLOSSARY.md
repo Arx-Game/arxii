@@ -51,6 +51,16 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   tags (see `BuildingKind`), so single-flag deltas are out of scope. Slice #1
   of epic #673. _Avoid:_ reclassify (ambiguous); use "renovation" for the
   catalog-kind swap specifically.
+- **Building Upgrade** — the `BUILDING_UPGRADE` project kind (#1888):
+  bumps an existing Building's `target_size` up to a higher tier on
+  completion and re-snapshots `space_budget` from the `BuildingSizeTier`
+  table (e.g. tier-3 House → tier-4 Manor grows the budget from 250 to 600).
+  Funded, owner-gated, `SINGLE_THRESHOLD`. Monotonic max-set (mirrors
+  `FORTIFICATION_UPGRADE`): `target_size = max(current, new_target_size)`,
+  so a late-completing lower-target upgrade never regresses the size.
+  Does not change `Building.kind` (use `BUILDING_RENOVATION` for that).
+  _Avoid:_ size extension (that's `BUILDING_EXTENSION`, which adds flat
+  budget units without changing the tier).
 - **Interior Design (commission)** — the `INTERIOR_DESIGN` project kind:
   commission an admin-authored polish `ProjectTemplate` against the building or
   one room; completion applies the template's polish increments. _Avoid:_

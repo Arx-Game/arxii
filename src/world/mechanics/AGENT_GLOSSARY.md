@@ -31,3 +31,11 @@ _Avoid_: object flag, object tag, attribute row
 **Approach**:
 A way to resolve a challenge (`ChallengeApproach`), connecting what a character can do (an `Application`) with how it is rolled (a `CheckType`) for a specific challenge template, optionally gated by a required effect property.
 _Avoid_: method, tactic, option, resolution path
+
+**SituationTrapLink**:
+An authored trap blueprint carried by a `SituationTemplate` — name, consequence
+pool, detect/disarm check types and difficulties, hidden/obvious default.
+Materialized into a real `room_features.Trap` row by `instantiate_situation`;
+carries no runtime state (no armed/detected/position — those are fresh per
+instantiated Trap).
+_Avoid_: trap template, trap blueprint (as a class name), situation trap

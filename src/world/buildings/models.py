@@ -616,6 +616,53 @@ class BuildingRenovationDetails(SharedMemoryModel):
         return f"Renovation -> kind {self.target_kind_id} for building {self.building_id}"
 
 
+class BuildingUpgradeDetails(SharedMemoryModel):
+    """Per-(BUILDING_UPGRADE Project) details payload (#1888).
+
+    Bumps an existing Building's ``target_size`` up to a higher tier on
+    completion and re-snapshots ``space_budget`` from the
+    ``BuildingSizeTier`` table — e.g. upgrading a tier-3 House to a tier-4
+    Manor grows the space budget from 250 to 600. Larger material/labor cost
+    than ``BUILDING_EXTENSION``; prestige uplift. Does not change the
+    building's ``kind`` (use ``BUILDING_RENOVATION`` for that).
+
+    Monotonic max-set semantics on completion (mirrors
+    ``FortificationUpgradeDetails``): the handler sets
+    ``building.target_size = max(current, new_target_size)`` so a lower-target
+    upgrade completing after a higher one doesn't regress the size.
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="building_upgrade_details",
+        primary_key=True,
+    )
+    building = models.ForeignKey(
+        "buildings.Building",
+        on_delete=models.CASCADE,
+        related_name="upgrade_details",
+    )
+    new_target_size = models.PositiveSmallIntegerField(
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(room_constants.MAX_BUILDING_SIZE_TIER),
+        ],
+        help_text="Size tier this upgrade targets on completion.",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the size was applied; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Building upgrade details"
+
+    def __str__(self) -> str:
+        return f"Upgrade -> size {self.new_target_size} for building {self.building_id}"
+
+
 class InteriorDesignDetails(SharedMemoryModel):
     """Per-(INTERIOR_DESIGN Project) details payload (#670).
 

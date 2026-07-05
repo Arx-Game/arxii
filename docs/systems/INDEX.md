@@ -1576,7 +1576,8 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   capped at `MAX_FORTIFICATION_LEVEL`), `BuildingMaterial`
   (per-building snapshot of materials used at construction), `MaterialLoreEffect`
   (per-template special properties — godswar stone → resonance_amp etc.; zero
-  rows shipped, content-authored), `BuildingPermitDetails` (persona-scoped permit
+  rows shipped; content-authored via the `MaterialLoreEffectAdmin` Django admin
+  registration, #695), `BuildingPermitDetails` (persona-scoped permit
   holder, building_kind + approved_wards M2M), `BuildingConstructionDetails`
   (Project per-kind payload for BUILDING_CONSTRUCTION),
   `BuildingExtensionDetails` (#670: BUILDING_EXTENSION payload — `added_budget`,
@@ -1697,8 +1698,9 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   the BuildingPermit ItemTemplate + House BuildingKind + wires House onto
   Builders Guild Clerk PERMIT offers). NOT a committed fixture (per #683).
 - **Out of scope, filed as followups:** BuildingKind catalog expansion (#694),
-  MaterialLoreEffect content authoring (#695), Building → Neighborhood → Domain
-  progression (#696), BUILDING_RENOVATION / BUILDING_UPGRADE project kinds
+  MaterialLoreEffect catalog content — authoring surface shipped in #695;
+  ongoing staff content authoring, not a code task — Building → Neighborhood →
+  Domain progression (#696), BUILDING_RENOVATION / BUILDING_UPGRADE project kinds
   (#673; EXTENSION + INTERIOR_DESIGN shipped with #670).
 - **Cross-app dependencies:** `world.areas` (Area + AreaClosure + ward fields),
   `world.items` (ItemTemplate + ItemInstance + OwnershipEvent + `lore_value`),
@@ -1997,8 +1999,11 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793)
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
 - **Key Functions:**
+  - `instantiate_situation(template, location) -> SituationInstance` (#1625) — mints
+    a SituationInstance + materializes its SituationTrapLink rows into Trap rows.
+    Traps only; does not mint ChallengeInstances (see mechanics.md Situation System).
   - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
     rows for a target's active `Property` set; folded into combat technique damage in
     `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)
