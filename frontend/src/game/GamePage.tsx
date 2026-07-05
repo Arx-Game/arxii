@@ -9,6 +9,7 @@ import { PresencePanel } from './components/PresencePanel';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { StoryTray } from '@/missions/components/StoryTray';
 import { StatusPanel } from '@/status/components/StatusPanel';
+import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Toaster } from '@/components/ui/sonner';
@@ -96,6 +97,11 @@ export function GamePage() {
             presencePanel={<PresencePanel />}
             statusPanel={
               activeCharacterId ? <StatusPanel characterId={activeCharacterId} /> : undefined
+            }
+            inventoryPanel={
+              activeCharacterId ? (
+                <InventorySidebarPanel characterId={activeCharacterId} />
+              ) : undefined
             }
           />
         }
