@@ -2,9 +2,13 @@
 
 Thin wrappers over ``world.items.services.crafting``/``world.items.services
 .facets`` — the same service functions ``ItemFacetViewSet``/
-``ItemStyleCraftViewSet`` call. No new business logic; domain exceptions
-raised by the service layer are translated to failure ``ActionResult``s
-(mirrors the ViewSets' own exception handling) rather than propagating.
+``ItemStyleCraftViewSet`` call. Operate directly on ``ItemInstance``
+(never a physical ``ObjectDB``) — crafting's ownership model is
+body/tenure-keyed (``OwnsItemInstancePrerequisite``), matching
+``_user_holds_item`` in ``world/items/views.py``, not physical possession.
+Domain exceptions raised by the service layer are translated to failure
+``ActionResult``s (mirrors the ViewSets' own exception handling) rather
+than propagating.
 """
 
 from __future__ import annotations
@@ -13,8 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from actions.base import Action
-from actions.definitions.item_helpers import resolve_item_instance
-from actions.prerequisites import HoldsItemPrerequisite, Prerequisite
+from actions.prerequisites import OwnsItemInstancePrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 from world.items.exceptions import (
     CraftingCostUnaffordable,
@@ -34,7 +37,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
-    from world.items.models import ItemFacet
+    from world.items.models import ItemFacet, ItemInstance
     from world.magic.models import Facet
 
 _CRAFT_EXCEPTIONS = (
@@ -60,7 +63,7 @@ class AttachFacetAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [HoldsItemPrerequisite()]
+        return [OwnsItemInstancePrerequisite()]
 
     def execute(
         self,
@@ -68,18 +71,15 @@ class AttachFacetAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        item_obj = kwargs.get("item")
+        item_instance: ItemInstance | None = kwargs.get("item_instance")
         facet: Facet | None = kwargs.get("facet")
-        if item_obj is None or facet is None:
+        if item_instance is None or facet is None:
             return ActionResult(success=False, message="Attach what facet, to what item?")
-        instance = resolve_item_instance(item_obj)
-        if instance is None:
-            return ActionResult(success=False, message="That isn't an item.")
         try:
             result = craft_attach_facet(
                 crafter_account=cast("AccountDB", actor.account),
                 crafter_character=actor,
-                item_instance=instance,
+                item_instance=item_instance,
                 facet=facet,
             )
         except _CRAFT_EXCEPTIONS as exc:
@@ -98,7 +98,7 @@ class DetachFacetAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [HoldsItemPrerequisite()]
+        return [OwnsItemInstancePrerequisite()]
 
     def execute(
         self,
@@ -129,7 +129,7 @@ class AttachStyleAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [HoldsItemPrerequisite()]
+        return [OwnsItemInstancePrerequisite()]
 
     def execute(
         self,
@@ -137,18 +137,15 @@ class AttachStyleAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        item_obj = kwargs.get("item")
+        item_instance: ItemInstance | None = kwargs.get("item_instance")
         style = kwargs.get("style")
-        if item_obj is None or style is None:
+        if item_instance is None or style is None:
             return ActionResult(success=False, message="Attach what style, to what item?")
-        instance = resolve_item_instance(item_obj)
-        if instance is None:
-            return ActionResult(success=False, message="That isn't an item.")
         try:
             result = craft_attach_style(
                 crafter_account=cast("AccountDB", actor.account),
                 crafter_character=actor,
-                item_instance=instance,
+                item_instance=item_instance,
                 style=style,
             )
         except _CRAFT_EXCEPTIONS as exc:

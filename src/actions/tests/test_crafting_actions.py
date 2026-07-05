@@ -27,18 +27,11 @@ class AttachFacetActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="AttachFacetSword")
-        item_obj = ObjectDBFactory(
-            db_key="AttachFacetSwordObj", db_typeclass_path="typeclasses.objects.Object"
-        )
-        item_obj.location = actor
-        item_obj.save()
-        instance = ItemInstanceFactory(
-            template=template, holder_character_sheet=sheet, game_object=item_obj
-        )
-        return actor, instance, item_obj
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
+        return actor, instance
 
     def test_attach_facet_success(self):
-        actor, instance, item_obj = self._actor_and_item()
+        actor, instance = self._actor_and_item()
         facet = object()  # stand-in Facet; craft_attach_facet is mocked below
         result = FacetCraftResult(
             attached=True,
@@ -51,7 +44,9 @@ class AttachFacetActionTests(TestCase):
         with patch(
             "actions.definitions.crafting.craft_attach_facet", return_value=result
         ) as mocked:
-            action_result = AttachFacetAction().run(actor=actor, item=item_obj, facet=facet)
+            action_result = AttachFacetAction().run(
+                actor=actor, item_instance=instance, facet=facet
+            )
         assert action_result.success
         assert action_result.data["result"] is result
         mocked.assert_called_once()
@@ -62,32 +57,31 @@ class AttachFacetActionTests(TestCase):
         room = ObjectDBFactory(
             db_key="AttachFacetRoom2", db_typeclass_path="typeclasses.rooms.Room"
         )
-        other_room = ObjectDBFactory(
-            db_key="AttachFacetOtherRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
         account = AccountFactory(username="attach_facet_account_2")
         actor = CharacterFactory(db_key="AttachFacetBob", location=room)
         actor.db_account = account
         actor.save()
         CharacterSheetFactory(character=actor)
+        other_account = AccountFactory(username="attach_facet_account_2_other")
+        other_actor = CharacterFactory(db_key="AttachFacetOtherOwner", location=room)
+        other_actor.db_account = other_account
+        other_actor.save()
+        other_sheet = CharacterSheetFactory(character=other_actor)
         template = ItemTemplateFactory(name="AttachFacetElsewhereSword")
-        item_obj = ObjectDBFactory(
-            db_key="AttachFacetElsewhereSwordObj", db_typeclass_path="typeclasses.objects.Object"
-        )
-        item_obj.location = other_room
-        item_obj.save()
-        ItemInstanceFactory(template=template, game_object=item_obj)
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=other_sheet)
 
-        action_result = AttachFacetAction().run(actor=actor, item=item_obj, facet=object())
+        action_result = AttachFacetAction().run(actor=actor, item_instance=instance, facet=object())
         assert not action_result.success
 
     def test_attach_facet_translates_domain_exception(self):
-        actor, _instance, item_obj = self._actor_and_item()
+        actor, instance = self._actor_and_item()
         with patch(
             "actions.definitions.crafting.craft_attach_facet",
             side_effect=FacetAlreadyAttached("already attached"),
         ):
-            action_result = AttachFacetAction().run(actor=actor, item=item_obj, facet=object())
+            action_result = AttachFacetAction().run(
+                actor=actor, item_instance=instance, facet=object()
+            )
         assert not action_result.success
         assert action_result.message
 
@@ -101,12 +95,7 @@ class AttachStyleActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="AttachStyleCoat")
-        item_obj = ObjectDBFactory(
-            db_key="AttachStyleCoatObj", db_typeclass_path="typeclasses.objects.Object"
-        )
-        item_obj.location = actor
-        item_obj.save()
-        ItemInstanceFactory(template=template, holder_character_sheet=sheet, game_object=item_obj)
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
         result = StyleCraftResult(
             attached=True,
             outcome=None,
@@ -118,7 +107,9 @@ class AttachStyleActionTests(TestCase):
         with patch(
             "actions.definitions.crafting.craft_attach_style", return_value=result
         ) as mocked:
-            action_result = AttachStyleAction().run(actor=actor, item=item_obj, style=object())
+            action_result = AttachStyleAction().run(
+                actor=actor, item_instance=instance, style=object()
+            )
         assert action_result.success
         assert action_result.data["result"] is result
         mocked.assert_called_once()
@@ -127,28 +118,23 @@ class AttachStyleActionTests(TestCase):
 class DetachFacetActionTests(TestCase):
     def test_detach_facet_requires_holding_item(self):
         room = ObjectDBFactory(db_key="DetachFacetRoom", db_typeclass_path="typeclasses.rooms.Room")
-        other_room = ObjectDBFactory(
-            db_key="DetachFacetOtherRoom", db_typeclass_path="typeclasses.rooms.Room"
-        )
         account = AccountFactory(username="detach_facet_account")
         actor = CharacterFactory(db_key="DetachFacetAlice", location=room)
         actor.db_account = account
         actor.save()
         CharacterSheetFactory(character=actor)
+        other_account = AccountFactory(username="detach_facet_account_other")
+        other_actor = CharacterFactory(db_key="DetachFacetOtherOwner", location=room)
+        other_actor.db_account = other_account
+        other_actor.save()
+        other_sheet = CharacterSheetFactory(character=other_actor)
         template = ItemTemplateFactory(name="DetachFacetShield")
-        item_obj = ObjectDBFactory(
-            db_key="DetachFacetShieldObj", db_typeclass_path="typeclasses.objects.Object"
-        )
-        item_obj.location = other_room
-        item_obj.save()
-        instance = ItemInstanceFactory(template=template, game_object=item_obj)
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=other_sheet)
 
         class _FakeItemFacet:
             item_instance = instance
 
-        action_result = DetachFacetAction().run(
-            actor=actor, item=item_obj, item_facet=_FakeItemFacet()
-        )
+        action_result = DetachFacetAction().run(actor=actor, item_facet=_FakeItemFacet())
         assert not action_result.success
 
     def test_detach_facet_success(self):
@@ -161,22 +147,13 @@ class DetachFacetActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="DetachFacetSword")
-        item_obj = ObjectDBFactory(
-            db_key="DetachFacetSwordObj", db_typeclass_path="typeclasses.objects.Object"
-        )
-        item_obj.location = actor
-        item_obj.save()
-        instance = ItemInstanceFactory(
-            template=template, holder_character_sheet=sheet, game_object=item_obj
-        )
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
 
         class _FakeItemFacet:
             item_instance = instance
 
         item_facet = _FakeItemFacet()
         with patch("actions.definitions.crafting.remove_facet_from_item") as mocked:
-            action_result = DetachFacetAction().run(
-                actor=actor, item=item_obj, item_facet=item_facet
-            )
+            action_result = DetachFacetAction().run(actor=actor, item_facet=item_facet)
         assert action_result.success
         mocked.assert_called_once_with(item_facet=item_facet)

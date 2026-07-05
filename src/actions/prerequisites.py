@@ -205,6 +205,42 @@ class HoldsItemPrerequisite(Prerequisite):
         return True, ""
 
 
+@dataclass
+class OwnsItemInstancePrerequisite(Prerequisite):
+    """The actor's own CharacterSheet must be the item's holder.
+
+    Body/tenure-keyed ownership (mirrors ``_user_holds_item`` in
+    ``world.items.views``) — the item need not exist as a physical ObjectDB
+    in the world; crafting operates on ``ItemInstance`` directly. Reads
+    ``item_instance`` from kwargs, or derives it from ``item_facet`` when
+    only that's present (the detach path).
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        item_instance = kwargs.get("item_instance")
+        if item_instance is None:
+            item_facet = kwargs.get("item_facet")
+            if item_facet is not None:
+                item_instance = item_facet.item_instance
+        if item_instance is None:
+            return False, "Use what?"
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "You aren't holding that."
+        if item_instance.holder_character_sheet_id != sheet.pk:
+            return False, "You aren't holding that."
+        return True, ""
+
+
 def _is_visible_to(actor, target) -> bool:
     """Whether ``actor`` can perceive ``target``.
 
