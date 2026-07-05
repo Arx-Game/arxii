@@ -181,7 +181,12 @@ Key service functions for scene round lifecycle:
   `room.contents`. Wired into `Room.at_object_leave` (movement) and
   `Character.at_post_unpuppet` (disconnect, after Evennia's own base-class
   relocation — see typeclasses/characters.py — has already removed the
-  character from the room).
+  character from the room). **Skips** any scene with a live (`completed_at`/
+  `concluded_at` is null) `CombatEncounter` or `Battle` attached — that
+  scene's lifecycle belongs to the encounter/battle outcome, not room
+  emptiness, and such scenes lack the account/participant data
+  `finish_scene_full`'s broadcast step needs (a real CI-caught crash, not a
+  theoretical concern). Follow-up: #1899 (combat/mission disconnect policy).
 - `ensure_round_for_acute_condition(character_sheet) -> SceneRound | None`: ensures an active scene round
   for the character's room (enrolling everyone present). When none is active, creates a STRICT
   `SceneRound(start_reason=DANGER)`; when one already exists (any mode), the peril rides it. Caller

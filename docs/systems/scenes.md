@@ -478,6 +478,9 @@ from world.scenes.round_services import maybe_finish_empty_scene
 
 # Auto-close (#1361): finishes room's active scene via finish_scene_full if no
 # PC other than `leaving` remains in room.contents. No-ops if no active scene.
+# Skips a scene with a live CombatEncounter/Battle attached (that scene's
+# lifecycle belongs to the encounter/battle outcome, not room emptiness — and
+# such scenes lack the account/participant data finish_scene_full needs).
 # Called from Room.at_object_leave (movement) and Character.at_post_unpuppet
 # (disconnect, after Evennia's own base-class relocation has already run).
 maybe_finish_empty_scene(room, *, leaving=None) -> None
