@@ -878,8 +878,9 @@ def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     if not targets:
         return
 
-    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
-    if template is None:
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
         return
 
     for target in targets:
@@ -1019,8 +1020,9 @@ def _advance_surrounded_participants(
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
     from world.vitals.services import advance_surrounded  # noqa: PLC0415
 
-    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
-    if template is None:
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
         return  # seeding gap — nothing to advance
 
     participants = BattleParticipant.objects.filter(
