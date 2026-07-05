@@ -94,6 +94,7 @@ from commands.relationships import CmdRelationship
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
+from commands.setsituation import CmdSetSituation
 from commands.setstage import CmdSetStage
 from commands.ships import CmdShip
 from commands.signature import CmdSignature
@@ -278,6 +279,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdRoom,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.
             CmdSetStage,
+            # #1895 — staff set-situation: instantiate a SituationTemplate into the room.
+            CmdSetSituation,
             # #1514 — in-room comfort/weather readout (the mechanical surface).
             CmdComfort,
             # #1522 — IC time + local weather readout (`time`/`weather`).

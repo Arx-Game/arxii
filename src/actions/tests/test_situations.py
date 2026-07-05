@@ -4,8 +4,8 @@ from django.test import TestCase
 from evennia import create_object
 
 from actions.definitions.situations import SetSituationAction
-from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.mechanics.factories import SituationTemplateFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from world.mechanics.factories import SituationTemplateFactory, SituationTrapLinkFactory
 from world.mechanics.models import SituationInstance
 
 
@@ -64,4 +64,21 @@ class SetSituationActionTest(TestCase):
         result = action.run(actor, situation_template_id=template.pk)
 
         assert result.success is False
+        assert SituationInstance.objects.filter(template=template).count() == 0
+
+    def test_missing_room_profile_with_trap_link_fails_cleanly(self) -> None:
+        """A trap-link-bearing template in a room with no RoomProfile should fail
+        cleanly (#1895 Finding 2), not raise ObjectDoesNotExist unhandled."""
+        action = SetSituationAction()
+        account = AccountFactory(is_staff=True)
+        bare_location = ObjectDBFactory()
+        actor = CharacterFactory(db_key="stager-no-profile", location=bare_location)
+        actor.db_account = account
+        template = SituationTemplateFactory()
+        SituationTrapLinkFactory(situation_template=template)
+
+        result = action.run(actor, situation_template_id=template.pk)
+
+        assert result.success is False
+        assert result.message
         assert SituationInstance.objects.filter(template=template).count() == 0

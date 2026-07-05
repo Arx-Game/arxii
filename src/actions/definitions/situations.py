@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
@@ -50,6 +51,12 @@ class SetSituationAction(Action):
         except SituationTemplate.DoesNotExist:
             return ActionResult(success=False, message="That situation template does not exist.")
 
-        instantiate_situation(template, actor.location)
+        try:
+            instantiate_situation(template, actor.location)
+        except ObjectDoesNotExist:
+            return ActionResult(
+                success=False,
+                message="This room isn't set up to hold that situation's traps.",
+            )
 
         return ActionResult(success=True)

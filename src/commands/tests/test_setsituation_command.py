@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from commands.default_cmdsets import CharacterCmdSet
 from commands.exceptions import CommandError
 from commands.setsituation import CmdSetSituation
 from world.mechanics.factories import SituationTemplateFactory
@@ -32,3 +33,11 @@ class SetSituationParseTests(TestCase):
     def test_unknown_name_raises(self) -> None:
         with self.assertRaises(CommandError):
             self._parse("No Such Situation")
+
+
+class CmdSetSituationCmdsetRegistrationTests(TestCase):
+    def test_setsituation_command_registered(self) -> None:
+        cmdset = CharacterCmdSet()
+        cmdset.at_cmdset_creation()
+        keys = {c.key for c in cmdset.commands}
+        self.assertIn("setsituation", keys)
