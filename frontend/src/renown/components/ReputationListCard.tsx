@@ -4,9 +4,16 @@ import type { SocietyReputationEntry } from '../types';
 
 interface Props {
   reputation: SocietyReputationEntry[];
+  /**
+   * Society ids the viewer's active persona is currently wanted by (#1765 heat rows).
+   * Own-view only — omit (or leave undefined) on foreign-view renders.
+   */
+  wantedSocietyIds?: Set<number>;
 }
 
-const TIER_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+// Exported for reuse by the consolidated Reputation tab's Standing card (#1446),
+// which renders the same named-tier badges for organization reputations.
+export const TIER_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   reviled: 'destructive',
   despised: 'destructive',
   disliked: 'destructive',
@@ -18,7 +25,7 @@ const TIER_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'ou
   revered: 'default',
 };
 
-function formatTier(tier: string): string {
+export function formatTier(tier: string): string {
   return tier.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -26,7 +33,7 @@ function formatTier(tier: string): string {
  * Per-society reputation list. Named tier labels only — the raw numeric
  * value is intentionally never exposed to the client (#676 spec).
  */
-export function ReputationListCard({ reputation }: Props) {
+export function ReputationListCard({ reputation, wantedSocietyIds }: Props) {
   return (
     <Card>
       <CardHeader>
@@ -42,9 +49,14 @@ export function ReputationListCard({ reputation }: Props) {
             {reputation.map((entry) => (
               <li key={entry.society_id} className="flex items-center justify-between">
                 <span className="font-medium">{entry.society_name}</span>
-                <Badge variant={TIER_VARIANT[entry.tier] ?? 'outline'}>
-                  {formatTier(entry.tier)}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {wantedSocietyIds?.has(entry.society_id) && (
+                    <Badge variant="destructive">Wanted</Badge>
+                  )}
+                  <Badge variant={TIER_VARIANT[entry.tier] ?? 'outline'}>
+                    {formatTier(entry.tier)}
+                  </Badge>
+                </div>
               </li>
             ))}
           </ul>

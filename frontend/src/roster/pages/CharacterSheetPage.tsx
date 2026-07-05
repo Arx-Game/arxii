@@ -11,8 +11,7 @@ import {
 } from '@/components/character';
 import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RenownPanel } from '@/renown/components/RenownPanel';
-import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
+import { ReputationTab } from '@/reputation/components/ReputationTab';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 import { FriendButton } from '@/friends/components/FriendButton';
 import { FriendsTab } from '@/friends/components/FriendsTab';
@@ -30,7 +29,7 @@ export function CharacterSheetPage() {
 
   // Show messages section only when the viewing user owns this character.
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
-  // For the Renown tab on foreign sheets: resolve the viewer's primary
+  // For the Reputation tab on foreign sheets: resolve the viewer's primary
   // persona from their first owned character. Null when the viewer has
   // no characters → the backend returns the anonymous subset.
   const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
@@ -64,7 +63,7 @@ export function CharacterSheetPage() {
         <TabsList>
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
-          <TabsTrigger value="renown">Renown</TabsTrigger>
+          <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
@@ -109,15 +108,16 @@ export function CharacterSheetPage() {
           />
         </TabsContent>
 
-        <TabsContent value="renown" className="space-y-4">
-          {isMyCharacter ? (
-            <RenownPanel characterSheetId={entry.character.id} />
-          ) : (
-            <RenownCardPanel
-              characterSheetId={entry.character.id}
-              viewerPersonaId={viewerPersonaId}
-            />
-          )}
+        <TabsContent value="reputation" className="space-y-4">
+          {/* Consolidated Reputation tab (#1446): renown, standing (society + org), covenants,
+              and wanted flags for the own view; the existing RenownCardPanel for foreign views.
+              Radix unmounts inactive tab content, so these queries only fire when opened. */}
+          <ReputationTab
+            entryCharacterId={entry.character.id}
+            viewerPersonaId={viewerPersonaId}
+            isMyCharacter={isMyCharacter}
+            viewerEntryId={viewerEntryId}
+          />
         </TabsContent>
 
         <TabsContent value="titles" className="space-y-4">
