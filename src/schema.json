@@ -15794,6 +15794,37 @@ paths:
           description: Voting not open / option not surfaced / not active.
         '404':
           description: Not a participant / no such mission.
+  /api/missions/journal/{id}/invite/:
+    post:
+      operationId: missions_journal_invite_create
+      description: '#887 — invite a co-located character to join this mission run.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionInviteRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionInviteResult'
+          description: ''
+        '400':
+          description: Not the contract holder / not active / already a participant.
+        '404':
+          description: Not a participant / no such mission / no such character.
   /api/missions/journal/{id}/report/:
     post:
       operationId: missions_journal_report_create
@@ -15854,6 +15885,35 @@ paths:
           description: Option not live here / run not active.
         '404':
           description: Not a participant / no such mission.
+  /api/missions/journal/respond/:
+    post:
+      operationId: missions_journal_respond_create
+      description: |-
+        #887 — accept or decline a pending mission invitation.
+
+        The invitee is NOT a participant yet, so this is detail=False with the
+        invite_id in the body (not _instance_for, which would 404).
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissionInviteRespondRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionInviteResult'
+          description: ''
+        '400':
+          description: Already responded / run not active / bad response.
+        '404':
+          description: No such invitation for your persona.
   /api/missions/nodes/:
     get:
       operationId: missions_nodes_list
@@ -33182,7 +33242,7 @@ components:
           type: boolean
         response:
           allOf:
-          - $ref: '#/components/schemas/ResponseEnum'
+          - $ref: '#/components/schemas/EventInvitationResponseEnum'
           readOnly: true
         responded_at:
           type: string
@@ -33218,6 +33278,16 @@ components:
           type: boolean
       required:
       - target_type
+    EventInvitationResponseEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
     EventInvite:
       type: object
       description: Serializer for creating invitations.
@@ -37063,6 +37133,61 @@ components:
         * `complete` - Complete
         * `abandoned` - Abandoned
         * `expired` - Expired
+    MissionInviteRequestRequest:
+      type: object
+      description: |-
+        POST body for the #887 invite endpoint.
+
+        ``invitee_character_id`` is the ObjectDB pk of the character to invite
+        (web clients speak character ids). The view resolves it to that
+        character's primary ``Persona``.
+      properties:
+        invitee_character_id:
+          type: integer
+          minimum: 1
+      required:
+      - invitee_character_id
+    MissionInviteRespondRequest:
+      type: object
+      description: |-
+        POST body for the #887 respond endpoint.
+
+        ``invite_id`` is the ``MissionInvite`` pk; ``response`` is the literal
+        ``"accept"`` or ``"decline"``.
+      properties:
+        invite_id:
+          type: integer
+          minimum: 1
+        response:
+          $ref: '#/components/schemas/MissionInviteRespondResponseEnum'
+      required:
+      - invite_id
+      - response
+    MissionInviteRespondResponseEnum:
+      enum:
+      - accept
+      - decline
+      type: string
+      description: |-
+        * `accept` - accept
+        * `decline` - decline
+    MissionInviteResult:
+      type: object
+      description: 'Result of the #887 invite/respond endpoints.'
+      properties:
+        invite_id:
+          type: integer
+          readOnly: true
+        response:
+          type: string
+          readOnly: true
+        instance_id:
+          type: integer
+          readOnly: true
+      required:
+      - instance_id
+      - invite_id
+      - response
     MissionNode:
       type: object
       description: |-
@@ -47555,16 +47680,6 @@ components:
       - source_room_profile
       - source_scene_entry_endorsement
       - source_staff_account
-    ResponseEnum:
-      enum:
-      - pending
-      - accepted
-      - declined
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `accepted` - Accepted
-        * `declined` - Declined
     Restriction:
       type: object
       description: Serializer for Restriction lookup records.

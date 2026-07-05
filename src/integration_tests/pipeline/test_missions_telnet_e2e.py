@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from commands.missions import CmdMission
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import ConflictMode, MissionStatus, OptionKind, OptionSource
 from world.missions.factories import (
@@ -25,7 +25,7 @@ from world.missions.factories import (
     MissionOptionFactory,
     MissionTemplateFactory,
 )
-from world.missions.models import MissionDeedRecord, MissionGroupBallot
+from world.missions.models import MissionDeedRecord, MissionGroupBallot, MissionInvite
 from world.missions.services.run import share_mission, staff_assign_mission
 
 
@@ -48,9 +48,12 @@ def _said(caller: object) -> str:
     return "\n".join(chunks)
 
 
-def _pc(db_key: str | None = None) -> object:
+def _pc(db_key: str | None = None, room: object | None = None) -> object:
     character = CharacterFactory(db_key=db_key) if db_key else CharacterFactory()
     CharacterSheetFactory(character=character)
+    if room is not None:
+        character.db_location = room
+        character.save(update_fields=["db_location"])
     return character
 
 
@@ -189,3 +192,49 @@ class GroupMissionTelnetTests(TestCase):
         out = _said(self.holder)
         self.assertIn("Path A", out)
         self.assertIn("1)", out)
+
+
+class MissionInviteTelnetTests(TestCase):
+    """#887 — the invite / accept / decline telnet verbs end-to-end."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(db_key="Tavern", db_typeclass_path="typeclasses.rooms.Room")
+        self.holder = _pc("Holder", room=self.room)
+        self.invitee = _pc("Invitee", room=self.room)
+        self.template, self.entry, self.second = _solo_graph("invite-e2e")
+        self.instance = staff_assign_mission(self.template, self.holder)
+
+    def test_invite_then_accept_shares_the_mission(self) -> None:
+        """Holder invites; invitee accepts via 'mission accept <id>'."""
+        from world.missions.models import MissionParticipant
+
+        _run(self.holder, f"invite {self.instance.pk} Invitee")
+        out = _said(self.holder)
+        self.assertIn("invite", out.lower())
+
+        invite = MissionInvite.objects.get(instance=self.instance)
+        _run(self.invitee, f"accept {invite.pk}")
+        self.assertTrue(
+            MissionParticipant.objects.filter(
+                instance=self.instance, character_id=self.invitee.pk
+            ).exists()
+        )
+
+    def test_invite_then_decline_does_not_share(self) -> None:
+        from world.missions.models import MissionParticipant
+
+        _run(self.holder, f"invite {self.instance.pk} Invitee")
+        invite = MissionInvite.objects.get(instance=self.instance)
+        _run(self.invitee, f"decline {invite.pk}")
+        self.assertFalse(
+            MissionParticipant.objects.filter(
+                instance=self.instance, character_id=self.invitee.pk
+            ).exists()
+        )
+
+    def test_pending_invite_surfaces_in_mission_list(self) -> None:
+        _run(self.holder, f"invite {self.instance.pk} Invitee")
+        invite = MissionInvite.objects.get(instance=self.instance)
+        _run(self.invitee, "")
+        out = _said(self.invitee)
+        self.assertIn(f"invite #{invite.pk}", out)

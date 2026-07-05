@@ -656,3 +656,33 @@ class GroupVoteRequestSerializer(serializers.Serializer):
     """POST body for the #1036 group-vote endpoint."""
 
     option_id = serializers.IntegerField(min_value=1)
+
+
+class MissionInviteRequestSerializer(serializers.Serializer):
+    """POST body for the #887 invite endpoint.
+
+    ``invitee_character_id`` is the ObjectDB pk of the character to invite
+    (web clients speak character ids). The view resolves it to that
+    character's primary ``Persona``.
+    """
+
+    invitee_character_id = serializers.IntegerField(min_value=1)
+
+
+class MissionInviteRespondSerializer(serializers.Serializer):
+    """POST body for the #887 respond endpoint.
+
+    ``invite_id`` is the ``MissionInvite`` pk; ``response`` is the literal
+    ``"accept"`` or ``"decline"``.
+    """
+
+    invite_id = serializers.IntegerField(min_value=1)
+    response = serializers.ChoiceField(choices=["accept", "decline"])
+
+
+class MissionInviteResultSerializer(serializers.Serializer):
+    """Result of the #887 invite/respond endpoints."""
+
+    invite_id = serializers.IntegerField(read_only=True)
+    response = serializers.CharField(read_only=True)
+    instance_id = serializers.IntegerField(read_only=True)
