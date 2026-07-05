@@ -397,6 +397,51 @@ def _render_magic_section(command: Command) -> list[str]:
     return lines
 
 
+def _render_status_section(command: Command) -> list[str]:
+    """The status section (#1446): condition, purse, and AP for the active character.
+
+    Mirrors the web Status panel — health/stamina/anima render as WORDS (wound bands,
+    fatigue zones, anima band) over the same vocabularies; coin and AP are currencies
+    and show numbers. Self-only, read-only.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.currency.constants import format_coppers  # noqa: PLC0415
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+    from world.fatigue.services import get_full_status  # noqa: PLC0415
+    from world.magic.constants import anima_band_for  # noqa: PLC0415
+    from world.vitals.services import derive_character_status  # noqa: PLC0415
+
+    viewer = _viewer_sheet(command)
+    character = viewer.character
+
+    lines = [f"|wStatus — {character.key}:|n"]
+
+    vitals = getattr(viewer, "vitals", None)  # noqa: GETATTR_LITERAL
+    wound = vitals.wound_description if vitals else "a healthy appearance"
+    lines.append(f"  Condition: {derive_character_status(viewer)} — {wound}")
+
+    fatigue_pool = getattr(viewer, "fatigue", None)  # noqa: GETATTR_LITERAL
+    fatigue = get_full_status(viewer, pool=fatigue_pool)
+    zones = ", ".join(
+        f"{category}: {data['zone']}"
+        for category, data in fatigue.items()
+        if isinstance(data, dict)
+    )
+    lines.append(f"  Fatigue: {zones}")
+
+    anima = getattr(character, "anima", None)  # noqa: GETATTR_LITERAL
+    if anima is not None:
+        lines.append(f"  Anima: {anima_band_for(anima.current, anima.maximum)}")
+
+    purse = get_or_create_purse(viewer)
+    lines.append(f"  Coin: {format_coppers(purse.balance)}")
+
+    pool = ActionPointPool.get_or_create_for_character(character)
+    banked = f" (+{pool.banked} banked)" if pool.banked else ""
+    lines.append(f"  AP: {pool.current} of {pool.get_effective_maximum()} this week{banked}")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
@@ -415,6 +460,7 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "distinction": _render_distinction_section,
     "distinctions": _render_distinction_section,
     "magic": _render_magic_section,
+    "status": _render_status_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
@@ -428,4 +474,5 @@ SECTION_NAMES: tuple[str, ...] = (
     "crime",
     "distinction",
     "magic",
+    "status",
 )

@@ -989,6 +989,8 @@ export interface CharacterAnimaRecord {
   character: number;
   current: number;
   maximum: number;
+  /** Qualitative anima word for status surfaces (#1446), e.g. "steady". */
+  band: string;
   last_recovery: string | null;
 }
 

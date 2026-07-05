@@ -159,6 +159,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterTitle'
           description: ''
+  /api/action-points/{character_id}/:
+    get:
+      operationId: action_points_retrieve
+      description: |-
+        Read-only AP pool for the status surfaces (#1446).
+
+        Visibility: staff, or an account with an active tenure on the character.
+        Everyone else receives 404 (the vitals-view rule). Pools lazy-create with
+        config defaults so a fresh character still reads cleanly. ``current`` is
+        the authoritative "AP remaining" — the weekly cron tops it up additively.
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - action-points
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionPointPool'
+          description: ''
   /api/action-requests/:
     get:
       operationId: action_requests_list
@@ -6749,6 +6776,32 @@ paths:
           description: Not a member of the organization.
         '404':
           description: No such organization.
+  /api/currency/purse/{character_id}/:
+    get:
+      operationId: currency_purse_retrieve
+      description: |-
+        Read-only personal purse for the status surfaces (#1446).
+
+        Visibility: staff, or an account with an active tenure on the character.
+        Everyone else receives 404 (the vitals-view rule). Purse rows lazy-create
+        at zero so a coinless character still reads cleanly.
+      parameters:
+      - in: path
+        name: character_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterPurse'
+          description: ''
   /api/distinctions/categories/:
     get:
       operationId: distinctions_categories_list
@@ -26608,6 +26661,21 @@ components:
         * `physical` - Physical
         * `social` - Social
         * `mental` - Mental
+    ActionPointPool:
+      type: object
+      description: The viewer's own AP pool — ``current`` is the spendable "remaining
+        this week".
+      properties:
+        current:
+          type: integer
+        effective_maximum:
+          type: integer
+        banked:
+          type: integer
+      required:
+      - banked
+      - current
+      - effective_maximum
     ActionRef:
       type: object
       description: |-
@@ -28651,6 +28719,10 @@ components:
           maximum: 2147483647
           minimum: 0
           description: Maximum anima capacity.
+        band:
+          type: string
+          description: Qualitative anima word for status surfaces (#1446).
+          readOnly: true
         last_recovery:
           type: string
           format: date-time
@@ -28658,6 +28730,7 @@ components:
           nullable: true
           description: When anima was last recovered through ritual.
       required:
+      - band
       - character
       - id
       - last_recovery
@@ -29303,6 +29376,17 @@ components:
       - modifier_target_name
       - source
       - value
+    CharacterPurse:
+      type: object
+      description: The viewer's own coin purse — a single coppers balance (the client
+        formats g/s/c).
+      properties:
+        balance:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Coppers on hand.
     CharacterRelationship:
       type: object
       description: Full serializer for CharacterRelationship detail view.

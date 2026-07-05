@@ -16,7 +16,9 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from world.character_sheets.models import CharacterSheet
 from world.currency.models import (
     ContributionRecord,
     CurrencyTransfer,
@@ -24,7 +26,13 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
-from world.currency.services import get_or_create_economics, get_or_create_treasury
+from world.currency.serializers import CharacterPurseSerializer
+from world.currency.services import (
+    get_or_create_economics,
+    get_or_create_purse,
+    get_or_create_treasury,
+)
+from world.roster.models import RosterEntry
 
 _MSG_NO_ORG = "No such organization."
 _MSG_NOT_MEMBER = "You are not a member of that organization."
@@ -309,3 +317,34 @@ def _books_payload(organization) -> dict:
         ],
         "ledger": ledger,
     }
+
+
+class CharacterPurseView(APIView):
+    """Read-only personal purse for the status surfaces (#1446).
+
+    Visibility: staff, or an account with an active tenure on the character.
+    Everyone else receives 404 (the vitals-view rule). Purse rows lazy-create
+    at zero so a coinless character still reads cleanly.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _can_view(self, request: Request, character_id: int) -> bool:
+        if request.user.is_staff:
+            return True
+        return (
+            RosterEntry.objects.for_account(request.user)
+            .filter(character_sheet_id=character_id)
+            .exists()
+        )
+
+    @extend_schema(responses=CharacterPurseSerializer)
+    def get(self, request: Request, character_id: int) -> Response:
+        if not self._can_view(request, character_id):
+            raise NotFound
+        try:
+            sheet = CharacterSheet.objects.get(pk=character_id)
+        except CharacterSheet.DoesNotExist:
+            raise NotFound from None
+        purse = get_or_create_purse(sheet)
+        return Response(CharacterPurseSerializer(purse).data)

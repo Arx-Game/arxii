@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
@@ -7,6 +8,8 @@ import { SidebarTabPanel } from './components/SidebarTabPanel';
 import { PresencePanel } from './components/PresencePanel';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { StoryTray } from '@/missions/components/StoryTray';
+import { StatusPanel } from '@/status/components/StatusPanel';
+import { InventorySidebarPanel } from '@/inventory/components/InventorySidebarPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
 import { Toaster } from '@/components/ui/sonner';
@@ -26,6 +29,15 @@ export function GamePage() {
   const { sessions, active } = useAppSelector((state) => state.game);
 
   const focus = useFocusStack(DEFAULT_ROOM_ENTRY);
+
+  // Resolve the active character name to its underlying ObjectDB pk (copied
+  // from WardrobePage's snippet — CharacterSheet is OneToOne with ObjectDB
+  // via primary_key=True, so the same id doubles as the character sheet pk).
+  const activeEntry = useMemo(
+    () => characters.find((entry) => entry.name === active) ?? null,
+    [characters, active]
+  );
+  const activeCharacterId = activeEntry?.character_id ?? null;
 
   if (!account) {
     return (
@@ -83,6 +95,14 @@ export function GamePage() {
             storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
             eventsPanel={<EventsSidebarPanel />}
             presencePanel={<PresencePanel />}
+            statusPanel={
+              activeCharacterId ? <StatusPanel characterId={activeCharacterId} /> : undefined
+            }
+            inventoryPanel={
+              activeCharacterId ? (
+                <InventorySidebarPanel characterId={activeCharacterId} />
+              ) : undefined
+            }
           />
         }
       />

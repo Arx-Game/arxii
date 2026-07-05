@@ -82,6 +82,14 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
 | `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
 
+**Anima band vocabulary (#1446).** `ANIMA_BANDS` (`constants.py`) is a descending
+`(min_ratio, label)` tuple (PLACEHOLDER labels pending Apostate rewrite — brimming /
+vibrant / steady / dimmed / guttering / spent), mirroring `vitals.constants
+.WOUND_DESCRIPTIONS`. `anima_band_for(current, maximum) -> str` resolves the qualitative
+word (player-facing anima is narrative, never a raw number); `CharacterAnimaSerializer.band`
+(a `SerializerMethodField`) surfaces it on `/character-anima/`, and the same helper backs
+the web Status tab and the `sheet/status` telnet section.
+
 **CharacterResonance reshape note.** Prior to Spec A, `CharacterResonance`
 carried `scope`, `strength`, `is_active`, and FK'd `ObjectDB`. Those fields
 were dropped (no readers beyond Mage Scars, which now uses
@@ -1313,7 +1321,7 @@ the legacy ThreadType lookup no longer exists.
 | `/character-auras/` | GET/POST | Character aura data |
 | `/character-resonances/` | GET | Character resonances (balance + lifetime_earned per Spec A §2.2; create/delete via service functions, not REST mutations) |
 | `/character-gifts/` | GET/POST/DELETE | Character's acquired gifts |
-| `/character-anima/` | GET/POST/PATCH | Character anima pool |
+| `/character-anima/` | GET/POST/PATCH | Character anima pool (`band` — qualitative `anima_band_for` word, #1446) |
 | `/character-anima-rituals/` | GET/POST/PATCH/DELETE | Character's rituals |
 | `/character-facets/` | GET/POST/PATCH/DELETE | Character facet assignments |
 | `/techniques/` | GET/POST/PATCH | Character techniques |

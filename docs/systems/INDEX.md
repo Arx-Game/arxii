@@ -50,7 +50,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     latent provisioning at CG + `gift_resonances_for` (the four cast sites).
   - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
     `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
-    `TechniqueOutcomeModifier`
+    `TechniqueOutcomeModifier`. `ANIMA_BANDS` + `anima_band_for(current, maximum)`
+    (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
+    qualitative band word; `CharacterAnimaSerializer.band` surfaces it for the
+    web Status tab + `sheet/status` telnet section (#1446)
   - **Mage Scars (renamed from Magical Scars — display-only, §7.2):**
     `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
@@ -767,10 +770,14 @@ Time/effort resource economy with regeneration via cron. The most complete gate 
   - `ActionPointPool.get_or_create_for_character(character)` — safe accessor
   - `pool.can_afford(amount) -> bool` — check before spending
   - `pool.spend(amount) -> bool` — atomic via `select_for_update`
-  - `pool.bank(amount) -> bool`, `pool.unbank(amount) -> int`
+  - `pool.unbank(amount) -> int`, `pool.consume_banked(amount) -> bool` (no `bank()` — removed
+    as dead code; `banked` only accrues via the codex teaching flow)
   - `pool.get_effective_maximum() -> int` — base + distinction modifiers
   - `pool.apply_daily_regen()`, `pool.apply_weekly_regen()`
 - **Pattern:** Fully integrated with mechanics modifier system via `get_modifier_total(sheet, modifier_target)` for regen rates and pool max. Uses `select_for_update` for race-condition safety.
+- **Surfaces:** `GET /api/action-points/{character_id}/` (`ActionPointPoolView`) — self-scoped
+  read `{current, effective_maximum, banked}` for the web Status tab + `sheet/status` telnet
+  section; `current` is the authoritative weekly-remaining figure (#1446)
 - **Integrates with:** codex (teaching costs AP), mechanics (AP modifiers from distinctions), cron (daily/weekly regeneration)
 - **Source:** `src/world/action_points/`
 - **Details:** [action_points.md](action_points.md)
@@ -1490,6 +1497,10 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   graft, income streams w/ pools + `uncollected_total`, debts, obligations, contributions,
   ledger; per-line summon affordances drive the npc_services interaction dialog
   (`frontend/src/org_books/`)
+- **Purse surface:** `GET /api/currency/purse/{character_id}/` (`CharacterPurseView`) —
+  self-scoped `{balance}` coppers (vitals-view gating: staff or active tenure, else 404);
+  lazy-creates the purse at zero. Feeds the web Status tab (`formatCoppers`) and
+  `sheet/status` telnet section (#1446)
 - **Source:** `src/world/currency/`
 
 ### Predicates (shared rule engine)

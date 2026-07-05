@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
 from world.conditions.models import CapabilityType, ConditionTemplate, DamageType
 from world.items.models import ItemInstance
-from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
+from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind, anima_band_for
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
@@ -454,6 +454,8 @@ class CharacterGiftSerializer(serializers.ModelSerializer):
 class CharacterAnimaSerializer(serializers.ModelSerializer):
     """Serializer for CharacterAnima records."""
 
+    band = serializers.SerializerMethodField()
+
     class Meta:
         model = CharacterAnima
         fields = [
@@ -461,9 +463,14 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
             "character",
             "current",
             "maximum",
+            "band",
             "last_recovery",
         ]
         read_only_fields = ["id", "last_recovery"]
+
+    def get_band(self, obj: CharacterAnima) -> str:
+        """Qualitative anima word for status surfaces (#1446)."""
+        return anima_band_for(obj.current, obj.maximum)
 
 
 # =============================================================================

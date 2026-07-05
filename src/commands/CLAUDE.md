@@ -526,11 +526,17 @@ actions, backends, and service functions.
   `_build_distinctions` builder, mirroring the web Distinctions tab); `magic` (`sheet/magic`,
   #1446 — gifts/techniques/motif/aura over the shared `_build_magic` builder, mirroring the web
   Magic tab; describe-only — casting/weaving/rituals stay in-scene, per "the sheet describes; the
-  scene does" in `design-tenets.md`). Each is thin over its app's data. Add a section: a renderer
+  scene does" in `design-tenets.md`); `status` (`sheet/status`, #1446 — condition, fatigue, and
+  anima as qualitative words (wound band, fatigue zones, `anima_band_for`), plus coin
+  (`format_coppers`) and weekly AP (current/effective-maximum/banked); self-only, read-only,
+  mirroring the web Status tab). Each is thin over its app's data. Add a section: a renderer
   + a registry entry (+ `SECTION_NAMES`). Standing and covenant now also have web homes: standing
   lives in the consolidated **Reputation** tab (society + org standing + covenant associations);
   covenant core identity surfaces in the sheet header, with full detail in the Reputation tab's
-  covenant subsection (#1446).
+  covenant subsection (#1446). Status and Inventory now also have web homes: the game-rail
+  **Status** and **Inventory** tabs (`frontend/src/status/`,
+  `frontend/src/inventory/components/InventorySidebarPanel.tsx` — the latter reuses
+  `useInventory`/`useEquippedItems`/`ItemCard` with Worn badges + a `/wardrobe` link).
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`
