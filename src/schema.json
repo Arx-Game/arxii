@@ -39157,6 +39157,9 @@ components:
         id:
           type: integer
           readOnly: true
+        persona:
+          type: integer
+          description: The persona (character identity) this reputation belongs to
         organization:
           type: integer
           description: The organization this reputation is with
@@ -39170,6 +39173,7 @@ components:
       - id
       - organization
       - organization_name
+      - persona
       - tier
     OrganizationSearch:
       type: object

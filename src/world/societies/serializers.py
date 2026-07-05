@@ -80,6 +80,7 @@ class OrganizationReputationSerializer(serializers.ModelSerializer):
         model = OrganizationReputation
         fields = [
             "id",
+            "persona",
             "organization",
             "organization_name",
             "tier",

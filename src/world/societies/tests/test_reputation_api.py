@@ -58,6 +58,7 @@ class OrganizationReputationApiTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["organization"], self.organization.id)
         self.assertEqual(rows[0]["organization_name"], self.organization.name)
+        self.assertEqual(rows[0]["persona"], self.persona.pk)  # client filters by viewed persona
         self.assertEqual(rows[0]["tier"], "liked")
         self.assertNotIn("value", rows[0])
 

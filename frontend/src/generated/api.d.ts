@@ -21616,6 +21616,8 @@ export interface components {
     /** @description A persona's standing with an organization — named tier only, never the raw value. */
     OrganizationReputation: {
       readonly id: number;
+      /** @description The persona (character identity) this reputation belongs to */
+      persona: number;
       /** @description The organization this reputation is with */
       organization: number;
       readonly organization_name: string;
