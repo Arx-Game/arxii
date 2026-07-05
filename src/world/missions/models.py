@@ -1197,6 +1197,59 @@ class MissionParticipant(SharedMemoryModel):
         return f"{self.character} @ {self.instance}"
 
 
+class MissionInvite(SharedMemoryModel):
+    """An RSVP invitation to join a :class:`MissionInstance` (#887).
+
+    Consent is opt-in participation, not a behavior-altering effect
+    (ADR-0024), so this mirrors ``EventInvitation``'s
+    PENDING/ACCEPTED/DECLINED RSVP rather than the ``SceneActionRequest``
+    consent flow. On ACCEPT, the service calls the existing
+    ``share_mission`` to add the invitee as a non-holder participant.
+    """
+
+    class Response(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        DECLINED = "declined", "Declined"
+
+    instance = models.ForeignKey(
+        MissionInstance,
+        on_delete=models.CASCADE,
+        related_name="invites",
+    )
+    target_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.CASCADE,
+        related_name="mission_invites_received",
+    )
+    invited_by = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mission_invites_sent",
+    )
+    response = models.CharField(
+        max_length=10,
+        choices=Response.choices,
+        default=Response.PENDING,
+        db_index=True,
+    )
+    invited_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "target_persona"],
+                name="unique_missioninvite_instance_target_persona",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"invite {self.target_persona} -> {self.instance} ({self.response})"
+
+
 class MissionNodeSnapshot(SharedMemoryModel):
     """Durable per-node-entry state capture for one participant.
 
