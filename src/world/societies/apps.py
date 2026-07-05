@@ -26,3 +26,14 @@ class SocietiesConfig(AppConfig):
         from world.societies.offer_handlers import OrgInviteHandler  # noqa: PLC0415
 
         register_offer_handler(OrgInviteHandler())
+
+        # #1891 — register the GANG_TURF kind handler + tiered resolver.
+        from world.projects.constants import ProjectKind  # noqa: PLC0415
+        from world.projects.services import (  # noqa: PLC0415
+            register_kind_handler,
+            register_tiered_resolver,
+        )
+        from world.societies.gang_turf import complete_gang_turf, resolve_gang_turf  # noqa: PLC0415
+
+        register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
+        register_tiered_resolver(ProjectKind.GANG_TURF, resolve_gang_turf)
