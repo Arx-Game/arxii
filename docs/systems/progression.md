@@ -85,8 +85,9 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | `ClassLevelRequirement` | Minimum level in a specific class | `character_class`, `minimum_level` |
 | `MultiClassRequirement` | Multiple classes at specific levels (via `MultiClassLevel` through model) | `required_classes`, `description_override` |
 | `TierRequirement` | Character has reached a specific tier | `minimum_tier` (1 for levels 1-5, 2 for 6-10) |
-| `AchievementRequirement` | Story progress/achievement flag | `achievement_key` |
+| `AchievementRequirement` | Character has been granted a specific Achievement | `achievement` (FK `achievements.Achievement`) |
 | `RelationshipRequirement` | Character relationship level | `relationship_target`, `minimum_level` |
+| `ItemRequirement` | Possesses a physical touchstone/trophy item (#1859) | `item_template` XOR `min_touchstone_tier` (FK `magic.ResonanceTier`), `quantity`, `min_quality_tier` — possession-only, not consumed |
 
 ### Class-Level Advancement Receipts (#1352)
 
