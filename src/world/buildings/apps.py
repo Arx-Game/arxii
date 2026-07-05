@@ -32,6 +32,9 @@ class BuildingsConfig(AppConfig):
             complete_building_construction,
             issue_permit,
         )
+        from world.buildings.upgrade_services import (  # noqa: PLC0415
+            complete_building_upgrade,
+        )
         from world.npc_services.constants import OfferKind  # noqa: PLC0415
         from world.npc_services.effects import register_offer_effect_handler  # noqa: PLC0415
         from world.projects.constants import ProjectKind  # noqa: PLC0415
@@ -41,5 +44,6 @@ class BuildingsConfig(AppConfig):
         register_kind_handler(ProjectKind.BUILDING_CONSTRUCTION, complete_building_construction)
         register_kind_handler(ProjectKind.BUILDING_EXTENSION, complete_building_extension)
         register_kind_handler(ProjectKind.BUILDING_RENOVATION, complete_building_renovation)
+        register_kind_handler(ProjectKind.BUILDING_UPGRADE, complete_building_upgrade)
         register_kind_handler(ProjectKind.INTERIOR_DESIGN, complete_interior_design)
         register_kind_handler(ProjectKind.FORTIFICATION_UPGRADE, complete_fortification_upgrade)

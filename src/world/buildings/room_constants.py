@@ -47,3 +47,10 @@ FORTIFICATION_UPGRADE_THRESHOLD_PER_LEVEL = 150
 # PLACEHOLDER threshold pending the economy pass (renovations don't scale
 # by units/levels like extension/fortification; a single reclassification cost).
 RENOVATION_THRESHOLD = 150
+
+# Building upgrade (#1888). Bumps Building.target_size up to a higher tier
+# and re-snapshots space_budget from BuildingSizeTier. PLACEHOLDER threshold
+# per tier pending the economy pass — larger than EXTENSION_THRESHOLD_PER_UNIT
+# (a size-tier bump grows the budget more than a flat-budget extension).
+MAX_BUILDING_SIZE_TIER = 7
+UPGRADE_THRESHOLD_PER_TIER = 200
