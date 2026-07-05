@@ -23,6 +23,7 @@ import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { SpellbookTab } from '@/magic/components/SpellbookTab';
+import { LocationsTab } from '@/locations/components/LocationsTab';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -108,6 +109,7 @@ export function CharacterSheetPage() {
           {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="crime">Crime</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="friends">Friends</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="locations">Locations</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -222,6 +224,17 @@ export function CharacterSheetPage() {
             {/* Your OOC friends list (#1727) — account-wide trusted partners, separate from IC
                 relationships. Add friends from other characters' sheets; this lists + removes. */}
             <FriendsTab />
+          </TabsContent>
+        )}
+
+        {isMyCharacter && (
+          <TabsContent value="locations" className="space-y-4">
+            {/* Consolidated Locations tab (#1446): dwellings, tenancies, and ships. Own-only —
+                dwellings/tenancies are keyed on the viewed character's persona (never the
+                account's first-listed character, to avoid alt-leak), ships are self-scoped
+                server-side to the requester's active persona. Radix unmounts inactive tabs,
+                so these queries only fire when opened. */}
+            <LocationsTab personaId={viewedPersonaId} />
           </TabsContent>
         )}
       </Tabs>
