@@ -66,10 +66,7 @@ export function StatusPanel({ characterId }: { characterId: number }) {
 
   if (!vitals) return null;
 
-  // `band` is generated on CharacterAnima (#1446) but the hand-rolled
-  // CharacterAnimaRecord interface in magic/api.ts predates it — extend
-  // locally rather than editing a file outside this task's scope.
-  const animaBand = (anima as { band?: string } | undefined)?.band;
+  const animaBand = anima?.band;
 
   return (
     <Card data-testid="status-panel">
