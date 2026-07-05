@@ -503,3 +503,13 @@ class Character(ObjectParent, DefaultCharacter):
             from world.scenes.round_services import maybe_finish_empty_scene
 
             maybe_finish_empty_scene(origin, leaving=self)
+
+            sheet = getattr(self, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            if sheet is not None:
+                from world.battles.services import maybe_pause_battle_for_disconnect
+                from world.combat.services import maybe_pause_encounter_for_disconnect
+                from world.missions.services.play import maybe_pause_mission_for_disconnect
+
+                maybe_pause_encounter_for_disconnect(sheet)
+                maybe_pause_battle_for_disconnect(sheet)
+                maybe_pause_mission_for_disconnect(sheet)
