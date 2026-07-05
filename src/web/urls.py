@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/clues/", include("world.clues.urls")),
     path("api/fatigue/", include("world.fatigue.urls")),
     path("api/vitals/", include("world.vitals.urls")),
+    path("api/action-points/", include("world.action_points.urls")),
     path("api/areas/", include("world.areas.urls")),
     path("api/player-submissions/", include("world.player_submissions.urls")),
     path("api/staff-inbox/", include("world.staff_inbox.urls")),
