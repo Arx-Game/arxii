@@ -8752,7 +8752,14 @@ export interface paths {
     /**
      * @description Sanctification entry point — ``POST /api/magic/sanctums/install/``.
      *
-     *     Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
+     *     Body: ``{ room_profile_id, resonance_type_id, owner_mode, components }``.
+     *     ``components`` is an optional list of the caller's own ``ItemInstance``
+     *     pks (the Sanctification Ritual's touchstone/reagent
+     *     ``RitualComponentRequirement`` rows, #707) — explicit selection.
+     *     Ownership is checked here (against ``actor.sheet_data``, the same
+     *     puppet-resolved actor every other check in this view trusts) rather
+     *     than in the serializer, since the serializer has no reliable way to
+     *     resolve "the actor for this specific request".
      *     Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
      *     — action does the heavy validation (room ownership, leader
      *     standing, physical presence, partial-unique race window). Returns
@@ -20818,6 +20825,7 @@ export interface components {
        *     * `rumor` - Rumor
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
+       *     * `item` - Item
        */
       sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
@@ -20860,6 +20868,7 @@ export interface components {
        *     * `rumor` - Rumor
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
+       *     * `item` - Item
        */
       sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
@@ -20872,6 +20881,7 @@ export interface components {
      *     * `rumor` - Rumor
      *     * `crime_watch` - Crime Watch
      *     * `beat` - Beat
+     *     * `item` - Item
      * @enum {string}
      */
     MissionOptionRouteRewardSinkEnum:
@@ -20880,7 +20890,8 @@ export interface components {
       | 'resonance'
       | 'rumor'
       | 'crime_watch'
-      | 'beat';
+      | 'beat'
+      | 'item';
     /**
      * @description * `authored` - Authored
      *     * `challenge` - Challenge
@@ -24440,6 +24451,7 @@ export interface components {
        *     * `rumor` - Rumor
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
+       *     * `item` - Item
        */
       sink?: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
