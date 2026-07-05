@@ -190,6 +190,18 @@ class SituationChallengeLinkTests(TestCase):
     def test_str(self) -> None:
         self.assertEqual(str(self.link), "Dungeon → Trap")
 
+    def test_target_object_name_is_authored(self) -> None:
+        # Uses a distinct challenge_template (not self.challenge) to avoid colliding
+        # with the (situation_template, challenge_template) unique constraint already
+        # occupied by cls.link from setUpTestData.
+        other_challenge = ChallengeTemplateFactory(name="Vault")
+        link = SituationChallengeLinkFactory(
+            situation_template=self.situation,
+            challenge_template=other_challenge,
+            target_object_name="the locked door",
+        )
+        self.assertEqual(link.target_object_name, "the locked door")
+
     def test_challenges_through_m2m(self) -> None:
         self.assertIn(self.challenge, self.situation.challenges.all())
 

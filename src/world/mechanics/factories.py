@@ -385,6 +385,7 @@ class SituationChallengeLinkFactory(DjangoModelFactory):
 
     situation_template = factory.SubFactory(SituationTemplateFactory)
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
+    target_object_name = factory.Sequence(lambda n: f"target object {n}")
     display_order = factory.Sequence(lambda n: n)
 
 
