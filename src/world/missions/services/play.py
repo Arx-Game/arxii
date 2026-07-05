@@ -52,6 +52,7 @@ from world.narrative.services import emit_ambient_room_stir, send_narrative_mess
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionInstance, MissionNode
 
 
@@ -527,3 +528,39 @@ def cast_group_vote(
     if _resolve_group_if_ready(instance, node) is not None:
         return _resolved_group_result(instance, character)
     return GroupBeatResult(group_beat=_group_beat_view(instance, node), resolved=None)
+
+
+def maybe_pause_mission_for_disconnect(character_sheet: CharacterSheet) -> None:
+    """Pause every active MissionInstance the character currently participates
+    in, on disconnect (#1899).
+
+    No scale exception — missions don't reach battle-scale participant counts.
+    Pauses *all* matching instances, not just the first: nothing in
+    world/missions/services/run.py prevents a character being an ACTIVE
+    participant in more than one MissionInstance concurrently, so a naive
+    .first() would silently leave a second concurrent mission unpaused.
+
+    Deliberately per-instance ``.save(update_fields=...)`` rather than a bulk
+    ``.filter(...).update(...)``: MissionInstance is a SharedMemoryModel
+    (idmapper). A bulk queryset ``.update()`` writes the DB row directly and
+    bypasses the identity map, so an already-cached MissionInstance Python
+    object (e.g. one a caller elsewhere in the process is still holding) never
+    sees ``is_paused`` flip — confirmed empirically: the DB row shows
+    ``is_paused=True`` right after a bulk update, but the process's cached
+    instance (and thus ``refresh_from_db()`` on it, since idmapper's
+    model-construction hook returns the pre-existing cached object rather than
+    applying the freshly queried row) still reads ``False``. Loading each
+    instance and calling ``.save()`` goes through SharedMemoryModel's
+    post-save cache refresh instead, so the in-memory singleton is updated
+    too. The instance count here is bounded by one character's concurrent
+    mission count (small), so the extra queries are cheap.
+    """
+    from world.missions.models import MissionInstance, MissionParticipant  # noqa: PLC0415
+
+    instance_ids = MissionParticipant.objects.filter(
+        character=character_sheet.character,
+        instance__status=MissionStatus.ACTIVE,
+    ).values_list("instance_id", flat=True)
+    for instance in MissionInstance.objects.filter(pk__in=list(instance_ids)):
+        instance.is_paused = True
+        instance.save(update_fields=["is_paused"])
