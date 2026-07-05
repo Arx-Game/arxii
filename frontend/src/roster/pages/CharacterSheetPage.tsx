@@ -1,6 +1,7 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAppSelector } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
+import { useOrganizationByName } from '@/orgs/queries';
 import {
   CharacterPortrait,
   BackgroundSection,
@@ -43,9 +44,15 @@ export function CharacterSheetPage() {
   // resolve the active character's roster entry. Null when no character is active → no secrets.
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const viewerEntryId = myEntries?.find((e) => e.name === activeCharacterName)?.id ?? null;
+  // Resolve a same-named org for the family click-through (#1446); membership-gated visibility
+  // means an empty/absent result is normal — fall back to plain text in that case.
+  const { data: familyOrg } = useOrganizationByName(entry?.character.family ?? '');
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
+
+  const covenant = entry.character.covenant;
+  const family = entry.character.family;
 
   return (
     <div className="container mx-auto space-y-4 p-4">
@@ -53,7 +60,28 @@ export function CharacterSheetPage() {
         <CharacterPortrait
           name={entry.fullname || entry.character.name}
           profilePicture={entry.profile_picture}
-        />
+        >
+          {covenant && (
+            <p className="text-sm text-muted-foreground">
+              <Link to={`/covenants/${covenant.id}`} className="hover:underline">
+                {covenant.name}
+              </Link>
+              {' — '}
+              {covenant.role}
+            </p>
+          )}
+          {family && (
+            <p className="text-sm text-muted-foreground">
+              {familyOrg ? (
+                <Link to={`/orgs/${familyOrg.id}`} className="hover:underline">
+                  {family}
+                </Link>
+              ) : (
+                family
+              )}
+            </p>
+          )}
+        </CharacterPortrait>
         {entry.quote && <blockquote className="italic">"{entry.quote}"</blockquote>}
         {/* Friend this character — an OOC trusted-partner designation (#1727), only on others' sheets. */}
         {!isMyCharacter && (
