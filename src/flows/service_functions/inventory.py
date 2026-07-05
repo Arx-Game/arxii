@@ -148,8 +148,9 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     previous_location = item.instance.game_object.location
     if not item.instance.game_object.move_to(character.obj, quiet=True):
         raise NotReachable
-    if item.instance.holder_character_sheet_id is None:
-        item.instance.holder_character_sheet = character.obj.sheet_data
+    # Sheet-less actors can't own things — skip the assignment (holder stays None).
+    if item.instance.holder_character_sheet_id is None and taker_sheet is not None:
+        item.instance.holder_character_sheet = taker_sheet
         item.instance.save(update_fields=["holder_character_sheet"])
     character.obj.carried_items.invalidate()
     # If the item came from another character (rare), invalidate that too.

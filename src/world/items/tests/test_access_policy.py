@@ -232,6 +232,15 @@ class ContainerAccessPolicyTests(TestCase):
         # Ownership is preserved — pick_up never reassigns an owned item.
         self.assertEqual(item_state.instance.holder_character_sheet, self.owner_sheet)
 
+        # Unowned item: pick_up succeeds and holder stays None — a sheet-less
+        # actor can't own things, so the owner assignment is skipped entirely.
+        unowned_state = self._room_item(holder=None)
+        pick_up(sheetless_state, unowned_state)
+        unowned_state.instance.refresh_from_db()
+        unowned_state.instance.game_object.refresh_from_db()
+        self.assertEqual(unowned_state.instance.game_object.location, sheetless)
+        self.assertIsNone(unowned_state.instance.holder_character_sheet)
+
     def test_sheetless_actor_take_out_from_owner_only_container_does_not_raise(self) -> None:
         sheetless = CharacterFactory(db_key="AccessPolicySheetless2", location=self.room)
         sheetless_state = CharacterState(sheetless, context=MagicMock())
