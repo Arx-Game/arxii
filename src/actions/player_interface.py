@@ -1235,90 +1235,21 @@ def _tenure_persona_ids(tenure: object) -> set[int]:
         return set()
 
 
-def _decide_consent_block(
-    rule_mode: str | None,
-    *,
-    actor_present: bool,
-    whitelisted: bool,
-    blacklisted: bool,
-    is_friend: bool,
-) -> bool:
-    """Per-category consent decision, given a pref exists with the master switch on.
-
-    Shared by the per-tenure :func:`_tenure_blocks_actor` and the batched
-    :func:`_consent_excluded_persona_ids` so the mode logic lives in one place. Returns
-    ``True`` when the actor is *blocked* from targeting the owner in this category.
-
-    - ``None`` / ``EVERYONE`` → never blocked (default allow).
-    - ``ALL_BUT_BLACKLIST`` → blocked only when the actor is on the blacklist; an unknown
-      actor (general-visibility probe) is allowed.
-    - ``FRIENDS_WHITELIST`` → allowed only for an OOC friend or a whitelisted actor;
-      everyone else — including an unknown actor — is blocked.
-    - ``ALLOWLIST`` → allowed only for a whitelisted actor; everyone else blocked.
-    """
-    from world.consent.constants import ConsentMode  # noqa: PLC0415
-
-    if rule_mode is None or rule_mode == ConsentMode.EVERYONE:
-        return False
-    if rule_mode == ConsentMode.ALL_BUT_BLACKLIST:
-        return actor_present and blacklisted
-    if rule_mode == ConsentMode.FRIENDS_WHITELIST:
-        return not (actor_present and (is_friend or whitelisted))
-    # ALLOWLIST — strict default-deny; friendship alone is not enough.
-    return not (actor_present and whitelisted)
-
-
 def _tenure_blocks_actor(
     tenure: object, actor_tenure: object | None, category: object | None
 ) -> bool:
     """True if *tenure*'s consent excludes *actor_tenure* for *category*.
 
-    False when no preference row exists (default: allow). Single-tenure path; the
-    scene-wide picker sweep batches the same decision in :func:`_social_consent_exclusions`.
+    Thin wrapper over :func:`world.consent.services.consent_blocks_targeting` — the
+    single-tenure gate decision now lives there (#1909) so later gates (e.g. the steal
+    gate) can call it directly without reaching into the dispatch layer. This name
+    stays so existing callers (duels, tests) are untouched. The scene-wide picker
+    sweep batches the same decision in :func:`_consent_excluded_persona_ids`.
     """
-    from world.consent.models import (  # noqa: PLC0415
-        SocialConsentBlacklist,
-        SocialConsentCategoryRule,
-        SocialConsentPreference,
-        SocialConsentWhitelist,
-    )
-    from world.scenes.friend_services import is_friend as _is_friend  # noqa: PLC0415
+    from world.consent.services import consent_blocks_targeting  # noqa: PLC0415
 
-    try:
-        pref = tenure.social_consent_preference  # type: ignore[union-attr]
-    except SocialConsentPreference.DoesNotExist:
-        return False
-
-    if not pref.allow_social_actions:
-        return True
-
-    if category is None:
-        return False  # uncategorized → master switch only
-
-    rule = SocialConsentCategoryRule.objects.filter(preference=pref, category=category).first()
-    rule_mode = rule.mode if rule is not None else None
-    if rule_mode is None or actor_tenure is None:
-        return _decide_consent_block(
-            rule_mode,
-            actor_present=actor_tenure is not None,
-            whitelisted=False,
-            blacklisted=False,
-            is_friend=False,
-        )
-
-    whitelisted = SocialConsentWhitelist.objects.filter(
-        owner_tenure=tenure, allowed_tenure=actor_tenure, category=category
-    ).exists()
-    blacklisted = SocialConsentBlacklist.objects.filter(
-        owner_tenure=tenure, blocked_tenure=actor_tenure, category=category
-    ).exists()
-    friended = _is_friend(owner_tenure=tenure, friend_tenure=actor_tenure)
-    return _decide_consent_block(
-        rule_mode,
-        actor_present=True,
-        whitelisted=whitelisted,
-        blacklisted=blacklisted,
-        is_friend=friended,
+    return consent_blocks_targeting(
+        owner_tenure=tenure, category=category, actor_tenure=actor_tenure
     )
 
 
@@ -1412,6 +1343,7 @@ def _consent_excluded_persona_ids(
     whole set (one preference query plus the loads in :func:`_load_category_consent_data`).
     """
     from world.consent.models import SocialConsentPreference  # noqa: PLC0415
+    from world.consent.services import _decide_consent_block  # noqa: PLC0415
 
     # One query: preferences for those tenures, keyed by tenure id (missing → default allow).
     prefs_by_tenure: dict[int, object] = {
