@@ -13,6 +13,10 @@ class OfferKind(models.TextChoices):
     COLLECTION = "collection", "Collection"
     IMPROVEMENT = "improvement", "Improvement"
     COURT_GRANT = "court_grant", "Court Grant"
+    # #1872 — promote a class-1 Functionary into a privately-owned NPCAsset.
+    INFORMANT = "informant", "Informant"
+    CONTACT = "contact", "Contact"
+    PERSONAL_FAVOR = "personal_favor", "Personal Favor"
     # Future kinds: training/marriage/attunement.
 
 
