@@ -134,6 +134,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/action-points/{character_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only AP pool for the status surfaces (#1446).
+     *
+     *     Visibility: staff, or an account with an active tenure on the character.
+     *     Everyone else receives 404 (the vitals-view rule). Pools lazy-create with
+     *     config defaults so a fresh character still reads cleanly. ``current`` is
+     *     the authoritative "AP remaining" — the weekly cron tops it up additively.
+     */
+    get: operations['action_points_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/action-requests/': {
     parameters: {
       query?: never;
@@ -4495,6 +4519,29 @@ export interface paths {
      *     mirrors RankingDisplayViewSet).
      */
     get: operations['currency_org_books_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/currency/purse/{character_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only personal purse for the status surfaces (#1446).
+     *
+     *     Visibility: staff, or an account with an active tenure on the character.
+     *     Everyone else receives 404 (the vitals-view rule). Purse rows lazy-create
+     *     at zero so a coinless character still reads cleanly.
+     */
+    get: operations['currency_purse_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -15686,6 +15733,12 @@ export interface components {
      * @enum {string}
      */
     ActionCategoryEnum: 'physical' | 'social' | 'mental';
+    /** @description The viewer's own AP pool — ``current`` is the spendable "remaining this week". */
+    ActionPointPool: {
+      current: number;
+      effective_maximum: number;
+      banked: number;
+    };
     /**
      * @description Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference.
      *
@@ -16630,6 +16683,8 @@ export interface components {
       current?: number;
       /** @description Maximum anima capacity. */
       maximum?: number;
+      /** @description Qualitative anima word for status surfaces (#1446). */
+      readonly band: string;
       /**
        * Format: date-time
        * @description When anima was last recovered through ritual.
@@ -16929,6 +16984,14 @@ export interface components {
       expires_at?: string | null;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /** @description The viewer's own coin purse — a single coppers balance (the client formats g/s/c). */
+    CharacterPurse: {
+      /**
+       * Format: int64
+       * @description Coppers on hand.
+       */
+      balance?: number;
     };
     /** @description Full serializer for CharacterRelationship detail view. */
     CharacterRelationship: {
@@ -30179,6 +30242,27 @@ export interface operations {
       };
     };
   };
+  action_points_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ActionPointPool'];
+        };
+      };
+    };
+  };
   action_requests_list: {
     parameters: {
       query?: {
@@ -35871,6 +35955,27 @@ export interface operations {
       };
     };
   };
+  currency_purse_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterPurse'];
+        };
+      };
+    };
+  };
   distinctions_categories_list: {
     parameters: {
       query?: never;
@@ -40675,8 +40780,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
