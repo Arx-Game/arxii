@@ -403,3 +403,28 @@ class TechniqueReach(models.TextChoices):
 class FuryCheckTrait(models.TextChoices):
     COMPOSURE = "composure", "Composure"
     WILLPOWER = "willpower", "Willpower"
+
+
+# PLACEHOLDER anima band labels (#1446 bundle 2) — Apostate rewrite pending.
+# Qualitative anima vocabulary for status surfaces (player-facing anima is narrative,
+# not numerical). Mirrors vitals.constants.WOUND_DESCRIPTIONS: (min_ratio, label),
+# descending, first match wins.
+ANIMA_BANDS: tuple[tuple[float, str], ...] = (
+    (0.95, "brimming"),
+    (0.75, "vibrant"),
+    (0.5, "steady"),
+    (0.3, "dimmed"),
+    (0.1, "guttering"),
+    (0.0, "spent"),
+)
+
+
+def anima_band_for(current: int, maximum: int) -> str:
+    """The qualitative band for an anima pool — the word status surfaces show."""
+    if maximum <= 0:
+        return ANIMA_BANDS[-1][1]
+    ratio = current / maximum
+    for threshold, label in ANIMA_BANDS:
+        if ratio >= threshold:
+            return label
+    return ANIMA_BANDS[-1][1]
