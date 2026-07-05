@@ -745,3 +745,84 @@ class RemoveFixtureAction(_RoomBuilderAction):
         name = decoration.kind.name
         remove_decoration(decoration)
         return ActionResult(success=True, message=f"{name} removed.")
+
+
+def _kind_flags(kind: Any) -> str:
+    """Bracketed comma-joined short-names of a ``BuildingKind``'s active flags.
+
+    Display-only — the glossary says the flags carry no mechanical weight, so a
+    model method would imply otherwise.
+    """
+    _NAMES = (
+        ("is_residential", "residential"),
+        ("is_commercial", "commercial"),
+        ("is_fortified", "fortified"),
+        ("is_occult", "occult"),
+        ("is_maritime", "maritime"),
+        ("is_agrarian", "agrarian"),
+        ("is_aerial", "aerial"),
+        ("is_subterranean", "subterranean"),
+        ("is_secret", "secret"),
+    )
+    active = [label for field, label in _NAMES if getattr(kind, field)]
+    return f" [{', '.join(active)}]" if active else ""
+
+
+@dataclass
+class StartBuildingRenovationAction(_RoomBuilderAction):
+    """Commission a funded renovation re-pointing the building to a new kind.
+
+    Kwargs: ``target_kind`` (str — name or pk), optional ``room_id`` (web canvas).
+    Bare invocation lists all ``BuildingKind`` rows excluding the building's
+    current kind.
+    """
+
+    key: str = "start_building_renovation"
+    name: str = "Renovate Building"
+    icon: str = "hammer"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.models import BuildingKind  # noqa: PLC0415
+        from world.buildings.renovation_services import (  # noqa: PLC0415
+            start_building_renovation,
+        )
+        from world.buildings.room_services import (  # noqa: PLC0415
+            RoomBuildError,
+            building_for_room,
+        )
+
+        room = _resolve_room(actor, kwargs)
+        if room is None:
+            return ActionResult(success=False, message=_no_room_message(kwargs))
+        building = building_for_room(room)
+        if building is None:
+            return ActionResult(success=False, message="This room isn't part of a building.")
+        target = (kwargs.get("target_kind") or "").strip()
+        if not target:
+            lines = [
+                f"{kind.name}{_kind_flags(kind)}"
+                for kind in BuildingKind.objects.exclude(pk=building.kind_id)
+            ]
+            return ActionResult(success=False, message="Renovate to: " + ", ".join(lines))
+        kind = (
+            BuildingKind.objects.get(pk=target)
+            if target.isdigit()
+            else BuildingKind.objects.filter(name__iexact=target).first()
+        )
+        if kind is None:
+            return ActionResult(success=False, message=f"No building kind named '{target}'.")
+        try:
+            project = start_building_renovation(
+                persona=_persona_for(actor), building=building, target_kind=kind
+            )
+        except RoomBuildError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"'{kind.name}' renovation commissioned (project #{project.pk}).",
+        )

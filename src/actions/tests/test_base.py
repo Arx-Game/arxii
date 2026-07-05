@@ -170,6 +170,7 @@ class ActionRegistryTests(TestCase):
             "set_primary_home",
             "commission_decoration",
             "start_building_extension",
+            "start_building_renovation",
             "project_donate",
             "project_check",
             "project_story",

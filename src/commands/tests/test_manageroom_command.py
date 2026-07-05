@@ -100,6 +100,14 @@ class RoomCommandParseTests(TestCase):
         key, kwargs = self._dispatch(["extend"], "50")
         assert (key, kwargs) == ("start_building_extension", {"added_budget": "50"})
 
+    def test_renovate_switch_routes(self) -> None:
+        key, kwargs = self._dispatch(["renovate"], "Occult Manor")
+        assert (key, kwargs) == ("start_building_renovation", {"target_kind": "Occult Manor"})
+
+    def test_renovate_bare_routes_empty(self) -> None:
+        key, kwargs = self._dispatch(["renovate"], "")
+        assert (key, kwargs) == ("start_building_renovation", {"target_kind": ""})
+
     def test_no_switch_raises_usage(self) -> None:
         with self.assertRaises(CommandError):
             self._dispatch([], "anything")
