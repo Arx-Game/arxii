@@ -219,6 +219,7 @@ from actions.definitions.signature import (
     SignatureListAction,
     SignatureSetAction,
 )
+from actions.definitions.situations import SetSituationAction
 from actions.definitions.social import (
     deceive,
     entrance,
@@ -298,6 +299,7 @@ _ALL_ACTIONS: list[Action] = [
     HomeAction(),
     MoveToPositionAction(),
     SetTheStageAction(),
+    SetSituationAction(),
     PerformRitualAction(),
     AuthorTechniqueAction(),
     ImbueAction(),

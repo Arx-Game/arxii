@@ -756,6 +756,7 @@
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - renovation_details <- buildings.BuildingRenovationDetails
+  - upgrade_details <- buildings.BuildingUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
@@ -793,6 +794,11 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
   - target_kind -> buildings.BuildingKind [FK]
+
+### BuildingUpgradeDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
 
 ### InteriorDesignDetails
 **Foreign Keys:**
@@ -4108,6 +4114,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - building_upgrade_details <- buildings.BuildingUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance

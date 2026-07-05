@@ -1078,6 +1078,14 @@ class SituationChallengeLink(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="situation_links",
     )
+    target_object_name = models.CharField(
+        max_length=100,
+        help_text=(
+            "Display name for the ObjectDB instantiate_situation creates to embody "
+            "this challenge (e.g. 'the locked door'). Player-visible via "
+            "ChallengeInstanceSerializer.target_object_name."
+        ),
+    )
     display_order = models.PositiveIntegerField(default=0)
     depends_on = models.ForeignKey(
         "self",

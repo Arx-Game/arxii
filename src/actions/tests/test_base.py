@@ -186,6 +186,7 @@ class ActionRegistryTests(TestCase):
             "use_item",
             "move_to_position",
             "set_the_stage",
+            "set_situation",
             "start_round",
             "join_round",
             "leave_round",

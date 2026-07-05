@@ -1,11 +1,15 @@
-"""Tests for instantiate_situation (traps-only scope — see #1625)."""
+"""Tests for instantiate_situation (traps + challenges — see #1625, #1895)."""
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
-from world.mechanics.factories import SituationTemplateFactory, SituationTrapLinkFactory
-from world.mechanics.models import SituationInstance
+from world.mechanics.factories import (
+    SituationChallengeLinkFactory,
+    SituationTemplateFactory,
+    SituationTrapLinkFactory,
+)
+from world.mechanics.models import ChallengeInstance, SituationInstance
 from world.mechanics.situation_services import instantiate_situation
 from world.room_features.models import Trap
 
@@ -82,3 +86,74 @@ class InstantiateSituationTest(TestCase):
         instance = instantiate_situation(template, bare_object)
 
         assert instance.location == bare_object
+
+    def test_creates_one_challenge_instance_per_link(self) -> None:
+        template = SituationTemplateFactory()
+        SituationChallengeLinkFactory(
+            situation_template=template,
+            target_object_name="the locked door",
+        )
+        SituationChallengeLinkFactory(
+            situation_template=template,
+            target_object_name="the guttering torch",
+        )
+        room = RoomProfileFactory().objectdb
+
+        instantiate_situation(template, room)
+
+        instances = ChallengeInstance.objects.filter(location=room)
+        assert instances.count() == 2
+        assert {ci.target_object.db_key for ci in instances} == {
+            "the locked door",
+            "the guttering torch",
+        }
+
+    def test_challenge_instance_links_correct_template(self) -> None:
+        template = SituationTemplateFactory()
+        link = SituationChallengeLinkFactory(
+            situation_template=template,
+            target_object_name="the locked door",
+        )
+        room = RoomProfileFactory().objectdb
+
+        instantiate_situation(template, room)
+
+        instance = ChallengeInstance.objects.get(location=room)
+        assert instance.template == link.challenge_template
+        assert instance.is_active is True
+        assert instance.is_revealed is True
+
+    def test_traps_and_challenges_both_created_in_one_call(self) -> None:
+        template = SituationTemplateFactory()
+        SituationTrapLinkFactory(situation_template=template, name="Spike Pit")
+        SituationChallengeLinkFactory(
+            situation_template=template,
+            target_object_name="the locked door",
+        )
+        room_profile = RoomProfileFactory()
+
+        instantiate_situation(template, room_profile.objectdb)
+
+        assert Trap.objects.filter(room_profile=room_profile).count() == 1
+        assert ChallengeInstance.objects.filter(location=room_profile.objectdb).count() == 1
+
+    def test_no_challenge_links_creates_no_challenge_instances(self) -> None:
+        template = SituationTemplateFactory()
+        room = RoomProfileFactory().objectdb
+
+        instantiate_situation(template, room)
+
+        assert ChallengeInstance.objects.count() == 0
+
+    def test_location_without_room_profile_is_fine_when_only_challenges(self) -> None:
+        template = SituationTemplateFactory()
+        SituationChallengeLinkFactory(
+            situation_template=template,
+            target_object_name="the locked door",
+        )
+        bare_object = ObjectDBFactory()
+
+        instance = instantiate_situation(template, bare_object)
+
+        assert instance.location == bare_object
+        assert ChallengeInstance.objects.filter(location=bare_object).count() == 1

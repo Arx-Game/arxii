@@ -67,22 +67,29 @@ modifier.modifier_target  # Derived from source.modifier_target (not stored dire
 
 ### Situation System
 Reusable authored scenarios (`SituationTemplate`) composed of Challenges and
-now Traps, instantiated at a location.
+Traps, instantiated at a location by a staff-triggered Action.
 
-- **Models:** `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink`
-  (#1625 — authored trap blueprint: name, consequence_pool, detect/disarm
-  check_type + difficulty, is_hidden), `SituationInstance`, `ChallengeInstance`
+- **Models:** `SituationTemplate`, `SituationChallengeLink` (#1895 — carries
+  `target_object_name`, the authored display name for the ChallengeInstance's
+  auto-created target object), `SituationTrapLink` (#1625 — authored trap
+  blueprint), `SituationInstance`, `ChallengeInstance`
 - **Key Functions:**
   - `instantiate_situation(template, location) -> SituationInstance` (#1625,
-    `world/mechanics/situation_services.py`) — mints a `SituationInstance` and
-    materializes the template's `SituationTrapLink` rows into real
-    `room_features.Trap` rows at `location.room_profile`. **Traps only** —
-    does not mint `ChallengeInstance`s (see Phase 5.7 in
-    `docs/roadmap/capabilities-and-challenges.md` for why: `target_object`
-    sourcing for challenges is a separate, unresolved question).
-- **Admin:** `SituationTemplateAdmin` has both `SituationChallengeLinkInline`
-  and `SituationTrapLinkInline` for authoring.
-- **Integrates with:** room_features (`Trap` model, `check_room_traps_on_entry`)
+    extended #1895, `world/mechanics/situation_services.py`) — mints a
+    `SituationInstance`, materializes `SituationTrapLink` rows into
+    `room_features.Trap` rows, and materializes `SituationChallengeLink` rows
+    into `ChallengeInstance`s (auto-creating a bare `ObjectDB` per link named
+    from `target_object_name`, then delegating to the existing
+    `instantiate_challenge()`). All wrapped in one `transaction.atomic()` block.
+- **Trigger:** `SetSituationAction` (`actions/definitions/situations.py`) +
+  `CmdSetSituation` (`commands/setsituation.py`, telnet key `setsituation`) —
+  staff-only, in-scene verb mirroring `SetTheStageAction`/`CmdSetStage`. No
+  duplicate-instantiation guard (intentional — see ADR-0091).
+- **Admin:** `SituationTemplateAdmin` has `SituationChallengeLinkInline` and
+  `SituationTrapLinkInline` for authoring.
+- **Integrates with:** room_features (`Trap` model, `check_room_traps_on_entry`),
+  actions (`SetSituationAction`), evennia (`ObjectDB` auto-creation for
+  challenge targets)
 
 ---
 
