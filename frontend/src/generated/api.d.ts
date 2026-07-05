@@ -13713,6 +13713,48 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/reputations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve the requester's active persona's organization reputations (standing).
+     *
+     *     Self-only: rows are scoped to personas the requester currently plays.
+     */
+    get: operations['societies_reputations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/societies/reputations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List/retrieve the requester's active persona's organization reputations (standing).
+     *
+     *     Self-only: rows are scoped to personas the requester currently plays.
+     */
+    get: operations['societies_reputations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/staff-inbox/': {
     parameters: {
       query?: never;
@@ -16444,6 +16486,14 @@ export interface components {
       readonly background: string;
       relationships?: string[];
       galleries?: components['schemas']['CharacterGallery'][];
+      /**
+       * @description Core-identity covenant: the active DURANCE-type covenant role, if any (#1446).
+       *
+       *     One indexed query per character; bounded by roster pagination in list context.
+       */
+      readonly covenant: {
+        [key: string]: unknown;
+      } | null;
     };
     /** @description Serializer for character achievement records. */
     CharacterAchievement: {
@@ -21563,6 +21613,14 @@ export interface components {
       /** @description Members at this rank can promote/demote others */
       can_manage_ranks?: boolean;
     };
+    /** @description A persona's standing with an organization — named tier only, never the raw value. */
+    OrganizationReputation: {
+      readonly id: number;
+      /** @description The organization this reputation is with */
+      organization: number;
+      readonly organization_name: string;
+      readonly tier: string;
+    };
     OrganizationSearch: {
       id: number;
       name: string;
@@ -22707,6 +22765,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['OrganizationRank'][];
+    };
+    PaginatedOrganizationReputationList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OrganizationReputation'][];
     };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
@@ -25331,6 +25404,7 @@ export interface components {
     PersonaHeat: {
       readonly id: number;
       readonly area_name: string;
+      society: number;
       readonly society_name: string;
       readonly tier: string;
       readonly tier_label: string;
@@ -40304,8 +40378,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Consequence Pool. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -49397,6 +49470,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OrganizationRank'];
+        };
+      };
+    };
+  };
+  societies_reputations_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationReputationList'];
+        };
+      };
+    };
+  };
+  societies_reputations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Organization Reputation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationReputation'];
         };
       };
     };
