@@ -544,6 +544,15 @@
 - `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
 
 
+## world.assets
+
+### NPCAsset
+**Foreign Keys:**
+  - promoter_persona -> scenes.Persona [FK]
+  - asset_persona -> scenes.Persona [OneToOne]
+  - source_functionary -> npc_services.Functionary [FK]
+
+
 ## world.battles
 
 ### Battle
@@ -756,6 +765,7 @@
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - renovation_details <- buildings.BuildingRenovationDetails
+  - upgrade_details <- buildings.BuildingUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
@@ -793,6 +803,11 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
   - target_kind -> buildings.BuildingKind [FK]
+
+### BuildingUpgradeDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
 
 ### InteriorDesignDetails
 **Foreign Keys:**
@@ -3778,6 +3793,8 @@
 **Foreign Keys:**
   - role -> npc_services.NPCRole [FK]
   - room -> evennia_extensions.RoomProfile [FK]
+**Pointed to by:**
+  - promotions <- assets.NPCAsset
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -4108,6 +4125,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - building_upgrade_details <- buildings.BuildingUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance
@@ -4527,6 +4545,8 @@
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
   - businesses <- currency.Business
+  - promoted_assets <- assets.NPCAsset
+  - asset_promotion <- assets.NPCAsset
   - authored_secrets <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - heat_rows <- justice.PersonaHeat
