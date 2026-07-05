@@ -15,10 +15,11 @@ from world.societies.models import (
 class OrganizationFilter(django_filters.FilterSet):
     society = django_filters.CharFilter(field_name="society__name", lookup_expr="iexact")
     org_type = django_filters.CharFilter(field_name="org_type__name", lookup_expr="iexact")
+    name = django_filters.CharFilter(field_name="name", lookup_expr="iexact")
 
     class Meta:
         model = Organization
-        fields = ["society", "org_type"]
+        fields = ["society", "org_type", "name"]
 
 
 class OrganizationMembershipFilter(django_filters.FilterSet):

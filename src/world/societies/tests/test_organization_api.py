@@ -86,6 +86,20 @@ class OrganizationApiTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_filter_by_name(self) -> None:
+        """Name filter resolves a family/house org for sheet click-throughs (#1446)."""
+        other_org = OrganizationFactory(name="Some Other Org")
+        OrganizationMembershipFactory(organization=other_org, persona=self.persona)
+
+        response = self.client.get(
+            reverse("societies:organization-list"),
+            {"name": "regular org"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data["results"]
+        self.assertEqual([org["id"] for org in rows], [self.organization.id])
+
 
 class OrganizationMembershipApiTests(TestCase):
     """Tests for the /api/societies/memberships/ endpoint."""

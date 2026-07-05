@@ -49360,6 +49360,7 @@ export interface operations {
   societies_organizations_list: {
     parameters: {
       query?: {
+        name?: string;
         org_type?: string;
         /** @description A page number within the paginated result set. */
         page?: number;

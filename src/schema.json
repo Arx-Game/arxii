@@ -22685,6 +22685,10 @@ paths:
         Staff see all non-covenant organizations.
       parameters:
       - in: query
+        name: name
+        schema:
+          type: string
+      - in: query
         name: org_type
         schema:
           type: string
