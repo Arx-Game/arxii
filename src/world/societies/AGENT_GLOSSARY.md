@@ -67,3 +67,7 @@ _Avoid_: containment option, hush method.
 **Reach (act)**:
 Where knowledge of an act lands at birth — contained (a Secret) or the realm walk's societies — always derived from room privacy + containment + the fame of those involved, never authored per act (ADR-0082). Continental/world are escalation (gemit, common knowledge, legend), never minted.
 _Avoid_: stakeholders, audience list
+
+**Gang Turf (GANG_TURF)**:
+A `TIERED_PERIOD` `Project` kind — the first of its mode (#1891) — representing a gang organization's ongoing territorial pressure over a period, graded at deadline into a `CheckOutcome` tier by accumulated progress. The tier applies a data-driven reputation delta to the owning gang org via `bump_organization_reputation` (relational channel, not the archetype dot-product). Opened only by a leader-rank member (`OrganizationRank.can_lead_rituals`). "Turf" here is abstract menace/standing, **not** literal map control — a dedicated territory model is deferred (see the #1891 spec follow-ups).
+_Avoid_: territory (literal), zone control, gang influence (until the territory model lands).
