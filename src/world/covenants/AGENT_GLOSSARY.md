@@ -55,7 +55,7 @@ The combat-power axis of membership: a role's archetype (Sword / Shield / Crown)
 _Avoid_: rank, position, office.
 
 **Covenant Rank**:
-The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage. Orthogonal to Role.
+The administrative-authority axis of membership: a per-covenant tier on the rank ladder (lower tier number = higher authority) whose capability flags gate invite / kick / manage / lead-rituals. Orthogonal to Role. `can_lead_rituals` gates who may perform Covenant Sanctification and future covenant-led group rites (#708).
 _Avoid_: role, level.
 
 **Command Tier**:

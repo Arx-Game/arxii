@@ -843,6 +843,34 @@ class CovenantRankViewSetTests(CovenantsViewTestCase):
         self.assertEqual(response.data["name"], "Scribe")
         self.assertEqual(response.data["tier"], 3)
 
+    def test_manager_can_create_rank_with_can_lead_rituals(self) -> None:
+        """A manager can POST a new rank with can_lead_rituals set."""
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantManagerRankFactory,
+        )
+
+        new_cov = CovenantFactory(name="RankLeadRitualsCov")
+        mgr_rank = CovenantManagerRankFactory(covenant=new_cov, tier=1)
+        CharacterCovenantRoleFactory(
+            character_sheet=self.mgr_sheet,
+            covenant=new_cov,
+            rank=mgr_rank,
+        )
+        response = self.client.post(
+            "/api/covenants/ranks/",
+            {
+                "covenant": new_cov.pk,
+                "name": "Ritual Leader",
+                "tier": 3,
+                "can_lead_rituals": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data["can_lead_rituals"])
+
     def test_non_manager_cannot_create_rank(self) -> None:
         """A member without can_manage_ranks is denied with 403."""
         client = self._non_mgr_client()

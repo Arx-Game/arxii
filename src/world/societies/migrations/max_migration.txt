@@ -1,1 +1,1 @@
-0019_society_enforcer_name
+0020_organizationrank_can_lead_rituals

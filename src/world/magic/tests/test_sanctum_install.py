@@ -40,7 +40,9 @@ from world.magic.services.sanctum_install import (
     AbsorbNotPhysicallyPresentError,
     DissolutionAlreadyDissolvedError,
     SanctificationFounderHasPersonalSanctumError,
+    SanctificationLeaderNotCovenantMemberError,
     SanctificationLeaderNotOwnerError,
+    SanctificationLeaderRankNotAuthorizedError,
     SanctificationRoomAlreadyHasFeatureError,
     SanctificationRoomNotOwnedError,
     _dissolution_recovery_fraction,
@@ -170,6 +172,127 @@ def _setup_personal_sanctification_room(*, resonance=None, owner_in_room=True):
         character.db_location = room_profile.objectdb
         character.save(update_fields=["db_location"])
     return room_profile, owner, resonance
+
+
+def _setup_covenant_sanctification_room(*, leader_rank_can_lead_rituals: bool, resonance=None):
+    """Build a room owned by a Covenant's backing Organization; returns
+    (room_profile, leader_persona, covenant, resonance).
+
+    The leader's CharacterCovenantRole is active with a rank whose
+    can_lead_rituals flag is set per the argument. The leader's character is
+    positioned in the room so the physical-presence check (which runs after
+    leader validation) doesn't block a happy-path test.
+    """
+    from evennia_extensions.factories import RoomProfileFactory
+    from world.covenants.factories import (
+        CharacterCovenantRoleFactory,
+        CovenantFactory,
+        CovenantRankFactory,
+    )
+    from world.room_features.seeds import ensure_sanctum_kind
+    from world.scenes.factories import PersonaFactory
+
+    ensure_sanctum_kind()
+    resonance = resonance or ResonanceFactory()
+    covenant = CovenantFactory()
+    rank = CovenantRankFactory(covenant=covenant, can_lead_rituals=leader_rank_can_lead_rituals)
+    leader = PersonaFactory()
+    CharacterCovenantRoleFactory(
+        character_sheet=leader.character_sheet,
+        covenant=covenant,
+        rank=rank,
+    )
+    room_profile = RoomProfileFactory()
+    LocationOwnershipFactory(
+        parent_type=LocationParentType.ROOM,
+        area=None,
+        room_profile=room_profile,
+        holder_type=HolderType.ORGANIZATION,
+        holder_persona=None,
+        holder_organization=covenant.organization,
+    )
+    character = leader.character_sheet.character
+    character.db_location = room_profile.objectdb
+    character.save(update_fields=["db_location"])
+    return room_profile, leader, covenant, resonance
+
+
+class PerformSanctificationCovenantLeaderGateTests(TestCase):
+    """First-ever coverage of the COVENANT owner_mode leader-authorization path."""
+
+    def setUp(self):
+        from unittest.mock import patch
+
+        ensure_sanctum_rituals()
+        ensure_magic_check_content()
+        self._check_patcher = patch("world.checks.services.perform_check")
+        mock_check = self._check_patcher.start()
+        mock_check.return_value = _mock_check_result(success_level=1)
+
+    def tearDown(self):
+        self._check_patcher.stop()
+
+    def test_member_without_can_lead_rituals_rank_rejected(self) -> None:
+        room_profile, leader, _covenant, resonance = _setup_covenant_sanctification_room(
+            leader_rank_can_lead_rituals=False
+        )
+        with self.assertRaises(SanctificationLeaderRankNotAuthorizedError) as ctx:
+            perform_sanctification(
+                room_profile, leader, resonance, owner_mode=SanctumOwnerMode.COVENANT
+            )
+        self.assertIn("ritual-leadership authority", ctx.exception.user_message)
+
+    def test_member_with_can_lead_rituals_rank_succeeds(self) -> None:
+        room_profile, leader, _covenant, resonance = _setup_covenant_sanctification_room(
+            leader_rank_can_lead_rituals=True
+        )
+        result = perform_sanctification(
+            room_profile, leader, resonance, owner_mode=SanctumOwnerMode.COVENANT
+        )
+        details = SanctumDetails.objects.get(pk=result.sanctum_id)
+        self.assertEqual(details.owner_mode, SanctumOwnerMode.COVENANT)
+
+    def test_non_covenant_organization_owned_room_rejected(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.room_features.seeds import ensure_sanctum_kind
+        from world.scenes.factories import PersonaFactory
+        from world.societies.factories import OrganizationFactory
+
+        ensure_sanctum_kind()
+        leader = PersonaFactory()
+        # OrganizationFactory's org_type defaults to a sequence-named OrganizationType
+        # (e.g. "org_type_7"), never "covenant" — see world/societies/factories.py.
+        org = OrganizationFactory()
+        room_profile = RoomProfileFactory()
+        LocationOwnershipFactory(
+            parent_type=LocationParentType.ROOM,
+            area=None,
+            room_profile=room_profile,
+            holder_type=HolderType.ORGANIZATION,
+            holder_persona=None,
+            holder_organization=org,
+        )
+        with self.assertRaises(SanctificationLeaderNotCovenantMemberError):
+            perform_sanctification(
+                room_profile, leader, ResonanceFactory(), owner_mode=SanctumOwnerMode.COVENANT
+            )
+
+    def test_covenant_ownership_not_allowed_by_catalog_rejected(self) -> None:
+        from world.room_features.constants import RoomFeatureOwnerType
+        from world.room_features.models import RoomFeatureKind, RoomFeatureKindOwnerType
+        from world.room_features.seeds import SANCTUM_KIND_NAME
+
+        room_profile, leader, _covenant, resonance = _setup_covenant_sanctification_room(
+            leader_rank_can_lead_rituals=True
+        )
+        sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
+        RoomFeatureKindOwnerType.objects.filter(
+            feature_kind=sanctum_kind, owner_type=RoomFeatureOwnerType.ORGANIZATION_COVENANT
+        ).delete()
+        with self.assertRaises(SanctificationLeaderNotCovenantMemberError):
+            perform_sanctification(
+                room_profile, leader, resonance, owner_mode=SanctumOwnerMode.COVENANT
+            )
 
 
 class PerformSanctificationTests(TestCase):

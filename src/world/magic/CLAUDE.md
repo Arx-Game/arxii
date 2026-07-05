@@ -1069,7 +1069,15 @@ The sanctum subsystem is a 7-op surface shared by telnet (`CmdSanctum`) and web
 
 **Actions** (`actions/definitions/sanctum.py`, all REGISTRY, `target_type=SELF`, `category="magic"`):
 - `sanctum_install` — Ritual of Sanctification: validate presence/ownership/founder-cap, create
-  `RoomFeatureInstance` + `SanctumDetails`.
+  `RoomFeatureInstance` + `SanctumDetails`. Leader authorization
+  (`_validate_sanctification_leader` in `services/sanctum_install.py`) branches on
+  `owner_mode`: Personal requires the leader persona to be the room's direct owner;
+  Covenant requires the room to be owned by a Covenant-type organization, that the
+  Sanctum kind's authored owner-type catalog currently permits covenant ownership
+  (`_covenant_ownership_allowed_for_sanctum()`, reading `RoomFeatureKindOwnerType` —
+  staff can revoke covenant eligibility there), and that the leader holds an active
+  (`left_at IS NULL`) `CharacterCovenantRole` whose `CovenantRank.can_lead_rituals` is
+  `True` — mere active membership is no longer sufficient (#708).
 - `sanctum_homecoming` — Ritual of Homecoming: sacrifice resonance to grow the Sanctum's
   Homecoming reservoir (wraps `perform_homecoming_ritual`).
 - `sanctum_purging` — Ritual of Purging: change the Sanctum's consecrated resonance type,

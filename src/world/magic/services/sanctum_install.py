@@ -57,6 +57,12 @@ class SanctificationLeaderNotCovenantMemberError(SanctificationError):
     user_message = "You must be an active covenant member to lead this Sanctification."
 
 
+class SanctificationLeaderRankNotAuthorizedError(SanctificationLeaderNotCovenantMemberError):
+    user_message = (
+        "You are an active covenant member, but your rank doesn't have ritual-leadership authority."
+    )
+
+
 class SanctificationRoomNotOwnedError(SanctificationError):
     user_message = "No owner is recognized for this room; cannot found a Sanctum here."
 
@@ -323,7 +329,8 @@ def perform_sanctification(
 
 
 def _validate_sanctification_leader(ownership, leader_persona: Persona, owner_mode: str) -> None:
-    """Personal: leader = room owner persona. Covenant: leader = active covenant member."""
+    """Personal: leader = room owner persona. Covenant: leader = active member with a
+    can_lead_rituals rank."""
     if owner_mode == SanctumOwnerMode.PERSONAL:
         if (
             ownership.holder_type != HolderType.PERSONA
@@ -338,9 +345,18 @@ def _validate_sanctification_leader(ownership, leader_persona: Persona, owner_mo
 
     # COVENANT
     if ownership.holder_type != HolderType.ORGANIZATION:
+        # NOTE: `user_message` (the class attribute below) is what reaches the
+        # player, not this constructed `msg` — kept for exception __str__/logging.
         msg = "Covenant Sanctification requires an organization-owned room."
         raise SanctificationLeaderNotCovenantMemberError(msg)
+    if not _covenant_ownership_allowed_for_sanctum():
+        # NOTE: `user_message` (the class attribute below) is what reaches the
+        # player, not this constructed `msg` — kept for exception __str__/logging.
+        msg = "This room-feature kind does not permit covenant ownership."
+        raise SanctificationLeaderNotCovenantMemberError(msg)
     if ownership.holder_organization.org_type.name != COVENANT_ORG_TYPE_NAME:
+        # NOTE: `user_message` (the class attribute below) is what reaches the
+        # player, not this constructed `msg` — kept for exception __str__/logging.
         msg = "The owning organization is not a Covenant."
         raise SanctificationLeaderNotCovenantMemberError(msg)
     covenant = ownership.holder_organization.covenant
@@ -348,11 +364,37 @@ def _validate_sanctification_leader(ownership, leader_persona: Persona, owner_mo
         covenant=covenant,
         character_sheet=leader_persona.character_sheet,
         left_at__isnull=True,
+        rank__can_lead_rituals=True,
     ).exists():
         msg = (
-            f"Leader persona {leader_persona.pk} is not an active member of covenant {covenant.pk}."
+            f"Leader persona {leader_persona.pk} is not authorized to lead Sanctification "
+            f"for covenant {covenant.pk}: requires an active membership whose rank has "
+            "ritual-leadership authority."
         )
-        raise SanctificationLeaderNotCovenantMemberError(msg)
+        raise SanctificationLeaderRankNotAuthorizedError(msg)
+
+
+def _covenant_ownership_allowed_for_sanctum() -> bool:
+    """Whether the Sanctum RoomFeatureKind's authored catalog currently permits
+    covenant ownership.
+
+    Reads world.room_features.RoomFeatureKindOwnerType instead of assuming covenant
+    ownership is always eligible — staff can revoke it via the authored catalog
+    (admin-editable), closing the gap where this eligibility step was specified in
+    the Plan 4 design (#669) but never actually wired.
+    """
+    from world.room_features.constants import RoomFeatureOwnerType  # noqa: PLC0415
+    from world.room_features.models import (  # noqa: PLC0415
+        RoomFeatureKind,
+        RoomFeatureKindOwnerType,
+    )
+    from world.room_features.seeds import SANCTUM_KIND_NAME  # noqa: PLC0415
+
+    sanctum_kind = RoomFeatureKind.objects.get(name=SANCTUM_KIND_NAME)
+    return RoomFeatureKindOwnerType.objects.filter(
+        feature_kind=sanctum_kind,
+        owner_type=RoomFeatureOwnerType.ORGANIZATION_COVENANT,
+    ).exists()
 
 
 # ---------------------------------------------------------------------------

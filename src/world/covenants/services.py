@@ -121,6 +121,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
             can_invite=False,
             can_kick=False,
             can_manage_ranks=False,
+            can_lead_rituals=False,
         )
         return member_rank, member_rank
 
@@ -131,6 +132,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
         can_invite=True,
         can_kick=True,
         can_manage_ranks=True,
+        can_lead_rituals=True,
     )
     member_rank = CovenantRank.objects.create(
         covenant=covenant,
@@ -139,6 +141,7 @@ def _build_default_ladder(covenant: Covenant, *, flat: bool) -> tuple[CovenantRa
         can_invite=False,
         can_kick=False,
         can_manage_ranks=False,
+        can_lead_rituals=False,
     )
     return founder_rank, member_rank
 
@@ -261,6 +264,7 @@ def _ensure_base_rank(covenant: Covenant) -> CovenantRank:
         can_invite=False,
         can_kick=False,
         can_manage_ranks=False,
+        can_lead_rituals=False,
     )
 
 
@@ -822,6 +826,7 @@ def create_rank(  # noqa: PLR0913
     can_invite: bool = False,
     can_kick: bool = False,
     can_manage_ranks: bool = False,
+    can_lead_rituals: bool = False,
 ) -> CovenantRank:
     """Create a new rank in the covenant's ladder. Requires can_manage_ranks."""
     if not actor.rank.can_manage_ranks:
@@ -833,6 +838,7 @@ def create_rank(  # noqa: PLR0913
         can_invite=can_invite,
         can_kick=can_kick,
         can_manage_ranks=can_manage_ranks,
+        can_lead_rituals=can_lead_rituals,
     )
     covenant.member_roster.invalidate()
     return rank
@@ -849,13 +855,14 @@ def rename_rank(*, rank: CovenantRank, actor: CharacterCovenantRole, name: str) 
 
 
 @transaction.atomic
-def set_rank_capabilities(
+def set_rank_capabilities(  # noqa: PLR0913
     *,
     rank: CovenantRank,
     actor: CharacterCovenantRole,
     can_invite: bool | None = None,
     can_kick: bool | None = None,
     can_manage_ranks: bool | None = None,
+    can_lead_rituals: bool | None = None,
 ) -> CovenantRank:
     """Update capability flags on a rank. Requires can_manage_ranks.
 
@@ -875,6 +882,9 @@ def set_rank_capabilities(
     if can_manage_ranks is not None:
         rank.can_manage_ranks = can_manage_ranks
         update_fields.append("can_manage_ranks")
+    if can_lead_rituals is not None:
+        rank.can_lead_rituals = can_lead_rituals
+        update_fields.append("can_lead_rituals")
 
     # Check lock-out: if we're removing manage capability from this rank,
     # ensure other members still hold a can_manage_ranks rank.

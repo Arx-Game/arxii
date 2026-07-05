@@ -1767,8 +1767,12 @@ resolves a room's hub; crier install places a "Town Crier" `Functionary` via
   - `RoomFeatureKindInstallRitual` — M2M-shape: which Rituals can install
     this kind. Lets one kind admit multiple install rites
     (Sanctification of own home vs. Covenant Sanctification).
-  - `RoomFeatureKindOwnerType` — M2M-shape: which `HolderType` values
-    (PERSONA / ORGANIZATION) may own this kind. Validated at install.
+  - `RoomFeatureKindOwnerType` — M2M-shape: which `RoomFeatureOwnerType` values
+    (PERSONA / ORG_NOBLE / ORG_TRADE / ORG_CRIMINAL / ORG_COVENANT / ORG_DEVOTIONAL)
+    may own this kind. Consulted by Covenant Sanctification's leader gate
+    (`world.magic.services.sanctum_install._covenant_ownership_allowed_for_sanctum`,
+    #708); no other install path (e.g. the generic `StartRoomFeatureProjectAction`
+    Project flow) checks it yet.
   - `RoomFeatureInstance` — per-(room, kind) decoration. OneToOne to
     `RoomProfile`; `level` field mutable via upgrade projects. One
     instance per room (unique constraint). `dissolved_at` (nullable

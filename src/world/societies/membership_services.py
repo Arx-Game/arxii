@@ -71,6 +71,7 @@ def ensure_default_rank_ladder(organization: Organization) -> list[OrganizationR
                 can_invite=is_top,
                 can_kick=is_top,
                 can_manage_ranks=is_top,
+                can_lead_rituals=is_top,
             )
         )
     return ranks

@@ -120,6 +120,7 @@ class CovenantRankFactory(factory_django.DjangoModelFactory):
     can_invite = False
     can_kick = False
     can_manage_ranks = False
+    can_lead_rituals = False
 
 
 class CovenantManagerRankFactory(CovenantRankFactory):
@@ -129,6 +130,7 @@ class CovenantManagerRankFactory(CovenantRankFactory):
     can_invite = True
     can_kick = True
     can_manage_ranks = True
+    can_lead_rituals = True
 
 
 class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):

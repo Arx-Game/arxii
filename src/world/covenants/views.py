@@ -522,6 +522,7 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
                 can_invite=ser.validated_data.get("can_invite", False),
                 can_kick=ser.validated_data.get("can_kick", False),
                 can_manage_ranks=ser.validated_data.get("can_manage_ranks", False),
+                can_lead_rituals=ser.validated_data.get("can_lead_rituals", False),
             )
         except NotAuthorizedToManageRanksError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
@@ -553,7 +554,7 @@ class CovenantRankViewSet(viewsets.ModelViewSet):
                 rank = rename_rank(rank=rank, actor=actor, name=validated["name"])
             cap_kwargs: dict = {
                 cap: validated[cap]
-                for cap in ("can_invite", "can_kick", "can_manage_ranks")
+                for cap in ("can_invite", "can_kick", "can_manage_ranks", "can_lead_rituals")
                 if cap in validated
             }
             if cap_kwargs:

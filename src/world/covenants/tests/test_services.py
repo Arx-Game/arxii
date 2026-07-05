@@ -106,11 +106,13 @@ class CreateCovenantTests(TestCase):
         self.assertTrue(founder_rank.can_invite)
         self.assertTrue(founder_rank.can_kick)
         self.assertTrue(founder_rank.can_manage_ranks)
+        self.assertTrue(founder_rank.can_lead_rituals)
         self.assertEqual(member_rank.name, DEFAULT_MEMBER_RANK_NAME)
         self.assertEqual(member_rank.tier, 2)
         self.assertFalse(member_rank.can_invite)
         self.assertFalse(member_rank.can_kick)
         self.assertFalse(member_rank.can_manage_ranks)
+        self.assertFalse(member_rank.can_lead_rituals)
 
         m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
         m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
@@ -136,6 +138,7 @@ class CreateCovenantTests(TestCase):
         self.assertEqual(len(ranks), 1)
         self.assertEqual(ranks[0].name, DEFAULT_MEMBER_RANK_NAME)
         self.assertFalse(ranks[0].can_manage_ranks)
+        self.assertFalse(ranks[0].can_lead_rituals)
 
         m_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
         m_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
@@ -1357,6 +1360,16 @@ class RankManagementTests(TestCase):
         self.assertEqual(rank.tier, 3)
         self.assertTrue(rank.can_kick)
 
+    def test_create_rank_with_can_lead_rituals(self) -> None:
+        rank = create_rank(
+            covenant=self.cov,
+            actor=self.manager_member,
+            name="Ritual Leader",
+            tier=3,
+            can_lead_rituals=True,
+        )
+        self.assertTrue(rank.can_lead_rituals)
+
     # --- rename_rank ---
 
     def test_rename_rank_requires_manage_ranks(self) -> None:
@@ -1384,6 +1397,15 @@ class RankManagementTests(TestCase):
         self.base_rank.refresh_from_db()
         self.assertTrue(self.base_rank.can_invite)
         self.assertTrue(self.base_rank.can_kick)
+
+    def test_set_rank_capabilities_updates_can_lead_rituals(self) -> None:
+        set_rank_capabilities(
+            rank=self.base_rank,
+            actor=self.manager_member,
+            can_lead_rituals=True,
+        )
+        self.base_rank.refresh_from_db()
+        self.assertTrue(self.base_rank.can_lead_rituals)
 
     def test_set_rank_capabilities_lockout_last_manager(self) -> None:
         """Removing can_manage_ranks from the only manager rank raises LastManagerRankError."""

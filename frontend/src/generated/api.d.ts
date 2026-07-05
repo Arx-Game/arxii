@@ -17374,6 +17374,8 @@ export interface components {
       can_kick?: boolean;
       /** @description May edit the ladder and assign members. */
       can_manage_ranks?: boolean;
+      /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
+      can_lead_rituals?: boolean;
     };
     /**
      * @description Minimal nested representation of a CovenantRank (id, name, tier) for embedding
@@ -17405,6 +17407,8 @@ export interface components {
       can_kick?: boolean;
       /** @description May edit the ladder and assign members. */
       can_manage_ranks?: boolean;
+      /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
+      can_lead_rituals?: boolean;
     };
     /** @description Read-only serializer for CovenantRite authored definitions. */
     CovenantRite: {
@@ -21562,6 +21566,8 @@ export interface components {
       can_kick?: boolean;
       /** @description Members at this rank can promote/demote others */
       can_manage_ranks?: boolean;
+      /** @description Members at this rank may lead this organization's group rituals. No org-ritual dispatch mechanism consumes this yet for non-Covenant organizations — see needs-design follow-up filed alongside #708 ('Generic organization-ritual dispatch for non-Covenant org kinds'). Mirrors CovenantRank.can_lead_rituals, which IS consumed today by Covenant Sanctification. */
+      can_lead_rituals?: boolean;
     };
     OrganizationSearch: {
       id: number;
@@ -23974,6 +23980,8 @@ export interface components {
       can_kick?: boolean;
       /** @description May edit the ladder and assign members. */
       can_manage_ranks?: boolean;
+      /** @description May lead this covenant's group rituals (e.g. Covenant Sanctification). */
+      can_lead_rituals?: boolean;
     };
     /** @description Full encounter state with covenant-filtered action visibility. */
     PatchedEncounterDetailRequest: {

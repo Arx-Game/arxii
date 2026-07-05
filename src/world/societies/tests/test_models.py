@@ -888,3 +888,27 @@ class PersonaLegendSummaryTests(TestCase):
         self._refresh()
         row = PersonaLegendSummary.objects.get(persona_id=persona.pk)
         assert row.persona_legend == 25
+
+
+class OrganizationRankCanLeadRitualsTests(TestCase):
+    def test_default_is_false(self) -> None:
+        from world.societies.factories import OrganizationRankFactory
+
+        # Organization.save() auto-creates a full 5-rank ladder (tiers 1-5) for
+        # non-covenant orgs, so a bare OrganizationRankFactory() call collides
+        # on tier=1 with UNIQUE(organization, tier). Use tier=6, matching the
+        # factory's own documented "extra rank" usage.
+        rank = OrganizationRankFactory(tier=6)
+        self.assertFalse(rank.can_lead_rituals)
+
+
+class EnsureDefaultRankLadderCanLeadRitualsTests(TestCase):
+    def test_top_rank_can_lead_rituals_lower_ranks_cannot(self) -> None:
+        from world.societies.factories import OrganizationFactory
+        from world.societies.membership_services import ensure_default_rank_ladder
+
+        org = OrganizationFactory()
+        ranks = ensure_default_rank_ladder(org)
+        self.assertTrue(ranks[0].can_lead_rituals)
+        for rank in ranks[1:]:
+            self.assertFalse(rank.can_lead_rituals)

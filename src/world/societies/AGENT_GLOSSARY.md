@@ -33,7 +33,7 @@ The live award *mechanism* — `fire_renown_award` reading an authored `RenownAw
 _Avoid_: fame (fame is one output of Renown), reputation, the Legend total.
 
 **OrganizationRank**:
-A per-organization rung on the five-tier rank ladder (tier 1 highest, tier 5 lowest). Carries the diegetic name for that rung and capability flags (`can_invite`, `can_kick`, `can_manage_ranks`). Generic organizations auto-create a default ladder from their `OrganizationType` titles on first save; covenants do not use this model.
+A per-organization rung on the five-tier rank ladder (tier 1 highest, tier 5 lowest). Carries the diegetic name for that rung and capability flags (`can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals`). Generic organizations auto-create a default ladder from their `OrganizationType` titles on first save; covenants do not use this model. `can_lead_rituals` mirrors `CovenantRank.can_lead_rituals` (#708) but has no consuming org-ritual dispatch yet — see the needs-design follow-up on generic organization-ritual dispatch.
 _Avoid_: rank row, rank level.
 
 **OrganizationMembershipOffer**:
