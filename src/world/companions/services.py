@@ -130,12 +130,9 @@ def materialize_companion_as_combat_opponent(
         The created CombatOpponent (ALLY, sourced from archetype stats).
     """
     from world.combat.constants import CombatAllegiance  # noqa: PLC0415
-    from world.combat.models import ThreatPool  # noqa: PLC0415
     from world.combat.services import add_opponent  # noqa: PLC0415
 
     archetype = companion.archetype
-    if threat_pool is None:
-        threat_pool = ThreatPool.objects.filter(encounter=encounter).first()
 
     opponent = add_opponent(
         encounter,
