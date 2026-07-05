@@ -2,19 +2,21 @@
  * Consolidated Reputation tab (#1446) — replaces the old standalone Renown tab.
  *
  * Own-view sections:
- *   - Renown: the existing `RenownPanel`, unchanged — fame/prestige/deeds/dwellings plus its
- *     own (unflagged) society-reputation card.
- *   - Standing: society reputation again, this time with "Wanted" flags for any society
- *     currently pursuing the viewer's active persona (#1765 heat), plus organization
- *     memberships (rank titles) and organization reputation (tier badges).
+ *   - Renown: the existing `RenownPanel`, fed the viewed character's wanted-flag data
+ *     (#1765 heat) — fame/prestige/deeds/dwellings plus its own society-reputation card,
+ *     with a destructive "Wanted" badge on any society currently pursuing this character.
+ *   - Standing: organization memberships (rank titles) and organization reputation (tier
+ *     badges) for the character being viewed.
  *   - Covenants: the character's active covenant role assignments.
  *
  * Foreign-view: unchanged `RenownCardPanel` — no Standing/Covenants/Wanted surfaced for
  * someone else's sheet.
  *
- * The society-reputation list is necessarily rendered twice (once inside `RenownPanel`,
- * once here with wanted flags) — `RenownPanel` is intentionally left untouched by this task,
- * so the wanted-aware view lives in the new Standing card instead of being threaded through it.
+ * Scoping note: `/api/societies/reputations/` and `/api/societies/memberships/` are
+ * account-wide (span every character/persona the account plays), not sheet-scoped —
+ * unlike the covenant-roles endpoint, which already filters by `character_sheet`. So the
+ * membership/reputation rows are filtered client-side to `viewedPersonaId` to avoid
+ * leaking a different one of the viewer's own characters' standings onto this sheet.
  */
 
 import { Link } from 'react-router-dom';
@@ -24,12 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RenownPanel } from '@/renown/components/RenownPanel';
 import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
-import {
-  ReputationListCard,
-  TIER_VARIANT,
-  formatTier,
-} from '@/renown/components/ReputationListCard';
-import { usePersonaRenownQuery } from '@/renown/queries';
+import { TIER_VARIANT, formatTier } from '@/renown/components/ReputationListCard';
 import { usePersonaHeat } from '@/justice/queries';
 import type { PersonaHeatRow } from '@/justice/api';
 import type { CharacterCovenantRole } from '@/covenants/api';
@@ -47,15 +44,25 @@ interface Props {
   viewerPersonaId?: number | null;
   /** True when the viewer owns this character (own-view vs. foreign-view). */
   isMyCharacter: boolean;
-  /** The viewer's active RosterEntry pk; used to key the own-only wanted-flag lookup. */
-  viewerEntryId?: number | null;
+  /**
+   * RosterEntry pk of the character being viewed. Own-view only — used to key the
+   * wanted-flag heat lookup to THIS character, not whichever character the account
+   * currently has active (matches the `viewer=` param CrimeTab passes).
+   */
+  viewedEntryId?: number | null;
+  /**
+   * Persona id of the character being viewed. Own-view only — used to filter the
+   * account-wide org membership/reputation rows down to this character's persona.
+   */
+  viewedPersonaId?: number | null;
 }
 
 export function ReputationTab({
   entryCharacterId,
   viewerPersonaId,
   isMyCharacter,
-  viewerEntryId,
+  viewedEntryId,
+  viewedPersonaId,
 }: Props) {
   if (!isMyCharacter) {
     return (
@@ -69,35 +76,40 @@ export function ReputationTab({
   return (
     <OwnReputationView
       entryCharacterId={entryCharacterId}
-      viewerPersonaId={viewerPersonaId ?? null}
-      viewerEntryId={viewerEntryId ?? null}
+      viewedEntryId={viewedEntryId ?? null}
+      viewedPersonaId={viewedPersonaId ?? null}
     />
   );
 }
 
 function OwnReputationView({
   entryCharacterId,
-  viewerPersonaId,
-  viewerEntryId,
+  viewedEntryId,
+  viewedPersonaId,
 }: {
   entryCharacterId: number;
-  viewerPersonaId: number | null;
-  viewerEntryId: number | null;
+  viewedEntryId: number | null;
+  viewedPersonaId: number | null;
 }) {
+  const { data: heatRows } = usePersonaHeat(viewedEntryId);
+  const wantedSocietyIds = new Set<number>(
+    (heatRows ?? []).map((row: PersonaHeatRow) => row.society)
+  );
+
   return (
     <div className="space-y-6">
       <section aria-labelledby="reputation-tab-renown">
         <h2 id="reputation-tab-renown" className="mb-3 text-lg font-semibold">
           Renown
         </h2>
-        <RenownPanel characterSheetId={entryCharacterId} />
+        <RenownPanel characterSheetId={entryCharacterId} wantedSocietyIds={wantedSocietyIds} />
       </section>
 
       <section aria-labelledby="reputation-tab-standing">
         <h2 id="reputation-tab-standing" className="mb-3 text-lg font-semibold">
           Standing
         </h2>
-        <StandingSection viewerPersonaId={viewerPersonaId} viewerEntryId={viewerEntryId} />
+        <OrganizationStandingCard viewedPersonaId={viewedPersonaId} />
       </section>
 
       <section aria-labelledby="reputation-tab-covenants">
@@ -111,41 +123,20 @@ function OwnReputationView({
 }
 
 // ---------------------------------------------------------------------------
-// Standing — society reputation (wanted-flag aware) + org memberships/reputation.
+// Standing — org memberships/reputation, scoped to the viewed character's persona.
 // ---------------------------------------------------------------------------
 
-function StandingSection({
-  viewerPersonaId,
-  viewerEntryId,
-}: {
-  viewerPersonaId: number | null;
-  viewerEntryId: number | null;
-}) {
-  const { data: renown } = usePersonaRenownQuery(viewerPersonaId);
-  const { data: heatRows } = usePersonaHeat(viewerEntryId);
-  const wantedSocietyIds = new Set<number>(
-    (heatRows ?? []).map((row: PersonaHeatRow) => row.society)
-  );
-
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <ReputationListCard
-        reputation={renown?.reputation ?? []}
-        wantedSocietyIds={wantedSocietyIds}
-      />
-      <OrganizationStandingCard />
-    </div>
-  );
-}
-
-function OrganizationStandingCard() {
+function OrganizationStandingCard({ viewedPersonaId }: { viewedPersonaId: number | null }) {
   const { data: memberships, isLoading: membershipsLoading } =
     useOrganizationMembershipsQuery(true);
   const { data: reputations, isLoading: reputationsLoading } =
     useOrganizationReputationsQuery(true);
 
   const isLoading = membershipsLoading || reputationsLoading;
-  const activeMemberships = (memberships ?? []).filter((m) => m.is_active);
+  const activeMemberships = (memberships ?? []).filter(
+    (m) => m.is_active && m.persona === viewedPersonaId
+  );
+  const scopedReputations = (reputations ?? []).filter((r) => r.persona === viewedPersonaId);
 
   return (
     <Card>
@@ -181,13 +172,13 @@ function OrganizationStandingCard() {
             </div>
             <div>
               <h3 className="mb-2 text-sm font-medium text-muted-foreground">Reputation</h3>
-              {(reputations ?? []).length === 0 ? (
+              {scopedReputations.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No organizations have a recorded opinion yet.
                 </p>
               ) : (
                 <ul className="space-y-2 text-sm">
-                  {(reputations ?? []).map((rep) => (
+                  {scopedReputations.map((rep) => (
                     <li key={rep.id} className="flex items-center justify-between">
                       <Link
                         to={`/orgs/${rep.organization}`}

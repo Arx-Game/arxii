@@ -33,6 +33,12 @@ export function CharacterSheetPage() {
   // persona from their first owned character. Null when the viewer has
   // no characters → the backend returns the anonymous subset.
   const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
+  // For the Reputation tab's own-view: resolve the persona/entry of the character being
+  // VIEWED (not the account's first-listed character) — an account can own several
+  // characters, and scoping to myEntries[0] would leak another character's standing
+  // (heat, org memberships/reputation) onto this sheet.
+  const viewedMyEntry = myEntries?.find((e) => e.id === entryId);
+  const viewedPersonaId = viewedMyEntry?.primary_persona_id ?? null;
   // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
   // resolve the active character's roster entry. Null when no character is active → no secrets.
   const activeCharacterName = useAppSelector((state) => state.game.active);
@@ -116,7 +122,8 @@ export function CharacterSheetPage() {
             entryCharacterId={entry.character.id}
             viewerPersonaId={viewerPersonaId}
             isMyCharacter={isMyCharacter}
-            viewerEntryId={viewerEntryId}
+            viewedEntryId={entryId}
+            viewedPersonaId={viewedPersonaId}
           />
         </TabsContent>
 

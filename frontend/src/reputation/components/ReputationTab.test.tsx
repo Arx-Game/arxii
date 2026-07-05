@@ -135,7 +135,13 @@ describe('ReputationTab', () => {
   it('renders Renown, Standing, and Covenants sections for the own view', () => {
     setRenown(makeRenown());
     renderWithProviders(
-      <ReputationTab entryCharacterId={1} viewerPersonaId={1} isMyCharacter viewerEntryId={1} />
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        viewedPersonaId={1}
+      />
     );
     expect(screen.getByText('Renown')).toBeInTheDocument();
     expect(screen.getByText('Standing')).toBeInTheDocument();
@@ -160,7 +166,13 @@ describe('ReputationTab', () => {
       },
     ]);
     renderWithProviders(
-      <ReputationTab entryCharacterId={1} viewerPersonaId={1} isMyCharacter viewerEntryId={1} />
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        viewedPersonaId={1}
+      />
     );
     expect(screen.getByText('Wanted')).toBeInTheDocument();
   });
@@ -172,11 +184,88 @@ describe('ReputationTab', () => {
         entryCharacterId={1}
         viewerPersonaId={5}
         isMyCharacter={false}
-        viewerEntryId={null}
+        viewedEntryId={null}
+        viewedPersonaId={null}
       />
     );
     expect(screen.queryByText('Standing')).not.toBeInTheDocument();
     expect(screen.queryByText('Covenants')).not.toBeInTheDocument();
     expect(screen.queryByText('Wanted')).not.toBeInTheDocument();
+  });
+
+  it('does not render the account-wide society-reputation list twice (only via RenownPanel)', () => {
+    setRenown(
+      makeRenown({
+        reputation: [{ society_id: 3, society_name: 'The Honest', tier: 'disliked' }],
+      })
+    );
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        viewedPersonaId={1}
+      />
+    );
+    // "The Honest" comes from RenownPanel's own reputation card; it must appear exactly
+    // once — the Standing card no longer renders a second, duplicate reputation list.
+    expect(screen.getAllByText('The Honest')).toHaveLength(1);
+  });
+
+  it('filters organization memberships/reputation rows to the viewed persona only', () => {
+    setRenown(makeRenown());
+    setMemberships([
+      {
+        id: 1,
+        organization: 10,
+        organization_name: 'Match Org',
+        persona: 1,
+        persona_name: 'Alice',
+        rank: { id: 1, name: 'Member', tier: 5 },
+        title: 'Member',
+        joined_date: '2026-01-01T00:00:00Z',
+        is_active: true,
+      } as OrganizationMembership,
+      {
+        id: 2,
+        organization: 20,
+        organization_name: 'Other Character Org',
+        persona: 99,
+        persona_name: 'Someone Else',
+        rank: { id: 2, name: 'Member', tier: 5 },
+        title: 'Member',
+        joined_date: '2026-01-01T00:00:00Z',
+        is_active: true,
+      } as OrganizationMembership,
+    ]);
+    setReputations([
+      {
+        id: 1,
+        persona: 1,
+        organization: 10,
+        organization_name: 'Match Org',
+        tier: 'liked',
+      } as OrganizationReputation,
+      {
+        id: 2,
+        persona: 99,
+        organization: 20,
+        organization_name: 'Other Character Org',
+        tier: 'liked',
+      } as OrganizationReputation,
+    ]);
+    renderWithProviders(
+      <ReputationTab
+        entryCharacterId={1}
+        viewerPersonaId={1}
+        isMyCharacter
+        viewedEntryId={1}
+        viewedPersonaId={1}
+      />
+    );
+    // Match Org appears twice: once under Memberships, once under Reputation.
+    expect(screen.getAllByText('Match Org')).toHaveLength(2);
+    expect(screen.queryByText('Other Character Org')).not.toBeInTheDocument();
   });
 });
