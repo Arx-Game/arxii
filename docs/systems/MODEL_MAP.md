@@ -20,6 +20,7 @@
   - wound_pool_damage_types <- conditions.DamageType
   - death_pool_damage_types <- conditions.DamageType
   - condition_stages <- conditions.ConditionStage
+  - situation_trap_links <- mechanics.SituationTrapLink
   - context_attachments <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
   - traps <- room_features.Trap
@@ -731,6 +732,7 @@
   - offered_by <- npc_services.PermitOfferDetails
   - buildings <- buildings.Building
   - permits <- buildings.BuildingPermitDetails
+  - renovation_targets <- buildings.BuildingRenovationDetails
   - installable_features <- room_features.RoomFeatureKind
 
 ### BuildingSizeTier
@@ -753,6 +755,7 @@
   - materials_used <- buildings.BuildingMaterial
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
+  - renovation_details <- buildings.BuildingRenovationDetails
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
@@ -789,7 +792,7 @@
 **Foreign Keys:**
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
-  - target_kind -> buildings.BuildingKind [FK] (PROTECT)
+  - target_kind -> buildings.BuildingKind [FK]
 
 ### InteriorDesignDetails
 **Foreign Keys:**
@@ -1097,6 +1100,7 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
+  - story_dependencies <- stories.StoryNPCDependency
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
   - purse <- currency.CharacterPurse
@@ -1203,6 +1207,8 @@
   - treatmenttemplate_set <- conditions.TreatmentTemplate
   - modifier_target <- mechanics.ModifierTarget
   - challenge_approaches <- mechanics.ChallengeApproach
+  - detect_situation_traps <- mechanics.SituationTrapLink
+  - disarm_situation_traps <- mechanics.SituationTrapLink
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - consequence_outcomes <- checks.ConsequenceOutcome
   - traits <- checks.CheckTypeTrait
@@ -1912,7 +1918,7 @@
 - `covenant_members_present(*, covenant: 'Covenant', room: 'ObjectDB') -> 'list[CharacterSheet]' — CharacterSheets of active `covenant` members present in `room`.`
 - `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]', battle_binding: 'str' = '', campaign_story: 'Story | None' = None, leader: 'CharacterSheet | None' = None, flat: 'bool' = False) -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
 - `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
-- `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False) -> 'CovenantRank' — Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
+- `create_rank(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', name: 'str', tier: 'int', can_invite: 'bool' = False, can_kick: 'bool' = False, can_manage_ranks: 'bool' = False, can_lead_rituals: 'bool' = False) -> 'CovenantRank' — Create a new rank in the covenant's ladder. Requires can_manage_ranks.`
 - `delete_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', reassign_to: 'CovenantRank') -> 'None' — Delete a rank after reassigning all active members to ``reassign_to``.`
 - `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
 - `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
@@ -1934,7 +1940,7 @@
 - `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` (one-line shim over`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
-- `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
+- `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None, can_lead_rituals: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
 - `swear_court_pact(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet', granted_pull_cap: 'int') -> 'CourtPact' — Create an active CourtPact binding servant_sheet to covenant.`
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
@@ -2135,6 +2141,7 @@
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
 **Pointed to by:**
+  - class_level_item_requirements <- progression.ItemRequirement
   - ritual_requirements <- magic.RitualComponentRequirement
   - technique_grants <- magic.TechniqueGrant
   - clue_triggers <- clues.ItemClueTrigger
@@ -3430,6 +3437,7 @@
   - challenges -> mechanics.ChallengeTemplate [M2M]
 **Pointed to by:**
   - challenge_links <- mechanics.SituationChallengeLink
+  - trap_links <- mechanics.SituationTrapLink
   - instances <- mechanics.SituationInstance
 
 ### SituationChallengeLink
@@ -3439,6 +3447,13 @@
   - depends_on -> mechanics.SituationChallengeLink [FK] (nullable)
 **Pointed to by:**
   - dependents <- mechanics.SituationChallengeLink
+
+### SituationTrapLink
+**Foreign Keys:**
+  - situation_template -> mechanics.SituationTemplate [FK]
+  - consequence_pool -> actions.ConsequencePool [FK]
+  - detect_check_type -> checks.CheckType [FK]
+  - disarm_check_type -> checks.CheckType [FK]
 
 ### SituationInstance
 **Foreign Keys:**
@@ -3597,6 +3612,7 @@
   - rescue_target -> character_sheets.CharacterSheet [FK] (nullable)
 **Pointed to by:**
   - participants <- missions.MissionParticipant
+  - invites <- missions.MissionInvite
   - snapshots <- missions.MissionNodeSnapshot
   - group_ballots <- missions.MissionGroupBallot
   - deeds <- missions.MissionDeedRecord
@@ -3607,6 +3623,12 @@
   - character -> objects.ObjectDB [FK]
 **Pointed to by:**
   - group_ballots <- missions.MissionGroupBallot
+
+### MissionInvite
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - target_persona -> scenes.Persona [FK]
+  - invited_by -> scenes.Persona [FK] (nullable)
 
 ### MissionNodeSnapshot
 **Foreign Keys:**
@@ -3678,11 +3700,13 @@
 - `emit_candidate_rewards(instance: 'MissionInstance', candidate: 'MissionOptionRouteCandidate', deed: 'MissionDeedRecord') -> 'list[MissionDeedRewardLine]' — Emit a fired random-set candidate's own reward bundle (#941).`
 - `emit_terminal_rewards(instance: 'MissionInstance', route: 'MissionOptionRoute', deed: 'MissionDeedRecord') -> 'list[MissionDeedRewardLine]' — Emit one :class:`MissionDeedRewardLine` per (template × recipient).`
 - `enter_node(instance: 'MissionInstance', node: 'MissionNode') -> 'None' — Record entry into ``node`` and advance the run's position.`
+- `invite_to_mission(instance: 'MissionInstance', holder_persona: 'Persona', invitee_persona: 'Persona') -> 'MissionInvite' — Create a PENDING invite for ``invitee_persona`` to join ``instance``.`
 - `journal_for(character: 'ObjectDB') -> 'list[JournalEntry]' — Return one :class:`JournalEntry` per mission this character is in.`
 - `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None) -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' — Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' — Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
 - `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
+- `respond_to_mission_invite(invite: 'MissionInvite', decision: 'MissionInvite.Response') -> 'MissionParticipant | None' — Resolve a PENDING invite. On ACCEPT, calls ``share_mission``.`
 - `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' — Add ``other_character`` as a non-holder participant to ``instance``.`
 - `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB') -> 'MissionInstance' — Staff-power: drop a mission on a character without a giver context.`
 - `validate_mission_option(option: 'MissionOption') -> 'None' — Validate post-save invariants for ``option``.`
@@ -3967,6 +3991,7 @@
   - relationshiprequirement_requirements <- progression.RelationshipRequirement
   - legendrequirement_requirements <- progression.LegendRequirement
   - tierrequirement_requirements <- progression.TierRequirement
+  - itemrequirement_requirements <- progression.ItemRequirement
 
 ### TraitRatingUnlock
 **Foreign Keys:**
@@ -4014,6 +4039,13 @@
 ### TierRequirement
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK]
+
+### ItemRequirement
+**Foreign Keys:**
+  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - item_template -> items.ItemTemplate [FK] (nullable)
+  - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
+  - min_quality_tier -> items.QualityTier [FK] (nullable)
 
 ### CharacterUnlock
 **Foreign Keys:**
@@ -4075,8 +4107,8 @@
   - resulting_building <- buildings.Building
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
-  - interior_design_details <- buildings.InteriorDesignDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
   - resulting_building_project_instance <- buildings.BuildingProjectInstance
   - ship_upgrade_details <- ships.ShipUpgradeDetails
@@ -4506,6 +4538,8 @@
   - invitations_sent <- events.EventInvitation
   - combat_opponents <- combat.CombatOpponent
   - gm_table_memberships <- gm.GMTableMembership
+  - mission_invites_received <- missions.MissionInvite
+  - mission_invites_sent <- missions.MissionInvite
   - mission_risk_acknowledgements <- missions.MissionRiskAcknowledgement
   - projects_owned <- projects.Project
   - project_contributions <- projects.Contribution
@@ -5151,6 +5185,7 @@
   - notes <- stories.StoryNote
   - gm_offers <- stories.StoryGMOffer
   - bulletin_posts <- stories.TableBulletinPost
+  - npc_dependencies <- stories.StoryNPCDependency
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
@@ -5262,6 +5297,7 @@
   - stakes <- stories.Stake
   - stake_activations <- stories.StakeContractActivation
   - treasured_signoffs <- stories.TreasuredSignoff
+  - npc_dependencies <- stories.StoryNPCDependency
   - resolving_encounters <- combat.CombatEncounter
 
 ### EpisodeProgressionRequirement
@@ -5412,6 +5448,12 @@
   - beat -> stories.Beat [FK]
   - player_data -> evennia_extensions.PlayerData [FK]
   - treasured_subject -> boundaries.TreasuredSubject [FK]
+
+### StoryNPCDependency
+**Foreign Keys:**
+  - story -> stories.Story [FK]
+  - npc_sheet -> character_sheets.CharacterSheet [FK]
+  - beat -> stories.Beat [FK] (nullable)
 
 
 ## world.traits

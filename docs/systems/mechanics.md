@@ -65,6 +65,25 @@ modifier.modifier_target  # Derived from source.modifier_target (not stored dire
 - Modifiers with `value == 0` are hidden from display.
 - `modifier_target` is derived from `source.distinction_effect.target` -- never stored directly on `CharacterModifier`.
 
+### Situation System
+Reusable authored scenarios (`SituationTemplate`) composed of Challenges and
+now Traps, instantiated at a location.
+
+- **Models:** `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink`
+  (#1625 — authored trap blueprint: name, consequence_pool, detect/disarm
+  check_type + difficulty, is_hidden), `SituationInstance`, `ChallengeInstance`
+- **Key Functions:**
+  - `instantiate_situation(template, location) -> SituationInstance` (#1625,
+    `world/mechanics/situation_services.py`) — mints a `SituationInstance` and
+    materializes the template's `SituationTrapLink` rows into real
+    `room_features.Trap` rows at `location.room_profile`. **Traps only** —
+    does not mint `ChallengeInstance`s (see Phase 5.7 in
+    `docs/roadmap/capabilities-and-challenges.md` for why: `target_object`
+    sourcing for challenges is a separate, unresolved question).
+- **Admin:** `SituationTemplateAdmin` has both `SituationChallengeLinkInline`
+  and `SituationTrapLinkInline` for authoring.
+- **Integrates with:** room_features (`Trap` model, `check_room_traps_on_entry`)
+
 ---
 
 ## Key Methods
