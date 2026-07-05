@@ -5,12 +5,14 @@ Admin interface for progression unlocks models.
 from django.contrib import admin
 from django.contrib.contenttypes.admin import GenericTabularInline
 
+from world.magic.models import ThreadCrossingThreshold
 from world.progression.models import (
     AchievementRequirement,
     CharacterUnlock,
     ClassLevelRequirement,
     ClassLevelUnlock,
     ClassXPCost,
+    ItemRequirement,
     LevelRequirement,
     MultiClassLevel,
     MultiClassRequirement,
@@ -267,3 +269,37 @@ class CharacterUnlockAdmin(admin.ModelAdmin):
     list_filter = ["unlocked_date", "character_class"]
     search_fields = ["character__db_key", "character_class__name"]
     readonly_fields = ["unlocked_date"]
+
+
+# Thread Crossing Thresholds (#1885)
+
+
+class TraitRequirementInline(admin.TabularInline):
+    """Inline for TraitRequirements attached to a crossing threshold."""
+
+    model = TraitRequirement
+    extra = 0
+    fields = ["trait", "minimum_value", "is_active", "description"]
+
+
+class ItemRequirementInline(admin.TabularInline):
+    """Inline for ItemRequirements attached to a crossing threshold."""
+
+    model = ItemRequirement
+    extra = 0
+    fields = ["item_template", "min_touchstone_tier", "quantity", "is_active"]
+
+
+@admin.register(ThreadCrossingThreshold)
+class ThreadCrossingThresholdAdmin(admin.ModelAdmin):
+    """Admin interface for ThreadCrossingThreshold.
+
+    Authored catalog of crossing-level requirement gates, keyed on
+    ``(target_kind, level)``. Requirements attach via the polymorphic
+    ``thread_crossing_threshold`` FK on ``AbstractUnlockRequirement``.
+    """
+
+    list_display = ["target_kind", "level", "stage"]
+    list_filter = ["target_kind", "stage"]
+    search_fields = ["target_kind", "level"]
+    inlines = [TraitRequirementInline, ItemRequirementInline]

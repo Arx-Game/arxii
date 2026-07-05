@@ -234,8 +234,18 @@ class TraitRatingUnlock(SharedMemoryModel):
 # Abstract Requirements System
 
 
-class AbstractClassLevelRequirement(models.Model):
-    """Abstract base for all types of requirements for class level unlocks."""
+class AbstractUnlockRequirement(models.Model):
+    """Abstract base for all types of requirements for unlock targets.
+
+    Generalized from the former ``AbstractClassLevelRequirement`` (#1885):
+    the base now supports a polymorphic unlock target — either a
+    ``ClassLevelUnlock`` (Durance path) or a ``ThreadCrossingThreshold``
+    (thread crossing gate). Exactly one of the two FKs must be set,
+    enforced by a CheckConstraint.
+
+    See ADR-0090 for the boundary choice and the ADR-0016 (shared base) vs
+    ADR-0089 (sibling-per-domain) justification.
+    """
 
     description = models.TextField(
         blank=True,
@@ -246,20 +256,50 @@ class AbstractClassLevelRequirement(models.Model):
         help_text="Whether this requirement is active",
     )
 
-    # Direct foreign key to the class level unlock this requirement applies to
+    # Polymorphic unlock target — exactly one must be set (CheckConstraint below).
     class_level_unlock = models.ForeignKey(
         "ClassLevelUnlock",
         on_delete=models.CASCADE,
         related_name="%(class)s_requirements",
+        null=True,
+        blank=True,
+    )
+    thread_crossing_threshold = models.ForeignKey(
+        "magic.ThreadCrossingThreshold",
+        on_delete=models.CASCADE,
+        related_name="%(class)s_requirements",
+        null=True,
+        blank=True,
+        help_text=(
+            "Thread crossing threshold this requirement gates. "
+            "Exactly one of class_level_unlock / thread_crossing_threshold must be set."
+        ),
     )
 
     class Meta:
         abstract = True
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(class_level_unlock__isnull=False)
+                    & models.Q(thread_crossing_threshold__isnull=True)
+                )
+                | (
+                    models.Q(class_level_unlock__isnull=True)
+                    & models.Q(thread_crossing_threshold__isnull=False)
+                ),
+                name="%(class)s_exactly_one_unlock_target",
+            ),
+        ]
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if this requirement is met by the given character."""
         msg = "Subclasses must implement is_met_by_character"
         raise NotImplementedError(msg)
+
+
+# Backwards-compat alias for any external references to the old name.
+AbstractClassLevelRequirement = AbstractUnlockRequirement
 
 
 class TraitRequirement(AbstractClassLevelRequirement):
@@ -492,6 +532,19 @@ class LegendRequirement(AbstractClassLevelRequirement):
     class Meta:
         verbose_name = "Legend Requirement"
         verbose_name_plural = "Legend Requirements"
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(class_level_unlock__isnull=False)
+                    & models.Q(thread_crossing_threshold__isnull=True)
+                )
+                | (
+                    models.Q(class_level_unlock__isnull=True)
+                    & models.Q(thread_crossing_threshold__isnull=False)
+                ),
+                name="legendrequirement_exactly_one_unlock_target",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"Legend >= {self.minimum_legend}"
@@ -580,16 +633,25 @@ class ItemRequirement(AbstractClassLevelRequirement):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    (
-                        models.Q(item_template__isnull=False)
-                        & models.Q(min_touchstone_tier__isnull=True)
-                    )
-                    | (
-                        models.Q(item_template__isnull=True)
-                        & models.Q(min_touchstone_tier__isnull=False)
-                    )
+                    models.Q(item_template__isnull=False)
+                    & models.Q(min_touchstone_tier__isnull=True)
+                )
+                | (
+                    models.Q(item_template__isnull=True)
+                    & models.Q(min_touchstone_tier__isnull=False)
                 ),
                 name="itemrequirement_exactly_one_mode",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(class_level_unlock__isnull=False)
+                    & models.Q(thread_crossing_threshold__isnull=True)
+                )
+                | (
+                    models.Q(class_level_unlock__isnull=True)
+                    & models.Q(thread_crossing_threshold__isnull=False)
+                ),
+                name="itemrequirement_exactly_one_unlock_target",
             ),
         ]
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.classes.services import is_crossing_level
 from world.magic.constants import ACCELERATED_GAIN_SOURCES, EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
@@ -22,6 +23,7 @@ from world.magic.models import (
     IntensityTier,
     ResonanceGrant,
     Thread,
+    ThreadCrossingThreshold,
     ThreadLevelUnlock,
 )
 from world.magic.services.pull_effects import get_pull_effects_for_thread
@@ -270,7 +272,7 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
 
 
 @transaction.atomic
-def spend_resonance_for_imbuing(  # noqa: C901
+def spend_resonance_for_imbuing(  # noqa: C901, PLR0912, PLR0915
     character_sheet: CharacterSheet,
     thread: Thread,
     amount: int,
@@ -325,6 +327,7 @@ def spend_resonance_for_imbuing(  # noqa: C901
         thread.developed_points += amount
 
     blocked_by: str = "NONE"
+    blocked_requirement_messages: list[str] = []
     imbue_multiplier = get_imbue_cost_multiplier(thread.target_kind)
     while True:
         n = thread.level
@@ -342,6 +345,23 @@ def spend_resonance_for_imbuing(  # noqa: C901
             if not unlocked:
                 blocked_by = "XP_LOCK"
                 break
+        if is_crossing_level(next_level):
+            from world.progression.services.spends import (  # noqa: PLC0415
+                check_requirements_for_thread_crossing,
+            )
+
+            threshold = ThreadCrossingThreshold.objects.filter(
+                target_kind=thread.target_kind,
+                level=next_level,
+            ).first()
+            if threshold is not None:
+                met, failed = check_requirements_for_thread_crossing(
+                    character_sheet.character, threshold
+                )
+                if not met:
+                    blocked_by = "CROSSING_REQUIREMENT"
+                    blocked_requirement_messages = failed
+                    break
         if next_level > cap:
             blocked_by = (
                 "PATH_CAP"
@@ -368,6 +388,7 @@ def spend_resonance_for_imbuing(  # noqa: C901
         new_level=thread.level,
         new_developed_points=thread.developed_points,
         blocked_by=blocked_by,  # type: ignore[arg-type]
+        blocked_requirement_messages=blocked_requirement_messages,
     )
 
 

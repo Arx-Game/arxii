@@ -439,6 +439,18 @@ with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on
   `out_of_path_multiplier`. SANCTUM threads do not require a
   `ThreadWeavingUnlock` — the anchor cap (`sanctum.feature_instance.level × 10`)
   is the only gate at imbue time.
+- `ThreadCrossingThreshold` - Authored gate at thread-level PathStage crossing
+  levels (3, 6, 11, 16, 21). Keyed on `(target_kind, level)` so a level-3 GIFT
+  crossing can require different things than a level-3 COVENANT_ROLE crossing.
+  Requirements attach via the polymorphic `thread_crossing_threshold` FK on
+  `AbstractUnlockRequirement` (the generalized base formerly
+  `AbstractClassLevelRequirement`). Possession-only — items are never consumed
+  (#1885, ADR-0090). Fail-open: no row for `(target_kind, level)` → no gate.
+  The imbuing loop (`spend_resonance_for_imbuing`) checks for a threshold
+  before advancing to a crossing level; if requirements are unmet, it sets
+  `blocked_by="CROSSING_REQUIREMENT"` and stops. `is_crossing_level(level)`
+  in `world/classes/services.py` is the single source of truth for crossing
+  detection.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
 - `Ritual` - Authored magical procedure. Dispatch kinds: `SERVICE` →
