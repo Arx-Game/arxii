@@ -20693,6 +20693,8 @@ export interface components {
       /** @description Where the run currently sits; null = complete. */
       current_node?: number | null;
       status?: components['schemas']['MissionInstanceStatusEnum'];
+      /** @description Set when a participant disconnects (#1899) — see maybe_pause_mission_for_disconnect. */
+      is_paused?: boolean;
       /** Format: date-time */
       readonly started_at: string;
       /** Format: date-time */
