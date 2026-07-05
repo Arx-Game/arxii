@@ -198,8 +198,28 @@ Build to the ADR; these are not open questions. See
   is a number), out-of-combat sea travel, cargo-as-tracked-goods, and mission integration.
 - **Servant / retriever NPC entity**; **vault security / access lists / theft**;
   **building→neighborhood→domain progression** (#696); **room-feature systems** (Library/Lab/Training
-  Room/Command Center/Granary/Cannon Deck — #675, only Sanctum real); **future Project kinds** (#673);
-  **touchstone items + reagents + personal imbuments** (#707). `intent`.
+  Room/Command Center/Granary/Cannon Deck — #675, only Sanctum real); **future Project kinds** (#673).
+  `intent`.
+- **Touchstone items + magical reagents + personal attunement framework** — `partial`. #707
+  shipped the framework (ADR-0087). Resonance-tied items (`ItemTemplate.tied_resonance`/`resonance_tier`, a new
+  `ResonanceTier` potency axis independent of crafting `QualityTier`); two-stage personal
+  **attunement** (`attune_touchstone()`, seeded "Rite of Attunement" ritual — binds an
+  `ItemInstance` to a character without consuming it); `RitualComponentRequirement`
+  touchstone-mode (dynamic resonance match against the performer's own claimed Resonance, or
+  a specific `resonance_context` — e.g. Sanctification's founding Resonance) alongside its
+  existing template-mode, both resolved/consumed by the shared
+  `resolve_and_consume_ritual_components()` helper; Ritual of Sanctification's two rituals now
+  carry real touchstone + generic-reagent requirements; FACET_ATTACH crafting seeded with a
+  generic reagent material requirement (content-only, zero service-layer change); narrative
+  acquisition (`grant_touchstone_item_to_character()` + staff `CmdGrantItem` + Mission
+  `DeedRewardSink.ITEM` reward sink — no shop/merchant system exists in this codebase, so
+  GM-grant and mission-reward are the only acquisition channels). See
+  [magic.md](../systems/magic.md) ("Touchstones + reagents") and
+  [items.md](../systems/items.md) ("Touchstones + reagents" / "Narrative acquisition").
+  Seeded content is **framework-proving only** (one touchstone template, three generic
+  reagents) — a full per-resonance/per-tier catalog is separate content-authoring work.
+  Follow-up: **#1859** (leveled/Path-scaled component requirements — Ritual of the Durance,
+  Rite of Weaving/Imbuing — `needs-design`, blocked on this landing).
 - **Asset / Companion subsystem** — #672. **Companion/familiar half shipped**
   (generic bound-creature substrate + Beastlord beast-binding, see
   [companions.md](../systems/companions.md)); still `intent`: **gifts/paths

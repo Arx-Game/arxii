@@ -1123,6 +1123,7 @@
   - weekly_journal_xp <- journals.WeeklyJournalXP
   - owned_items <- items.ItemInstance
   - crafted_items <- items.ItemInstance
+  - attuned_touchstones <- items.ItemInstance
   - items_given_away <- items.OwnershipEvent
   - items_received <- items.OwnershipEvent
   - outfits <- items.Outfit
@@ -2127,6 +2128,8 @@
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
   - minimum_quality_tier -> items.QualityTier [FK] (nullable)
+  - tied_resonance -> magic.Resonance [FK] (nullable)
+  - resonance_tier -> magic.ResonanceTier [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
@@ -2154,6 +2157,7 @@
   - quality_tier -> items.QualityTier [FK] (nullable)
   - holder_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
@@ -2491,12 +2495,15 @@
   - modifier_target <- mechanics.ModifierTarget
   - cascade_overrides <- locations.LocationValueOverride
   - cascade_modifiers <- locations.LocationValueModifier
+  - tied_item_templates <- items.ItemTemplate
   - garment_mitigations <- items.GarmentMitigation
   - covenantrole_subrole <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
   - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
+
+### ResonanceTier
 
 ### Gift
 **Foreign Keys:**
@@ -2966,7 +2973,8 @@
 ### RitualComponentRequirement
 **Foreign Keys:**
   - ritual -> magic.Ritual [FK]
-  - item_template -> items.ItemTemplate [FK]
+  - item_template -> items.ItemTemplate [FK] (nullable)
+  - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
 
 ### PendingRitualEffect
@@ -3216,6 +3224,7 @@
 ### Service Functions
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' — Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
 - `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' — Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
+- `attune_touchstone(*, character_sheet: 'CharacterSheet', ritual: 'Ritual | None', item_instance: 'ItemInstance', **kwargs: 'Any') -> 'ItemInstance' — Bind ``item_instance`` to ``character_sheet`` as a personal touchstone.`
 - `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int', strain_commitment: 'int' = 0, lethal: 'bool' = True) -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
 - `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig', *, lethal: 'bool' = True) -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
 - `coherence_cache_scope() — Context manager that memoizes ``motif_coherence_bonus`` per (sheet, resonance).`
@@ -3243,6 +3252,7 @@
 - `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
+- `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' — Validate and atomically consume ``ritual``'s components from ``components``.`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0) -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
@@ -3568,6 +3578,7 @@
   - route -> missions.MissionOptionRoute [FK] (nullable)
   - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
+  - item_template -> items.ItemTemplate [FK] (nullable)
 
 ### MissionRenownAward
 **Foreign Keys:**
@@ -3643,6 +3654,7 @@
   - deed -> missions.MissionDeedRecord [FK]
   - recipient -> objects.ObjectDB [FK]
   - resonance -> magic.Resonance [FK] (nullable)
+  - item_template -> items.ItemTemplate [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
 

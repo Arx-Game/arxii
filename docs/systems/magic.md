@@ -420,7 +420,7 @@ All SharedMemoryModel lookups.
 | `RitualComponentRequirement` | Items required to perform a Ritual | `ritual` FK, either `item_template` FK (template-mode) or `min_touchstone_tier` FK to `ResonanceTier` (touchstone-mode — exactly one of the two set, enforced by `CheckConstraint`), `quantity`, optional `min_quality_tier` FK, `authored_provenance` |
 | `ResonanceTier` | Ordered potency tier for resonance-tied items/touchstones (independent of `items.QualityTier` — potency and crafting quality are orthogonal axes) | `name` (unique), `tier_level` (unique, ordering/threshold value), `description` |
 
-**Touchstones + reagents (#707).** `ItemTemplate.tied_resonance` (FK to `Resonance`) +
+**Touchstones + reagents (#707 — ADR-0087).** `ItemTemplate.tied_resonance` (FK to `Resonance`) +
 `ItemTemplate.resonance_tier` (FK to `ResonanceTier`) mark a template as a *touchstone* —
 a resonance-tied item a character personally attunes to. `ItemInstance.attuned_to_character_sheet`
 + `attuned_at` record that binding, set by `attune_touchstone()` (`services/touchstones.py`,
@@ -442,6 +442,16 @@ dispatch through `PerformRitualAction` — see the Sanctum section below). `seed
 seeds a small framework-proving catalog (three `ResonanceTier` rows, one example Praedari-paw
 touchstone template, three generic reagent templates) and attaches requirements to both
 Sanctification rituals; a full per-resonance/per-tier catalog is separate content-authoring work.
+Attunement itself (binding, not consuming) is the seeded **Rite of Attunement** `Ritual`
+(SERVICE, `seeds_touchstones.py`) dispatching `attune_touchstone()`
+(`services/touchstones.py`) through the *generic* `PerformRitualAction` seam — unlike
+Sanctification, this one genuinely goes through `CmdRitual`/`RitualPerformView`. It sets
+`ItemInstance.attuned_to_character_sheet` + `attuned_at`, raising `RitualComponentError` if the
+item isn't resonance-tied, isn't held by the performer, is already attuned, or the performer
+hasn't claimed the item's `tied_resonance`. Narrative acquisition of touchstones/reagents
+themselves (no shop system exists) is documented in `docs/systems/items.md`
+(`grant_touchstone_item_to_character`). See ADR-0087 for the extension-vs-parallel-model
+decision and the `client_hosted` dispatch discovery.
 
 ### ThreadWeaving Acquisition (Spec A §2.1 / §4.2)
 
@@ -1412,7 +1422,7 @@ execute_flow("cast_power", context={
 - **Thread PROTECT FKs** - All typed `target_*` FKs use `on_delete=PROTECT`. Anchors cannot be deleted while threads reference them. This is why `CharacterThreadHandler.passive_vital_bonuses` doesn't need an anchor-in-scope runtime filter.
 - **SANCTUM room anchor** - `target_sanctum_details` (FK to `SanctumDetails`) is the leveled room anchor. Cap = `sanctum.feature_instance.level × 10`. Thread is pull-applicable (in-sanctum boost) while the character is in the Sanctum's room. Bare ROOM `target_kind` was removed.
 - **Sanctum ops are TELNET+WEB** (#1497) — 7 REGISTRY Actions (`sanctum_install` / `sanctum_homecoming` / `sanctum_purging` / `sanctum_weave` / `sanctum_dissolve` / `sanctum_absorb` / `sanctum_sever`) in `actions/definitions/sanctum.py`. `CmdSanctum` (`commands/sanctum.py`) is the namespaced telnet face; the web `SanctumViewSet` dispatches the same Actions. Dissolution is a soft-delete: `RoomFeatureInstance.dissolved_at` marks dissolved sanctums; `.active()` excludes them; SANCTUM threads are soft-retired on dissolution. One-personal-per-founder enforced in service layer (excluding dissolved rows).
-- **Sanctification requires real components (#707)** — both Sanctification `Ritual` rows
+- **Sanctification requires real components (#707 — ADR-0087)** — both Sanctification `Ritual` rows
   (Personal + Covenant) carry seeded `RitualComponentRequirement` rows (a touchstone tied to the
   founding Resonance + three generic reagents; see "Touchstones + reagents" above).
   `sanctum_install` validates/consumes them via `resolve_and_consume_ritual_components` before

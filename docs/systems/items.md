@@ -37,7 +37,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK) |
+| `ItemTemplate` | Archetype definition for an item type | `name`, `description`, `weight`, `size`, `value`, `is_active`, container fields, stacking fields, consumable fields, crafting fields, `interactions` (M2M to InteractionType), `minimum_quality_tier` (FK), `tied_resonance` (FK to `magic.Resonance`, nullable — marks a template as a *touchstone*) + `resonance_tier` (FK to `magic.ResonanceTier`, nullable — potency floor; `CheckConstraint` requires both set together or both null, #707) |
 | `TemplateSlot` | Body region + layer an item occupies | `template` (FK), `body_region`, `equipment_layer`, `covers_lower_layers` |
 | `TemplateInteraction` | Flavor text for a specific interaction on a template | `template` (FK), `interaction_type` (FK), `flavor_text` |
 
@@ -45,7 +45,7 @@ from world.items.constants import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `holder_character_sheet` (FK to CharacterSheet), `crafter_character_sheet` (FK to CharacterSheet), `lore_value`, `destroyed_at` |
+| `ItemInstance` | A specific item in the game world | `template` (FK, PROTECT), `game_object` (OneToOne to ObjectDB), `custom_name`, `custom_description`, `quality_tier` (FK), `quantity`, `charges`, `is_open`, `holder_character_sheet` (FK to CharacterSheet), `crafter_character_sheet` (FK to CharacterSheet), `lore_value`, `destroyed_at`, `attuned_to_character_sheet` (FK to CharacterSheet, `SET_NULL`, nullable — the character this touchstone instance is personally bound to) + `attuned_at` (DateTimeField, nullable; set by `attune_touchstone()`, #707) |
 | `EquippedItem` | Tracks equipped item at a body slot | `character` (FK to ObjectDB), `item_instance` (FK), `body_region`, `equipment_layer`. Unique on (character, body_region, equipment_layer) |
 
 ### Economy & History
@@ -268,9 +268,55 @@ items both capability sources AND potential targets for challenges (a rust spell
   anchor kind (`thread.item` FK → `ItemInstance`). Thread-bearing items accrue
   resonance and level independently of their wielder.
 - **Ritual components** — `RitualComponentRequirement` FKs to `ItemTemplate` with an
-  optional `QualityTier`, declaring what the ritual consumes on cast.
+  optional `QualityTier` (template-mode), or to a `magic.ResonanceTier` floor
+  (touchstone-mode — see below), declaring what the ritual consumes on cast.
 
 See `docs/systems/magic.md` for the full thread and ritual model lineup.
+
+### Touchstones + reagents (#707 — ADR-0087)
+
+`ItemTemplate.tied_resonance` + `ItemTemplate.resonance_tier` mark a template as a
+**touchstone**: a resonance-tied item archetype (e.g. a Tier-1 Praedari paw) a character
+personally attunes to. Resonance potency (`ResonanceTier`, in `world.magic`) is an axis
+independent of `items.QualityTier` — a Tier-1 touchstone can be Masterwork-crafted; a
+Tier-3 one can be Common-quality.
+
+Attunement is two-stage: `attune_touchstone()` (`world.magic.services.touchstones`, the
+seeded "Rite of Attunement" `Ritual`) binds an `ItemInstance` to a character
+(`attuned_to_character_sheet` + `attuned_at`) without consuming it — the item keeps
+existing as a physical, carryable object. The *target* ritual (e.g. Ritual of
+Sanctification) is what actually consumes it later, via the same
+`resolve_and_consume_ritual_components()` requirement-consumption plumbing used for
+ordinary reagents. See `docs/systems/magic.md` ("Touchstones + reagents") for the full
+attunement/consumption flow and ADR-0087 for the `RitualComponentRequirement`
+touchstone-mode design.
+
+**Generic reagents** (candle, salt, incense) are ordinary `ItemTemplate`s with no
+`tied_resonance` — consumed exactly like any other template-mode ritual/crafting
+component; no attunement step.
+
+### Narrative acquisition — no shop/merchant system exists (#707)
+
+There is no `Shop`/`Vendor`/`Merchant` model or purchase service anywhere in this
+codebase. Touchstones and reagents (and any other story-earned item) are acquired
+narratively, through two channels:
+
+- **GM staff grant** — `grant_touchstone_item_to_character(*, character_sheet, template,
+  granted_by=None)` (`world.items.services.narrative_grants`) creates one `ItemInstance`
+  of a given `ItemTemplate`, held by the recipient's `CharacterSheet`. `granted_by` is
+  audit-only (not surfaced to the recipient, mirroring `award_kudos`'s
+  don't-leak-the-staff-hand precedent). Staff-facing telnet command: `CmdGrantItem`
+  (`grant_item <character>=<item template name>`, `perm(Admin)`,
+  `src/commands/grant_item.py`).
+- **Mission reward** — `DeedRewardSink.ITEM` (`world.missions.constants`) on a
+  `MissionDeedRewardLine` dispatches `IMMEDIATE` (not queued/cron): `_route_line`
+  (`world.missions.services.rewards`) calls `grant_touchstone_item_to_character` directly
+  when `kind=IMMEDIATE, sink=ITEM`, granting `line.item_template` to the recipient's sheet.
+  `MissionDeedRewardLine.item_template` is required iff `sink=ITEM` (model `clean()`).
+
+A shop/vendor economy is a separate, unrelated future feature (`docs/roadmap/planned-systems.md`,
+"Store / shop / vendor" — #923); these two channels are this framework's *only* acquisition
+path today.
 
 ---
 
@@ -301,6 +347,23 @@ handler — no schema change required.
 `CraftingSkillCap.for_skill(recipe, skill_value)` returns the `max_quality_tier` for
 the highest band at or below the crafter's skill rank (or `None` when no rows exist /
 skill is below every band).
+
+### FACET_ATTACH reagent content (#707)
+
+`world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement(recipe)`
+get-or-creates a generic reagent `ItemTemplate` ("Enchanter's Binding Thread") and a
+`CraftingMaterialRequirement` row (quantity 1) on the given FACET_ATTACH `CraftingRecipe`.
+This is content-only — `run_crafting_recipe()` already stages and consumes
+`CraftingMaterialRequirement` rows generically for every `CraftingRecipeKind`
+(`stage_and_assert_affordable` / `consume_cost` in `crafting/cost.py`), so no
+service-layer change was needed to make facet attachment (both plain-item facets and
+fashion-item facet attachment share the one FACET_ATTACH recipe) cost a real material.
+Per ADR-0087's rejected-alternative note, FACET_ATTACH reagents stay exact-template
+matching (no touchstone-mode) — attaching a facet to someone else's garment isn't a
+personal-resonance act. Proven end-to-end by
+`world/items/tests/test_facet_attach_material_e2e.py`; the seed helper is not yet
+invoked from a production content loader (framework-proving scope only, mirroring the
+touchstone/reagent seeds in `world.magic`).
 
 ### Handler Registry (`crafting/registry.py`, `crafting/handlers.py`)
 
