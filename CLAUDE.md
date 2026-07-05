@@ -45,6 +45,12 @@ back from the creating command's own stdout.
 
 - **Never work directly on main.** Branch first: `git checkout -b feature-name`.
   After a squash-merge: `git checkout main && git pull && git branch -D feature-name`.
+- **Finishing a branch always means push + open a PR — never a local merge.** When a
+  skill (e.g. `superpowers:finishing-a-development-branch`) offers a menu of
+  merge/PR/keep/discard, skip straight to push + PR without asking; only ask if the
+  user wants to keep-as-is or discard instead. This follows from the merge-queue rule
+  below (a local merge bypasses CI and the queue entirely) — don't re-ask it as an
+  open question each time.
 - **`main` uses a merge queue (#991; see ADR-0021).** Once a PR is green, **enqueue it**
   (`gh pr merge --auto --squash`, or `enqueue-pr.sh` in the `issue-to-merged-pr`
   skill) and stop — do not re-sync with main or merge by hand. The queue
