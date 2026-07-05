@@ -11,7 +11,9 @@ import { BuilderCanvas } from './BuilderCanvas';
 import { DecorationDialog } from './DecorationDialog';
 import { DigDialog } from './DigDialog';
 import { ExtensionDialog } from './ExtensionDialog';
+import { RenovationDialog } from './RenovationDialog';
 import { RoomDetailPanel } from './RoomDetailPanel';
+import { StyleDialog } from './StyleDialog';
 
 interface BuildingBuilderDialogProps {
   buildingId: number;
@@ -46,6 +48,8 @@ export function BuildingBuilderDialog({
   const [decorateRoom, setDecorateRoom] = useState(false);
   const [decorateOpen, setDecorateOpen] = useState(false);
   const [extendOpen, setExtendOpen] = useState(false);
+  const [renovateOpen, setRenovateOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
   const action = useRoomBuilderAction(characterId, buildingId);
 
   const payload = manager.data;
@@ -103,6 +107,22 @@ export function BuildingBuilderDialog({
               disabled={entryRoomId == null}
             >
               Extend Building
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setRenovateOpen(true)}
+              disabled={entryRoomId == null}
+            >
+              Renovate
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setStyleOpen(true)}
+              disabled={entryRoomId == null}
+            >
+              Style
             </Button>
             {payload && <BudgetMeter building={payload.building} />}
           </div>
@@ -185,6 +205,22 @@ export function BuildingBuilderDialog({
               currentBudget={payload.building.space_budget}
               open={extendOpen}
               onOpenChange={setExtendOpen}
+              runAction={runAction}
+            />
+            <RenovationDialog
+              anchorRoomId={entryRoomId}
+              currentKind={payload.building.kind}
+              renovationCost={payload.building.renovation_cost ?? null}
+              open={renovateOpen}
+              onOpenChange={setRenovateOpen}
+              runAction={runAction}
+            />
+            <StyleDialog
+              anchorRoomId={entryRoomId}
+              characterId={characterId}
+              currentStyle={payload.building.style ?? null}
+              open={styleOpen}
+              onOpenChange={setStyleOpen}
               runAction={runAction}
             />
           </>

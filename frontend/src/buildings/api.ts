@@ -3,10 +3,12 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type {
   BuildingManagerPayload,
   ForRoomResult,
-  RoomComfortBreakdown,
+  PaginatedArchitecturalStyleList,
+  PaginatedBuildingKindList,
   PaginatedDecorationTemplateList,
   PaginatedRoomSizeTierList,
   RoomBuilderActionKey,
+  RoomComfortBreakdown,
 } from './types';
 
 async function getJson<T>(url: string, fallbackError: string): Promise<T> {
@@ -64,6 +66,23 @@ export function fetchDecorationTemplates(
   return getJson(
     `/api/buildings/decoration-templates/${params}`,
     'Failed to load the decoration catalog.'
+  );
+}
+
+export function fetchBuildingKinds(search?: string): Promise<PaginatedBuildingKindList> {
+  const params = search ? `?search=${encodeURIComponent(search)}` : '';
+  return getJson(`/api/buildings/building-kinds/${params}`, 'Failed to load building kinds.');
+}
+
+export function fetchArchitecturalStyles(
+  characterId: number,
+  search?: string
+): Promise<PaginatedArchitecturalStyleList> {
+  const params = new URLSearchParams({ character_id: String(characterId) });
+  if (search) params.set('search', search);
+  return getJson(
+    `/api/buildings/architectural-styles/?${params.toString()}`,
+    'Failed to load architectural styles.'
   );
 }
 

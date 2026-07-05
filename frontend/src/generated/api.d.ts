@@ -1161,6 +1161,100 @@ export interface paths {
     patch: operations['boundaries_treasured_subjects_partial_update'];
     trace?: never;
   };
+  '/api/buildings/architectural-styles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The ArchitecturalStyle catalog for the builder picker, per-viewer filtered (#1882).
+     *
+     *     ``set_building_style`` is knowledge-gated (``can_build_style``): default
+     *     styles are open, throwback styles require codex knowledge. This endpoint
+     *     returns only styles the requesting persona can build, so unlearned throwback
+     *     styles never reach the picker.
+     */
+    get: operations['buildings_architectural_styles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/architectural-styles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The ArchitecturalStyle catalog for the builder picker, per-viewer filtered (#1882).
+     *
+     *     ``set_building_style`` is knowledge-gated (``can_build_style``): default
+     *     styles are open, throwback styles require codex knowledge. This endpoint
+     *     returns only styles the requesting persona can build, so unlearned throwback
+     *     styles never reach the picker.
+     */
+    get: operations['buildings_architectural_styles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/building-kinds/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The admin-authored BuildingKind catalog for the renovation picker (#1882).
+     *
+     *     Public read — BuildingKind is an open author-authored catalog (no owner
+     *     gating needed for listing). The frontend excludes the building's current
+     *     kind client-side (it knows the kind from the manager payload).
+     */
+    get: operations['buildings_building_kinds_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/buildings/building-kinds/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The admin-authored BuildingKind catalog for the renovation picker (#1882).
+     *
+     *     Public read — BuildingKind is an open author-authored catalog (no owner
+     *     gating needed for listing). The frontend excludes the building's current
+     *     kind client-side (it knows the kind from the manager payload).
+     */
+    get: operations['buildings_building_kinds_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/buildings/decoration-templates/': {
     parameters: {
       query?: never;
@@ -15919,6 +16013,27 @@ export interface components {
      * @enum {string}
      */
     ArcanaTypeEnum: 'major' | 'minor';
+    /**
+     * @description An authorable architectural style for the builder picker (#1882).
+     *
+     *     The player-facing lore lives in the linked ``CodexSubject`` — knowing that
+     *     subject is what gates throwback styles (``can_build_style``). The description
+     *     is surfaced inline here so the picker needn't hit the Codex app.
+     */
+    ArchitecturalStyle: {
+      readonly id: number;
+      name: string;
+      description: string | null;
+      /** @description Default-available (living-realm tier). Non-default styles are the discoverable throwback tier (#1469): buildable only once the persona's character KNOWS an entry under codex_subject (research-unlocked). */
+      is_default?: boolean;
+      /** @description Base dwelling-prestige addend for a building wearing this style (#1469 throwback tier). PLACEHOLDER magnitudes pending the tuning pass. */
+      prestige_bonus?: number;
+      /**
+       * Format: decimal
+       * @description Construction/renovation cost knob for this style (#1469). Data only for now — charging awaits the economy pass (Phase E cost deduction is unwired).
+       */
+      cost_multiplier?: string;
+    };
     AreaList: {
       readonly id: number;
       readonly name: string;
@@ -16432,6 +16547,28 @@ export interface components {
       display_name: string;
       /** @description Whether available in character creation */
       is_cg_selectable?: boolean;
+    };
+    /**
+     * @description An authorable building category for the renovation picker (#1882).
+     *
+     *     Open catalog — rows authored by staff. Each row carries non-exclusive
+     *     descriptive flags the picker badges (a fortified witch-king manor is
+     *     ``residential + fortified + occult + aerial``).
+     */
+    BuildingKind: {
+      readonly id: number;
+      name: string;
+      /** @description Admin-editable flavor describing what this kind is. */
+      description?: string;
+      is_residential?: boolean;
+      is_commercial?: boolean;
+      is_fortified?: boolean;
+      is_occult?: boolean;
+      is_maritime?: boolean;
+      is_agrarian?: boolean;
+      is_aerial?: boolean;
+      is_subterranean?: boolean;
+      is_secret?: boolean;
     };
     /** @description The full owner-facing manager payload. */
     BuildingManager: {
@@ -20556,6 +20693,7 @@ export interface components {
       name: string;
       kind: string;
       style: string | null;
+      renovation_cost: number | null;
       space_budget: number;
       space_used: number;
       space_remaining: number;
@@ -22085,6 +22223,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AlternateSelf'][];
     };
+    PaginatedArchitecturalStyleList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ArchitecturalStyle'][];
+    };
     PaginatedAreaListList: {
       /** @example 123 */
       count: number;
@@ -22174,6 +22327,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['BugReportDetail'][];
+    };
+    PaginatedBuildingKindList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BuildingKind'][];
     };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
@@ -31727,6 +31895,102 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TreasuredSubject'];
+        };
+      };
+    };
+  };
+  buildings_architectural_styles_list: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedArchitecturalStyleList'];
+        };
+      };
+    };
+  };
+  buildings_architectural_styles_retrieve: {
+    parameters: {
+      query: {
+        /** @description ObjectDB id of the viewing character (must be your own). */
+        character_id: number;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ArchitecturalStyle'];
+        };
+      };
+    };
+  };
+  buildings_building_kinds_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBuildingKindList'];
+        };
+      };
+    };
+  };
+  buildings_building_kinds_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this building kind. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BuildingKind'];
         };
       };
     };

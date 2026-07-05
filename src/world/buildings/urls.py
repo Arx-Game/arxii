@@ -4,6 +4,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.buildings.views import (
+    ArchitecturalStyleViewSet,
+    BuildingKindViewSet,
     BuildingManagerViewSet,
     DecorationTemplateViewSet,
     RoomSizeTierViewSet,
@@ -15,5 +17,7 @@ router = DefaultRouter()
 router.register(r"manager", BuildingManagerViewSet, basename="building-manager")
 router.register(r"room-size-tiers", RoomSizeTierViewSet, basename="room-size-tier")
 router.register(r"decoration-templates", DecorationTemplateViewSet, basename="decoration-template")
+router.register(r"building-kinds", BuildingKindViewSet, basename="building-kind")
+router.register(r"architectural-styles", ArchitecturalStyleViewSet, basename="architectural-style")
 
 urlpatterns = [path("", include(router.urls))]

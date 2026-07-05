@@ -3,7 +3,9 @@ import { toast } from 'sonner';
 
 import {
   dispatchRoomBuilder,
+  fetchArchitecturalStyles,
   fetchBuildingForRoom,
+  fetchBuildingKinds,
   fetchBuildingManager,
   fetchDecorationTemplates,
   fetchRoomComfort,
@@ -21,6 +23,9 @@ export const buildingKeys = {
   roomComfort: (roomId: number) => [...buildingKeys.all, 'room-comfort', roomId] as const,
   sizeTiers: () => [...buildingKeys.all, 'room-size-tiers'] as const,
   templates: (search: string) => [...buildingKeys.all, 'decoration-templates', search] as const,
+  buildingKinds: (search: string) => [...buildingKeys.all, 'building-kinds', search] as const,
+  architecturalStyles: (characterId: number, search: string) =>
+    [...buildingKeys.all, 'architectural-styles', characterId, search] as const,
   personaSearch: (term: string) => [...buildingKeys.all, 'persona-search', term] as const,
 };
 
@@ -74,6 +79,28 @@ export function useDecorationTemplatesQuery(search = '', enabled = true) {
     queryKey: buildingKeys.templates(search),
     queryFn: () => fetchDecorationTemplates(search || undefined),
     enabled,
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useBuildingKindsQuery(search = '', enabled = true) {
+  return useQuery({
+    queryKey: buildingKeys.buildingKinds(search),
+    queryFn: () => fetchBuildingKinds(search || undefined),
+    enabled,
+    staleTime: FIVE_MINUTES,
+  });
+}
+
+export function useArchitecturalStylesQuery(
+  characterId: number | null | undefined,
+  search = '',
+  enabled = true
+) {
+  return useQuery({
+    queryKey: buildingKeys.architecturalStyles(characterId ?? 0, search),
+    queryFn: () => fetchArchitecturalStyles(characterId!, search || undefined),
+    enabled: enabled && characterId != null,
     staleTime: FIVE_MINUTES,
   });
 }
