@@ -169,6 +169,13 @@ class Character(ObjectParent, DefaultCharacter):
         return CharacterConditionHandler(self)
 
     @cached_property
+    def companions(self):
+        """Handler for this character's bonded Companion rows (#672)."""
+        from world.companions.handlers import CharacterCompanionHandler
+
+        return CharacterCompanionHandler(self)
+
+    @cached_property
     def equipped_items(self):
         """Cached handler for this character's equipped items and their facets (Spec D §3.3)."""
         from world.items.handlers import CharacterEquipmentHandler
@@ -402,6 +409,14 @@ class Character(ObjectParent, DefaultCharacter):
                 lambda: reconcile_sunlight_exposure(self, self.location),
                 actor=self,
             )
+
+            # Companions follow their owner (#672 spec, Decision #9).
+            def _companion_follow_on_move() -> None:
+                for companion in self.companions.active():
+                    if companion.objectdb is not None:
+                        companion.objectdb.move_to(self.location, quiet=True)
+
+            run_safely("companion_follow_on_move", _companion_follow_on_move, actor=self)
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.

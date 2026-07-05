@@ -128,6 +128,15 @@ class StaffCharacterFactory(ObjectDBFactory):
     db_typeclass_path = "typeclasses.gm_characters.StaffCharacter"
 
 
+class CompanionObjectFactory(ObjectDBFactory):
+    """
+    Factory for creating CompanionObject instances for testing.
+    """
+
+    db_key = factory.Sequence(lambda n: f"Companion_{n}")
+    db_typeclass_path = "typeclasses.companions.CompanionObject"
+
+
 class EmailAddressFactory(factory.django.DjangoModelFactory):
     """
     Factory for creating EmailAddress instances for testing.

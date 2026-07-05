@@ -4775,6 +4775,105 @@ paths:
               schema:
                 $ref: '#/components/schemas/DuelChallenge'
           description: ''
+  /api/companions/companion-archetypes/:
+    get:
+      operationId: companions_companion_archetypes_list
+      description: Read-only catalog of authored CompanionArchetype rows.
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompanionArchetype'
+          description: ''
+  /api/companions/companion-archetypes/{id}/:
+    get:
+      operationId: companions_companion_archetypes_retrieve
+      description: Read-only catalog of authored CompanionArchetype rows.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion Archetype.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanionArchetype'
+          description: ''
+  /api/companions/companions/:
+    get:
+      operationId: companions_companions_list
+      description: Read endpoints for the player's own active companions.
+      parameters:
+      - in: query
+        name: archetype__domain
+        schema:
+          type: string
+          enum:
+          - BEAST
+          - CONSTRUCT
+          - ELEMENTAL
+          - SPIRIT
+          - UNDEAD
+        description: |-
+          * `BEAST` - Beast
+          * `UNDEAD` - Undead
+          * `ELEMENTAL` - Elemental
+          * `CONSTRUCT` - Construct
+          * `SPIRIT` - Spirit
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCompanionList'
+          description: ''
+  /api/companions/companions/{id}/:
+    get:
+      operationId: companions_companions_retrieve
+      description: Read endpoints for the player's own active companions.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
   /api/conditions/capabilities/:
     get:
       operationId: conditions_capabilities_list
@@ -29670,6 +29769,65 @@ components:
       description: |-
         * `message` - Message
         * `status_change` - Status Change
+    Companion:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        archetype:
+          allOf:
+          - $ref: '#/components/schemas/CompanionArchetype'
+          readOnly: true
+        bonded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        released_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - archetype
+      - bonded_at
+      - id
+      - name
+      - released_at
+    CompanionArchetype:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        domain:
+          allOf:
+          - $ref: '#/components/schemas/DomainEnum'
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        bind_difficulty:
+          type: integer
+          readOnly: true
+          description: Feeds perform_check's target_difficulty for the bind attempt.
+        capacity_cost:
+          type: integer
+          readOnly: true
+          description: Companion Capacity consumed while this archetype is bonded.
+      required:
+      - bind_difficulty
+      - capacity_cost
+      - description
+      - domain
+      - id
+      - name
     ConditionCategory:
       type: object
       description: Serializer for condition categories.
@@ -31488,6 +31646,20 @@ components:
       - id
       - name
       - slug
+    DomainEnum:
+      enum:
+      - BEAST
+      - UNDEAD
+      - ELEMENTAL
+      - CONSTRUCT
+      - SPIRIT
+      type: string
+      description: |-
+        * `BEAST` - Beast
+        * `UNDEAD` - Undead
+        * `ELEMENTAL` - Elemental
+        * `CONSTRUCT` - Construct
+        * `SPIRIT` - Spirit
     DraftApplication:
       type: object
       description: Serializer for draft applications (list view).
@@ -39607,6 +39779,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CharacterRelationshipList'
+    PaginatedCompanionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Companion'
     PaginatedConsequenceOutcomeList:
       type: object
       required:

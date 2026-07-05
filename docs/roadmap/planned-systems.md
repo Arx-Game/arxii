@@ -200,8 +200,12 @@ Build to the ADR; these are not open questions. See
   **building→neighborhood→domain progression** (#696); **room-feature systems** (Library/Lab/Training
   Room/Command Center/Granary/Cannon Deck — #675, only Sanctum real); **future Project kinds** (#673);
   **touchstone items + reagents + personal imbuments** (#707). `intent`.
-- **Asset / Companion subsystem** — #672. Includes **animal companions**; we would almost certainly want
-  **gifts around them, possibly paths built around companionship**. `intent`.
+- **Asset / Companion subsystem** — #672. **Companion/familiar half shipped**
+  (generic bound-creature substrate + Beastlord beast-binding, see
+  [companions.md](../systems/companions.md)); still `intent`: **gifts/paths
+  built around companionship** beyond the one shipped Gift. The **NPCAsset
+  informant/contact promotion mechanic** (the other half #672 originally
+  bundled) is split to its own follow-up issue, `intent`.
 
 ## Species & racial framework
 

@@ -26,6 +26,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [codex](src/world/codex/AGENT_GLOSSARY.md)
 - [stories](src/world/stories/AGENT_GLOSSARY.md)
 - [boundaries](src/world/boundaries/AGENT_GLOSSARY.md)
+- [companions](src/world/companions/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md)

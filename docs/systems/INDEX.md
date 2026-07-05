@@ -1748,6 +1748,42 @@ the hull stat IS `Building.fortification_level`, reused not duplicated. Full det
   `world.locations`, `world.scenes`, `world.covenants`.
 - **Source:** `src/world/ships/`
 
+### Companions (#672)
+Generic bound-creature substrate plus one concrete consumer: a Beastlord-style
+Gift letting a PC bind a wild beast archetype as a persistent, room-present
+companion. Full detail: [companions.md](companions.md).
+
+- **Models:** `CompanionArchetype` (staff-authored catalog: `domain`, `name`,
+  `bind_difficulty`, `capacity_cost` — binding is archetype-selection, no
+  discrete in-room "wild creature" object), `Companion` (the bound instance:
+  `owner` → `CharacterSheet`, `archetype`, `granting_gift` → `magic.Gift`,
+  `name`, `objectdb` → live `CompanionObject`, `bonded_at`/`released_at`;
+  never hard-deleted).
+- **Companion Capacity** (`world.companions.services`): `companion_capacity` /
+  `used_companion_capacity` compute a PC's capacity from the granting Gift's
+  `Thread.level` via the existing `ThreadPullEffect` mechanism
+  (`TargetKind.GIFT`, `EffectKind.FLAT_BONUS`, tier 0) — no new magic enum
+  values (ADR-0088).
+  `bind_companion` / `release_companion` create/tear down the `Companion` row
+  + its live `CompanionObject` (release soft-deletes: `released_at` set,
+  `objectdb` cleared, never a hard delete).
+- **Typeclass:** `typeclasses.companions.CompanionObject` extends `Character`
+  (ADR-0088), not `Object` — a valid future combat participant without a
+  typeclass migration. `Character.companions`
+  (`world.companions.handlers.CharacterCompanionHandler`) exposes a PC's
+  active companions; `Character.at_post_move` moves them along with their
+  owner between rooms.
+- **Actions** (`actions/definitions/companions.py`, REGISTRY,
+  `category="companions"`): `BindCompanionAction` (`bind_companion`) — gated
+  by `HasCompanionCapacityPrerequisite`, executes via `perform_check` against
+  `CompanionArchetype.bind_difficulty`.
+- **REST API:** `world.companions.views.{CompanionViewSet,
+  CompanionArchetypeViewSet}` — read-only, mounted at `/api/companions/`.
+  Binding happens via the Action dispatch seam, not a ViewSet write.
+- **Cross-app dependencies:** `world.character_sheets`, `world.magic`
+  (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
+- **Source:** `src/world/companions/`
+
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
 `RoomFeatureInstance` decorates a `RoomProfile` and dispatches per-kind logic

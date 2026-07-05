@@ -1,0 +1,31 @@
+"""FactoryBoy factories for the companions app (#672)."""
+
+from __future__ import annotations
+
+import factory
+from factory.django import DjangoModelFactory
+
+from world.companions.constants import CompanionDomain
+from world.companions.models import Companion, CompanionArchetype
+
+
+class CompanionArchetypeFactory(DjangoModelFactory):
+    class Meta:
+        model = CompanionArchetype
+        django_get_or_create = ("name",)
+
+    domain = CompanionDomain.BEAST
+    name = factory.Sequence(lambda n: f"Archetype {n}")
+    description = factory.Faker("sentence")
+    bind_difficulty = 20
+    capacity_cost = 10
+
+
+class CompanionFactory(DjangoModelFactory):
+    class Meta:
+        model = Companion
+
+    owner = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    archetype = factory.SubFactory(CompanionArchetypeFactory)
+    granting_gift = factory.SubFactory("world.magic.factories.GiftFactory")
+    name = factory.Sequence(lambda n: f"Companion {n}")

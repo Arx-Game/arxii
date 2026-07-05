@@ -5,6 +5,7 @@ from evennia.objects.models import ObjectDB
 import factory
 
 from typeclasses.characters import Character
+from typeclasses.companions import CompanionObject
 from typeclasses.gm_characters import GMCharacter, StaffCharacter
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
@@ -41,6 +42,12 @@ class GMCharacterFactory(ObjectDBFactory):
 
 class StaffCharacterFactory(ObjectDBFactory):
     def __new__(cls, *args: Any, **kwargs: Any) -> StaffCharacter: ...
+
+    db_key: str
+    db_typeclass_path: str
+
+class CompanionObjectFactory(ObjectDBFactory):
+    def __new__(cls, *args: Any, **kwargs: Any) -> CompanionObject: ...
 
     db_key: str
     db_typeclass_path: str
