@@ -54,6 +54,11 @@ from actions.definitions.covenants import (
     StandDownBattleCovenantAction,
     TransferTopRankAction,
 )
+from actions.definitions.crafting import (
+    AttachFacetAction,
+    AttachStyleAction,
+    DetachFacetAction,
+)
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -288,6 +293,10 @@ _ALL_ACTIONS: list[Action] = [
     TakeOutAction(),
     ActivatePermitAction(),
     UseItemAction(),
+    # #1866 — crafting telnet coverage.
+    AttachFacetAction(),
+    DetachFacetAction(),
+    AttachStyleAction(),
     ApplyOutfitAction(),
     UndressAction(),
     PresentOutfitAction(),
