@@ -29,6 +29,7 @@ from world.mechanics.models import (
     SituationChallengeLink,
     SituationInstance,
     SituationTemplate,
+    SituationTrapLink,
     TraitCapabilityDerivation,
 )
 
@@ -240,12 +241,18 @@ class SituationChallengeLinkInline(admin.TabularInline):
     extra = 1
 
 
+class SituationTrapLinkInline(admin.TabularInline):
+    model = SituationTrapLink
+    fk_name = "situation_template"
+    extra = 1
+
+
 @admin.register(SituationTemplate)
 class SituationTemplateAdmin(admin.ModelAdmin):
     list_display = ["name", "category"]
     list_filter = ["category"]
     search_fields = ["name"]
-    inlines = [SituationChallengeLinkInline]
+    inlines = [SituationChallengeLinkInline, SituationTrapLinkInline]
 
 
 @admin.register(SituationInstance)

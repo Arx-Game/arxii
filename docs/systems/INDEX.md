@@ -1999,8 +1999,11 @@ Field+Granary/crop) are split to `needs-design` follow-up issues.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793)
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`, `PropertyDamageModifier` (#1793), `SituationTemplate`, `SituationChallengeLink`, `SituationTrapLink` (#1625), `SituationInstance`
 - **Key Functions:**
+  - `instantiate_situation(template, location) -> SituationInstance` (#1625) — mints
+    a SituationInstance + materializes its SituationTrapLink rows into Trap rows.
+    Traps only; does not mint ChallengeInstances (see mechanics.md Situation System).
   - `property_damage_bonus(target, damage_type) -> int` (#1793) — sums `PropertyDamageModifier`
     rows for a target's active `Property` set; folded into combat technique damage in
     `CombatTechniqueResolver._profile_damage` (`world/combat/services.py`)

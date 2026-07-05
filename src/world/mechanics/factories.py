@@ -36,6 +36,7 @@ from world.mechanics.models import (
     SituationChallengeLink,
     SituationInstance,
     SituationTemplate,
+    SituationTrapLink,
     TraitCapabilityDerivation,
 )
 
@@ -385,6 +386,22 @@ class SituationChallengeLinkFactory(DjangoModelFactory):
     situation_template = factory.SubFactory(SituationTemplateFactory)
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
     display_order = factory.Sequence(lambda n: n)
+
+
+class SituationTrapLinkFactory(DjangoModelFactory):
+    """Factory for creating SituationTrapLink instances."""
+
+    class Meta:
+        model = SituationTrapLink
+
+    situation_template = factory.SubFactory(SituationTemplateFactory)
+    name = factory.Sequence(lambda n: f"situation-trap-{n}")
+    consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
+    detect_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    disarm_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    detect_difficulty = 20
+    disarm_difficulty = 20
+    is_hidden = True
 
 
 class ChallengeInstanceFactory(DjangoModelFactory):

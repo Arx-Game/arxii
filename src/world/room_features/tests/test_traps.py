@@ -34,6 +34,8 @@ from world.magic.services import (
     seed_thread_survivability_tuning,
 )
 from world.mechanics.effect_handlers import apply_effect
+from world.mechanics.factories import SituationTemplateFactory, SituationTrapLinkFactory
+from world.mechanics.situation_services import instantiate_situation
 from world.room_features.factories import TrapFactory
 from world.room_features.trap_services import check_room_traps_on_entry, check_traps_at_position
 from world.traits.factories import CheckOutcomeFactory
@@ -281,3 +283,49 @@ class DealDamageThreadReductionTest(TestCase):
 
         vitals_no_threads.refresh_from_db()
         self.assertEqual(vitals_no_threads.health, 85)  # full 15 deducted
+
+
+class SituationInstantiatedTrapEntryTest(_TrapSceneMixin, TestCase):
+    """A Trap minted by instantiate_situation behaves exactly like a hand-placed one.
+
+    Reuses _TrapSceneMixin's character/vitals/consequence-pool setup, but
+    replaces the mixin's TrapFactory-built trap with one minted via
+    instantiate_situation from a SituationTrapLink — same pool, same check
+    types, same difficulties — so the existing damage assertions apply
+    unchanged.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        pool = self.trap.consequence_pool
+        detect_check_type = self.trap.detect_check_type
+        disarm_check_type = self.trap.disarm_check_type
+        self.trap.delete()
+
+        template = SituationTemplateFactory()
+        SituationTrapLinkFactory(
+            situation_template=template,
+            name="Situation Spike Pit",
+            consequence_pool=pool,
+            detect_check_type=detect_check_type,
+            disarm_check_type=disarm_check_type,
+            detect_difficulty=20,
+            disarm_difficulty=20,
+        )
+
+        instantiate_situation(template, self.room)
+        self.trap = self.room_profile.traps.get(name="Situation Spike Pit")
+
+    def test_instantiated_trap_fires_on_failed_detection(self) -> None:
+        with force_check_outcome(self.failure_outcome):
+            check_room_traps_on_entry(self.character, self.room)
+
+        assert self._health() == 70
+        assert self.sheet in self.trap.detected_by.all()
+
+    def test_instantiated_trap_detection_success_avoids_damage(self) -> None:
+        with force_check_outcome(self.success_outcome):
+            check_room_traps_on_entry(self.character, self.room)
+
+        assert self._health() == 100
+        assert self.sheet in self.trap.detected_by.all()
