@@ -509,9 +509,16 @@ actions, backends, and service functions.
   *society* reputation); `covenant` (`sheet/covenant` — your covenant membership(s), role, rank,
   and which you're *engaged* in, from `CharacterCovenantRole`; read-only); `title`
   (`sheet/titles`, #1522 — the earned, displayable titles your active character holds, from
-  `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab). Each is thin over its
-  app's data. Add a section: a renderer + a registry entry (+ `SECTION_NAMES`). *Web tabs for
-  standing/covenant are a follow-up — the "which contextual center owns this" call is open (#1446).*
+  `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab); `distinction`
+  (`sheet/distinction`, #1446 — your distinctions, secret-badged, over the shared
+  `_build_distinctions` builder, mirroring the web Distinctions tab); `magic` (`sheet/magic`,
+  #1446 — gifts/techniques/motif/aura over the shared `_build_magic` builder, mirroring the web
+  Magic tab; describe-only — casting/weaving/rituals stay in-scene, per "the sheet describes; the
+  scene does" in `design-tenets.md`). Each is thin over its app's data. Add a section: a renderer
+  + a registry entry (+ `SECTION_NAMES`). Standing and covenant now also have web homes: standing
+  lives in the consolidated **Reputation** tab (society + org standing + covenant associations);
+  covenant core identity surfaces in the sheet header, with full detail in the Reputation tab's
+  covenant subsection (#1446).
 
 ### Social Commands (`social/`)
 - **`blocking.py`**: `CmdBlock`/`CmdUnblock`/`CmdShareBlock`/`CmdMute`/`CmdUnmute`/`CmdBlockList`

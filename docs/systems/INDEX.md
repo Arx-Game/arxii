@@ -696,7 +696,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **Key Services:** `ensure_default_rank_ladder`, `join_organization`, `leave_organization`, `invite_to_organization`, `apply_to_organization`, `accept_invitation`, `decline_invitation`, `accept_application`, `decline_application`, `promote_member`, `demote_member`, `expel_member`
 - **Action Keys:** `org_invite`, `org_apply`, `org_join`, `org_leave`, `org_promote`, `org_demote`, `org_expel`
 - **Telnet:** `org <subverb>` command; `accept org` / `decline org` offer responses
-- **DRF:** `OrganizationViewSet`, `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet` at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, and `/api/societies/offers/`
+- **DRF:** `OrganizationViewSet` (`?name=` iexact filter), `OrganizationMembershipViewSet`, `OrganizationRankViewSet`, `OrganizationMembershipOfferViewSet`, `OrganizationReputationViewSet` at `/api/societies/organizations/`, `/api/societies/memberships/`, `/api/societies/ranks/`, `/api/societies/offers/`, and `/api/societies/reputations/` (self-scoped org standing, #1446)
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Legend deed from crossing:** `LegendEntry.audere_majora_crossing` — reverse OneToOne to `AudereMajoraCrossing` (magic app); set when `cross_threshold` mints a deed via `fire_renown_award` + `_mint_crossing_deed`.
 - **Scandal reach fork (#1464, ADR-0082):** `world/societies/scandal.py` —
@@ -848,7 +848,8 @@ heat; identity-association copies it (`associate_heat` — the #1334 outing seam
   MOSTLY_ACCURATE dodge + masked-report association chance)
 - **Surfaces (self-only):** room-desc tier line + `heat` on the room-state payload;
   safe-now relief line on movement; `sheet/crime` + web Crime tab over
-  `GET /api/justice/heat/` (tiers only, never raw values)
+  `GET /api/justice/heat/` (tiers only, never raw values; `PersonaHeatSerializer`
+  also carries `society` id for the web Reputation tab's client-side join, #1446)
 - **Source:** `src/world/justice/`
 - **Details:** [justice.md](justice.md)
 

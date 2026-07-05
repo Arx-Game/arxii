@@ -335,6 +335,15 @@ This composes with **closed-issue ≠ proven**: a capability counts as covered o
 end-to-end test demonstrates the outcome — "we think it works" is not safe to hand a GM. The
 live coverage map is [`player-capability-ledger.md`](player-capability-ledger.md).
 
+### The sheet describes; the scene does
+
+Sheet centers (web tabs, telnet `sheet/<section>`) are declarative — they
+describe what a character has and is. DOING things (casting, weaving, rituals)
+is invoked in-scene via context-menu actions dispatching `action.run()`, never
+sheet navigation. Corollary: "more findable places is a feature" — a
+main-sheet identity link complements a dedicated section, never replaces it.
+(Apostate, #1446.)
+
 ### Checks are stat + skill (+ specialization), rarely stat + stat
 
 A check's composition defaults to a **stat + the relevant skill**, plus a **specialization
