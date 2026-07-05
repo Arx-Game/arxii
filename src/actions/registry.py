@@ -31,7 +31,11 @@ from actions.definitions.communication import (
     SayAction,
     WhisperAction,
 )
-from actions.definitions.companions import BindCompanionAction
+from actions.definitions.companions import (
+    BindCompanionAction,
+    CompanionFightAction,
+    DeployCompanionAction,
+)
 from actions.definitions.conditions import treat_condition
 from actions.definitions.consent_preferences import (
     AddSocialConsentBlacklistAction,
@@ -421,6 +425,8 @@ _ALL_ACTIONS: list[Action] = [
     RepairShipAction(),
     ShipStatusAction(),
     BindCompanionAction(),
+    CompanionFightAction(),
+    DeployCompanionAction(),
 ]
 
 # Lookup by key
