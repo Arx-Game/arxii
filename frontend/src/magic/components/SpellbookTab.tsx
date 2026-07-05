@@ -37,7 +37,10 @@ function dominantAffinityLabel(aura: CharacterSheetAura): string {
     ['Primal', aura.primal],
     ['Abyssal', aura.abyssal],
   ];
-  return shares.reduce((dominant, share) => (share[1] > dominant[1] ? share : dominant))[0];
+  return shares.reduce(
+    (dominant, share) => (share[1] > dominant[1] ? share : dominant),
+    shares[0]
+  )[0];
 }
 
 export function SpellbookTab({ characterId, isMyCharacter }: Props) {
