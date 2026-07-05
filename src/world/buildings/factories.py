@@ -10,6 +10,7 @@ from world.buildings.models import (
     BuildingMaterial,
     BuildingPermitDetails,
     BuildingRenovationDetails,
+    BuildingUpgradeDetails,
     FortificationUpgradeDetails,
     MaterialLoreEffect,
 )
@@ -118,4 +119,14 @@ class BuildingRenovationDetailsFactory(DjangoModelFactory):
     project = factory.SubFactory("world.projects.factories.ProjectFactory")
     building = factory.SubFactory(BuildingFactory)
     target_kind = factory.SubFactory(BuildingKindFactory)
+    applied_at = None
+
+
+class BuildingUpgradeDetailsFactory(DjangoModelFactory):
+    class Meta:
+        model = BuildingUpgradeDetails
+
+    project = factory.SubFactory("world.projects.factories.ProjectFactory")
+    building = factory.SubFactory(BuildingFactory)
+    new_target_size = 6
     applied_at = None
