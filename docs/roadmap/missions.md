@@ -33,7 +33,9 @@ Missions are branching narrative quest chains — the primary way characters int
 - **Per-candidate overrides STORED BUT UNCONSUMED** (Phase D wires per-candidate emission; the mission roulette reveal #933 couples to it).
 - **Instanced play**: `spawn_instanced_room` wiring is #886 (prison/ransom #931 is its flagship consumer).
 - **Crowdfundable ransom**: #1500 ✅ shipped — ransom is now a RANSOM `Project` standing in the captive's cell (`Captivity.ransom_project`); anyone `project/donate`s toward it and the captive is freed the instant it's funded (instant-completion seam). GM demand via telnet `demandransom` (staff) + web `POST /api/gm/demand-ransom/`. The cell shows a red OOC captive-status banner. The legacy org-treasury `demand_ransom`/`pay_ransom` Contract path was **retired** — the project is the single ransom route.
-- **Trigger-giver target picker**: #882. **Categorical room binding**: #888.
+- **Trigger-giver target picker**: done (#882) — `EntitySearchField` typeclass-constrained
+  search-and-select replaces the raw ObjectDB-pk input on `TriggerGiversPage`. **Categorical
+  room binding**: #888.
 - **POOL count policy**: #726 ✅ shipped — `offer_policy.mission_pool_count` scales the POOL slate by NPC standing (stranger → 1, trusted → 5, wired into the live interaction render); `has_completed_mission` predicate leaf gates chained missions; `MissionOfferDetails.draw_priority` surfaces chain/high-stakes offers ahead of the general pool.
 - **Offer-policy enrichment**: #1020 ✅ shipped — org-reputation folded into the count (`max(npc_standing, org)` when the role fronts an org); Era arc-replace draws active-season offers (`created_in_era` + `percent_replace`) ahead of the general pool, behind explicit chains. Ordering/bands live in `npc_services/constants.py` for playtest retuning.
 - **Zero seed content**: a fresh DB has no missions (part of the seed/content pass).

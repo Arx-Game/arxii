@@ -13,6 +13,7 @@ from web.api.views.general_views import (
     SocialProvidersAPIView,
 )
 from web.api.views.search_views import (
+    MissionGiverTargetSearchAPIView,
     OnlineCharacterSearchAPIView,
     RoomCharacterSearchAPIView,
 )
@@ -49,6 +50,11 @@ urlpatterns = [
         "characters/room/",
         RoomCharacterSearchAPIView.as_view(),
         name="api-room-characters",
+    ),
+    path(
+        "mission-giver-targets/",
+        MissionGiverTargetSearchAPIView.as_view(),
+        name="api-mission-giver-targets",
     ),
     # Social auth providers list
     path(

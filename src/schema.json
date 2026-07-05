@@ -15251,6 +15251,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/SituationTemplateDetail'
           description: ''
+  /api/mission-giver-targets/:
+    get:
+      operationId: mission_giver_targets_retrieve
+      description: Return matching {id, name, hint} rows, or a single row for ?id=.
+      tags:
+      - mission-giver-targets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/missions/categories/:
     get:
       operationId: missions_categories_list

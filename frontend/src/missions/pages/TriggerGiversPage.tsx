@@ -6,15 +6,16 @@
  * giver holds a flat pool of mission templates; the runtime (Phase 2) draws an
  * eligible one and hands it to the player on entry / examine.
  *
- * The target is entered as an Evennia object id (pk) for now — the server
- * validates that the object's typeclass matches the kind (a Room for
- * ROOM_TRIGGER, a non-Room/Character/Exit Object for ENVIRONMENTAL_DETAIL) and
- * returns a 400 on a mismatch. A typeclass-constrained object picker is a
- * follow-up.
+ * The target is picked via a typeclass-constrained name search
+ * (EntitySearchField, #882) — ROOM_TRIGGER offers rooms, ENVIRONMENTAL_DETAIL
+ * offers non-Room/Character/Exit objects. The server still validates the
+ * (kind, target) typeclass pairing on save and returns a 400 on a mismatch —
+ * the picker narrows candidates but doesn't replace server-side validation.
  */
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { EntitySearchField } from '@/components/EntitySearchField';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,7 +29,12 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 
-import { ApiValidationError, flattenErrorMessage } from '../api';
+import {
+  ApiValidationError,
+  flattenErrorMessage,
+  resolveMissionGiverTarget,
+  searchMissionGiverTargets,
+} from '../api';
 import {
   useCreateGiver,
   useDeleteGiver,
@@ -159,14 +165,14 @@ function GiverCard({ giver }: { giver: MissionGiver }) {
   const templates = templatesData?.results ?? [];
 
   const [kind, setKind] = useState<string>(giver.giver_kind ?? 'room_trigger');
-  const [target, setTarget] = useState(giver.target?.toString() ?? '');
+  const [target, setTarget] = useState<number | null>(giver.target ?? null);
   const [org, setOrg] = useState(giver.org?.toString() ?? '');
   const [isActive, setIsActive] = useState(giver.is_active ?? true);
   const [picked, setPicked] = useState<number[]>(giver.templates ?? []);
 
   useEffect(() => {
     setKind(giver.giver_kind ?? 'room_trigger');
-    setTarget(giver.target?.toString() ?? '');
+    setTarget(giver.target ?? null);
     setOrg(giver.org?.toString() ?? '');
     setIsActive(giver.is_active ?? true);
     setPicked(giver.templates ?? []);
@@ -180,7 +186,7 @@ function GiverCard({ giver }: { giver: MissionGiver }) {
       id: giver.id,
       body: {
         giver_kind: kind as MissionGiver['giver_kind'],
-        target: numOrNull(target),
+        target,
         org: numOrNull(org),
         is_active: isActive,
         templates: picked,
@@ -221,20 +227,17 @@ function GiverCard({ giver }: { giver: MissionGiver }) {
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Target object id</Label>
-            <Input
-              type="number"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder="Room / object pk"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Org id (optional)</Label>
-            <Input type="number" value={org} onChange={(e) => setOrg(e.target.value)} />
-          </div>
+        <EntitySearchField
+          value={target}
+          onChange={setTarget}
+          search={(q) => searchMissionGiverTargets(kind, q)}
+          resolveById={(id) => resolveMissionGiverTarget(kind, id)}
+          label="Target"
+          placeholder="Search rooms/objects by name…"
+        />
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Org id (optional)</Label>
+          <Input type="number" value={org} onChange={(e) => setOrg(e.target.value)} />
         </div>
 
         <div className="space-y-1">
