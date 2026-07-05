@@ -320,6 +320,14 @@ actions, backends, and service functions.
   that anyone may `project/donate` toward (freed the instant it's funded). The same service backs
   the web `DemandRansomView` (`POST /api/gm/demand-ransom/`). Thin over the service — no business
   logic in the command (mirrors `gemit`).
+- **`grant_item.py`**: `CmdGrantItem` (`grant_item`, staff-only `perm(Admin)`, #707) — the ad-hoc
+  narrative item grant surface. `grant_item <character>=<item template name>` resolves the target
+  by name (`self.caller.search(..., global_search=True)`) and calls
+  `world.items.services.narrative_grants.grant_touchstone_item_to_character` to create one
+  `ItemInstance` of the named `ItemTemplate`, held by the target's `CharacterSheet`. No shop/
+  merchant system exists in this codebase — this command IS the acquisition channel for
+  story-earned touchstones/reagents (a GM hand-awarding a specific item after a story beat).
+  Thin over the service — no business logic in the command (mirrors `demandransom`/`gemit`).
 - **`setstage.py`**: `CmdSetStage` (`setstage`, staff `perm(Admin)`, #1498) — telnet face of
   `SetTheStageAction` (key `set_the_stage`, REGISTRY backend). A staff caller instantiates a
   `PositionBlueprint` into their current room: `setstage` shows this room's positions + default
