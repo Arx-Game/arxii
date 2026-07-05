@@ -27,10 +27,14 @@ class AttachFacetActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="AttachFacetSword")
-        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
-        item_obj = instance.game_object
+        item_obj = ObjectDBFactory(
+            db_key="AttachFacetSwordObj", db_typeclass_path="typeclasses.objects.Object"
+        )
         item_obj.location = actor
         item_obj.save()
+        instance = ItemInstanceFactory(
+            template=template, holder_character_sheet=sheet, game_object=item_obj
+        )
         return actor, instance, item_obj
 
     def test_attach_facet_success(self):
@@ -67,10 +71,12 @@ class AttachFacetActionTests(TestCase):
         actor.save()
         CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="AttachFacetElsewhereSword")
-        instance = ItemInstanceFactory(template=template)
-        item_obj = instance.game_object
+        item_obj = ObjectDBFactory(
+            db_key="AttachFacetElsewhereSwordObj", db_typeclass_path="typeclasses.objects.Object"
+        )
         item_obj.location = other_room
         item_obj.save()
+        ItemInstanceFactory(template=template, game_object=item_obj)
 
         action_result = AttachFacetAction().run(actor=actor, item=item_obj, facet=object())
         assert not action_result.success
@@ -95,10 +101,12 @@ class AttachStyleActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="AttachStyleCoat")
-        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
-        item_obj = instance.game_object
+        item_obj = ObjectDBFactory(
+            db_key="AttachStyleCoatObj", db_typeclass_path="typeclasses.objects.Object"
+        )
         item_obj.location = actor
         item_obj.save()
+        ItemInstanceFactory(template=template, holder_character_sheet=sheet, game_object=item_obj)
         result = StyleCraftResult(
             attached=True,
             outcome=None,
@@ -128,10 +136,12 @@ class DetachFacetActionTests(TestCase):
         actor.save()
         CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="DetachFacetShield")
-        instance = ItemInstanceFactory(template=template)
-        item_obj = instance.game_object
+        item_obj = ObjectDBFactory(
+            db_key="DetachFacetShieldObj", db_typeclass_path="typeclasses.objects.Object"
+        )
         item_obj.location = other_room
         item_obj.save()
+        instance = ItemInstanceFactory(template=template, game_object=item_obj)
 
         class _FakeItemFacet:
             item_instance = instance
@@ -151,10 +161,14 @@ class DetachFacetActionTests(TestCase):
         actor.save()
         sheet = CharacterSheetFactory(character=actor)
         template = ItemTemplateFactory(name="DetachFacetSword")
-        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
-        item_obj = instance.game_object
+        item_obj = ObjectDBFactory(
+            db_key="DetachFacetSwordObj", db_typeclass_path="typeclasses.objects.Object"
+        )
         item_obj.location = actor
         item_obj.save()
+        instance = ItemInstanceFactory(
+            template=template, holder_character_sheet=sheet, game_object=item_obj
+        )
 
         class _FakeItemFacet:
             item_instance = instance
