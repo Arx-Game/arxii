@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useState } from 'react';
-import { BookOpen, Calendar, MapPin, Scroll, Users } from 'lucide-react';
+import { Activity, BookOpen, Calendar, MapPin, Scroll, Users } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface SidebarTabPanelProps {
@@ -10,6 +10,8 @@ interface SidebarTabPanelProps {
   codexPanel?: ReactNode;
   /** #1463 presence tab — who's online + where (coloured area paths). */
   presencePanel?: ReactNode;
+  /** #1446 qualitative status tab — health/fatigue/anima as words, coin + AP as numbers. */
+  statusPanel?: ReactNode;
   /**
    * Label for the room tab. Defaults to ``"Room"`` but the parent can
    * pass the currently-focused subject (a character or item name) so the
@@ -26,6 +28,7 @@ export function SidebarTabPanel({
   storiesPanel,
   codexPanel,
   presencePanel,
+  statusPanel,
   roomTabLabel,
 }: SidebarTabPanelProps) {
   const [activeTab, setActiveTab] = useState('room');
@@ -45,7 +48,7 @@ export function SidebarTabPanel({
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
-      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-5">
+      <TabsList className="mx-2 mt-2 grid w-auto grid-cols-6">
         <TabsTrigger value="room" className="gap-1 text-xs" title={label}>
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="inline-block max-w-[8rem] truncate">{label}</span>
@@ -65,6 +68,10 @@ export function SidebarTabPanel({
         <TabsTrigger value="codex" className="gap-1 text-xs">
           <BookOpen className="h-3 w-3" />
           Codex
+        </TabsTrigger>
+        <TabsTrigger value="status" className="gap-1 text-xs">
+          <Activity className="h-3 w-3" />
+          Status
         </TabsTrigger>
       </TabsList>
       <TabsContent value="room" className="mt-0 flex-1 overflow-y-auto">
@@ -90,6 +97,11 @@ export function SidebarTabPanel({
       <TabsContent value="codex" className="mt-0 flex-1 overflow-y-auto p-3">
         {activatedTabs.has('codex')
           ? (codexPanel ?? <p className="text-sm text-muted-foreground">Codex coming soon.</p>)
+          : null}
+      </TabsContent>
+      <TabsContent value="status" className="mt-0 flex-1 overflow-y-auto p-3">
+        {activatedTabs.has('status')
+          ? (statusPanel ?? <p className="text-sm text-muted-foreground">No status to show.</p>)
           : null}
       </TabsContent>
     </Tabs>
