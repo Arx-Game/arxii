@@ -402,6 +402,22 @@ BALANCED posture all contribute nothing:
 | Commander bonus | `commander_bonus_for_side_at_place(side, place)` | Max (not sum) `get_modifier_total` walk against the `"battle_command"` `ModifierTarget` (`ensure_battle_command_modifier_target`, seeded by `factories.py`) across every ACTIVE unit's `commander` on that side/place, read from `battle.state_cache` (#1846); 0 if none commanded |
 | Posture | `BATTLE_POSTURE_CHECK_MODIFIER.get(participant.side.posture)` | `constants.py` dict — AGGRESSIVE −5, BALANCED 0, DEFENSIVE +10 |
 
+`cached_all()` coverage extends beyond the two catalogs above: `CapabilityType`
+(mobility/reposition, `_has_unimpaired_mobility`/`_resolve_reposition_success`) and
+`ConsequencePool`/`ConditionStage` (the Surrounded entry roll,
+`_maybe_apply_surrounded`) also read through `cached_all()` (#1871), so none of
+the five per-declaration catalog lookups in `resolution.py` — STRIKE or
+non-STRIKE — re-query their table per declaration. The Surrounded *terminal* pool
+lookup (`select_surrounded_terminal_pool`, reached once per terminal-stage
+Surrounded participant per round rather than per declaration) was folded into the
+same `cached_all()` pass in the same change. `ConditionTemplate` is the one
+exception worth calling out explicitly: it isn't missing from this list because
+it's uncached — it uses its own pre-existing `get_by_name()` cache
+(`world/conditions/models.py`) rather than `cached_all()`, and the rescue/
+escalation/Surrounded-entry paths (`_resolve_rescue_success`,
+`_advance_surrounded_participants`, `_maybe_apply_surrounded`) all call it that
+way.
+
 The first three sources only apply to STRIKE declarations (they read `declaration.target_unit`,
 which is `None` for SUPPORT/RESCUE); commander and posture apply to every declaration kind.
 Posture also independently scales VP gain (`BATTLE_POSTURE_VP_MULTIPLIER`, applied in

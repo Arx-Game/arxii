@@ -100,7 +100,14 @@ def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
     from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
 
-    movement = CapabilityType.objects.filter(name=FoundationalCapability.MOVEMENT).first()
+    movement = next(
+        (
+            c
+            for c in CapabilityType.objects.cached_all()
+            if c.name == FoundationalCapability.MOVEMENT
+        ),
+        None,
+    )
     if movement is None:
         return False
     return get_effective_capability_value(character_sheet, movement) > 0
@@ -269,7 +276,7 @@ def select_surrounded_terminal_pool(
     pool_name = (
         POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY
     )
-    return ConsequencePool.objects.filter(name=pool_name).first()
+    return next((p for p in ConsequencePool.objects.cached_all() if p.name == pool_name), None)
 
 
 def resolve_surrounded_terminal(
@@ -722,7 +729,14 @@ def _resolve_reposition_success(
     if requested_distance == 0:
         return
 
-    speed_capability = CapabilityType.objects.filter(name="speed").first()
+    speed_capability = next(
+        (
+            c
+            for c in CapabilityType.objects.cached_all()
+            if c.name == "speed"  # noqa: STRING_LITERAL
+        ),
+        None,
+    )
     max_distance = Decimal(
         vehicle.unit.effective_capability(speed_capability) if speed_capability else 0
     )
@@ -864,8 +878,9 @@ def _resolve_rescue_success(declaration: BattleActionDeclaration) -> None:
     if not targets:
         return
 
-    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
-    if template is None:
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
         return
 
     for target in targets:
@@ -907,10 +922,23 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
     if not _is_isolated(participant):
         return False
 
-    pool = ConsequencePool.objects.filter(name=POOL_SURROUNDED_ENTRY).first()
-    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
+    pool = next(
+        (p for p in ConsequencePool.objects.cached_all() if p.name == POOL_SURROUNDED_ENTRY),
+        None,
+    )
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        template = None
     entry_stage = (
-        ConditionStage.objects.filter(condition=template, stage_order=1).first()
+        next(
+            (
+                s
+                for s in ConditionStage.objects.cached_all()
+                if s.condition_id == template.pk and s.stage_order == 1
+            ),
+            None,
+        )
         if template is not None
         else None
     )
@@ -1005,8 +1033,9 @@ def _advance_surrounded_participants(
     from world.conditions.services import get_active_conditions  # noqa: PLC0415
     from world.vitals.services import advance_surrounded  # noqa: PLC0415
 
-    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
-    if template is None:
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
         return  # seeding gap — nothing to advance
 
     participants = BattleParticipant.objects.filter(

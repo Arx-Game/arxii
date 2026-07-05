@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+from actions.models.consequence_pools import ConsequencePool
 from actions.services import get_effective_consequences
 from actions.types import WeightedConsequence
 from world.checks.factories import ConsequenceFactory
@@ -286,3 +287,23 @@ class CachedConsequencesTests(TestCase):
         result = child.cached_consequences
         relist_entry = next(wc for wc in result if wc.label == "CP_Relist")
         assert relist_entry.weight == 42
+
+
+class ConsequencePoolCachedAllTests(TestCase):
+    def setUp(self) -> None:
+        ConsequencePool.objects.flush_all_cache()
+        ConsequencePool.flush_instance_cache()
+
+    def test_second_call_hits_identity_map_zero_queries(self) -> None:
+        ConsequencePoolFactory()
+        ConsequencePool.objects.flush_all_cache()
+        ConsequencePool.flush_instance_cache()
+        ConsequencePool.objects.cached_all()  # prime
+        with self.assertNumQueries(0):
+            ConsequencePool.objects.cached_all()
+
+    def test_returns_every_row(self) -> None:
+        first = ConsequencePoolFactory()
+        second = ConsequencePoolFactory()
+        result = ConsequencePool.objects.cached_all()
+        self.assertCountEqual([r.pk for r in result], [first.pk, second.pk])
