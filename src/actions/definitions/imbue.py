@@ -71,6 +71,18 @@ class ImbueAction(Action):
         except (AnchorCapExceeded, InvalidImbueAmount, ResonanceInsufficient) as exc:
             return ActionResult(success=False, message=exc.user_message)
 
+        if result.blocked_by == "CROSSING_REQUIREMENT" and result.blocked_requirement_messages:  # noqa: STRING_LITERAL
+            req_list = "; ".join(result.blocked_requirement_messages)
+            return ActionResult(
+                success=True,
+                message=(
+                    f"You complete the rite, advancing {thread.name} to level "
+                    f"{result.new_level}. The thread's resonance cannot cross further "
+                    f"until you meet the crossing requirements: {req_list}"
+                ),
+                data={"result": result},
+            )
+
         return ActionResult(
             success=True,
             message=f"You complete the rite, imbuing {thread.name}.",

@@ -74,6 +74,7 @@ from world.magic.models.aura import (
 from world.magic.models.cantrips import Cantrip
 from world.magic.models.commitments import CommittingDeclaration  # noqa: F401
 from world.magic.models.corruption_config import CorruptionConfig
+from world.magic.models.crossings import ThreadCrossingThreshold
 from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 from world.magic.models.endorsement import (
     EntryFlourishRecord,
@@ -367,6 +368,7 @@ __all__ = [
     "TechniqueVariantDamageProfile",
     # threads
     "Thread",
+    "ThreadCrossingThreshold",
     "ThreadLevelUnlock",
     "ThreadPullCost",
     "ThreadPullEffect",

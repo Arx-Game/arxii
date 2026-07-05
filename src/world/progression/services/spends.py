@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.classes.models import CharacterClass
+    from world.magic.models import ThreadCrossingThreshold
 
 
 def spend_xp_on_unlock(
@@ -122,16 +123,22 @@ def spend_xp_on_unlock(
         return True, f"Successfully unlocked {unlock_target}", unlock
 
 
-def check_requirements_for_unlock(
+def _check_requirements(
     character: ObjectDB,
-    unlock_target: ClassLevelUnlock,
+    unlock_target: object,
+    fk_name: str,
 ) -> tuple[bool, list[str]]:
-    """
-    Check if a character meets all requirements for an unlock.
+    """Check if a character meets all active requirements pointing at a target.
+
+    Shared loop used by both ``check_requirements_for_unlock`` (Durance path,
+    FK ``class_level_unlock``) and ``check_requirements_for_thread_crossing``
+    (thread crossing gate, FK ``thread_crossing_threshold``).
 
     Args:
-        character: Character to check
-        unlock_target: The unlock object to check requirements for
+        character: Character to check.
+        unlock_target: The unlock/threshold object requirements point to.
+        fk_name: The FK field name to filter on
+            (``"class_level_unlock"`` or ``"thread_crossing_threshold"``).
 
     Returns:
         tuple: (all_met: bool, failed_messages: list)
@@ -148,38 +155,70 @@ def check_requirements_for_unlock(
         TraitRequirement,
     )
 
-    failed_messages = []
+    requirement_types = [
+        TraitRequirement,
+        LevelRequirement,
+        ClassLevelRequirement,
+        TierRequirement,
+        AchievementRequirement,
+        RelationshipRequirement,
+        MultiClassRequirement,
+        LegendRequirement,
+        ItemRequirement,
+    ]
 
-    # Get all requirements that point to this unlock (only works for ClassLevelUnlock
-    # now)
-    if isinstance(unlock_target, ClassLevelUnlock):
-        requirement_types = [
-            TraitRequirement,
-            LevelRequirement,
-            ClassLevelRequirement,
-            TierRequirement,
-            AchievementRequirement,
-            RelationshipRequirement,
-            MultiClassRequirement,
-            LegendRequirement,
-            ItemRequirement,
-        ]
+    failed_messages: list[str] = []
+    filter_kwargs = {fk_name: unlock_target, "is_active": True}
 
-        for req_type in requirement_types:
-            requirements = req_type.objects.filter(
-                class_level_unlock=unlock_target,
-                is_active=True,
-            )
-
-            for requirement in requirements:
-                is_met, message = requirement.is_met_by_character(character)
-                if not is_met:
-                    failed_messages.append(message)
-    else:
-        # For other unlock types, no requirements checking for now
-        pass
+    for req_type in requirement_types:
+        requirements = req_type.objects.filter(**filter_kwargs)
+        for requirement in requirements:
+            is_met, message = requirement.is_met_by_character(character)
+            if not is_met:
+                failed_messages.append(message)
 
     return len(failed_messages) == 0, failed_messages
+
+
+def check_requirements_for_unlock(
+    character: ObjectDB,
+    unlock_target: ClassLevelUnlock,
+) -> tuple[bool, list[str]]:
+    """
+    Check if a character meets all requirements for an unlock.
+
+    Args:
+        character: Character to check
+        unlock_target: The unlock object to check requirements for
+
+    Returns:
+        tuple: (all_met: bool, failed_messages: list)
+    """
+    if isinstance(unlock_target, ClassLevelUnlock):
+        return _check_requirements(character, unlock_target, "class_level_unlock")
+
+    # For other unlock types, no requirements checking for now
+    return True, []
+
+
+def check_requirements_for_thread_crossing(
+    character: ObjectDB,
+    threshold: ThreadCrossingThreshold,
+) -> tuple[bool, list[str]]:
+    """Check if a character meets all requirements for a thread crossing.
+
+    Mirrors ``check_requirements_for_unlock`` but filters on the
+    ``thread_crossing_threshold`` FK. Returns ``(True, [])`` when no
+    requirements are authored on the threshold (fail-open).
+
+    Args:
+        character: Character to check.
+        threshold: The ``ThreadCrossingThreshold`` to check requirements for.
+
+    Returns:
+        tuple: (all_met: bool, failed_messages: list)
+    """
+    return _check_requirements(character, threshold, "thread_crossing_threshold")
 
 
 def get_available_unlocks_for_character(

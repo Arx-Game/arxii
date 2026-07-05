@@ -21,6 +21,19 @@ def stage_for_level(level: int) -> int:
     return PathStage.PROSPECT
 
 
+def is_crossing_level(level: int) -> bool:
+    """Return True if ``level`` is a PathStage crossing boundary.
+
+    A crossing level is one where ``stage_for_level(level)`` differs from
+    ``stage_for_level(level - 1)`` — i.e. levels 3, 6, 11, 16, 21. Used by
+    the imbuing loop to decide whether to check for a
+    ``ThreadCrossingThreshold`` gate before advancing (#1885).
+    """
+    if level < 1:
+        return False
+    return stage_for_level(level) != stage_for_level(level - 1)
+
+
 def set_primary_class_level(  # noqa: OBJECTDB_PARAM
     character: object,
     character_class: object,

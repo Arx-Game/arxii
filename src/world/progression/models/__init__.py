@@ -49,6 +49,7 @@ from world.progression.models.rewards import (
 )
 from world.progression.models.unlocks import (
     AbstractClassLevelRequirement,
+    AbstractUnlockRequirement,
     AchievementRequirement,
     CharacterUnlock,
     ClassLevelRequirement,
@@ -76,6 +77,7 @@ from world.progression.models.voting import (
 __all__ = [
     "AbstractClassLevelAdvancement",
     "AbstractClassLevelRequirement",
+    "AbstractUnlockRequirement",
     "AchievementRequirement",
     "CharacterPathHistory",
     "CharacterUnlock",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from django.db import models
@@ -28,7 +28,15 @@ class ThreadImbueResult:
     levels_gained: int
     new_level: int
     new_developed_points: int
-    blocked_by: Literal["NONE", "XP_LOCK", "ANCHOR_CAP", "PATH_CAP", "INSUFFICIENT_BUCKET"]
+    blocked_by: Literal[
+        "NONE",
+        "XP_LOCK",
+        "ANCHOR_CAP",
+        "PATH_CAP",
+        "INSUFFICIENT_BUCKET",
+        "CROSSING_REQUIREMENT",
+    ]
+    blocked_requirement_messages: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

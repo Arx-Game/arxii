@@ -167,6 +167,11 @@ conflicts, then continue (`git rebase --continue` / `git merge --continue`).
 
 ### 5. Push & open PR
 
+**PR creation is automatic — do not ask the operator for approval.** Once
+implementation is complete, tests pass, and docs are updated, push the branch
+and open the PR immediately. The operator has pre-approved this step; the
+human review gate is on the PR itself (code review + CI), not on opening it.
+
 Compose the PR body's substitution values. For each deferred follow-up, call
 `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before opening
 the PR) and collect the issue numbers. **Before filing each follow-up, run the
