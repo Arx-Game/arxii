@@ -8,7 +8,12 @@ from typing import ClassVar
 
 from django.contrib import admin
 
-from world.buildings.models import ArchitecturalStyle, BuildingSizeTier, StyleAffinity
+from world.buildings.models import (
+    ArchitecturalStyle,
+    BuildingSizeTier,
+    MaterialLoreEffect,
+    StyleAffinity,
+)
 
 
 @admin.register(BuildingSizeTier)
@@ -37,3 +42,19 @@ class ArchitecturalStyleAdmin(admin.ModelAdmin):
     list_filter: ClassVar[list[str]] = ["is_default", "is_active"]
     search_fields: ClassVar[list[str]] = ["name"]
     inlines: ClassVar[list[type[admin.TabularInline]]] = [StyleAffinityInline]
+
+
+@admin.register(MaterialLoreEffect)
+class MaterialLoreEffectAdmin(admin.ModelAdmin):
+    """The material-lore catalog — content authored here, not in code (#695)."""
+
+    list_display: ClassVar[list[str]] = [
+        "template",
+        "target_stat",
+        "units_per_tier",
+        "magnitude_per_tier",
+        "max_tiers",
+    ]
+    list_filter: ClassVar[list[str]] = ["target_stat"]
+    search_fields: ClassVar[list[str]] = ["template__name", "target_stat"]
+    autocomplete_fields: ClassVar[list[str]] = ["template"]
