@@ -209,3 +209,8 @@ class Room(ObjectParent, DefaultRoom):
         from world.areas.positioning.plummet import resolve_unattended_plummets
 
         resolve_unattended_plummets(self, departing=obj)
+        # #1361: a departure may leave this room's active scene empty — finish it
+        # immediately rather than leaving it open indefinitely.
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        maybe_finish_empty_scene(self, leaving=obj)

@@ -976,3 +976,50 @@ class MaybeFinishEmptySceneTests(TestCase):
         other_scene.refresh_from_db()
         assert self.scene.is_finished is True  # this room's scene closes
         assert other_scene.is_finished is False  # unrelated room's scene untouched
+
+
+class RoomAtObjectLeaveFinishesEmptySceneTests(TestCase):
+    """Room.at_object_leave wiring: last PC walking out finishes the scene (#1361)."""
+
+    _PATCH_BASE = "world.scenes.scene_admin_services"
+
+    def setUp(self):
+        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+        from world.scenes.factories import SceneFactory
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.CharacterFactory = CharacterFactory
+
+    def _pc_in_room(self, db_key):
+        char = self.CharacterFactory(db_key=db_key, location=self.room)
+        CharacterSheetFactory(character=char)
+        return char
+
+    def test_last_pc_walking_out_finishes_scene(self):
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            # Mirrors test_solo_last_rescuer_leaves_immediately's direct-hook-call style.
+            self.room.at_object_leave(pc, None)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+
+    def test_pc_walking_out_with_another_pc_remaining_keeps_scene_active(self):
+        leaving_pc = self._pc_in_room("Leaving")
+        self._pc_in_room("Staying")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            self.room.at_object_leave(leaving_pc, None)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is False
