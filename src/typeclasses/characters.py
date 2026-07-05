@@ -480,6 +480,7 @@ class Character(ObjectParent, DefaultCharacter):
             session: Session that was puppeting this character, if any.
             **kwargs: Arbitrary, optional arguments passed by Evennia.
         """
+        origin = self.location
         super().at_post_unpuppet(account=account, session=session, **kwargs)
         target = [session] if session else self.sessions.all()
         for sess in target:
@@ -493,3 +494,12 @@ class Character(ObjectParent, DefaultCharacter):
         from world.scenes.friend_services import notify_friends_of_status
 
         notify_friends_of_status(self, online=False)
+
+        # #1361: the base at_post_unpuppet call above already relocated this
+        # character off-grid if that was its last session — finish the room's
+        # scene if it's now empty. Guard mirrors Evennia's own last-session-out
+        # check rather than re-implementing it.
+        if origin is not None and self.location is None:
+            from world.scenes.round_services import maybe_finish_empty_scene
+
+            maybe_finish_empty_scene(origin, leaving=self)

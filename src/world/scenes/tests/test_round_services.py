@@ -863,3 +863,230 @@ class SceneRoundOutcomeBroadcastTests(TestCase):
         )
         resolve_scene_round(self.rnd)
         assert Interaction.objects.filter(mode=InteractionMode.OUTCOME).count() == 0
+
+
+class MaybeFinishEmptySceneTests(TestCase):
+    """maybe_finish_empty_scene: the shared core behind both auto-close triggers."""
+
+    _PATCH_BASE = "world.scenes.scene_admin_services"
+
+    def setUp(self):
+        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+        from world.scenes.factories import SceneFactory
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.CharacterFactory = CharacterFactory
+
+    def _pc_in_room(self, db_key):
+        char = self.CharacterFactory(db_key=db_key, location=self.room)
+        CharacterSheetFactory(character=char)
+        return char
+
+    def test_no_active_scene_is_a_noop(self):
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        empty_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        # No Scene exists for empty_room — must not raise.
+        maybe_finish_empty_scene(empty_room)
+
+    def test_last_pc_leaving_finishes_the_scene(self):
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+        assert self.scene.is_active is False
+
+    def test_other_pc_still_present_keeps_scene_active(self):
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        leaving_pc = self._pc_in_room("Leaving")
+        self._pc_in_room("Staying")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=leaving_pc)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is False
+
+    def test_npc_without_sheet_does_not_count_as_present(self):
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        pc = self._pc_in_room("Solo")
+        self.CharacterFactory(db_key="BarePropNPC", location=self.room)  # no CharacterSheet
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+
+    def test_no_leaving_kwarg_still_finds_empty_room(self):
+        """Disconnect call site passes leaving for symmetry, but the character is
+        already absent from room.contents by the time it's called — confirm the
+        function works correctly with no PCs present at all, leaving=None."""
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+
+    def test_scene_at_different_room_is_unaffected(self):
+        """The location=room filter must isolate correctly across rooms."""
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.scenes.factories import SceneFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        other_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        other_scene = SceneFactory(location=other_room, is_active=True)
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)
+
+        self.scene.refresh_from_db()
+        other_scene.refresh_from_db()
+        assert self.scene.is_finished is True  # this room's scene closes
+        assert other_scene.is_finished is False  # unrelated room's scene untouched
+
+    def test_scene_with_live_combat_encounter_is_not_finished(self):
+        """Regression (#1361): a bare CombatEncounter-backed Scene has no real
+        participant/account data, so finish_scene_full's broadcast step crashes
+        on it (AttributeError: 'NoneType' object has no attribute 'msg') — and
+        even setting that aside, the encounter owns this scene's lifecycle, not
+        room emptiness. Reproduces world.stories.tests.test_flee_services's
+        CombatEncounterFactory(room=...) fixture shape."""
+        from world.combat.factories import CombatEncounterFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        CombatEncounterFactory(scene=self.scene, room=self.room)
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)  # must not raise
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is False
+
+    def test_scene_with_completed_combat_encounter_still_finishes(self):
+        """The exclusion only applies to a LIVE encounter — once it's completed,
+        an otherwise-empty scene closes normally."""
+        from django.utils import timezone
+
+        from world.combat.factories import CombatEncounterFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        encounter.completed_at = timezone.now()
+        encounter.save(update_fields=["completed_at"])
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+
+    def test_scene_with_live_battle_is_not_finished(self):
+        """Regression (#1361): same crash-prevention/lifecycle-ownership logic
+        as the CombatEncounter case, for the Battle model."""
+        from world.battles.factories import BattleFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        battle = BattleFactory()  # auto-creates its own backing Scene
+        battle.scene.location = self.room
+        battle.scene.save(update_fields=["location"])
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)  # must not raise
+
+        battle.scene.refresh_from_db()
+        assert battle.scene.is_finished is False
+
+
+class RoomAtObjectLeaveFinishesEmptySceneTests(TestCase):
+    """Room.at_object_leave wiring: last PC walking out finishes the scene (#1361)."""
+
+    _PATCH_BASE = "world.scenes.scene_admin_services"
+
+    def setUp(self):
+        from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+        from world.scenes.factories import SceneFactory
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        self.CharacterFactory = CharacterFactory
+
+    def _pc_in_room(self, db_key):
+        char = self.CharacterFactory(db_key=db_key, location=self.room)
+        CharacterSheetFactory(character=char)
+        return char
+
+    def test_last_pc_walking_out_finishes_scene(self):
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            # Mirrors test_solo_last_rescuer_leaves_immediately's direct-hook-call style.
+            self.room.at_object_leave(pc, None)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+
+    def test_pc_walking_out_with_another_pc_remaining_keeps_scene_active(self):
+        leaving_pc = self._pc_in_room("Leaving")
+        self._pc_in_room("Staying")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            self.room.at_object_leave(leaving_pc, None)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is False

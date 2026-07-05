@@ -576,6 +576,57 @@ def resolve_solo_abandoned_victims(
         resolve_abandonment(sheet)
 
 
+def maybe_finish_empty_scene(
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    leaving: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Finish ``room``'s active scene if no PC other than ``leaving`` remains there.
+
+    Mirrors ``resolve_solo_abandoned_victims``'s early-return and
+    exclude-the-departing-id pattern (#1361). Called from ``Room.at_object_leave``
+    (movement — fires before the mover actually leaves ``room.contents``, hence
+    ``leaving``) and from ``Character.at_post_unpuppet`` (disconnect — called
+    after Evennia's own base-class relocation has already removed the character
+    from ``room.contents``, so ``leaving`` has no practical effect there but is
+    passed for signature symmetry).
+    """
+    from world.battles.models import Battle  # noqa: PLC0415
+    from world.scenes.models import Scene  # noqa: PLC0415
+    from world.scenes.scene_admin_services import finish_scene_full  # noqa: PLC0415
+
+    scene = Scene.objects.filter(location=room, is_active=True).first()
+    if scene is None:
+        return
+
+    # #1361: a scene backing a live CombatEncounter/Battle has its own
+    # lifecycle, resolved via combat/battle outcome rather than room emptiness
+    # — auto-closing it here would be premature. These auxiliary scenes also
+    # lack the account/participant setup a real RP scene has, so
+    # finish_scene_full's broadcast step crashes on them (discovered via CI:
+    # world.stories.tests.test_flee_services.FleeStoryCriticalNPCTests, whose
+    # CombatEncounter fixture regressed against this function). The
+    # combat/mission-disconnect-policy follow-up (#1899) decides what should
+    # happen to a live encounter/battle on disconnect; this just leaves them
+    # untouched for now.
+    if scene.combat_encounters.filter(completed_at__isnull=True).exists():
+        return
+    if Battle.objects.filter(scene=scene, concluded_at__isnull=True).exists():
+        return
+
+    exclude_id = leaving.pk if leaving is not None else None
+    for obj in room.contents:
+        if obj.pk == exclude_id:
+            continue
+        try:
+            obj.sheet_data  # noqa: B018 — attribute access guards NPC/prop skip
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        return  # a PC remains — scene stays active
+
+    finish_scene_full(scene)
+
+
 @transaction.atomic
 def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     """Unconditionally resolve a DECLARING round: execute declared CHALLENGE actions in
