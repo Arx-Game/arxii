@@ -253,11 +253,15 @@ actions, backends, and service functions.
 - **`missions.py`**: `CmdMission` (`mission`, #1349) — the mission play namespace. Thin over the
   mission play services in `world.missions.services.play` (+ `services.journal`) — the *same*
   functions the web `MissionJournalViewSet` calls; no separate Action (mirrors `CmdRitual`'s
-  service-direct session subcommands). Bare `mission`/`mission list` shows the caller's journal;
+  service-direct session subcommands). Bare `mission`/`mission list` shows the caller's journal
+  (+ pending invites addressed to the caller's persona, #887);
   `mission beat <id>` renders the current beat's numbered options (routing single-vs-group on
   `node.conflict_mode` + participant count); `mission resolve <id> <n>` / `mission abandon <id>`
   drive the single-player path; `mission pick <id> <n>` then `mission vote <id> <n>` drive the
-  two-stage group decision. `mission report <id> <style>` closes out a RESOLVED run at a
+  two-stage group decision. `mission invite <id> <name>` invites a co-located character to join
+  (#887); `mission accept <invite-id>` / `mission decline <invite-id>` respond to a pending
+  invitation (the invitee is not yet a participant — thin over `world.missions.services.run`'s
+  `invite_to_mission` / `respond_to_mission_invite`). `mission report <id> <style>` closes out a RESOLVED run at a
   co-located report-to **Functionary** (#1766), choosing a payout *style*
   (`humble`/`accurate`/`embellished`, #1753) — thin over `world.missions.services.report`.
   Options are chosen by the small ordinal shown in `mission beat`
