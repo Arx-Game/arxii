@@ -29,8 +29,6 @@ import type {
   ResolvedBeat,
 } from './types';
 
-export type { EntitySearchResult };
-
 const BASE_URL = '/api/missions';
 
 export class ApiValidationError extends Error {
