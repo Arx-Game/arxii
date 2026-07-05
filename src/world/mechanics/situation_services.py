@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.mechanics.models import SituationInstance
 from world.room_features.models import Trap
 
@@ -28,23 +30,26 @@ def instantiate_situation(template: SituationTemplate, location: ObjectDB) -> Si
     Raises ``django.core.exceptions.ObjectDoesNotExist`` (unwrapped) if
     ``location`` has no RoomProfile and the template carries trap links —
     this is a real caller error (wrong location passed in), not a case to
-    silently skip.
+    silently skip. The instance and its traps are created atomically: if
+    trap materialization fails partway (including this RoomProfile lookup),
+    no orphaned SituationInstance survives.
     """
-    instance = SituationInstance.objects.create(template=template, location=location)
+    with transaction.atomic():
+        instance = SituationInstance.objects.create(template=template, location=location)
 
-    trap_links = list(template.trap_links.all())
-    if trap_links:
-        room_profile = location.room_profile
-        for link in trap_links:
-            Trap.objects.create(
-                room_profile=room_profile,
-                name=link.name,
-                consequence_pool=link.consequence_pool,
-                detect_check_type=link.detect_check_type,
-                disarm_check_type=link.disarm_check_type,
-                detect_difficulty=link.detect_difficulty,
-                disarm_difficulty=link.disarm_difficulty,
-                is_hidden=link.is_hidden,
-            )
+        trap_links = list(template.trap_links.all())
+        if trap_links:
+            room_profile = location.room_profile
+            for link in trap_links:
+                Trap.objects.create(
+                    room_profile=room_profile,
+                    name=link.name,
+                    consequence_pool=link.consequence_pool,
+                    detect_check_type=link.detect_check_type,
+                    disarm_check_type=link.disarm_check_type,
+                    detect_difficulty=link.detect_difficulty,
+                    disarm_difficulty=link.disarm_difficulty,
+                    is_hidden=link.is_hidden,
+                )
 
     return instance

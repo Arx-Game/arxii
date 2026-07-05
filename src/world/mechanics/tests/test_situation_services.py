@@ -73,6 +73,8 @@ class InstantiateSituationTest(TestCase):
         with self.assertRaises(ObjectDoesNotExist):
             instantiate_situation(template, bare_object)
 
+        assert SituationInstance.objects.count() == 0
+
     def test_location_without_room_profile_is_fine_when_template_has_no_traps(self) -> None:
         template = SituationTemplateFactory()
         bare_object = ObjectDBFactory()
