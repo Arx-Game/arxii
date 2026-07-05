@@ -116,3 +116,36 @@ class Companion(SharedMemoryModel):
     @property
     def is_active(self) -> bool:
         return self.released_at is None
+
+
+class CompanionDeployment(SharedMemoryModel):
+    """Links a persistent ``Companion`` to its in-battle ``BattleVehicle``.
+
+    Lives in ``companions`` (not ``battles``) per ADR-0010: the FK points from
+    the more specific/dependent system (companions) at the reusable battle
+    primitives, so ``battles`` stays free of a companions import — mirroring
+    ``ShipDeployment`` in ``world/ships/models.py``.
+    """
+
+    companion = models.ForeignKey(
+        Companion,
+        on_delete=models.CASCADE,
+        related_name="deployments",
+    )
+    battle = models.ForeignKey(
+        "battles.Battle",
+        on_delete=models.CASCADE,
+        related_name="companion_deployments",
+    )
+    vehicle = models.OneToOneField(
+        "battles.BattleVehicle",
+        on_delete=models.CASCADE,
+        related_name="companion_deployment",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["battle", "companion"]
+
+    def __str__(self) -> str:
+        return f"Deployment of companion {self.companion_id} into battle {self.battle_id}"
