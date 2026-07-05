@@ -4343,6 +4343,25 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         objectdb.delete()
 
 
+def maybe_pause_encounter_for_disconnect(character_sheet: CharacterSheet) -> None:
+    """Pause the character's live CombatEncounter, if any, on disconnect (#1899).
+
+    CombatEncounter has no scale exception (it's inherently small-scale —
+    PARTY_COMBAT/OPEN_ENCOUNTER/DUEL); every live encounter pauses. Reuses the
+    existing is_paused field/semantics unchanged (soft flag; only blocks the
+    TIMED-mode auto-resolve sweep, per its existing behavior).
+    """
+    participant = CombatParticipant.objects.filter(
+        character_sheet=character_sheet,
+        status=ParticipantStatus.ACTIVE,
+        encounter__completed_at__isnull=True,
+    ).first()
+    if participant is None:
+        return
+    participant.encounter.is_paused = True
+    participant.encounter.save(update_fields=["is_paused"])
+
+
 def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     """Return True if the encounter should be marked complete.
 

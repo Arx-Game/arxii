@@ -861,3 +861,56 @@ class SceneParticipationOnCombatEntryTest(TestCase):
         self.assertTrue(
             SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
         )
+
+
+class MaybePauseEncounterForDisconnectTests(TestCase):
+    def test_pauses_live_encounter(self) -> None:
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        encounter = CombatEncounterFactory()
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+
+        maybe_pause_encounter_for_disconnect(sheet)
+
+        encounter.refresh_from_db()
+        assert encounter.is_paused is True
+
+    def test_no_active_participant_is_a_noop(self) -> None:
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        sheet = CharacterSheetFactory()
+        # No CombatParticipant row at all — must not raise.
+        maybe_pause_encounter_for_disconnect(sheet)
+
+    def test_completed_encounter_is_not_paused(self) -> None:
+        from django.utils import timezone
+
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        encounter = CombatEncounterFactory(completed_at=timezone.now())
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+
+        maybe_pause_encounter_for_disconnect(sheet)
+
+        encounter.refresh_from_db()
+        assert encounter.is_paused is False
+
+    def test_fled_participant_is_not_paused(self) -> None:
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        encounter = CombatEncounterFactory()
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.FLED
+        )
+
+        maybe_pause_encounter_for_disconnect(sheet)
+
+        encounter.refresh_from_db()
+        assert encounter.is_paused is False
