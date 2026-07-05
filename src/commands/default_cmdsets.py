@@ -40,6 +40,7 @@ from commands.consent import (
 )
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
+from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
@@ -313,6 +314,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCovenant,
             # #1592 — battle system: GM lifecycle + player declare namespace.
             CmdBattle,
+            # #1866 — facet/style attach/detach telnet namespace.
+            CmdCraft,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             # #1832 — ship commission/upgrade/repair/status namespace.
