@@ -26,9 +26,20 @@ class EnsureAssetPromotionContentTests(TestCase):
 
     def test_offers_reuse_existing_check_types_not_new_ones(self) -> None:
         ensure_asset_promotion_content()
-        names = set(
-            NPCServiceOffer.objects.filter(kind=OfferKind.INFORMANT.value).values_list(
-                "check_type__name", flat=True
-            )
+        role = NPCServiceOffer.objects.filter(kind=OfferKind.INFORMANT.value).first().role
+        offers = NPCServiceOffer.objects.filter(role=role)
+        check_type_by_kind = dict(offers.values_list("kind", "check_type__name"))
+        # Asserting these three exact (kind, check_type name) pairs — rather than a
+        # bare CheckType.objects.count() — is the robust check: the three seed
+        # functions (seed_stealth_check_content/seed_governance_check_content/
+        # seed_social_check_content) each seed their own broader content, so a
+        # total-row-count assertion would be fragile against unrelated CheckType
+        # rows those seeders also produce.
+        self.assertEqual(
+            check_type_by_kind,
+            {
+                OfferKind.INFORMANT.value: "Stealth",
+                OfferKind.CONTACT.value: "Household Command",
+                OfferKind.PERSONAL_FAVOR.value: "Seduction",
+            },
         )
-        self.assertIn("Stealth", names)

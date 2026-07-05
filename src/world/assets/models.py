@@ -50,6 +50,7 @@ class NPCAsset(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["promoter_persona", "source_functionary"],

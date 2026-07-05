@@ -92,3 +92,30 @@ class PromoteFunctionaryEffectTests(EvenniaTestCase):
             result = dispatch_offer_effect(self.offer, self.persona)
         self.assertFalse(NPCAsset.objects.filter(promoter_persona=self.persona).exists())
         self.assertIn("no longer", result.message.lower())
+
+    def test_no_functionary_ever_placed_here_is_handled(self) -> None:
+        from evennia import create_object
+
+        from world.areas.services import get_room_profile
+
+        # A distinct room with no Functionary of this role ever placed —
+        # the very first .first() lookup in _promote_functionary returns
+        # None, which is a different code path from "was here, then
+        # removed" (test_functionary_no_longer_here_is_handled above).
+        other_room = create_object("typeclasses.rooms.Room", key="Never Cultivated Room")
+        self.character.location = other_room
+        self.character.save()
+        other_room_profile = get_room_profile(other_room)
+        offer = NPCServiceOfferFactory(
+            role=self.functionary.role,
+            kind=OfferKind.INFORMANT,
+            check_type=self.check_type,
+        )
+        success = CheckOutcomeFactory(name="Forced Promotion Success 5", success_level=3)
+        with force_check_outcome(success):
+            result = dispatch_offer_effect(offer, self.persona)
+        self.assertFalse(NPCAsset.objects.filter(promoter_persona=self.persona).exists())
+        self.assertIn("no longer", result.message.lower())
+        self.assertFalse(
+            functionaries_in_room(other_room_profile).filter(role=self.functionary.role).exists()
+        )

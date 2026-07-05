@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from world.npc_services.models import NPCServiceOffer
     from world.scenes.models import Persona
 
+_FUNCTIONARY_GONE_MESSAGE = "They're no longer here."
+
 
 @transaction.atomic
 def _promote_functionary(
@@ -52,7 +54,7 @@ def _promote_functionary(
     room_profile = get_room_profile(character.location)
     functionary = Functionary.objects.filter(role=offer.role, room=room_profile).first()
     if functionary is None:
-        return EffectResult(kind=offer.kind, message="They're no longer here.")
+        return EffectResult(kind=offer.kind, message=_FUNCTIONARY_GONE_MESSAGE)
 
     if NPCAsset.objects.filter(promoter_persona=persona, source_functionary=functionary).exists():
         return EffectResult(kind=offer.kind, message="You've already cultivated this one.")
@@ -67,7 +69,13 @@ def _promote_functionary(
     if not Functionary.objects.filter(pk=functionary.pk, is_active=True).exists():
         # Inactive for some other reason (staff removal, role disabled, ...) —
         # not because this promoter already cultivated it (checked above).
-        return EffectResult(kind=offer.kind, message="They're no longer here.")
+        return EffectResult(kind=offer.kind, message=_FUNCTIONARY_GONE_MESSAGE)
+
+    if offer.check_type_id is None:
+        return EffectResult(
+            kind=offer.kind,
+            message="This offer has no capability check configured. (Authoring error.)",
+        )
 
     check_result = perform_check(
         character, offer.check_type, target_difficulty=offer.check_difficulty
