@@ -28,7 +28,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.missions.models import MissionTemplate
+    from world.missions.models import MissionInvite, MissionTemplate
+    from world.scenes.models import Persona
 
 
 def _entry_node(template: MissionTemplate) -> MissionNode:
@@ -147,3 +148,81 @@ def share_mission(
         character=other_character,
         is_contract_holder=False,
     )
+
+
+class InviteError(Exception):
+    """A typed error from the mission invite services (#887).
+
+    Carries a user-safe message (never an internal str()).
+    """
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+
+
+_ERR_NOT_ACTIVE = "That mission is not active."
+_ERR_NOT_HOLDER = "Only the contract holder may invite others."
+_ERR_ALREADY_PARTICIPANT = "They are already part of that mission."
+_ERR_ALREADY_RESPONDED = "You have already responded to that invitation."
+_ERR_RUN_NOT_ACTIVE = "That mission is no longer active."
+
+
+def invite_to_mission(
+    instance: MissionInstance,
+    holder_persona: Persona,
+    invitee_persona: Persona,
+) -> MissionInvite:
+    """Create a PENDING invite for ``invitee_persona`` to join ``instance``.
+
+    Validates the inviter is the instance's contract holder and the run is
+    ACTIVE; rejects if the invitee is already a participant. Consent is opt-in
+    participation (ADR-0024 — not a behavior-altering effect), mirroring
+    ``EventInvitation``'s RSVP rather than the ``SceneActionRequest`` flow.
+    """
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInvite, MissionParticipant  # noqa: PLC0415
+    from world.missions.services.multiplayer import contract_holder  # noqa: PLC0415
+
+    if instance.status != MissionStatus.ACTIVE:
+        raise InviteError(_ERR_NOT_ACTIVE)
+    holder = contract_holder(instance)
+    if holder.character.sheet_data.primary_persona.pk != holder_persona.pk:
+        raise InviteError(_ERR_NOT_HOLDER)
+    if MissionParticipant.objects.filter(
+        instance=instance, character_id=invitee_persona.character_sheet.character_id
+    ).exists():
+        raise InviteError(_ERR_ALREADY_PARTICIPANT)
+    return MissionInvite.objects.create(
+        instance=instance,
+        target_persona=invitee_persona,
+        invited_by=holder_persona,
+    )
+
+
+def respond_to_mission_invite(
+    invite: MissionInvite,
+    decision: MissionInvite.Response,
+) -> MissionParticipant | None:
+    """Resolve a PENDING invite. On ACCEPT, calls ``share_mission``.
+
+    Raises ``InviteError`` if the run is no longer active or the invite was
+    already responded to. Returns the new ``MissionParticipant`` on accept;
+    ``None`` on decline.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.missions.constants import MissionStatus  # noqa: PLC0415
+    from world.missions.models import MissionInvite  # noqa: PLC0415
+
+    if invite.response != MissionInvite.Response.PENDING:
+        raise InviteError(_ERR_ALREADY_RESPONDED)
+    if invite.instance.status != MissionStatus.ACTIVE:
+        raise InviteError(_ERR_RUN_NOT_ACTIVE)
+    invite.response = decision
+    invite.responded_at = timezone.now()
+    invite.save(update_fields=["response", "responded_at"])
+    if decision != MissionInvite.Response.ACCEPTED:
+        return None
+    invitee_character = invite.target_persona.character_sheet.character
+    return share_mission(invite.instance, invitee_character)

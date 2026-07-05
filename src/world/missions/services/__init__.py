@@ -52,9 +52,16 @@ from world.missions.services.rewards import (
     emit_candidate_rewards,
     emit_terminal_rewards,
 )
-from world.missions.services.run import share_mission, staff_assign_mission
+from world.missions.services.run import (
+    InviteError,
+    invite_to_mission,
+    respond_to_mission_invite,
+    share_mission,
+    staff_assign_mission,
+)
 
 __all__ = [
+    "InviteError",
     "MissionRewardRoutingError",
     "apply_deed_rewards",
     "apply_mission_reward_batch",
@@ -65,11 +72,13 @@ __all__ = [
     "emit_candidate_rewards",
     "emit_terminal_rewards",
     "enter_node",
+    "invite_to_mission",
     "journal_for",
     "on_mission_complete_for_beat",
     "resolve_beat_option",
     "resolve_group_node",
     "resolve_option",
+    "respond_to_mission_invite",
     "share_mission",
     "staff_assign_mission",
     "validate_mission_option",
