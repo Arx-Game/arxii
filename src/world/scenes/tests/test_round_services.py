@@ -977,6 +977,73 @@ class MaybeFinishEmptySceneTests(TestCase):
         assert self.scene.is_finished is True  # this room's scene closes
         assert other_scene.is_finished is False  # unrelated room's scene untouched
 
+    def test_scene_with_live_combat_encounter_is_not_finished(self):
+        """Regression (#1361): a bare CombatEncounter-backed Scene has no real
+        participant/account data, so finish_scene_full's broadcast step crashes
+        on it (AttributeError: 'NoneType' object has no attribute 'msg') — and
+        even setting that aside, the encounter owns this scene's lifecycle, not
+        room emptiness. Reproduces world.stories.tests.test_flee_services's
+        CombatEncounterFactory(room=...) fixture shape."""
+        from world.combat.factories import CombatEncounterFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        CombatEncounterFactory(scene=self.scene, room=self.room)
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)  # must not raise
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is False
+
+    def test_scene_with_completed_combat_encounter_still_finishes(self):
+        """The exclusion only applies to a LIVE encounter — once it's completed,
+        an otherwise-empty scene closes normally."""
+        from django.utils import timezone
+
+        from world.combat.factories import CombatEncounterFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.room)
+        encounter.completed_at = timezone.now()
+        encounter.save(update_fields=["completed_at"])
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)
+
+        self.scene.refresh_from_db()
+        assert self.scene.is_finished is True
+
+    def test_scene_with_live_battle_is_not_finished(self):
+        """Regression (#1361): same crash-prevention/lifecycle-ownership logic
+        as the CombatEncounter case, for the Battle model."""
+        from world.battles.factories import BattleFactory
+        from world.scenes.round_services import maybe_finish_empty_scene
+
+        battle = BattleFactory()  # auto-creates its own backing Scene
+        battle.scene.location = self.room
+        battle.scene.save(update_fields=["location"])
+        pc = self._pc_in_room("Solo")
+
+        with (
+            mock.patch(f"{self._PATCH_BASE}.on_scene_finished"),
+            mock.patch(f"{self._PATCH_BASE}.process_deferred_fatigue_resets"),
+            mock.patch(f"{self._PATCH_BASE}.broadcast_scene_message"),
+        ):
+            maybe_finish_empty_scene(self.room, leaving=pc)  # must not raise
+
+        battle.scene.refresh_from_db()
+        assert battle.scene.is_finished is False
+
 
 class RoomAtObjectLeaveFinishesEmptySceneTests(TestCase):
     """Room.at_object_leave wiring: last PC walking out finishes the scene (#1361)."""

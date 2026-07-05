@@ -591,11 +591,27 @@ def maybe_finish_empty_scene(
     from ``room.contents``, so ``leaving`` has no practical effect there but is
     passed for signature symmetry).
     """
+    from world.battles.models import Battle  # noqa: PLC0415
     from world.scenes.models import Scene  # noqa: PLC0415
     from world.scenes.scene_admin_services import finish_scene_full  # noqa: PLC0415
 
     scene = Scene.objects.filter(location=room, is_active=True).first()
     if scene is None:
+        return
+
+    # #1361: a scene backing a live CombatEncounter/Battle has its own
+    # lifecycle, resolved via combat/battle outcome rather than room emptiness
+    # — auto-closing it here would be premature. These auxiliary scenes also
+    # lack the account/participant setup a real RP scene has, so
+    # finish_scene_full's broadcast step crashes on them (discovered via CI:
+    # world.stories.tests.test_flee_services.FleeStoryCriticalNPCTests, whose
+    # CombatEncounter fixture regressed against this function). The
+    # combat/mission-disconnect-policy follow-up (#1899) decides what should
+    # happen to a live encounter/battle on disconnect; this just leaves them
+    # untouched for now.
+    if scene.combat_encounters.filter(completed_at__isnull=True).exists():
+        return
+    if Battle.objects.filter(scene=scene, concluded_at__isnull=True).exists():
         return
 
     exclude_id = leaving.pk if leaving is not None else None
