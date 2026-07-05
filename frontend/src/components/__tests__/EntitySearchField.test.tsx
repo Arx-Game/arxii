@@ -66,4 +66,39 @@ describe('EntitySearchField', () => {
     await waitFor(() => expect(resolveById).toHaveBeenCalledWith(7));
     expect(await screen.findByDisplayValue('Notice Board Plaza')).toBeInTheDocument();
   });
+
+  it('does not clear in-progress typing when the parent updates value to null after onChange(null)', async () => {
+    const user = userEvent.setup();
+    const search = vi.fn().mockResolvedValue([ROOM]);
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <EntitySearchField value={7} onChange={onChange} search={search} label="Target" />
+    );
+
+    await screen.findByDisplayValue(String(7));
+    const field = screen.getByLabelText('Target');
+    await user.clear(field);
+    await user.type(field, 'Cha');
+
+    // Parent reacts to the onChange(null) call fired during editing.
+    rerender(<EntitySearchField value={null} onChange={onChange} search={search} label="Target" />);
+
+    expect(screen.getByLabelText('Target')).toHaveValue('Cha');
+  });
+
+  it('falls back to displaying the raw id if resolveById rejects', async () => {
+    const resolveById = vi.fn().mockRejectedValue(new Error('network error'));
+    render(
+      <EntitySearchField
+        value={7}
+        onChange={vi.fn()}
+        search={vi.fn().mockResolvedValue([])}
+        resolveById={resolveById}
+        label="Target"
+      />
+    );
+
+    await waitFor(() => expect(resolveById).toHaveBeenCalledWith(7));
+    expect(await screen.findByDisplayValue('7')).toBeInTheDocument();
+  });
 });

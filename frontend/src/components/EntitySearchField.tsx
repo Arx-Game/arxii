@@ -54,9 +54,12 @@ export function EntitySearchField({
   // Resolve an externally-set value's display name (e.g. on mount).
   // Note: selectedId is intentionally not in the dependency array — we only
   // want this effect to run when the external `value` prop changes, not when
-  // selectedId changes from internal user actions (e.g. clicking a search result).
+  // selectedId changes from internal user actions (e.g. clicking a search
+  // result). Both branches below still read the latest selectedId from the
+  // closure to guard against redundant resets when the effect does run.
   useEffect(() => {
     if (value === null) {
+      if (selectedId === null) return;
       setSelectedId(null);
       setQuery('');
       return;
@@ -68,9 +71,14 @@ export function EntitySearchField({
       return;
     }
     let cancelled = false;
-    resolveRef.current(value).then((entity) => {
-      if (!cancelled) setQuery(entity ? entity.name : String(value));
-    });
+    resolveRef
+      .current(value)
+      .then((entity) => {
+        if (!cancelled) setQuery(entity ? entity.name : String(value));
+      })
+      .catch(() => {
+        if (!cancelled) setQuery(String(value));
+      });
     return () => {
       cancelled = true;
     };
