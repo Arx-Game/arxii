@@ -2469,3 +2469,48 @@ class TreasuredSignoff(SharedMemoryModel):
     def __str__(self) -> str:
         status = "active" if self.active else "withdrawn"
         return f"TreasuredSignoff(beat={self.beat_id}, player={self.player_data_id}, {status})"
+
+
+class StoryNPCDependency(SharedMemoryModel):
+    """Declares that an NPC is load-bearing for a story.
+
+    When active, the NPC is structurally protected from death by actors
+    external to the story. See ``is_death_prevented_by_story`` in
+    ``world.stories.npc_protection``.
+    """
+
+    story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="npc_dependencies",
+    )
+    npc_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="story_dependencies",
+        help_text="The NPC character that is load-bearing for this story.",
+    )
+    beat = models.ForeignKey(
+        Beat,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="npc_dependencies",
+        help_text=(
+            "For beat-level refinement: protection applies only while this "
+            "beat is unsatisfied. Null = story-level (whole arc)."
+        ),
+    )
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, help_text="GM notes on why this NPC is critical.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["story", "npc_sheet"]
+        indexes = [
+            models.Index(fields=["npc_sheet", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        scope = f"beat #{self.beat_id}" if self.beat_id else "story-level"
+        return f"StoryNPCDependency(npc_sheet=#{self.npc_sheet_id}, {scope})"
