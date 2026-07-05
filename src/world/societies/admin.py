@@ -12,6 +12,9 @@ from world.societies.models import (
     CovenantLegendCredit,
     FameReactionCooldown,
     FameReactionLine,
+    GangTurfDetails,
+    GangTurfReputationAward,
+    GangTurfTierThreshold,
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
@@ -558,3 +561,30 @@ class FameReactionCooldownAdmin(admin.ModelAdmin):
     """#881 — re-fire throttle rows (operational visibility only)."""
 
     list_display = ("persona", "room", "available_at")
+
+
+@admin.register(GangTurfDetails)
+class GangTurfDetailsAdmin(admin.ModelAdmin):
+    """#1891 — per-(GANG_TURF Project) payload."""
+
+    list_display = ("project", "organization", "target_area")
+    list_select_related = ("organization", "target_area")
+    search_fields = ("organization__name",)
+
+
+@admin.register(GangTurfTierThreshold)
+class GangTurfTierThresholdAdmin(admin.ModelAdmin):
+    """#1891 — progress band → CheckOutcome tier mapping per project."""
+
+    list_display = ("details", "outcome_tier", "min_progress")
+    list_select_related = ("details", "outcome_tier")
+    ordering = ("details", "-min_progress")
+
+
+@admin.register(GangTurfReputationAward)
+class GangTurfReputationAwardAdmin(admin.ModelAdmin):
+    """#1891 — global tier → reputation delta table (staff-tunable)."""
+
+    list_display = ("outcome_tier", "reputation_delta")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
