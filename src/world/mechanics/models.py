@@ -1100,6 +1100,46 @@ class SituationChallengeLink(SharedMemoryModel):
         return f"{self.situation_template.name} → {self.challenge_template.name}"
 
 
+class SituationTrapLink(SharedMemoryModel):
+    """Authored trap blueprint carried by a SituationTemplate.
+
+    Instantiated into a real ``room_features.Trap`` row by
+    ``instantiate_situation``. Carries only authorable fields — no
+    ``is_armed``/``detected_by`` (always fresh per instantiated Trap), no
+    ``position`` (traps minted from a link are always room-wide), no
+    ``depends_on`` (traps are independent hazards, not a sequenced chain
+    like SituationChallengeLink).
+    """
+
+    situation_template = models.ForeignKey(
+        SituationTemplate,
+        on_delete=models.CASCADE,
+        related_name="trap_links",
+    )
+    name = models.CharField(max_length=100)
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        related_name="situation_trap_links",
+    )
+    detect_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="detect_situation_traps",
+    )
+    disarm_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="disarm_situation_traps",
+    )
+    detect_difficulty = models.PositiveIntegerField(default=0)
+    disarm_difficulty = models.PositiveIntegerField(default=0)
+    is_hidden = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return f"{self.situation_template.name} — trap: {self.name}"
+
+
 class SituationInstance(SharedMemoryModel):
     """A live Situation placed at a location, possibly tied to a scene."""
 
