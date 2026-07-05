@@ -13721,7 +13721,7 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List/retrieve the requester's active persona's organization reputations (standing).
+     * @description List/retrieve org reputations (standing) for personas the requester currently plays.
      *
      *     Self-only: rows are scoped to personas the requester currently plays.
      */
@@ -13742,7 +13742,7 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List/retrieve the requester's active persona's organization reputations (standing).
+     * @description List/retrieve org reputations (standing) for personas the requester currently plays.
      *
      *     Self-only: rows are scoped to personas the requester currently plays.
      */

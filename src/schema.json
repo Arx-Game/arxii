@@ -22827,7 +22827,7 @@ paths:
     get:
       operationId: societies_reputations_list
       description: |-
-        List/retrieve the requester's active persona's organization reputations (standing).
+        List/retrieve org reputations (standing) for personas the requester currently plays.
 
         Self-only: rows are scoped to personas the requester currently plays.
       parameters:
@@ -22856,7 +22856,7 @@ paths:
     get:
       operationId: societies_reputations_retrieve
       description: |-
-        List/retrieve the requester's active persona's organization reputations (standing).
+        List/retrieve org reputations (standing) for personas the requester currently plays.
 
         Self-only: rows are scoped to personas the requester currently plays.
       parameters:
