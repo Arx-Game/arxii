@@ -100,7 +100,14 @@ def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
     from world.conditions.models import CapabilityType  # noqa: PLC0415
     from world.conditions.services import get_effective_capability_value  # noqa: PLC0415
 
-    movement = CapabilityType.objects.filter(name=FoundationalCapability.MOVEMENT).first()
+    movement = next(
+        (
+            c
+            for c in CapabilityType.objects.cached_all()
+            if c.name == FoundationalCapability.MOVEMENT
+        ),
+        None,
+    )
     if movement is None:
         return False
     return get_effective_capability_value(character_sheet, movement) > 0
@@ -722,7 +729,14 @@ def _resolve_reposition_success(
     if requested_distance == 0:
         return
 
-    speed_capability = CapabilityType.objects.filter(name="speed").first()
+    speed_capability = next(
+        (
+            c
+            for c in CapabilityType.objects.cached_all()
+            if c.name == "speed"  # noqa: STRING_LITERAL
+        ),
+        None,
+    )
     max_distance = Decimal(
         vehicle.unit.effective_capability(speed_capability) if speed_capability else 0
     )
