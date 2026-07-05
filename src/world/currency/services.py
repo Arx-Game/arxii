@@ -170,6 +170,7 @@ def mint_instrument(
     ledger and lives inside the instrument until redemption.
     """
     from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
 
     face_value = DENOMINATION_VALUES[denomination]
     fee = int(face_value * MINT_FEE_PCT)
@@ -196,6 +197,9 @@ def mint_instrument(
             denomination=denomination,
             face_value=face_value,
         )
+        # Coin is physical money (#1909): born as a real object in the
+        # minter's inventory so it can be dropped/given/stowed/stolen.
+        materialize_item_game_object(instance, holder_sheet)
     return instance
 
 
@@ -226,6 +230,7 @@ def mint_loose_cache(
     """
     from world.currency.constants import Denomination  # noqa: PLC0415
     from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
 
     with transaction.atomic():
         transfer(
@@ -243,6 +248,9 @@ def mint_loose_cache(
             denomination=Denomination.LOOSE,
             face_value=amount,
         )
+        # Coin is physical money (#1909): born as a real object in the
+        # minter's inventory so it can be dropped/given/stowed/stolen.
+        materialize_item_game_object(instance, holder_sheet)
     return instance
 
 
@@ -254,7 +262,12 @@ def redeem_instrument(
 ) -> CurrencyTransfer:
     """Convert a physical coin back into ledger money (fee-free).
 
-    Consumes the instrument (the coin is melted back into the books).
+    Consumes the instrument (the coin is melted back into the books) —
+    including its physical ObjectDB, when one exists, via the established
+    consumption pattern (``usage.hard_delete_item_instance`` precedent:
+    delete the game_object, CASCADE removes the ItemInstance row; ownership
+    events survive via SET_NULL). Without this a redeemed coin would linger
+    as a ghost object in the depositor's inventory (#1909).
     """
     details = CurrencyInstrumentDetails.objects.get(item_instance=instance)
     with transaction.atomic():
@@ -264,7 +277,14 @@ def redeem_instrument(
             to_purse=to_purse,
             to_treasury=to_treasury,
         )
-        instance.delete()
+        game_object = instance.game_object
+        holder = game_object.location if game_object is not None else None
+        if game_object is not None:
+            game_object.delete()  # CASCADE removes the ItemInstance row
+        else:
+            instance.delete()
+        if holder is not None and hasattr(holder, "carried_items"):
+            holder.carried_items.invalidate()
     return row
 
 

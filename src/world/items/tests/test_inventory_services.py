@@ -726,6 +726,23 @@ class PutInTests(TestCase):
         with self.assertRaises(NotReachable):
             put_in(self.character_state, self.item_state, self.container_state)
 
+    def test_put_in_row_only_item_raises_not_in_possession(self) -> None:
+        """A row-only item (no game_object — narrative-grant pattern) fails
+        cleanly with NotInPossession instead of AttributeError (#1909)."""
+        row_only = ItemInstanceFactory(template=self.item_template, game_object=None)
+        row_only_state = ItemState(row_only, context=MagicMock())
+        with self.assertRaises(NotInPossession):
+            put_in(self.character_state, row_only_state, self.container_state)
+
+    def test_put_in_row_only_container_raises_not_a_container(self) -> None:
+        """A row-only container (no game_object) has no physical inside (#1909)."""
+        row_only_container = ItemInstanceFactory(
+            template=self.container_template, game_object=None, is_open=True
+        )
+        row_only_state = ItemState(row_only_container, context=MagicMock())
+        with self.assertRaises(NotAContainer):
+            put_in(self.character_state, self.item_state, row_only_state)
+
 
 class TakeOutTests(TestCase):
     """Cover the happy path of ``take_out``."""

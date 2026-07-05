@@ -300,7 +300,16 @@ def put_in(
     ``item.contained_in = container`` and moves the underlying ``ObjectDB``
     into the container's ``ObjectDB`` so Evennia's ``look``/contents traversal
     sees the item as being inside the container.
+
+    Row-only instances (``game_object`` null — the narrative-grant pattern)
+    fail cleanly up front rather than dereferencing a null object below
+    (#1909): a row-only item is not in anyone's physical possession, and a
+    row-only container has no physical inside to put things into.
     """
+    if item.instance.game_object is None:
+        raise NotInPossession
+    if container.instance.game_object is None:
+        raise NotAContainer
     if not container.is_reachable_by(character.obj):
         raise NotReachable
     container_template = container.instance.template

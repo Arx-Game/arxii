@@ -43,6 +43,9 @@ class WithdrawCoinsActionTests(TestCase):
         details = CurrencyInstrumentDetails.objects.get(item_instance=instance)
         assert details.denomination == Denomination.LOOSE
         assert details.face_value == 350
+        # Born physical (#1909 fix round): a real object in the minter's inventory.
+        assert instance.game_object is not None
+        assert instance.game_object.location == actor
 
     def test_withdraw_zero_or_missing_amount_fails(self) -> None:
         _room, actor, _sheet, _purse = self._actor_with_balance(1_000)
@@ -70,16 +73,9 @@ class DepositCoinsActionTests(TestCase):
         sheet = CharacterSheetFactory(character=actor)
         purse = get_or_create_purse(sheet)
         transfer(amount=1_000, reason="seed", to_purse=purse)
+        # mint_loose_cache materializes the coin's game_object in the
+        # minter's inventory (#1909 fix round) — no manual wiring needed.
         instance = mint_loose_cache(amount=amount, holder_sheet=sheet, from_purse=purse)
-        # mint_loose_cache is a ledger-level service and does not spawn a
-        # physical game_object (same gap as grant_touchstone_item_to_character
-        # / building permits elsewhere in this codebase) — wire one here so
-        # DepositCoinsAction has an ObjectDB target to resolve, same as it
-        # would get from a caller's ``deposit <item>`` search in practice
-        # once that materialization gap is addressed.
-        game_obj = ObjectDBFactory(db_key="LooseCoinCache", location=actor)
-        instance.game_object = game_obj
-        instance.save(update_fields=["game_object"])
         return room, actor, sheet, purse, instance
 
     def test_deposit_redeems_instrument_and_credits_purse(self) -> None:
