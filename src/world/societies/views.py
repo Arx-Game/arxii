@@ -18,12 +18,14 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationMembershipOffer,
     OrganizationRank,
+    OrganizationReputation,
 )
 from world.societies.permissions import IsOwnMembership, active_persona_q
 from world.societies.serializers import (
     OrganizationMembershipOfferSerializer,
     OrganizationMembershipSerializer,
     OrganizationRankSerializer,
+    OrganizationReputationSerializer,
     OrganizationSerializer,
 )
 
@@ -80,6 +82,26 @@ class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset().filter(organization__covenant__isnull=True)
         if self.request.user.is_staff:
             return qs
+        return qs.filter(active_persona_q(self.request.user, path="persona"))
+
+
+class OrganizationReputationViewSet(viewsets.ReadOnlyModelViewSet):
+    """List/retrieve org reputations (standing) for personas the requester currently plays.
+
+    Self-only: rows are scoped to personas the requester currently plays.
+    """
+
+    queryset = OrganizationReputation.objects.select_related("organization").order_by(
+        "organization__name"
+    )
+    serializer_class = OrganizationReputationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SocietiesPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ("organization",)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
         return qs.filter(active_persona_q(self.request.user, path="persona"))
 
 

@@ -13,6 +13,13 @@ import type { RenownPayload } from '../types';
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
   characterSheetId: number;
+  /**
+   * Society ids the viewer's active persona is currently wanted by (#1765 heat rows).
+   * Own-view only — omit (or leave undefined) when the caller has no wanted-flag data
+   * (e.g. foreign views never pass this). Threaded down to the reputation list so the
+   * consolidated Reputation tab (#1446) doesn't need its own duplicate list.
+   */
+  wantedSocietyIds?: Set<number>;
 }
 
 /**
@@ -25,15 +32,21 @@ interface Props {
  *   - The selected persona's renown payload, rendered as four cards:
  *     Fame, Prestige, Reputation, Recent Deeds.
  */
-export function RenownPanel({ characterSheetId }: Props) {
+export function RenownPanel({ characterSheetId, wantedSocietyIds }: Props) {
   return (
     <PersonaSelectionShell characterSheetId={characterSheetId}>
-      {(personaId) => <PanelBody personaId={personaId} />}
+      {(personaId) => <PanelBody personaId={personaId} wantedSocietyIds={wantedSocietyIds} />}
     </PersonaSelectionShell>
   );
 }
 
-function PanelBody({ personaId }: { personaId: number }) {
+function PanelBody({
+  personaId,
+  wantedSocietyIds,
+}: {
+  personaId: number;
+  wantedSocietyIds?: Set<number>;
+}) {
   const { data: renown, isLoading } = usePersonaRenownQuery(personaId);
   if (isLoading || !renown) {
     return (
@@ -47,17 +60,25 @@ function PanelBody({ personaId }: { personaId: number }) {
       <div className="flex justify-end">
         <SpreadTaleDialog personaId={personaId} />
       </div>
-      <CardLayout renown={renown} personaId={personaId} />
+      <CardLayout renown={renown} personaId={personaId} wantedSocietyIds={wantedSocietyIds} />
     </div>
   );
 }
 
-function CardLayout({ renown, personaId }: { renown: RenownPayload; personaId: number }) {
+function CardLayout({
+  renown,
+  personaId,
+  wantedSocietyIds,
+}: {
+  renown: RenownPayload;
+  personaId: number;
+  wantedSocietyIds?: Set<number>;
+}) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <FameCard fame={renown.fame} />
       <PrestigeBreakdownCard prestige={renown.prestige} />
-      <ReputationListCard reputation={renown.reputation} />
+      <ReputationListCard reputation={renown.reputation} wantedSocietyIds={wantedSocietyIds} />
       <DeedsLogCard deeds={renown.recent_deeds} personaId={personaId} />
       <OwnedDwellingsCard dwellings={renown.owned_dwellings} />
       <TenantedRoomsCard rooms={renown.tenanted_rooms} />

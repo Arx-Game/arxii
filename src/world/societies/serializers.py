@@ -9,6 +9,7 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationMembershipOffer,
     OrganizationRank,
+    OrganizationReputation,
 )
 
 
@@ -68,6 +69,26 @@ class OrganizationMembershipSerializer(serializers.ModelSerializer):
 
     def get_is_active(self, obj: OrganizationMembership) -> bool:
         return obj.left_at is None and obj.exiled_at is None
+
+
+class OrganizationReputationSerializer(serializers.ModelSerializer):
+    """A persona's standing with an organization — named tier only, never the raw value."""
+
+    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    tier = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganizationReputation
+        fields = [
+            "id",
+            "persona",
+            "organization",
+            "organization_name",
+            "tier",
+        ]
+
+    def get_tier(self, obj: OrganizationReputation) -> str:
+        return obj.get_tier().value
 
 
 class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):

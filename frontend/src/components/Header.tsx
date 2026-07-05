@@ -20,8 +20,6 @@ const links = [
   { to: '/events', label: 'Events' },
   { to: '/codex', label: 'Codex' },
   { to: '/tidings', label: 'Tidings' },
-  { to: '/news', label: 'News' },
-  { to: '/community', label: 'Community' },
   { to: '/threads', label: 'Threads' },
   { to: '/magic/progression', label: 'Progression' },
 ];

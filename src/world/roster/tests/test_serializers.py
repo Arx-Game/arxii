@@ -19,6 +19,92 @@ from world.roster.models import ApplicationStatus, RosterApplication
 from world.roster.serializers import MyRosterEntrySerializer, RosterEntrySerializer
 
 
+class CharacterSerializerCovenantTestCase(TestCase):
+    """The covenant identity summary on CharacterSerializer (#1446)."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+
+    def test_covenant_null_when_no_active_role(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.serializers import CharacterSerializer
+
+        CharacterSheetFactory(character=self.character)
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] is None
+
+    def test_covenant_summary_from_active_durance_role(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.roster.serializers import CharacterSerializer
+
+        sheet = CharacterSheetFactory(character=self.character)
+        role = CharacterCovenantRoleFactory(character_sheet=sheet)
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] == {
+            "id": role.covenant.pk,
+            "name": role.covenant.name,
+            "role": role.covenant_role.name,
+        }
+
+    def test_covenant_ignores_departed_roles(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.roster.serializers import CharacterSerializer
+
+        sheet = CharacterSheetFactory(character=self.character)
+        CharacterCovenantRoleFactory(character_sheet=sheet, left_at=timezone.now())
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] is None
+
+    def test_covenant_prefers_engaged_row_over_other_active_durance_role(self):
+        """Two active DURANCE roles: the engaged one wins, regardless of join order (#1446)."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.roster.serializers import CharacterSerializer
+
+        sheet = CharacterSheetFactory(character=self.character)
+        # Joined first, but not engaged — should lose to the engaged row below.
+        CharacterCovenantRoleFactory(character_sheet=sheet, engaged=False)
+        engaged_role = CharacterCovenantRoleFactory(character_sheet=sheet, engaged=True)
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] == {
+            "id": engaged_role.covenant.pk,
+            "name": engaged_role.covenant.name,
+            "role": engaged_role.covenant_role.name,
+        }
+
+    def test_covenant_null_when_only_active_role_is_non_durance(self):
+        """A non-DURANCE (e.g. BATTLE) active role must not surface as the identity covenant."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.roster.serializers import CharacterSerializer
+
+        sheet = CharacterSheetFactory(character=self.character)
+        battle_covenant = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        battle_role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=battle_covenant, covenant_role=battle_role
+        )
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] is None
+
+
 class CharacterSerializerTestCase(TestCase):
     """Test the CharacterSerializer, including species field."""
 

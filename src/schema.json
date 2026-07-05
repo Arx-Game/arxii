@@ -22852,6 +22852,10 @@ paths:
         Staff see all non-covenant organizations.
       parameters:
       - in: query
+        name: name
+        schema:
+          type: string
+      - in: query
         name: org_type
         schema:
           type: string
@@ -22985,6 +22989,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrganizationRank'
+          description: ''
+  /api/societies/reputations/:
+    get:
+      operationId: societies_reputations_list
+      description: |-
+        List/retrieve org reputations (standing) for personas the requester currently plays.
+
+        Self-only: rows are scoped to personas the requester currently plays.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: integer
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationReputationList'
+          description: ''
+  /api/societies/reputations/{id}/:
+    get:
+      operationId: societies_reputations_retrieve
+      description: |-
+        List/retrieve org reputations (standing) for personas the requester currently plays.
+
+        Self-only: rows are scoped to personas the requester currently plays.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Organization Reputation.
+        required: true
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationReputation'
           description: ''
   /api/staff-inbox/:
     get:
@@ -28514,11 +28572,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CharacterGallery'
+        covenant:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Core-identity covenant: the active DURANCE-type covenant role, if any (#1446).
+
+            One indexed query per character; bounded by roster pagination in list context.
+          readOnly: true
       required:
       - age
       - background
       - char_class
       - concept
+      - covenant
       - family
       - gender
       - id
@@ -39407,6 +39475,32 @@ components:
       - id
       - name
       - tier
+    OrganizationReputation:
+      type: object
+      description: A persona's standing with an organization — named tier only, never
+        the raw value.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        persona:
+          type: integer
+          description: The persona (character identity) this reputation belongs to
+        organization:
+          type: integer
+          description: The organization this reputation is with
+        organization_name:
+          type: string
+          readOnly: true
+        tier:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - organization
+      - organization_name
+      - persona
+      - tier
     OrganizationSearch:
       type: object
       properties:
@@ -41287,6 +41381,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrganizationRank'
+    PaginatedOrganizationReputationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationReputation'
     PaginatedOrganizationSearchList:
       type: object
       required:
@@ -45618,6 +45735,8 @@ components:
         area_name:
           type: string
           readOnly: true
+        society:
+          type: integer
         society_name:
           type: string
           readOnly: true
@@ -45636,6 +45755,7 @@ components:
       - alleged_deeds
       - area_name
       - id
+      - society
       - society_name
       - tier
       - tier_label

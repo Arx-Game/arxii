@@ -53,6 +53,8 @@ export interface CharacterData {
   background?: string;
   relationships?: string[];
   galleries: CharacterGallery[];
+  /** Core-identity covenant: the active DURANCE-type covenant role, if any (#1446). */
+  covenant?: { id: number; name: string; role: string } | null;
 }
 
 export type CreationProvenance = 'staff' | 'gm_table' | 'player';

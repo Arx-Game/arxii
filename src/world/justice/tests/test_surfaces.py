@@ -117,6 +117,7 @@ class HeatApiTests(APITestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["tier"], HeatTier.DANGEROUS.value)
         self.assertEqual(rows[0]["area_name"], self.city.name)
+        self.assertEqual(rows[0]["society"], self.crown.pk)  # id for reputation join (#1446)
         self.assertNotIn("value", rows[0])  # tiers only — never the raw number
 
     def test_unowned_viewer_is_empty(self) -> None:

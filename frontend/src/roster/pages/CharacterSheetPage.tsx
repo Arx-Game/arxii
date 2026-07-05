@@ -1,6 +1,7 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAppSelector } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
+import { useOrganizationByName } from '@/orgs/queries';
 import {
   CharacterPortrait,
   BackgroundSection,
@@ -11,8 +12,7 @@ import {
 } from '@/components/character';
 import { MessagesSection } from '@/narrative/components/MessagesSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RenownPanel } from '@/renown/components/RenownPanel';
-import { RenownCardPanel } from '@/renown/components/RenownCardPanel';
+import { ReputationTab } from '@/reputation/components/ReputationTab';
 import { VitalsPanel } from '@/vitals/components/VitalsPanel';
 import { FriendButton } from '@/friends/components/FriendButton';
 import { FriendsTab } from '@/friends/components/FriendsTab';
@@ -21,6 +21,9 @@ import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
+import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
+import { SpellbookTab } from '@/magic/components/SpellbookTab';
+import { LocationsTab } from '@/locations/components/LocationsTab';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -30,17 +33,33 @@ export function CharacterSheetPage() {
 
   // Show messages section only when the viewing user owns this character.
   const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
-  // For the Renown tab on foreign sheets: resolve the viewer's primary
+  // For the Reputation tab on foreign sheets: resolve the viewer's primary
   // persona from their first owned character. Null when the viewer has
   // no characters → the backend returns the anonymous subset.
   const viewerPersonaId = myEntries?.[0]?.primary_persona_id ?? null;
+  // For the Reputation tab's own-view: resolve the persona/entry of the character being
+  // VIEWED (not the account's first-listed character) — an account can own several
+  // characters, and scoping to myEntries[0] would leak another character's standing
+  // (heat, org memberships/reputation) onto this sheet.
+  const viewedMyEntry = myEntries?.find((e) => e.id === entryId);
+  const viewedPersonaId = viewedMyEntry?.primary_persona_id ?? null;
   // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
   // resolve the active character's roster entry. Null when no character is active → no secrets.
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const viewerEntryId = myEntries?.find((e) => e.name === activeCharacterName)?.id ?? null;
+  // For the Locations tab's Ships section: GET /api/ships/ships/ is server-scoped to the
+  // account's ACTIVE persona, not the character being viewed, so only render it when the
+  // viewed character IS the active character (an account can own several characters).
+  const isActiveCharacter = viewerEntryId === entryId;
+  // Resolve a same-named org for the family click-through (#1446); membership-gated visibility
+  // means an empty/absent result is normal — fall back to plain text in that case.
+  const { data: familyOrg } = useOrganizationByName(entry?.character.family ?? '');
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
+
+  const covenant = entry.character.covenant;
+  const family = entry.character.family;
 
   return (
     <div className="container mx-auto space-y-4 p-4">
@@ -48,7 +67,28 @@ export function CharacterSheetPage() {
         <CharacterPortrait
           name={entry.fullname || entry.character.name}
           profilePicture={entry.profile_picture}
-        />
+        >
+          {covenant && (
+            <p className="text-sm text-muted-foreground">
+              <Link to={`/covenants/${covenant.id}`} className="hover:underline">
+                {covenant.name}
+              </Link>
+              {' — '}
+              {covenant.role}
+            </p>
+          )}
+          {family && (
+            <p className="text-sm text-muted-foreground">
+              {familyOrg ? (
+                <Link to={`/orgs/${familyOrg.id}`} className="hover:underline">
+                  {family}
+                </Link>
+              ) : (
+                family
+              )}
+            </p>
+          )}
+        </CharacterPortrait>
         {entry.quote && <blockquote className="italic">"{entry.quote}"</blockquote>}
         {/* Friend this character — an OOC trusted-partner designation (#1727), only on others' sheets. */}
         {!isMyCharacter && (
@@ -64,13 +104,16 @@ export function CharacterSheetPage() {
         <TabsList>
           <TabsTrigger value="sheet">Sheet</TabsTrigger>
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
-          <TabsTrigger value="renown">Renown</TabsTrigger>
+          <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
+          <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
+          <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="crime">Crime</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="friends">Friends</TabsTrigger>}
+          {isMyCharacter && <TabsTrigger value="locations">Locations</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="sheet" className="space-y-4">
@@ -109,21 +152,41 @@ export function CharacterSheetPage() {
           />
         </TabsContent>
 
-        <TabsContent value="renown" className="space-y-4">
-          {isMyCharacter ? (
-            <RenownPanel characterSheetId={entry.character.id} />
-          ) : (
-            <RenownCardPanel
-              characterSheetId={entry.character.id}
-              viewerPersonaId={viewerPersonaId}
-            />
-          )}
+        <TabsContent value="reputation" className="space-y-4">
+          {/* Consolidated Reputation tab (#1446): renown, standing (society + org), covenants,
+              and wanted flags for the own view; the existing RenownCardPanel for foreign views.
+              Radix unmounts inactive tab content, so these queries only fire when opened. */}
+          <ReputationTab
+            entryCharacterId={entry.character.id}
+            viewerPersonaId={viewerPersonaId}
+            isMyCharacter={isMyCharacter}
+            viewedEntryId={entryId}
+            viewedPersonaId={viewedPersonaId}
+          />
         </TabsContent>
 
         <TabsContent value="titles" className="space-y-4">
           {/* Titles are cosmetic and public — render for any viewer. character.id is the
               CharacterSheet pk the titles API filters by. */}
           <TitlesPanel characterSheetId={entry.character.id} />
+        </TabsContent>
+
+        <TabsContent value="distinctions" className="space-y-4">
+          {/* Ungated (#1446): the server already filters secret rows for non-privileged
+              viewers, so every viewer sees this tab and the tab only renders what it's given.
+              character.id is the CharacterSheet pk (shared with the ObjectDB pk). Radix
+              unmounts inactive tab content, so the query only fires when this tab is opened. */}
+          <DistinctionsTab characterId={entry.character.id} />
+        </TabsContent>
+
+        <TabsContent value="magic" className="space-y-4">
+          {/* Ungated (#1446): the server already gates payload.magic to null for foreign
+              viewers without visibility and for magic-less characters, so every viewer sees
+              this tab and the tab only renders what it's given (a muted line when null).
+              Spellbook/status view only — "the sheet describes; the scene does." character.id
+              is the CharacterSheet pk. Radix unmounts inactive tab content, so the query only
+              fires when this tab is opened. */}
+          <SpellbookTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
         </TabsContent>
 
         <TabsContent value="secrets" className="space-y-4">
@@ -165,6 +228,18 @@ export function CharacterSheetPage() {
             {/* Your OOC friends list (#1727) — account-wide trusted partners, separate from IC
                 relationships. Add friends from other characters' sheets; this lists + removes. */}
             <FriendsTab />
+          </TabsContent>
+        )}
+
+        {isMyCharacter && (
+          <TabsContent value="locations" className="space-y-4">
+            {/* Consolidated Locations tab (#1446): dwellings, tenancies, and ships. Own-only —
+                dwellings/tenancies are keyed on the viewed character's persona (never the
+                account's first-listed character, to avoid alt-leak); ships are self-scoped
+                server-side to the requester's ACTIVE persona, so isActiveCharacter gates
+                that section off when viewing a non-active character owned by this account.
+                Radix unmounts inactive tabs, so these queries only fire when opened. */}
+            <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
           </TabsContent>
         )}
       </Tabs>

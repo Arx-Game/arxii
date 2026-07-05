@@ -81,6 +81,8 @@ deeds accept `crime_kinds=` on `create_solo_deed` / `create_legend_event`.
 - `sheet/crime` telnet section + web **Crime** tab (own sheet only) over
   `GET /api/justice/heat/?viewer=<roster-entry>` (`PersonaHeatViewSet` — owner
   validated via `for_account`, scoped via `active_persona_for_sheet`, tiers only).
+  `PersonaHeatSerializer` also exposes `society` (id) so the web Reputation tab
+  can join heat against its own org/society standing rows client-side (#1446).
 
 ## Constants
 

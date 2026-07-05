@@ -21,7 +21,15 @@ class PersonaHeatSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PersonaHeat
-        fields = ("id", "area_name", "society_name", "tier", "tier_label", "alleged_deeds")
+        fields = (
+            "id",
+            "area_name",
+            "society",
+            "society_name",
+            "tier",
+            "tier_label",
+            "alleged_deeds",
+        )
 
     def get_tier(self, obj: PersonaHeat) -> str:
         return tier_for_value(obj.value).value

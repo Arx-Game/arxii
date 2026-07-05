@@ -195,10 +195,11 @@ Read-only endpoints under `/api/societies/`:
 
 | Endpoint | Viewset | Purpose |
 |----------|---------|---------|
-| `/organizations/` | `OrganizationViewSet` | Organizations the requester belongs to (staff see all) |
+| `/organizations/` | `OrganizationViewSet` | Organizations the requester belongs to (staff see all); `?name=` filters iexact (family-org resolve) |
 | `/memberships/` | `OrganizationMembershipViewSet` | Current memberships, excluding covenants |
 | `/ranks/` | `OrganizationRankViewSet` | Rank ladders for visible organizations |
 | `/offers/` | `OrganizationMembershipOfferViewSet` | Offers owned/received/org-visible to the requester |
+| `/reputations/` | `OrganizationReputationViewSet` | The requester's active persona's org reputations (standing) — `{id, persona, organization, organization_name, tier}`, tier only, self-scoped (#1446) |
 
 All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
 

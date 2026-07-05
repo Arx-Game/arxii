@@ -164,6 +164,16 @@ const CovenantDetailPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded org stub page (#1446, seeds #1884)
+// ---------------------------------------------------------------------------
+
+const OrgPage = lazy(() =>
+  import('@/orgs/pages/OrgPage').then((m) => ({
+    default: m.OrgPage,
+  }))
+);
+
+// ---------------------------------------------------------------------------
 // Lazy-loaded org books pages (#930)
 // ---------------------------------------------------------------------------
 
@@ -774,6 +784,20 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <CovenantDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Org stub page — click-through destination (#1446, seeds #1884)     */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/orgs/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <OrgPage />
               </ProtectedRoute>
             </Suspense>
           }

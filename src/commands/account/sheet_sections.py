@@ -334,6 +334,69 @@ def _render_crime_section(command: Command) -> list[str]:
     return lines
 
 
+def _render_distinction_section(command: Command) -> list[str]:
+    """The distinctions section (#1446): the active character's distinctions.
+
+    Mirrors the web Distinctions tab — both faces read ``_build_distinctions``. Self-only
+    (privileged view): the owner sees gated entries with a ``(secret)`` marker; the web serves
+    foreign viewers the filtered public list through the sheet serializer instead.
+    """
+    from world.character_sheets.serializers import (  # noqa: PLC0415
+        _build_distinctions,
+        get_character_sheet_queryset,
+    )
+
+    viewer = _viewer_sheet(command)
+    sheet = get_character_sheet_queryset().get(pk=viewer.pk)
+    entries = _build_distinctions(sheet, privileged=True)
+    if not entries:
+        return ["You have no distinctions."]
+    lines = ["|wYour distinctions:|n"]
+    for entry in entries:
+        secret = " |m(secret)|n" if entry["is_secret"] else ""
+        notes = f" — {entry['notes']}" if entry["notes"] else ""
+        lines.append(f"  {entry['name']} (rank {entry['rank']}){secret}{notes}")
+    return lines
+
+
+def _render_magic_section(command: Command) -> list[str]:
+    """The magic section (#1446): the active character's spellbook/status view.
+
+    Mirrors the web Magic tab — both faces read ``_build_magic``. The sheet describes; the
+    scene does: this lists gifts, techniques, motif, and aura — casting/weaving stays with
+    the in-scene commands (``cast``, ``weave``, ``ritual``).
+    """
+    from world.character_sheets.serializers import (  # noqa: PLC0415
+        _build_magic,
+        get_character_sheet_queryset,
+    )
+
+    viewer = _viewer_sheet(command)
+    sheet = get_character_sheet_queryset().get(pk=viewer.pk)
+    magic = _build_magic(sheet)
+    if magic is None:
+        return ["Nothing is known of your magic."]
+    lines = ["|wYour spellbook:|n"]
+    for gift in magic["gifts"]:
+        lines.append(f"  |w{gift['name']}|n")
+        lines.extend(
+            f"    {technique['name']} (level {technique['level']})"
+            for technique in gift["techniques"]
+        )
+        if gift["resonances"]:
+            lines.append(f"    resonances: {', '.join(gift['resonances'])}")
+    motif = magic["motif"]
+    if motif:
+        resonances = ", ".join(entry["name"] for entry in motif["resonances"])
+        lines.append(f"  Motif: {motif['description'] or resonances}")
+        if motif["description"] and resonances:
+            lines.append(f"    resonances: {resonances}")
+    aura = magic["aura"]
+    if aura and aura["glimpse_story"]:
+        lines.append(f"  Aura: {aura['glimpse_story']}")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
@@ -349,6 +412,9 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "titles": _render_titles_section,
     "crime": _render_crime_section,
     "crimes": _render_crime_section,
+    "distinction": _render_distinction_section,
+    "distinctions": _render_distinction_section,
+    "magic": _render_magic_section,
 }
 
 # Canonical section names shown in the bare-``sheet`` footer (deduped; one per real section).
@@ -360,4 +426,6 @@ SECTION_NAMES: tuple[str, ...] = (
     "covenant",
     "title",
     "crime",
+    "distinction",
+    "magic",
 )
