@@ -534,6 +534,113 @@ class TierRequirement(AbstractClassLevelRequirement):
         return f"Tier: >= {cast(int, self.minimum_tier)}"
 
 
+class ItemRequirement(AbstractClassLevelRequirement):
+    """Requirement based on possessing a physical touchstone/trophy item.
+
+    Dual mode, mirroring RitualComponentRequirement's shape (ADR-0087):
+    exactly one of item_template (a fixed narrative trophy) or
+    min_touchstone_tier (any attuned item tied to a Resonance the character
+    holds, at/above a tier floor) is set. Possession-only — is_met_by_character
+    never consumes the qualifying item (#1859 Decision 4).
+    """
+
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="class_level_item_requirements",
+    )
+    min_touchstone_tier = models.ForeignKey(
+        "magic.ResonanceTier",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Touchstone mode: any item attuned to the character, tied to a "
+            "Resonance they've claimed, at or above this tier, satisfies this "
+            "requirement. Exactly one of item_template/min_touchstone_tier is set."
+        ),
+    )
+    quantity = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Template-mode only; touchstone-mode is a possess-at-least-one check.",
+    )
+    min_quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(item_template__isnull=False)
+                        & models.Q(min_touchstone_tier__isnull=True)
+                    )
+                    | (
+                        models.Q(item_template__isnull=True)
+                        & models.Q(min_touchstone_tier__isnull=False)
+                    )
+                ),
+                name="itemrequirement_exactly_one_mode",
+            ),
+        ]
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        """Check possession of a qualifying item. Never consumes it."""
+        from world.items.models import ItemInstance  # noqa: PLC0415
+        from world.items.services.materials import meets_quality_tier  # noqa: PLC0415
+
+        sheet = character.sheet_data
+
+        if self.item_template_id is not None:
+            candidates = ItemInstance.objects.in_play().filter(
+                holder_character_sheet=sheet, template_id=self.item_template_id
+            )
+            total_qty = sum(inst.quantity for inst in candidates if meets_quality_tier(inst, self))
+            if total_qty >= self.quantity:
+                return True, f"Has {self.quantity}x {self.item_template.name}"
+            return (
+                False,
+                f"Need {self.quantity}x {self.item_template.name}, have {total_qty}",
+            )
+
+        from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+        claimed_resonance_ids = set(
+            CharacterResonance.objects.filter(character_sheet=sheet).values_list(
+                "resonance_id", flat=True
+            )
+        )
+        has_touchstone = (
+            ItemInstance.objects.in_play()
+            .filter(
+                holder_character_sheet=sheet,
+                attuned_to_character_sheet=sheet,
+                template__tied_resonance_id__in=claimed_resonance_ids,
+                template__resonance_tier__tier_level__gte=self.min_touchstone_tier.tier_level,
+            )
+            .exists()
+        )
+        if has_touchstone:
+            return True, f"Has touchstone (tier >= {self.min_touchstone_tier.name})"
+        return (
+            False,
+            f"Need an attuned touchstone (tier >= {self.min_touchstone_tier.name})",
+        )
+
+    def __str__(self) -> str:
+        if self.item_template_id is not None:
+            return f"Item: {self.quantity}x {self.item_template}"
+        return f"Touchstone: tier >= {self.min_touchstone_tier.name}"
+
+
 # Character Unlocks
 
 
