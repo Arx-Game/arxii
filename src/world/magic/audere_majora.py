@@ -194,7 +194,7 @@ def eligible_paths_for_threshold(character: ObjectDB, threshold: AudereMajoraThr
     return list(path.child_paths.filter(stage=threshold.target_stage, is_active=True))
 
 
-def _evaluate_majora_gates(  # noqa: PLR0911
+def _evaluate_majora_gates(  # noqa: PLR0911, C901
     character: ObjectDB, runtime_intensity: int, sheet: CharacterSheet
 ) -> tuple[AudereMajoraThreshold | None, int]:
     """Run all Audere Majora eligibility gates, returning the threshold + stage.
@@ -213,6 +213,10 @@ def _evaluate_majora_gates(  # noqa: PLR0911
     5. Character has an active CharacterEngagement.
     6. If threshold.requires_active_audere, character has the Audere condition.
     7. At least one eligible child path exists.
+    8. If a ClassLevelUnlock is authored for (character's class, boundary_level + 1),
+       its requirements (ItemRequirement, TraitRequirement, etc., via
+       check_requirements_for_unlock) must be met. No authored unlock = no gate
+       (fail-open) -- #1859.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
@@ -251,6 +255,20 @@ def _evaluate_majora_gates(  # noqa: PLR0911
 
     if not eligible_paths_for_threshold(character, threshold):
         return None, 0
+
+    from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
+    from world.progression.services.advancement import primary_class_level  # noqa: PLC0415
+    from world.progression.services.spends import check_requirements_for_unlock  # noqa: PLC0415
+
+    cl = primary_class_level(character)
+    if cl is not None:
+        unlock = ClassLevelUnlock.objects.filter(
+            character_class=cl.character_class, target_level=cl.level + 1
+        ).first()
+        if unlock is not None:
+            requirements_met, _failed = check_requirements_for_unlock(character, unlock)
+            if not requirements_met:
+                return None, 0
 
     return threshold, stage_order
 
