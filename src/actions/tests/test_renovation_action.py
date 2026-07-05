@@ -78,10 +78,20 @@ class RenovationCommissionTests(TestCase):
         assert "already" in result.message.lower()
 
     def test_non_building_room_errors(self) -> None:
+        # The actor owns a *non-building* room — the owner prerequisite passes,
+        # but the room isn't part of any building, so the action reports that.
+        area = AreaFactory()
         bare_room = ObjectDB.objects.create(
             db_key="Void", db_typeclass_path="typeclasses.rooms.Room"
         )
-        RoomProfile.objects.update_or_create(objectdb=bare_room, defaults={"area": AreaFactory()})
+        RoomProfile.objects.update_or_create(objectdb=bare_room, defaults={"area": area})
+        persona = self.actor.sheet_data.primary_persona
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=area,
+            holder_type=HolderType.PERSONA,
+            holder_persona=persona,
+        )
         self.actor.db_location = bare_room
         self.actor.save(update_fields=["db_location"])
         action = get_action("start_building_renovation")
