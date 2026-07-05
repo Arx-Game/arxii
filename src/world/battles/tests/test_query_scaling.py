@@ -19,10 +19,18 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from actions.factories import ActionTemplateFactory
-from world.battles.constants import BattleActionScope, VehicleKind
-from world.battles.factories import BattlePlaceFactory
+from world.battles.constants import BattleActionScope, BattleParticipantStatus, VehicleKind
+from world.battles.factories import (
+    BattleFactory,
+    BattleParticipantFactory,
+    BattlePlaceFactory,
+    BattleSideFactory,
+)
 from world.battles.models import BattleActionKind, BattleSideRole, BattleUnitCapability
-from world.battles.resolution import resolve_battle_round
+from world.battles.resolution import (
+    _block_if_participant_mid_audere_majora_crossing,
+    resolve_battle_round,
+)
 from world.battles.services import (
     add_side,
     add_unit,
@@ -284,3 +292,31 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
             "A new per-declaration query may have been introduced in one of "
             "the non-STRIKE resolution paths (#1871).",
         )
+
+
+class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
+    """Regression (#1899 whole-branch review): the caller-side sheet-list build
+    in ``_block_if_participant_mid_audere_majora_crossing`` must not reintroduce
+    a per-participant N+1 that the batched
+    ``any_character_mid_audere_majora_crossing`` check exists to avoid (see
+    ``world/magic/tests/test_audere_majora_crossing.py::
+    test_batched_check_is_bounded_query_count``)."""
+
+    def test_guard_query_count_bounded_regardless_of_participant_count(self) -> None:
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle)
+        sheet_ids = [CharacterSheetFactory().pk for _ in range(12)]
+        for sheet_id in sheet_ids:
+            BattleParticipantFactory(
+                battle=battle,
+                side=side,
+                character_sheet_id=sheet_id,
+                status=BattleParticipantStatus.ACTIVE,
+            )
+
+        # 1 query for the select_related participant+sheet join, 2 for the
+        # batched crossing check (PendingAudereMajoraOffer + ConditionInstance)
+        # — bounded regardless of participant count. A regression that drops
+        # select_related would instead cost 1 + 12 (one per participant) + 2.
+        with self.assertNumQueries(3):
+            _block_if_participant_mid_audere_majora_crossing(battle)

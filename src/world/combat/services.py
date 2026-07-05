@@ -5376,7 +5376,10 @@ def _block_if_participant_mid_audere_majora_crossing(encounter: CombatEncounter)
     )
 
     active_sheets = [
-        p.character_sheet for p in encounter.participants.filter(status=ParticipantStatus.ACTIVE)
+        p.character_sheet
+        for p in encounter.participants.filter(status=ParticipantStatus.ACTIVE).select_related(
+            "character_sheet"
+        )
     ]
     if any_character_mid_audere_majora_crossing(active_sheets):
         raise ActionDispatchError(ActionDispatchError.PARTICIPANT_MID_CROSSING)

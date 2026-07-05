@@ -1102,6 +1102,37 @@ def _dispatch_success_handler(
     handler()
 
 
+def _block_if_participant_mid_audere_majora_crossing(battle: Battle) -> None:
+    """Hard, unconditional block (#1899): a round must never resolve while an
+    active participant is mid-Audere-Majora-crossing, regardless of
+    ``battle.is_paused`` — that flag is a separate, softer disconnect-pause
+    concern. Extracted (mirrors ``world.combat.services``'s sibling helper)
+    so the caller-side query cost is independently testable.
+    """
+    from actions.errors import ActionDispatchError  # noqa: PLC0415
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.magic.audere_majora import (  # noqa: PLC0415
+        any_character_mid_audere_majora_crossing,
+    )
+
+    active_sheets = [
+        p.character_sheet
+        for p in battle.participants.filter(status=BattleParticipantStatus.ACTIVE).select_related(
+            "character_sheet"
+        )
+    ]
+    if any_character_mid_audere_majora_crossing(active_sheets):
+        # Shares the exact user-facing string with the combat-side hard block
+        # (actions/errors.py's ActionDispatchError.PARTICIPANT_MID_CROSSING) —
+        # one message, two error types (BattleError vs ActionDispatchError)
+        # because the battles/combat exception hierarchies are independent.
+        raise BattleError(
+            user_message=ActionDispatchError(
+                ActionDispatchError.PARTICIPANT_MID_CROSSING
+            ).user_message
+        )
+
+
 @transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
@@ -1123,17 +1154,7 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     Returns:
         A ``BattleRoundResult`` summarising what happened this round.
     """
-    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
-    from world.magic.audere_majora import (  # noqa: PLC0415
-        any_character_mid_audere_majora_crossing,
-    )
-
-    active_sheets = [
-        p.character_sheet
-        for p in battle_round.battle.participants.filter(status=BattleParticipantStatus.ACTIVE)
-    ]
-    if any_character_mid_audere_majora_crossing(active_sheets):
-        raise BattleError(user_message="A participant needs a moment — try again shortly.")
+    _block_if_participant_mid_audere_majora_crossing(battle_round.battle)
 
     result = BattleRoundResult()
 

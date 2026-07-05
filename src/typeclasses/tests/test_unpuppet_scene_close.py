@@ -197,4 +197,17 @@ class UnpuppetPausesCombatBattleMissionTests(TestCase):
         assert instance.is_paused is True
 
     def test_disconnect_with_no_combat_battle_mission_does_not_raise(self) -> None:
+        """No active combat/battle/mission participation (but sheet_data exists)
+        — the three maybe_pause_* calls are each individually a no-op; must not
+        raise. Does NOT exercise the `sheet_data is None` guard branch — see
+        `test_disconnect_with_no_character_sheet_does_not_raise` for that."""
         self.character.at_post_unpuppet()  # No participation rows anywhere — must not raise.
+
+    def test_disconnect_with_no_character_sheet_does_not_raise(self) -> None:
+        """Regression (#1899 whole-branch review): a sheet-less character (no
+        CharacterSheet at all) must short-circuit at the
+        `getattr(self, "sheet_data", None) is None` guard in
+        Character.at_post_unpuppet before any maybe_pause_* call — must not raise."""
+        sheetless = CharacterFactory(db_key="NoSheet", location=self.room)
+
+        sheetless.at_post_unpuppet()

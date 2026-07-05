@@ -953,3 +953,30 @@ class ResolveRoundClimacticMomentBlockTests(TestCase):
         )
 
         resolve_round(encounter)  # Must not raise PARTICIPANT_MID_CROSSING.
+
+
+class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
+    """Regression (#1899 whole-branch review): the caller-side sheet-list build
+    must not reintroduce a per-participant N+1 that the batched
+    ``any_character_mid_audere_majora_crossing`` check exists to avoid (see
+    ``world/magic/tests/test_audere_majora_crossing.py::
+    test_batched_check_is_bounded_query_count``)."""
+
+    def test_guard_query_count_bounded_regardless_of_participant_count(self) -> None:
+        from world.combat.services import _block_if_participant_mid_audere_majora_crossing
+
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        sheet_ids = [CharacterSheetFactory().pk for _ in range(12)]
+        for sheet_id in sheet_ids:
+            CombatParticipantFactory(
+                encounter=encounter,
+                character_sheet_id=sheet_id,
+                status=ParticipantStatus.ACTIVE,
+            )
+
+        # 1 query for the select_related participant+sheet join, 2 for the
+        # batched crossing check (PendingAudereMajoraOffer + ConditionInstance)
+        # — bounded regardless of participant count. A regression that drops
+        # select_related would instead cost 1 + 12 (one per participant) + 2.
+        with self.assertNumQueries(3):
+            _block_if_participant_mid_audere_majora_crossing(encounter)
