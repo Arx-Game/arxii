@@ -509,7 +509,7 @@ What shipped:
   dominate the final acclaim. Consent boundary: only characters who present are
   judgeable; no self/alt/duplicate judging.
 - **`Persona.prestige_from_fashion`** — a 5th prestige axis (same event-sourced
-  recompute pattern as the other four), surfaced on the Renown tab.
+  recompute pattern as the other four), surfaced on the Reputation tab (né Renown, #1446).
 - **`FacetVogueMomentum` + trendsetter ceremony** — acclaimed presentations accrue
   per-`(society, facet)` vogue momentum (cron-decayed); a seasonal cron crowns the
   top presenter (`Trendsetter`) and rewrites the society's living `FashionStyle`
