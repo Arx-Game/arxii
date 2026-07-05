@@ -10,6 +10,32 @@ from actions.prerequisites import HasCompanionCapacityPrerequisite, Prerequisite
 from actions.types import ActionResult, TargetType
 
 
+def _resolve_owned_companion(actor, companion_id: int):
+    """Fetch a companion, validating it belongs to the actor and is active.
+
+    Returns ``(companion, None)`` on success, or ``(None, ActionResult)``
+    with a failure result explaining why the companion can't be used.
+    """
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    try:
+        companion = Companion.objects.select_related("archetype", "owner").get(
+            pk=companion_id,
+        )
+    except Companion.DoesNotExist:
+        return None, ActionResult(success=False, message="No such companion.")
+
+    if not companion.is_active:
+        return None, ActionResult(success=False, message=f"{companion.name} is no longer active.")
+    if companion.owner != actor.sheet_data:
+        return None, ActionResult(success=False, message="That is not your companion.")
+    if companion.objectdb is None:
+        return None, ActionResult(
+            success=False, message=f"{companion.name} has no in-world presence."
+        )
+    return companion, None
+
+
 @dataclass
 class BindCompanionAction(Action):
     key: str = "bind_companion"
@@ -67,10 +93,9 @@ class CompanionFightAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
-    def execute(self, actor, context=None, **kwargs) -> ActionResult:  # noqa: PLR0911
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.combat.constants import ParticipantStatus  # noqa: PLC0415
         from world.combat.models import CombatParticipant  # noqa: PLC0415
-        from world.companions.models import Companion  # noqa: PLC0415
         from world.companions.services import (  # noqa: PLC0415
             materialize_companion_as_combat_opponent,
         )
@@ -79,21 +104,9 @@ class CompanionFightAction(Action):
         if not companion_id:
             return ActionResult(success=False, message="Pick a companion to commit.")
 
-        try:
-            companion = Companion.objects.select_related("archetype", "owner").get(
-                pk=companion_id,
-            )
-        except Companion.DoesNotExist:
-            return ActionResult(success=False, message="No such companion.")
-
-        if not companion.is_active:
-            return ActionResult(success=False, message=f"{companion.name} is no longer active.")
-        if companion.owner != actor.sheet_data:
-            return ActionResult(success=False, message="That is not your companion.")
-        if companion.objectdb is None:
-            return ActionResult(
-                success=False, message=f"{companion.name} has no in-world presence."
-            )
+        companion, failure = _resolve_owned_companion(actor, companion_id)
+        if failure is not None:
+            return failure
 
         participant = (
             CombatParticipant.objects.filter(
@@ -125,10 +138,9 @@ class DeployCompanionAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
-    def execute(self, actor, context=None, **kwargs) -> ActionResult:  # noqa: PLR0911
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
         from world.battles.models import BattleParticipant  # noqa: PLC0415
-        from world.companions.models import Companion  # noqa: PLC0415
         from world.companions.services import (  # noqa: PLC0415
             materialize_companion_as_battle_vehicle,
         )
@@ -137,21 +149,9 @@ class DeployCompanionAction(Action):
         if not companion_id:
             return ActionResult(success=False, message="Pick a companion to deploy.")
 
-        try:
-            companion = Companion.objects.select_related("archetype", "owner").get(
-                pk=companion_id,
-            )
-        except Companion.DoesNotExist:
-            return ActionResult(success=False, message="No such companion.")
-
-        if not companion.is_active:
-            return ActionResult(success=False, message=f"{companion.name} is no longer active.")
-        if companion.owner != actor.sheet_data:
-            return ActionResult(success=False, message="That is not your companion.")
-        if companion.objectdb is None:
-            return ActionResult(
-                success=False, message=f"{companion.name} has no in-world presence."
-            )
+        companion, failure = _resolve_owned_companion(actor, companion_id)
+        if failure is not None:
+            return failure
 
         battle_participant = (
             BattleParticipant.objects.filter(
