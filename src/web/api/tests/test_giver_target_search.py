@@ -88,3 +88,7 @@ class MissionGiverTargetSearchAPIViewTests(TestCase):
         # self.prop is not a Room, so it 404s under kind=room_trigger.
         resp = self.client.get(self.URL, {"kind": "room_trigger", "id": self.prop.pk})
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_id_lookup_non_numeric_id_400(self) -> None:
+        resp = self.client.get(self.URL, {"kind": "room_trigger", "id": "abc"})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

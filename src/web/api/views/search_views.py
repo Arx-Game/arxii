@@ -87,6 +87,11 @@ class MissionGiverTargetSearchAPIView(APIView):
             )
 
         target_id = request.query_params.get("id")  # noqa: USE_FILTERSET
+        if target_id is not None and not target_id.isdigit():
+            return Response(
+                {"detail": "id must be a positive integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         term = request.query_params.get("search", "")  # noqa: USE_FILTERSET
 
         if kind == GiverKind.ROOM_TRIGGER:
