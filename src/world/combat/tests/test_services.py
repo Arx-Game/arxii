@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.test import TestCase
 import pytest
 
+from actions.errors import ActionDispatchError
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
@@ -914,3 +915,41 @@ class MaybePauseEncounterForDisconnectTests(TestCase):
 
         encounter.refresh_from_db()
         assert encounter.is_paused is False
+
+
+class ResolveRoundClimacticMomentBlockTests(TestCase):
+    def test_blocks_when_active_participant_mid_crossing(self) -> None:
+        from world.magic.factories import wire_audere_power_multipliers
+        from world.magic.tests.majora_fixtures import build_crossing_world
+
+        wire_audere_power_multipliers()
+        (_character, mid_crossing_sheet, _threshold, _prospect, _puissant, _offer) = (
+            build_crossing_world(5, "_resolveblock")
+        )
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=mid_crossing_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        with self.assertRaises(ActionDispatchError) as ctx:
+            resolve_round(encounter)
+        assert ctx.exception.code == ActionDispatchError.PARTICIPANT_MID_CROSSING
+
+    def test_does_not_block_when_is_paused_false_and_no_one_mid_crossing(self) -> None:
+        """Proves the hard block is a separate check from is_paused, not
+        accidentally gated by it — must still allow resolution normally when
+        nobody is mid-crossing, regardless of is_paused state."""
+        encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, is_paused=False
+        )
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=sheet, defaults={"health": 100, "max_health": 100}
+        )
+
+        resolve_round(encounter)  # Must not raise PARTICIPANT_MID_CROSSING.

@@ -772,3 +772,33 @@ class LeaveViewTest(CombatEncounterViewSetTestBase):
         self.encounter.save(update_fields=["status", "round_number"])
         response = self.client.post(f"/api/combat/{self.encounter.pk}/leave/")
         self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+
+
+class ResolveRoundRestViewClimacticMomentBlockTests(CombatEncounterViewSetTestBase):
+    """Regression (#1899 spec review): the REST resolve_round endpoint is a
+    SECOND, independent manual-resolve entry point — it must be blocked too,
+    proving the guard lives in the shared resolve_round() service function,
+    not only in the Action-layer wrapper."""
+
+    def test_rest_resolve_round_returns_400_when_mid_crossing(self) -> None:
+        from world.magic.factories import wire_audere_power_multipliers
+        from world.magic.tests.majora_fixtures import build_crossing_world
+
+        wire_audere_power_multipliers()
+        (_character, mid_crossing_sheet, _threshold, _prospect, _puissant, _offer) = (
+            build_crossing_world(5, "_restblock")
+        )
+        declaring_encounter = CombatEncounterFactory(
+            scene=self.scene, status=RoundStatus.DECLARING, round_number=1
+        )
+        CombatParticipantFactory(
+            encounter=declaring_encounter,
+            character_sheet=mid_crossing_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(f"/api/combat/{declaring_encounter.pk}/resolve_round/")
+
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
