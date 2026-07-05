@@ -213,10 +213,10 @@ def _evaluate_majora_gates(  # noqa: PLR0911, C901
     5. Character has an active CharacterEngagement.
     6. If threshold.requires_active_audere, character has the Audere condition.
     7. At least one eligible child path exists.
-    8. If a ClassLevelUnlock is authored for (character's class, boundary_level + 1),
-       its requirements (ItemRequirement, TraitRequirement, etc., via
-       check_requirements_for_unlock) must be met. No authored unlock = no gate
-       (fail-open) -- #1859.
+    8. If a ClassLevelUnlock is authored for (character's primary class, that
+       class's next level), its requirements (ItemRequirement, TraitRequirement,
+       etc., via check_requirements_for_unlock) must be met. No authored unlock =
+       no gate (fail-open) -- #1859.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415

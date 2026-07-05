@@ -9,8 +9,9 @@ Accepted
 #1859 needs a way to gate a specific `ClassLevelUnlock` (Ritual of the Durance,
 per-level advancement) on the character possessing a physical touchstone/trophy
 item. #707 already built the exact match-mode vocabulary needed — `item_template`
-XOR `min_touchstone_tier` — on `RitualComponentRequirement` (ADR-0087), which is
-scoped to `Ritual` rows.
+XOR `min_touchstone_tier` — on `RitualComponentRequirement` (ADR-0087
+(`docs/adr/0087-touchstone-dynamic-resonance-match.md`)), which is scoped to
+`Ritual` rows.
 
 Two designs were considered:
 

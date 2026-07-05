@@ -573,6 +573,7 @@ class ItemRequirement(AbstractClassLevelRequirement):
         null=True,
         blank=True,
         related_name="+",
+        help_text="Template-mode only; ignored in touchstone mode.",
     )
 
     class Meta:
@@ -600,8 +601,10 @@ class ItemRequirement(AbstractClassLevelRequirement):
         sheet = character.sheet_data
 
         if self.item_template_id is not None:
-            candidates = ItemInstance.objects.in_play().filter(
-                holder_character_sheet=sheet, template_id=self.item_template_id
+            candidates = (
+                ItemInstance.objects.in_play()
+                .filter(holder_character_sheet=sheet, template_id=self.item_template_id)
+                .select_related("quality_tier")
             )
             total_qty = sum(inst.quantity for inst in candidates if meets_quality_tier(inst, self))
             if total_qty >= self.quantity:
