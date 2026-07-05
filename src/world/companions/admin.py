@@ -5,7 +5,16 @@ from world.companions.models import Companion, CompanionArchetype
 
 @admin.register(CompanionArchetype)
 class CompanionArchetypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "domain", "bind_difficulty", "capacity_cost"]
+    list_display = [
+        "name",
+        "domain",
+        "bind_difficulty",
+        "capacity_cost",
+        "max_health",
+        "soak_value",
+        "tier",
+        "strength",
+    ]
     list_filter = ["domain"]
     search_fields = ["name"]
     ordering = ["domain", "name"]

@@ -11,6 +11,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.combat.constants import OpponentTier
 from world.companions.constants import CompanionDomain
 
 
@@ -38,6 +39,25 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
     )
     capacity_cost = models.PositiveSmallIntegerField(
         help_text="Companion Capacity consumed while this archetype is bonded.",
+    )
+    # Combat stats for bridging into encounters/battles (#1873).
+    max_health = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Max health when bridged into a CombatOpponent (manual mode).",
+    )
+    soak_value = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Damage mitigation when bridged into a CombatOpponent.",
+    )
+    tier = models.CharField(
+        max_length=20,
+        choices=OpponentTier.choices,
+        default=OpponentTier.MOOK,
+        help_text="Opponent tier when bridged into a CombatOpponent.",
+    )
+    strength = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Unit strength when bridged into a BattleVehicle.",
     )
 
     class Meta:
