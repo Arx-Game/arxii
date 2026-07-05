@@ -29,11 +29,14 @@ if TYPE_CHECKING:
     from world.missions.models import MissionInstance
     from world.missions.types import BeatOption
 
-_SUBVERBS = frozenset({"list", "beat", "resolve", "abandon", "pick", "vote", "report"})
+_SUBVERBS = frozenset(
+    {"list", "beat", "resolve", "abandon", "pick", "vote", "report", "invite", "accept", "decline"}
+)
 _USAGE = (
     "Usage: mission | mission beat <id> | mission resolve <id> <n> | "
     "mission abandon <id> | mission pick <id> <n> | mission vote <id> <n> | "
-    "mission report <id> <style>"
+    "mission report <id> <style> | mission invite <id> <name> | "
+    "mission accept <invite-id> | mission decline <invite-id>"
 )
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
@@ -70,20 +73,19 @@ class CmdMission(ArxCommand):
         if subverb not in _SUBVERBS:
             msg = f"Unknown mission action '{subverb}'. {_USAGE}"
             raise CommandError(msg)
-        if subverb == "list":  # noqa: STRING_LITERAL
-            self._handle_journal()
-        elif subverb == "beat":  # noqa: STRING_LITERAL
-            self._handle_beat(rest)
-        elif subverb == "resolve":  # noqa: STRING_LITERAL
-            self._handle_resolve(rest)
-        elif subverb == "abandon":  # noqa: STRING_LITERAL
-            self._handle_abandon(rest)
-        elif subverb == "pick":  # noqa: STRING_LITERAL
-            self._handle_pick(rest)
-        elif subverb == "vote":  # noqa: STRING_LITERAL
-            self._handle_vote(rest)
-        elif subverb == "report":  # noqa: STRING_LITERAL
-            self._handle_report(rest)
+        _DISPATCH = {
+            "list": lambda: self._handle_journal(),
+            "beat": lambda: self._handle_beat(rest),
+            "resolve": lambda: self._handle_resolve(rest),
+            "abandon": lambda: self._handle_abandon(rest),
+            "pick": lambda: self._handle_pick(rest),
+            "vote": lambda: self._handle_vote(rest),
+            "report": lambda: self._handle_report(rest),
+            "invite": lambda: self._handle_invite(rest),
+            "accept": lambda: self._handle_respond(rest, accept=True),
+            "decline": lambda: self._handle_respond(rest, accept=False),
+        }
+        _DISPATCH[subverb]()
 
     # ------------------------------------------------------------------
     # Read
@@ -94,13 +96,35 @@ class CmdMission(ArxCommand):
 
         entries = journal_for(self.caller)
         if not entries:
-            self.msg("You have no missions.")
-            return
-        lines = ["|wYour missions:|n"]
-        for entry in entries:
-            node = f" — at {entry.current_node_key}" if entry.current_node_key else ""
-            lines.append(f"  [#{entry.instance_id}] {entry.template_name} ({entry.status}){node}")
+            lines = ["|wYour missions:|n", "  (none)"]
+        else:
+            lines = ["|wYour missions:|n"]
+            for entry in entries:
+                node = f" — at {entry.current_node_key}" if entry.current_node_key else ""
+                lines.append(
+                    f"  [#{entry.instance_id}] {entry.template_name} ({entry.status}){node}"
+                )
+        self._append_pending_invites(lines)
         self.msg("\n".join(lines))
+
+    def _append_pending_invites(self, lines: list[str]) -> None:
+        """Append pending mission invites addressed to the caller's persona (#887)."""
+        from world.missions.models import MissionInvite  # noqa: PLC0415
+
+        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        if persona is None:
+            return
+        pending = (
+            MissionInvite.objects.filter(
+                target_persona=persona, response=MissionInvite.Response.PENDING
+            )
+            .select_related("instance__template")
+            .values_list("pk", "instance__template__name")
+        )
+        lines.extend(
+            f"  [invite #{pk}] {name} — 'mission accept {pk}' / 'mission decline {pk}'"
+            for pk, name in pending
+        )
 
     def _handle_beat(self, rest: str) -> None:
         from world.missions.services.play import (  # noqa: PLC0415
@@ -194,6 +218,63 @@ class CmdMission(ArxCommand):
         if result.embellish_success is False:
             line += " Your embellishment falls flat."
         self.msg(line)
+
+    # ------------------------------------------------------------------
+    # Invite / respond (#887)
+    # ------------------------------------------------------------------
+
+    def _handle_invite(self, rest: str) -> None:
+        """``mission invite <id> <name>`` — invite a co-located character."""
+        from world.missions.services.run import (  # noqa: PLC0415
+            InviteError,
+            invite_to_mission,
+        )
+
+        instance, remainder = self._instance_or_raise(rest)
+        name = remainder.strip()
+        if not name:
+            msg = "Invite whom? Usage: mission invite <id> <name>"
+            raise CommandError(msg)
+        target = self.caller.search(name)
+        if target is None:
+            return  # search already sent a "not found" message
+        holder_persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        invitee_persona = getattr(target.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        if holder_persona is None or invitee_persona is None:
+            msg = "Both characters need a persona."
+            raise CommandError(msg)
+        try:
+            invite = invite_to_mission(instance, holder_persona, invitee_persona)
+        except InviteError as exc:
+            raise CommandError(exc.user_message) from exc
+        self.msg(f"You invite {target.key} to join mission #{instance.pk} (invite #{invite.pk}).")
+
+    def _handle_respond(self, rest: str, *, accept: bool) -> None:
+        """``mission accept|decline <invite-id>`` — respond to an invitation."""
+        from world.missions.models import MissionInvite  # noqa: PLC0415
+        from world.missions.services.run import (  # noqa: PLC0415
+            InviteError,
+            respond_to_mission_invite,
+        )
+
+        token = rest.strip()
+        if not token.isdigit():
+            msg = "Which invitation? Usage: mission accept <invite-id>"
+            raise CommandError(msg)
+        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        if persona is None:
+            msg = "You have no active persona."
+            raise CommandError(msg)
+        invite = MissionInvite.objects.filter(pk=int(token), target_persona=persona).first()
+        if invite is None:
+            raise CommandError(_ERR_NOT_PARTICIPANT)
+        decision = MissionInvite.Response.ACCEPTED if accept else MissionInvite.Response.DECLINED
+        try:
+            respond_to_mission_invite(invite, decision)
+        except InviteError as exc:
+            raise CommandError(exc.user_message) from exc
+        verb = "accept" if accept else "decline"
+        self.msg(f"You {verb} the invitation to mission #{invite.instance_id}.")
 
     # ------------------------------------------------------------------
     # Group decision
