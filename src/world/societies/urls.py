@@ -8,6 +8,7 @@ from world.societies.views import (
     OrganizationMembershipOfferViewSet,
     OrganizationMembershipViewSet,
     OrganizationRankViewSet,
+    OrganizationReputationViewSet,
     OrganizationViewSet,
 )
 
@@ -18,6 +19,11 @@ router.register(r"rankings", RankingDisplayViewSet, basename="ranking-display")
 router.register(r"organizations", OrganizationViewSet, basename="organization")
 router.register(r"memberships", OrganizationMembershipViewSet, basename="organization-membership")
 router.register(r"ranks", OrganizationRankViewSet, basename="organization-rank")
+router.register(
+    r"reputations",
+    OrganizationReputationViewSet,
+    basename="organization-reputation",
+)
 router.register(
     r"offers",
     OrganizationMembershipOfferViewSet,
