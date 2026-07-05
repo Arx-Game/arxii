@@ -79,6 +79,20 @@ if [[ -z "${PR_TITLE:-}" ]]; then
   PR_TITLE="$ISSUE_TITLE"
 fi
 
+# Guard: refuse to open a PR for an issue assigned to another session.
+# Placed BEFORE the dry-run block so --dry-run exercises it too.
+CURRENT_USER=$(gh api user --jq '.login')
+ASSIGNEES=$(gh issue view "$ISSUE" --json assignees --jq '.assignees[].login' 2>/dev/null || true)
+if [[ -n "$ASSIGNEES" ]] && ! grep -qx "$CURRENT_USER" <<<"$ASSIGNEES"; then
+  echo "ERROR: issue #$ISSUE is assigned to someone else ($ASSIGNEES), not you ($CURRENT_USER)." >&2
+  echo "Refusing to open a PR against another session's work. Run start-work.sh on your own issue." >&2
+  exit 3
+fi
+# If unassigned, warn but proceed (the user's priority is "always open a PR").
+if [[ -z "$ASSIGNEES" ]]; then
+  echo "WARN: issue #$ISSUE is unassigned. Consider running start-work.sh to claim it." >&2
+fi
+
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "[dry-run] would open PR:"
   echo "  branch: $BRANCH"
