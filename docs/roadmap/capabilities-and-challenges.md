@@ -277,16 +277,15 @@ to enhance mundane social actions with magical techniques.
 ### Phase 5.7: Situation Runtime
 The Situation and Challenge models exist but there is no runtime lifecycle.
 
-**Traps: solved (#1625).** `SituationTrapLink` + `instantiate_situation()`
-(`world/mechanics/situation_services.py`) mint authored traps into real
-`room_features.Trap` rows. The remaining open questions below are about
-Challenges and the runtime trigger mechanism, not traps.
+**Traps and Challenges: solved (#1625, #1895).** `SituationTrapLink` +
+`SituationChallengeLink.target_object_name` + `instantiate_situation()`
+(`world/mechanics/situation_services.py`) mint both into real `Trap` and
+`ChallengeInstance` rows. The GM trigger mechanism is also solved (#1895):
+`SetSituationAction` + `CmdSetSituation`, mirroring `SetTheStageAction`.
 
-**Needs design (open question #5):**
-- When and how SituationInstances are created (GM trigger? event-driven? room entry?)
-- How Challenges are revealed to players (all visible? progressive discovery?)
-- How SituationChallengeLink dependencies work at runtime (completing one Challenge
-  unlocks the next)
+**Still needs design:**
+- How SituationChallengeLink dependencies work at runtime (completing one
+  Challenge unlocks the next)
 - Instance lifecycle and cleanup (when do they deactivate/disappear?)
 - How scene FK works (Situation tied to active scene recording?)
 
@@ -498,7 +497,7 @@ These need resolution before or during implementation of later phases:
 2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
 3. ~~**Difficulty tuning**~~ — RESOLVED. Rank-based calculation via `preview_check_difficulty()`. Uses the same CheckRank pipeline as actual checks. IMPOSSIBLE filtering hides actions where the ResultChart has no success outcomes.
 4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
-5. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered? (See Phase 5.7)
+5. **Situation lifecycle** — creation is resolved (GM-triggered via `SetSituationAction`/`CmdSetSituation`, #1895); activation/cleanup (when do instances deactivate or disappear?) is still open. (See Phase 5.7)
 6. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
 7. ~~**Consequence pool model**~~ — RESOLVED. Freestanding `ConsequencePool` container with single-depth inheritance. Pools are reused across techniques, challenges, and environmental contexts. ActionTemplate carries the pool FK; ContextConsequencePool links pools to Properties.
 8. **Cooperative resolution** — how do multiple independent rolls combine into a cooperative outcome? Count successes, average tiers, best/worst with support modifiers? (See Phase 3)

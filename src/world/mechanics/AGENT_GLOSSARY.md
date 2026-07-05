@@ -39,3 +39,10 @@ Materialized into a real `room_features.Trap` row by `instantiate_situation`;
 carries no runtime state (no armed/detected/position — those are fresh per
 instantiated Trap).
 _Avoid_: trap template, trap blueprint (as a class name), situation trap
+
+**SituationChallengeLink.target_object_name** (#1895):
+The authored display name for the ObjectDB `instantiate_situation` auto-creates
+to embody a Situation-carried Challenge (e.g. "the locked door"). Player-visible
+via `ChallengeInstanceSerializer.target_object_name`. Not to be confused with an
+actual room prop — the object exists solely as the Challenge's mechanical anchor.
+_Avoid_: target prop, challenge prop, door object (as a literal expectation)

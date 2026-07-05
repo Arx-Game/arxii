@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Superseded by ADR-0091 (#1895) — `instantiate_situation` now mints
+ChallengeInstances too, once `SituationChallengeLink.target_object_name`
+answered the target_object-sourcing question this ADR left open.
 
 ## Context
 
