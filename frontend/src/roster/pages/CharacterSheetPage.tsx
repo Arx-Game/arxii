@@ -21,6 +21,7 @@ import { SecretsTab } from '@/secrets/components/SecretsTab';
 import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
+import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -99,6 +100,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="relationships">Relationships</TabsTrigger>
           <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
+          <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
@@ -159,6 +161,14 @@ export function CharacterSheetPage() {
           {/* Titles are cosmetic and public — render for any viewer. character.id is the
               CharacterSheet pk the titles API filters by. */}
           <TitlesPanel characterSheetId={entry.character.id} />
+        </TabsContent>
+
+        <TabsContent value="distinctions" className="space-y-4">
+          {/* Ungated (#1446): the server already filters secret rows for non-privileged
+              viewers, so every viewer sees this tab and the tab only renders what it's given.
+              character.id is the CharacterSheet pk (shared with the ObjectDB pk). Radix
+              unmounts inactive tab content, so the query only fires when this tab is opened. */}
+          <DistinctionsTab characterId={entry.character.id} />
         </TabsContent>
 
         <TabsContent value="secrets" className="space-y-4">
