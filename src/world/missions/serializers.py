@@ -433,6 +433,7 @@ class MissionInstanceSerializer(serializers.ModelSerializer):
             "template",
             "current_node",
             "status",
+            "is_paused",
             "started_at",
             "completed_at",
             "source_beat",

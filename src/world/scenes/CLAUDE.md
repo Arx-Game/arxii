@@ -250,7 +250,7 @@ Key service functions for scene round lifecycle:
 - Participant data serialization
 
 ### `filters.py`
-- Scene filtering by status (Active/Paused/Finished)
+- Scene filtering by status (Active/Completed/Upcoming)
 - Persona filtering by scene, character, type
 - Search by participants, location
 
