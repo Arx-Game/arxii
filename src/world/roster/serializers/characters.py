@@ -6,6 +6,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
+from world.covenants.constants import CovenantType
+from world.covenants.models import CharacterCovenantRole
+
 
 class CharacterGallerySerializer(serializers.Serializer):
     """Serialize a single gallery entry for a character."""
@@ -59,6 +62,7 @@ class CharacterSerializer(serializers.ModelSerializer):
     )
     relationships = serializers.ListField(child=serializers.CharField(), default=list)
     galleries = CharacterGallerySerializer(many=True, default=list)
+    covenant = serializers.SerializerMethodField()
 
     class Meta:
         model = ObjectDB
@@ -77,6 +81,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             "background",
             "relationships",
             "galleries",
+            "covenant",
         )
         read_only_fields = fields
 
@@ -110,6 +115,28 @@ class CharacterSerializer(serializers.ModelSerializer):
             race_data["species"] = species_data
 
         return race_data
+
+    def get_covenant(self, obj) -> dict | None:
+        """Core-identity covenant: the active DURANCE-type covenant role, if any (#1446).
+
+        One indexed query per character; bounded by roster pagination in list context.
+        """
+        role = (
+            CharacterCovenantRole.objects.filter(
+                character_sheet_id=obj.pk,
+                left_at__isnull=True,
+                covenant__covenant_type=CovenantType.DURANCE,
+            )
+            .select_related("covenant", "covenant_role")
+            .first()
+        )
+        if role is None:
+            return None
+        return {
+            "id": role.covenant.pk,
+            "name": role.covenant.name,
+            "role": role.covenant_role.name,
+        }
 
     def get_char_class(self, _obj):
         # Placeholder until class system is implemented

@@ -19,6 +19,51 @@ from world.roster.models import ApplicationStatus, RosterApplication
 from world.roster.serializers import MyRosterEntrySerializer, RosterEntrySerializer
 
 
+class CharacterSerializerCovenantTestCase(TestCase):
+    """The covenant identity summary on CharacterSerializer (#1446)."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+
+    def test_covenant_null_when_no_active_role(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.serializers import CharacterSerializer
+
+        CharacterSheetFactory(character=self.character)
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] is None
+
+    def test_covenant_summary_from_active_durance_role(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.roster.serializers import CharacterSerializer
+
+        sheet = CharacterSheetFactory(character=self.character)
+        role = CharacterCovenantRoleFactory(character_sheet=sheet)
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] == {
+            "id": role.covenant.pk,
+            "name": role.covenant.name,
+            "role": role.covenant_role.name,
+        }
+
+    def test_covenant_ignores_departed_roles(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.roster.serializers import CharacterSerializer
+
+        sheet = CharacterSheetFactory(character=self.character)
+        CharacterCovenantRoleFactory(character_sheet=sheet, left_at=timezone.now())
+
+        data = CharacterSerializer(instance=self.character).data
+
+        assert data["covenant"] is None
+
+
 class CharacterSerializerTestCase(TestCase):
     """Test the CharacterSerializer, including species field."""
 
