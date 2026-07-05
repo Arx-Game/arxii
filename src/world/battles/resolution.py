@@ -75,22 +75,17 @@ def _is_isolated(participant: BattleParticipant) -> bool:
 
     A participant with no ``place`` assigned (front-agnostic) is never counted as
     isolated — isolation is specifically about being alone at a front, not merely
-    unassigned.
+    unassigned. Reads battle.state_cache (#1846) instead of
+    BattleParticipant.objects.filter().
     """
     from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
 
     if participant.place_id is None:
         return False
-    return (
-        not BattleParticipant.objects.filter(
-            battle_id=participant.battle_id,
-            side_id=participant.side_id,
-            place_id=participant.place_id,
-            status=BattleParticipantStatus.ACTIVE,
-        )
-        .exclude(pk=participant.pk)
-        .exists()
+    others = participant.battle.state_cache.participants_on_place(
+        participant.place_id, statuses=(BattleParticipantStatus.ACTIVE,)
     )
+    return not any(p.side_id == participant.side_id and p.pk != participant.pk for p in others)
 
 
 def _has_unimpaired_mobility(character_sheet: CharacterSheet) -> bool:
@@ -115,26 +110,33 @@ def _property_affinity_modifier(technique: Technique, holder: HasProperties) -> 
     """Sum every TechniquePropertyAffinity row matching one of holder's properties (#1794).
 
     Returns 0 when no row matches — most techniques have no authored affinity,
-    and that's the expected common case.
+    and that's the expected common case. Reads from cached_all() (#1846) — the
+    whole table is small and admin-authored, so it's loaded once per process
+    and filtered in Python rather than re-queried per declaration.
     """
     from world.battles.models import TechniquePropertyAffinity  # noqa: PLC0415
 
-    rows = TechniquePropertyAffinity.objects.filter(technique=technique).select_related("property")
+    rows = [
+        r for r in TechniquePropertyAffinity.objects.cached_all() if r.technique_id == technique.pk
+    ]
     return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
 def _terrain_property_modifier(place: BattlePlace | None, holder: HasProperties) -> int:
     """Sum every TerrainPropertyEffect row matching one of holder's properties (#1794).
 
-    Returns 0 when the unit has no place, or no row matches.
+    Returns 0 when the unit has no place, or no row matches. Reads from
+    cached_all() (#1846) — see _property_affinity_modifier for why.
     """
     from world.battles.models import TerrainPropertyEffect  # noqa: PLC0415
 
     if place is None:
         return 0
-    rows = TerrainPropertyEffect.objects.filter(terrain_type=place.terrain_type).select_related(
-        "property"
-    )
+    rows = [
+        r
+        for r in TerrainPropertyEffect.objects.cached_all()
+        if r.terrain_type == place.terrain_type
+    ]
     return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
@@ -164,15 +166,18 @@ def _weather_property_modifier(place: BattlePlace | None, holder: HasProperties)
     """Sum every WeatherTypePropertyEffect row matching one of holder's properties (#1715).
 
     Returns 0 when there's no effective weather at place, or no row matches.
+    Reads from cached_all() (#1846) — see _property_affinity_modifier for why.
     """
     from world.battles.models import WeatherTypePropertyEffect  # noqa: PLC0415
 
     weather_type = effective_weather(place)
     if weather_type is None:
         return 0
-    rows = WeatherTypePropertyEffect.objects.filter(weather_type=weather_type).select_related(
-        "property"
-    )
+    rows = [
+        r
+        for r in WeatherTypePropertyEffect.objects.cached_all()
+        if r.weather_type_id == weather_type.pk
+    ]
     return sum(row.modifier for row in rows if holder.has_property(row.property))
 
 
@@ -182,15 +187,18 @@ def _weather_capability_modifier(place: BattlePlace | None, holder: HasCapabilit
     battle modifier in the codebase (everything else is presence- or >=-threshold based).
 
     Returns 0 when there's no effective weather at place, or no row applies.
+    Reads from cached_all() (#1846) — see _property_affinity_modifier for why.
     """
     from world.battles.models import WeatherTypeCapabilityChallenge  # noqa: PLC0415
 
     weather_type = effective_weather(place)
     if weather_type is None:
         return 0
-    rows = WeatherTypeCapabilityChallenge.objects.filter(weather_type=weather_type).select_related(
-        "capability"
-    )
+    rows = [
+        r
+        for r in WeatherTypeCapabilityChallenge.objects.cached_all()
+        if r.weather_type_id == weather_type.pk
+    ]
     return sum(
         row.modifier for row in rows if holder.effective_capability(row.capability) < row.threshold
     )
@@ -205,27 +213,21 @@ def commander_bonus_for_side_at_place(side: BattleSide, place: BattlePlace | Non
     """Max Battle Command modifier-walk bonus across commanded units on ``side`` at
     ``place`` (#1711). Max, not sum — multiple commanders present don't stack.
     Returns 0 when ``place`` is None or no ACTIVE unit on this side/place has a
-    commander set.
+    commander set. Reads battle.state_cache (#1846) instead of two separate
+    queries (BattleUnit.objects.filter() + CharacterSheet.objects.filter()) —
+    unit.commander is already a resolved FK on each cached unit.
     """
     from world.battles.factories import ensure_battle_command_modifier_target  # noqa: PLC0415
-    from world.battles.models import BattleUnit  # noqa: PLC0415
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415
 
     if place is None:
         return 0
-    commander_ids = (
-        BattleUnit.objects.filter(
-            side=side, place=place, status=BattleUnitStatus.ACTIVE, commander__isnull=False
-        )
-        .values_list("commander_id", flat=True)
-        .distinct()
-    )
-    if not commander_ids:
+    units = side.battle.state_cache.units_on_place(place.pk, statuses=(BattleUnitStatus.ACTIVE,))
+    commanders = {u.commander for u in units if u.side_id == side.pk and u.commander_id is not None}
+    if not commanders:
         return 0
     target = ensure_battle_command_modifier_target()
-    sheets = CharacterSheet.objects.filter(pk__in=commander_ids)
-    return max(get_modifier_total(sheet, target) for sheet in sheets)
+    return max(get_modifier_total(sheet, target) for sheet in commanders)
 
 
 def select_surrounded_terminal_pool(
@@ -253,15 +255,16 @@ def select_surrounded_terminal_pool(
         POOL_SURROUNDED_TERMINAL_PVP,
     )
 
-    opposing_pc_present = (
-        BattleParticipant.objects.filter(
-            battle_id=battle.pk,
-            place_id=participant.place_id,
-            status=BattleParticipantStatus.ACTIVE,
+    others = (
+        battle.state_cache.participants_on_place(
+            participant.place_id, statuses=(BattleParticipantStatus.ACTIVE,)
         )
-        .exclude(side_id=participant.side_id)
-        .filter(character_sheet__character__db_account__isnull=False)
-        .exists()
+        if participant.place_id is not None
+        else []
+    )
+    opposing_pc_present = any(
+        p.side_id != participant.side_id and p.character_sheet.character.db_account is not None
+        for p in others
     )
     pool_name = (
         POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY
@@ -451,41 +454,37 @@ def _scope_target_units(
     """Active (optionally also ROUTED) BattleUnits affected by *declaration*, per its
     scope (#1710). ``include_routed=True`` (RALLY, #1712) also includes ROUTED units
     — RALLY's whole purpose is reaching units that have already broken; DESTROYED
-    units are never included (gone, not rallyable)."""
+    units are never included (gone, not rallyable). Reads battle.state_cache (#1846)
+    instead of BattleUnit.objects.filter()."""
     from world.battles.constants import BattleActionScope, BattleUnitStatus  # noqa: PLC0415
-    from world.battles.models import BattleUnit  # noqa: PLC0415
 
     statuses = (
         (BattleUnitStatus.ACTIVE, BattleUnitStatus.ROUTED)
         if include_routed
         else (BattleUnitStatus.ACTIVE,)
     )
+    battle = declaration.battle_round.battle
     if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
-        return list(
-            BattleUnit.objects.filter(side_id=declaration.target_side_id, status__in=statuses)
-        )
+        return battle.state_cache.units_on_side(declaration.target_side_id, statuses=statuses)
     if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
-        return list(
-            BattleUnit.objects.filter(place_id=declaration.target_place_id, status__in=statuses)
-        )
+        return battle.state_cache.units_on_place(declaration.target_place_id, statuses=statuses)
     return [declaration.target_unit] if declaration.target_unit is not None else []
 
 
 def _scope_target_participants(declaration: BattleActionDeclaration) -> list:
-    """Active BattleParticipants affected by *declaration*, per its scope (#1710)."""
+    """Active BattleParticipants affected by *declaration*, per its scope (#1710).
+    Reads battle.state_cache (#1846) instead of BattleParticipant.objects.filter()."""
     from world.battles.constants import BattleActionScope, BattleParticipantStatus  # noqa: PLC0415
 
+    statuses = (BattleParticipantStatus.ACTIVE,)
+    battle = declaration.battle_round.battle
     if declaration.scope == BattleActionScope.SIDE and declaration.target_side_id:
-        return list(
-            BattleParticipant.objects.filter(
-                side_id=declaration.target_side_id, status=BattleParticipantStatus.ACTIVE
-            )
+        return battle.state_cache.participants_on_side(
+            declaration.target_side_id, statuses=statuses
         )
     if declaration.scope == BattleActionScope.PLACE and declaration.target_place_id:
-        return list(
-            BattleParticipant.objects.filter(
-                place_id=declaration.target_place_id, status=BattleParticipantStatus.ACTIVE
-            )
+        return battle.state_cache.participants_on_place(
+            declaration.target_place_id, statuses=statuses
         )
     return [declaration.target_ally] if declaration.target_ally is not None else []
 
@@ -531,7 +530,6 @@ def _resolve_strike_success(
         unit.save(update_fields=["strength", "status"])
 
         if unit.status == BattleUnitStatus.DESTROYED:
-            from world.battles.models import BattleVehicle  # noqa: PLC0415
             from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
 
             # is_structural=False only (#1714): a living mount's own BattleUnit
@@ -542,9 +540,10 @@ def _resolve_strike_success(
             # doesn't auto-breach the wall. Structural vehicles only eject
             # occupants via a hull Fortification breach (see BREACH handling),
             # never from this unit-destruction path. This asymmetry is
-            # intentional, not a gap.
-            vehicle = BattleVehicle.objects.filter(unit=unit, is_structural=False).first()
-            if vehicle is not None:
+            # intentional, not a gap. Reads battle.state_cache (#1846) instead
+            # of BattleVehicle.objects.filter().
+            vehicle = unit.battle.state_cache.vehicle_for_unit(unit.pk)
+            if vehicle is not None and not vehicle.is_structural:
                 eject_vehicle_occupants(vehicle=vehicle)
 
     side = declaration.participant.side
@@ -763,10 +762,10 @@ def _resolve_breach_success(
     fort.save(update_fields=["integrity", "breached"])
 
     if fort.breached and fort.kind == FortificationKind.HULL:
-        from world.battles.models import BattleVehicle  # noqa: PLC0415
         from world.battles.services import eject_vehicle_occupants  # noqa: PLC0415
 
-        vehicle = BattleVehicle.objects.filter(place=fort.place).first()
+        # Reads battle.state_cache (#1846) instead of BattleVehicle.objects.filter().
+        vehicle = fort.place.battle.state_cache.vehicle_at_place(fort.place_id)
         if vehicle is not None:
             eject_vehicle_occupants(vehicle=vehicle)
 

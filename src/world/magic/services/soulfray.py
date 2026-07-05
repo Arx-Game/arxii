@@ -155,20 +155,22 @@ def get_soulfray_warning(character: ObjectDB) -> SoulfrayWarning | None:
 
 
 def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:
-    """Select a control mishap consequence pool based on deficit magnitude."""
-    from django.db import models as db_models  # noqa: PLC0415
+    """Select a control mishap consequence pool based on deficit magnitude.
 
+    Scans the cached catalog (#1846) in Python instead of a filtered
+    ORDER BY ... LIMIT 1 query per call.
+    """
     from world.magic.models import MishapPoolTier  # noqa: PLC0415
 
-    tier = (
-        MishapPoolTier.objects.filter(min_deficit__lte=control_deficit)
-        .filter(
-            db_models.Q(max_deficit__gte=control_deficit) | db_models.Q(max_deficit__isnull=True),
-        )
-        .order_by("-min_deficit")
-        .first()
-    )
-    return tier.consequence_pool if tier else None
+    candidates = [
+        t
+        for t in MishapPoolTier.objects.cached_all()
+        if t.min_deficit <= control_deficit
+        and (t.max_deficit is None or t.max_deficit >= control_deficit)
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda t: t.min_deficit).consequence_pool
 
 
 def _handle_soulfray_accumulation(

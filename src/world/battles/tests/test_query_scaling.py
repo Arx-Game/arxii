@@ -1,12 +1,14 @@
 """Marginal per-declaration query-cost gate for resolve_battle_round.
 
-Guards the scaling property (#1741): per-declaration marginal query cost
-must stay bounded. Uses two rounds of different sizes and asserts the
-marginal cost per added declaration stays below a budget.
+Guards the scaling property (#1741, tightened by #1846): per-declaration
+marginal query cost must stay bounded. Uses two rounds of different sizes
+and asserts the marginal cost per added declaration stays below a budget.
 
 The singleton-caching (SoulfrayConfig) + select_related (.character hop)
-wins are what make the marginal cost drop. A regression in either would
-raise the marginal above the budget.
+wins (#1741), plus the catalog cache (ArxSharedMemoryManager.cached_all())
+and BattleStateCache roster-state cache (#1846), are what make the
+marginal cost drop. A regression in any of these would raise the marginal
+above the budget.
 """
 
 from unittest.mock import patch
@@ -41,10 +43,12 @@ from world.vitals.factories import CharacterVitalsFactory
 class ResolveBattleRoundQueryScalingTests(TestCase):
     """Assert marginal per-declaration query cost stays bounded.
 
-    Post-fix, the SoulfrayConfig singleton lookup and the .character
+    Post-#1741, the SoulfrayConfig singleton lookup and the .character
     select_related hop are eliminated from the per-declaration marginal.
-    Any non-zero regression in marginal cost indicates a new
-    per-declaration query was introduced in the use_technique path.
+    Post-#1846, the catalog cache and BattleStateCache further eliminate
+    per-declaration roster/catalog re-queries. Any regression in marginal
+    cost indicates a new per-declaration query was introduced in the
+    use_technique path or the battles modifier stack.
     """
 
     def setUp(self) -> None:
@@ -98,8 +102,10 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         """Marginal query cost per added declaration stays below budget.
 
         Measures Q(2) and Q(5) and asserts (Q(5) - Q(2)) / 3 < budget.
-        Post-fix, the SoulfrayConfig singleton + .character hop are
-        eliminated from the per-declaration marginal.
+        Post-#1846, the catalog cache (ArxSharedMemoryManager.cached_all())
+        and BattleStateCache eliminate per-declaration re-queries of roster
+        and catalog state on top of #1741's SoulfrayConfig singleton +
+        .character hop wins.
         """
         round_small = self._build_round_with_declarations(num_declarations=2)
         round_large = self._build_round_with_declarations(num_declarations=5)
@@ -108,16 +114,16 @@ class ResolveBattleRoundQueryScalingTests(TestCase):
         q_large = self._count_queries_for_round(round_large)
 
         marginal = (q_large - q_small) / 3
-        # baseline: Q(2)=<recorded>, Q(5)=<recorded>, marginal=<recorded>
-        # Budget: set above post-fix marginal, below pre-fix marginal.
-        # Pre-fix marginal included SoulfrayConfig.objects.first() + .character
-        # hop per declaration; post-fix both are eliminated.
-        per_declaration_budget = 60
+        # baseline (#1846): Q(2)=77, Q(5)=149, marginal=24.0
+        # Budget set just above this observed marginal — a regression here means
+        # a new per-declaration query was reintroduced into the modifier stack,
+        # scope resolution, or use_technique envelope.
+        per_declaration_budget = 30
         self.assertLess(
             marginal,
             per_declaration_budget,
             f"Marginal per-declaration query cost {marginal:.1f} exceeds budget "
             f"{per_declaration_budget}. Q(2)={q_small}, Q(5)={q_large}. "
             "A new per-declaration query may have been introduced in the "
-            "use_technique path.",
+            "use_technique path or the battles modifier stack (#1846).",
         )

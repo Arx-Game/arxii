@@ -7,9 +7,12 @@ lifecycle, and per-participant declarations.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import ArxSharedMemoryManager
 from world.battles.constants import (
     DEFAULT_MORALE,
     DEFAULT_ROUND_LIMIT,
@@ -31,6 +34,9 @@ from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 from world.scenes.round_models import AbstractRound
 from world.weather.models import WeatherType
+
+if TYPE_CHECKING:
+    from world.battles.state_cache import BattleStateCache
 
 # Lazy model references extracted to constants to satisfy S1192.
 SCENE_MODEL = "scenes.Scene"
@@ -137,6 +143,15 @@ class Battle(SharedMemoryModel):
         """Latest non-completed round, or None."""
         return self.rounds.exclude(status=RoundStatus.COMPLETED).order_by("-round_number").first()
 
+    @property
+    def state_cache(self) -> BattleStateCache:
+        """Per-battle roster cache -- see world.battles.state_cache.BattleStateCache."""
+        if not hasattr(self, "_state_cache"):
+            from world.battles.state_cache import BattleStateCache  # noqa: PLC0415
+
+            self._state_cache = BattleStateCache(battle=self)
+        return self._state_cache
+
 
 class BattleSide(SharedMemoryModel):
     """One side in a battle (attacker or defender) with its victory-point tally."""
@@ -178,6 +193,12 @@ class BattleSide(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.battle.name} — {self.get_role_display()}"
+
+    def save(self, *args, **kwargs) -> None:
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.battle.state_cache.register_side(self)
 
 
 class BattlePlace(SharedMemoryModel):
@@ -262,6 +283,12 @@ class BattlePlace(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.battle.name} / {self.name}"
 
+    def save(self, *args, **kwargs) -> None:
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.battle.state_cache.register_place(self)
+
 
 class Fortification(SharedMemoryModel):
     """A defensible structure (wall/gate/battlement) at a battle front (#1713).
@@ -314,6 +341,12 @@ class Fortification(SharedMemoryModel):
     def __str__(self) -> str:
         state = "breached" if self.breached else f"{self.integrity}/{self.max_integrity}"
         return f"{self.place.name} {self.get_kind_display()} ({state})"
+
+    def save(self, *args, **kwargs) -> None:
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.place.battle.state_cache.register_fortification(self)
 
 
 class BattleUnit(SharedMemoryModel):
@@ -427,6 +460,12 @@ class BattleUnit(SharedMemoryModel):
         """
         return self.properties.filter(pk=prop.pk).exists()
 
+    def save(self, *args, **kwargs) -> None:
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.battle.state_cache.register_unit(self)
+
 
 class BattleUnitCapability(SharedMemoryModel):
     """Authored (unit, capability) -> magnitude row (#1794).
@@ -533,6 +572,12 @@ class BattleParticipant(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character_sheet} in {self.battle.name}"
+
+    def save(self, *args, **kwargs) -> None:
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.battle.state_cache.register_participant(self)
 
 
 class BattleActionDeclaration(SharedMemoryModel):
@@ -647,6 +692,8 @@ class TechniquePropertyAffinity(SharedMemoryModel):
     which could only ever match a unit's single composition tag.
     """
 
+    objects = ArxSharedMemoryManager()
+
     technique = models.ForeignKey(
         TECHNIQUE_MODEL,
         on_delete=models.PROTECT,
@@ -680,6 +727,8 @@ class TerrainPropertyEffect(SharedMemoryModel):
     a matching row — replaces #1711's TerrainCompositionEffect.
     """
 
+    objects = ArxSharedMemoryManager()
+
     terrain_type = models.CharField(max_length=20, choices=TerrainType.choices)
     property = models.ForeignKey(
         Property,
@@ -710,6 +759,8 @@ class WeatherTypePropertyEffect(SharedMemoryModel):
     keyed on the place's *effective* weather (resolution.effective_weather)
     rather than its static terrain_type.
     """
+
+    objects = ArxSharedMemoryManager()
 
     weather_type = models.ForeignKey(
         WeatherType,
@@ -744,6 +795,8 @@ class WeatherTypeCapabilityChallenge(SharedMemoryModel):
     Stormy weather. The first absence/threshold-based battle modifier in the
     codebase (everything else is presence- or >=-threshold based).
     """
+
+    objects = ArxSharedMemoryManager()
 
     weather_type = models.ForeignKey(
         WeatherType,
@@ -842,3 +895,9 @@ class BattleVehicle(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_vehicle_kind_display()} ({self.place.name})"
+
+    def save(self, *args, **kwargs) -> None:
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            self.unit.battle.state_cache.register_vehicle(self)
