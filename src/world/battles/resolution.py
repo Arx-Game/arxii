@@ -276,7 +276,7 @@ def select_surrounded_terminal_pool(
     pool_name = (
         POOL_SURROUNDED_TERMINAL_PVP if opposing_pc_present else POOL_SURROUNDED_TERMINAL_ENEMY
     )
-    return ConsequencePool.objects.filter(name=pool_name).first()
+    return next((p for p in ConsequencePool.objects.cached_all() if p.name == pool_name), None)
 
 
 def resolve_surrounded_terminal(

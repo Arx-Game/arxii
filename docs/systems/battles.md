@@ -407,7 +407,10 @@ BALANCED posture all contribute nothing:
 `ConsequencePool`/`ConditionStage` (the Surrounded entry roll,
 `_maybe_apply_surrounded`) also read through `cached_all()` (#1871), so none of
 the five per-declaration catalog lookups in `resolution.py` — STRIKE or
-non-STRIKE — re-query their table per declaration. `ConditionTemplate` is the one
+non-STRIKE — re-query their table per declaration. The Surrounded *terminal* pool
+lookup (`select_surrounded_terminal_pool`, reached once per terminal-stage
+Surrounded participant per round rather than per declaration) was folded into the
+same `cached_all()` pass in the same change. `ConditionTemplate` is the one
 exception worth calling out explicitly: it isn't missing from this list because
 it's uncached — it uses its own pre-existing `get_by_name()` cache
 (`world/conditions/models.py`) rather than `cached_all()`, and the rescue/
