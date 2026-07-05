@@ -7,6 +7,7 @@ See: docs/superpowers/specs/2026-05-30-projects-buildings-sanctum-design.md
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -27,6 +28,8 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
     from world.scenes.models import Persona
     from world.traits.models import CheckOutcome
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectNotActiveError(ValueError):
@@ -299,6 +302,42 @@ def clear_instant_completion_kinds() -> None:
     _INSTANT_COMPLETION_KINDS.clear()
 
 
+# ---------------------------------------------------------------------------
+# Tiered-period resolvers (#1891)
+# ---------------------------------------------------------------------------
+# A TIERED_PERIOD project has no single threshold to cross — it grades at its
+# deadline by how much progress was banked. Each TIERED_PERIOD kind registers
+# a resolver here that reads its own per-kind details, selects the outcome
+# tier from progress, and calls ``resolve_project``. ``scan_active_projects``
+# invokes the registered resolver the same tick it transitions the project to
+# RESOLVING, so graded projects don't linger. A kind with no registered
+# resolver (a not-yet-implemented future kind) is left RESOLVING — today's
+# behavior, no regression.
+
+TieredResolver = Callable[[Project], None]
+
+_TIERED_RESOLVERS: dict[str, TieredResolver] = {}
+
+
+def register_tiered_resolver(kind: str, resolver: TieredResolver) -> None:
+    """Register a TIERED_PERIOD kind's tier-grading resolver. Re-registration overwrites."""
+    _TIERED_RESOLVERS[kind] = resolver
+
+
+def get_tiered_resolver(kind: str) -> TieredResolver:
+    """Return the registered tiered resolver for ``kind``, or raise LookupError."""
+    try:
+        return _TIERED_RESOLVERS[kind]
+    except KeyError as exc:
+        msg = f"No tiered resolver registered for ProjectKind={kind!r}"
+        raise LookupError(msg) from exc
+
+
+def clear_tiered_resolvers() -> None:
+    """Test-only: clear the tiered-resolver registry."""
+    _TIERED_RESOLVERS.clear()
+
+
 def maybe_complete_immediately(project: Project) -> bool:
     """Resolve an instant-completion project the moment its threshold is funded (#1500).
 
@@ -383,11 +422,31 @@ def scan_active_projects() -> int:
     for project in active:
         if not _project_is_completion_ready(project, now):
             continue
-        # Use save() instead of .objects.filter().update() so the in-memory
-        # SharedMemoryModel instance stays in sync — refresh_from_db() does
-        # not reliably re-fetch when the identity map already holds the row.
-        project.status = ProjectStatus.RESOLVING
-        project.save(update_fields=["status", "updated_at"])
-        transitioned += 1
+        # Per-project atomic + try/except isolation: a handler failure rolls the
+        # project back to ACTIVE (retryable next tick) rather than stranding it in
+        # RESOLVING, which scan never revisits (it only scans ACTIVE). Other
+        # projects in the same tick are unaffected. TIERED_PERIOD projects are
+        # graded in the same tick via their registered resolver; a kind with no
+        # registered resolver is left RESOLVING (today's behavior — no regression).
+        try:
+            with transaction.atomic():
+                project.status = ProjectStatus.RESOLVING
+                project.save(update_fields=["status", "updated_at"])
+                if project.completion_mode == CompletionMode.TIERED_PERIOD:
+                    resolver = _TIERED_RESOLVERS.get(project.kind)
+                    if resolver is not None:
+                        resolver(project)
+                transitioned += 1
+        except Exception:
+            # The atomic rollback restored the DB to ACTIVE; reset the stale
+            # in-memory instance to match. SharedMemoryModel's identity map
+            # would otherwise keep the rolled-back RESOLVING value on this
+            # reference (refresh_from_db does not reliably re-fetch it — see
+            # the note on save() vs .update() above).
+            project.status = ProjectStatus.ACTIVE
+            logger.exception(
+                "Resolution failed for project #%s; leaving it ACTIVE for retry.",
+                project.pk,
+            )
 
     return transitioned

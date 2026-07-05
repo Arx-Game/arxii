@@ -1682,3 +1682,106 @@ class PhilosophicalArchetype(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+# ---------------------------------------------------------------------------
+# #1891 — GANG_TURF project kind (TIERED_PERIOD, first of its kind)
+# ---------------------------------------------------------------------------
+
+
+class GangTurfDetails(SharedMemoryModel):
+    """Per-(GANG_TURF Project) details payload (#1891).
+
+    A gang organization exerts ongoing territorial pressure over a period; at
+    the deadline accumulated progress is graded into an outcome tier via the
+    related ``GangTurfTierThreshold`` rows, and the tier applies a reputation
+    delta to the owning gang org. ``target_area`` is IC flavor only — it is NOT
+    a mechanical control field this slice (a dedicated territory model is
+    deferred; see the #1891 spec follow-ups).
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="gang_turf_details",
+    )
+    organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.PROTECT,
+        related_name="gang_turf_projects",
+        help_text="The gang organization exerting pressure.",
+    )
+    target_area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gang_turf_projects",
+        help_text="IC flavor: the area under pressure. Not a control field this slice.",
+    )
+
+    def __str__(self) -> str:
+        return f"GangTurf#{self.project_id}: {self.organization_id}"
+
+
+class GangTurfTierThreshold(SharedMemoryModel):
+    """A progress band on a GangTurfDetails that grants a CheckOutcome tier.
+
+    Tier reached at deadline = highest ``min_progress`` row whose
+    ``min_progress <= project.current_progress`` (mirror
+    ``societies.types.ReputationTier.from_value``). Seeded rows always include a
+    baseline failure tier at ``min_progress=0`` so every graded project maps to
+    exactly one tier — no None branch.
+    """
+
+    details = models.ForeignKey(
+        GangTurfDetails,
+        on_delete=models.CASCADE,
+        related_name="tier_thresholds",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="gang_turf_thresholds",
+    )
+    min_progress = models.PositiveIntegerField(
+        help_text="Minimum progress at which this tier applies.",
+    )
+
+    class Meta:
+        ordering = ["-min_progress"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["details", "outcome_tier"],
+                name="uniq_gang_turf_tier",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier} @ {self.min_progress}"
+
+
+class GangTurfReputationAward(SharedMemoryModel):
+    """Reputation delta granted to the owning gang org for a CheckOutcome tier.
+
+    One row per ``CheckOutcome`` (globally). Read by
+    ``gang_turf._tier_to_reputation_delta``; a missing row yields 0 (a content
+    gap, not a crash). Staff-tunable — no hardcoded deltas in service code (repo
+    rule: gameplay rules live in the DB).
+    """
+
+    outcome_tier = models.OneToOneField(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="gang_turf_award",
+    )
+    reputation_delta = models.PositiveIntegerField(
+        help_text="Reputation gained by the owning org's standing for this tier.",
+    )
+
+    class Meta:
+        ordering = ["outcome_tier__success_level"]
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier}: +{self.reputation_delta}"

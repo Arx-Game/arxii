@@ -29,6 +29,7 @@ class ProjectKind(models.TextChoices):
     SHIP_UPGRADE = "SHIP_UPGRADE", "Ship Upgrade"
     SHIP_REPAIR = "SHIP_REPAIR", "Ship Repair"
     TEST_KIND = "TEST_KIND", "Test Kind (framework tests only)"
+    GANG_TURF = "GANG_TURF", "Gang Turf"
 
 
 class ProjectStatus(models.TextChoices):

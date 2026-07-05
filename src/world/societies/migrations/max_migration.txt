@@ -1,1 +1,1 @@
-0020_organizationrank_can_lead_rituals
+0021_gangturfdetails_gangturftierthreshold_gangturfreputationaward

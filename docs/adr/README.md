@@ -49,6 +49,7 @@ treat those names as hints to confirm, not gospel.
 - [0004 — Tempo is action-driven, never wall-clock (AFK-safe)](0004-tempo-is-action-driven-never-wall-clock.md)
 - [0005 — Reactive behavior is a separate flows/triggers/events engine](0005-reactive-behavior-is-a-separate-flows-engine.md)
 - [0006 — Scenes are provisional by default; never auto-persist RP](0006-scenes-are-provisional-never-auto-persist-rp.md)
+- [0091 — GANG_TURF resolves TIERED_PERIOD via a per-kind resolver registry, not a shared accessor](0091-gang-turf-tiered-period.md)
 
 ### Database & modeling
 - [0007 — No JSON fields; every setting is a typed, queryable column](0007-no-json-fields-typed-queryable-columns.md)
