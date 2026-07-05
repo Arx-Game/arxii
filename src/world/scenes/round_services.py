@@ -576,6 +576,41 @@ def resolve_solo_abandoned_victims(
         resolve_abandonment(sheet)
 
 
+def maybe_finish_empty_scene(
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM
+    *,
+    leaving: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
+) -> None:
+    """Finish ``room``'s active scene if no PC other than ``leaving`` remains there.
+
+    Mirrors ``resolve_solo_abandoned_victims``'s early-return and
+    exclude-the-departing-id pattern (#1361). Called from ``Room.at_object_leave``
+    (movement — fires before the mover actually leaves ``room.contents``, hence
+    ``leaving``) and from ``Character.at_post_unpuppet`` (disconnect — called
+    after Evennia's own base-class relocation has already removed the character
+    from ``room.contents``, so ``leaving`` has no practical effect there but is
+    passed for signature symmetry).
+    """
+    from world.scenes.models import Scene  # noqa: PLC0415
+    from world.scenes.scene_admin_services import finish_scene_full  # noqa: PLC0415
+
+    scene = Scene.objects.filter(location=room, is_active=True).first()
+    if scene is None:
+        return
+
+    exclude_id = leaving.pk if leaving is not None else None
+    for obj in room.contents:
+        if obj.pk == exclude_id:
+            continue
+        try:
+            obj.sheet_data  # noqa: B018 — attribute access guards NPC/prop skip
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        return  # a PC remains — scene stays active
+
+    finish_scene_full(scene)
+
+
 @transaction.atomic
 def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     """Unconditionally resolve a DECLARING round: execute declared CHALLENGE actions in
