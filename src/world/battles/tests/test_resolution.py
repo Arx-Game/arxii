@@ -27,6 +27,7 @@ from world.battles.constants import (
     SUPPORT_VP,
     BattleActionKind,
     BattleActionScope,
+    BattleParticipantStatus,
     BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
@@ -35,6 +36,7 @@ from world.battles.constants import (
     VehicleKind,
 )
 from world.battles.exceptions import (
+    BattleError,
     CannotStrikeOwnSideError,
     FortificationAlreadyBreachedError,
     FortificationOwnershipMismatchError,
@@ -2372,3 +2374,41 @@ class PostureVpScalingTests(TestCase):
             + BATTLE_POSTURE_FAILURE_DAMAGE_MODIFIER[BattlePosture.DEFENSIVE]
         )
         self.assertEqual(vitals.health, 100 - expected_damage)
+
+
+class ResolveBattleRoundClimacticMomentBlockTests(TestCase):
+    def test_blocks_when_active_participant_mid_crossing(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+        from world.magic.factories import wire_audere_power_multipliers
+        from world.magic.tests.majora_fixtures import build_crossing_world
+
+        wire_audere_power_multipliers()
+        (_character, mid_crossing_sheet, _threshold, _prospect, _puissant, _offer) = (
+            build_crossing_world(5, "_battleresolveblock")
+        )
+        battle_round = BattleRoundFactory()
+        side = BattleSideFactory(battle=battle_round.battle)
+        BattleParticipantFactory(
+            battle=battle_round.battle,
+            side=side,
+            character_sheet=mid_crossing_sheet,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+
+        with self.assertRaises(BattleError):
+            resolve_battle_round(battle_round=battle_round)
+
+    def test_does_not_block_when_no_one_mid_crossing(self) -> None:
+        from world.battles.resolution import resolve_battle_round
+
+        battle_round = BattleRoundFactory()
+        side = BattleSideFactory(battle=battle_round.battle)
+        sheet = CharacterSheetFactory()
+        BattleParticipantFactory(
+            battle=battle_round.battle,
+            side=side,
+            character_sheet=sheet,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+
+        resolve_battle_round(battle_round=battle_round)  # Must not raise BattleError.

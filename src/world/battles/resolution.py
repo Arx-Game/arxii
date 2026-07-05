@@ -47,6 +47,7 @@ from world.battles.constants import (
     BattleActionKind,
     BattleUnitStatus,
 )
+from world.battles.exceptions import BattleError
 from world.battles.models import BattleParticipant, BattleRound
 from world.checks.services import perform_check
 from world.scenes.constants import RoundStatus
@@ -1122,6 +1123,18 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     Returns:
         A ``BattleRoundResult`` summarising what happened this round.
     """
+    from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+    from world.magic.audere_majora import (  # noqa: PLC0415
+        any_character_mid_audere_majora_crossing,
+    )
+
+    active_sheets = [
+        p.character_sheet
+        for p in battle_round.battle.participants.filter(status=BattleParticipantStatus.ACTIVE)
+    ]
+    if any_character_mid_audere_majora_crossing(active_sheets):
+        raise BattleError(user_message="A participant needs a moment — try again shortly.")
+
     result = BattleRoundResult()
 
     declarations = list(
