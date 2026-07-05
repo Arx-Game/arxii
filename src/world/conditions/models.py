@@ -18,6 +18,7 @@ from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.managers import CachedAllMixin
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.conditions.constants import (
     ConditionInteractionOutcome,
@@ -107,6 +108,10 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
         return list(self.conditions.all())
 
 
+class CapabilityTypeManager(CachedAllMixin, NaturalKeyManager):
+    """Manager for CapabilityType with natural key support, plus cached_all() (#1871)."""
+
+
 class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
     """
     Capabilities that can be restricted or enhanced by conditions.
@@ -134,7 +139,7 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
         help_text="Capability-level prerequisite checked for ALL sources of this Capability.",
     )
 
-    objects = NaturalKeyManager()
+    objects = CapabilityTypeManager()
 
     class NaturalKeyConfig:
         fields = ["name"]
@@ -480,6 +485,10 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         return ConditionTemplateReactiveHandler(self)
 
 
+class ConditionStageManager(CachedAllMixin, NaturalKeyManager):
+    """Manager for ConditionStage with natural key support, plus cached_all() (#1871)."""
+
+
 class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
     """
     A stage in a progressive condition.
@@ -574,7 +583,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
     )
 
-    objects = NaturalKeyManager()
+    objects = ConditionStageManager()
 
     class NaturalKeyConfig:
         fields = ["condition", "stage_order"]
