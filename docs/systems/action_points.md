@@ -134,6 +134,17 @@ for pool in ActionPointPool.objects.all():
 
 ---
 
+## API
+
+- `GET /api/action-points/{character_id}/` (`ActionPointPoolView`) — self-scoped read-only
+  pool: `{current, effective_maximum, banked}`. Visibility: staff, or an account with an
+  active tenure on the character (else 404, the vitals-view rule). Lazy-creates the pool
+  with config defaults. `current` is the authoritative "AP remaining this week" figure —
+  the weekly cron tops it up additively. Feeds the web Status tab and the `sheet/status`
+  telnet section (#1446).
+
+---
+
 ## Admin
 
 Both models registered with organized fieldsets:

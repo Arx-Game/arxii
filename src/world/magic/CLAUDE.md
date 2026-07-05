@@ -66,6 +66,10 @@ The magic system for Arx II. Power flows from identity and connection.
   `flavor_text`. Unified per Spec A §2.2 — the old `scope`/`strength`/`is_active`
   shape was dropped; row existence replaces `is_active`.
 - `CharacterAnima` - Magical resource (anima) tracking
+- `ANIMA_BANDS` / `anima_band_for(current, maximum)` (`constants.py`, #1446) - Qualitative
+  anima vocabulary (PLACEHOLDER labels pending Apostate rewrite) mirroring
+  `vitals.constants.WOUND_DESCRIPTIONS`; `CharacterAnimaSerializer.band` surfaces it, shared
+  by the web Status tab and the `sheet/status` telnet section
 
 ### Gifts & Techniques
 - `Gift` - Thematic collections of magical techniques (M2M to Resonance — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052). Carries a `kind` column (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable — species abilities and in-play powers are delivered as Minor Gifts; ADR-0050, #1577)
