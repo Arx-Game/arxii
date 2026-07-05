@@ -105,6 +105,11 @@ table above.
   pushd "$(jq -r '.worktree_path' <<<"$START_JSON")"
   ```
 
+  Do NOT run `git worktree add` or invoke `using-git-worktrees` Step 1a/1b again
+  — `start-work.sh` already created the git worktree. The `using-git-worktrees`
+  skill's Step 0 will detect you're already isolated and skip creation; that's
+  the expected path on re-entry.
+
 - **Model selection.** Read the `model` and `complexity` fields from the emitted
   JSON. `pickup-issue.sh` derives the model from the `complexity:*` label, with
   tier names overridable via `ISSUE_MODEL_HIGH` / `ISSUE_MODEL_MEDIUM` /

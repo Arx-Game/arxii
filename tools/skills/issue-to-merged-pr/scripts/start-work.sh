@@ -31,8 +31,13 @@ BRANCH=$(jq -r '.branch' <<<"$PICKUP_JSON")
 #     and the add-assignee). Refuse if the issue is now NOT assigned to us.
 CURRENT_USER=$(gh api user --jq '.login')
 ASSIGNEES=$(gh issue view "$ISSUE" --json assignees --jq '.assignees[].login')
+if [[ -z "$ASSIGNEES" ]]; then
+  echo "ERROR: issue #$ISSUE is unassigned — the claim did not take." >&2
+  echo "(pickup's gh issue edit --add-assignee may have no-op'd, e.g. lacking triage permission). Re-run start-work.sh." >&2
+  exit 3
+fi
 if ! grep -qx "$CURRENT_USER" <<<"$ASSIGNEES"; then
-  echo "ERROR: issue #$ISSUE is not assigned to you ($CURRENT_USER)." >&2
+  echo "ERROR: issue #$ISSUE is assigned to someone else ($ASSIGNEES), not you ($CURRENT_USER)." >&2
   echo "Claim was lost (likely a concurrent session). Re-run start-work.sh." >&2
   exit 3
 fi
