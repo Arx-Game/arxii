@@ -40380,7 +40380,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Consequence Pool. */
+        id: number;
       };
       cookie?: never;
     };
