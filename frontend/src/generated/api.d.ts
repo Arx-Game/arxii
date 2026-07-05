@@ -10125,6 +10125,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/{id}/invite/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #887 — invite a co-located character to join this mission run. */
+    post: operations['missions_journal_invite_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/{id}/report/': {
     parameters: {
       query?: never;
@@ -10165,6 +10182,28 @@ export interface paths {
      *     (never 403 — existence must not leak).
      */
     post: operations['missions_journal_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #887 — accept or decline a pending mission invitation.
+     *
+     *     The invitee is NOT a participant yet, so this is detail=False with the
+     *     invite_id in the body (not _instance_for, which would 404).
+     */
+    post: operations['missions_journal_respond_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -18672,7 +18711,7 @@ export interface components {
       target_society?: number | null;
       readonly target_name: string | null;
       can_bring_guests?: boolean;
-      readonly response: components['schemas']['ResponseEnum'];
+      readonly response: components['schemas']['EventInvitationResponseEnum'];
       /** Format: date-time */
       readonly responded_at: string | null;
       /** Format: date-time */
@@ -18685,6 +18724,13 @@ export interface components {
       target_society?: number | null;
       can_bring_guests?: boolean;
     };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     * @enum {string}
+     */
+    EventInvitationResponseEnum: 'pending' | 'accepted' | 'declined';
     /** @description Serializer for creating invitations. */
     EventInvite: {
       target_type: components['schemas']['TargetTypeFedEnum'];
@@ -20533,6 +20579,38 @@ export interface components {
      * @enum {string}
      */
     MissionInstanceStatusEnum: 'active' | 'resolved' | 'complete' | 'abandoned' | 'expired';
+    /**
+     * @description POST body for the #887 invite endpoint.
+     *
+     *     ``invitee_character_id`` is the ObjectDB pk of the character to invite
+     *     (web clients speak character ids). The view resolves it to that
+     *     character's primary ``Persona``.
+     */
+    MissionInviteRequestRequest: {
+      invitee_character_id: number;
+    };
+    /**
+     * @description POST body for the #887 respond endpoint.
+     *
+     *     ``invite_id`` is the ``MissionInvite`` pk; ``response`` is the literal
+     *     ``"accept"`` or ``"decline"``.
+     */
+    MissionInviteRespondRequest: {
+      invite_id: number;
+      response: components['schemas']['MissionInviteRespondResponseEnum'];
+    };
+    /**
+     * @description * `accept` - accept
+     *     * `decline` - decline
+     * @enum {string}
+     */
+    MissionInviteRespondResponseEnum: 'accept' | 'decline';
+    /** @description Result of the #887 invite/respond endpoints. */
+    MissionInviteResult: {
+      readonly invite_id: number;
+      readonly response: string;
+      readonly instance_id: number;
+    };
     /**
      * @description Editor CRUD for MissionNode rows.
      *
@@ -26419,13 +26497,6 @@ export interface components {
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
     };
-    /**
-     * @description * `pending` - Pending
-     *     * `accepted` - Accepted
-     *     * `declined` - Declined
-     * @enum {string}
-     */
-    ResponseEnum: 'pending' | 'accepted' | 'declined';
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
       readonly id: number;
@@ -43330,6 +43401,45 @@ export interface operations {
       };
     };
   };
+  missions_journal_invite_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionInviteRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionInviteResult'];
+        };
+      };
+      /** @description Not the contract holder / not active / already a participant. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission / no such character. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   missions_journal_report_create: {
     parameters: {
       query?: never;
@@ -43381,6 +43491,43 @@ export interface operations {
         content?: never;
       };
       /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MissionInviteRespondRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MissionInviteResult'];
+        };
+      };
+      /** @description Already responded / run not active / bad response. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No such invitation for your persona. */
       404: {
         headers: {
           [name: string]: unknown;
