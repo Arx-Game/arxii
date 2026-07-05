@@ -848,6 +848,14 @@ authored, falling back to a generic public-fact composition; ceremony text is ne
 No deed is created when `threshold.risk == NONE` or when the sheet has no primary
 persona (`legend_entry` stays null).
 
+**Eligibility gate 8 (#1859):** `_evaluate_majora_gates` additionally checks the
+`ClassLevelUnlock` authored for `(character's class, boundary_level + 1)`, via
+`check_requirements_for_unlock` — the same hardcoded requirement-type list Ritual
+of the Durance uses (`TraitRequirement`, `ItemRequirement`, etc.). No authored
+unlock for that level means no gate (fail-open). Because the check is live and
+non-cached, satisfying the last requirement mid-scene (e.g. acquiring a touchstone)
+makes the very next eligibility poll pass — no separate re-sync step.
+
 ### Dramatic Moment Tagging (#545 / #1139)
 
 | Model | Purpose | Key Fields |

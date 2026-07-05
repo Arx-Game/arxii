@@ -102,6 +102,9 @@ A leveled room that serves as a Thread anchor via `target_sanctum_details`, capp
 **Mantle**:
 A specific, storied, attunable ItemInstance in the world (a particular sword, amulet, banner) with authored progression levels. A character attunes by weaving a MANTLE-kind Thread anchored on the Mantle, gated on having cleared at least its first level; the Thread's level cannot exceed the character's max-cleared mantle level.
 
+**Touchstone**:
+A resonance-tied `ItemInstance` a character has personally attuned via `attune_touchstone` (requires holding it, an unset `attuned_to_character_sheet`, and having claimed the item's `tied_resonance`). Attunement does not consume the item. Touchstone-mode component/item requirements (`RitualComponentRequirement`, `ItemRequirement`) match any attuned item whose `ResonanceTier` meets a floor, rather than one fixed catalog item — see ADR-0087.
+
 **Mage Scar**:
 The player-facing name for a magical alteration imprinted on a character by magical exposure — a queued, tiered cosmetic-to-profound change carrying social, weakness, and resonance effects. Backend class and table names retain the `MagicalAlteration` naming.
 _Avoid_: Magical Scar, Magical Alteration (as the player-facing name).

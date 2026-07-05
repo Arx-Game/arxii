@@ -953,8 +953,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `ClassLevelRequirement` — checks specific class level
   - `MultiClassRequirement` — multiple class levels
   - `TierRequirement` — tier 1 vs tier 2
-  - `AchievementRequirement` — **stub**, checks `character.db` attribute
+  - `AchievementRequirement` — checks `CharacterAchievement` for a granted `Achievement`
   - `RelationshipRequirement` — **stub**, always returns False
+  - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
