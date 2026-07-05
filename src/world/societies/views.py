@@ -86,7 +86,7 @@ class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class OrganizationReputationViewSet(viewsets.ReadOnlyModelViewSet):
-    """List/retrieve the requester's active persona's organization reputations (standing).
+    """List/retrieve org reputations (standing) for personas the requester currently plays.
 
     Self-only: rows are scoped to personas the requester currently plays.
     """

@@ -47,6 +47,10 @@ export function CharacterSheetPage() {
   // resolve the active character's roster entry. Null when no character is active → no secrets.
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const viewerEntryId = myEntries?.find((e) => e.name === activeCharacterName)?.id ?? null;
+  // For the Locations tab's Ships section: GET /api/ships/ships/ is server-scoped to the
+  // account's ACTIVE persona, not the character being viewed, so only render it when the
+  // viewed character IS the active character (an account can own several characters).
+  const isActiveCharacter = viewerEntryId === entryId;
   // Resolve a same-named org for the family click-through (#1446); membership-gated visibility
   // means an empty/absent result is normal — fall back to plain text in that case.
   const { data: familyOrg } = useOrganizationByName(entry?.character.family ?? '');
@@ -231,10 +235,11 @@ export function CharacterSheetPage() {
           <TabsContent value="locations" className="space-y-4">
             {/* Consolidated Locations tab (#1446): dwellings, tenancies, and ships. Own-only —
                 dwellings/tenancies are keyed on the viewed character's persona (never the
-                account's first-listed character, to avoid alt-leak), ships are self-scoped
-                server-side to the requester's active persona. Radix unmounts inactive tabs,
-                so these queries only fire when opened. */}
-            <LocationsTab personaId={viewedPersonaId} />
+                account's first-listed character, to avoid alt-leak); ships are self-scoped
+                server-side to the requester's ACTIVE persona, so isActiveCharacter gates
+                that section off when viewing a non-active character owned by this account.
+                Radix unmounts inactive tabs, so these queries only fire when opened. */}
+            <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
           </TabsContent>
         )}
       </Tabs>

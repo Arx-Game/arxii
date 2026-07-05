@@ -128,6 +128,7 @@ class CharacterSerializer(serializers.ModelSerializer):
                 covenant__covenant_type=CovenantType.DURANCE,
             )
             .select_related("covenant", "covenant_role")
+            .order_by("-engaged", "joined_at")
             .first()
         )
         if role is None:

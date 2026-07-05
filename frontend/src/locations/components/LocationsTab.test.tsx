@@ -100,7 +100,7 @@ describe('LocationsTab', () => {
       },
     ]);
 
-    renderWithProviders(<LocationsTab personaId={1} />);
+    renderWithProviders(<LocationsTab personaId={1} isActiveCharacter />);
 
     expect(screen.getByText('Owned Dwellings')).toBeInTheDocument();
     expect(screen.getByText('The Rookery')).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe('LocationsTab', () => {
     setRenown(makeRenown());
     setShips([]);
 
-    renderWithProviders(<LocationsTab personaId={1} />);
+    renderWithProviders(<LocationsTab personaId={1} isActiveCharacter />);
 
     expect(screen.getByTestId('domains-placeholder')).toHaveTextContent(
       'Domains your organizations hold will appear here (#1884).'
@@ -125,8 +125,50 @@ describe('LocationsTab', () => {
     setRenown(undefined);
     setShips(undefined);
 
-    renderWithProviders(<LocationsTab personaId={null} />);
+    renderWithProviders(<LocationsTab personaId={null} isActiveCharacter />);
 
     expect(screen.getByText(/No active character to view locations for/i)).toBeInTheDocument();
+  });
+
+  it('shows a muted notice instead of ships when viewing a non-active character', () => {
+    setRenown(
+      makeRenown({
+        owned_dwellings: [],
+        tenanted_rooms: [],
+      })
+    );
+    setShips([
+      {
+        id: 3,
+        ship_type: {
+          id: 1,
+          name: 'The Gull',
+          description: '',
+          base_hull: 10,
+          base_handling: 10,
+          base_armament: 10,
+          base_crew_capacity: 4,
+          base_cargo_capacity: 4,
+        },
+        effective_handling: 10,
+        effective_armament: 10,
+        effective_hull: 10,
+        handling_level: 0,
+        armament_level: 0,
+        crew_capacity: 4,
+        cargo_capacity: 4,
+        needs_repair: false,
+        owner_persona_id: 1,
+        owner_persona_name: 'Alice',
+        owner_covenant_id: null,
+        owner_covenant_name: null,
+      },
+    ]);
+
+    renderWithProviders(<LocationsTab personaId={1} isActiveCharacter={false} />);
+
+    expect(screen.getByText('Ships are visible while playing this character.')).toBeInTheDocument();
+    expect(screen.queryByText('The Gull')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ships')).not.toBeInTheDocument();
   });
 });

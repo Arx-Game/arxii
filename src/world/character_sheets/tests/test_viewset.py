@@ -69,6 +69,7 @@ from world.roster.factories import (
     TenureMediaFactory,
 )
 from world.scenes.factories import PersonaFactory
+from world.secrets.factories import SecretFactory
 from world.skills.factories import (
     CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
@@ -942,6 +943,72 @@ class TestDistinctionsEmpty(TestCase):
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["distinctions"] == []
+
+
+class TestDistinctionsPrivacy(TestCase):
+    """Server-side privacy for secret distinctions (final review, #1446).
+
+    A foreign (non-owner, non-staff) viewer's GET must not surface a secret distinction —
+    the public one is visible, the secret one is dropped entirely. The owner's own GET sees
+    both, with ``is_secret`` flagging the gated row.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with one public and one secret distinction."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="SecretDistChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.public_distinction = DistinctionFactory(name="PublicHonor")
+        cls.secret_distinction = DistinctionFactory(name="HiddenShame")
+
+        cls.public_cd = CharacterDistinctionFactory(
+            character=cls.character,
+            distinction=cls.public_distinction,
+            rank=1,
+        )
+        cls.secret_cd = CharacterDistinctionFactory(
+            character=cls.character,
+            distinction=cls.secret_distinction,
+            rank=1,
+            secret=SecretFactory(subject_sheet=cls.roster_entry.character_sheet),
+        )
+
+        # Foreign viewer: authenticated account with no tenure on this character.
+        cls.foreign_player = PlayerDataFactory()
+
+    def _get_distinctions(self, account) -> list:
+        """Fetch the distinctions section from the API as the given account."""
+        client = APIClient()
+        client.force_authenticate(user=account)
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = client.get(url)
+        assert response.status_code == 200
+        return response.data["distinctions"]
+
+    def test_foreign_viewer_does_not_see_secret_distinction(self) -> None:
+        """A foreign account's GET must contain the public name but never the secret one."""
+        distinctions = self._get_distinctions(self.foreign_player.account)
+        names = {d["name"] for d in distinctions}
+
+        assert "PublicHonor" in names
+        assert "HiddenShame" not in names
+
+    def test_owner_sees_both_distinctions_with_is_secret_flag(self) -> None:
+        """The owner's own GET contains both, with is_secret true on the gated row."""
+        distinctions = self._get_distinctions(self.player.account)
+        by_name = {d["name"]: d for d in distinctions}
+
+        assert set(by_name) == {"PublicHonor", "HiddenShame"}
+        assert by_name["PublicHonor"]["is_secret"] is False
+        assert by_name["HiddenShame"]["is_secret"] is True
 
 
 class TestMagicSectionFull(TestCase):
