@@ -83,7 +83,9 @@ export function StatusPanel({ characterId }: { characterId: number }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <section aria-label="Condition" className="space-y-1">
-          <p className="text-sm text-muted-foreground">{vitals.wound_description || 'Unhurt.'}</p>
+          <p className="text-sm text-muted-foreground">
+            {vitals.wound_description || 'A healthy appearance.'}
+          </p>
         </section>
 
         <section aria-label="Fatigue" className="space-y-2">

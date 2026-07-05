@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from drf_spectacular.utils import extend_schema
-from evennia.objects.models import ObjectDB
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -12,6 +11,7 @@ from rest_framework.views import APIView
 
 from world.action_points.models import ActionPointPool
 from world.action_points.serializers import ActionPointPoolSerializer
+from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
 
 
@@ -40,10 +40,12 @@ class ActionPointPoolView(APIView):
         if not self._can_view(request, character_id):
             raise NotFound
         try:
-            character = ObjectDB.objects.get(pk=character_id)  # noqa: OBJECTDB_PARAM
-        except ObjectDB.DoesNotExist:
+            sheet = CharacterSheet.objects.get(pk=character_id)
+        except CharacterSheet.DoesNotExist:
+            # Guards the staff path: a bare ObjectDB pk (a vase, a room) must never
+            # lazy-create a junk ActionPointPool row.
             raise NotFound from None
-        pool = ActionPointPool.get_or_create_for_character(character)
+        pool = ActionPointPool.get_or_create_for_character(sheet.character)
         payload = {
             "current": pool.current,
             "effective_maximum": pool.get_effective_maximum(),

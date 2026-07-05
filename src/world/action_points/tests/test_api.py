@@ -58,6 +58,19 @@ class ActionPointsApiTests(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_staff_get_on_non_character_pk_is_404_and_creates_no_pool(self) -> None:
+        from evennia_extensions.factories import ObjectDBFactory
+        from world.action_points.models import ActionPointPool
+
+        staff = AccountFactory(is_staff=True)
+        self.client.force_authenticate(user=staff)
+        vase = ObjectDBFactory(db_key="a vase of flowers")
+
+        response = self.client.get(AP_URL.format(pk=vase.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertFalse(ActionPointPool.objects.filter(character=vase).exists())
+
     def test_anonymous_is_denied(self) -> None:
         self.client.force_authenticate(user=None)
 
