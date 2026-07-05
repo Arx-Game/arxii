@@ -922,10 +922,23 @@ def _maybe_apply_surrounded(declaration: BattleActionDeclaration) -> bool:
     if not _is_isolated(participant):
         return False
 
-    pool = ConsequencePool.objects.filter(name=POOL_SURROUNDED_ENTRY).first()
-    template = ConditionTemplate.objects.filter(name=SURROUNDED_CONDITION_NAME).first()
+    pool = next(
+        (p for p in ConsequencePool.objects.cached_all() if p.name == POOL_SURROUNDED_ENTRY),
+        None,
+    )
+    try:
+        template = ConditionTemplate.get_by_name(SURROUNDED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        template = None
     entry_stage = (
-        ConditionStage.objects.filter(condition=template, stage_order=1).first()
+        next(
+            (
+                s
+                for s in ConditionStage.objects.cached_all()
+                if s.condition_id == template.pk and s.stage_order == 1
+            ),
+            None,
+        )
         if template is not None
         else None
     )
