@@ -914,6 +914,12 @@ class MissionOptionRouteReward(SharedMemoryModel):
         if self.sink != DeedRewardSink.RESONANCE and self.resonance_id is not None:
             msg = "resonance may only be set when sink=RESONANCE."
             raise ValidationError(msg)
+        if self.sink == DeedRewardSink.ITEM and self.item_template_id is None:
+            msg = "sink=ITEM requires item_template to be set."
+            raise ValidationError(msg)
+        if self.sink != DeedRewardSink.ITEM and self.item_template_id is not None:
+            msg = "item_template may only be set when sink=ITEM."
+            raise ValidationError(msg)
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()

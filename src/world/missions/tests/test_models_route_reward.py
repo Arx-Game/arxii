@@ -12,6 +12,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.checks.factories import CheckTypeFactory
+from world.items.factories import ItemTemplateFactory
 from world.magic.factories import ResonanceFactory
 from world.missions.constants import (
     DeedRewardKind,
@@ -226,6 +227,55 @@ class MissionOptionRouteRewardResonanceTests(TestCase):
             sink=DeedRewardSink.MONEY,
             amount=10,
             resonance=self.resonance,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+
+class MissionOptionRouteRewardItemTemplateTests(TestCase):
+    """Tests for the #707 item_template FK on MissionOptionRouteReward.
+
+    Mirrors ``MissionOptionRouteRewardResonanceTests`` above: item_template
+    is required when sink=ITEM, and forbidden otherwise — the same
+    bidirectional shape as the resonance/RESONANCE validation.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.route = MissionOptionRouteFactory()
+        cls.item_template = ItemTemplateFactory()
+
+    def test_item_sink_requires_item_template_fk(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.ITEM,
+            amount=None,
+            item_template=None,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_item_sink_with_item_template_fk_is_valid(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.ITEM,
+            amount=None,
+            item_template=self.item_template,
+        )
+        reward.clean()  # must not raise
+
+    def test_non_item_sink_forbids_item_template_fk(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+            item_template=self.item_template,
         )
         with self.assertRaises(ValidationError):
             reward.clean()
