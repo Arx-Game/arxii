@@ -525,3 +525,88 @@ class CrossingGrantsPathMagicTests(TestCase):
         PathGiftGrant.objects.all().delete()
         _accept(self.offer, self.puissant_path)
         self.assertFalse(CharacterGift.objects.filter(character=self.sheet).exists())
+
+
+class MidAudereMajoraCrossingTests(TestCase):
+    """is_mid_audere_majora_crossing / any_character_mid_audere_majora_crossing (#1899)."""
+
+    def test_pending_offer_means_mid_crossing(self) -> None:
+        from world.magic.audere_majora import is_mid_audere_majora_crossing
+
+        wire_audere_power_multipliers()
+        (_character, sheet, _threshold, _prospect, _puissant, _offer) = build_crossing_world(
+            5, "_pending"
+        )
+        assert is_mid_audere_majora_crossing(sheet) is True
+
+    def test_no_offer_no_condition_means_not_mid_crossing(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.audere_majora import is_mid_audere_majora_crossing
+
+        sheet = CharacterSheetFactory()
+        assert is_mid_audere_majora_crossing(sheet) is False
+
+    def test_active_condition_means_mid_crossing(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.audere_majora import is_mid_audere_majora_crossing
+
+        sheet = CharacterSheetFactory()
+        ConditionInstanceFactory(
+            target=sheet.character,
+            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME),
+        )
+        assert is_mid_audere_majora_crossing(sheet) is True
+
+    def test_batched_check_true_when_any_one_is_mid_crossing(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.audere_majora import any_character_mid_audere_majora_crossing
+
+        uninvolved = CharacterSheetFactory()
+        mid_crossing = CharacterSheetFactory()
+        ConditionInstanceFactory(
+            target=mid_crossing.character,
+            condition=ConditionTemplateFactory(name=AUDERE_MAJORA_CONDITION_NAME),
+        )
+        assert any_character_mid_audere_majora_crossing([uninvolved, mid_crossing]) is True
+
+    def test_batched_check_false_when_none_mid_crossing(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.audere_majora import any_character_mid_audere_majora_crossing
+
+        sheets = [CharacterSheetFactory() for _ in range(3)]
+        assert any_character_mid_audere_majora_crossing(sheets) is False
+
+    def test_batched_check_empty_input_is_false(self) -> None:
+        from world.magic.audere_majora import any_character_mid_audere_majora_crossing
+
+        assert any_character_mid_audere_majora_crossing([]) is False
+
+    def test_batched_check_is_bounded_query_count(self) -> None:
+        """Regression (#1899 spec review): must not issue one query pair per
+        character — a large battle can have 10+ active participants. Sheets
+        must be re-fetched from the DB (not the raw factory instances) so a
+        cached FK on the Python object can't hide an N+1."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.character_sheets.models import CharacterSheet
+        from world.magic.audere_majora import any_character_mid_audere_majora_crossing
+
+        ids = [CharacterSheetFactory().pk for _ in range(15)]
+        sheets = list(CharacterSheet.objects.filter(pk__in=ids))
+        with self.assertNumQueries(2):
+            any_character_mid_audere_majora_crossing(sheets)
+
+    def test_batched_check_true_for_pending_offer_branch(self) -> None:
+        """Regression (#1899 spec review): the PendingAudereMajoraOffer branch of
+        the batched function was previously unverified — only the ConditionInstance
+        branch had a true-case test."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.audere_majora import any_character_mid_audere_majora_crossing
+
+        wire_audere_power_multipliers()
+        (_character, mid_crossing_sheet, _threshold, _prospect, _puissant, _offer) = (
+            build_crossing_world(5, "_batchedoffer")
+        )
+        uninvolved = CharacterSheetFactory()
+        assert any_character_mid_audere_majora_crossing([uninvolved, mid_crossing_sheet]) is True

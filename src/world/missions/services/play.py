@@ -52,6 +52,7 @@ from world.narrative.services import emit_ambient_room_stir, send_narrative_mess
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionInstance, MissionNode
 
 
@@ -313,7 +314,19 @@ def _resolve_group_if_ready(
     "Done" is mode-specific: GROUP_VOTE needs every participant to have *voted*
     (stage 2); JOINT has no vote stage, so it resolves once every participant has
     *picked*. The timeout backstops both.
+
+    Paused instances short-circuit to None BEFORE ever calling
+    ``resolve_group_node`` (#1899 whole-branch review). ``resolve_group_node``
+    itself also returns ``[]`` when paused (for the cron sweep, which calls it
+    directly and only cares "did anything resolve"), but ``[] is not None`` —
+    every one of this module's five play-surface callers treats a non-None
+    return as "the beat really resolved." Without this early return, a paused
+    instance whose ballots satisfy the ready condition would fool the caller
+    into telling the player the beat resolved, when the mission is actually
+    frozen.
     """
+    if instance.is_paused:
+        return None
     ballots = MissionGroupBallot.objects.filter(instance=instance, node=node)
     if not ballots.exists():
         return None
@@ -341,7 +354,12 @@ def _resolve_if_expired(
     before it's even recorded, so the only reason to resolve up front is a window
     that already expired (someone returning after the party left). The full
     readiness check (``_resolve_group_if_ready``) runs after the write.
+
+    Paused instances short-circuit to None first — see ``_resolve_group_if_ready``'s
+    docstring for why this must happen before ``resolve_group_node`` is ever reached.
     """
+    if instance.is_paused:
+        return None
     deadline = _group_window_deadline(instance, node)
     if deadline is not None and timezone.now() >= deadline:
         return resolve_group_node(instance, node)
@@ -527,3 +545,39 @@ def cast_group_vote(
     if _resolve_group_if_ready(instance, node) is not None:
         return _resolved_group_result(instance, character)
     return GroupBeatResult(group_beat=_group_beat_view(instance, node), resolved=None)
+
+
+def maybe_pause_mission_for_disconnect(character_sheet: CharacterSheet) -> None:
+    """Pause every active MissionInstance the character currently participates
+    in, on disconnect (#1899).
+
+    No scale exception — missions don't reach battle-scale participant counts.
+    Pauses *all* matching instances, not just the first: nothing in
+    world/missions/services/run.py prevents a character being an ACTIVE
+    participant in more than one MissionInstance concurrently, so a naive
+    .first() would silently leave a second concurrent mission unpaused.
+
+    Deliberately per-instance ``.save(update_fields=...)`` rather than a bulk
+    ``.filter(...).update(...)``: MissionInstance is a SharedMemoryModel
+    (idmapper). A bulk queryset ``.update()`` writes the DB row directly and
+    bypasses the identity map, so an already-cached MissionInstance Python
+    object (e.g. one a caller elsewhere in the process is still holding) never
+    sees ``is_paused`` flip — confirmed empirically: the DB row shows
+    ``is_paused=True`` right after a bulk update, but the process's cached
+    instance (and thus ``refresh_from_db()`` on it, since idmapper's
+    model-construction hook returns the pre-existing cached object rather than
+    applying the freshly queried row) still reads ``False``. Loading each
+    instance and calling ``.save()`` goes through SharedMemoryModel's
+    post-save cache refresh instead, so the in-memory singleton is updated
+    too. The instance count here is bounded by one character's concurrent
+    mission count (small), so the extra queries are cheap.
+    """
+    from world.missions.models import MissionInstance, MissionParticipant  # noqa: PLC0415
+
+    instance_ids = MissionParticipant.objects.filter(
+        character=character_sheet.character,
+        instance__status=MissionStatus.ACTIVE,
+    ).values_list("instance_id", flat=True)
+    for instance in MissionInstance.objects.filter(pk__in=list(instance_ids)):
+        instance.is_paused = True
+        instance.save(update_fields=["is_paused"])

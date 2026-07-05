@@ -4343,6 +4343,25 @@ def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
         objectdb.delete()
 
 
+def maybe_pause_encounter_for_disconnect(character_sheet: CharacterSheet) -> None:
+    """Pause the character's live CombatEncounter, if any, on disconnect (#1899).
+
+    CombatEncounter has no scale exception (it's inherently small-scale —
+    PARTY_COMBAT/OPEN_ENCOUNTER/DUEL); every live encounter pauses. Reuses the
+    existing is_paused field/semantics unchanged (soft flag; only blocks the
+    TIMED-mode auto-resolve sweep, per its existing behavior).
+    """
+    participant = CombatParticipant.objects.filter(
+        character_sheet=character_sheet,
+        status=ParticipantStatus.ACTIVE,
+        encounter__completed_at__isnull=True,
+    ).first()
+    if participant is None:
+        return
+    participant.encounter.is_paused = True
+    participant.encounter.save(update_fields=["is_paused"])
+
+
 def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     """Return True if the encounter should be marked complete.
 
@@ -5346,8 +5365,30 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
             anima.save(update_fields=["current"])
 
 
+def _block_if_participant_mid_audere_majora_crossing(encounter: CombatEncounter) -> None:
+    """Hard, unconditional block (#1899): a round must never resolve while an
+    active participant is mid-Audere-Majora-crossing, regardless of
+    ``encounter.is_paused`` — that flag is a separate, softer disconnect-pause
+    concern. Extracted to keep ``resolve_round`` under the statement-count lint.
+    """
+    from world.magic.audere_majora import (  # noqa: PLC0415
+        any_character_mid_audere_majora_crossing,
+    )
+
+    active_sheets = [
+        p.character_sheet
+        for p in encounter.participants.filter(status=ParticipantStatus.ACTIVE).select_related(
+            "character_sheet"
+        )
+    ]
+    if any_character_mid_audere_majora_crossing(active_sheets):
+        raise ActionDispatchError(ActionDispatchError.PARTICIPANT_MID_CROSSING)
+
+
 @transaction.atomic
-def resolve_round(
+def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
+    # single-helper-call budget (see _fire_round_start), and the #1899
+    # climactic-moment guard is one more mandatory statement past the limit.
     encounter: CombatEncounter,
     *,
     defense_check_fn: PerformCheckFn | None = None,
@@ -5399,6 +5440,8 @@ def resolve_round(
     Returns:
         ``RoundResolutionResult`` with outcomes and phase transitions.
     """
+    _block_if_participant_mid_audere_majora_crossing(encounter)
+
     enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
     if enc.status != RoundStatus.DECLARING:
         msg = (

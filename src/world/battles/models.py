@@ -81,6 +81,12 @@ class Battle(SharedMemoryModel):
         default=BattleOutcome.UNRESOLVED,
     )
     concluded_at = models.DateTimeField(null=True, blank=True)
+    is_paused = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set when a participant disconnects (#1899) — see maybe_pause_battle_for_disconnect."
+        ),
+    )
     afk_peril_override = models.BooleanField(
         default=False,
         help_text=(

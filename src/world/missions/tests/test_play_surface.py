@@ -32,8 +32,10 @@ from world.missions.constants import (
     OptionSource,
 )
 from world.missions.factories import (
+    MissionInstanceFactory,
     MissionNodeFactory,
     MissionOptionFactory,
+    MissionParticipantFactory,
     MissionTemplateFactory,
 )
 from world.missions.models import MissionInstance
@@ -463,3 +465,54 @@ class InstancedPlayTests(TestCase):
         record = InstancedRoom.objects.filter(room_id=spawned.pk).first()
         # Completed (occupants relocated) — or already deleted as ephemeral.
         assert record is None or record.status == InstanceStatus.COMPLETED
+
+
+class MaybePauseMissionForDisconnectTests(TestCase):
+    def test_pauses_active_instance(self) -> None:
+        from world.missions.services.play import maybe_pause_mission_for_disconnect
+
+        instance = MissionInstanceFactory()
+        sheet = CharacterSheetFactory()
+        MissionParticipantFactory(instance=instance, character=sheet.character)
+
+        maybe_pause_mission_for_disconnect(sheet)
+
+        instance.refresh_from_db()
+        assert instance.is_paused is True
+
+    def test_no_active_participation_is_a_noop(self) -> None:
+        from world.missions.services.play import maybe_pause_mission_for_disconnect
+
+        sheet = CharacterSheetFactory()
+        maybe_pause_mission_for_disconnect(sheet)  # No MissionParticipant row — must not raise.
+
+    def test_non_active_instance_is_not_paused(self) -> None:
+        from world.missions.constants import MissionStatus
+        from world.missions.services.play import maybe_pause_mission_for_disconnect
+
+        instance = MissionInstanceFactory(status=MissionStatus.COMPLETE)
+        sheet = CharacterSheetFactory()
+        MissionParticipantFactory(instance=instance, character=sheet.character)
+
+        maybe_pause_mission_for_disconnect(sheet)
+
+        instance.refresh_from_db()
+        assert instance.is_paused is False
+
+    def test_pauses_all_concurrent_active_instances(self) -> None:
+        """Regression (#1899 spec review): a naive .first() would silently
+        leave a second concurrently-active mission unpaused."""
+        from world.missions.services.play import maybe_pause_mission_for_disconnect
+
+        sheet = CharacterSheetFactory()
+        instance_a = MissionInstanceFactory()
+        instance_b = MissionInstanceFactory()
+        MissionParticipantFactory(instance=instance_a, character=sheet.character)
+        MissionParticipantFactory(instance=instance_b, character=sheet.character)
+
+        maybe_pause_mission_for_disconnect(sheet)
+
+        instance_a.refresh_from_db()
+        instance_b.refresh_from_db()
+        assert instance_a.is_paused is True
+        assert instance_b.is_paused is True

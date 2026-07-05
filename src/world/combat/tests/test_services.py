@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.test import TestCase
 import pytest
 
+from actions.errors import ActionDispatchError
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
@@ -861,3 +862,121 @@ class SceneParticipationOnCombatEntryTest(TestCase):
         self.assertTrue(
             SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
         )
+
+
+class MaybePauseEncounterForDisconnectTests(TestCase):
+    def test_pauses_live_encounter(self) -> None:
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        encounter = CombatEncounterFactory()
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+
+        maybe_pause_encounter_for_disconnect(sheet)
+
+        encounter.refresh_from_db()
+        assert encounter.is_paused is True
+
+    def test_no_active_participant_is_a_noop(self) -> None:
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        sheet = CharacterSheetFactory()
+        # No CombatParticipant row at all — must not raise.
+        maybe_pause_encounter_for_disconnect(sheet)
+
+    def test_completed_encounter_is_not_paused(self) -> None:
+        from django.utils import timezone
+
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        encounter = CombatEncounterFactory(completed_at=timezone.now())
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+
+        maybe_pause_encounter_for_disconnect(sheet)
+
+        encounter.refresh_from_db()
+        assert encounter.is_paused is False
+
+    def test_fled_participant_is_not_paused(self) -> None:
+        from world.combat.services import maybe_pause_encounter_for_disconnect
+
+        encounter = CombatEncounterFactory()
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.FLED
+        )
+
+        maybe_pause_encounter_for_disconnect(sheet)
+
+        encounter.refresh_from_db()
+        assert encounter.is_paused is False
+
+
+class ResolveRoundClimacticMomentBlockTests(TestCase):
+    def test_blocks_when_active_participant_mid_crossing(self) -> None:
+        from world.magic.factories import wire_audere_power_multipliers
+        from world.magic.tests.majora_fixtures import build_crossing_world
+
+        wire_audere_power_multipliers()
+        (_character, mid_crossing_sheet, _threshold, _prospect, _puissant, _offer) = (
+            build_crossing_world(5, "_resolveblock")
+        )
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=mid_crossing_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        with self.assertRaises(ActionDispatchError) as ctx:
+            resolve_round(encounter)
+        assert ctx.exception.code == ActionDispatchError.PARTICIPANT_MID_CROSSING
+
+    def test_does_not_block_when_is_paused_false_and_no_one_mid_crossing(self) -> None:
+        """Proves the hard block is a separate check from is_paused, not
+        accidentally gated by it — must still allow resolution normally when
+        nobody is mid-crossing, regardless of is_paused state."""
+        encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, is_paused=False
+        )
+        sheet = CharacterSheetFactory()
+        CombatParticipantFactory(
+            encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=sheet, defaults={"health": 100, "max_health": 100}
+        )
+
+        resolve_round(encounter)  # Must not raise PARTICIPANT_MID_CROSSING.
+
+
+class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
+    """Regression (#1899 whole-branch review): the caller-side sheet-list build
+    must not reintroduce a per-participant N+1 that the batched
+    ``any_character_mid_audere_majora_crossing`` check exists to avoid (see
+    ``world/magic/tests/test_audere_majora_crossing.py::
+    test_batched_check_is_bounded_query_count``)."""
+
+    def test_guard_query_count_bounded_regardless_of_participant_count(self) -> None:
+        from world.combat.services import _block_if_participant_mid_audere_majora_crossing
+
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, round_number=1)
+        sheet_ids = [CharacterSheetFactory().pk for _ in range(12)]
+        for sheet_id in sheet_ids:
+            CombatParticipantFactory(
+                encounter=encounter,
+                character_sheet_id=sheet_id,
+                status=ParticipantStatus.ACTIVE,
+            )
+
+        # 1 query for the select_related participant+sheet join, 2 for the
+        # batched crossing check (PendingAudereMajoraOffer + ConditionInstance)
+        # — bounded regardless of participant count. A regression that drops
+        # select_related would instead cost 1 + 12 (one per participant) + 2.
+        with self.assertNumQueries(3):
+            _block_if_participant_mid_audere_majora_crossing(encounter)

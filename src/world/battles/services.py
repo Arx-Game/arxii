@@ -22,6 +22,7 @@ from world.battles.constants import (
     DEFAULT_ROUND_LIMIT,
     DEFAULT_VICTORY_THRESHOLD,
     FORTIFICATION_LEVEL_INTEGRITY_BONUS,
+    LARGE_SCALE_BATTLE_PARTICIPANT_THRESHOLD,
     VEHICLE_HAZARD_BASE_DAMAGE,
     VEHICLE_HAZARD_UNIT_STRENGTH_PENALTY,
     BattleActionKind,
@@ -824,6 +825,29 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     run_battle_conclusion_hooks(battle)
 
     return battle
+
+
+def maybe_pause_battle_for_disconnect(character_sheet: CharacterSheet) -> None:
+    """Pause the character's live Battle on disconnect, unless it's large-scale
+    and the character isn't mid-Audere-Majora-crossing (#1899)."""
+    from world.magic.audere_majora import is_mid_audere_majora_crossing  # noqa: PLC0415
+
+    participant = BattleParticipant.objects.filter(
+        character_sheet=character_sheet,
+        status=BattleParticipantStatus.ACTIVE,
+        battle__concluded_at__isnull=True,
+    ).first()
+    if participant is None:
+        return
+    battle = participant.battle
+    participant_count = BattleParticipant.objects.filter(
+        battle=battle, status=BattleParticipantStatus.ACTIVE
+    ).count()
+    is_large_scale = participant_count >= LARGE_SCALE_BATTLE_PARTICIPANT_THRESHOLD
+    if is_large_scale and not is_mid_audere_majora_crossing(character_sheet):
+        return
+    battle.is_paused = True
+    battle.save(update_fields=["is_paused"])
 
 
 def maybe_conclude_on_timer(*, battle: Battle) -> BattleOutcome | None:

@@ -211,3 +211,18 @@ class MissionDeedRecordTests(TestCase):
         self.assertEqual(rumor.ref, "heist-rumor")
         # The reward summary is a relation of typed rows, not a JSON blob.
         self.assertFalse(hasattr(deed, "reward_summary"))
+
+
+class MissionInstanceIsPausedFieldTests(TestCase):
+    """`is_paused` (#1899) — plain boolean, no behavior wired yet."""
+
+    def test_defaults_to_false(self) -> None:
+        instance = MissionInstanceFactory()
+        self.assertFalse(instance.is_paused)
+
+    def test_can_be_set_true_and_persists(self) -> None:
+        instance = MissionInstanceFactory()
+        instance.is_paused = True
+        instance.save(update_fields=["is_paused"])
+        instance.refresh_from_db()
+        self.assertTrue(instance.is_paused)

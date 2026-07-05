@@ -1069,6 +1069,12 @@ class MissionInstance(SharedMemoryModel):
     )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    is_paused = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set when a participant disconnects (#1899) — see maybe_pause_mission_for_disconnect."
+        ),
+    )
     # #1753 — the after-action report (RESOLVED → COMPLETE). Set when the player
     # reports the outcome to the report-to Functionary; the chosen style drives the
     # money / fame-prestige / resonance deltas.

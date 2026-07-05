@@ -37522,6 +37522,9 @@ components:
           description: Where the run currently sits; null = complete.
         status:
           $ref: '#/components/schemas/MissionInstanceStatusEnum'
+        is_paused:
+          type: boolean
+          description: Set when a participant disconnects (#1899) — see maybe_pause_mission_for_disconnect.
         started_at:
           type: string
           format: date-time

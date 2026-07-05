@@ -58,3 +58,10 @@ class BattleActionKindSiegeTests(TestCase):
     def test_breach_and_fortify_are_valid_choices(self) -> None:
         self.assertIn(BattleActionKind.BREACH, BattleActionKind.values)
         self.assertIn(BattleActionKind.FORTIFY, BattleActionKind.values)
+
+
+class LargeScaleBattleParticipantThresholdTests(TestCase):
+    def test_large_scale_battle_participant_threshold_is_ten(self) -> None:
+        from world.battles.constants import LARGE_SCALE_BATTLE_PARTICIPANT_THRESHOLD
+
+        assert LARGE_SCALE_BATTLE_PARTICIPANT_THRESHOLD == 10

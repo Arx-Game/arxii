@@ -17,6 +17,7 @@ class ActionDispatchError(Exception):
     ROUND_REPEAT_BLOCKED = "round_repeat_blocked"
     PULL_ALREADY_COMMITTED = "pull_already_committed"
     PULL_INVALID = "pull_invalid"
+    PARTICIPANT_MID_CROSSING = "participant_mid_crossing"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -27,6 +28,7 @@ class ActionDispatchError(Exception):
         ROUND_REPEAT_BLOCKED: "You have already acted this round.",
         PULL_ALREADY_COMMITTED: "You have already pulled a thread this round.",
         PULL_INVALID: "That pull cannot be applied to this action.",
+        PARTICIPANT_MID_CROSSING: "A participant needs a moment — try again shortly.",
     }
     _FALLBACK = "That action could not be completed."
 

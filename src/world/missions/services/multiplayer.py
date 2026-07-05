@@ -143,8 +143,16 @@ def resolve_group_node(
     result routes once.
 
     Ballots are deleted after resolution. Returns the resulting deeds; an empty
-    list when no ballots exist (nothing to resolve).
+    list when no ballots exist (nothing to resolve) OR when ``instance`` is
+    paused (#1899) — a disconnect-pause freezes group resolution too, and this
+    is the single choke point both the lazy on-access path
+    (``_resolve_group_if_ready``) and the cron backstop sweep
+    (``resolve_expired_group_votes``) call into, so gating here covers both
+    callers rather than just one.
     """
+    if instance.is_paused:
+        return []
+
     from world.missions.models import MissionGroupBallot  # noqa: PLC0415
 
     ballots = list(

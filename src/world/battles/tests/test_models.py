@@ -258,3 +258,16 @@ class BattleVehicleTests(TestCase):
         vehicle = BattleVehicleFactory(vehicle_kind=VehicleKind.DRAGON, is_structural=False)
 
         self.assertFalse(vehicle.is_structural)
+
+
+class BattleIsPausedFieldTests(TestCase):
+    def test_defaults_to_false(self) -> None:
+        battle = BattleFactory()
+        assert battle.is_paused is False
+
+    def test_can_be_set_true_and_persists(self) -> None:
+        battle = BattleFactory()
+        battle.is_paused = True
+        battle.save(update_fields=["is_paused"])
+        battle.refresh_from_db()
+        assert battle.is_paused is True

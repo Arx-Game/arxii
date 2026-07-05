@@ -271,6 +271,8 @@ class CmdBattle(ArxCommand):
             )
         else:
             lines.append("No active round.")
+        if battle.is_paused:
+            lines.append("Status: PAUSED (a participant recently disconnected)")
         self.msg("\n".join(lines))
 
     def _declare(self, rest: list[str]) -> None:
