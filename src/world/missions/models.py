@@ -866,6 +866,14 @@ class MissionOptionRouteReward(SharedMemoryModel):
         related_name="mission_route_rewards",
         help_text="Required when sink=RESONANCE: which Resonance this reward grants.",
     )
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
+    )
     contract_holder_only = models.BooleanField(
         default=False,
         help_text=(
@@ -1552,6 +1560,14 @@ class MissionDeedRewardLine(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Set when sink=RESONANCE: which Resonance this line grants.",
+    )
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
     ref = models.CharField(
         max_length=200,

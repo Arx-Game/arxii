@@ -220,3 +220,4 @@ class DeedRewardSink(models.TextChoices):
     RUMOR = "rumor", "Rumor"
     CRIME_WATCH = "crime_watch", "Crime Watch"
     BEAT = "beat", "Beat"
+    ITEM = "item", "Item"
