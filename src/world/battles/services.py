@@ -67,7 +67,7 @@ from world.battles.models import (
     BattleVehicle,
     Fortification,
 )
-from world.combat.constants import OpponentTier
+from world.combat.constants import OpponentTier, RiskLevel
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
@@ -93,6 +93,7 @@ def create_battle(
     name: str,
     campaign_story: Story | None = None,
     round_limit: int = DEFAULT_ROUND_LIMIT,
+    risk_level: str = RiskLevel.LOW,
 ) -> Battle:
     """Create a new Battle (and its backing Scene).
 
@@ -100,11 +101,17 @@ def create_battle(
         name: Human-readable name for the battle.
         campaign_story: Optional parent Story this battle belongs to.
         round_limit: Maximum number of rounds before auto-conclusion.
+        risk_level: Stakes level for companion death-gating (#1873).
 
     Returns:
         The newly created ``Battle`` instance.
     """
-    battle = Battle(name=name, campaign_story=campaign_story, round_limit=round_limit)
+    battle = Battle(
+        name=name,
+        campaign_story=campaign_story,
+        round_limit=round_limit,
+        risk_level=risk_level,
+    )
     battle.save()  # Battle.save() auto-creates the backing Scene
     return battle
 

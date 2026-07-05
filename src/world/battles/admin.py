@@ -28,8 +28,8 @@ from world.battles.models import (
 
 @admin.register(Battle)
 class BattleAdmin(admin.ModelAdmin):
-    list_display = ("name", "outcome", "round_limit", "created_at")
-    list_filter = ("outcome",)
+    list_display = ("name", "outcome", "round_limit", "risk_level", "created_at")
+    list_filter = ("outcome", "risk_level")
     search_fields = ("name",)
 
 

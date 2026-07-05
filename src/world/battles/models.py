@@ -29,6 +29,7 @@ from world.battles.constants import (
     UnitQuality,
     VehicleKind,
 )
+from world.combat.constants import RiskLevel
 from world.conditions.models import CapabilityType
 from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
@@ -86,6 +87,16 @@ class Battle(SharedMemoryModel):
             "When true, a Surrounded participant's peril escalates every round the GM "
             "resolves regardless of whether they declared this round (narrow, explicit "
             "ADR-0004 exception scoped to peril only — see ADR-0074)."
+        ),
+    )
+    risk_level = models.CharField(
+        max_length=10,
+        choices=RiskLevel.choices,
+        default=RiskLevel.LOW,
+        help_text=(
+            "Stakes axis for companion death-gating (#1873). "
+            "EXTREME/LETHAL make companion death possible on defeat. "
+            "Mirrors CombatEncounter.risk_level."
         ),
     )
     region = models.ForeignKey(

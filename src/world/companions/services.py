@@ -11,7 +11,9 @@ from world.magic.constants import EffectKind, TargetKind
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 
 if TYPE_CHECKING:
+    from world.battles.models import Battle, BattleSide, BattleVehicle
     from world.character_sheets.models import CharacterSheet
+    from world.combat.models import CombatEncounter, CombatOpponent, ThreatPool
     from world.companions.models import Companion, CompanionArchetype
     from world.magic.models.gifts import Gift
 
@@ -104,3 +106,144 @@ def release_companion(companion: Companion) -> None:
     # level, outside any single instance's .save() path — any other process-cached
     # Companion for this pk would otherwise keep reporting a stale non-null objectdb.
     Companion.flush_instance_cache()
+
+
+def materialize_companion_as_combat_opponent(
+    companion: Companion,
+    encounter: CombatEncounter,
+    *,
+    threat_pool: ThreatPool | None = None,
+) -> CombatOpponent:
+    """Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).
+
+    Mirrors ``summon_ally``'s ``add_opponent`` call, but sources stats from
+    the persistent ``CompanionArchetype`` instead of a one-shot summon payload.
+    Sets allegiance=ALLY, summoned_by=owner, bond_expires_round=None
+    (persistent, not ephemeral).
+
+    Args:
+        companion: The persistent Companion to bridge.
+        encounter: The active CombatEncounter to add the opponent to.
+        threat_pool: Optional ThreatPool; if None, uses encounter's first.
+
+    Returns:
+        The created CombatOpponent (ALLY, sourced from archetype stats).
+    """
+    from world.combat.constants import CombatAllegiance  # noqa: PLC0415
+    from world.combat.services import add_opponent  # noqa: PLC0415
+
+    archetype = companion.archetype
+
+    opponent = add_opponent(
+        encounter,
+        name=companion.name,
+        tier=archetype.tier,
+        threat_pool=threat_pool,
+        max_health=archetype.max_health,
+        soak_value=archetype.soak_value,
+        existing_objectdb=companion.objectdb,
+    )
+
+    opponent.allegiance = CombatAllegiance.ALLY
+    opponent.summoned_by = companion.owner
+    # bond_expires_round stays None — persistent companion, not ephemeral.
+    opponent.save(update_fields=["allegiance", "summoned_by"])
+
+    return opponent
+
+
+def materialize_companion_as_battle_vehicle(
+    companion: Companion,
+    battle: Battle,
+    side: BattleSide,
+) -> BattleVehicle:
+    """Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).
+
+    Mirrors ``materialize_ship_as_battle_vehicle``, snapshots the archetype's
+    strength into a non-structural COMPANION-kind BattleVehicle, and links
+    via ``CompanionDeployment`` (mirroring ``ShipDeployment``).
+
+    Args:
+        companion: The persistent Companion to bridge.
+        battle: The active Battle.
+        side: The BattleSide the companion fights on.
+
+    Returns:
+        The created BattleVehicle (COMPANION kind, non-structural).
+    """
+    from world.battles.constants import VehicleKind  # noqa: PLC0415
+    from world.battles.services import create_battle_vehicle  # noqa: PLC0415
+    from world.companions.models import CompanionDeployment  # noqa: PLC0415
+
+    archetype = companion.archetype
+    vehicle = create_battle_vehicle(
+        battle=battle,
+        side=side,
+        place_name=companion.name,
+        vehicle_kind=VehicleKind.COMPANION,
+        is_structural=False,
+    )
+    # Set the unit's strength from the archetype (create_battle_vehicle
+    # uses the default 100; the companion's strength is authored).
+    vehicle.unit.strength = archetype.strength
+    vehicle.unit.save(update_fields=["strength"])
+
+    CompanionDeployment.objects.create(
+        companion=companion,
+        battle=battle,
+        vehicle=vehicle,
+    )
+
+    return vehicle
+
+
+def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
+    """Resolve a bridged companion's defeat consequence (#1873).
+
+    At LOW/MODERATE/HIGH: no effect on the persistent Companion (ephemeral
+    combat participation). At EXTREME/LETHAL: draws from the companion-defeat
+    ConsequencePool; the ``die`` outcome calls ``release_companion``.
+
+    Args:
+        companion: The persistent Companion whose bridged opponent was defeated.
+        risk_level: The RiskLevel of the encounter/battle the companion fought in.
+
+    Returns:
+        True if the companion was released (died), False otherwise.
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
+    )
+
+    if risk_level not in RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT:
+        return False
+
+    # Lethal stakes: consult the companion-defeat pool.
+    from world.companions.factories_combat import (  # noqa: PLC0415
+        create_companion_defeat_pool,
+    )
+
+    pool = create_companion_defeat_pool()
+    consequences = pool.cached_consequences
+    if not consequences:
+        return False
+
+    # Weighted draw — mirrors the weighted selection in select_consequence
+    # but without a check roll (the defeat IS the trigger, not a check result).
+    import random  # noqa: PLC0415
+
+    total_weight = sum(c.weight for c in consequences)
+    if total_weight <= 0:
+        return False
+
+    roll = random.randint(1, total_weight)  # noqa: S311
+    cumulative = 0
+    for consequence in consequences:
+        cumulative += consequence.weight
+        if roll <= cumulative:
+            if consequence.character_loss:
+                release_companion(companion)
+                return True
+            return False
+
+    return False

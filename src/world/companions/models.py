@@ -11,6 +11,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.combat.constants import OpponentTier
 from world.companions.constants import CompanionDomain
 
 
@@ -38,6 +39,25 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
     )
     capacity_cost = models.PositiveSmallIntegerField(
         help_text="Companion Capacity consumed while this archetype is bonded.",
+    )
+    # Combat stats for bridging into encounters/battles (#1873).
+    max_health = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Max health when bridged into a CombatOpponent (manual mode).",
+    )
+    soak_value = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Damage mitigation when bridged into a CombatOpponent.",
+    )
+    tier = models.CharField(
+        max_length=20,
+        choices=OpponentTier.choices,
+        default=OpponentTier.MOOK,
+        help_text="Opponent tier when bridged into a CombatOpponent.",
+    )
+    strength = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Unit strength when bridged into a BattleVehicle.",
     )
 
     class Meta:
@@ -96,3 +116,36 @@ class Companion(SharedMemoryModel):
     @property
     def is_active(self) -> bool:
         return self.released_at is None
+
+
+class CompanionDeployment(SharedMemoryModel):
+    """Links a persistent ``Companion`` to its in-battle ``BattleVehicle``.
+
+    Lives in ``companions`` (not ``battles``) per ADR-0010: the FK points from
+    the more specific/dependent system (companions) at the reusable battle
+    primitives, so ``battles`` stays free of a companions import — mirroring
+    ``ShipDeployment`` in ``world/ships/models.py``.
+    """
+
+    companion = models.ForeignKey(
+        Companion,
+        on_delete=models.CASCADE,
+        related_name="deployments",
+    )
+    battle = models.ForeignKey(
+        "battles.Battle",
+        on_delete=models.CASCADE,
+        related_name="companion_deployments",
+    )
+    vehicle = models.OneToOneField(
+        "battles.BattleVehicle",
+        on_delete=models.CASCADE,
+        related_name="companion_deployment",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["battle", "companion"]
+
+    def __str__(self) -> str:
+        return f"Deployment of companion {self.companion_id} into battle {self.battle_id}"
