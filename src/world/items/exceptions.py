@@ -238,6 +238,26 @@ class OutfitIncomplete(InventoryError):
     )
 
 
+class OwnedByAnother(InventoryError):
+    """Raised when a plain take targets a room item owned by someone else (#1909).
+
+    Steal is the deliberate bypass (with consequences); plain pick_up never
+    reassigns another character's item.
+    """
+
+    user_message = "That belongs to someone else."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That belongs to someone else."})
+
+
+class ContainerAccessDenied(InventoryError):
+    """Raised when a container's access policy bars a taker from its contents (#1909)."""
+
+    user_message = "You aren't permitted to take things from there."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You aren't permitted to take things from there."},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Material consumption errors (services/materials.py)
 # ---------------------------------------------------------------------------

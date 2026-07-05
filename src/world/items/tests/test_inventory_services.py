@@ -34,6 +34,7 @@ from world.items.exceptions import (
     NotInContainer,
     NotInPossession,
     NotReachable,
+    OwnedByAnother,
     RecipientNotAdjacent,
 )
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
@@ -87,12 +88,18 @@ class PickUpTests(TestCase):
         # #684: pickup sets the holder body (CharacterSheet), not the account.
         self.assertEqual(self.item.holder_character_sheet, self.sheet)
 
-    def test_pickup_does_not_overwrite_existing_owner(self) -> None:
+    def test_pickup_of_item_owned_by_another_raises_and_does_not_overwrite_owner(self) -> None:
+        """Room item already owned by someone else cannot be plainly picked up (#1909).
+
+        The ownership gate now blocks this before any mutation — steal is the
+        bypass (a later task), plain pick_up never reassigns another's item.
+        """
         other_character = CharacterFactory(db_key="OtherOwner")
         other_sheet = CharacterSheetFactory(character=other_character)
         self.item.holder_character_sheet = other_sheet
         self.item.save()
-        pick_up(self.character_state, self.item_state)
+        with self.assertRaises(OwnedByAnother):
+            pick_up(self.character_state, self.item_state)
         self.item.refresh_from_db()
         self.assertEqual(self.item.holder_character_sheet, other_sheet)
 
@@ -736,6 +743,8 @@ class TakeOutTests(TestCase):
         )
         self.character.db_account = self.account
         self.character.save()
+        # #1909 gate reads the taker's sheet_data — every acting character has one.
+        self.sheet = CharacterSheetFactory(character=self.character)
 
         container_template = ItemTemplateFactory(
             name="TakeOutTest Box",

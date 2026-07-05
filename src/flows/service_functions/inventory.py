@@ -7,12 +7,15 @@ failures roll back fully.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from world.items.constants import OwnershipEventType
 from world.items.exceptions import (
+    ContainerAccessDenied,
     ContainerClosed,
     ContainerFull,
     ItemTooLarge,
@@ -22,10 +25,66 @@ from world.items.exceptions import (
     NotInContainer,
     NotInPossession,
     NotReachable,
+    OwnedByAnother,
     RecipientNotAdjacent,
 )
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.items.models import ItemInstance
+    from world.roster.models import RosterTenure
+
+
+def _active_tenure_for_sheet(sheet: CharacterSheet) -> RosterTenure | None:
+    """Return ``sheet``'s active ``RosterTenure`` (end_date null), or None for NPCs (#1909).
+
+    Mirrors the dispatch layer's sheet→active-tenure resolution
+    (``actions.player_interface``). An NPC-owned sheet has no live tenure.
+    """
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    return RosterTenure.objects.filter(
+        roster_entry__character_sheet=sheet,
+        end_date__isnull=True,
+    ).first()
+
+
+def _container_policy_denies(taker_sheet: CharacterSheet, container_instance: ItemInstance) -> bool:
+    """True when the container's access policy bars ``taker_sheet`` from its contents."""
+    from world.items.constants import ContainerAccessPolicy  # noqa: PLC0415
+
+    owner_sheet = container_instance.holder_character_sheet
+    policy = container_instance.access_policy
+    if policy == ContainerAccessPolicy.OPEN or owner_sheet is None:
+        return False
+    if owner_sheet.pk == taker_sheet.pk:
+        return False
+    if policy == ContainerAccessPolicy.OWNER_ONLY:
+        return True
+    # FRIENDS: resolve both sides to active tenures; NPC sides have none → deny.
+    owner_tenure = _active_tenure_for_sheet(owner_sheet)
+    taker_tenure = _active_tenure_for_sheet(taker_sheet)
+    if owner_tenure is None or taker_tenure is None:
+        return True
+    from world.scenes.friend_services import is_friend  # noqa: PLC0415
+
+    return not is_friend(owner_tenure=owner_tenure, friend_tenure=taker_tenure)
+
+
+def take_requires_steal(taker_sheet: CharacterSheet, item_instance: ItemInstance) -> bool:
+    """The one ownership/policy test (#1909): True → only ``steal`` may move it.
+
+    Room item owned by someone else → steal. Container item: the container's
+    policy decides; policy pass → plain take even if the item belongs to the
+    container's owner (sanctioned borrowing).
+    """
+    container = item_instance.contained_in
+    if container is not None:
+        return _container_policy_denies(taker_sheet, container)
+    owner = item_instance.holder_character_sheet
+    return owner is not None and owner.pk != taker_sheet.pk
 
 
 def _fire_item_acquisition_triggers(acquirer: CharacterState, item: ItemState) -> None:
@@ -64,6 +123,10 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     """
     if not item.can_take(taker=character):
         raise NotReachable
+    if take_requires_steal(character.obj.sheet_data, item.instance):
+        if item.instance.contained_in is not None:
+            raise ContainerAccessDenied
+        raise OwnedByAnother
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
@@ -261,6 +324,8 @@ def take_out(character: CharacterState, item: ItemState) -> None:
         raise NotReachable
     if item.instance.contained_in is None:
         raise NotInContainer
+    if take_requires_steal(character.obj.sheet_data, item.instance):
+        raise ContainerAccessDenied
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
