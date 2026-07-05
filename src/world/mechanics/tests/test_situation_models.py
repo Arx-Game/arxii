@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from actions.factories import ConsequencePoolFactory
 from world.checks.factories import CheckTypeFactory
-from world.mechanics.factories import SituationTemplateFactory
+from world.mechanics.factories import SituationTemplateFactory, SituationTrapLinkFactory
 from world.mechanics.models import SituationTrapLink
 
 
@@ -24,3 +24,13 @@ class SituationTrapLinkModelTest(TestCase):
         assert link.is_hidden is True
         assert template.trap_links.get() == link
         assert str(link) == "The Sealed Passage — trap: Spike Pit"
+
+
+class SituationTrapLinkFactoryTest(TestCase):
+    def test_factory_builds_valid_link(self) -> None:
+        link = SituationTrapLinkFactory()
+
+        assert link.pk is not None
+        assert link.detect_difficulty == 20
+        assert link.disarm_difficulty == 20
+        assert link.is_hidden is True
