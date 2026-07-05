@@ -183,9 +183,12 @@ def death_is_permitted(
     - source_character is None (absent/non-lethal environmental context).
     - source_character is a PC (ADR-0023: PvP is non-lethal).
     - The victim carries an active death_deferred condition.
+    - The victim is story-critical and the source is not a participant (#1874).
 
     Returns True only for a non-PC source with no active death_deferred on
-    the victim (i.e. a significant-NPC attacker in a lethal encounter).
+    the victim and no story-criticality protection (i.e. a significant-NPC
+    attacker in a lethal encounter, where the victim is not load-bearing
+    for any active story).
     """
     if source_character is None:
         return False
@@ -196,6 +199,13 @@ def death_is_permitted(
     from world.conditions.services import has_death_deferred  # noqa: PLC0415
 
     if has_death_deferred(victim_sheet.character):
+        return False
+
+    from world.stories.npc_protection import (  # noqa: PLC0415
+        is_death_prevented_by_story,
+    )
+
+    if is_death_prevented_by_story(victim_sheet, source_character):
         return False
 
     return True

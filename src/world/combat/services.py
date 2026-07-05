@@ -2622,7 +2622,25 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # Hero Killer cannot be defeated -- narrative immunity ("you must run").
     defeated = opponent.health <= 0 and opponent.tier != OpponentTier.HERO_KILLER
     if defeated:
-        opponent.status = OpponentStatus.DEFEATED
+        # Story-criticality check: prevent death if NPC is load-bearing
+        # for a story the attacker isn't part of (#1874).
+        from world.stories.flee_services import flee_story_critical_npc  # noqa: PLC0415
+        from world.stories.npc_protection import (  # noqa: PLC0415
+            is_death_prevented_by_story,
+        )
+
+        npc_sheet = None
+        if opponent.objectdb is not None:
+            try:
+                npc_sheet = opponent.objectdb.sheet_data
+            except AttributeError:
+                npc_sheet = None
+        attacker = source_sheet.character if source_sheet else None
+        if npc_sheet is not None and is_death_prevented_by_story(npc_sheet, attacker):
+            flee_story_critical_npc(opponent, attacker)
+            defeated = False
+        else:
+            opponent.status = OpponentStatus.DEFEATED
 
     opponent.save(update_fields=["health", "probing_current", "status"])
 
