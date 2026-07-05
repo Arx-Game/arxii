@@ -585,10 +585,28 @@ class MidAudereMajoraCrossingTests(TestCase):
 
     def test_batched_check_is_bounded_query_count(self) -> None:
         """Regression (#1899 spec review): must not issue one query pair per
-        character — a large battle can have 10+ active participants."""
+        character — a large battle can have 10+ active participants. Sheets
+        must be re-fetched from the DB (not the raw factory instances) so a
+        cached FK on the Python object can't hide an N+1."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.character_sheets.models import CharacterSheet
+        from world.magic.audere_majora import any_character_mid_audere_majora_crossing
+
+        ids = [CharacterSheetFactory().pk for _ in range(15)]
+        sheets = list(CharacterSheet.objects.filter(pk__in=ids))
+        with self.assertNumQueries(2):
+            any_character_mid_audere_majora_crossing(sheets)
+
+    def test_batched_check_true_for_pending_offer_branch(self) -> None:
+        """Regression (#1899 spec review): the PendingAudereMajoraOffer branch of
+        the batched function was previously unverified — only the ConditionInstance
+        branch had a true-case test."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.audere_majora import any_character_mid_audere_majora_crossing
 
-        sheets = [CharacterSheetFactory() for _ in range(15)]
-        with self.assertNumQueries(2):
-            any_character_mid_audere_majora_crossing(sheets)
+        wire_audere_power_multipliers()
+        (_character, mid_crossing_sheet, _threshold, _prospect, _puissant, _offer) = (
+            build_crossing_world(5, "_batchedoffer")
+        )
+        uninvolved = CharacterSheetFactory()
+        assert any_character_mid_audere_majora_crossing([uninvolved, mid_crossing_sheet]) is True

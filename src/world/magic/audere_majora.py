@@ -223,9 +223,13 @@ def any_character_mid_audere_majora_crossing(
         return True
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
-    characters = [s.character for s in sheets]
+    # CharacterSheet.character is a OneToOneField(primary_key=True), so
+    # sheet.pk == sheet.character_id. Filter by id directly instead of
+    # dereferencing `.character` on each sheet, which would issue an
+    # uncached query per sheet (an N+1 identical in shape to the one this
+    # batched function exists to prevent; #1899 spec review).
     return ConditionInstance.objects.filter(
-        target__in=characters,
+        target_id__in=[s.pk for s in sheets],
         condition__name=AUDERE_MAJORA_CONDITION_NAME,
     ).exists()
 
