@@ -198,3 +198,55 @@ def materialize_companion_as_battle_vehicle(
     )
 
     return vehicle
+
+
+def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
+    """Resolve a bridged companion's defeat consequence (#1873).
+
+    At LOW/MODERATE/HIGH: no effect on the persistent Companion (ephemeral
+    combat participation). At EXTREME/LETHAL: draws from the companion-defeat
+    ConsequencePool; the ``die`` outcome calls ``release_companion``.
+
+    Args:
+        companion: The persistent Companion whose bridged opponent was defeated.
+        risk_level: The RiskLevel of the encounter/battle the companion fought in.
+
+    Returns:
+        True if the companion was released (died), False otherwise.
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT,
+    )
+
+    if risk_level not in RISK_LEVELS_REQUIRING_ACKNOWLEDGEMENT:
+        return False
+
+    # Lethal stakes: consult the companion-defeat pool.
+    from world.companions.factories_combat import (  # noqa: PLC0415
+        create_companion_defeat_pool,
+    )
+
+    pool = create_companion_defeat_pool()
+    consequences = pool.cached_consequences
+    if not consequences:
+        return False
+
+    # Weighted draw — mirrors the weighted selection in select_consequence
+    # but without a check roll (the defeat IS the trigger, not a check result).
+    import random  # noqa: PLC0415
+
+    total_weight = sum(c.weight for c in consequences)
+    if total_weight <= 0:
+        return False
+
+    roll = random.randint(1, total_weight)  # noqa: S311
+    cumulative = 0
+    for consequence in consequences:
+        cumulative += consequence.weight
+        if roll <= cumulative:
+            if consequence.character_loss:
+                release_companion(companion)
+                return True
+            return False
+
+    return False
