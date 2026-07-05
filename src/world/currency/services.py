@@ -199,6 +199,53 @@ def mint_instrument(
     return instance
 
 
+def _loose_cache_template():
+    """Lazy ItemTemplate for loose-coin caches (same precedent as _instrument_template)."""
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+
+    template, _ = ItemTemplate.objects.get_or_create(
+        name="Loose coins",
+        defaults={"description": "A handful of mixed coins."},
+    )
+    return template
+
+
+def mint_loose_cache(
+    *,
+    amount: int,
+    holder_sheet: CharacterSheet,
+    from_purse: CharacterPurse | None = None,
+    from_treasury: OrganizationTreasury | None = None,
+) -> ItemInstance:
+    """Convert ledger money into a loose-coin cache item (#1909).
+
+    Unlike ``mint_instrument`` the face value is arbitrary and there is NO
+    mint fee — this is everyday cash, not a grand instrument. Value is
+    conserved: it leaves the ledger and lives in the item until redemption
+    (``redeem_instrument`` handles deposit unchanged — it is face_value-driven).
+    """
+    from world.currency.constants import Denomination  # noqa: PLC0415
+    from world.items.models import ItemInstance  # noqa: PLC0415
+
+    with transaction.atomic():
+        transfer(
+            amount=amount,
+            reason="withdraw loose coins",
+            from_purse=from_purse,
+            from_treasury=from_treasury,
+        )
+        instance = ItemInstance.objects.create(
+            template=_loose_cache_template(),
+            holder_character_sheet=holder_sheet,
+        )
+        CurrencyInstrumentDetails.objects.create(
+            item_instance=instance,
+            denomination=Denomination.LOOSE,
+            face_value=amount,
+        )
+    return instance
+
+
 def redeem_instrument(
     *,
     instance: ItemInstance,

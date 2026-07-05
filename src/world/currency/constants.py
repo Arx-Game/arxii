@@ -25,6 +25,7 @@ class Denomination(models.TextChoices):
     DUCHESS = "duchess", "Duchess"
     QUEEN = "queen", "Queen"
     EMPRESS = "empress", "Empress"
+    LOOSE = "loose", "Loose Coins"
 
 
 # Face value of each instrument, in coppers.
