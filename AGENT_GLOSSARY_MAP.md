@@ -40,6 +40,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [buildings](src/world/buildings/AGENT_GLOSSARY.md)
 - [forms](src/world/forms/AGENT_GLOSSARY.md)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
+- [assets](src/world/assets/AGENT_GLOSSARY.md)
 
 ## Relationships (how the root concepts connect)
 

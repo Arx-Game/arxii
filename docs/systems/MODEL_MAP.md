@@ -544,6 +544,15 @@
 - `where_listing(viewer_account: 'object | None' = None) -> 'list[WhereEntry]' — Characters currently in PUBLIC rooms, with their coloured location paths (#1463).`
 
 
+## world.assets
+
+### NPCAsset
+**Foreign Keys:**
+  - promoter_persona -> scenes.Persona [FK]
+  - asset_persona -> scenes.Persona [OneToOne]
+  - source_functionary -> npc_services.Functionary [FK]
+
+
 ## world.battles
 
 ### Battle
@@ -3784,6 +3793,8 @@
 **Foreign Keys:**
   - role -> npc_services.NPCRole [FK]
   - room -> evennia_extensions.RoomProfile [FK]
+**Pointed to by:**
+  - promotions <- assets.NPCAsset
 
 ### NPCServiceOffer
 **Foreign Keys:**
@@ -4534,6 +4545,8 @@
   - contracts_proposed <- currency.Contract
   - contracts_received <- currency.Contract
   - businesses <- currency.Business
+  - promoted_assets <- assets.NPCAsset
+  - asset_promotion <- assets.NPCAsset
   - authored_secrets <- secrets.Secret
   - secret_victimhoods <- secrets.SecretVictim
   - heat_rows <- justice.PersonaHeat

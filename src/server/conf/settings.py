@@ -78,6 +78,7 @@ INSTALLED_APPS += [
     "world.boundaries.apps.BoundariesConfig",
     "world.codex.apps.CodexConfig",
     "world.companions.apps.CompanionsConfig",
+    "world.assets.apps.AssetsConfig",
     "world.clues.apps.CluesConfig",
     "world.secrets.apps.SecretsConfig",
     "world.conditions.apps.ConditionsConfig",

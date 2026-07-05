@@ -224,8 +224,12 @@ Build to the ADR; these are not open questions. See
   (generic bound-creature substrate + Beastlord beast-binding, see
   [companions.md](../systems/companions.md)); still `intent`: **gifts/paths
   built around companionship** beyond the one shipped Gift. The **NPCAsset
-  informant/contact promotion mechanic** (the other half #672 originally
-  bundled) is split to its own follow-up issue, `intent`.
+  informant/contact promotion mechanic** — #1872 — **shipped** (see
+  [INDEX.md](../systems/INDEX.md) "Assets" section); still `intent`:
+  distinction-granted starting assets (`needs-design`), asset gameplay loops
+  (tasking/intel/income), compromise/loss lifecycle, voluntary asset
+  sharing, guard/fan/minor-ally variants — none yet filed as separate
+  follow-up issues.
 
 ## Species & racial framework
 

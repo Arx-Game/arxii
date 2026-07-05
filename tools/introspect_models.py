@@ -21,6 +21,7 @@ TARGET_APPS = [
     "flows",
     "typeclasses",
     "world.areas",
+    "world.assets",
     "world.attempts",
     "world.battles",
     "world.boundaries",

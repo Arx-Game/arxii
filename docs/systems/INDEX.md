@@ -1815,6 +1815,38 @@ companion. Full detail: [companions.md](companions.md).
   (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
 - **Source:** `src/world/companions/`
 
+### Assets (#1872)
+
+Promotes a class-1 `Functionary` into a permanently-owned, named NPC
+(informant/contact/personal-favor) once rapport crosses a threshold and a
+capability trait gate is met. Modeled as a plain `NPCServiceOffer` on the
+existing offer/effect-dispatch framework — see ADR-0091.
+
+- **Models:** `NPCAsset` (`promoter_persona`, `asset_persona` — both FK
+  `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`;
+  `status`; `created_at`). No `standing` field — ongoing affection reads
+  through the existing `NPCStanding` row for the same persona pair.
+- **`OfferKind`** additions: `INFORMANT`, `CONTACT`, `PERSONAL_FAVOR`
+  (`world.npc_services.constants`).
+- **Effect handlers** (`world.assets.effects`): resolve the Functionary from
+  the PC's current location + the offer's role, roll `offer.check_type`
+  directly (final offers don't auto-roll), and on success spawn a
+  Character+CharacterSheet+PRIMARY Persona via
+  `create_character_with_sheet`, place it in the Functionary's room, create
+  the `NPCAsset` row, and deactivate the source Functionary. Registered via
+  `AssetsConfig.ready()`.
+- **Seed content** (`world.assets.content`): reuses the existing
+  Stealth/Leadership/Persuasion check content
+  (`world.seeds.stealth_checks`/`governance_checks`/`social_checks`) rather
+  than inventing new Trait rows — framework-proving only.
+- **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
+  at `/api/assets/`, scoped to the requesting user's own promoted assets.
+- **Source:** `src/world/assets/`
+
+Deferred follow-ups: distinction-granted starting assets (`needs-design`),
+asset gameplay loops (tasking/intel/income), compromise/loss lifecycle,
+voluntary asset sharing, guard/fan/minor-ally variants.
+
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
 `RoomFeatureInstance` decorates a `RoomProfile` and dispatches per-kind logic

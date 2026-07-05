@@ -704,6 +704,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/AreaRoom'
           description: ''
+  /api/assets/:
+    get:
+      operationId: assets_list
+      description: Read endpoints for the player's own promoted assets.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNPCAssetList'
+          description: ''
+  /api/assets/{id}/:
+    get:
+      operationId: assets_retrieve
+      description: Read endpoints for the player's own promoted assets.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this npc asset.
+        required: true
+      tags:
+      - assets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NPCAsset'
+          description: ''
   /api/assistant-gm-claims/:
     get:
       operationId: assistant_gm_claims_list
@@ -38623,6 +38667,44 @@ components:
       - name
       - primary_persona_id
       - profile_picture_url
+    NPCAsset:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        asset_persona_name:
+          type: string
+          readOnly: true
+        role_context:
+          allOf:
+          - $ref: '#/components/schemas/RoleContextEnum'
+          readOnly: true
+          description: |-
+            What kind of relationship this asset serves.
+
+            * `informant` - Informant
+            * `contact` - Contact
+            * `personal_favor` - Personal Favor
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NPCAssetStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - asset_persona_name
+      - created_at
+      - id
+      - role_context
+      - status
+    NPCAssetStatusEnum:
+      enum:
+      - active
+      type: string
+      description: '* `active` - Active'
     NPCRole:
       type: object
       properties:
@@ -38716,6 +38798,9 @@ components:
             * `collection` - Collection
             * `improvement` - Improvement
             * `court_grant` - Court Grant
+            * `informant` - Informant
+            * `contact` - Contact
+            * `personal_favor` - Personal Favor
         label:
           type: string
           description: UI display text for the menu option.
@@ -38784,6 +38869,9 @@ components:
       - collection
       - improvement
       - court_grant
+      - informant
+      - contact
+      - personal_favor
       type: string
       description: |-
         * `permit` - Permit
@@ -38792,6 +38880,9 @@ components:
         * `collection` - Collection
         * `improvement` - Improvement
         * `court_grant` - Court Grant
+        * `informant` - Informant
+        * `contact` - Contact
+        * `personal_favor` - Personal Favor
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -38809,6 +38900,9 @@ components:
             * `collection` - Collection
             * `improvement` - Improvement
             * `court_grant` - Court Grant
+            * `informant` - Informant
+            * `contact` - Contact
+            * `personal_favor` - Personal Favor
         label:
           type: string
           minLength: 1
@@ -41269,6 +41363,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Mute'
+    PaginatedNPCAssetList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NPCAsset'
     PaginatedNPCRoleList:
       type: object
       required:
@@ -44274,6 +44391,9 @@ components:
             * `collection` - Collection
             * `improvement` - Improvement
             * `court_grant` - Court Grant
+            * `informant` - Informant
+            * `contact` - Contact
+            * `personal_favor` - Personal Favor
         label:
           type: string
           minLength: 1
@@ -48396,6 +48516,16 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    RoleContextEnum:
+      enum:
+      - informant
+      - contact
+      - personal_favor
+      type: string
+      description: |-
+        * `informant` - Informant
+        * `contact` - Contact
+        * `personal_favor` - Personal Favor
     RoomComfortBreakdown:
       type: object
       description: The owner build-HUD payload for one room (#1514).
