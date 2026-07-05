@@ -51,7 +51,7 @@ class CmdCraftTests(TestCase):
         assert any("facet" in m for m in messages)
 
     def test_craft_facet_dispatches_attach_facet_action(self):
-        caller, item_obj, _ = self._make_caller_with_item()
+        caller, item_obj, instance = self._make_caller_with_item()
         from world.magic.models import Facet
 
         facet = Facet.objects.create(name="CmdCraftGlow")
@@ -65,7 +65,7 @@ class CmdCraftTests(TestCase):
             self._run(caller, f"facet {facet.name} item={item_obj.id}")
         mocked.assert_called_once()
         assert mocked.call_args.kwargs["facet"] == facet
-        assert mocked.call_args.kwargs["item"] == item_obj
+        assert mocked.call_args.kwargs["item_instance"] == instance
 
     def test_craft_removefacet_dispatches_detach_action(self):
         caller, _item_obj, item_instance = self._make_caller_with_item()

@@ -80,26 +80,34 @@ class CmdCraft(ArxCommand):
         except CommandError as err:
             self.msg(str(err))
 
-    def _resolve_item(self, item_id_raw: str) -> Any:
+    def _resolve_item_instance(self, item_id_raw: str) -> Any:
+        from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415
+
         if not item_id_raw or not item_id_raw.isdigit():
             raise CommandError(_USAGE)
         obj = self.caller.search(f"#{item_id_raw}", location=self.caller)
         if not obj:
             msg = "You aren't holding that item."
             raise CommandError(msg)
-        return obj
+        instance = resolve_item_instance(obj)
+        if instance is None:
+            msg = "That isn't an item."
+            raise CommandError(msg)
+        return instance
 
     def _do_facet(self, rest: str) -> None:
         from world.magic.models import Facet  # noqa: PLC0415
 
         kwargs = _parse_kwargs(rest)
         name = _leading_text(rest)
-        item = self._resolve_item(kwargs.get("item", ""))
+        item_instance = self._resolve_item_instance(kwargs.get("item", ""))
         facet = Facet.objects.filter(name__iexact=name).first()
         if facet is None:
             msg = f"No facet called '{name}'."
             raise CommandError(msg)
-        result = AttachFacetAction().run(actor=self.caller, item=item, facet=facet)
+        result = AttachFacetAction().run(
+            actor=self.caller, item_instance=item_instance, facet=facet
+        )
         if result.message:
             self.msg(result.message)
 
@@ -114,8 +122,7 @@ class CmdCraft(ArxCommand):
         if item_facet is None:
             msg = "No such attached facet."
             raise CommandError(msg)
-        item_obj = item_facet.item_instance.game_object
-        result = DetachFacetAction().run(actor=self.caller, item=item_obj, item_facet=item_facet)
+        result = DetachFacetAction().run(actor=self.caller, item_facet=item_facet)
         if result.message:
             self.msg(result.message)
 
@@ -124,12 +131,14 @@ class CmdCraft(ArxCommand):
 
         kwargs = _parse_kwargs(rest)
         name = _leading_text(rest)
-        item = self._resolve_item(kwargs.get("item", ""))
+        item_instance = self._resolve_item_instance(kwargs.get("item", ""))
         style = Style.objects.filter(name__iexact=name).first()
         if style is None:
             msg = f"No style called '{name}'."
             raise CommandError(msg)
-        result = AttachStyleAction().run(actor=self.caller, item=item, style=style)
+        result = AttachStyleAction().run(
+            actor=self.caller, item_instance=item_instance, style=style
+        )
         if result.message:
             self.msg(result.message)
 
@@ -140,6 +149,7 @@ class CmdCraft(ArxCommand):
         from world.magic.models import Facet  # noqa: PLC0415
 
         kwargs = _parse_kwargs(rest)
+        self._resolve_item_instance(kwargs.get("item", ""))
         sheet = self.caller.sheet_data
         if "facet" in kwargs:  # noqa: STRING_LITERAL
             facet = Facet.objects.filter(name__iexact=kwargs["facet"]).first()
