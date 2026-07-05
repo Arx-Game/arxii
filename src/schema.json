@@ -13747,7 +13747,14 @@ paths:
       description: |-
         Sanctification entry point — ``POST /api/magic/sanctums/install/``.
 
-        Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
+        Body: ``{ room_profile_id, resonance_type_id, owner_mode, components }``.
+        ``components`` is an optional list of the caller's own ``ItemInstance``
+        pks (the Sanctification Ritual's touchstone/reagent
+        ``RitualComponentRequirement`` rows, #707) — explicit selection.
+        Ownership is checked here (against ``actor.sheet_data``, the same
+        puppet-resolved actor every other check in this view trusts) rather
+        than in the serializer, since the serializer has no reliable way to
+        resolve "the actor for this specific request".
         Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
         — action does the heavy validation (room ownership, leader
         standing, physical presence, partial-unique race window). Returns
@@ -37646,6 +37653,7 @@ components:
             * `rumor` - Rumor
             * `crime_watch` - Crime Watch
             * `beat` - Beat
+            * `item` - Item
         amount:
           type: integer
           maximum: 2147483647
@@ -37708,6 +37716,7 @@ components:
             * `rumor` - Rumor
             * `crime_watch` - Crime Watch
             * `beat` - Beat
+            * `item` - Item
         amount:
           type: integer
           maximum: 2147483647
@@ -37725,6 +37734,7 @@ components:
       - rumor
       - crime_watch
       - beat
+      - item
       type: string
       description: |-
         * `money` - Money
@@ -37733,6 +37743,7 @@ components:
         * `rumor` - Rumor
         * `crime_watch` - Crime Watch
         * `beat` - Beat
+        * `item` - Item
     MissionOptionSourceKindEnum:
       enum:
       - authored
@@ -43776,6 +43787,7 @@ components:
             * `rumor` - Rumor
             * `crime_watch` - Crime Watch
             * `beat` - Beat
+            * `item` - Item
         amount:
           type: integer
           maximum: 2147483647

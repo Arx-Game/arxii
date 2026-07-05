@@ -222,7 +222,21 @@ class RitualComponentRequirement(SharedMemoryModel):
     item_template = models.ForeignKey(
         "items.ItemTemplate",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="ritual_requirements",
+    )
+    min_touchstone_tier = models.ForeignKey(
+        "magic.ResonanceTier",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Touchstone mode: any attuned item whose tied_resonance matches the "
+            "performer's own claimed Resonance, at or above this tier, satisfies "
+            "this requirement. Exactly one of item_template/min_touchstone_tier is set."
+        ),
     )
     quantity = models.PositiveSmallIntegerField(default=1)
     min_quality_tier = models.ForeignKey(
@@ -233,6 +247,23 @@ class RitualComponentRequirement(SharedMemoryModel):
         related_name="+",
     )
     authored_provenance = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(item_template__isnull=False)
+                        & models.Q(min_touchstone_tier__isnull=True)
+                    )
+                    | (
+                        models.Q(item_template__isnull=True)
+                        & models.Q(min_touchstone_tier__isnull=False)
+                    )
+                ),
+                name="ritualcomponentrequirement_exactly_one_mode",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.ritual.name} needs {self.quantity}x {self.item_template_id}"

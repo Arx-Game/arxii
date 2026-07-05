@@ -17,6 +17,7 @@ Real factory objects, no ORM mocks.
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.items.factories import ItemTemplateFactory
 from world.magic.factories import ResonanceFactory
 from world.missions.constants import (
     DeedRewardKind,
@@ -236,6 +237,27 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
         self.assertEqual(len(matching), 1)
         self.assertEqual(matching[0].resonance_id, resonance.pk)
         self.assertEqual(matching[0].amount, 15)
+
+    def test_emit_terminal_rewards_copies_item_template_onto_the_line(self) -> None:
+        item_template = ItemTemplateFactory()
+        instance = MissionInstanceFactory(template=self.template)
+        char_h = CharacterFactory(db_key="ItemTemplateHolder")
+        MissionParticipantFactory(instance=instance, character=char_h, is_contract_holder=True)
+        route = _make_terminal_route(self.option)
+        route.reward_templates.create(
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.ITEM,
+            item_template=item_template,
+            contract_holder_only=False,
+        )
+        deed = MissionDeedRecordFactory(
+            instance=instance, actor=char_h, node=self.node, option=self.option
+        )
+
+        lines = emit_terminal_rewards(instance, route, deed)
+        matching = [ln for ln in lines if ln.sink == DeedRewardSink.ITEM]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0].item_template_id, item_template.pk)
 
 
 class EmitTerminalRewardsStubSealedRulesTests(TestCase):

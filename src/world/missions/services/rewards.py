@@ -139,6 +139,7 @@ def _line_for(
         sink=template.sink,
         amount=template.amount,
         resonance=template.resonance,
+        item_template=template.item_template,
         ref=template.ref,
     )
 
@@ -297,7 +298,7 @@ def _route_crime_watch(
     crime_watch.flag_crime(line, room=room)
 
 
-def _route_line(  # noqa: PLR0913 — keyword-only routing context threaded from apply_deed_rewards
+def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind, sink) pair
     deed: MissionDeedRecord,
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],
@@ -347,6 +348,17 @@ def _route_line(  # noqa: PLR0913 — keyword-only routing context threaded from
         stub_calls.append(StubCallRecord(sink=sink, line_id=line.pk))
         return
 
+    if kind == DeedRewardKind.IMMEDIATE and sink == DeedRewardSink.ITEM:
+        from world.items.services.narrative_grants import (  # noqa: PLC0415
+            grant_touchstone_item_to_character,
+        )
+
+        recipient_sheet = line.recipient.sheet_data
+        grant_touchstone_item_to_character(
+            character_sheet=recipient_sheet, template=line.item_template
+        )
+        return
+
     # CRIME_WATCH is live (#1765): mints heat + the society sting at the report
     # location. Skipped when the reporter dodged (mostly-accurate success) or
     # when no room context reached us (non-report callers have no "where").
@@ -387,6 +399,11 @@ def apply_deed_rewards(
         :func:`world.currency.services.deliver_mission_money` into the
         recipient's ``CharacterPurse`` (falls back to the money_stub only for
         a sheet-less recipient).
+      * ``(IMMEDIATE, ITEM)`` → real payout via
+        :func:`world.items.services.narrative_grants.grant_touchstone_item_to_character`:
+        mints an ``ItemInstance`` of ``line.item_template`` held by the
+        recipient's ``CharacterSheet`` — the touchstone/reagent narrative
+        grant path (#707).
       * ``(POST_CRON, LEGEND_POINTS)`` / ``(POST_CRON, RESONANCE)`` →
         idempotent ``update_or_create`` of a :class:`MissionRewardQueue`
         row keyed by ``line`` (the cron in Phase 5b.2 will flip

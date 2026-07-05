@@ -196,9 +196,10 @@ def ensure_sanctum_rituals() -> None:
     """Seed all Sanctum Ritual rows + check content. Safe to call repeatedly.
 
     Seeds the five SERVICE Ritual rows, wires the two Sanctification rows to
-    the Sanctum ``RoomFeatureKind`` via ``RoomFeatureKindInstallRitual``, then
-    calls ``seeds_checks.ensure_ritual_check_configs()`` to bind
-    CheckType/RitualCheckConfig rows for all five rituals.
+    the Sanctum ``RoomFeatureKind`` via ``RoomFeatureKindInstallRitual``, attaches
+    the touchstone/reagent ``RitualComponentRequirement`` rows (#707) to both
+    Sanctification rituals, then calls ``seeds_checks.ensure_ritual_check_configs()``
+    to bind CheckType/RitualCheckConfig rows for all five rituals.
     """
     ensure_homecoming_ritual()
     ensure_purging_ritual()
@@ -207,6 +208,13 @@ def ensure_sanctum_rituals() -> None:
     ensure_dissolution_ritual()
     _link_install_ritual_to_sanctum(personal, "Personal")
     _link_install_ritual_to_sanctum(covenant, "Covenant")
+
+    from world.magic.seeds_touchstone_content import (  # noqa: PLC0415
+        ensure_sanctification_requirements,
+    )
+
+    ensure_sanctification_requirements(personal)
+    ensure_sanctification_requirements(covenant)
 
     from world.magic.seeds_checks import ensure_ritual_check_configs  # noqa: PLC0415
 

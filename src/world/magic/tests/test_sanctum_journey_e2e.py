@@ -19,14 +19,16 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from commands.sanctum import CmdSanctum
-from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.locations.constants import HolderType, LocationParentType
 from world.locations.factories import LocationOwnershipFactory
 from world.magic.constants import SanctumSlotKind, TargetKind
 from world.magic.factories import ResonanceFactory
 from world.magic.models import (
     CharacterResonance,
+    ResonanceTier,
     SanctumDetails,
     SanctumOwnerMode,
     SanctumPendingPayout,
@@ -34,6 +36,7 @@ from world.magic.models import (
 )
 from world.magic.seeds_checks import ensure_magic_check_content
 from world.magic.seeds_sanctum import ensure_sanctum_rituals
+from world.magic.seeds_touchstone_content import ensure_touchstone_content
 from world.magic.services.sanctum_lvm import sum_homecoming_value
 from world.room_features.models import RoomFeatureInstance
 from world.room_features.seeds import ensure_sanctum_kind
@@ -128,6 +131,32 @@ class SanctumTelnetJourneyTests(TestCase):
             balance=200,
             lifetime_earned=200,
         )
+
+        # ensure_sanctum_rituals() (above) now attaches real touchstone + reagent
+        # RitualComponentRequirement rows to the Personal Sanctification ritual
+        # (#707) — carry matching items so Step 1 (install) can still succeed.
+        # Reagent templates are the shared seeded ones (candle/salt/incense);
+        # the touchstone is bespoke here since it must be tied to R1, not the
+        # seeded content's own Praedari-tied example template.
+        _, reagent_templates = ensure_touchstone_content()
+        faint_tier = ResonanceTier.objects.get(tier_level=1)
+        touchstone_template = ItemTemplateFactory(
+            tied_resonance=self.resonance_1, resonance_tier=faint_tier
+        )
+
+        def _carry(template, *, attuned: bool = False) -> None:
+            obj = ObjectDBFactory(db_typeclass_path="typeclasses.objects.Object")
+            obj.location = self.owner_char
+            obj.save()
+            ItemInstanceFactory(
+                template=template,
+                game_object=obj,
+                attuned_to_character_sheet=self.owner_sheet if attuned else None,
+            )
+
+        _carry(touchstone_template, attuned=True)
+        for reagent_template in reagent_templates:
+            _carry(reagent_template)
 
     def tearDown(self) -> None:
         self._check_patcher.stop()

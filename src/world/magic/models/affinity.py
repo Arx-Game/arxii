@@ -103,3 +103,26 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.affinity.name})"
+
+
+class ResonanceTier(SharedMemoryModel):
+    """Ordered potency tier for resonance-tied items and touchstones.
+
+    Independent of ``items.QualityTier`` (crafting/craftsmanship quality) —
+    resonance potency and crafting quality are orthogonal axes. A Tier-1
+    Praedari paw can be Masterwork-crafted; a Tier-3 Copperi reliquary can
+    be Common-quality.
+    """
+
+    name = models.CharField(max_length=50, unique=True)
+    tier_level = models.PositiveSmallIntegerField(
+        unique=True,
+        help_text="Ordering + threshold-comparison value (1=lowest).",
+    )
+    description = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["tier_level"]
+
+    def __str__(self) -> str:
+        return self.name

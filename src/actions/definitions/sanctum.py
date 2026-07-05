@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.types import ActionResult, TargetType
-from world.magic.exceptions import ResonanceInsufficient
+from world.magic.exceptions import ResonanceInsufficient, RitualComponentError
+from world.magic.models import Ritual, SanctumOwnerMode
 from world.magic.services.sanctum_install import (
     AbsorbError,
     DissolutionError,
@@ -139,16 +140,53 @@ class SanctumInstallAction(SanctumActionBase):
     icon: str = "home"
 
     def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from django.db import transaction  # noqa: PLC0415
+
+        from world.magic.seeds_sanctum import (  # noqa: PLC0415
+            SANCTIFICATION_COVENANT_RITUAL_NAME,
+            SANCTIFICATION_PERSONAL_RITUAL_NAME,
+        )
+        from world.magic.services.ritual_components import (  # noqa: PLC0415
+            resolve_and_consume_ritual_components,
+        )
+
         persona = self._persona(actor)
         if persona is None:
             return self._fail(_MSG_NO_ACTIVE_CHARACTER)
+
+        owner_mode = kwargs["owner_mode"]
+        ritual_name = (
+            SANCTIFICATION_PERSONAL_RITUAL_NAME
+            if owner_mode == SanctumOwnerMode.PERSONAL
+            else SANCTIFICATION_COVENANT_RITUAL_NAME
+        )
+        ritual = Ritual.objects.get(name=ritual_name)
+        components = kwargs.get("components_provided", [])
+
+        # Both the component consumption AND perform_sanctification's own
+        # validation must live in ONE transaction: perform_sanctification does
+        # its own @transaction.atomic, but that only wraps ITS body — by the
+        # time it's called, the consumption above would already be committed
+        # if not for this outer atomic block. A downstream SANCTUM_EXC (e.g.
+        # "room already has a feature installed") must roll back the
+        # already-consumed touchstone/reagents, not just fail cleanly while
+        # leaving them deleted.
         try:
-            result = perform_sanctification(
-                kwargs["room_profile"],
-                persona,
-                kwargs["resonance"],
-                owner_mode=kwargs["owner_mode"],
-            )
+            with transaction.atomic():
+                resolve_and_consume_ritual_components(
+                    ritual=ritual,
+                    components=components,
+                    performer_sheet=persona.character_sheet,
+                    resonance_context=kwargs["resonance"],
+                )
+                result = perform_sanctification(
+                    kwargs["room_profile"],
+                    persona,
+                    kwargs["resonance"],
+                    owner_mode=owner_mode,
+                )
+        except RitualComponentError as exc:
+            return self._fail(exc.user_message)
         except SANCTUM_EXC as exc:
             return self._fail(getattr(exc, "user_message", _MSG_OPERATION_FAILED))  # noqa: GETATTR_LITERAL
         if result.fizzled:

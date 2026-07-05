@@ -42,6 +42,7 @@ from world.magic.services.resonance import (
     spend_resonance_for_imbuing,
     spend_resonance_for_pull,
 )
+from world.magic.services.ritual_components import resolve_and_consume_ritual_components
 from world.magic.services.ritual_knowledge import reconcile_ritual_knowledge
 from world.magic.services.soulfray import (
     calculate_soulfray_severity,
@@ -76,6 +77,7 @@ from world.magic.services.threads import (
     update_thread_narrative,
     weave_thread,
 )
+from world.magic.services.touchstones import attune_touchstone
 from world.mechanics.services import (
     coherence_cache_scope,
 )
@@ -87,6 +89,8 @@ __all__ = [
     # threads
     "accept_thread_weaving_unlock",
     "apply_damage_reduction_from_threads",
+    # touchstones
+    "attune_touchstone",
     # techniques
     "calculate_effective_anima_cost",
     # soulfray
@@ -119,6 +123,7 @@ __all__ = [
     "provision_player_anima_ritual",
     "recompute_max_health_with_threads",
     "reconcile_ritual_knowledge",
+    "resolve_and_consume_ritual_components",
     "resolve_pending_alteration",
     "resolve_pull_effects",
     "seed_thread_survivability_tuning",

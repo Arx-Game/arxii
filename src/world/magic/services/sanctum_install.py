@@ -207,9 +207,14 @@ def perform_sanctification(
     Personal vs Covenant determined by ``owner_mode`` — each ritual's
     service function passes the right value (Ritual of Thine Own
     Sanctum → PERSONAL; Ritual of Blood Covenant Sanctification →
-    COVENANT). Components are validated + consumed when the touchstone-
-    item framework lands (#707); for now ``component_items`` is accepted
-    but unused.
+    COVENANT). Ritual of Sanctification's ``RitualComponentRequirement``
+    rows (#707) are validated/consumed one layer up, in
+    ``SanctumInstallAction.execute()`` (``resolve_and_consume_ritual_components``),
+    BEFORE this function is ever called — Sanctification doesn't dispatch
+    through the generic ``PerformRitualAction`` seam, so its bespoke Action
+    is the only place that consumption can live. ``component_items`` here is
+    vestigial (unused; no caller passes it) and may be removed in a future
+    cleanup.
     """
     from world.room_features.models import (  # noqa: PLC0415
         RoomFeatureInstance,

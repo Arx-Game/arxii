@@ -866,6 +866,14 @@ class MissionOptionRouteReward(SharedMemoryModel):
         related_name="mission_route_rewards",
         help_text="Required when sink=RESONANCE: which Resonance this reward grants.",
     )
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
+    )
     contract_holder_only = models.BooleanField(
         default=False,
         help_text=(
@@ -905,6 +913,12 @@ class MissionOptionRouteReward(SharedMemoryModel):
             raise ValidationError(msg)
         if self.sink != DeedRewardSink.RESONANCE and self.resonance_id is not None:
             msg = "resonance may only be set when sink=RESONANCE."
+            raise ValidationError(msg)
+        if self.sink == DeedRewardSink.ITEM and self.item_template_id is None:
+            msg = "sink=ITEM requires item_template to be set."
+            raise ValidationError(msg)
+        if self.sink != DeedRewardSink.ITEM and self.item_template_id is not None:
+            msg = "item_template may only be set when sink=ITEM."
             raise ValidationError(msg)
 
     def save(self, *args: object, **kwargs: object) -> None:
@@ -1552,6 +1566,14 @@ class MissionDeedRewardLine(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Set when sink=RESONANCE: which Resonance this line grants.",
+    )
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
     ref = models.CharField(
         max_length=200,

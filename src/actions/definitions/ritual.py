@@ -75,8 +75,7 @@ class PerformRitualAction(Action):
 
         try:
             with transaction.atomic():
-                matched_pks = self._validate_components(ritual, components)
-                self._consume(matched_pks)
+                self._validate_components(ritual, components, sheet)
 
                 if ritual.execution_kind == RitualExecutionKind.CEREMONY:
                     result = self._begin_ceremony(ritual, sheet)
@@ -109,32 +108,17 @@ class PerformRitualAction(Action):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _validate_components(self, ritual: Any, components: list[Any]) -> list[int]:
-        """Check that ``components`` satisfy all of the ritual's requirements.
+    def _validate_components(
+        self, ritual: Any, components: list[Any], performer_sheet: Any
+    ) -> None:
+        """Validate and consume ``ritual``'s components via the shared helper."""
+        from world.magic.services.ritual_components import (  # noqa: PLC0415
+            resolve_and_consume_ritual_components,
+        )
 
-        Delegates to ``gather_consumable_pks``, translating
-        ``InsufficientMaterials`` into the ritual-surface ``RitualComponentError``.
-        """
-        from world.items.exceptions import InsufficientMaterials  # noqa: PLC0415
-        from world.items.services.materials import gather_consumable_pks  # noqa: PLC0415
-        from world.magic.exceptions import RitualComponentError  # noqa: PLC0415
-
-        requirements = ritual.requirements.all().select_related("item_template", "min_quality_tier")
-        try:
-            return gather_consumable_pks(available=components, requirements=requirements)
-        except InsufficientMaterials as exc:
-            req = exc.requirement
-            msg = (
-                f"Ritual '{ritual.name}' requires {req.quantity}x "
-                f"'{req.item_template}' but only {exc.provided_qty} provided."
-            )
-            raise RitualComponentError(msg) from exc
-
-    def _consume(self, matched_pks: list[int]) -> None:
-        """Atomically consume the matched component instances."""
-        from world.items.services.materials import consume_pks  # noqa: PLC0415
-
-        consume_pks(matched_pks)
+        resolve_and_consume_ritual_components(
+            ritual=ritual, components=components, performer_sheet=performer_sheet
+        )
 
     def _dispatch_service(self, ritual: Any, sheet: Any, kwargs: dict[str, Any]) -> Any:
         """Import and call the ritual's service function.

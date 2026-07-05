@@ -67,7 +67,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `PendingRitualEffect` (in-progress CEREMONY record; unique per `(character, ritual)`;
     created by `PerformRitualAction`, consumed by finisher action `WeaveThreadAction`
     or `ImbueThreadAction`),
-    `RitualComponentRequirement`, `ThreadWeavingUnlock`,
+    `RitualComponentRequirement` (touchstone-mode: nullable `min_touchstone_tier` FK to
+    `ResonanceTier`, mutually exclusive with `item_template` via `CheckConstraint`, #707 —
+    see ADR-0087), `ResonanceTier` (ordered potency lookup for resonance-tied items,
+    independent of `items.QualityTier` — `name`, `tier_level`, `description`),
+    `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
     `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
     `ThreadSurvivabilityTuning` (per-`VitalBonusTarget` tuning row for the
@@ -338,9 +342,21 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
   mechanics (Property via Ritual site_property; Property-gated targeting via
   `Technique.target_prerequisites`, #1793),
-  items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
+  items (RitualComponentRequirement FKs ItemTemplate / QualityTier, or `ResonanceTier` in
+  touchstone-mode; `ItemTemplate.tied_resonance`/`resonance_tier` FK into magic, #707),
   flows (Ritual FLOW dispatch via FlowDefinition),
   covenants (`draft_validator_path` on Covenant Induction ritual → `assert_initiator_can_induct`)
+- **Touchstone attunement (#707 — ADR-0087):** `attune_touchstone(*, character_sheet, ritual,
+  item_instance)` (`world.magic.services.touchstones`) binds a resonance-tied `ItemInstance`
+  to the performer (does not consume it); dispatched by the seeded "Rite of Attunement"
+  `Ritual` (SERVICE, `seeds_touchstones.py`) through the generic `perform_ritual` seam — same
+  `POST /api/magic/rituals/perform/` / `CmdRitual` path every SERVICE ritual uses. The shared
+  `resolve_and_consume_ritual_components(*, ritual, components, performer_sheet,
+  resonance_context=None)` (`world.magic.services.ritual_components`) validates/consumes
+  touchstone-mode + template-mode requirements atomically (all-or-nothing); called from both
+  `PerformRitualAction._validate_components` and `SanctumInstallAction.execute()` (Sanctification
+  is `client_hosted=True` and does not dispatch through `PerformRitualAction` at all — see the
+  Sanctum entry above and ADR-0087).
 - **API endpoints (Spec A §4.5):**
   - `GET/POST/DELETE /api/magic/threads/`,
     `GET /api/magic/threads/{id}/` — list/create/soft-retire owned threads;
@@ -1891,6 +1907,12 @@ drain the well by physically visiting and performing an absorb action.
   / `sanctum_dissolve` / `sanctum_absorb` / `sanctum_sever`). `CmdSanctum`
   (`commands/sanctum.py`) is the namespaced telnet surface (`sanctum <subverb>`);
   the web `SanctumViewSet` dispatches the same Actions via `Action().run()`.
+- **Component-gated Sanctification (#707):** both Sanctification `Ritual` rows carry seeded
+  `RitualComponentRequirement` rows (a touchstone-mode row + 3 generic reagent rows, see the
+  magic system doc's "Touchstones + reagents" section). `sanctum_install` validates/consumes
+  them via `resolve_and_consume_ritual_components` before creating the Sanctum. `CmdSanctum`
+  auto-gathers carried items (`_gather_components`); the web `install` endpoint takes an explicit
+  `components` list of `ItemInstance` pks (`SanctifyActionSerializer.components`).
 - **API endpoints** (`world.magic.views_sanctum`):
   - `POST /api/magic/sanctums/install/` — `perform_sanctification` wrapper.
   - `POST /api/magic/sanctums/<id>/dissolve/` — `perform_dissolution`.
@@ -2032,7 +2054,9 @@ crafting framework and check-driven facet/style attachment.
     `attachment_quality_tier`; unique per (item_instance, style)
   - **Crafting sub-models** (`world.items.crafting`, registered under the `items` app):
     `CraftingRecipe` (one per `CraftingRecipeKind`; carries check config + AP/anima cost +
-    default consumption policy), `CraftingMaterialRequirement` (ingredient rows),
+    default consumption policy), `CraftingMaterialRequirement` (ingredient rows —
+    `world.items.seeds_facet_reagents.ensure_facet_attach_reagent_requirement(recipe)`
+    seeds a generic reagent requirement onto a FACET_ATTACH recipe, content-only, #707),
     `CraftingSkillCap` (skill-rank → quality ceiling ladder), `CraftingRecipeConsequence`
     (weighted consequence pool entry with per-row `cost_consumption` override). Replaces
     the old `FacetCraftingConfig` singleton.
@@ -2041,6 +2065,12 @@ crafting framework and check-driven facet/style attachment.
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
   — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
   by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
+- **New fields on `ItemTemplate` (touchstones, #707):** `tied_resonance` (nullable FK to
+  `magic.Resonance`) + `resonance_tier` (nullable FK to `magic.ResonanceTier`) — mark a template
+  as a resonance-tied touchstone; `CheckConstraint` requires both set together or both null
+- **New fields on `ItemInstance` (touchstone attunement, #707):** `attuned_to_character_sheet`
+  (nullable FK to CharacterSheet, `SET_NULL`) + `attuned_at` (nullable DateTimeField) — set by
+  `world.magic.services.touchstones.attune_touchstone()`
 - **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
@@ -2088,6 +2118,15 @@ crafting framework and check-driven facet/style attachment.
       returns PKs to delete; also used by the ritual path
     - `consume_pks(pks) -> None`
     - `meets_quality_tier(inst, requirement) -> bool`
+  - **Narrative acquisition** (`world.items.services.narrative_grants`, #707 — no shop/
+    merchant system exists anywhere in this codebase):
+    - `grant_touchstone_item_to_character(*, character_sheet, template, granted_by=None)
+      -> ItemInstance` — creates one `ItemInstance` of `template`, held by
+      `character_sheet`. `granted_by` is audit-only, never surfaced to the recipient
+      (mirrors `award_kudos`). Called by `CmdGrantItem` (staff telnet, `perm(Admin)`,
+      `grant_item <character>=<item template name>`, `src/commands/grant_item.py`) and by
+      the Mission `DeedRewardSink.ITEM` reward sink (`world.missions.services.rewards
+      ._route_line`, `IMMEDIATE`-dispatched, not queued)
 - **Predicates on `ItemInstance`:**
   - `differs_from_template` — True if instance has any per-instance data (custom name/desc,
     lore_value, quality_tier, facets, or non-CREATED provenance); gates soft- vs. hard-delete
@@ -2144,8 +2183,10 @@ crafting framework and check-driven facet/style attachment.
   `ItemDetailPanel`'s action row.
 - **Integrates with:** mechanics (equipment modifier walk via `passive_facet_bonuses` +
   `covenant_role_bonus`), magic (outfit trickle, `outfit_item_facet` ResonanceGrant FK,
-  ritual material consumption via shared `gather_consumable_pks`), covenants (gear archetype
-  compatibility), checks (`perform_check` + consequence pool)
+  ritual material consumption via shared `gather_consumable_pks`; touchstone
+  `tied_resonance`/`resonance_tier` FKs into `magic.Resonance`/`ResonanceTier`, #707),
+  covenants (gear archetype compatibility), checks (`perform_check` + consequence pool),
+  missions (`DeedRewardSink.ITEM` reward line grants via `grant_touchstone_item_to_character`)
 - **Source:** `src/world/items/`
 - **Details:** [items.md](items.md)
 

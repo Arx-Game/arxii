@@ -215,6 +215,23 @@ class ResonanceFactory(factory.django.DjangoModelFactory):
         self.properties.add(*extracted)
 
 
+class ResonanceTierFactory(factory.django.DjangoModelFactory):
+    """Factory for ResonanceTier."""
+
+    class Meta:
+        model = "magic.ResonanceTier"
+        # Dedup on `name`, not `tier_level`: get_or_create on tier_level would
+        # silently return the existing row for a duplicate-tier_level factory
+        # call instead of hitting the DB unique constraint (the
+        # django_get_or_create gotcha — see django_notes.md), which breaks
+        # test_tier_level_unique. Matches ResonanceFactory's own dedup key.
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Tier {n}")
+    tier_level = factory.Sequence(lambda n: n + 1)
+    description = ""
+
+
 class DistinctionResonanceGrantFactory(factory.django.DjangoModelFactory):
     """Factory for DistinctionResonanceGrant (#1834 currency-knob sidecar)."""
 

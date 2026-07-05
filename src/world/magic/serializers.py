@@ -1347,15 +1347,21 @@ class RitualPerformRequestSerializer(serializers.Serializer):
         return instances
 
     def validate(self, attrs: dict) -> dict:
-        """Cross-field validation: ensure components belong to the acting sheet."""
+        """Cross-field validation: ensure components belong to the acting sheet.
+
+        ``ItemInstance`` has no ``owner`` field — items are body-scoped via
+        ``holder_character_sheet`` (#684), mirroring the ownership check in
+        ``views_sanctum.py``'s ``SanctumViewSet.install``.
+        """
         actor = attrs.get("character_sheet_id")
         instances = attrs.get("components") or []
         if actor is not None and instances:
-            owner_account = actor.character.db_account_id
-            for inst in instances:
-                if inst.owner_id is not None and inst.owner_id != owner_account:
-                    msg = f"ItemInstance {inst.pk} is not owned by the actor."
-                    raise serializers.ValidationError(msg)
+            not_owned = [
+                inst.pk for inst in instances if inst.holder_character_sheet_id != actor.pk
+            ]
+            if not_owned:
+                msg = f"ItemInstance(s) not in your inventory: {sorted(not_owned)}."
+                raise serializers.ValidationError(msg)
         return attrs
 
 

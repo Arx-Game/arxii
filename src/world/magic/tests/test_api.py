@@ -16,6 +16,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.items.factories import ItemInstanceFactory
 from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -847,6 +848,55 @@ class RitualPerformViewTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_ritual_perform_rejects_foreign_owned_component(self) -> None:
+        """A component ItemInstance held by a DIFFERENT character's sheet is
+        rejected with 400, not a 500 crash.
+
+        Regression for the final-review Finding 2 fold-in:
+        ``RitualPerformRequestSerializer.validate()`` used to reference
+        ``inst.owner_id``, a field that does not exist on ``ItemInstance``
+        (only ``holder_character_sheet`` does) — this branch's own new work
+        (wiring touchstone-mode consumption into ``PerformRitualAction``)
+        makes this reachable via a real component requirement, so the
+        ownership check must actually work rather than crash.
+        """
+        foreign_account = AccountFactory(username="ritual_component_foreign")
+        foreign_character = CharacterFactory(db_key="RitualComponentForeign")
+        foreign_sheet = CharacterSheetFactory(character=foreign_character)
+        _link_account_to_sheet(foreign_account, foreign_character, foreign_sheet)
+        foreign_item = ItemInstanceFactory(holder_character_sheet=foreign_sheet)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:ritual-perform"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {},
+                "components": [foreign_item.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+
+    def test_ritual_perform_accepts_own_component(self) -> None:
+        """A component ItemInstance the requester genuinely holds is accepted
+        (not incorrectly rejected as foreign-owned, and no 500 crash)."""
+        own_item = ItemInstanceFactory(holder_character_sheet=self.sheet)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:ritual-perform"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {},
+                "components": [own_item.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
 
 class ThreadWeavingTeachingOfferViewSetTests(APITestCase):

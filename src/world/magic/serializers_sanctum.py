@@ -112,6 +112,37 @@ class SanctifyActionSerializer(serializers.Serializer):
     room_profile_id = serializers.IntegerField()
     resonance_type_id = serializers.IntegerField()
     owner_mode = serializers.ChoiceField(choices=["PERSONAL", "COVENANT"])
+    components = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+
+    def validate_components(self, value: list[int]) -> list:
+        """Resolve component PKs to ItemInstances (existence only).
+
+        Mirrors ``RitualPerformRequestSerializer.validate_components``
+        (``world/magic/serializers.py``) — explicit item-ID selection for the
+        web surface, as opposed to the telnet surface's auto-gather-from-
+        inventory (``commands.sanctum.CmdSanctum._gather_components``).
+
+        Ownership (``ItemInstance.holder_character_sheet`` against the body
+        actually acting in this request — #684) is deliberately NOT checked
+        here: the serializer has no reliable way to determine "the actor for
+        this specific request" (a per-request puppet, not account-wide
+        roster state). That check lives in ``SanctumViewSet.install``, right
+        alongside the same ``_resolve_actor`` every other check in that view
+        already trusts.
+        """
+        from world.items.models import ItemInstance  # noqa: PLC0415
+
+        if not value:
+            return []
+        instances = list(ItemInstance.objects.filter(pk__in=value))
+        found_pks = {inst.pk for inst in instances}
+        missing = set(value) - found_pks
+        if missing:
+            msg = f"ItemInstance(s) not found: {sorted(missing)}."
+            raise serializers.ValidationError(msg)
+        return instances
 
 
 class HomecomingActionSerializer(serializers.Serializer):

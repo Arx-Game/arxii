@@ -74,6 +74,8 @@ class ItemTemplateFactory(factory.django.DjangoModelFactory):
     size = 1
     value = 0
     is_active = True
+    tied_resonance = None
+    resonance_tier = None
 
     class Params:
         weapon = factory.Trait(

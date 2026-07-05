@@ -54,6 +54,7 @@ from world.magic.models.affinity import (
     AffinityManager,
     Resonance,
     ResonanceManager,
+    ResonanceTier,
 )
 from world.magic.models.alterations import (
     MagicalAlterationEvent,
@@ -306,6 +307,8 @@ __all__ = [
     # gain ledger (Spec C §2.4)
     "ResonanceGrant",
     "ResonanceManager",
+    # ordered potency tier for resonance-tied items/touchstones (#707)
+    "ResonanceTier",
     "Restriction",
     "RestrictionManager",
     "Ritual",

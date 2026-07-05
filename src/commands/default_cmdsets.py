@@ -76,6 +76,7 @@ from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
 from commands.gm_tables import CmdGMTable
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
+from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
 from commands.journals import CmdJournal
@@ -271,6 +272,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdProject,
             # #1500 — staff: demand a crowdfundable ransom for a held captive.
             CmdDemandRansom,
+            # #707 — staff: ad-hoc narrative item grant (no shop/merchant system exists).
+            CmdGrantItem,
             # #1470 — owner-gated room editor (name/description/public-private).
             CmdRoom,
             # #1498 — staff set-the-stage: apply a position blueprint to the room.

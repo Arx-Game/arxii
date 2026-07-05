@@ -201,7 +201,14 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
     def install(self, request):
         """Sanctification entry point — ``POST /api/magic/sanctums/install/``.
 
-        Body: ``{ room_profile_id, resonance_type_id, owner_mode }``.
+        Body: ``{ room_profile_id, resonance_type_id, owner_mode, components }``.
+        ``components`` is an optional list of the caller's own ``ItemInstance``
+        pks (the Sanctification Ritual's touchstone/reagent
+        ``RitualComponentRequirement`` rows, #707) — explicit selection.
+        Ownership is checked here (against ``actor.sheet_data``, the same
+        puppet-resolved actor every other check in this view trusts) rather
+        than in the serializer, since the serializer has no reliable way to
+        resolve "the actor for this specific request".
         Wraps :class:`actions.definitions.sanctum.SanctumInstallAction`
         — action does the heavy validation (room ownership, leader
         standing, physical presence, partial-unique race window). Returns
@@ -209,13 +216,25 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
         """
         from evennia_extensions.models import RoomProfile  # noqa: PLC0415
 
-        serializer = SanctifyActionSerializer(data=request.data)
+        serializer = SanctifyActionSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         actor = self._resolve_actor(request)
         if actor is None:
             return Response(
                 {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
             )
+        components: list = serializer.validated_data.get("components", [])
+        if components:
+            not_owned = [
+                inst.pk
+                for inst in components
+                if inst.holder_character_sheet_id != actor.sheet_data.pk
+            ]
+            if not_owned:
+                return Response(
+                    {"detail": f"ItemInstance(s) not in your inventory: {sorted(not_owned)}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         room_profile = get_object_or_404(
             RoomProfile, pk=serializer.validated_data["room_profile_id"]
         )
@@ -225,6 +244,7 @@ class SanctumViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
             room_profile=room_profile,
             resonance=resonance,
             owner_mode=serializer.validated_data["owner_mode"],
+            components_provided=components,
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)

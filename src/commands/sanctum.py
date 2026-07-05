@@ -200,7 +200,25 @@ class CmdSanctum(DispatchCommand):
             "room_profile": room_profile,
             "resonance": resonance,
             "owner_mode": owner_mode,
+            "components_provided": self._gather_components(),
         }
+
+    def _gather_components(self) -> list[Any]:
+        """Collect ItemInstance rows for the caller's carried items.
+
+        Auto-gathers everything the caller is physically carrying — mirrors
+        ``commands.ritual.CmdRitual._gather_components`` (#707). The
+        Sanctification Ritual's ``RitualComponentRequirement`` rows are
+        validated/consumed against this list by
+        ``resolve_and_consume_ritual_components`` inside
+        ``SanctumInstallAction.execute()``.
+        """
+        components = []
+        for obj in self.caller.contents:
+            instance = getattr(obj, "item_instance", None)  # noqa: GETATTR_LITERAL
+            if instance is not None:
+                components.append(instance)
+        return components
 
     def _args_homecoming(self, parsed: dict[str, str]) -> dict[str, Any]:
         """Resolve homecoming kwargs: sanctum, resonance_sacrificed, narrative_text."""
