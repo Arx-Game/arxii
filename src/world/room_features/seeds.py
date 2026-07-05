@@ -76,6 +76,10 @@ def ensure_plan_4_seeds() -> None:
     ``world.magic`` and are seeded by its own seed module.
     """
     ensure_sanctum_kind()
+    ensure_library_kind()
+    ensure_training_room_kind()
+    ensure_siege_deck_kind()
+    ensure_captains_quarters_kind()
 
 
 COMMAND_CENTER_KIND_NAME = "Command Center"
@@ -192,3 +196,125 @@ def ensure_town_crier_role() -> NPCRole:
         },
     )
     return role
+
+
+# ---------------------------------------------------------------------------
+# #675 feature kinds — Library, Training Room, Siege Deck, Captain's Quarters.
+# ---------------------------------------------------------------------------
+
+LIBRARY_KIND_NAME = "Library"
+LIBRARY_MAX_LEVEL = 10
+
+
+def ensure_library_kind() -> RoomFeatureKind:
+    """Get-or-create the Library ``RoomFeatureKind`` (#675).
+
+    A study hall: discounts codex-learning AP cost for learners in the room
+    (read-time via ``active_library_in`` at ``CodexTeachingOffer.accept``).
+    No per-kind details model — the bonus is derived from ``instance.level``.
+    No owner-type restriction (any building owner may install).
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.LIBRARY,
+        defaults={
+            "name": LIBRARY_KIND_NAME,
+            "max_level": LIBRARY_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "PLACEHOLDER — Library kind: a study hall where codex learning "
+                "costs less AP. The discount scales with the Library's level."
+            ),
+        },
+    )
+    return kind
+
+
+TRAINING_ROOM_KIND_NAME = "Training Room"
+TRAINING_ROOM_MAX_LEVEL = 3
+
+
+def ensure_training_room_kind() -> RoomFeatureKind:
+    """Get-or-create the Training Room ``RoomFeatureKind`` (#675).
+
+    A practice hall: discounts technique-learning AP cost for learners in
+    the room (read-time via ``active_training_room_in`` at
+    ``learn_technique``). No per-kind details model — the bonus is derived
+    from ``instance.level``.
+    """
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.TRAINING_ROOM,
+        defaults={
+            "name": TRAINING_ROOM_KIND_NAME,
+            "max_level": TRAINING_ROOM_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "PLACEHOLDER — Training Room kind: a practice hall where "
+                "technique learning costs less AP. The discount scales with "
+                "the Training Room's level."
+            ),
+        },
+    )
+    return kind
+
+
+SIEGE_DECK_KIND_NAME = "Siege Deck"
+SIEGE_DECK_MAX_LEVEL = 5
+
+
+def ensure_siege_deck_kind() -> RoomFeatureKind:
+    """Get-or-create the Siege Deck ``RoomFeatureKind`` (#675).
+
+    A weapon-platform deck on a maritime building: adds to the ship's
+    effective armament in battle (read-time via ``active_siege_deck_in`` at
+    the battle bridge). Pre-gunpowder framing — mounts ballistae, catapults,
+    scorpions. Restricted to maritime building kinds (ships today; airship
+    kinds added as a content edit when airships arrive).
+    """
+    from world.ships.seeds import ensure_ship_kind  # noqa: PLC0415
+
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.SIEGE_DECK,
+        defaults={
+            "name": SIEGE_DECK_KIND_NAME,
+            "max_level": SIEGE_DECK_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "PLACEHOLDER — Siege Deck kind: a weapon-platform deck mounting "
+                "ballistae, catapults, and scorpions. Adds to the ship's "
+                "effective armament in naval battle."
+            ),
+        },
+    )
+    ship_kind = ensure_ship_kind()
+    kind.allowed_building_kinds.add(ship_kind)
+    return kind
+
+
+CAPTAINS_QUARTERS_KIND_NAME = "Captain's Quarters"
+CAPTAINS_QUARTERS_MAX_LEVEL = 1
+
+
+def ensure_captains_quarters_kind() -> RoomFeatureKind:
+    """Get-or-create the Captain's Quarters ``RoomFeatureKind`` (#675).
+
+    A maritime-gated reachability feature (like Command Center): its
+    'content' is that certain surfaces are reachable where a Captain's
+    Quarters stands. No numeric bonus. Restricted to maritime building kinds.
+    """
+    from world.ships.seeds import ensure_ship_kind  # noqa: PLC0415
+
+    kind, _ = RoomFeatureKind.objects.get_or_create(
+        service_strategy=RoomFeatureServiceStrategy.CAPTAINS_QUARTERS,
+        defaults={
+            "name": CAPTAINS_QUARTERS_KIND_NAME,
+            "max_level": CAPTAINS_QUARTERS_MAX_LEVEL,
+            "install_mechanism": RoomFeatureInstallMechanism.PROJECT,
+            "description": (
+                "PLACEHOLDER — Captain's Quarters kind: the IC center of "
+                "command on a ship. Reachability-only; no numeric bonus."
+            ),
+        },
+    )
+    ship_kind = ensure_ship_kind()
+    kind.allowed_building_kinds.add(ship_kind)
+    return kind

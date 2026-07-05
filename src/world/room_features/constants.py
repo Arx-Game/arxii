@@ -19,7 +19,8 @@ class RoomFeatureServiceStrategy(models.TextChoices):
     LAB = "LAB", "Lab"
     COMMAND_CENTER = "COMMAND_CENTER", "Command Center"
     GRANARY = "GRANARY", "Granary"
-    CANNON_DECK = "CANNON_DECK", "Cannon Deck"
+    SIEGE_DECK = "SIEGE_DECK", "Siege Deck"
+    CAPTAINS_QUARTERS = "CAPTAINS_QUARTERS", "Captain's Quarters"
     # Civic-hub reader surfaces (#1450): one per room (the instance is a
     # OneToOne), so a room carries a board OR a crier — flavor variants of the
     # same local-tidings reader.
@@ -32,7 +33,7 @@ class RoomFeatureInstallMechanism(models.TextChoices):
 
     Magical features (Sanctum, future Wardstone, future Sigil-circle)
     install via a perform-time **ritual** — one actor, witchy, components
-    consumed at performance. Physical features (Granary, Cannon Deck,
+    consumed at performance. Physical features (Granary, Siege Deck,
     Forge, Barracks) install via a **project** — collaborative, accumulated,
     multi-contributor.
 
@@ -60,3 +61,8 @@ class RoomFeatureOwnerType(models.TextChoices):
     ORGANIZATION_CRIMINAL = "ORG_CRIMINAL", "Organization — Criminal Gang"
     ORGANIZATION_COVENANT = "ORG_COVENANT", "Organization — Covenant"
     ORGANIZATION_DEVOTIONAL = "ORG_DEVOTIONAL", "Organization — Devotional Order"
+
+
+#: Per-level AP discount a Training Room grants to technique learning (#675).
+#: PLACEHOLDER — pending content pass.
+TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL = 1

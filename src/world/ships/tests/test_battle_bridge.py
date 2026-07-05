@@ -125,3 +125,36 @@ class MaterializeShipAsBattleVehicleTests(TestCase):
                 capability__name=f"sanctum_{resonance.name.lower()}",
             ).exists()
         )
+
+
+class SiegeDeckBonusTests(TestCase):
+    """A Siege Deck on the ship's deck room adds to effective armament (#675)."""
+
+    def setUp(self) -> None:
+        self.battle = BattleFactory()
+        self.side = BattleSideFactory(battle=self.battle)
+
+    def test_siege_deck_adds_armament_bonus(self) -> None:
+        from world.room_features.seeds import ensure_siege_deck_kind
+
+        ship = ShipDetailsFactory()
+        kind = ensure_siege_deck_kind()
+        room_profile = RoomProfileFactory(area=ship.building.area)
+        RoomFeatureInstanceFactory(room_profile=room_profile, feature_kind=kind, level=2)
+
+        vehicle = materialize_ship_as_battle_vehicle(ship=ship, battle=self.battle, side=self.side)
+
+        vehicle.unit.refresh_from_db()
+        # effective_armament + (siege_deck.level * SIEGE_DECK_ARMAMENT_PER_LEVEL)
+        from world.ships.constants import SIEGE_DECK_ARMAMENT_PER_LEVEL
+
+        expected = ship.effective_armament() + 2 * SIEGE_DECK_ARMAMENT_PER_LEVEL
+        self.assertEqual(vehicle.unit.strength, expected)
+
+    def test_no_siege_deck_means_base_armament(self) -> None:
+        ship = ShipDetailsFactory()
+
+        vehicle = materialize_ship_as_battle_vehicle(ship=ship, battle=self.battle, side=self.side)
+
+        vehicle.unit.refresh_from_db()
+        self.assertEqual(vehicle.unit.strength, ship.effective_armament())

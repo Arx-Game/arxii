@@ -629,3 +629,71 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
             offer.accept(self.learner)
 
         assert "action points" in str(ctx.exception).lower()
+
+
+class LibraryDiscountTests(TestCase):
+    """A Library in the learner's room discounts codex-learning AP (#675)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = RosterTenureFactory()
+        cls.learner = RosterTenureFactory()
+        cls.entry = CodexEntryFactory(learn_cost=10)
+
+    def test_library_discounts_learn_cost(self):
+        """A Library at level 3 reduces the AP spent by 3 (1 per level)."""
+        from world.room_features.factories import RoomFeatureInstanceFactory
+        from world.room_features.seeds import ensure_library_kind
+
+        kind = ensure_library_kind()
+        instance = RoomFeatureInstanceFactory(feature_kind=kind, level=3)
+        ActionPointPoolFactory(character=self.teacher.character, banked=50)
+        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        offer = CodexTeachingOfferFactory(
+            teacher=self.teacher,
+            entry=self.entry,
+            banked_ap=50,
+        )
+
+        offer.accept(self.learner, room_profile=instance.room_profile)
+
+        pool.refresh_from_db()
+        # 10 learn_cost - 3 (level 3 * 1 per level) = 7 spent; 100 - 7 = 93
+        assert pool.current == 93
+
+    def test_no_library_means_full_cost(self):
+        """Without a Library, the full learn_cost is spent (regression)."""
+        ActionPointPoolFactory(character=self.teacher.character, banked=50)
+        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        offer = CodexTeachingOfferFactory(
+            teacher=self.teacher,
+            entry=self.entry,
+            banked_ap=50,
+        )
+
+        offer.accept(self.learner)  # no room_profile kwarg
+
+        pool.refresh_from_db()
+        assert pool.current == 90  # 100 - 10
+
+    def test_discount_floors_at_one(self):
+        """The discounted cost never drops below 1 AP."""
+        from world.room_features.factories import RoomFeatureInstanceFactory
+        from world.room_features.seeds import ensure_library_kind
+
+        kind = ensure_library_kind()
+        # A level-10 Library (max) would discount 10, flooring at 1.
+        instance = RoomFeatureInstanceFactory(feature_kind=kind, level=10)
+        ActionPointPoolFactory(character=self.teacher.character, banked=50)
+        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
+        offer = CodexTeachingOfferFactory(
+            teacher=self.teacher,
+            entry=self.entry,
+            banked_ap=50,
+        )
+
+        offer.accept(self.learner, room_profile=instance.room_profile)
+
+        pool.refresh_from_db()
+        # 10 - 10 = 0, floored to 1; 100 - 1 = 99
+        assert pool.current == 99

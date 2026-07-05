@@ -343,4 +343,5 @@ def accept_technique_offer(
         technique,
         source=AccessChangeSource.GIFT_ACQUISITION,
         ap_cost=0,
+        location=sheet.character.location,
     )

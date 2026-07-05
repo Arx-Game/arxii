@@ -24,6 +24,10 @@ SHIP_CONSTRUCTION_THRESHOLD: int = 1000
 SHIP_UPGRADE_THRESHOLD_PER_LEVEL: int = 100
 SHIP_REPAIR_THRESHOLD: int = 200
 
+#: Per-level armament bonus a Siege Deck grants to a ship in battle (#675).
+#: PLACEHOLDER — pending content pass.
+SIEGE_DECK_ARMAMENT_PER_LEVEL: int = 2
+
 
 class ShipUpgradeStat(models.TextChoices):
     """Which stat a persistent ship upgrade improves."""

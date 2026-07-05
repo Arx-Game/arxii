@@ -230,3 +230,135 @@ def active_hub_feature(room_profile: RoomProfile) -> RoomFeatureInstance | None:
         .active()
         .first()
     )
+
+
+# ---------------------------------------------------------------------------
+# #675 feature-kind active-instance helpers — read-time bonus lookups.
+# Each mirrors active_hub_feature's shape: filter by service_strategy, .active().
+# ---------------------------------------------------------------------------
+
+
+def active_library_in(room_profile: RoomProfile) -> RoomFeatureInstance | None:
+    """The room's active Library feature, or None.
+
+    Consumed at ``CodexTeachingOffer.accept`` to discount the learner's AP
+    cost by ``instance.level * LIBRARY_AP_DISCOUNT_PER_LEVEL``.
+    """
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    return (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.LIBRARY,
+        )
+        .select_related("feature_kind")
+        .active()
+        .first()
+    )
+
+
+def active_training_room_in(room_profile: RoomProfile) -> RoomFeatureInstance | None:
+    """The room's active Training Room feature, or None.
+
+    Consumed at ``learn_technique`` to discount the learner's AP cost by
+    ``instance.level * TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL``.
+    """
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    return (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.TRAINING_ROOM,
+        )
+        .select_related("feature_kind")
+        .active()
+        .first()
+    )
+
+
+def active_siege_deck_in(room_profile: RoomProfile) -> RoomFeatureInstance | None:
+    """The room's active Siege Deck feature, or None.
+
+    Consumed at the battle bridge to add ``instance.level *
+    SIEGE_DECK_ARMAMENT_PER_LEVEL`` to the ship's effective armament.
+    """
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    return (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.SIEGE_DECK,
+        )
+        .select_related("feature_kind")
+        .active()
+        .first()
+    )
+
+
+def active_captains_quarters_in(room_profile: RoomProfile) -> RoomFeatureInstance | None:
+    """The room's active Captain's Quarters feature, or None.
+
+    Reachability-only — no numeric bonus. Consumed by future surfaces that
+    gate on "a Captain's Quarters stands here."
+    """
+    from world.room_features.models import RoomFeatureInstance  # noqa: PLC0415
+
+    return (
+        RoomFeatureInstance.objects.filter(
+            room_profile=room_profile,
+            feature_kind__service_strategy=RoomFeatureServiceStrategy.CAPTAINS_QUARTERS,
+        )
+        .select_related("feature_kind")
+        .active()
+        .first()
+    )
+
+
+def handle_library_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """LIBRARY strategy (#675): row-only install/level.
+
+    The discount is read-time — ``active_library_in(room)`` at codex accept.
+    """
+    _install_or_level_feature(project, target_level)
+
+
+def handle_training_room_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """TRAINING_ROOM strategy (#675): row-only install/level.
+
+    The discount is read-time — ``active_training_room_in(room)`` at
+    ``learn_technique``.
+    """
+    _install_or_level_feature(project, target_level)
+
+
+def handle_siege_deck_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """SIEGE_DECK strategy (#675): row-only install/level.
+
+    The armament bonus is read-time — ``active_siege_deck_in(room)`` at
+    the battle bridge.
+    """
+    _install_or_level_feature(project, target_level)
+
+
+def handle_captains_quarters_progression(
+    project: Project,
+    target_level: int,
+    outcome_tier: CheckOutcome | None = None,  # noqa: ARG001
+) -> None:
+    """CAPTAINS_QUARTERS strategy (#675): row-only install.
+
+    Reachability-only feature (like Command Center). No numeric bonus.
+    """
+    _install_or_level_feature(project, target_level)

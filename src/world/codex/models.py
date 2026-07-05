@@ -451,11 +451,17 @@ class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
 
         return True, ""
 
-    def accept(self, learner: RosterTenure) -> CharacterCodexKnowledge:
+    def accept(self, learner: RosterTenure, *, room_profile=None) -> CharacterCodexKnowledge:
         """
         Learner accepts offer.
 
         Pays costs, creates knowledge entry, consumes teacher's banked AP.
+
+        Args:
+            learner: The tenure of the learner accepting the offer.
+            room_profile: Optional RoomProfile of the learner's current room.
+                When provided, an active Library feature in that room discounts
+                the learner's AP cost (#675).
 
         Returns:
             The new CharacterCodexKnowledge entry.
@@ -470,7 +476,15 @@ class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
         with transaction.atomic():
             # Learner pays AP - uses character from tenure
             learner_pool = ActionPointPool.get_or_create_for_character(learner.character)
-            learner_pool.spend(self.entry.learn_cost)
+            learn_cost = self.entry.learn_cost
+            if room_profile is not None:
+                from world.codex.constants import LIBRARY_AP_DISCOUNT_PER_LEVEL  # noqa: PLC0415
+                from world.room_features.services import active_library_in  # noqa: PLC0415
+
+                library = active_library_in(room_profile)
+                if library is not None:
+                    learn_cost = max(1, learn_cost - library.level * LIBRARY_AP_DISCOUNT_PER_LEVEL)
+            learner_pool.spend(learn_cost)
 
             # Teacher's banked AP is consumed - uses character from tenure
             teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher.character)
