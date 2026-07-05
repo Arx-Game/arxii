@@ -22,6 +22,7 @@ import { CluesTab } from '@/clues/components/CluesTab';
 import { CrimeTab } from '@/justice/components/CrimeTab';
 import { TitlesPanel } from '@/achievements/components/TitlesPanel';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
+import { SpellbookTab } from '@/magic/components/SpellbookTab';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -101,6 +102,7 @@ export function CharacterSheetPage() {
           <TabsTrigger value="reputation">Reputation</TabsTrigger>
           <TabsTrigger value="titles">Titles</TabsTrigger>
           <TabsTrigger value="distinctions">Distinctions</TabsTrigger>
+          <TabsTrigger value="magic">Magic</TabsTrigger>
           <TabsTrigger value="secrets">Secrets</TabsTrigger>
           {isMyCharacter && <TabsTrigger value="clues">Clues</TabsTrigger>}
           {isMyCharacter && <TabsTrigger value="gossip">Gossip</TabsTrigger>}
@@ -169,6 +171,16 @@ export function CharacterSheetPage() {
               character.id is the CharacterSheet pk (shared with the ObjectDB pk). Radix
               unmounts inactive tab content, so the query only fires when this tab is opened. */}
           <DistinctionsTab characterId={entry.character.id} />
+        </TabsContent>
+
+        <TabsContent value="magic" className="space-y-4">
+          {/* Ungated (#1446): the server already gates payload.magic to null for foreign
+              viewers without visibility and for magic-less characters, so every viewer sees
+              this tab and the tab only renders what it's given (a muted line when null).
+              Spellbook/status view only — "the sheet describes; the scene does." character.id
+              is the CharacterSheet pk. Radix unmounts inactive tab content, so the query only
+              fires when this tab is opened. */}
+          <SpellbookTab characterId={entry.character.id} isMyCharacter={isMyCharacter} />
         </TabsContent>
 
         <TabsContent value="secrets" className="space-y-4">
