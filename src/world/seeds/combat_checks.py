@@ -166,7 +166,7 @@ def ensure_melee_defense_check_type(skill, specs) -> object:
 
 
 def seed_combat_check_content() -> None:
-    """Cluster entry — seed the Melee Combat skill catalog + Attack/Defense checks (#1706, #1994)."""
+    """Cluster entry — seed Melee Combat skill catalog + Attack/Defense checks."""
     skill = ensure_melee_combat_skill()
     specs = ensure_weapon_specializations(skill)
     ensure_melee_attack_check_type(skill, specs)
