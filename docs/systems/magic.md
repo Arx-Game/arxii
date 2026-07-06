@@ -990,6 +990,23 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
   (#1834); typed source FK `source_character_distinction`. See "Distinction → Resonance
   (#1834)" in `docs/systems/distinctions.md` for the model + reconcile/accelerator services.
 
+**Telnet visibility (#2032).** Balances were earnable/spendable via telnet (pulls, imbuing,
+sanctum weaving) but had no telnet surface showing `CharacterResonance.balance` at all. Two
+read-only faces now expose it, both reading the same handler/service the web uses (no parallel
+query pipeline):
+- `sheet/magic` (`commands/account/sheet_sections.py`) — a `Resonance:` block listing every
+  claimed resonance's balance + lifetime earned, built by
+  `_build_magic_resonances` (`world/character_sheets/serializers.py`), which reads
+  `character.resonances` (`CharacterResonanceHandler`, the cached identity-mapped accessor —
+  not a fresh query). Folded into `MagicSection.resonances` so telnet and the web Magic tab
+  share one data path.
+- `resonance` (`commands/resonance.py`, key `resonance`) — bare `resonance` reuses
+  `_build_magic_resonances` for the same balance listing; `resonance history [<name>]` shows
+  the caller's last 10 `ResonanceGrant` rows (newest first, source label via
+  `get_source_display()`), optionally narrowed to one claimed resonance, via
+  `resonance_grant_history_for_sheet` (`world/magic/services/gain.py`) — mirrors
+  `ResonanceGrantViewSet`'s `-granted_at` ordering.
+
 `ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (`world/magic/constants.py`,
 ADR-0041) partition every `GainSource` member (a total-classification test enforces this):
 perception/presence-driven sources a character actively performs to be seen (`POSE_ENDORSEMENT`,

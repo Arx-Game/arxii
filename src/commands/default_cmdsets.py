@@ -98,6 +98,7 @@ from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene
 from commands.projects import CmdProject
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
+from commands.resonance import CmdResonance
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
@@ -340,6 +341,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdLabStation,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
+            # #2032 — spendable resonance balances + grant history (bare/history subverbs).
+            CmdResonance,
         )
         for command_cls in command_classes:
             self.add(command_cls())

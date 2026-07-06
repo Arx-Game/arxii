@@ -183,6 +183,14 @@ class AuraThemingData(TypedDict):
     abyssal: Decimal
 
 
+class ResonanceBalanceEntry(TypedDict):
+    """A claimed resonance with its spendable balance and lifetime-earned total (#2032)."""
+
+    name: str
+    balance: int
+    lifetime_earned: int
+
+
 class MagicSection(TypedDict):
     """The magic section of the character sheet API response."""
 
@@ -190,6 +198,7 @@ class MagicSection(TypedDict):
     motif: MotifSection | None
     anima_ritual: AnimaRitualSection | None
     aura: AuraData | None
+    resonances: list[ResonanceBalanceEntry]
 
 
 class StorySection(TypedDict):

@@ -4144,7 +4144,13 @@ def _resolve_npc_action(
     (the normal PC-facing path — applies damage, knockout/death transitions, and
     threat-entry conditions) or ``opponent_targets`` (an ALLY summon attacking
     ENEMY opponents — damage only; #1584).
+
+    When ``defense_check_type`` is None (production), the defense check type is
+    sourced from ``npc_action.threat_entry.defense_check_type`` (#1994). A
+    non-None external param (test override) takes precedence.
     """
+    # Source from threat entry when no external override is provided (#1994).
+    effective_defense_check_type = defense_check_type or npc_action.threat_entry.defense_check_type
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
 
     try:
@@ -4193,7 +4199,7 @@ def _resolve_npc_action(
             target_participant,
             opponent=opponent,
             npc_action=npc_action,
-            defense_check_type=defense_check_type,
+            defense_check_type=effective_defense_check_type,
             defense_check_fn=defense_check_fn,
             conditions=conditions,
             outcome=outcome,

@@ -164,6 +164,14 @@ actions, backends, and service functions.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
+- **`resonance.py`**: `CmdResonance` (`resonance`, #2032) — read-only spendable-resonance
+  visibility. Bare `resonance` lists claimed resonances (balance + lifetime earned) via
+  `_build_magic_resonances` (`world/character_sheets/serializers.py`, the same builder
+  `sheet/magic` reads — no parallel query pipeline); `resonance history [<name>]` shows the
+  caller's last 10 `ResonanceGrant` rows (newest first, source label), optionally narrowed to
+  one resonance, via `resonance_grant_history_for_sheet`
+  (`world/magic/services/gain.py`) — mirrors `ResonanceGrantViewSet`'s ordering. No business
+  logic in the command.
 - **`combat.py`**: Two commands sharing a `_CombatCommandMixin` (provides
   `_combat_participant_or_none` and `_find_technique_id`). Both subclass `DispatchCommand`
   — business logic lives entirely in the dispatcher and service layer, never in the command.
@@ -601,9 +609,11 @@ actions, backends, and service functions.
   `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab); `distinction`
   (`sheet/distinction`, #1446 — your distinctions, secret-badged, over the shared
   `_build_distinctions` builder, mirroring the web Distinctions tab); `magic` (`sheet/magic`,
-  #1446 — gifts/techniques/motif/aura over the shared `_build_magic` builder, mirroring the web
-  Magic tab; describe-only — casting/weaving/rituals stay in-scene, per "the sheet describes; the
-  scene does" in `design-tenets.md`); `status` (`sheet/status`, #1446 — condition, fatigue, and
+  #1446 — gifts/techniques/motif/aura/**resonance balances** (#2032) over the shared
+  `_build_magic` builder, mirroring the web Magic tab; describe-only — casting/weaving/rituals
+  stay in-scene, per "the sheet describes; the scene does" in `design-tenets.md`; resonance
+  *history* is a separate read surface, `resonance history` (`commands/resonance.py`));
+  `status` (`sheet/status`, #1446 — condition, fatigue, and
   anima as qualitative words (wound band, fatigue zones, `anima_band_for`), plus coin
   (`format_coppers`) and weekly AP (current/effective-maximum/banked); self-only, read-only,
   mirroring the web Status tab). Each is thin over its app's data. Add a section: a renderer

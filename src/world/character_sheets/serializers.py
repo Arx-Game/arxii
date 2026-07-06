@@ -38,6 +38,7 @@ from world.character_sheets.types import (
     PathHistoryEntry,
     PersonaEntry,
     PronounsData,
+    ResonanceBalanceEntry,
     SheetVisibility,
     SkillEntry,
     SkillRef,
@@ -663,11 +664,31 @@ def _build_magic_aura(character: ObjectDB) -> AuraData | None:
     )
 
 
+def _build_magic_resonances(character: ObjectDB) -> list[ResonanceBalanceEntry]:
+    """Build the claimed-resonance balances sub-section (#2032).
+
+    Reads the character's cached ``resonances`` handler (``CharacterResonanceHandler``,
+    ``typeclasses.characters.Character.resonances``) rather than issuing a fresh
+    query — the same identity-mapped source every other resonance-balance reader
+    (thread pulls, imbuing, sanctum) uses. Sorted by name for stable rendering.
+    """
+    entries = [
+        ResonanceBalanceEntry(
+            name=cr.resonance.name,
+            balance=cr.balance,
+            lifetime_earned=cr.lifetime_earned,
+        )
+        for cr in character.resonances.all()
+    ]
+    entries.sort(key=lambda entry: entry["name"])
+    return entries
+
+
 def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
-    """Build the magic section with gifts, motif, anima ritual, and aura.
+    """Build the magic section with gifts, motif, anima ritual, aura, and resonances.
 
     Returns ``None`` when the character has no magic data at all (no gifts,
-    no motif, no anima ritual, and no aura).
+    no motif, no anima ritual, no aura, and no claimed resonances).
     """
     character = sheet.character
 
@@ -675,9 +696,16 @@ def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
     motif_data = _build_magic_motif(sheet)
     anima_ritual_data = _build_magic_anima_ritual(sheet)
     aura_data = _build_magic_aura(character)
+    resonances = _build_magic_resonances(character)
 
     # Return None if no magic data exists at all
-    if not gifts and motif_data is None and anima_ritual_data is None and aura_data is None:
+    if (
+        not gifts
+        and motif_data is None
+        and anima_ritual_data is None
+        and aura_data is None
+        and not resonances
+    ):
         return None
 
     return MagicSection(
@@ -685,6 +713,7 @@ def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
         motif=motif_data,
         anima_ritual=anima_ritual_data,
         aura=aura_data,
+        resonances=resonances,
     )
 
 

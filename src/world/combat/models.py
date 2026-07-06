@@ -259,6 +259,17 @@ class ThreatPoolEntry(SharedMemoryModel):
             "AWAY_FROM_ACTOR effect here is how a GM authors 'this attack knocks back.'"
         ),
     )
+    defense_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="threat_pool_entries",
+        help_text=(
+            "CheckType the targeted PC rolls to evade/mitigate this attack. "
+            "Null = flat base_damage with no defense roll (backward-compatible)."
+        ),
+    )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
 

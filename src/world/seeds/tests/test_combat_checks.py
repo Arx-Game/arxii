@@ -45,3 +45,20 @@ class CombatCheckSeedTests(TestCase):
         seed_combat_check_content()
         seed_combat_check_content()  # re-run
         self.assertEqual(CheckType.objects.filter(name="Melee Attack").count(), 1)
+
+    def test_melee_defense_composition(self):
+        from world.checks.models import CheckType
+
+        seed_combat_check_content()
+        ct = CheckType.objects.get(name="Melee Defense")
+        trait_names = {t.trait.name for t in ct.traits.all()}
+        self.assertEqual(trait_names, {"agility", "Melee Combat"})
+        spec_names = {s.specialization.name for s in ct.specializations.all()}
+        self.assertEqual(spec_names, {"Small Weapons", "Medium Weapons", "Heavy Weapons"})
+
+    def test_melee_defense_idempotent(self):
+        from world.checks.models import CheckType
+
+        seed_combat_check_content()
+        seed_combat_check_content()
+        self.assertEqual(CheckType.objects.filter(name="Melee Defense").count(), 1)

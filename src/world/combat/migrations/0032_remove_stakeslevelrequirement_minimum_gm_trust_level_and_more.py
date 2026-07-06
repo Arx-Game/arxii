@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("combat", "0030_threatpoolentry_on_hit_consequence_pool"),
-    ]
+    dependencies = [("combat", "0031_threatpoolentry_defense_check_type")]
 
     operations = [
         migrations.RemoveField(

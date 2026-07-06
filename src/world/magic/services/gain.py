@@ -80,6 +80,7 @@ from world.magic.models import (
     PoseEndorsement,
     Resonance,
     ResonanceGainConfig,
+    ResonanceGrant,
     SceneEntryEndorsement,
 )
 from world.magic.types import (
@@ -216,6 +217,25 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     claimed_ids = set(sheet.resonances.values_list("resonance_id", flat=True))
     matched_ids = tagged_ids & claimed_ids
     return set(Resonance.objects.filter(pk__in=matched_ids))
+
+
+def resonance_grant_history_for_sheet(
+    sheet: CharacterSheet,
+    *,
+    resonance: Resonance | None = None,
+    limit: int = 10,
+) -> list[ResonanceGrant]:
+    """Return this character's most recent ``ResonanceGrant`` rows, newest first.
+
+    Mirrors ``ResonanceGrantViewSet``'s ordering (``-granted_at``) and user-scoping
+    shape (`world/magic/views.py`) — the single read path for both the web audit
+    ledger and the telnet ``resonance history`` command. Optionally narrowed to one
+    claimed resonance.
+    """
+    qs = ResonanceGrant.objects.filter(character_sheet=sheet).select_related("resonance")
+    if resonance is not None:
+        qs = qs.filter(resonance=resonance)
+    return list(qs.order_by("-granted_at")[:limit])
 
 
 @transaction.atomic
