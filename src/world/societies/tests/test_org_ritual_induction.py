@@ -160,3 +160,89 @@ class InductOrganizationMemberViaSessionTests(TestCase):
         )
         with self.assertRaises(SessionTargetMissingError):
             induct_organization_member_via_session(session=session)
+
+
+class OrganizationInductionJourneyTests(TestCase):
+    """Highest-seam journey test: draft -> accept -> fire, exactly as a player
+    would experience it via CmdRitual + OrganizationInductionAdapter."""
+
+    def test_full_journey_creates_membership(self):
+        from datetime import UTC, datetime, timedelta
+
+        from commands.ritual_adapters import get_adapter
+        from world.magic.factories import OrganizationInductionRitualFactory
+        from world.magic.services.sessions import accept_session, draft_session, fire_session
+
+        org = OrganizationFactory()
+        leader_sheet = CharacterSheetFactory()
+        OrganizationMembershipFactory(
+            organization=org,
+            persona=leader_sheet.primary_persona,
+            rank=1,
+        )
+        candidate_sheet = CharacterSheetFactory()
+        ritual = OrganizationInductionRitualFactory()
+
+        adapter = get_adapter(ritual)
+        draft_parse = adapter.parse_draft(kwargs={"organization": org.name}, caller=None)
+
+        session = draft_session(
+            ritual=ritual,
+            initiator=leader_sheet,
+            proposed_terms="",
+            session_kwargs=draft_parse.session_kwargs,
+            invitee_sheets=[candidate_sheet],
+            session_references=draft_parse.session_references,
+            initiator_participant_kwargs=draft_parse.initiator_participant_kwargs,
+            initiator_references=draft_parse.initiator_references,
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+        candidate_p = session.participants.get(character_sheet=candidate_sheet)
+        accept_session(participant=candidate_p, participant_kwargs={}, references=[])
+
+        membership = fire_session(session=session)
+
+        self.assertEqual(membership.persona, candidate_sheet.primary_persona)
+        self.assertEqual(membership.organization, org)
+        self.assertTrue(
+            OrganizationMembership.objects.filter(
+                organization=org, persona=candidate_sheet.primary_persona, left_at__isnull=True
+            ).exists()
+        )
+        # Session is deleted on fire (CASCADE):
+        self.assertFalse(RitualSession.objects.filter(pk=session.pk).exists())
+
+    def test_unauthorized_officiant_rejected_at_draft(self):
+        from datetime import UTC, datetime, timedelta
+
+        from commands.ritual_adapters import get_adapter
+        from world.magic.factories import OrganizationInductionRitualFactory
+        from world.magic.services.sessions import draft_session
+        from world.societies.exceptions import NotAuthorizedToLeadOrgRitualError
+
+        org = OrganizationFactory()
+        member_sheet = CharacterSheetFactory()
+        OrganizationMembershipFactory(
+            organization=org, persona=member_sheet.primary_persona, rank=5
+        )
+        candidate_sheet = CharacterSheetFactory()
+        ritual = OrganizationInductionRitualFactory()
+
+        adapter = get_adapter(ritual)
+        draft_parse = adapter.parse_draft(kwargs={"organization": org.name}, caller=None)
+
+        with self.assertRaises(NotAuthorizedToLeadOrgRitualError):
+            draft_session(
+                ritual=ritual,
+                initiator=member_sheet,
+                proposed_terms="",
+                session_kwargs=draft_parse.session_kwargs,
+                invitee_sheets=[candidate_sheet],
+                session_references=draft_parse.session_references,
+                initiator_participant_kwargs=draft_parse.initiator_participant_kwargs,
+                initiator_references=draft_parse.initiator_references,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        # No session persisted — draft_session's transaction rolled back:
+        self.assertEqual(RitualSession.objects.filter(ritual=ritual).count(), 0)
