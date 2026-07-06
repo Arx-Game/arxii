@@ -57,6 +57,10 @@ class EnhancedSceneActionResult:
     technique_result: TechniqueUseResult | None = None
     power_ledger: PowerLedger | None = None
     fury_committed: FuryTier | None = None
+    fizzle_note: str | None = None
+    """When a thread pull was declared but failed at charge time (#1919), this
+    carries the player-facing explanation so the OUTCOME pose can note the
+    fizzle. ``None`` when no pull was declared or the pull succeeded."""
 
 
 @dataclass(frozen=True)

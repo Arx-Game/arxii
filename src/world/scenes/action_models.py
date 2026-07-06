@@ -361,19 +361,25 @@ class SceneActionTarget(DefenderConsentFields, SharedMemoryModel):
         ]
 
 
-class SceneCastPullDeclaration(SharedMemoryModel):
-    """A paid thread pull declared alongside a benign standalone cast (#854).
+class SceneActionPullDeclaration(SharedMemoryModel):
+    """A paid thread pull declared alongside a scene action request (#854, #1919).
 
-    Persisted only for PENDING benign casts so the declaration survives until
-    consent-resolution. Immediate casts charge in-line and need no row; combat
-    pulls live on ``CombatPull`` in the combat app.
+    Persisted for PENDING benign casts AND social consent actions so the
+    declaration survives until consent-resolution. Immediate casts charge
+    in-line and need no row; combat pulls live on ``CombatPull`` in the combat
+    app.
+
+    For social actions (#1919), the declaration is charged exactly once at
+    accept-time via ``_charge_social_pull``; the ``charged_at`` /
+    ``charged_flat_bonus`` fields guard against double-charging across
+    multi-target resolutions.
     """
 
     request = models.OneToOneField(
         "scenes.SceneActionRequest",
         on_delete=models.CASCADE,
         related_name="pull_declaration",
-        help_text="The benign cast request this pull was declared with.",
+        help_text="The action request this pull was declared with.",
     )
     resonance = models.ForeignKey(
         "magic.Resonance",
@@ -387,9 +393,23 @@ class SceneCastPullDeclaration(SharedMemoryModel):
     )
     threads = models.ManyToManyField(
         "magic.Thread",
-        related_name="cast_pull_declarations",
-        help_text="Threads pulled; owned by the caster, sharing ``resonance``.",
+        related_name="action_pull_declarations",
+        help_text="Threads pulled; owned by the actor, sharing ``resonance``.",
+    )
+    charged_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="When the pull was first charged at resolution time; guards "
+        "against double-charging across multi-target resolutions (#1919).",
+    )
+    charged_flat_bonus = models.IntegerField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Cached FLAT_BONUS total from the first charge, returned on "
+        "idempotent subsequent calls without re-charging (#1919).",
     )
 
     def __str__(self) -> str:
-        return f"Cast pull (tier {self.tier}) for request {self.request_id}"
+        return f"Action pull (tier {self.tier}) for request {self.request_id}"

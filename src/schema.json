@@ -49542,6 +49542,10 @@ components:
         bond_thread_id:
           type: integer
           nullable: true
+        pull:
+          allOf:
+          - $ref: '#/components/schemas/CastPullRequestRequest'
+          nullable: true
       required:
       - action_key
       - initiator_persona
@@ -53598,6 +53602,12 @@ components:
             type: integer
         action_context:
           $ref: '#/components/schemas/PullActionContextRequest'
+        scene_id:
+          type: integer
+          nullable: true
+        exclude_gift:
+          type: boolean
+          default: false
       required:
       - character_sheet_id
       - resonance_id

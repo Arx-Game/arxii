@@ -32,7 +32,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.constants import PendingAlterationStatus, RitualExecutionKind
+from world.magic.constants import PendingAlterationStatus, RitualExecutionKind, TargetKind
 from world.magic.exceptions import (
     InvalidImbueAmount,
     TechniqueAuthoringNotPermitted,
@@ -898,6 +898,8 @@ class ThreadPullPreviewView(APIView):
                 tier=data["tier"],
                 threads=threads,
                 combat_encounter=combat_encounter,
+                scene_id=data.get("scene_id"),
+                excluded_kinds=frozenset({TargetKind.GIFT}) if data.get("exclude_gift") else None,
             )
         except InvalidImbueAmount as exc:
             return Response(

@@ -160,7 +160,13 @@ export interface ImbueResponse {
 // Re-export generated shapes.
 // ---------------------------------------------------------------------------
 
-export type PullPreviewRequest = components['schemas']['ThreadPullPreviewRequestRequest'];
+export type PullPreviewRequest = Omit<
+  components['schemas']['ThreadPullPreviewRequestRequest'],
+  'exclude_gift' | 'scene_id'
+> & {
+  exclude_gift?: boolean;
+  scene_id?: number | null;
+};
 
 /** One previewed effect in the preview response. */
 export type PreviewedEffect = components['schemas']['ResolvedPullEffect'];

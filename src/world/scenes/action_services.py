@@ -23,7 +23,11 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
-from world.scenes.action_models import SceneActionRequest, SceneActionTarget
+from world.scenes.action_models import (
+    SceneActionPullDeclaration,
+    SceneActionRequest,
+    SceneActionTarget,
+)
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
@@ -129,6 +133,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique
@@ -260,6 +265,7 @@ def create_action_request(  # noqa: PLR0913
     delivery: str = "",
     delivery_receivers: list[Persona] | None = None,
     additional_target_personas: list[Persona] | None = None,
+    pull: CastPullDeclaration | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
@@ -299,6 +305,10 @@ def create_action_request(  # noqa: PLR0913
             primary (``target_persona``). Each persona gets a ``SceneActionTarget``
             row. NPC additional targets are auto-resolved immediately (#572);
             PC additional targets stay PENDING until they respond.
+        pull: Optional declared thread pull (#1919). Persisted as a
+            ``SceneActionPullDeclaration`` on the request so it survives the
+            consent gap. Charged exactly once at accept-time via
+            ``_charge_social_pull``. ``None`` for actions without a pull.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -348,6 +358,15 @@ def create_action_request(  # noqa: PLR0913
     additional = additional_target_personas or []
     for persona in additional:
         SceneActionTarget.objects.create(action_request=request, target_persona=persona)
+    # #1919: Persist the pull declaration BEFORE auto-resolving NPC targets so
+    # the declaration exists when _charge_social_pull fires during auto-resolve.
+    if pull is not None:
+        decl = SceneActionPullDeclaration.objects.create(
+            request=request,
+            resonance=pull.resonance,
+            tier=pull.tier,
+        )
+        decl.threads.set(pull.threads)
     if additional:  # multi-target only — single-target path unchanged
         _auto_resolve_npc_targets(request)
 
@@ -473,7 +492,7 @@ def _blacklist_initiator_for_denier(
     add_social_consent_blacklist(owner_tenure, blocked_tenure, category)
 
 
-def respond_to_action_request(
+def respond_to_action_request(  # noqa: C901
     *,
     action_request: SceneActionRequest,
     decision: str,
@@ -515,6 +534,9 @@ def respond_to_action_request(
         action_request.status = ActionRequestStatus.DENIED
         action_request.resolved_at = timezone.now()
         action_request.save(update_fields=["status", "resolved_at"])
+        # #1919: Clean up any pull declaration on the denied request so it
+        # doesn't linger as an orphan row (the charge never fires on DENY).
+        SceneActionPullDeclaration.objects.filter(request=action_request).delete()
         if blacklist_actor:
             _blacklist_initiator_for_denier(action_request, action_request.target_persona)
         return None
@@ -534,11 +556,36 @@ def respond_to_action_request(
 
                 result = resolve_accepted_cast(action_request)
             else:
+                # #1919: Charge a persisted social pull declaration exactly
+                # once before per-target resolution. The resolved FLAT_BONUS
+                # is threaded into _resolve_action_against_persona as
+                # pull_flat_bonus. On failure (balance drained, anchor no
+                # longer in action, lock acquired, …), the pull fizzles — the
+                # action resolves pull-less with a fizzle note.
+                pull_flat_bonus = 0
+                fizzle_note: str | None = None
+                action_template = action_request.action_template
+                if action_template is not None and action_template.check_type_id is not None:
+                    from world.magic.exceptions import (  # noqa: PLC0415
+                        MagicError,
+                        ProtagonismLockedError,
+                    )
+
+                    try:
+                        pull_flat_bonus = _charge_social_pull(
+                            action_request=action_request,
+                            check_type=action_template.check_type,
+                        )
+                    except (MagicError, ProtagonismLockedError) as exc:
+                        fizzle_note = str(exc) or "The thread pull fizzled."
                 difficulty_override = _compute_difficulty_override_for_primary(
                     action_request, resist_effort
                 )
                 result = _resolve_standard_action(
-                    action_request, difficulty_override=difficulty_override
+                    action_request,
+                    difficulty_override=difficulty_override,
+                    pull_flat_bonus=pull_flat_bonus,
+                    fizzle_note=fizzle_note,
                 )
 
             _accrue_engagement_for_primary(action_request)
@@ -552,11 +599,131 @@ def respond_to_action_request(
     return None
 
 
+def _scene_is_high_stakes(action_request: SceneActionRequest) -> bool:
+    """True when an active combat encounter or DANGER round is on the scene (#1919).
+
+    Anima cost is waived (zeroed) for social pulls in low-stakes scenes — pure
+    social RP with no combat encounter (status ≠ COMPLETED) and no DANGER round
+    (``SceneRound.start_reason=DANGER``, non-COMPLETED). This reuses existing
+    state; no new schema field.
+    """
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus, SceneRoundStartReason  # noqa: PLC0415
+
+    scene = action_request.scene
+    if scene is None:
+        return False
+    room = scene.location
+    has_active_combat = CombatEncounter.objects.filter(
+        scene=scene,
+        status__in=[
+            RoundStatus.DECLARING,
+            RoundStatus.RESOLVING,
+            RoundStatus.BETWEEN_ROUNDS,
+        ],
+    ).exists()
+    if has_active_combat:
+        return True
+    if room is None:
+        return False
+    return scene.scene_rounds.filter(
+        start_reason=SceneRoundStartReason.DANGER,
+        status__in=[
+            RoundStatus.DECLARING,
+            RoundStatus.RESOLVING,
+            RoundStatus.BETWEEN_ROUNDS,
+        ],
+    ).exists()
+
+
+def _charge_social_pull(
+    *,
+    action_request: SceneActionRequest,
+    check_type: CheckType,
+) -> int:
+    """Charge a persisted social pull declaration and return the FLAT_BONUS total.
+
+    Returns ``0`` when no declaration exists on the request.
+
+    Resolves ``involved_traits`` from the check type's trait weights so TRAIT
+    threads can be validated as anchor-in-action. Waives anima cost when the
+    scene is not high-stakes (no active combat encounter or DANGER round).
+
+    **Idempotent (#1919):** on first call, charges via
+    ``spend_resonance_for_pull``, stamps ``charged_at`` + ``charged_flat_bonus``,
+    and returns the bonus. On subsequent calls (when ``charged_at`` is already
+    set — e.g. multi-target resolutions or the NPC auto-resolve path), returns
+    the cached bonus without re-charging.
+
+    Raises:
+        MagicError / ProtagonismLockedError: when the pull cannot be charged
+            (balance drained, anchor not in action, lock acquired, …). The caller
+            (``respond_to_action_request``) catches these to degrade to a fizzle.
+    """
+    from world.magic.constants import EffectKind, TargetKind  # noqa: PLC0415
+    from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+    from world.magic.types.pull import PullActionContext  # noqa: PLC0415
+
+    declaration = SceneActionPullDeclaration.objects.filter(request=action_request).first()
+    if declaration is None:
+        return 0
+
+    # Idempotent guard: if already charged, return the cached bonus.
+    if declaration.charged_at is not None:
+        return declaration.charged_flat_bonus or 0
+
+    sheet = action_request.initiator_persona.character_sheet
+    threads = list(declaration.threads.filter(retired_at__isnull=True))
+    if not threads:
+        return 0
+
+    target = None
+    if action_request.target_persona is not None:
+        target = action_request.target_persona.character_sheet.character
+
+    involved_traits = tuple(check_type.traits.values_list("trait_id", flat=True))
+
+    # Anima waiver: waived (zeroed) when no active combat or DANGER round.
+    anima_cost_override = 0 if not _scene_is_high_stakes(action_request) else None
+
+    pull_result = spend_resonance_for_pull(
+        sheet,
+        declaration.resonance,
+        declaration.tier,
+        threads,
+        PullActionContext(
+            combat_encounter=None,
+            involved_traits=involved_traits,
+            target=target,
+            excluded_kinds=frozenset({TargetKind.GIFT}),
+        ),
+        # Defense-in-depth: beseech_bonus=0 ensures no emergency draw fires
+        # even if the declaration somehow carried a bonus.
+        beseech_bonus=0,
+        anima_cost_override=anima_cost_override,
+    )
+
+    pull_flat_bonus = 0
+    for eff in pull_result.resolved_effects:
+        if eff.inactive:
+            continue
+        if eff.kind == EffectKind.FLAT_BONUS:
+            pull_flat_bonus += eff.scaled_value or 0
+
+    # Stamp the charge guard + cached bonus so subsequent calls (multi-target)
+    # return the same bonus without re-charging.
+    declaration.charged_at = timezone.now()
+    declaration.charged_flat_bonus = pull_flat_bonus
+    declaration.save(update_fields=["charged_at", "charged_flat_bonus"])
+    return pull_flat_bonus
+
+
 def _resolve_action_against_persona(
     action_request: SceneActionRequest,
     target_persona: Persona,
     *,
     difficulty_override: int | None = None,
+    pull_flat_bonus: int = 0,
 ) -> tuple[EnhancedSceneActionResult, Interaction | None, int]:
     """Resolve ``action_request`` against ONE persona.
 
@@ -570,6 +737,9 @@ def _resolve_action_against_persona(
         difficulty_override: When provided, overrides the difficulty computed
             from ``action_request.difficulty_choice``. Task 4 (plausibility
             defender) supplies per-target values via this seam.
+        pull_flat_bonus: FLAT_BONUS from a charged social pull (#1919), folded
+            into the plain-action check's ``extra_modifiers``. 0 when no pull
+            was declared or the pull fizzled.
 
     Returns:
         (result, result_interaction, difficulty) — difficulty is returned so
@@ -654,7 +824,7 @@ def _resolve_action_against_persona(
             template=action_template,
             target_difficulty=difficulty,
             context=context,
-            extra_modifiers=check_modifiers + breakdown.total,
+            extra_modifiers=check_modifiers + breakdown.total + pull_flat_bonus,
         )
         result = EnhancedSceneActionResult(
             action_resolution=action_resolution,
@@ -690,11 +860,16 @@ def _resolve_standard_action(
     action_request: SceneActionRequest,
     *,
     difficulty_override: int | None = None,
+    pull_flat_bonus: int = 0,
+    fizzle_note: str | None = None,
 ) -> EnhancedSceneActionResult:
     """Resolve the request against its primary target inside a transaction."""
     with transaction.atomic():
         result, result_interaction, difficulty = _resolve_action_against_persona(
-            action_request, action_request.target_persona, difficulty_override=difficulty_override
+            action_request,
+            action_request.target_persona,
+            difficulty_override=difficulty_override,
+            pull_flat_bonus=pull_flat_bonus,
         )
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
@@ -703,6 +878,8 @@ def _resolve_standard_action(
         if result_interaction is not None:
             action_request.result_interaction = result_interaction
             action_request.save(update_fields=["result_interaction"])
+    if fizzle_note is not None:
+        result.fizzle_note = fizzle_note
     return result
 
 
@@ -819,10 +996,30 @@ def respond_to_action_target(
             else:
                 increment = 0
             difficulty_override = base + increment
+            # #1919: Retrieve the pull flat bonus (idempotent — the primary
+            # resolution or an earlier NPC auto-resolve may have already charged
+            # it). Returns 0 when no declaration exists or it already fizzled.
+            pull_flat_bonus = 0
+            action_template = action_request.action_template
+            if action_template is not None and action_template.check_type_id is not None:
+                from world.magic.exceptions import (  # noqa: PLC0415
+                    MagicError,
+                    ProtagonismLockedError,
+                )
+
+                try:
+                    pull_flat_bonus = _charge_social_pull(
+                        action_request=action_request,
+                        check_type=action_template.check_type,
+                    )
+                except (MagicError, ProtagonismLockedError):
+                    # Already fizzled on the primary charge; no bonus for this target.
+                    pull_flat_bonus = 0
             result, result_interaction, resolved_difficulty = _resolve_action_against_persona(
                 action_request,
                 action_target.target_persona,
                 difficulty_override=difficulty_override,
+                pull_flat_bonus=pull_flat_bonus,
             )
             action_target.status = ActionRequestStatus.RESOLVED
             action_target.resolved_at = timezone.now()
@@ -1021,13 +1218,19 @@ def _targeted_outcome_content(
     if result.technique_result is not None and action_request.technique is not None:
         technique_name = action_request.technique.name
         anima_spent = result.technique_result.anima_cost.effective_cost
-        return (
+        content = (
             f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
             f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
         )
-    return (
-        f"{initiator_name} attempts to {action_key} {target_name}: {status_word} ({outcome_name})"
-    )
+    else:
+        content = (
+            f"{initiator_name} attempts to {action_key} {target_name}: "
+            f"{status_word} ({outcome_name})"
+        )
+    # #1919: Append a fizzle note when the thread pull failed at charge time.
+    if result.fizzle_note:
+        content += f" — {result.fizzle_note}"
+    return content
 
 
 def _create_result_interaction(

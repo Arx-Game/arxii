@@ -18,9 +18,9 @@ from world.magic.factories import (
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import (
+    SceneActionPullDeclaration,
     SceneActionRequest,
     SceneActionTarget,
-    SceneCastPullDeclaration,
 )
 from world.scenes.constants import RoundStatus
 from world.scenes.factories import (
@@ -750,7 +750,7 @@ class CastEndpointTestCase(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["status"] == ActionRequestStatus.PENDING
         request_id = response.data["id"]
-        assert SceneCastPullDeclaration.objects.filter(request_id=request_id).exists()
+        assert SceneActionPullDeclaration.objects.filter(request_id=request_id).exists()
         character_resonance.refresh_from_db()
         assert character_resonance.balance == self._STARTING_BALANCE
 

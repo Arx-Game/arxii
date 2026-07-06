@@ -20,9 +20,9 @@ from world.magic.factories import (
 )
 from world.scenes.action_constants import ActionRequestStatus, CastPullTier, DifficultyChoice
 from world.scenes.action_models import (
+    SceneActionPullDeclaration,
     SceneActionRequest,
     SceneActionTarget,
-    SceneCastPullDeclaration,
 )
 from world.scenes.factories import (
     PersonaFactory,
@@ -220,8 +220,8 @@ class StandalonecastTests(TestCase):
         assert request.is_standalone_cast is False
 
 
-class SceneCastPullDeclarationTests(TestCase):
-    """Persistence and related-name access for SceneCastPullDeclaration."""
+class SceneActionPullDeclarationTests(TestCase):
+    """Persistence and related-name access for SceneActionPullDeclaration."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -243,7 +243,7 @@ class SceneCastPullDeclarationTests(TestCase):
         )
 
     def test_declaration_round_trip(self) -> None:
-        decl = SceneCastPullDeclaration.objects.create(
+        decl = SceneActionPullDeclaration.objects.create(
             request=self.request,
             resonance=self.resonance,
             tier=CastPullTier.TIER_2,

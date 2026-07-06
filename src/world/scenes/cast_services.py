@@ -51,7 +51,7 @@ from world.scenes.action_constants import (
     CAST_DIFFICULTY_BANDS,
     ActionRequestStatus,
 )
-from world.scenes.action_models import SceneActionRequest, SceneCastPullDeclaration
+from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import create_interaction
 from world.scenes.narrator import get_or_create_narrator_persona
@@ -420,7 +420,7 @@ def resolve_accepted_cast(
         The resolved EnhancedSceneActionResult for benign casts; None for hostile
         casts resolved into combat.
 
-    A persisted ``SceneCastPullDeclaration`` is re-checked here on the benign
+    A persisted ``SceneActionPullDeclaration`` is re-checked here on the benign
     path: if the committed pull is still payable it is charged with the cast;
     otherwise the cast resolves pull-less and the OUTCOME pose carries a fizzle
     note. (Hostile casts never carry a declaration — pulls are rejected on the
@@ -458,7 +458,7 @@ def resolve_accepted_cast(
             action_request.save(update_fields=["status", "resolved_at"])
         return None
 
-    declaration = SceneCastPullDeclaration.objects.filter(request=action_request).first()
+    declaration = SceneActionPullDeclaration.objects.filter(request=action_request).first()
     cast_pull = None
     fizzle_note = None
     if declaration is not None:
@@ -659,7 +659,7 @@ def request_technique_cast(  # noqa: PLR0913
         fury_commitment: Optional FuryTier the player declared.
         fury_anchor: CharacterSheet of the anchor character (bond caps the tier).
         cast_pull: Optional declared thread pull. Charged in-line on the
-            immediate path; persisted as a ``SceneCastPullDeclaration`` on the
+            immediate path; persisted as a ``SceneActionPullDeclaration`` on the
             benign consent path; rejected on hostile casts (combat pulls go
             through ``CombatPull``).
         supplied_personas: For FILTERED_GROUP techniques, the player-picked subset of
@@ -841,7 +841,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
 
-    A declared pull is persisted (not charged) as a ``SceneCastPullDeclaration``
+    A declared pull is persisted (not charged) as a ``SceneActionPullDeclaration``
     so it survives until consent-resolution re-checks affordability.
     """
     with transaction.atomic():
@@ -856,7 +856,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             fury_anchor=fury_anchor,
         )
         if cast_pull is not None:
-            declaration = SceneCastPullDeclaration.objects.create(
+            declaration = SceneActionPullDeclaration.objects.create(
                 request=request,
                 resonance=cast_pull.resonance,
                 tier=cast_pull.tier,
