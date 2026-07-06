@@ -88,6 +88,48 @@ class ProgressionSeriesTests(TestCase):
             progression_series(weeks=8)
 
 
+class WeeklyWindowBoundaryTests(TestCase):
+    """Pins `_week_boundaries`'s Monday-anchored cutoff.
+
+    The window filter is `transaction_date__date__gte=cutoff` where `cutoff`
+    is the oldest tracked Monday — so a row dated 00:30 UTC on that Monday is
+    inside the window (falls in the oldest bucket), while a row dated 23:30
+    UTC the Sunday immediately before is outside it entirely (excluded by the
+    query, not merely bucketed elsewhere).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        today = timezone.now().date()
+        this_monday = today - datetime.timedelta(days=today.weekday())
+        cls.oldest_monday = this_monday - datetime.timedelta(weeks=7)
+
+        inside_dt = datetime.datetime.combine(
+            cls.oldest_monday, datetime.time(0, 30), tzinfo=datetime.UTC
+        )
+        outside_dt = datetime.datetime.combine(
+            cls.oldest_monday - datetime.timedelta(days=1),
+            datetime.time(23, 30),
+            tzinfo=datetime.UTC,
+        )
+
+        cls.inside = CharacterXPTransactionFactory(character=cls.sheet.character, amount=10)
+        CharacterXPTransaction.objects.filter(pk=cls.inside.pk).update(transaction_date=inside_dt)
+
+        cls.outside = CharacterXPTransactionFactory(character=cls.sheet.character, amount=20)
+        CharacterXPTransaction.objects.filter(pk=cls.outside.pk).update(transaction_date=outside_dt)
+
+    def test_weekly_window_boundary_inclusion_and_exclusion(self) -> None:
+        series = progression_series(weeks=8)
+        xp_series = next(s for s in series if s.label == "XP earned")
+        assert xp_series.points[0].week_start == self.oldest_monday
+        assert xp_series.points[0].value == 10.0
+        # The outside row must not surface in any bucket -- the sum across
+        # the whole series should equal only the inside row's amount.
+        assert sum(point.value for point in xp_series.points) == 10.0
+
+
 class LevelDistributionTests(TestCase):
     def setUp(self) -> None:
         self.klass = CharacterClassFactory()

@@ -18,7 +18,32 @@
   </div>
 </div>
 
-{% for row in series %}
+{# Minted and Sunk render side by side so mint-vs-sink is directly comparable;
+   Transferred (not a mint/sink signal) renders full-width below. #}
+<div class="panel-columns">
+  {% for row in series|slice:":2" %}
+  <div>
+    <h3>{{ row.label }}</h3>
+    <table class="tuning-table">
+      <tbody>
+        {% for point in row.points %}
+        <tr>
+          <td class="bar-row">
+            <span class="bar-label">{{ point.week_start|date:"M j" }}</span>
+            <span class="bar-track">
+              <span class="bar" style="width: {{ point.pct }}%"></span>
+            </span>
+            <span class="bar-label">{{ point.value|floatformat:0 }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</div>
+
+{% for row in series|slice:"2:" %}
 <h3>{{ row.label }}</h3>
 <table class="tuning-table">
   <tbody>
