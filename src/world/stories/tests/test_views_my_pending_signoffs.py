@@ -117,3 +117,12 @@ class MyPendingSignoffsResponseTest(APITestCase):
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
+
+    def test_non_numeric_beats_param_is_ignored_not_500(self):
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+
+        response = self.client.get(MY_PENDING_SIGNOFFS_URL, {"beats": ["abc", "42"]})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []

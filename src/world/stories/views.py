@@ -3164,7 +3164,7 @@ class PlayerPendingTreasuredSignoffsView(APIView):
         if not hasattr(request.user, "player_data"):
             return Response([])
         player_data = cast(PlayerData, request.user.player_data)
-        beat_ids = request.query_params.getlist("beats")
+        beat_ids = [b for b in request.query_params.getlist("beats") if b.isdigit()]
         beats = list(Beat.objects.filter(pk__in=beat_ids))
         entries = player_pending_treasured_signoffs(player_data, beats)
         return Response(PendingTreasuredSignoffsSerializer(entries, many=True).data)
