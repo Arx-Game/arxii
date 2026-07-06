@@ -43,6 +43,8 @@ from world.missions.constants import (
 )
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 
+_PERSONA_MODEL_PATH = "scenes.Persona"
+
 # MissionOptionRouteReward XOR (route, candidate) — module-level so the
 # clean() messages stay readable and the magic 2 has a name.
 _ERR_REWARD_NO_PARENT = "Exactly one of route or candidate must be set; both are null."
@@ -1129,7 +1131,7 @@ class MissionInstance(SharedMemoryModel):
     # Null for trigger-based / legacy seed rows; SET_NULL on Persona delete so
     # we keep the run record.
     accepted_as_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL_PATH,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -1224,12 +1226,12 @@ class MissionInvite(SharedMemoryModel):
         related_name="invites",
     )
     target_persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="mission_invites_received",
     )
     invited_by = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL_PATH,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1730,7 +1732,7 @@ class MissionRiskAcknowledgement(SharedMemoryModel):
         related_name="mission_risk_acknowledgements",
     )
     persona = models.ForeignKey(
-        "scenes.Persona",
+        _PERSONA_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="mission_risk_acknowledgements",
     )

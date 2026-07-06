@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 #: (hull is ``Building.fortification_level``, raised via ``start_ship_hull_upgrade``).
 _HULL_STAT = "hull"
 
+_NO_SUCH_SHIP_MESSAGE = "No such ship."
+
 
 def _resolve_ship(actor: ObjectDB, kwargs: dict[str, Any]) -> ShipDetails | None:
     """The action's target ship: the ``ship`` kwarg (a ``ShipDetails``
@@ -140,7 +142,7 @@ class UpgradeShipAction(Action):
 
         ship = _resolve_ship(actor, kwargs)
         if ship is None:
-            return ActionResult(success=False, message="No such ship.")
+            return ActionResult(success=False, message=_NO_SUCH_SHIP_MESSAGE)
         stat = kwargs.get("stat")
         target_level = kwargs.get("target_level")
         if not stat or target_level is None:
@@ -198,7 +200,7 @@ class RepairShipAction(Action):
 
         ship = _resolve_ship(actor, kwargs)
         if ship is None:
-            return ActionResult(success=False, message="No such ship.")
+            return ActionResult(success=False, message=_NO_SUCH_SHIP_MESSAGE)
         persona = active_persona_for_sheet(actor.sheet_data)
         project = start_ship_repair(persona=persona, ship=ship)
         return ActionResult(
@@ -231,7 +233,7 @@ class ShipStatusAction(Action):
     ) -> ActionResult:
         ship = _resolve_ship(actor, kwargs)
         if ship is None:
-            return ActionResult(success=False, message="No such ship.")
+            return ActionResult(success=False, message=_NO_SUCH_SHIP_MESSAGE)
         data = {
             "ship_id": ship.pk,
             "effective_handling": ship.effective_handling(),

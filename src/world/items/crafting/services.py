@@ -144,6 +144,29 @@ class CraftingQuote:
     station_status: StationStatus | None = None
 
 
+def _station_status_snapshot(station: object | None) -> tuple[StationStatus, bool]:
+    """Build a ``StationStatus`` from a resolved lab station.
+
+    Returns ``(status, broken)`` where ``broken`` is True when the station is
+    missing or broken — the caller uses it to narrow ``affordable`` to False.
+    """
+    if station is None:
+        return (
+            StationStatus(present=False, durability=0, max_durability=0, is_broken=True),
+            True,
+        )
+    return (
+        StationStatus(
+            present=True,
+            durability=station.durability,
+            max_durability=station.max_durability,
+            is_broken=station.is_broken,
+            feature_instance_id=station.feature_instance_id,
+        ),
+        station.is_broken,
+    )
+
+
 def build_crafting_quote(
     *,
     kind: CraftingRecipeKind,
@@ -243,21 +266,9 @@ def build_crafting_quote(
     station_status: StationStatus | None = None
     if recipe.requires_station:
         station = _resolve_active_lab_station(crafter_character)
-        if station is None:
-            station_status = StationStatus(
-                present=False, durability=0, max_durability=0, is_broken=True
-            )
+        station_status, station_broken = _station_status_snapshot(station)
+        if station_broken:
             affordable = False
-        else:
-            station_status = StationStatus(
-                present=True,
-                durability=station.durability,
-                max_durability=station.max_durability,
-                is_broken=station.is_broken,
-                feature_instance_id=station.feature_instance_id,
-            )
-            if station.is_broken:
-                affordable = False
 
     # 7. Failure risk from consequence pool ---
     consequence_rows = list(

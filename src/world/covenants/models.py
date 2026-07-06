@@ -579,64 +579,78 @@ class CharacterCovenantRole(SharedMemoryModel):
         if self.engaged and self.left_at is not None:
             raise ValidationError({"engaged": "Engaged row cannot have left_at set."})
         if self.engaged:
-            same_type_engaged = (
-                CharacterCovenantRole.objects.filter(
-                    character_sheet=self.character_sheet,
-                    covenant__covenant_type=self.covenant.covenant_type,
-                    engaged=True,
-                    left_at__isnull=True,
-                )
-                .exclude(pk=self.pk)
-                .exists()
+            self._validate_engaged_exclusivity()
+
+    def _validate_engaged_exclusivity(self) -> None:
+        """At most one engaged active role per covenant type + per special role.
+
+        Guards against a second engaged active membership of the same covenant
+        type, a second engaged Supreme Commander, and a second engaged Champion.
+        """
+        if self._another_same_type_engaged_exists():
+            raise ValidationError(
+                {
+                    "engaged": (
+                        "Another engaged active membership of the same covenant type "
+                        "exists for this character."
+                    ),
+                }
             )
-            if same_type_engaged:
+        if self.covenant_role.command_tier == CommandTier.SUPREME:
+            if self._another_engaged_supreme_exists():
                 raise ValidationError(
                     {
                         "engaged": (
-                            "Another engaged active membership of the same covenant type "
-                            "exists for this character."
+                            "Another engaged Supreme Commander already exists for this covenant."
                         ),
                     }
                 )
-            if self.covenant_role.command_tier == CommandTier.SUPREME:
-                other_supreme = (
-                    CharacterCovenantRole.objects.filter(
-                        covenant=self.covenant,
-                        covenant_role__command_tier=CommandTier.SUPREME,
-                        engaged=True,
-                        left_at__isnull=True,
-                    )
-                    .exclude(pk=self.pk)
-                    .exists()
+        if self.covenant_role.is_champion_role:
+            if self._another_engaged_champion_exists():
+                raise ValidationError(
+                    {
+                        "engaged": ("Another engaged Champion already exists for this covenant."),
+                    }
                 )
-                if other_supreme:
-                    raise ValidationError(
-                        {
-                            "engaged": (
-                                "Another engaged Supreme Commander already exists for this "
-                                "covenant."
-                            ),
-                        }
-                    )
-            if self.covenant_role.is_champion_role:
-                other_champion = (
-                    CharacterCovenantRole.objects.filter(
-                        covenant=self.covenant,
-                        covenant_role__is_champion_role=True,
-                        engaged=True,
-                        left_at__isnull=True,
-                    )
-                    .exclude(pk=self.pk)
-                    .exists()
-                )
-                if other_champion:
-                    raise ValidationError(
-                        {
-                            "engaged": (
-                                "Another engaged Champion already exists for this covenant."
-                            ),
-                        }
-                    )
+
+    def _another_same_type_engaged_exists(self) -> bool:
+        """True if another active engaged membership of the same covenant type exists."""
+        return (
+            CharacterCovenantRole.objects.filter(
+                character_sheet=self.character_sheet,
+                covenant__covenant_type=self.covenant.covenant_type,
+                engaged=True,
+                left_at__isnull=True,
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        )
+
+    def _another_engaged_supreme_exists(self) -> bool:
+        """True if another engaged Supreme Commander exists for this covenant."""
+        return (
+            CharacterCovenantRole.objects.filter(
+                covenant=self.covenant,
+                covenant_role__command_tier=CommandTier.SUPREME,
+                engaged=True,
+                left_at__isnull=True,
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        )
+
+    def _another_engaged_champion_exists(self) -> bool:
+        """True if another engaged Champion exists for this covenant."""
+        return (
+            CharacterCovenantRole.objects.filter(
+                covenant=self.covenant,
+                covenant_role__is_champion_role=True,
+                engaged=True,
+                left_at__isnull=True,
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        )
 
     def __str__(self) -> str:
         state = "active" if self.left_at is None else "ended"

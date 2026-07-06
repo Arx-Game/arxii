@@ -132,16 +132,34 @@ def _jeopardy_reachable(beat: Beat, max_hops: int) -> bool:
             )
             for transition in transitions:
                 target = transition.target_episode
-                if target is None or target.maturity == StoryMaturity.PITCH:
+                reachable = _downstream_episode_reaches_removal(target, transition, episode_id)
+                if reachable is None:
                     continue
-                if not _transition_follows_failure(transition, episode_id):
-                    continue
-                if any(_beat_offers_removal(downstream) for downstream in target.beats.all()):
+                if reachable is True:
                     return True
                 next_frontier.add(target.pk)
         frontier = next_frontier
         if not frontier:
             break
+    return False
+
+
+def _downstream_episode_reaches_removal(
+    target: object, transition: Transition, episode_id: int
+) -> bool | None:
+    """Whether a failure-following transition's target episode reaches removal.
+
+    Returns ``True`` when the target episode has a beat offering removal (the
+    cascade terminates there); ``False`` when it is a valid next hop to enqueue;
+    ``None`` when the transition should be skipped (no target, PITCH maturity, or
+    not a failure-following transition).
+    """
+    if target is None or target.maturity == StoryMaturity.PITCH:
+        return None
+    if not _transition_follows_failure(transition, episode_id):
+        return None
+    if any(_beat_offers_removal(downstream) for downstream in target.beats.all()):
+        return True
     return False
 
 

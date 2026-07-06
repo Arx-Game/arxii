@@ -27,6 +27,8 @@ from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType
 # Cross-app FK string for the Persona model, referenced by several fields below.
 # Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
 _PERSONA_FK = "scenes.Persona"
+_ORG_MODEL_PATH = "societies.Organization"
+_NPC_OFFER_DETAILS_HELP_TEXT = "The NPCServiceOffer row this details model decorates."
 
 
 class NPCStanding(SharedMemoryModel):
@@ -146,7 +148,7 @@ class NPCRole(SharedMemoryModel):
         ),
     )
     faction_affiliation = models.ForeignKey(
-        "societies.Organization",
+        _ORG_MODEL_PATH,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -571,7 +573,7 @@ class PermitOfferDetails(SharedMemoryModel):
         NPCServiceOffer,
         on_delete=models.CASCADE,
         related_name="permit_offer_details",
-        help_text="The NPCServiceOffer row this details model decorates.",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     building_kind = models.ForeignKey(
         "buildings.BuildingKind",
@@ -627,7 +629,7 @@ class LoanOfferDetails(SharedMemoryModel):
         NPCServiceOffer,
         on_delete=models.CASCADE,
         related_name="loan_offer_details",
-        help_text="The NPCServiceOffer row this details model decorates.",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     principal = models.PositiveBigIntegerField(
         help_text="Coppers lent on acceptance. PLACEHOLDER magnitudes."
@@ -637,7 +639,7 @@ class LoanOfferDetails(SharedMemoryModel):
         help_text="Monthly interest in basis points. PLACEHOLDER magnitudes.",
     )
     creditor_organization = models.ForeignKey(
-        "societies.Organization",
+        _ORG_MODEL_PATH,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -699,7 +701,7 @@ class NpcRegard(DiscriminatorMixin, SharedMemoryModel):
         help_text="Any persona (PC or NPC) this opinion is about. Set iff target_type=PERSONA.",
     )
     target_organization = models.ForeignKey(
-        "societies.Organization",
+        _ORG_MODEL_PATH,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -771,7 +773,7 @@ class CourtGrantOfferDetails(SharedMemoryModel):
         NPCServiceOffer,
         on_delete=models.CASCADE,
         related_name="court_grant_offer_details",
-        help_text="The NPCServiceOffer row this details model decorates.",
+        help_text=_NPC_OFFER_DETAILS_HELP_TEXT,
     )
     covenant = models.ForeignKey(
         "covenants.Covenant",

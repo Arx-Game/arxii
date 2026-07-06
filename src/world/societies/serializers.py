@@ -12,6 +12,8 @@ from world.societies.models import (
     OrganizationReputation,
 )
 
+_ORGANIZATION_NAME_SOURCE = "organization.name"
+
 
 class OrganizationRankSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,7 +47,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 
 class OrganizationMembershipSerializer(serializers.ModelSerializer):
-    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    organization_name = serializers.CharField(source=_ORGANIZATION_NAME_SOURCE, read_only=True)
     persona_name = serializers.CharField(source="persona.name", read_only=True)
     rank = OrganizationRankSerializer(read_only=True)
     title = serializers.CharField(source="get_title", read_only=True)
@@ -74,7 +76,7 @@ class OrganizationMembershipSerializer(serializers.ModelSerializer):
 class OrganizationReputationSerializer(serializers.ModelSerializer):
     """A persona's standing with an organization — named tier only, never the raw value."""
 
-    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    organization_name = serializers.CharField(source=_ORGANIZATION_NAME_SOURCE, read_only=True)
     tier = serializers.SerializerMethodField()
 
     class Meta:
@@ -92,7 +94,7 @@ class OrganizationReputationSerializer(serializers.ModelSerializer):
 
 
 class OrganizationMembershipOfferSerializer(serializers.ModelSerializer):
-    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    organization_name = serializers.CharField(source=_ORGANIZATION_NAME_SOURCE, read_only=True)
     from_persona_name = serializers.CharField(source="from_persona.name", read_only=True)
     to_persona_name = serializers.SerializerMethodField()
 

@@ -42,6 +42,8 @@ if TYPE_CHECKING:
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
 CONSEQUENCE_POOL_MODEL = "actions.ConsequencePool"
+STORY_BEAT_MODEL = "stories.Beat"
+STAKE_MODEL = "stories.Stake"
 
 # Foreclosure wrap-up annotation: the nullable resolved_at/resolved_by pair shared
 # by all three progress models (StoryProgress / GroupStoryProgress / GlobalStoryProgress).
@@ -1149,7 +1151,7 @@ class EpisodeProgressionRequirement(SharedMemoryModel):
         related_name="progression_requirements",
     )
     beat = models.ForeignKey(
-        "stories.Beat",
+        STORY_BEAT_MODEL,
         on_delete=models.CASCADE,
         related_name="gating_for_episodes",
     )
@@ -1188,7 +1190,7 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         related_name="required_outcomes",
     )
     beat = models.ForeignKey(
-        "stories.Beat",
+        STORY_BEAT_MODEL,
         on_delete=models.CASCADE,
         related_name="routing_for_transitions",
     )
@@ -1200,7 +1202,7 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         help_text="Required beat outcome; blank on stake-level rows.",
     )
     stake = models.ForeignKey(
-        "stories.Stake",
+        STAKE_MODEL,
         null=True,
         blank=True,
         on_delete=models.CASCADE,
@@ -2091,7 +2093,7 @@ class Stake(SharedMemoryModel):
     contracts.
     """
 
-    beat = models.ForeignKey("stories.Beat", on_delete=models.CASCADE, related_name="stakes")
+    beat = models.ForeignKey(STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="stakes")
     template = models.ForeignKey(
         "stories.StakeTemplate",
         null=True,
@@ -2169,7 +2171,7 @@ class StakeResolution(SharedMemoryModel):
     consequence pools -> process_damage_consequences).
     """
 
-    stake = models.ForeignKey("stories.Stake", on_delete=models.CASCADE, related_name="resolutions")
+    stake = models.ForeignKey(STAKE_MODEL, on_delete=models.CASCADE, related_name="resolutions")
     column = models.CharField(max_length=12, choices=StakeResolutionColumn.choices)
     outcome_key = models.CharField(
         max_length=40,
@@ -2347,7 +2349,7 @@ class StakeContractActivation(SharedMemoryModel):
     """
 
     beat = models.ForeignKey(
-        "stories.Beat", on_delete=models.CASCADE, related_name="stake_activations"
+        STORY_BEAT_MODEL, on_delete=models.CASCADE, related_name="stake_activations"
     )
     locked_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
@@ -2394,7 +2396,7 @@ class StakeOutcome(SharedMemoryModel):
     """
 
     stake = models.ForeignKey(
-        "stories.Stake",
+        STAKE_MODEL,
         on_delete=models.CASCADE,
         related_name="outcomes",
     )
@@ -2442,7 +2444,7 @@ class TreasuredSignoff(SharedMemoryModel):
     WITHDRAWAL column at completion."""
 
     beat = models.ForeignKey(
-        "stories.Beat",
+        STORY_BEAT_MODEL,
         on_delete=models.CASCADE,
         related_name="treasured_signoffs",
     )
