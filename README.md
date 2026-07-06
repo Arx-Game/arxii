@@ -135,6 +135,16 @@ Idempotent — safe to re-run; it only fills missing rows and never overwrites
 your edits or loaded fixtures. Superusers can also click **Load sane defaults**
 in Django admin.
 
+The Big Button's post-seed redirect lands on the **Game Setup** hub
+(`/admin/_game_setup/`), a superuser-only landing page laying out the
+clone→seed→tweak→export flow with a live per-cluster content inventory. From
+there, **Game Tuning** (`/admin/_tuning/`) offers check/consequence/condition
+difficulty analytics and a Monte Carlo party-vs-boss simulation preview, and
+**Game Ops** (`/admin/_ops/`) surfaces progression/economy/story/reports
+analytics plus a technical-health snapshot. If you maintain a private content
+repository, set `CONTENT_REPO_PATH` in `src/.env` and the hub also offers an
+optional **Load content repo** step to build and upsert it into the database.
+
 ## Using the arx CLI
 After setup, use the arx command-line tool:
 

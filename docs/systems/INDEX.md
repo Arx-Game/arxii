@@ -3116,6 +3116,35 @@ Production-callable seed layer for populating sane defaults on a fresh dev insta
 - **Source:** `src/world/seeds/`
 - **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)
 
+### Game Tuning & Game Ops Dashboards (#1220 / #1221)
+Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation and live-game analytics.
+
+- **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — four HTMX-fragment panels: checks
+  probability distributions (`web/admin/tuning/checks_analytics.py` —
+  `compute_chart_distributions`, `compute_matchup`), consequence-pool inspector
+  (`consequence_analytics.py` — `inspect_pool`, `list_pools`), condition danger ranking
+  (`condition_analytics.py` — `compute_condition_danger`), and a Monte Carlo
+  party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`).
+- **Simulator:** `world.combat.simulation.run_party_vs_boss_simulation(SimulationParams) -> SimulationReport`
+  drives the real `world.combat.services.resolve_round` pipeline through synthetic,
+  locationless encounters inside nested transaction savepoints that are always rolled
+  back (isolation contract in the module docstring) — nothing it does is ever persisted,
+  and existing `EncounterScalingConfig` tuning is never overwritten.
+- **Game Ops** (`/admin/_ops/`, `admin_ops`) — five panels: progression, economy,
+  story/GM, and reports-queue analytics (`web/admin/tuning/metrics.py` —
+  `progression_series`, `economy_series`, `story_series`, `reports_snapshot`, etc.), plus
+  a refresh-on-demand Technical Health panel (`tech_health.py` — `collect_tech_health`:
+  idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
+- **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
+  maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
+  `core_management.content_fixtures.build_all` + `load_entries`; linked from the Game
+  Setup hub.
+- **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
+  mirroring `game_setup_views.py`'s gate).
+- **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
+  `src/world/combat/simulation.py`.
+- **Details:** [tuning.md](tuning.md)
+
 ---
 
 ## Frontend

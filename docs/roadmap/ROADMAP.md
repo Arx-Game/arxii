@@ -102,9 +102,26 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 
 ### Cross-cutting initiatives
 
-- [Seed Mechanism + Integration Test Coverage](seed-and-integration-tests.md) — making the project clonable and every L1 user story regression-tested. Three phases: magic completeness → integration test framework expansion → seed for clone use. Audit at `docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`. **Sequenced before broad UI work.**
+- [Seed Mechanism + Integration Test Coverage](seed-and-integration-tests.md) — making the project clonable and every L1 user story regression-tested. Three phases: magic completeness → integration test framework expansion → seed for clone use. Audit at `docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`. **Sequenced before broad UI work.** Phase 3's cluster-master relocation (3.2, #1220) is done — masters now live in `src/world/seeds/game_content/`, with a compatibility facade in `integration_tests/game_content/`. The "Phase B #1221 makes them tunable" follow-on also shipped: admin-hosted Game Tuning & Game Ops dashboards (`/admin/_tuning/`, `/admin/_ops/`) plus a superuser content-repo load surface — see [tuning.md](../systems/tuning.md) and ADR-0093.
 
 ### Recent Infrastructure Changes
+
+- **Admin-hosted Game Tuning & Game Ops dashboards + content-repo load (#1220/#1221, complete):**
+  - **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — four HTMX-fragment panels: check-engine
+    probability distributions (`web/admin/tuning/checks_analytics.py`), a consequence-pool inspector
+    (`consequence_analytics.py`), condition danger ranking (`condition_analytics.py`), and a Monte
+    Carlo party-vs-boss simulation form backed by `world.combat.simulation.run_party_vs_boss_simulation`
+    (drives the real `resolve_round` pipeline inside rolled-back transaction savepoints — nothing
+    persists).
+  - **Game Ops** (`/admin/_ops/`, `admin_ops`) — five panels: progression/economy/story/reports
+    analytics (`web/admin/tuning/metrics.py`) plus a refresh-on-demand Technical Health panel
+    (`tech_health.py`: idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
+  - Superuser-only external content-repo load surface (`web/admin/content_load_views.py`,
+    `CONTENT_REPO_PATH` env var) upserting into the DB via `core_management.content_fixtures`;
+    linked from the Game Setup hub alongside both new dashboards.
+  - Built on the existing `ArxAdminSite` with `django-htmx` + vendored `htmx.min.js`, not
+    `django-unfold` (deviation from the original #1221 spec — see ADR-0093, which narrows
+    ADR-0022's admin-hosted-not-React decision). Details: [tuning.md](../systems/tuning.md).
 
 - **Scene-adaptive cast + three-mode round framework (#1351, complete):**
   - `SceneRoundMode` TextChoices (`OPEN` / `POSE_ORDER` / `STRICT`) on `SceneRound`. Social rounds
