@@ -2,9 +2,10 @@
 
 The dashboard page (`tuning_dashboard`) renders a skeleton of four panels, each
 an HTMX fragment loaded on page load. Task 2 replaced the checks-panel stub
-with `tuning_checks_fragment` (real analytics, see `checks_analytics.py`).
-Tasks 3/4/6 still need to replace the remaining stub fragment views below
-(`_consequences_fragment`, `_conditions_fragment`, `_simulation_fragment`).
+with `tuning_checks_fragment` (real analytics, see `checks_analytics.py`). Task 3
+replaced the consequences-panel stub with `tuning_consequences_fragment` (see
+`consequence_analytics.py`). Tasks 4/6 still need to replace the remaining stub
+fragment views below (`_conditions_fragment`, `_simulation_fragment`).
 """
 
 from __future__ import annotations
@@ -17,7 +18,9 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 
+from actions.models.consequence_pools import ConsequencePool
 from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
+from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
 
 _DEFAULT_ROLLER_POINTS = 25
 _DEFAULT_TARGET_DIFFICULTY = 25
@@ -80,9 +83,26 @@ def tuning_checks_fragment(request: HttpRequest) -> HttpResponse:
 
 
 @superuser_required
-def _consequences_fragment(_request: HttpRequest) -> HttpResponse:
-    """Stub for the consequences panel; replaced in Task 3."""
-    return HttpResponse("<p>Loading soon.</p>")
+def tuning_consequences_fragment(request: HttpRequest) -> HttpResponse:
+    """Consequence-pool inspector panel: annotated entries for a selected pool (#1221).
+
+    `pool` query param selects which pool to inspect via its `<select>`
+    re-render (`hx-get` on change); defaults to the first pool by name. The
+    selector form lives inside the fragment template so re-renders preserve it.
+    """
+    pools = list_pools()
+    default_pool_id = pools[0][0] if pools else 0
+    selected_pool_id = _int_query_param(request, "pool", default_pool_id)
+
+    pool = ConsequencePool.objects.filter(pk=selected_pool_id).first()
+    inspection = inspect_pool(pool) if pool is not None else None
+
+    context = {
+        "pools": pools,
+        "selected_pool_id": selected_pool_id,
+        "inspection": inspection,
+    }
+    return render(request, "admin/tuning/_consequences_panel.html", context)
 
 
 @superuser_required

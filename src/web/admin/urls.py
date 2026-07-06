@@ -7,9 +7,9 @@ from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.tuning.views import (
     _conditions_fragment,
-    _consequences_fragment,
     _simulation_fragment,
     tuning_checks_fragment,
+    tuning_consequences_fragment,
     tuning_dashboard,
 )
 from web.admin.views import (
@@ -37,7 +37,7 @@ urlpatterns = [
     path("_game_setup/", game_setup, name="admin_game_setup"),
     path("_tuning/", tuning_dashboard, name="admin_tuning"),
     path("_tuning/checks/", tuning_checks_fragment, name="admin_tuning_checks"),
-    path("_tuning/consequences/", _consequences_fragment, name="admin_tuning_consequences"),
+    path("_tuning/consequences/", tuning_consequences_fragment, name="admin_tuning_consequences"),
     path("_tuning/conditions/", _conditions_fragment, name="admin_tuning_conditions"),
     path("_tuning/simulation/", _simulation_fragment, name="admin_tuning_simulation"),
     path("", arx_admin_site.urls),
