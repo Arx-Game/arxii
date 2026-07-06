@@ -11,6 +11,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind, BeatPredicateType, StakeSeverity, StakeSubjectKind
 from world.stories.factories import (
@@ -124,6 +126,49 @@ class StakeCustomGateTests(APITestCase):
         resp = self.client.post(reverse("stake-list"), self._payload(), format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["subject_kind"], StakeSubjectKind.CUSTOM)
+
+
+class StakeCustomGateGMLevelCapTests(APITestCase):
+    """#2000 Task 3: custom-stake gate reads GMLevelCap.allow_custom_stakes."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.caps = seed_default_gm_level_caps()
+        cls.staff = AccountFactory(is_staff=True)
+        cls.senior_account = AccountFactory(is_staff=False)
+        GMProfileFactory(account=cls.senior_account, level=GMLevel.SENIOR)
+        cls.gm_account = AccountFactory(is_staff=False)
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.GM)
+        cls.story = StoryFactory(owners=[cls.staff, cls.senior_account, cls.gm_account])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(episode=cls.episode, risk=RenownRisk.LOW, target_level=2)
+
+    def _payload(self):
+        return {
+            "beat": self.beat.pk,
+            "subject_kind": StakeSubjectKind.CUSTOM,
+            "severity": StakeSeverity.COSTLY,
+            "subject_label": "A custom wager",
+            "player_summary": "Something dear is wagered.",
+        }
+
+    def test_senior_gm_may_author_custom_stake(self):
+        self.client.force_authenticate(user=self.senior_account)
+        resp = self.client.post(reverse("stake-list"), self._payload(), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["subject_kind"], StakeSubjectKind.CUSTOM)
+
+    def test_gm_level_cannot_author_custom_stake(self):
+        self.client.force_authenticate(user=self.gm_account)
+        resp = self.client.post(reverse("stake-list"), self._payload(), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("template", resp.data)
+
+    def test_staff_may_author_custom_stake_regardless_of_gm_level(self):
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(reverse("stake-list"), self._payload(), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
 
 class StakeTemplateBandingTests(APITestCase):

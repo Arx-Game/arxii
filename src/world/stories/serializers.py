@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMProfile, GMTable
+from world.gm.models import GMLevelCap, GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
@@ -919,6 +919,34 @@ class SessionRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "story_id"]
 
 
+def _gm_max_risk(user) -> str:
+    """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
+
+    No GMProfile or no cap row → RenownRisk.NONE.
+    """
+    try:
+        gm_profile = user.gm_profile
+    except GMProfile.DoesNotExist:
+        return RenownRisk.NONE
+    try:
+        cap = GMLevelCap.objects.get(level=gm_profile.level)
+    except GMLevelCap.DoesNotExist:
+        return RenownRisk.NONE
+    return cap.max_beat_risk
+
+
+def _gm_allows_custom_stakes(user) -> bool:
+    """Whether a non-staff author's GMLevelCap permits custom (template=null) stakes.
+
+    No GMProfile or no cap row → False.
+    """
+    try:
+        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
+    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        return False
+    return cap.allow_custom_stakes
+
+
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
@@ -1102,14 +1130,17 @@ class BeatSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(msg)
 
         if merged_risk != RenownRisk.NONE and not is_staff:
-            raise serializers.ValidationError(
-                {
-                    "risk": (
-                        "Only staff may author beats above risk NONE. "
-                        "Higher risk tiers unlock with GM trust level."
-                    )
-                }
-            )
+            from world.stories.services.stakes import risk_index  # noqa: PLC0415
+
+            if risk_index(merged_risk) > risk_index(_gm_max_risk(user)):
+                raise serializers.ValidationError(
+                    {
+                        "risk": (
+                            "Your GM level does not permit authoring beats at this risk "
+                            "tier. Higher tiers unlock as staff promote your GM level."
+                        )
+                    }
+                )
         return attrs
 
 
@@ -2644,12 +2675,12 @@ class StakeSerializer(serializers.ModelSerializer):
             attrs.setdefault("subject_kind", template.subject_kind)
             attrs.setdefault("severity", template.severity)
         else:
-            if not is_staff:
+            if not is_staff and not _gm_allows_custom_stakes(user):
                 raise serializers.ValidationError(
                     {
                         "template": (
-                            "Only staff may author custom stakes (template=null). "
-                            "Use a StakeTemplate instead."
+                            "Only staff or Senior GMs may author custom stakes "
+                            "(template=null). Use a StakeTemplate instead."
                         )
                     }
                 )
