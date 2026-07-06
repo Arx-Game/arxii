@@ -940,13 +940,28 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:
-        from world.checks.models import CheckCategory, CheckType
+        from decimal import Decimal
+
+        from world.checks.models import (
+            CheckCategory,
+            CheckType,
+            CheckTypeTrait,
+        )
+        from world.traits.factories import StatTraitFactory
+        from world.traits.models import TraitCategory
 
         category, _ = CheckCategory.objects.get_or_create(name="Combat")
         check, _ = CheckType.objects.get_or_create(
             name="Escalation Pace",
             category=category,
             defaults={"description": "Keep control in pace with rising intensity."},
+        )
+        # #1706 — seed the Escalation Pace check's wits stat leg (split-second
+        # reading of rising combat intensity). Idempotent get_or_create.
+        CheckTypeTrait.objects.get_or_create(
+            check_type=check,
+            trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
+            defaults={"weight": Decimal("1.00")},
         )
         return check
 
