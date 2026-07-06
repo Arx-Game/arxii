@@ -400,6 +400,15 @@ actions, backends, and service functions.
   `sanctum dissolve`, `sanctum absorb`, `sanctum sever <thread name|id>`.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdCombat`). No
   business logic in the command.
+- **`companion.py`**: `CmdCompanion` (`companion`, #1918) — the companion lifecycle namespace. One
+  `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release`) through
+  `dispatch_player_action` — the same seam the web `CompanionViewSet` uses — reaching the Actions in
+  `actions/definitions/companions.py`. Bare `companion`/`companion status`/`companion list` = status hub
+  (active companions + remaining capacity). Grammar:
+  `companion bind archetype=<name|id> gift=<name|id> name=<text>`,
+  `companion release <name|id>`, `companion fight <name|id>`, `companion deploy <name|id>`.
+  Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdSanctum`/`CmdCombat`).
+  No business logic in the command.
 - **`crafting_station.py`**: `CmdLabStation` (`station`, #1234) — the Lab
   crafting-station namespace. One `DispatchCommand` routes a leading subverb
   (`station install [level=<n>]` / `station upgrade level=<n>` / `station repair

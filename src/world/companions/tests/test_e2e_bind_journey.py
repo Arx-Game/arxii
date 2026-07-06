@@ -80,12 +80,70 @@ class CompanionBindJourneyTests(EvenniaTestCase):
         self.assertFalse(Companion.objects.filter(name="Ghost").exists())
 
         # Release the Wolf — object gone, row persists with released_at set.
-        from world.companions.services import release_companion
+        # Uses ReleaseCompanionAction (the Action seam), not the service directly (#1918).
+        from evennia.objects.models import ObjectDB
+
+        from actions.definitions.companions import ReleaseCompanionAction
 
         fang = Companion.objects.get(name="Fang")
         object_id = fang.objectdb_id
-        release_companion(fang)
-        from evennia.objects.models import ObjectDB
+        release_result = ReleaseCompanionAction().run(actor=self.owner, companion_id=fang.pk)
+        self.assertTrue(release_result.success, release_result.message)
 
         self.assertFalse(ObjectDB.objects.filter(pk=object_id).exists())
         self.assertTrue(Companion.objects.filter(pk=fang.pk, released_at__isnull=False).exists())
+
+    def test_bind_deploy_release_journey(self) -> None:
+        """Full bind → deploy → release loop through the Action seam (#1918).
+
+        Proves the three Actions compose end-to-end: bind creates the
+        companion, deploy bridges it into a battle vehicle, release tears
+        down the live object while keeping the row.
+        """
+        from actions.definitions.companions import (
+            BindCompanionAction,
+            DeployCompanionAction,
+            ReleaseCompanionAction,
+        )
+        from world.battles.factories import BattleFactory, BattleSideFactory
+        from world.battles.models import BattleParticipant, BattleParticipantStatus
+        from world.checks.test_helpers import force_check_outcome
+        from world.combat.constants import RiskLevel
+        from world.companions.models import Companion, CompanionArchetype
+        from world.traits.factories import CheckOutcomeFactory
+
+        # 1. Bind a companion.
+        hawk = CompanionArchetype.objects.get(name="Hawk")
+        success = CheckOutcomeFactory(name="Journey Deploy Success", success_level=5)
+        with force_check_outcome(success):
+            result = BindCompanionAction().run(
+                actor=self.owner, gift_id=self.gift.pk, archetype_id=hawk.pk, name="Skree"
+            )
+        self.assertTrue(result.success, result.message)
+        companion = Companion.objects.get(name="Skree")
+
+        # 2. Deploy into a battle (mirrors test_combat_bridge_e2e.py's fixture pattern).
+        battle = BattleFactory(risk_level=RiskLevel.LOW)
+        side = BattleSideFactory(battle=battle)
+        BattleParticipant.objects.create(
+            battle=battle,
+            character_sheet=self.sheet,
+            side=side,
+            status=BattleParticipantStatus.ACTIVE,
+        )
+        deploy_result = DeployCompanionAction().run(actor=self.owner, companion_id=companion.pk)
+        self.assertTrue(deploy_result.success, deploy_result.message)
+        self.assertIn("vehicle_id", deploy_result.data)
+
+        # 3. Release the companion via the Action seam.
+        object_id = companion.objectdb_id
+        release_result = ReleaseCompanionAction().run(actor=self.owner, companion_id=companion.pk)
+        self.assertTrue(release_result.success, release_result.message)
+        self.assertIn("released from your bond", release_result.message)
+
+        from evennia.objects.models import ObjectDB
+
+        companion.refresh_from_db()
+        self.assertIsNotNone(companion.released_at)
+        self.assertFalse(companion.is_active)
+        self.assertFalse(ObjectDB.objects.filter(pk=object_id).exists())
