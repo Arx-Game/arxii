@@ -1556,6 +1556,7 @@ def seed_magic_config() -> MagicConfigResult:
     )
     from world.magic.models.corruption_config import CorruptionConfig  # noqa: PLC0415
     from world.magic.models.gain_config import ResonanceGainConfig  # noqa: PLC0415
+    from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
     # --- AnimaConfig (has its own get_or_create helper) ---
     anima_config = AnimaConfig.get_singleton()
@@ -1577,13 +1578,32 @@ def seed_magic_config() -> MagicConfigResult:
             "deficit_scale": 5,
             "resilience_check_type": resilience_check_type,
             "base_check_difficulty": 15,
-            "ritual_budget_critical_success": 10,
-            "ritual_budget_success": 6,
-            "ritual_budget_partial": 3,
-            "ritual_budget_failure": 1,
             "ritual_severity_cost_per_point": 1,
         },
     )
+
+    # --- AnimaRitualBudgetAward: one authored row per canonical CheckOutcome tier ---
+    # Replaces the old SoulfrayConfig.ritual_budget_critical_success/_success/_partial/
+    # _failure fields (#1207). seed_check_resolution_tables() is idempotent
+    # (get_or_create on natural keys), so it's safe to call unconditionally here to
+    # guarantee the 5 canonical CheckOutcome rows exist before keying awards on them —
+    # this seed helper is called standalone in some test setUpTestData blocks without
+    # the check-resolution spine already seeded.
+    from world.seeds.checks import seed_check_resolution_tables  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    seed_check_resolution_tables()
+    for name, budget in (
+        ("Critical Success", 10),
+        ("Success", 6),
+        ("Partial Success", 3),
+        ("Failure", 1),
+        ("Critical Failure", 1),
+    ):
+        AnimaRitualBudgetAward.objects.get_or_create(
+            outcome_tier=CheckOutcome.objects.get(name=name),
+            defaults={"budget": budget},
+        )
 
     # --- ResonanceGainConfig (pk=1) ---
     resonance_gain_config, _ = ResonanceGainConfig.objects.get_or_create(pk=1, defaults={})
