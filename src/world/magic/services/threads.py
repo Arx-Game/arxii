@@ -459,23 +459,24 @@ def _has_weaving_unlock(
 ) -> bool:
     """Check if a character has the required ThreadWeavingUnlock for a given anchor.
 
-    Spec A §7.4 eligibility table (lines 449-457).
+    Spec A §7.4 eligibility table (lines 449-457). Delegates to the cached
+    CharacterWeavingUnlockHandler (ADR-0093) — no .filter()/.exists() queries.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
-    base = CharacterThreadWeavingUnlock.objects.filter(character=character_sheet)
+    handler = character_sheet.character.weaving_unlocks
     match target_kind:
         case TargetKind.TRAIT:
-            return base.filter(unlock__unlock_trait=target).exists()
+            return handler.has_unlock_for_trait(target)
         case TargetKind.TECHNIQUE:
-            return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
+            return handler.has_unlock_for_gift(target.gift)  # type: ignore[union-attr]
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL
-            return base.filter(unlock__unlock_track=track).exists()
-        case TargetKind.FACET:
-            # Single global FACET unlock — no per-facet variant; any FACET-kind unlock suffices.
-            return base.filter(unlock__target_kind=TargetKind.FACET).exists()
+            return handler.has_unlock_for_track(track)
+        # Kind-level unlocks: any unlock of that target_kind suffices.
+        case TargetKind.FACET | TargetKind.SANCTUM | TargetKind.ORGANIZATION:
+            return handler.has_unlock_for_kind(target_kind)
     return False
 
 
@@ -824,12 +825,15 @@ def accept_thread_weaving_unlock(
 
     # TODO: Transfer gold when economy system exists (matching codex TODO).
 
-    return CharacterThreadWeavingUnlock.objects.create(
+    purchase = CharacterThreadWeavingUnlock.objects.create(
         character=learner,
         unlock=unlock,
         xp_spent=xp_cost,
         teacher=offer.teacher,
     )
+    # Invalidate the cached handler so the next read sees the new unlock (ADR-0093).
+    learner.character.weaving_unlocks.invalidate()
+    return purchase
 
 
 # =============================================================================
