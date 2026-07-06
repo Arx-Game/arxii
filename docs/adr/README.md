@@ -128,7 +128,7 @@ treat those names as hints to confirm, not gospel.
 - [0085 — NPCStanding carries debt and petition-failure-streak, not CourtPact](0085-npcstanding-debt-and-petition-streak-are-generic.md)
 - [0091 — instantiate_situation mints Challenges via an authored target-object name; GM triggers it with a plain staff Action](0091-instantiate-situation-mints-challenges-gm-trigger.md) (supersedes ADR-0090)
 - [0095 — Battle live updates are a slim BATTLE_STATE ping plus REST refetch, not a full-state WS payload](0095-battle-live-updates-are-ping-plus-refetch.md)
-- [0095 — Casts roll the caster's personal check in every path](0095-casts-roll-the-casters-personal-check-in-every-path.md)
+- [0096 — Casts roll the caster's personal check in every path](0096-casts-roll-the-casters-personal-check-in-every-path.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)

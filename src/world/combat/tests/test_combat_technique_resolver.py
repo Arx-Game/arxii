@@ -744,7 +744,7 @@ class NonAttackPCActionRoutingTests(TestCase):
         # action_template with check_type is required — _resolve_pc_action derives
         # offense_check_type via resolve_cast_check_type, which falls back to
         # technique.action_template.check_type for this unprovisioned caster
-        # (ADR-0095).
+        # (ADR-0096).
         check_type = CheckTypeFactory()
         encounter = CombatEncounterFactory(round_number=1)
         sheet = CharacterSheetFactory()

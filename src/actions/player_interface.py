@@ -526,7 +526,7 @@ def _combat_actions(
             continue
         template = technique.action_template  # guaranteed non-None: queryset filters isnull=False
         # #2014: the caster's own provisioned magic check wins over the template's
-        # fallback (ADR-0095) — mirrors what the resolver actually rolls at dispatch.
+        # fallback (ADR-0096) — mirrors what the resolver actually rolls at dispatch.
         check_type = resolve_cast_check_type(character, template)
         ref = ActionRef(
             backend=ActionBackend.COMBAT,

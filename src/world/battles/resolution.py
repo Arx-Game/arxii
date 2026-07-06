@@ -18,7 +18,7 @@ the real magic envelope (``use_technique``). Routing through ``use_technique``
 (rather than a generic shared check) means the check is sourced from
 ``resolve_cast_check_type`` — the caster's provisioned personal magic check
 when they have one, falling back to the technique's
-``action_template.check_type`` only for an unprovisioned caster (ADR-0095) —
+``action_template.check_type`` only for an unprovisioned caster (ADR-0096) —
 anima/Soulfray/mishap apply normally, and Audere/Audere Majora escalation
 fires automatically (it's wired inside ``use_technique`` itself, Step 8c — no
 separate call site is needed here). ``resolve_battle_round`` calls

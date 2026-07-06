@@ -199,7 +199,7 @@ casting never hard-fails with "no template." The resolution chain:
   resolves this check type for use by the cast pipeline. `resolve_cast_check_type(character,
   template)` (`services/anima.py`) is the single resolver every cast path calls: it
   returns the personal check when the caster is provisioned, else falls back to
-  `template.check_type` (ADR-0095) — standalone casts, combat round casts, clash
+  `template.check_type` (ADR-0096) — standalone casts, combat round casts, clash
   contributions, and battle technique resolution (`world/battles/resolution.py`)
   all go through it, so none of them can silently roll the shared template check
   for a provisioned caster.
@@ -220,7 +220,7 @@ casting never hard-fails with "no template." The resolution chain:
   the flavor pick cannot affect the rolled check: **every** cast path (standalone,
   combat, clash, battle technique resolution in `world/battles/resolution.py`)
   resolves the check via `resolve_cast_check_type` (personal check first, template
-  fallback — ADR-0095) — as does the combat availability descriptor
+  fallback — ADR-0096) — as does the combat availability descriptor
   (`actions/player_interface.py`), so the action-picker UI shows the same check
   the resolver rolls — and none of them read
   `technique.action_template.check_type` directly anymore. Resolution:

@@ -331,7 +331,7 @@ class GetCharacterCastCheckTests(TestCase):
 
 
 class ResolveCastCheckTypeTests(TestCase):
-    """Precedence: personal check -> template check -> None (ADR-0095)."""
+    """Precedence: personal check -> template check -> None (ADR-0096)."""
 
     @classmethod
     def setUpTestData(cls):

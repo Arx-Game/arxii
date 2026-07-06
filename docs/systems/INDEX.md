@@ -2924,7 +2924,7 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
   `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from
   `resolve_cast_check_type` — the caster's provisioned personal magic check, falling back to
-  the cast technique's `action_template.check_type` only when unprovisioned, ADR-0095 — via
+  the cast technique's `action_template.check_type` only when unprovisioned, ADR-0096 — via
   `use_technique`; `select_consequence` for the Surrounded entry roll and resist checks,
   #1733), combat
   (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710, and

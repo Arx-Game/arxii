@@ -123,7 +123,7 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     context = ResolutionContext(character=character, target=target)
 
     # The cast rolls the CASTER'S personal magic check, falling back to the
-    # template's own check — the shared rule every cast path uses (ADR-0095).
+    # template's own check — the shared rule every cast path uses (ADR-0096).
     cast_check = resolve_cast_check_type(character, action_template)
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415

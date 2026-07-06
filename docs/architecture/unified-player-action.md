@@ -92,7 +92,7 @@ and `ChallengeApproach.action_template`
 > is carried on the descriptor only when present (combat techniques, registry
 > templates, override challenge approaches).
 >
-> **Superseded (2026-07-06, #2014, ADR-0095):** combat no longer reads
+> **Superseded (2026-07-06, #2014, ADR-0096):** combat no longer reads
 > `technique.action_template.check_type` directly. Every cast path — combat,
 > clash, and standalone — now resolves the offense check via
 > `resolve_cast_check_type` (`world/magic/services/anima.py`): the caster's
@@ -126,7 +126,7 @@ it. Scope = "player does thing with their character."
    `action_template` becomes **required** for combat-usable techniques (explicit
    config error, no silent no-op, no "legacy"). Add `focused_ally_target` to the
    `/dispatch/` path. **This is the #1 fix.** (Superseded 2026-07-06, #2014,
-   ADR-0095: the direct `action_template.check_type` read is now only the
+   ADR-0096: the direct `action_template.check_type` read is now only the
    unprovisioned-caster fallback inside `resolve_cast_check_type`, not the
    sourcing itself.)
 4. **Combat-agnostic tempo seam** — `get_active_round_context(character)`;
@@ -290,7 +290,7 @@ them costs a round is pre-existing combat-design, not this interface's concern.
 - In `_resolve_pc_action` (`src/world/combat/services.py:1764`),
   `offense_check_type` is derived from
   `action.focused_action.action_template.check_type` — not received as `None`.
-  (Superseded 2026-07-06, #2014, ADR-0095: now derived from
+  (Superseded 2026-07-06, #2014, ADR-0096: now derived from
   `resolve_cast_check_type`, which prefers the caster's personal check and
   falls back to this `action_template.check_type` only when unprovisioned.)
 - The silent `if offense_check_type is not None` no-op guard is **deleted**. A

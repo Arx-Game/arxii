@@ -206,7 +206,7 @@ def commit_to_clash(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
-    # 1. Resolve the check via the shared cast-check rule (ADR-0095): the
+    # 1. Resolve the check via the shared cast-check rule (ADR-0096): the
     #    caster's personal magic check when provisioned, else the template's.
     template = technique.action_template
     if template is None:

@@ -72,7 +72,7 @@ def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia cha
 
 
 def resolve_cast_check_type(character, template):  # noqa: OBJECTDB_PARAM — Evennia character
-    """The CheckType a technique cast rolls, for EVERY cast path (ADR-0095).
+    """The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).
 
     Precedence: the caster's provisioned personal magic check always wins;
     an ActionTemplate's ``check_type`` is a fallback, never an override.

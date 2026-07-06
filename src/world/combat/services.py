@@ -5558,7 +5558,7 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         offense_check_fn: Optional ``perform_check`` override for PC offense.
             The offense_check_type is now sourced from ``resolve_cast_check_type``
             (the caster's personal check, falling back to the declared technique's
-            action_template.check_type only when unprovisioned, ADR-0095) — it is
+            action_template.check_type only when unprovisioned, ADR-0096) — it is
             no longer passed externally.
 
     Returns:

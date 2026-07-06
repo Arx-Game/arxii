@@ -1,4 +1,4 @@
-# ADR-0095: Casts roll the caster's personal check in every path
+# ADR-0096: Casts roll the caster's personal check in every path
 
 **Status:** Accepted (2026-07-06) · **Issue:** #2014
 

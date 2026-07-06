@@ -120,7 +120,7 @@ def _build_combat_technique(*, action_category: str = ActionCategory.PHYSICAL, r
 
     action_template is required by _resolve_pc_action (resolve_cast_check_type
     falls back to template.check_type for the offense check type when the
-    caster is unprovisioned, ADR-0095).
+    caster is unprovisioned, ADR-0096).
     """
     check_type = CheckTypeFactory()
     kwargs = {

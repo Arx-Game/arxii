@@ -313,7 +313,7 @@ character's ACTIVE `BattleParticipant` whose `battle.scene.is_active=True`, orde
 `resolve_battle_technique(*, declaration) -> CheckResult | None` casts `declaration.technique`
 through the real magic envelope (`world.magic.services.use_technique`) rather than a generic
 shared check. Routing through `use_technique` means the check is sourced from
-`resolve_cast_check_type(character, template)` (`world/magic/services/anima.py`, ADR-0095) —
+`resolve_cast_check_type(character, template)` (`world/magic/services/anima.py`, ADR-0096) —
 the caster's provisioned personal magic check when they have one, falling back to the
 technique's `action_template.check_type` only for an unprovisioned caster — anima cost /
 Soulfray accumulation apply normally, and the Audere / Audere Majora escalation hook fires
@@ -1162,7 +1162,7 @@ payload data is applied directly; invalidation alone triggers the refetch.
   (#1794), implemented by both `BattleUnit` and `character_sheets.CharacterSheet` — the
   modifier stack's `_property_affinity_modifier`/`_terrain_property_modifier` read either
   kind of holder with no `isinstance` branching.
-- **Checks** — `perform_check`, sourced from `resolve_cast_check_type` (ADR-0095: the
+- **Checks** — `perform_check`, sourced from `resolve_cast_check_type` (ADR-0096: the
   caster's provisioned personal magic check, falling back to the cast technique's
   `action_template.check_type` only when unprovisioned) via `use_technique`, not a generic
   battle-wide `CheckType`; the Surrounded entry roll and per-round resist checks are
