@@ -182,6 +182,43 @@ class IsRoomOwnerPrerequisite(Prerequisite):
 
 
 @dataclass
+class IsExitRoomOwnerPrerequisite(Prerequisite):
+    """The actor's active persona must own or tenant the exit's source room.
+
+    Mirrors IsRoomOwnerPrerequisite, but resolves the room from the ``exit``
+    kwarg's ``location`` (the room the exit sits in) rather than a
+    ``room_id`` kwarg or the actor's own location — door-lock commands name
+    an exit, not necessarily the room the actor currently stands in.
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        exit_obj = (context or {}).get("kwargs", {}).get("exit")
+        if exit_obj is None:
+            return False, "Lock/unlock which exit?"
+        room = exit_obj.location
+        if room is None:
+            return False, "That exit has no source room."
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "Only characters can do that."
+        persona = active_persona_for_sheet(sheet)
+        if is_owner(persona, room) or is_tenant(persona, room):
+            return True, ""
+        return False, "You don't have standing in that room."
+
+
+@dataclass
 class HoldsItemPrerequisite(Prerequisite):
     """The actor must be holding the item passed as ``kwargs['item']``."""
 

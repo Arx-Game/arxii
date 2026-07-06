@@ -60,6 +60,7 @@ from actions.definitions.crafting import (
     DetachFacetAction,
 )
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
+from actions.definitions.doors import LockAction, UnlockAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
     AcknowledgeRiskAction,
@@ -456,6 +457,9 @@ _ALL_ACTIONS: list[Action] = [
     BindCompanionAction(),
     CompanionFightAction(),
     DeployCompanionAction(),
+    # #1866 — door lock/unlock telnet coverage.
+    LockAction(),
+    UnlockAction(),
 ]
 
 # Lookup by key

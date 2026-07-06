@@ -20,12 +20,29 @@ class ExitState(BaseState):
     def can_traverse(self, actor: "BaseState | None" = None) -> bool:
         """Return ``True`` if ``actor`` may traverse this exit.
 
+        A locked exit (``db.locked``) blocks traversal for anyone who isn't
+        the source room's owner or tenant (#1866) — checked before the
+        package-hook delegation so a locked door can't be overridden by an
+        unrelated hook.
+
         Args:
             actor: State attempting the action.
 
         Returns:
-            bool: Always ``True``.
+            bool: Whether traversal is permitted.
         """
+        if self.obj.db.locked and actor is not None:
+            from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            room = self.obj.location
+            sheet = getattr(actor.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            if room is not None and sheet is not None:
+                persona = active_persona_for_sheet(sheet)
+                if not (is_owner(persona, room) or is_tenant(persona, room)):
+                    return False
+            elif room is not None:
+                return False
 
         result = self._run_package_hook("can_traverse", actor)
         if result is not None:

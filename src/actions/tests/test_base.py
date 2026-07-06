@@ -339,6 +339,8 @@ class ActionRegistryTests(TestCase):
             "bind_companion",
             "companion_fight",
             "deploy_companion",
+            "lock_exit",
+            "unlock_exit",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
