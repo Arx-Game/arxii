@@ -21604,6 +21604,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       readonly role_context: components['schemas']['RoleContextEnum'];
       readonly status: components['schemas']['NPCAssetStatusEnum'];
@@ -21659,6 +21662,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -21697,6 +21703,9 @@ export interface components {
      *     * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
+     *     * `guard` - Guard
+     *     * `fan` - Fan
+     *     * `minor_ally` - Minor Ally
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -21708,7 +21717,10 @@ export interface components {
       | 'court_grant'
       | 'informant'
       | 'contact'
-      | 'personal_favor';
+      | 'personal_favor'
+      | 'guard'
+      | 'fan'
+      | 'minor_ally';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -21723,6 +21735,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25029,6 +25044,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -27159,9 +27177,12 @@ export interface components {
      * @description * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
+     *     * `guard` - Guard
+     *     * `fan` - Fan
+     *     * `minor_ally` - Minor Ally
      * @enum {string}
      */
-    RoleContextEnum: 'informant' | 'contact' | 'personal_favor';
+    RoleContextEnum: 'informant' | 'contact' | 'personal_favor' | 'guard' | 'fan' | 'minor_ally';
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;
