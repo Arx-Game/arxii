@@ -24816,6 +24816,31 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/stories/my-pending-signoffs/:
+    get:
+      operationId: stories_my_pending_signoffs_list
+      description: |-
+        GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+
+        Player-safe (never GM-facing): for the requesting player's own account,
+        which of the given beats have one of THEIR OWN treasured subjects staked
+        without an active sign-off. Batched across beats — the caller passes the
+        beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+        multi-value query-param style, but scoped to the caller instead of a
+        GM-supplied party).
+      tags:
+      - stories
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingTreasuredSignoffs'
+          description: ''
   /api/stories/staff-workload/:
     get:
       operationId: stories_staff_workload_retrieve
@@ -46173,6 +46198,26 @@ components:
       - sinner_persona_name
       - sinner_sheet_id
       - strain_cost_per_unit
+    PendingTreasuredSignoffs:
+      type: object
+      description: |-
+        Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+
+        Exposes only the requesting player's own beat_id + treasured_subject_ids —
+        the view-level query already guarantees no other player's data can appear
+        here (ADR-0033); this serializer adds no fields beyond that.
+      properties:
+        beat_id:
+          type: integer
+          readOnly: true
+        treasured_subject_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+      required:
+      - beat_id
+      - treasured_subject_ids
     PermitOfferDetails:
       type: object
       properties:
@@ -52064,6 +52109,19 @@ components:
           type: integer
           description: The character this sheet belongs to
           readOnly: true
+        tenure_id:
+          type: integer
+          nullable: true
+          description: |-
+            The current tenure of this CHARACTER-scope story's character (whoever is
+            currently playing them) — coincides with the viewer's own tenure only for
+            that player; other viewers get an inert value since
+            `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+            `tenure_id` that isn't theirs.
+
+            Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
+            CHARACTER-scope story whose character has no current tenure.
+          readOnly: true
         primary_table:
           type: integer
           readOnly: true
@@ -52099,6 +52157,7 @@ components:
       - id
       - owners
       - primary_table
+      - tenure_id
       - title
       - trust_requirements
       - updated_at

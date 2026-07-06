@@ -191,6 +191,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     owners = serializers.StringRelatedField(many=True, read_only=True)
     active_gms = GMProfileSerializer(many=True, read_only=True)
     character_sheet = serializers.PrimaryKeyRelatedField(read_only=True)
+    tenure_id = serializers.SerializerMethodField()
     primary_table = serializers.PrimaryKeyRelatedField(read_only=True)
     chapters_count = serializers.IntegerField(source="chapters.count", read_only=True)
     trust_requirements = serializers.SerializerMethodField()
@@ -210,6 +211,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "active_gms",
             "trust_requirements",
             "character_sheet",
+            "tenure_id",
             "primary_table",
             "chapters_count",
             "created_at",
@@ -223,6 +225,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "active_gms",
             "trust_requirements",
             "character_sheet",
+            "tenure_id",
             "primary_table",
             "chapters_count",
             "created_at",
@@ -233,6 +236,24 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     def get_trust_requirements(self, obj):
         """Get trust requirements for this story"""
         return obj.get_trust_requirements_summary()
+
+    def get_tenure_id(self, obj: Story) -> int | None:
+        """The current tenure of this CHARACTER-scope story's character (whoever is
+        currently playing them) — coincides with the viewer's own tenure only for
+        that player; other viewers get an inert value since
+        `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+        `tenure_id` that isn't theirs.
+
+        Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
+        CHARACTER-scope story whose character has no current tenure.
+        """
+        sheet = obj.character_sheet
+        if sheet is None:
+            return None
+        # OneToOne reverse accessor may not exist.
+        entry = getattr(sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL
+        tenure = entry.current_tenure if entry else None
+        return tenure.pk if tenure else None
 
     def to_representation(self, instance: Story) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
@@ -3025,3 +3046,15 @@ class StakeAvailabilitySerializer(serializers.Serializer):
     available = serializers.IntegerField(read_only=True)
     blocked = serializers.IntegerField(read_only=True)
     needs_signoff = serializers.IntegerField(read_only=True)
+
+
+class PendingTreasuredSignoffsSerializer(serializers.Serializer):
+    """Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+
+    Exposes only the requesting player's own beat_id + treasured_subject_ids —
+    the view-level query already guarantees no other player's data can appear
+    here (ADR-0033); this serializer adds no fields beyond that.
+    """
+
+    beat_id = serializers.IntegerField(read_only=True)
+    treasured_subject_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)

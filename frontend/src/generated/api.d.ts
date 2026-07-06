@@ -14871,6 +14871,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/my-pending-signoffs/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+     *
+     *     Player-safe (never GM-facing): for the requesting player's own account,
+     *     which of the given beats have one of THEIR OWN treasured subjects staked
+     *     without an active sign-off. Batched across beats — the caller passes the
+     *     beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+     *     multi-value query-param style, but scoped to the caller instead of a
+     *     GM-supplied party).
+     */
+    get: operations['stories_my_pending_signoffs_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/staff-workload/': {
     parameters: {
       query?: never;
@@ -25940,6 +25966,17 @@ export interface components {
        */
       readonly expires_at: string;
     };
+    /**
+     * @description Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+     *
+     *     Exposes only the requesting player's own beat_id + treasured_subject_ids —
+     *     the view-level query already guarantees no other player's data can appear
+     *     here (ADR-0033); this serializer adds no fields beyond that.
+     */
+    PendingTreasuredSignoffs: {
+      readonly beat_id: number;
+      readonly treasured_subject_ids: number[];
+    };
     PermitOfferDetails: {
       readonly id: number;
       /** @description The NPCServiceOffer row this details model decorates. */
@@ -28801,6 +28838,17 @@ export interface components {
       readonly trust_requirements: string;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
+      /**
+       * @description The current tenure of this CHARACTER-scope story's character (whoever is
+       *     currently playing them) — coincides with the viewer's own tenure only for
+       *     that player; other viewers get an inert value since
+       *     `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+       *     `tenure_id` that isn't theirs.
+       *
+       *     Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
+       *     CHARACTER-scope story whose character has no current tenure.
+       */
+      readonly tenure_id: number | null;
       readonly primary_table: number;
       readonly chapters_count: number;
       /** Format: date-time */
@@ -51692,6 +51740,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  stories_my_pending_signoffs_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingTreasuredSignoffs'][];
+        };
       };
     };
   };

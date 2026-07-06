@@ -47,6 +47,7 @@ const mockStory: Story = {
   status: 'active',
   privacy: 'invite_only',
   character_sheet: 0,
+  tenure_id: null,
   primary_table: 7,
   active_gms: [],
   owners: [],

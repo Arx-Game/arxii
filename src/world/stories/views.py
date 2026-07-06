@@ -4,8 +4,6 @@ from datetime import datetime
 from http import HTTPMethod
 from typing import TYPE_CHECKING, Any, cast
 
-from django.contrib.auth.base_user import AbstractBaseUser
-from django.contrib.auth.models import AnonymousUser
 from django.db import models, transaction
 from django.db.models import Count, Manager, Prefetch, QuerySet
 from django.shortcuts import get_object_or_404
@@ -169,6 +167,7 @@ from world.stories.serializers import (
     GroupStoryProgressSerializer,
     MarkBeatInputSerializer,
     OfferStoryToGMInputSerializer,
+    PendingTreasuredSignoffsSerializer,
     PlayerTrustSerializer,
     PromoteEpisodeInputSerializer,
     RejectClaimInputSerializer,
@@ -207,7 +206,7 @@ from world.stories.serializers import (
     WithdrawOfferInputSerializer,
     stakes_summary_for_beat,
 )
-from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
+from world.stories.services.dashboards import STALE_STORY_DAYS
 from world.stories.services.era import advance_era, archive_era
 from world.stories.services.participation import create_story_participation
 from world.stories.services.progress import get_active_progress_for_story
@@ -219,7 +218,6 @@ from world.stories.types import (
     EligibleTransitionEntry,
     EpisodeReadyEntry,
     FrontierStoryEntry,
-    MyActiveStoryEntry,
     PendingClaimEntry,
     PerGMQueueDepthEntry,
     StaleStoryEntry,
@@ -1751,89 +1749,6 @@ class TransitionRequiredOutcomeViewSet(viewsets.ModelViewSet):
 # ---------------------------------------------------------------------------
 
 
-def _serialize_progress_entry(progress: AnyStoryProgress, scope: str) -> MyActiveStoryEntry:
-    """Build the dict shape shared by all three scope collectors in MyActiveStoriesView."""
-    from world.stories.constants import StoryEpisodeStatus  # noqa: PLC0415
-
-    story = progress.story
-    episode = progress.current_episode
-    summary = compute_story_status(progress)
-
-    current_episode_id: int | None = episode.pk if episode is not None else None
-
-    return {
-        "story_id": story.pk,
-        "story_title": story.title,
-        "scope": scope,
-        "current_episode_id": current_episode_id,
-        "current_episode_title": summary.episode_title,
-        "chapter_title": summary.chapter_title,
-        "status": summary.status,
-        "status_label": StoryEpisodeStatus(summary.status).label,
-        "progress_status": progress.status,
-        "chapter_order": summary.chapter_order,
-        "episode_order": summary.episode_order,
-        "open_session_request_id": summary.open_session_request_id,
-        "scheduled_event_id": summary.scheduled_event_id,
-        "scheduled_real_time": summary.scheduled_real_time,
-    }
-
-
-def _collect_character_stories(
-    account: AbstractBaseUser | AnonymousUser,
-) -> list[MyActiveStoryEntry]:
-    """Return active CHARACTER-scope progress entries owned by this account."""
-    qs = StoryProgress.objects.filter(
-        story__character_sheet__character__db_account=account,
-        is_active=True,
-    ).select_related(
-        "story",
-        "current_episode",
-        "current_episode__chapter",
-    )
-    return [_serialize_progress_entry(p, StoryScope.CHARACTER) for p in qs]
-
-
-def _collect_group_stories(
-    account: AbstractBaseUser | AnonymousUser,
-) -> list[MyActiveStoryEntry]:
-    """Return active GROUP-scope progress entries for tables this account belongs to."""
-    qs = (
-        GroupStoryProgress.objects.filter(
-            gm_table__memberships__persona__character_sheet__character__db_account=account,
-            gm_table__memberships__left_at__isnull=True,
-            is_active=True,
-        )
-        .select_related(
-            "story",
-            "current_episode",
-            "current_episode__chapter",
-        )
-        .distinct()
-    )
-    return [_serialize_progress_entry(p, StoryScope.GROUP) for p in qs]
-
-
-def _collect_global_stories(
-    account: AbstractBaseUser | AnonymousUser,
-) -> list[MyActiveStoryEntry]:
-    """Return active GLOBAL-scope progress entries where the account has a StoryParticipation."""
-    qs = (
-        GlobalStoryProgress.objects.filter(
-            story__participants__character__db_account=account,
-            story__participants__is_active=True,
-            is_active=True,
-        )
-        .select_related(
-            "story",
-            "current_episode",
-            "current_episode__chapter",
-        )
-        .distinct()
-    )
-    return [_serialize_progress_entry(p, StoryScope.GLOBAL) for p in qs]
-
-
 class MyActiveStoriesView(APIView):
     """GET /api/stories/my-active/
 
@@ -1846,17 +1761,9 @@ class MyActiveStoriesView(APIView):
 
     def get(self, request: Request) -> Response:
         """Return active stories for the authenticated account."""
-        account = request.user
-        character_stories = _collect_character_stories(account)
-        group_stories = _collect_group_stories(account)
-        global_stories = _collect_global_stories(account)
-        return Response(
-            {
-                "character_stories": character_stories,
-                "group_stories": group_stories,
-                "global_stories": global_stories,
-            }
-        )
+        from world.stories.services.dashboards import active_stories_for_account  # noqa: PLC0415
+
+        return Response(active_stories_for_account(request.user))
 
 
 def _serialize_eligible_transitions(
@@ -3233,3 +3140,31 @@ class BeatStakeAvailabilityView(APIView):
         sheets = list(CharacterSheet.objects.filter(pk__in=sheet_ids)) if sheet_ids else []
         availability = stake_availability(beat, sheets)
         return Response(StakeAvailabilitySerializer(availability).data)
+
+
+class PlayerPendingTreasuredSignoffsView(APIView):
+    """GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+
+    Player-safe (never GM-facing): for the requesting player's own account,
+    which of the given beats have one of THEIR OWN treasured subjects staked
+    without an active sign-off. Batched across beats — the caller passes the
+    beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+    multi-value query-param style, but scoped to the caller instead of a
+    GM-supplied party).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(responses=PendingTreasuredSignoffsSerializer(many=True))
+    def get(self, request: Request) -> Response:
+        from world.stories.services.boundaries import (  # noqa: PLC0415
+            player_pending_treasured_signoffs,
+        )
+
+        if not hasattr(request.user, "player_data"):
+            return Response([])
+        player_data = cast(PlayerData, request.user.player_data)
+        beat_ids = [b for b in request.query_params.getlist("beats") if b.isdigit()]
+        beats = list(Beat.objects.filter(pk__in=beat_ids))
+        entries = player_pending_treasured_signoffs(player_data, beats)
+        return Response(PendingTreasuredSignoffsSerializer(entries, many=True).data)

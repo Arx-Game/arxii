@@ -440,6 +440,18 @@ actions, backends, and service functions.
   (`place_functionary`/`remove_functionary`/`functionaries_in_room`); the room the caller stands
   in is resolved via `areas.services.get_room_profile`. Functionaries also surface on `look`
   (`Room.return_appearance` appends them, since they are object-less and never in `contents`).
+- **`story.py`**: `CmdStory` (`story`, #1495/#1853) — GM lifecycle actions + player self-service
+  under one namespace (mirrors `CmdGMTable`'s precedent of mixed permission tiers in one command).
+  GM subverbs (`complete <story-id>` / `resolve <episode-id> ...` / `promote <episode-id> ...` /
+  `mark <beat-id> ...`) delegate to `Action().run()` and are gated by the story's Lead GM or staff
+  status in the backing action layer — unchanged from #1495. Player subverbs are self-scoped, no
+  GM/staff gate: bare `story` / `story list` shows the caller's active stories
+  (`world.stories.services.dashboards.active_stories_for_account` — the same service
+  `MyActiveStoriesView` calls); `story beats <episode-id>` lists one of the caller's own active
+  episode's beats, flagging any staked-without-signoff treasured subject inline
+  (`player_pending_treasured_signoffs`); `story signoff <beat-id> <subject> [withdraw]`
+  grants/withdraws via `grant_treasured_signoff`/`withdraw_treasured_signoff` — the same service
+  functions `TreasuredSignoffViewSet` calls. No business logic in the command.
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`
