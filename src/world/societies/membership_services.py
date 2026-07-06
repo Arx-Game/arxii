@@ -421,7 +421,10 @@ def induct_organization_member_via_session(*, session: RitualSession) -> Organiz
     InvalidOrganizationPersonaError, OrganizationMemberBlockError) applies here too.
     """
     from world.magic.constants import ParticipantState, ReferenceKind  # noqa: PLC0415
-    from world.magic.exceptions import SessionTargetMissingError  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        RequiredReferenceMissingError,
+        SessionTargetMissingError,
+    )
 
     target_ref = session.references.filter(
         participant__isnull=True,
@@ -436,5 +439,7 @@ def induct_organization_member_via_session(*, session: RitualSession) -> Organiz
         if p.character_sheet_id != session.initiator_id:
             candidate_sheet = p.character_sheet
             break
+    if candidate_sheet is None:
+        raise RequiredReferenceMissingError
 
     return join_organization(organization, candidate_sheet.primary_persona)
