@@ -8,12 +8,15 @@ Subverbs:
   gmtrust show [account]     — your own GM level + that level's caps; naming
                                 another account requires staff.
   gmtrust evidence <account> — staff-only aggregate track record.
-  gmtrust promote <account>=<level> [reason=...]
+  gmtrust promote <account>=<level> reason=<why>
                               — staff-only level change (promotion or demotion).
+                                ``reason`` is required and may not be blank,
+                                matching the web ``PromoteGMInputSerializer``.
 """
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from commands.exceptions import CommandError
@@ -29,13 +32,15 @@ _USAGE = (
     "Usage: gmtrust <subcommand>\n"
     "  gmtrust show [account]              — your GM level + caps (staff may name another)\n"
     "  gmtrust evidence <account>          — staff: aggregate track record\n"
-    "  gmtrust promote <account>=<level> [reason=...]\n"
+    "  gmtrust promote <account>=<level> reason=<why>\n"
     "                                       — staff: change a GM's trust level"
 )
 _STAFF_ONLY = "Only staff may do that."
 _NOT_A_GM = "You are not a GM."
 _NO_PROFILE = "That account has no GM profile."
 _REASON_PREFIX = "reason="
+_PROMOTE_USAGE = "Usage: gmtrust promote <account>=<level> reason=<why>."
+_REASON_TOKEN_RE = re.compile(rf"(?i)\b{re.escape(_REASON_PREFIX)}")
 
 _SUBVERB_HANDLERS: dict[str, str] = {
     "show": "_handle_show",
@@ -68,7 +73,7 @@ class CmdGMTrust(ArxNamespaceCommand):
                 self.msg(_NOT_A_GM)
                 return
         else:
-            if not self.caller.account.is_staff:
+            if not bool(self.caller.account and self.caller.account.is_staff):
                 raise CommandError(_STAFF_ONLY)
             target_account = self._resolve_account(target_token)
             profile = self._profile_or_error(target_account)
@@ -78,7 +83,7 @@ class CmdGMTrust(ArxNamespaceCommand):
         """``gmtrust evidence <account>`` — staff-only aggregate track record."""
         from world.gm.services import gm_evidence_summary  # noqa: PLC0415
 
-        if not self.caller.account.is_staff:
+        if not bool(self.caller.account and self.caller.account.is_staff):
             raise CommandError(_STAFF_ONLY)
         account_token = self._require_arg(rest, "Usage: gmtrust evidence <account>.")
         target_account = self._resolve_account(account_token)
@@ -87,11 +92,11 @@ class CmdGMTrust(ArxNamespaceCommand):
         self.msg(self._render_evidence(target_account, summary))
 
     def _handle_promote(self, rest: str) -> None:
-        """``gmtrust promote <account>=<level> [reason=...]`` — staff-only level change."""
+        """``gmtrust promote <account>=<level> reason=<why>`` — staff-only level change."""
         from world.gm.services import promote_gm  # noqa: PLC0415
 
-        usage = "Usage: gmtrust promote <account>=<level> [reason=...]"
-        if not self.caller.account.is_staff:
+        usage = _PROMOTE_USAGE
+        if not bool(self.caller.account and self.caller.account.is_staff):
             raise CommandError(_STAFF_ONLY)
 
         if "=" not in rest:
@@ -102,12 +107,18 @@ class CmdGMTrust(ArxNamespaceCommand):
         if not account_token or not right:
             raise CommandError(usage)
 
-        tokens = right.split(maxsplit=1)
-        level_token = tokens[0]
-        remainder = tokens[1].strip() if len(tokens) > 1 else ""
-        reason = ""
-        if remainder.lower().startswith(_REASON_PREFIX):
-            reason = remainder[len(_REASON_PREFIX) :].strip()
+        # The remainder is "<level text> reason=<why>" where the level text may
+        # itself be a multi-word label (e.g. "Junior GM"). Find the LAST
+        # "reason=" token so a reason value that happens to contain "=" isn't
+        # mistaken for another delimiter; everything before it is the level.
+        matches = list(_REASON_TOKEN_RE.finditer(right))
+        if not matches:
+            raise CommandError(usage)
+        last_match = matches[-1]
+        level_token = right[: last_match.start()].strip()
+        reason = right[last_match.end() :].strip()
+        if not level_token or not reason:
+            raise CommandError(usage)
 
         target_account = self._resolve_account(account_token)
         profile = self._profile_or_error(target_account)

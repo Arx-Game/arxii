@@ -228,7 +228,7 @@ class CmdGMTrustPromoteTests(TestCase):
         caller.msg = MagicMock()
         caller.account = staff_account
 
-        messages = self._run(caller, f"promote {target.account.username}=nonsense")
+        messages = self._run(caller, f"promote {target.account.username}=nonsense reason=whatever")
 
         joined = " ".join(messages)
         self.assertIn("Unknown GM level", joined)
@@ -242,7 +242,55 @@ class CmdGMTrustPromoteTests(TestCase):
         caller.msg = MagicMock()
         caller.account = staff_account
 
-        messages = self._run(caller, f"promote {target.username}=junior")
+        messages = self._run(caller, f"promote {target.username}=junior reason=strong story")
 
         joined = " ".join(messages)
         self.assertIn("no GM profile", joined)
+
+    def test_promote_accepts_multiword_label_with_reason(self) -> None:
+        staff_account = AccountFactory(is_staff=True)
+        target = GMProfileFactory(level=GMLevel.STARTING)
+        caller = MagicMock()
+        caller.msg = MagicMock()
+        caller.account = staff_account
+
+        messages = self._run(
+            caller, f"promote {target.account.username}=Junior GM reason=strong story"
+        )
+
+        target.refresh_from_db()
+        self.assertEqual(target.level, GMLevel.JUNIOR)
+        change = GMLevelChange.objects.get(profile=target)
+        self.assertEqual(change.reason, "strong story")
+        joined = " ".join(messages)
+        self.assertIn("Junior GM", joined)
+
+    def test_promote_missing_reason_errors(self) -> None:
+        staff_account = AccountFactory(is_staff=True)
+        target = GMProfileFactory(level=GMLevel.STARTING)
+        caller = MagicMock()
+        caller.msg = MagicMock()
+        caller.account = staff_account
+
+        messages = self._run(caller, f"promote {target.account.username}=junior")
+
+        joined = " ".join(messages)
+        self.assertIn("Usage", joined)
+        target.refresh_from_db()
+        self.assertEqual(target.level, GMLevel.STARTING)
+        self.assertFalse(GMLevelChange.objects.filter(profile=target).exists())
+
+    def test_promote_blank_reason_errors(self) -> None:
+        staff_account = AccountFactory(is_staff=True)
+        target = GMProfileFactory(level=GMLevel.STARTING)
+        caller = MagicMock()
+        caller.msg = MagicMock()
+        caller.account = staff_account
+
+        messages = self._run(caller, f"promote {target.account.username}=junior reason=")
+
+        joined = " ".join(messages)
+        self.assertIn("Usage", joined)
+        target.refresh_from_db()
+        self.assertEqual(target.level, GMLevel.STARTING)
+        self.assertFalse(GMLevelChange.objects.filter(profile=target).exists())
