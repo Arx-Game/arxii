@@ -1672,6 +1672,34 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   `applied_at` marker. Flags stay catalog-level per the glossary — a renovation
   swaps the catalog row, it does not mutate per-building flags. Slice #1 of
   epic #673 (future ProjectKind values).
+- **Condition tiers & upkeep (#1930, ADR-0093):** `Building.condition_tier`
+  (`ConditionTier` IntegerChoices ladder Decayed…**Excellent**…Immaculate) +
+  `condition_since` / `upkeep_arrears` (capped) / `ultra_upkeep` /
+  `mothballed_at` / building-scoped `consecutive_missed_upkeep` +
+  `consecutive_paid_upkeep`. Weekly cron `buildings.weekly_upkeep`
+  (`upkeep_services.apply_weekly_upkeep_all_buildings`, walks ALL buildings):
+  paid weeks hold Excellent (one-tier regain per `REGAIN_WEEKS_PER_TIER` below
+  it); misses accrue arrears capped at `ARREARS_CAP_WEEKS ×` weekly cost, then
+  slide one tier per `SLIP_WEEKS_PER_TIER` past `GRACE_MISSES` (floor DECAYED —
+  **polish/feature rows are never mutated by nonpayment**; the #676 decay +
+  restoration machinery is deleted). Above-Excellent tiers dwell-decay
+  (`ABOVE_NORMAL_DWELL_DAYS`); Immaculate holds only via the ultra-upkeep
+  premium. `set_condition_tier` is the single tier write path (stamps + fires
+  the prestige recompute). Prestige: `recompute_persona_prestige_from_dwellings`
+  step-multiplies each building-derived component by
+  `CONDITION_PRESTIGE_MULTIPLIER[tier]` (5%–200%; home-room polish follows the
+  containing building's tier). Recovery/prep (`condition_services`, all purse
+  sinks): `settle_upkeep_arrears`, `refurbish_building` (to Excellent;
+  arrears-settled gate; "refurbish" ≠ the kind-swap "renovation"),
+  `prepare_building` (Excellent→Extravagant→Immaculate luxury spend),
+  `set_ultra_upkeep`; `ConditionServiceError.user_message` on refusals.
+  Mothballing (`mothball_services`, weekly cron `buildings.mothball_sweep`):
+  owner decay-tier ≥ LONG_INACTIVE hides the building's rooms
+  (`RoomProfile.is_public` snapshotted per-room in `MothballedRoomState`) and
+  freezes accrual; return restores with zeroed misses, no back-billing. The
+  renown payload's `owned_dwellings` carries only the public
+  `condition_label`; arrears/misses/ultra state are owner-only via the action
+  family.
 - **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
@@ -1701,7 +1729,10 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   the #670 builder family in `src/actions/definitions/locations.py` —
   `dig_room`, `resize_room`, `remove_room`, `link_rooms`, `unlink_rooms`,
   `rename_exit`, `place_room`, `assign_room_tenant`, `end_room_tenancy`,
-  `set_primary_home`, `commission_decoration`, `start_building_extension` —
+  `set_primary_home`, `commission_decoration`, `start_building_extension`,
+  plus the #1930 condition family `settle_building_arrears`,
+  `refurbish_building`, `prepare_building`, `toggle_ultra_upkeep` (bare
+  invocation prints the owner-only condition/arrears status; `confirm` pays) —
   owner-gated (`IsRoomOwnerPrerequisite`) except home
   (`IsRoomTenantPrerequisite`)/tenancy-end. Structural actions accept an
   explicit `room_id` anchor (+ `to_room_id`/`exit_id`) so the web canvas can

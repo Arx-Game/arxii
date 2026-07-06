@@ -553,13 +553,16 @@
   - asset_persona -> scenes.Persona [OneToOne]
   - source_functionary -> npc_services.Functionary [FK] (nullable)
   - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
-**Pointed to by:**
-  - granted_assets <- assets.DistinctionAssetGrant
 
 ### DistinctionAssetGrant
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
   - npc_role -> npc_services.NPCRole [FK]
+**Pointed to by:**
+  - granted_assets <- assets.NPCAsset
+
+### Service Functions
+- `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 
 
 ## world.battles
@@ -781,6 +784,7 @@
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
+  - mothballed_room_states <- buildings.MothballedRoomState
   - ship_details <- ships.ShipDetails
 
 ### BuildingMaterial
@@ -910,6 +914,11 @@
 **Foreign Keys:**
   - room_profile -> evennia_extensions.RoomProfile [FK]
   - kind -> buildings.DecorationKind [FK]
+
+### MothballedRoomState
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - room_profile -> evennia_extensions.RoomProfile [FK]
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
@@ -1821,6 +1830,7 @@
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
+- `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -3103,6 +3113,8 @@
   - character -> character_sheets.CharacterSheet [FK]
   - gift -> magic.Gift [OneToOne]
 
+### RelationshipBondPullTuning
+
 ### AffinityInteraction
 **Foreign Keys:**
   - source_affinity -> magic.Affinity [FK]
@@ -3960,6 +3972,7 @@
 **Foreign Keys:**
   - faction_affiliation -> societies.Organization [FK] (nullable)
 **Pointed to by:**
+  - distinction_grants <- assets.DistinctionAssetGrant
   - missions_reported_to <- missions.MissionTemplate
   - functionaries <- npc_services.Functionary
   - offers <- npc_services.NPCServiceOffer
