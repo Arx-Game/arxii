@@ -1082,8 +1082,8 @@ GM at a given level may author (#2000, ADR-0095).
   (no profile → STARTING)
 - **API Endpoints:** `GMApplicationViewSet` (`/api/gm-applications/`; create for
   players, list/review/update for staff — approval auto-creates a `GMProfile`),
-  `GMProfileViewSet` (`/api/gm-profiles/`, read-only list for any authenticated user;
-  `POST /api/gm-profiles/{id}/promote/` and `GET /api/gm-profiles/{id}/evidence/`, both
+  `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
+  `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
   `IsAdminUser`), `GMTableViewSet` (`/api/gm-tables/`; staff sees all, GMs their own,
   players tables where an active persona holds membership; `archive`/`transfer_ownership`
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,

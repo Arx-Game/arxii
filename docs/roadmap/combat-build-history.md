@@ -151,7 +151,8 @@ an NPC at a bar) where concrete NPC objects aren't needed.
   thread-rich parties are simply stronger, not matched by tougher enemies (invariant test).
 - **Stakes is a gate, not a stat multiplier:** `validate_stakes_requirement(encounter, gm)`
   enforces a per-stakes minimum party average level + minimum GM trust, **reusing the existing
-  `stories` trust system** (`PlayerTrust.gm_trust_level`, `TrustLevel`) — no new GM-auth concept.
+  `stories` trust system** (`PlayerTrust.gm_trust_level`, `TrustLevel`) — no new GM-auth concept
+  (superseded by `GMProfile.level` — ADR-0095, #2000).
 - **Wiring + API:** `add_opponent` auto-fills omitted stats (and boss phases) from the formula
   when `max_health` is omitted (explicit values always win); read-only
   `GET /api/combat/{id}/opponent-defaults/?tier=…` previews the computed block + a non-blocking

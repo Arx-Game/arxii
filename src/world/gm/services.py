@@ -385,5 +385,5 @@ def gm_evidence_summary(profile: GMProfile) -> GMEvidenceSummary:
         stories_running=stories_running,
         beats_completed_by_risk=beats_completed_by_risk,
         feedback_by_category=feedback_by_category,
-        level_changes=list(profile.level_changes.all()[:20]),
+        level_changes=list(profile.level_changes.select_related("changed_by").all()[:20]),
     )

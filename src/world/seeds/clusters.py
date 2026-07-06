@@ -137,6 +137,12 @@ def _seed_kudos() -> None:
     seed_kudos_content()
 
 
+def _seed_gm() -> None:
+    from world.gm.factories import seed_default_gm_level_caps  # noqa: PLC0415
+
+    seed_default_gm_level_caps()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -197,6 +203,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
     # any other cluster.
     "kudos": _seed_kudos,
+    # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
+    # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
+    # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
+    "gm": _seed_gm,
 }
 
 
@@ -238,6 +248,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
+    from world.gm.models import GMLevelCap  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
@@ -294,4 +305,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
         "kudos": [KudosSourceCategory],
+        # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
+        "gm": [GMLevelCap],
     }

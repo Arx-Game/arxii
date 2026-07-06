@@ -70,6 +70,21 @@ class GMLevelCapAdmin(admin.ModelAdmin):
 
 @admin.register(GMLevelChange)
 class GMLevelChangeAdmin(admin.ModelAdmin):
+    """Audit row for a staff-driven GM level change — written by ``promote_gm`` only.
+
+    Read-only in admin: no add/change/delete, so the audit trail can't be
+    hand-edited or backdated.
+    """
+
     list_display = ["profile", "old_level", "new_level", "changed_by", "created_at"]
     list_filter = ["old_level", "new_level"]
     raw_id_fields = ["profile", "changed_by"]
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

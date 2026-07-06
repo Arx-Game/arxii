@@ -72,8 +72,8 @@ The GM system defines these role relationships; the stories app uses them for pe
 - **Evidence for the promotion decision** — `gm_evidence_summary(profile)` aggregates
   stories currently running, beats completed by risk tier, feedback by trust category,
   and the `GMLevelChange` audit trail, for a staff reviewer deciding on a level change.
-- **API** — `GMProfileViewSet.promote` (`POST /api/gm-profiles/{id}/promote/`,
-  `IsAdminUser`) and `.evidence` (`GET /api/gm-profiles/{id}/evidence/`, `IsAdminUser`).
+- **API** — `GMProfileViewSet.promote` (`POST /api/gm/profiles/{id}/promote/`,
+  `IsAdminUser`) and `.evidence` (`GET /api/gm/profiles/{id}/evidence/`, `IsAdminUser`).
 - **Telnet** — `CmdGMTrust` (`gmtrust show [account]` / `gmtrust evidence <account>`
   / `gmtrust promote <account>=<level> reason=<why>`), thin over the same services.
 - **Consumers of the ladder** — `stories.BeatSerializer`'s risk gate and
