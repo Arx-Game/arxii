@@ -56,7 +56,7 @@ def _relationship_pull_would_trigger(x_sheet: CharacterSheet, y_sheet: Character
 def relationship_bond_modulation(
     thread: Thread,
     target: ObjectDB,
-    effect_row: ThreadPullEffect,  # noqa: ARG001 — no polarity read; kept for call-site parity
+    effect_row: ThreadPullEffect,  # noqa: ARG001 (no polarity read; kept for call-site parity)
     base_scaled: int,
 ) -> int:
     """Empower ``base_scaled`` by the owner's own bond to the thread's threaded
