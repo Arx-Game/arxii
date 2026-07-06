@@ -9652,7 +9652,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GMProfile'
+                $ref: '#/components/schemas/GMEvidenceSummary'
           description: ''
   /api/gm/profiles/{id}/promote/:
     post:
@@ -9672,6 +9672,12 @@ paths:
         required: true
       tags:
       - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoteGMInputRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -28684,6 +28690,21 @@ components:
       - target_spec
       - target_type
       - tier
+    CategoryFeedback:
+      type: object
+      description: One trust category's aggregated feedback ratings for a GM (read-only).
+      properties:
+        category_name:
+          type: string
+        average_rating:
+          type: number
+          format: double
+        rating_count:
+          type: integer
+      required:
+      - average_rating
+      - category_name
+      - rating_count
     ChallengeApproach:
       type: object
       description: Nested serializer for challenge approaches.
@@ -34913,6 +34934,95 @@ components:
       - character_key
       - id
       - status
+    GMEvidenceSummary:
+      type: object
+      description: Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff
+        review (#2000).
+      properties:
+        profile_id:
+          type: integer
+        level:
+          $ref: '#/components/schemas/NewLevelEnum'
+        approved_at:
+          type: string
+          format: date-time
+        last_active_at:
+          type: string
+          format: date-time
+          nullable: true
+        stories_running:
+          type: integer
+        beats_completed_by_risk:
+          type: object
+          additionalProperties:
+            type: integer
+        feedback_by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryFeedback'
+        level_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMLevelChange'
+      required:
+      - approved_at
+      - beats_completed_by_risk
+      - feedback_by_category
+      - last_active_at
+      - level
+      - level_changes
+      - profile_id
+      - stories_running
+    GMLevelChange:
+      type: object
+      description: Read-only audit row for a staff-driven GM trust-level change (#2000).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        profile:
+          type: integer
+          readOnly: true
+        old_level:
+          allOf:
+          - $ref: '#/components/schemas/NewLevelEnum'
+          readOnly: true
+        old_level_display:
+          type: string
+          readOnly: true
+        new_level:
+          allOf:
+          - $ref: '#/components/schemas/NewLevelEnum'
+          readOnly: true
+        new_level_display:
+          type: string
+          readOnly: true
+        changed_by:
+          type: integer
+          readOnly: true
+          description: Staff account that made this change.
+        changed_by_username:
+          type: string
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+          description: Why the level changed — shown in the audit trail.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - changed_by
+      - changed_by_username
+      - created_at
+      - id
+      - new_level
+      - new_level_display
+      - old_level
+      - old_level_display
+      - profile
+      - reason
     GMProfile:
       type: object
       description: Read-only serializer for GM profiles.
@@ -34928,7 +35038,7 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/GMProfileLevelEnum'
+          - $ref: '#/components/schemas/NewLevelEnum'
           readOnly: true
         level_display:
           type: string
@@ -34945,20 +35055,6 @@ components:
       - id
       - level
       - level_display
-    GMProfileLevelEnum:
-      enum:
-      - starting
-      - junior
-      - gm
-      - experienced
-      - senior
-      type: string
-      description: |-
-        * `starting` - Starting GM
-        * `junior` - Junior GM
-        * `gm` - GM
-        * `experienced` - Experienced GM
-        * `senior` - Senior GM
     GMRosterInvite:
       type: object
       description: For GM create/list operations on invites for their own characters.
@@ -39581,6 +39677,20 @@ components:
       - delivered_at
       - id
       - message
+    NewLevelEnum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     NotificationLevelEnum:
       enum:
       - personal
@@ -47614,6 +47724,24 @@ components:
       - thread_target_kind
       - unlock_type
       - xp_cost
+    PromoteGMInputRequest:
+      type: object
+      description: |-
+        Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
+
+        ``context["profile"]`` is the ``GMProfile`` being changed — the view passes
+        ``self.get_object()``. Rejecting the same-level case here means
+        ``promote_gm``'s ``ValueError`` guard is a programmer-error backstop only and
+        should never fire from user input.
+      properties:
+        new_level:
+          $ref: '#/components/schemas/NewLevelEnum'
+        reason:
+          type: string
+          minLength: 1
+      required:
+      - new_level
+      - reason
     Pronouns:
       type: object
       description: Serializer for pronoun sets.

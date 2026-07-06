@@ -8,6 +8,7 @@ from django.db.models import Count, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -126,6 +127,7 @@ class GMProfileViewSet(
     filterset_class = GMProfileFilter
     pagination_class = StandardResultsSetPagination
 
+    @extend_schema(request=PromoteGMInputSerializer, responses=GMProfileSerializer)
     @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
     def promote(self, request: Request, pk: str | None = None) -> Response:
         """Staff changes a GM's trust level (promotion or demotion), with an audit row.
@@ -143,9 +145,9 @@ class GMProfileViewSet(
             changed_by=request.user,
             reason=serializer.validated_data["reason"],
         )
-        profile.refresh_from_db()
         return Response(GMProfileSerializer(profile).data)
 
+    @extend_schema(responses=GMEvidenceSummarySerializer)
     @action(detail=True, methods=["get"], permission_classes=[IsAdminUser])
     def evidence(self, request: Request, pk: str | None = None) -> Response:
         """Staff-only aggregate track record backing a level-change decision."""

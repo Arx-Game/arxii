@@ -16871,6 +16871,13 @@ export interface components {
         [key: string]: unknown;
       } | null;
     };
+    /** @description One trust category's aggregated feedback ratings for a GM (read-only). */
+    CategoryFeedback: {
+      category_name: string;
+      /** Format: double */
+      average_rating: number;
+      rating_count: number;
+    };
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -19718,12 +19725,43 @@ export interface components {
       /** @description Why player wants this character */
       readonly application_text: string;
     };
+    /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
+    GMEvidenceSummary: {
+      profile_id: number;
+      level: components['schemas']['NewLevelEnum'];
+      /** Format: date-time */
+      approved_at: string;
+      /** Format: date-time */
+      last_active_at: string | null;
+      stories_running: number;
+      beats_completed_by_risk: {
+        [key: string]: number;
+      };
+      feedback_by_category: components['schemas']['CategoryFeedback'][];
+      level_changes: components['schemas']['GMLevelChange'][];
+    };
+    /** @description Read-only audit row for a staff-driven GM trust-level change (#2000). */
+    GMLevelChange: {
+      readonly id: number;
+      readonly profile: number;
+      readonly old_level: components['schemas']['NewLevelEnum'];
+      readonly old_level_display: string;
+      readonly new_level: components['schemas']['NewLevelEnum'];
+      readonly new_level_display: string;
+      /** @description Staff account that made this change. */
+      readonly changed_by: number;
+      readonly changed_by_username: string;
+      /** @description Why the level changed — shown in the audit trail. */
+      readonly reason: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /** @description Read-only serializer for GM profiles. */
     GMProfile: {
       readonly id: number;
       readonly account: number;
       readonly account_username: string;
-      readonly level: components['schemas']['GMProfileLevelEnum'];
+      readonly level: components['schemas']['NewLevelEnum'];
       readonly level_display: string;
       /**
        * Format: date-time
@@ -19731,15 +19769,6 @@ export interface components {
        */
       readonly approved_at: string;
     };
-    /**
-     * @description * `starting` - Starting GM
-     *     * `junior` - Junior GM
-     *     * `gm` - GM
-     *     * `experienced` - Experienced GM
-     *     * `senior` - Senior GM
-     * @enum {string}
-     */
-    GMProfileLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -22060,6 +22089,15 @@ export interface components {
        */
       readonly acknowledged_at: string | null;
     };
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    NewLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /**
      * @description * `personal` - Personal
      *     * `room` - Room
@@ -26729,6 +26767,18 @@ export interface components {
       thread_resonance_name: string | null;
       thread_target_kind: string | null;
       dev_points_to_boundary: number | null;
+    };
+    /**
+     * @description Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
+     *
+     *     ``context["profile"]`` is the ``GMProfile`` being changed — the view passes
+     *     ``self.get_object()``. Rejecting the same-level case here means
+     *     ``promote_gm``'s ``ValueError`` guard is a programmer-error backstop only and
+     *     should never fire from user input.
+     */
+    PromoteGMInputRequest: {
+      new_level: components['schemas']['NewLevelEnum'];
+      reason: string;
     };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
@@ -38879,7 +38929,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['GMProfile'];
+          'application/json': components['schemas']['GMEvidenceSummary'];
         };
       };
     };
@@ -38894,7 +38944,11 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PromoteGMInputRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
