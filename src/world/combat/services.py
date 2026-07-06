@@ -2611,6 +2611,33 @@ def _emit_opponent_pre_apply(
     return pre_payload.amount, pre_payload.amount <= 0
 
 
+def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSheet | None) -> bool:
+    """Resolve whether an opponent at 0 HP is actually defeated.
+
+    Story-criticality check: prevent death if the NPC is load-bearing for a
+    story the attacker isn't part of (#1874). When death is prevented, the
+    NPC flees instead and ``False`` is returned. Otherwise the opponent's
+    status is set to DEFEATED and ``True`` is returned.
+    """
+    from world.stories.flee_services import flee_story_critical_npc  # noqa: PLC0415
+    from world.stories.npc_protection import (  # noqa: PLC0415
+        is_death_prevented_by_story,
+    )
+
+    npc_sheet = None
+    if opponent.objectdb is not None:
+        try:
+            npc_sheet = opponent.objectdb.sheet_data
+        except AttributeError:
+            npc_sheet = None
+    attacker = source_sheet.character if source_sheet else None
+    if npc_sheet is not None and is_death_prevented_by_story(npc_sheet, attacker):
+        flee_story_critical_npc(opponent, attacker)
+        return False
+    opponent.status = OpponentStatus.DEFEATED
+    return True
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -2666,25 +2693,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # Hero Killer cannot be defeated -- narrative immunity ("you must run").
     defeated = opponent.health <= 0 and opponent.tier != OpponentTier.HERO_KILLER
     if defeated:
-        # Story-criticality check: prevent death if NPC is load-bearing
-        # for a story the attacker isn't part of (#1874).
-        from world.stories.flee_services import flee_story_critical_npc  # noqa: PLC0415
-        from world.stories.npc_protection import (  # noqa: PLC0415
-            is_death_prevented_by_story,
-        )
-
-        npc_sheet = None
-        if opponent.objectdb is not None:
-            try:
-                npc_sheet = opponent.objectdb.sheet_data
-            except AttributeError:
-                npc_sheet = None
-        attacker = source_sheet.character if source_sheet else None
-        if npc_sheet is not None and is_death_prevented_by_story(npc_sheet, attacker):
-            flee_story_critical_npc(opponent, attacker)
-            defeated = False
-        else:
-            opponent.status = OpponentStatus.DEFEATED
+        defeated = _resolve_opponent_defeat(opponent, source_sheet)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
 
@@ -4135,7 +4144,13 @@ def _resolve_npc_action(
     (the normal PC-facing path — applies damage, knockout/death transitions, and
     threat-entry conditions) or ``opponent_targets`` (an ALLY summon attacking
     ENEMY opponents — damage only; #1584).
+
+    When ``defense_check_type`` is None (production), the defense check type is
+    sourced from ``npc_action.threat_entry.defense_check_type`` (#1994). A
+    non-None external param (test override) takes precedence.
     """
+    # Source from threat entry when no external override is provided (#1994).
+    effective_defense_check_type = defense_check_type or npc_action.threat_entry.defense_check_type
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
 
     try:
@@ -4184,7 +4199,7 @@ def _resolve_npc_action(
             target_participant,
             opponent=opponent,
             npc_action=npc_action,
-            defense_check_type=defense_check_type,
+            defense_check_type=effective_defense_check_type,
             defense_check_fn=defense_check_fn,
             conditions=conditions,
             outcome=outcome,

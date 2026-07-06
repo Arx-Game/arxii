@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
     from world.magic.models.weaving import ThreadWeavingUnlock
     from world.mechanics.models import Property
+    from world.relationships.models import RelationshipTrack
     from world.seeds.game_content.combat import FleeSeedResult, PenetrationContestResult
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -2327,6 +2328,14 @@ class FacetThreadUnlockResult:
 
 
 @dataclass
+class RelationshipTrackThreadUnlockResult:
+    """Returned by seed_relationship_track_thread_unlock()."""
+
+    track: RelationshipTrack
+    unlock: ThreadWeavingUnlock
+
+
+@dataclass
 class MagicDevSeedResult:
     """Returned by seed_magic_dev().
 
@@ -2339,6 +2348,13 @@ class MagicDevSeedResult:
     seeded by seed_flee_check() (#878).
     ``technique_cast_template`` is the shared Technique Cast ActionTemplate seeded
     by ensure_technique_cast_content() (#1306).
+    ``relationship_track_thread_unlock`` holds the canonical RELATIONSHIP_TRACK
+    ThreadWeavingUnlock (+ backing RelationshipTrack) seeded by
+    seed_relationship_track_thread_unlock() (#2027) — the Soul Tether formation
+    prerequisite.
+    ``soul_tether_content`` holds the Soul Tether authored content (Rituals,
+    ConditionTemplates, TriggerDefinitions) seeded by wire_soul_tether_content()
+    (#2027) — without this, Soul Tether formation is unreachable in a live game.
     """
 
     config: MagicConfigResult
@@ -2351,6 +2367,8 @@ class MagicDevSeedResult:
     flee: FleeSeedResult
     magic_checks: MagicCheckContentResult
     technique_cast_template: ActionTemplate
+    relationship_track_thread_unlock: RelationshipTrackThreadUnlockResult
+    soul_tether_content: object
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2369,6 +2387,49 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
         defaults={"xp_cost": 50},  # baseline cost; staff may tune
     )
     return FacetThreadUnlockResult(unlock=unlock)
+
+
+def seed_relationship_track_thread_unlock() -> RelationshipTrackThreadUnlockResult:
+    """Lazy-create the canonical RELATIONSHIP_TRACK ThreadWeavingUnlock (+ backing track).
+
+    Soul Tether formation (``accept_soul_tether`` in
+    ``world.magic.services.soul_tether``) gates on the Sinner holding a
+    ``CharacterThreadWeavingUnlock`` for ``TargetKind.RELATIONSHIP_TRACK``
+    (``_validate_unlock``) before they can weave the RELATIONSHIP_CAPSTONE
+    Thread that carries the Hollow. Unlike FACET, ``ThreadWeavingUnlock.unlock_track``
+    is a required non-null FK (per-kind CheckConstraint) — there is no
+    RelationshipTrack seeded anywhere in production content yet, so this
+    function also lazy-creates one canonical track ("Devotion") to hang the
+    unlock off of. This is the minimum authored content needed for the Rite of
+    the Soul Tether to be purchasable/reachable at all; a richer multi-track
+    catalog (Trust/Respect/Rivalry/Fear, etc.) is separate content-authoring
+    work, not framework work.
+
+    Idempotent via ``get_or_create`` on both the track (keyed on ``name``) and
+    the unlock (keyed on the ``unique_threadweaving_unlock_track`` constraint's
+    natural key: ``target_kind`` + ``unlock_track``).
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
+    from world.relationships.constants import TrackSign  # noqa: PLC0415
+    from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+
+    track, _ = RelationshipTrack.objects.get_or_create(
+        name="Devotion",
+        defaults={
+            "slug": "devotion",
+            "description": (
+                "Depth of bond between two souls — the axis Soul Tether capstones anchor to."
+            ),
+            "sign": TrackSign.POSITIVE,
+        },
+    )
+    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+        target_kind=TargetKind.RELATIONSHIP_TRACK,
+        unlock_track=track,
+        defaults={"xp_cost": 50},  # baseline cost; staff may tune
+    )
+    return RelationshipTrackThreadUnlockResult(track=track, unlock=unlock)
 
 
 def seed_starter_magic_story() -> None:
@@ -2429,6 +2490,12 @@ def seed_magic_dev() -> MagicDevSeedResult:
        check-scoped ModifierTarget (#767)
     10. ``seed_flee_check()`` — flee CheckType + ModifierTarget + FleeConfig
         singleton + tier modifiers + starter consequence pool (#878)
+    11. ``seed_relationship_track_thread_unlock()`` — canonical "Devotion"
+        RelationshipTrack + its RELATIONSHIP_TRACK ThreadWeavingUnlock (#2027)
+    12. ``wire_soul_tether_content()`` — Soul Tether Rituals (accept_soul_tether,
+        soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
+        and the two reactive TriggerDefinitions (#2027). Previously created only
+        in tests/factories — Soul Tether was unreachable in a live game.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved.
@@ -2436,7 +2503,10 @@ def seed_magic_dev() -> MagicDevSeedResult:
     Returns:
         MagicDevSeedResult composing all sub-results.
     """
-    from world.magic.factories import author_reference_corruption_content  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        author_reference_corruption_content,
+        wire_soul_tether_content,
+    )
     from world.magic.services import seed_thread_survivability_tuning  # noqa: PLC0415
     from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_flee_check,
@@ -2451,6 +2521,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     author_reference_corruption_content()
     magic_content = MagicContent.create_all()
     facet_thread_unlock = seed_facet_thread_unlock()
+    relationship_track_thread_unlock = seed_relationship_track_thread_unlock()
     seed_starter_magic_story()
     penetration = seed_penetration_contest()
     flee = seed_flee_check()
@@ -2462,6 +2533,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     technique_cast_template = ensure_technique_cast_content()
     ensure_technique_catalog_content()
+    soul_tether_content = wire_soul_tether_content()
 
     return MagicDevSeedResult(
         config=config,
@@ -2474,4 +2546,6 @@ def seed_magic_dev() -> MagicDevSeedResult:
         flee=flee,
         magic_checks=magic_checks,
         technique_cast_template=technique_cast_template,
+        relationship_track_thread_unlock=relationship_track_thread_unlock,
+        soul_tether_content=soul_tether_content,
     )

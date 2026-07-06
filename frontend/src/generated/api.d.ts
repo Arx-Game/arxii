@@ -734,6 +734,56 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/battles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only battle aggregate API — list (slim) and detail (full aggregate).
+     *
+     *     Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
+     *     a Battle is a 1:1 extension of scenes.Scene (world/battles/models.py), so
+     *     scene read-visibility alone decides who may see a battle. No participant
+     *     union needed — enlisting in a battle has no bearing here independent of
+     *     scene visibility.
+     */
+    get: operations['battles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/battles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only battle aggregate API — list (slim) and detail (full aggregate).
+     *
+     *     Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
+     *     a Battle is a 1:1 extension of scenes.Scene (world/battles/models.py), so
+     *     scene read-visibility alone decides who may see a battle. No participant
+     *     union needed — enlisting in a battle has no bearing here independent of
+     *     scene visibility.
+     */
+    get: operations['battles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/beats/': {
     parameters: {
       query?: never;
@@ -16290,6 +16340,127 @@ export interface components {
      * @enum {string}
      */
     BattleBindingEnum: 'standing' | 'campaign';
+    /** @description Full battle aggregate — sides, places, units, and participants. */
+    BattleDetail: {
+      readonly id: number;
+      name: string;
+      outcome?: components['schemas']['Outcome5d6Enum'];
+      /**
+       * @description Stakes axis for companion death-gating (#1873). EXTREME/LETHAL make companion death possible on defeat. Mirrors CombatEncounter.risk_level.
+       *
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       *     * `lethal` - Lethal
+       */
+      risk_level?: components['schemas']['RiskLevelEnum'];
+      /** @description Set when a participant disconnects (#1899) — see maybe_pause_battle_for_disconnect. */
+      is_paused?: boolean;
+      /** @description The battle's current (latest non-completed) round, or None. */
+      readonly round: {
+        [key: string]: unknown;
+      } | null;
+      readonly sides: components['schemas']['BattleSide'][];
+      readonly places: components['schemas']['BattlePlace'][];
+      readonly units: components['schemas']['BattleUnit'][];
+      readonly participants: components['schemas']['BattleParticipant'][];
+    };
+    /** @description Slim row for the battle list endpoint. */
+    BattleList: {
+      readonly id: number;
+      name: string;
+      readonly scene_id: number;
+      outcome?: components['schemas']['Outcome5d6Enum'];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description A player character enlisted in the battle, with their public persona face. */
+    BattleParticipant: {
+      readonly id: number;
+      status?: components['schemas']['BattleParticipantStatusEnum'];
+      readonly side_id: number;
+      readonly place_id: number | null;
+      /**
+       * @description Public persona identity only — id/name/thumbnail(s), never account/username.
+       *
+       *     ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
+       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+       *     already ``select_related``'d by the view's Prefetch (world/battles/views.py),
+       *     so this never issues a query. ``thumbnail_url`` is the legacy URLField,
+       *     kept alongside for callers still on it.
+       */
+      readonly persona: {
+        [key: string]: unknown;
+      } | null;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `withdrawn` - Withdrawn
+     *     * `incapacitated` - Incapacitated
+     * @enum {string}
+     */
+    BattleParticipantStatusEnum: 'active' | 'withdrawn' | 'incapacitated';
+    /** @description A named front/zone, with its battle-map position and embedded structures. */
+    BattlePlace: {
+      readonly id: number;
+      name: string;
+      terrain_type?: components['schemas']['TerrainTypeEnum'];
+      /** @description Authored cost for a future reposition/movement action — not yet filed as an issue; #1712 explicitly did not build this. Data only. */
+      movement_cost?: number;
+      /** Format: double */
+      x: number;
+      /** Format: double */
+      y: number;
+      /** Format: double */
+      footprint_radius: number;
+      readonly controlled_by_id: number | null;
+      /** @description The scene backing this front's bridged CombatEncounter, if any (#1236). */
+      readonly encounter_scene_id: number | null;
+      /**
+       * @description Read the embedded vehicle, if any, through the battle's state cache.
+       *
+       *     Never a fresh query — ``BattleStateCache.vehicle_at_place`` is the
+       *     single source of truth for which vehicle occupies a place (#1714).
+       */
+      readonly vehicle: {
+        [key: string]: unknown;
+      } | null;
+      readonly fortifications: components['schemas']['Fortification'][];
+    };
+    /** @description One side in the battle, with its victory tally and fielding covenant. */
+    BattleSide: {
+      readonly id: number;
+      role?: components['schemas']['RoleEnum'];
+      victory_points?: number;
+      victory_threshold?: number;
+      posture?: components['schemas']['PostureEnum'];
+      readonly covenant_id: number | null;
+      readonly covenant_name: string | null;
+    };
+    /** @description An abstract typed force at a particular front (or embedded in a vehicle). */
+    BattleUnit: {
+      readonly id: number;
+      name: string;
+      /** @description Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only — properties/capabilities/quality below drive mechanics. */
+      descriptor?: string;
+      quality?: components['schemas']['QualityEnum'];
+      status?: components['schemas']['BattleUnitStatusEnum'];
+      strength?: number;
+      /** @description Second resource alongside strength (#1712). status is always derived from whichever resource crosses its own threshold first — see world.battles.resolution._compute_unit_status. Unlike strength (starts at its ceiling), morale starts well below it — sitting near MAX_MORALE is rare. */
+      morale?: number;
+      /** @description Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. No swarm-math resolution is wired against this field yet; that is left to #1714 (naval/aerial units) or a future issue that needs it. */
+      individual_count?: number | null;
+      readonly side_id: number;
+      readonly place_id: number | null;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `routed` - Routed
+     *     * `destroyed` - Destroyed
+     * @enum {string}
+     */
+    BattleUnitStatusEnum: 'active' | 'routed' | 'destroyed';
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -19590,6 +19761,24 @@ export interface components {
      * @enum {string}
      */
     FormTypeEnum: 'true' | 'alternate' | 'disguise';
+    /** @description A defensible structure at a BattlePlace. */
+    Fortification: {
+      readonly id: number;
+      kind?: components['schemas']['FortificationKindEnum'];
+      integrity?: number;
+      /** @description Snapshotted once at creation from BASE_INTEGRITY[kind] plus building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS, if building is set (#1713). See world.battles.services.create_fortification. */
+      max_integrity?: number;
+      breached?: boolean;
+      readonly defending_side_id: number;
+    };
+    /**
+     * @description * `wall` - Wall
+     *     * `gate` - Gate
+     *     * `battlement` - Battlement
+     *     * `hull` - Hull
+     * @enum {string}
+     */
+    FortificationKindEnum: 'wall' | 'gate' | 'battlement' | 'hull';
     /** @description A friend row — the friended character's name + which of your characters friended. */
     Friendship: {
       readonly id: number;
@@ -22297,6 +22486,20 @@ export interface components {
       name: string;
     };
     /**
+     * @description * `unresolved` - Unresolved
+     *     * `attacker_decisive` - Attacker — decisive
+     *     * `attacker_marginal` - Attacker — marginal
+     *     * `defender_marginal` - Defender — marginal
+     *     * `defender_decisive` - Defender — decisive
+     * @enum {string}
+     */
+    Outcome5d6Enum:
+      | 'unresolved'
+      | 'attacker_decisive'
+      | 'attacker_marginal'
+      | 'defender_marginal'
+      | 'defender_decisive';
+    /**
      * @description * `victory` - Victory
      *     * `defeat` - Defeat
      *     * `fled` - Fled
@@ -22490,6 +22693,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['AssistantGMClaim'][];
+    };
+    PaginatedBattleListList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BattleList'][];
     };
     PaginatedBeatList: {
       /** @example 123 */
@@ -26639,6 +26857,13 @@ export interface components {
       readonly id: number;
       readonly name: string;
     };
+    /**
+     * @description * `balanced` - Balanced
+     *     * `aggressive` - Aggressive
+     *     * `defensive` - Defensive
+     * @enum {string}
+     */
+    PostureEnum: 'balanced' | 'aggressive' | 'defensive';
     /** @description Serializes a PowerLedger (entries + total) for the cast result payload. */
     PowerLedger: {
       entries: components['schemas']['PowerLedgerEntry'][];
@@ -26766,15 +26991,28 @@ export interface components {
     /**
      * @description Wire shape for the optional ``action_context`` block in a pull preview.
      *
-     *     Only ``combat_encounter_id`` is consumed by the preview path — the rest
-     *     of the fields are accepted for forward-compatibility with the eventual
-     *     authoring UI (the pre-commit preview doesn't care about action_kind
-     *     or anchors_in_play; the full commit path validates those).
+     *     ``combat_encounter_id`` and ``target_persona_id`` are consumed by the
+     *     preview path — the rest of the fields are accepted for forward-compatibility
+     *     with the eventual authoring UI (the pre-commit preview doesn't care about
+     *     action_kind or anchors_in_play; the full commit path validates those).
+     *
+     *     ``target_persona_id`` (#2035) names the Persona the pull's action would be
+     *     directed at — the same identifier shape as ``ApplicablePullsRequestSerializer``.
+     *     The view resolves it to the live ``ObjectDB`` target and feeds it to
+     *     ``preview_resonance_pull`` so a relationship-bond/Court-regard modulated
+     *     amount is visible in the preview, matching what the commit path
+     *     (``spend_resonance_for_pull``) would grant. Resolution is gated by
+     *     ``can_perceive`` (mirrors ``_relationship_pull_would_have_effect`` /
+     *     ``_court_pull_would_have_effect`` in ``pull_applicability.py``) — this is a
+     *     free, repeatable, uncommitted read, so it must not become an oracle for
+     *     probing private regard/relationship facts about personas the requester
+     *     cannot perceive (see ADR-0086).
      */
     PullActionContextRequest: {
       action_kind?: string;
       anchors_in_play?: number[];
       combat_encounter_id?: number | null;
+      target_persona_id?: number | null;
     };
     /** @description Input serializer for purchasing a progression unlock. */
     PurchaseUnlockRequest: {
@@ -26791,6 +27029,15 @@ export interface components {
       thread_id?: number | null;
       boundary_level?: number | null;
     };
+    /**
+     * @description * `militia` - Militia
+     *     * `levy` - Levy
+     *     * `trained` - Trained
+     *     * `veteran` - Veteran
+     *     * `elite` - Elite
+     * @enum {string}
+     */
+    QualityEnum: 'militia' | 'levy' | 'trained' | 'veteran' | 'elite';
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
       readonly id: number;
@@ -27385,6 +27632,12 @@ export interface components {
      * @enum {string}
      */
     RoleContextEnum: 'informant' | 'contact' | 'personal_favor' | 'guard' | 'fan' | 'minor_ally';
+    /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    RoleEnum: 'attacker' | 'defender';
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;
@@ -29540,6 +29793,26 @@ export interface components {
       sort_order?: number;
     };
     /**
+     * @description * `open` - Open
+     *     * `difficult` - Difficult
+     *     * `fortified` - Fortified
+     *     * `elevated` - Elevated
+     *     * `flooded` - Flooded
+     *     * `urban` - Urban
+     *     * `water` - Open water
+     *     * `aerial` - Open sky
+     * @enum {string}
+     */
+    TerrainTypeEnum:
+      | 'open'
+      | 'difficult'
+      | 'fortified'
+      | 'elevated'
+      | 'flooded'
+      | 'urban'
+      | 'water'
+      | 'aerial';
+    /**
      * @description Serializer for Thread records (Spec A §4.5).
      *
      *     Read: returns level / developed_points / resonance detail for display.
@@ -31442,6 +31715,66 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  battles_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `unresolved` - Unresolved
+         *     * `attacker_decisive` - Attacker — decisive
+         *     * `attacker_marginal` - Attacker — marginal
+         *     * `defender_marginal` - Defender — marginal
+         *     * `defender_decisive` - Defender — decisive
+         */
+        outcome?:
+          | 'attacker_decisive'
+          | 'attacker_marginal'
+          | 'defender_decisive'
+          | 'defender_marginal'
+          | 'unresolved';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBattleListList'];
+        };
+      };
+    };
+  };
+  battles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this battle. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BattleDetail'];
+        };
       };
     };
   };

@@ -22,6 +22,8 @@ import { handleCommandPayload } from './handleCommandPayload';
 import { handleInteractionPayload } from './handleInteractionPayload';
 import { handleRoulettePayload } from './handleRoulettePayload';
 import type { RoulettePayload } from '@/components/roulette/types';
+import { handleBattleStatePayload } from './handleBattleStatePayload';
+import type { BattleStatePayload } from '@/battles/types';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -139,6 +141,11 @@ export function useGameSocket() {
 
           if (msgType === WS_MESSAGE_TYPE.ROULETTE_RESULT) {
             handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.BATTLE_STATE) {
+            handleBattleStatePayload(kwargs as unknown as BattleStatePayload);
             return;
           }
 

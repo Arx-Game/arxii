@@ -160,7 +160,7 @@ function OrgBooksInner({ orgId }: { orgId: number }) {
             if (!dialogOpen) setSummon(null);
           }}
           onConcluded={() => {
-            void queryClient.invalidateQueries({ queryKey: orgBooksKeys.books(orgId) });
+            queryClient.invalidateQueries({ queryKey: orgBooksKeys.books(orgId) });
           }}
         />
       )}

@@ -251,6 +251,45 @@ class FactorySmokeTest(TestCase):
         self.assertIsNotNone(phase.opponent)
 
 
+class ThreatPoolEntryDefenseCheckTypeTest(TestCase):
+    """Tests for the defense_check_type FK on ThreatPoolEntry (#1994)."""
+
+    def test_defense_check_type_nullable(self) -> None:
+        """ThreatPoolEntry.defense_check_type is nullable (backward-compatible)."""
+        from world.combat.models import ThreatPool, ThreatPoolEntry
+
+        pool = ThreatPool.objects.create(name="test-pool")
+        entry = ThreatPoolEntry.objects.create(
+            pool=pool,
+            name="test-entry",
+            attack_category=ActionCategory.PHYSICAL,
+        )
+        self.assertIsNone(entry.defense_check_type)
+
+    def test_defense_check_type_set_null_on_delete(self) -> None:
+        """Deleting a CheckType sets threat entries to null (SET_NULL).
+
+        Uses ``values()`` to bypass the SharedMemoryModel identity map, which
+        caches the FK reference and does not reflect the null after delete.
+        """
+        from world.checks.models import CheckCategory, CheckType
+        from world.combat.models import ThreatPool, ThreatPoolEntry
+
+        pool = ThreatPool.objects.create(name="test-pool-2")
+        category = CheckCategory.objects.create(name="test-category")
+        ct = CheckType.objects.create(name="test-defense", category=category)
+        entry = ThreatPoolEntry.objects.create(
+            pool=pool,
+            name="test-entry-2",
+            attack_category=ActionCategory.PHYSICAL,
+            defense_check_type=ct,
+        )
+        ct.delete()
+        # Bypass the identity map — read the raw DB column value.
+        raw = ThreatPoolEntry.objects.filter(pk=entry.pk).values("defense_check_type_id").first()
+        self.assertIsNone(raw["defense_check_type_id"])
+
+
 class CombatTechniqueIntegrationTests(TestCase):
     """Smoke tests for combat-magic pipeline dataclasses."""
 

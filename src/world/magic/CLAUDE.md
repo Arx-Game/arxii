@@ -824,7 +824,13 @@ during Sineating actions, which refills the Hollow's capacity.
 - `soul_tether_stage_advance_prompt` TriggerDefinition — subscribes to
   `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`.
 
-All wired via `wire_soul_tether_content()` in `factories.py`.
+All wired via `wire_soul_tether_content()` in `factories.py`, which `seed_magic_dev()` calls
+(#2027) so this content exists in a real deploy, not only under test setup.
+`seed_relationship_track_thread_unlock()` (`world/seeds/game_content/magic.py`) seeds the
+paired RELATIONSHIP_TRACK `ThreadWeavingUnlock` (+ canonical "Devotion" `RelationshipTrack`)
+that `accept_soul_tether`'s `_validate_unlock` gates on — `ThreadWeavingUnlock.unlock_track`
+is a required FK and no `RelationshipTrack` catalog exists yet in production content, so this
+seed also authors the one canonical track needed to make Soul Tether formation reachable.
 
 **Relationship side changes (`world/relationships/models.py`):**
 - `RelationshipCapstone.is_ritual_capstone` — BooleanField (default False); marks capstones

@@ -18,6 +18,7 @@ class WebsocketMessageType(str, Enum):
     ACTION_RESULT = "action_result"
     INTERACTION = "interaction"
     ROULETTE_RESULT = "roulette_result"
+    BATTLE_STATE = "battle_state"
 
 
 @dataclass
@@ -117,3 +118,17 @@ class CommandErrorPayload:
 
     command: str
     error: str
+
+
+@dataclass
+class BattleStatePayload:
+    """Slim ping for ``battle_state`` messages.
+
+    Battles are location-less (their backing scene has no ``location``), so the
+    existing scene/room broadcast paths never reach participants — this is the
+    dedicated seam. Carries no battle data itself; clients refetch the REST
+    aggregate on receipt.
+    """
+
+    battle_id: int
+    round_number: int | None

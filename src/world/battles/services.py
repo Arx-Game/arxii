@@ -8,12 +8,14 @@ directly.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import asdict
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
 
+from web.webclient.message_types import BattleStatePayload
 from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.conclusion_hooks import run_battle_conclusion_hooks
 from world.battles.constants import (
@@ -477,6 +479,35 @@ def enlist_participant(
     )
 
 
+def notify_battle_state_changed(battle: Battle) -> None:
+    """Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.
+
+    Battles are location-less (their backing scene has no ``location``), so the
+    existing scene/room broadcast paths never reach participants -- this is the
+    dedicated seam. Called after round transitions (begin_battle_round,
+    resolve_battle_round) and on conclusion (conclude_battle) -- always deferred
+    via ``transaction.on_commit`` at each call site, so it runs post-commit and a
+    client that refetches on receipt always sees committed state.
+    """
+    current = battle.current_round
+    payload = asdict(
+        BattleStatePayload(
+            battle_id=battle.pk,
+            round_number=current.round_number if current else None,
+        )
+    )
+    # A fresh, bounded query rather than BattleStateCache (participants_on_side/
+    # participants_on_place): the cache indexes rows by side/place, not "every
+    # participant", and neither cached row carries the character_sheet__character
+    # join this ping needs -- reading through it would still cost a
+    # per-participant query. One bounded query here, not a refetch of cached state.
+    for participant in battle.participants.select_related("character_sheet__character"):
+        character = participant.character_sheet.character
+        if character is None or not character.has_account:
+            continue
+        character.msg(battle_state=((), payload))
+
+
 @transaction.atomic
 def begin_battle_round(*, battle: Battle) -> BattleRound:
     """Close any open round and open a new DECLARING round.
@@ -507,12 +538,14 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         else:
             next_number = last.round_number + 1
 
-    return BattleRound.objects.create(
+    new_round = BattleRound.objects.create(
         battle=battle,
         round_number=next_number,
         status=RoundStatus.DECLARING,
         round_started_at=timezone.now(),
     )
+    transaction.on_commit(lambda: notify_battle_state_changed(battle))
+    return new_round
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +553,7 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration facets + checks
+def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + checks
     *,
     participant: BattleParticipant,
     action_kind: str,
@@ -603,29 +636,20 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         raise TechniqueNotBattleReadyError
 
     if (
-        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD)
+        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD, BattleActionKind.REPOSITION)
         and scope != BattleActionScope.PLACE
     ):
         raise PlaceScopeRequiredError
 
-    if action_kind == BattleActionKind.REPOSITION and scope != BattleActionScope.PLACE:
-        raise PlaceScopeRequiredError
-
     if action_kind == BattleActionKind.SET_ENVIRONMENT:
-        if scope not in (BattleActionScope.BATTLE, BattleActionScope.PLACE):
-            raise InvalidEnvironmentScopeError
-        if technique.target_weather_type_id is None:
-            raise MissingEnvironmentTargetError
+        _validate_environment_action(scope=scope, technique=technique)
 
     if action_kind == BattleActionKind.REPOSITION:
         _validate_vehicle_command(participant=participant, target_place=target_place)
     elif scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
         _validate_command_scope(participant=participant, scope=scope)
 
-    if scope == BattleActionScope.PLACE and target_place is None:
-        raise MissingScopeTargetError
-    if scope == BattleActionScope.SIDE and target_side is None:
-        raise MissingScopeTargetError
+    _validate_scope_target(scope=scope, target_place=target_place, target_side=target_side)
 
     if (
         action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
@@ -640,18 +664,7 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         and target_unit is not None
         and participant.place_id is not None
     ):
-        # A vehicle's own BattleUnit never has place set (see BattleVehicle's
-        # docstring) — resolve its paired vehicle's place so a STRIKE against
-        # the vehicle's own unit is gated the same as a BREACH against its hull.
-        target_unit_place = target_unit.place
-        if target_unit_place is None and hasattr(target_unit, "vehicle"):  # noqa: GETATTR_LITERAL
-            target_unit_place = target_unit.vehicle.place
-        if (
-            target_unit_place is not None
-            and target_unit_place.pk != participant.place_id
-            and not places_overlap(target_unit_place, participant.place)
-        ):
-            raise PlacesDoNotOverlapError
+        _validate_unit_place_overlap(participant=participant, target_unit=target_unit)
 
     if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
         _validate_fortification_target(
@@ -659,15 +672,11 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
             action_kind=action_kind,
             target_fortification=target_fortification,
         )
-        if (
-            action_kind == BattleActionKind.BREACH
-            and target_fortification is not None
-            and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
-            and participant.place_id is not None
-            and target_fortification.place_id != participant.place_id
-            and not places_overlap(target_fortification.place, participant.place)
-        ):
-            raise PlacesDoNotOverlapError
+        _validate_fortification_place_overlap(
+            participant=participant,
+            action_kind=action_kind,
+            target_fortification=target_fortification,
+        )
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
@@ -687,6 +696,65 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         },
     )
     return declaration
+
+
+def _validate_environment_action(*, scope: str, technique: Technique) -> None:
+    """Validate a SET_ENVIRONMENT declaration's scope and weather target."""
+    if scope not in (BattleActionScope.BATTLE, BattleActionScope.PLACE):
+        raise InvalidEnvironmentScopeError
+    if technique.target_weather_type_id is None:
+        raise MissingEnvironmentTargetError
+
+
+def _validate_scope_target(
+    *,
+    scope: str,
+    target_place: BattlePlace | None,
+    target_side: BattleSide | None,
+) -> None:
+    """Raise ``MissingScopeTargetError`` when a scope's required target is absent."""
+    if scope == BattleActionScope.PLACE and target_place is None:
+        raise MissingScopeTargetError
+    if scope == BattleActionScope.SIDE and target_side is None:
+        raise MissingScopeTargetError
+
+
+def _validate_unit_place_overlap(
+    *, participant: BattleParticipant, target_unit: BattleUnit
+) -> None:
+    """Raise ``PlacesDoNotOverlapError`` when a UNIT target is out of range.
+
+    A vehicle's own BattleUnit never has place set (see BattleVehicle's
+    docstring) — resolve its paired vehicle's place so a STRIKE against the
+    vehicle's own unit is gated the same as a BREACH against its hull.
+    """
+    target_unit_place = target_unit.place
+    if target_unit_place is None and hasattr(target_unit, "vehicle"):  # noqa: GETATTR_LITERAL
+        target_unit_place = target_unit.vehicle.place
+    if (
+        target_unit_place is not None
+        and target_unit_place.pk != participant.place_id
+        and not places_overlap(target_unit_place, participant.place)
+    ):
+        raise PlacesDoNotOverlapError
+
+
+def _validate_fortification_place_overlap(
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    target_fortification: Fortification | None,
+) -> None:
+    """Raise ``PlacesDoNotOverlapError`` when a BREACH target is out of range."""
+    if (
+        action_kind == BattleActionKind.BREACH
+        and target_fortification is not None
+        and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
+        and participant.place_id is not None
+        and target_fortification.place_id != participant.place_id
+        and not places_overlap(target_fortification.place, participant.place)
+    ):
+        raise PlacesDoNotOverlapError
 
 
 def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> None:
@@ -800,6 +868,9 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     if the battle is already concluded, returns it unchanged (resolve_battle_beats
     does not re-fire). After beat resolution, runs every hook registered via
     register_battle_conclusion_hook (#1832) — e.g. ships' apply_ship_battle_outcome.
+    Pings connected participants via notify_battle_state_changed (#2009) last,
+    after every other side effect, deferred via transaction.on_commit so it
+    fires only once this transaction has actually committed.
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -823,6 +894,7 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
 
     resolve_battle_beats(battle)
     run_battle_conclusion_hooks(battle)
+    transaction.on_commit(lambda: notify_battle_state_changed(battle))
 
     return battle
 

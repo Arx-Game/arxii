@@ -942,6 +942,111 @@ class TestSeedMagicDev(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# #2027 — Soul Tether content is reachable from seed_magic_dev() alone
+# ---------------------------------------------------------------------------
+
+
+class TestSeedMagicDevSoulTetherContent(TestCase):
+    """Soul Tether formation prerequisites exist after seed_magic_dev() alone.
+
+    Regression guard for #2027: wire_soul_tether_content() (Rituals,
+    ConditionTemplates, TriggerDefinitions) and the RELATIONSHIP_TRACK
+    ThreadWeavingUnlock were previously only created by tests/factories —
+    unreachable in a live (non-test) game. This test deliberately does NOT
+    call wire_soul_tether_content() or seed_relationship_track_thread_unlock()
+    directly; it only runs the public seed_magic_dev() orchestrator, mirroring
+    what a real deploy/dev-seed run does.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from integration_tests.game_content.magic import seed_magic_dev
+
+        cls.result = seed_magic_dev()
+
+    def test_accept_soul_tether_ritual_seeded(self) -> None:
+        from world.magic.models import Ritual
+
+        self.assertTrue(Ritual.objects.filter(name="accept_soul_tether").exists())
+
+    def test_soul_tether_rescue_ritual_seeded(self) -> None:
+        from world.magic.models import Ritual
+
+        self.assertTrue(Ritual.objects.filter(name="soul_tether_rescue").exists())
+
+    def test_tether_strain_condition_template_seeded(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        self.assertTrue(ConditionTemplate.objects.filter(name="Tether Strain").exists())
+        self.assertEqual(
+            ConditionTemplate.objects.get(name="Tether Strain").stages.count(),
+            5,
+            "Tether Strain must have all 5 authored stages",
+        )
+
+    def test_soul_tether_active_condition_template_seeded(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        self.assertTrue(ConditionTemplate.objects.filter(name="Soul Tether Active").exists())
+
+    def test_soul_tether_trigger_definitions_seeded(self) -> None:
+        from flows.models import TriggerDefinition
+
+        self.assertTrue(
+            TriggerDefinition.objects.filter(name="soul_tether_redirect").exists(),
+        )
+        self.assertTrue(
+            TriggerDefinition.objects.filter(name="soul_tether_stage_advance_prompt").exists(),
+        )
+
+    def test_relationship_track_thread_weaving_unlock_seeded(self) -> None:
+        from world.magic.constants import TargetKind
+        from world.magic.models.weaving import ThreadWeavingUnlock
+
+        unlock = ThreadWeavingUnlock.objects.filter(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+        ).first()
+        self.assertIsNotNone(
+            unlock,
+            "seed_magic_dev() must seed a RELATIONSHIP_TRACK ThreadWeavingUnlock",
+        )
+        self.assertIsNotNone(unlock.unlock_track)
+        self.assertEqual(
+            self.result.relationship_track_thread_unlock.unlock.pk,
+            unlock.pk,
+        )
+
+    def test_idempotent_on_rerun(self) -> None:
+        """Re-running the orchestrator does not duplicate any of the above."""
+        from flows.models import TriggerDefinition
+        from integration_tests.game_content.magic import seed_magic_dev
+        from world.magic.constants import TargetKind
+        from world.magic.models import Ritual
+        from world.magic.models.weaving import ThreadWeavingUnlock
+
+        seed_magic_dev()
+
+        self.assertEqual(Ritual.objects.filter(name="accept_soul_tether").count(), 1)
+        self.assertEqual(Ritual.objects.filter(name="soul_tether_rescue").count(), 1)
+        self.assertEqual(
+            TriggerDefinition.objects.filter(name="soul_tether_redirect").count(),
+            1,
+        )
+        self.assertEqual(
+            TriggerDefinition.objects.filter(
+                name="soul_tether_stage_advance_prompt",
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            ThreadWeavingUnlock.objects.filter(
+                target_kind=TargetKind.RELATIONSHIP_TRACK,
+            ).count(),
+            1,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Task 1.11 — seed_canonical_affinities()
 # ---------------------------------------------------------------------------
 

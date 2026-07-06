@@ -30,6 +30,8 @@ from actions.prerequisites import (
 )
 from actions.types import ActionResult, TargetType
 
+_NOT_PART_OF_BUILDING_MESSAGE = "This room isn't part of a building."
+
 if TYPE_CHECKING:
     from actions.types import ActionContext
 
@@ -466,7 +468,7 @@ class SetBuildingStyleAction(_RoomBuilderAction):
             return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         if building is None:
-            return ActionResult(success=False, message="This room isn't part of a building.")
+            return ActionResult(success=False, message=_NOT_PART_OF_BUILDING_MESSAGE)
         style_name = (kwargs.get("style") or "").strip()
         if not style_name:
             options = ", ".join(
@@ -612,7 +614,7 @@ class CommissionDecorationAction(_RoomBuilderAction):
             return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         if building is None:
-            return ActionResult(success=False, message="This room isn't part of a building.")
+            return ActionResult(success=False, message=_NOT_PART_OF_BUILDING_MESSAGE)
         template = ProjectTemplate.objects.filter(pk=kwargs.get("template_id")).first()
         if template is None:
             return ActionResult(success=False, message="No such decoration template.")
@@ -656,7 +658,7 @@ class StartExtensionAction(_RoomBuilderAction):
             return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         if building is None:
-            return ActionResult(success=False, message="This room isn't part of a building.")
+            return ActionResult(success=False, message=_NOT_PART_OF_BUILDING_MESSAGE)
         try:
             added = int(kwargs.get("added_budget") or 0)
         except (TypeError, ValueError):
@@ -801,7 +803,7 @@ class StartBuildingRenovationAction(_RoomBuilderAction):
             return ActionResult(success=False, message=_no_room_message(kwargs))
         building = building_for_room(room)
         if building is None:
-            return ActionResult(success=False, message="This room isn't part of a building.")
+            return ActionResult(success=False, message=_NOT_PART_OF_BUILDING_MESSAGE)
         target = (kwargs.get("target_kind") or "").strip()
         if not target:
             lines = [

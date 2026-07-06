@@ -212,34 +212,10 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
     for stake in stakes:
         if stake.pk in already_resolved:
             continue
-        if withdrawal:
-            resolution = _branch_for_column(stake, StakeResolutionColumn.WITHDRAWAL)
-            if resolution is None:
-                # No authored withdrawal branch: the stake pends with the
-                # beat's PENDING_GM_REVIEW for a GM's constrained pick.
-                continue
-            column = StakeResolutionColumn.WITHDRAWAL
-        elif stake.pk in withdrawn_stake_ids:
-            # #1771 story 5: the stake's treasured subject had its sign-off
-            # withdrawn on this beat — a revoked-consent wager never grades
-            # WIN/LOSS, even though the beat itself resolves normally.
-            column = StakeResolutionColumn.WITHDRAWAL
-            resolution = _branch_for_column(stake, column)
-            if resolution is None:
-                # No authored WITHDRAWAL branch: pend for a GM's constrained
-                # pick, same semantics as the whole-encounter withdrawal path.
-                continue
-        else:
-            column = _machine_column_for_stake(stake, outcome)
-            resolution = _branch_for_column(
-                stake, column, prefer_lifecycle_state=_subject_lifecycle_state(stake)
-            )
-            if resolution is not None:
-                # A lifecycle-state match may have selected a branch on the
-                # OTHER column (#1760 — e.g. a DEAD/CAPTURED override firing
-                # LOSS on a beat-level SUCCESS); record the branch's actual
-                # column, not the outcome-derived default.
-                column = resolution.column
+        picked = _select_stake_resolution(stake, outcome, withdrawal, withdrawn_stake_ids)
+        if picked is None:
+            continue
+        resolution, column = picked
         outcomes.append(
             _fire_branch_and_record(
                 stake=stake,
@@ -254,6 +230,53 @@ def resolve_stakes_for_completion(  # noqa: PLR0913
             )
         )
     return outcomes
+
+
+def _select_stake_resolution(
+    stake: Stake,
+    outcome: BeatOutcome,
+    withdrawal: bool,
+    withdrawn_stake_ids: set[int],
+) -> tuple[StakeResolution | None, StakeResolutionColumn] | None:
+    """Pick the (resolution, column) for a single open stake, or None to skip.
+
+    Returns None (pend for a GM's constrained pick) when the selected branch is
+    unauthored. The three top-level branches mirror ``resolve_stakes_for_completion``:
+
+    - ``withdrawal`` (combat FLED/ABANDONED): only the WITHDRAWAL branch fires.
+    - revoked-consent subject (#1771 story 5): a WITHDRAWAL column is forced.
+    - otherwise the beat outcome maps to a column (WIN/LOSS), with a
+      lifecycle-state match (#1760) potentially selecting the other column.
+    """
+    if withdrawal:
+        resolution = _branch_for_column(stake, StakeResolutionColumn.WITHDRAWAL)
+        if resolution is None:
+            # No authored withdrawal branch: the stake pends with the
+            # beat's PENDING_GM_REVIEW for a GM's constrained pick.
+            return None
+        return resolution, StakeResolutionColumn.WITHDRAWAL
+    if stake.pk in withdrawn_stake_ids:
+        # #1771 story 5: the stake's treasured subject had its sign-off
+        # withdrawn on this beat — a revoked-consent wager never grades
+        # WIN/LOSS, even though the beat itself resolves normally.
+        column = StakeResolutionColumn.WITHDRAWAL
+        resolution = _branch_for_column(stake, column)
+        if resolution is None:
+            # No authored WITHDRAWAL branch: pend for a GM's constrained
+            # pick, same semantics as the whole-encounter withdrawal path.
+            return None
+        return resolution, column
+    column = _machine_column_for_stake(stake, outcome)
+    resolution = _branch_for_column(
+        stake, column, prefer_lifecycle_state=_subject_lifecycle_state(stake)
+    )
+    if resolution is not None:
+        # A lifecycle-state match may have selected a branch on the
+        # OTHER column (#1760 — e.g. a DEAD/CAPTURED override firing
+        # LOSS on a beat-level SUCCESS); record the branch's actual
+        # column, not the outcome-derived default.
+        column = resolution.column
+    return resolution, column
 
 
 def _machine_column_for_stake(

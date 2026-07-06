@@ -1006,7 +1006,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
 - **Good-sport kudos accrual:**
   - `accrue(account, initiator_account, points) -> WeeklySocialEngagement` (`services/engagement.py`) — adds points to the weekly pending ledger; tracks `WeeklyEngagementInitiator` rows for distinct-initiator anti-farm; resets stale ledgers lazily on the game-week boundary.
-  - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; iterates ungranted ledgers, skips those below `MIN_ENGAGEMENT_BAR` distinct initiators (currently 2), awards kudos via `award_kudos`, marks `granted=True`.
+  - `grant_social_engagement_kudos() -> int` (`services/engagement.py`) — called at weekly rollover; for each ungranted ledger with `engagement_events > 0`, rolls the diminishing-chance curve once per event (`_roll_good_sport_points`, guaranteed first point, capped at `GOOD_SPORT_WEEKLY_CAP`) and awards kudos via `award_kudos` when the roll yields > 0; every ledger is marked `granted=True` regardless of the rolled amount. There is no distinct-initiator floor — `distinct_initiators` (from `WeeklyEngagementInitiator` rows) is tracked on the ledger but not read by this function. Requires the `"social_engagement"` `KudosSourceCategory` to exist (seeded by the "kudos" cluster, #2026) or it logs a warning and no-ops.
   - `KudosDifficultyWeight.weight_for(band) -> Decimal` — returns configured multiplier for the difficulty band; falls back to `Decimal("1.0")` when no row exists.
 - **Class-level advancement spine (#1352 — `services/advancement.py`):**
   - `primary_class_level(character) -> CharacterClassLevel | None` — primary (or highest-level) class level row; None when absent.
@@ -2718,7 +2718,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
   `docs/architecture/damage-scaling.md`,
-  `docs/architecture/combat-conditions.md`
+  `docs/architecture/combat-conditions.md`,
+  `docs/systems/COMBAT_DEFENSES.md`
 
 ### Battles (#1592)
 Large-scale battle scenes (war covenant engagements, sieges, pitched fields) resolved
@@ -2924,7 +2925,22 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (the underlying `declare_battle_action`/`DeclareBattleActionAction` already
   supports REPOSITION generically) remain deferred. See
   [battles.md](battles.md#battlevehicle) for the full mechanism.
-- **Deferred follow-ups:** battle writeup page (#1735); naval/aerial embark actions
+- **REST/WS surface (#2009):** `BattleViewSet` (`IsAuthenticated`, scene-gated exactly like
+  `CombatEncounterViewSet` — staff unfiltered, else `scene__in=Scene.objects.viewable_by`,
+  404s a private battle rather than leaking a 403) exposes `GET /api/battles/` (list,
+  `?scene=`/`?outcome=` filters) and `GET /api/battles/<pk>/` (`BattleDetailSerializer` —
+  the single aggregate: sides → places (x/y/footprint/terrain/`controlled_by`/
+  `encounter_scene_id`/`vehicle`/`fortifications`) → units → participants (persona
+  id/name/thumbnail only)). `notify_battle_state_changed` sends a slim `BATTLE_STATE`
+  WS ping (`{battle_id, round_number}`, no battle data) to connected participants from
+  `begin_battle_round`/`resolve_battle_round`/`conclude_battle`, each via
+  `transaction.on_commit` (see ADR-0095: ping-plus-refetch, not a state payload push).
+  Frontend: `/scenes/:id/battle` — a read-only React Flow `BattleMapPage`, refetching
+  the aggregate via React Query on `BATTLE_STATE` receipt. See
+  [battles.md](battles.md#web-surface-2009) for the full contract.
+- **Deferred follow-ups:** battle writeup page (#1735 — should reuse
+  `BattleDetailSerializer`'s aggregate rather than authoring a second one; the live
+  strategic map itself shipped, #2009); naval/aerial embark actions
   and a dedicated REPOSITION telnet subcommand remain deferred (#1714) — the vehicle
   model, REPOSITION declaration and movement resolution, overlap-gated boarding, and
   hull-breach/living-mount-defeat ejection are built (see the Vehicles subsection

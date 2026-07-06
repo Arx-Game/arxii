@@ -50,6 +50,8 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
     from world.societies.models import LegendEntry, PhilosophicalArchetype, Society
 
+_HOUSEHOLD_COMMAND = "Household Command"
+
 
 @dataclass(frozen=True)
 class DeedReachResult:
@@ -152,8 +154,8 @@ WITNESS_APPROACHES: tuple[WitnessApproach, ...] = (
     ),
     WitnessApproach(
         key="household",
-        label="Household Command",
-        check_type_name="Household Command",
+        label=_HOUSEHOLD_COMMAND,
+        check_type_name=_HOUSEHOLD_COMMAND,
         household_only=True,
     ),
 )
@@ -270,7 +272,7 @@ def _run_containment_check(
         charm = handler.get_trait_value("charm")
         presence = handler.get_trait_value("presence")
         if household:
-            preferred = "Household Command"
+            preferred = _HOUSEHOLD_COMMAND
         else:
             preferred = "Con" if charm >= presence else "Intimidation"
         check_type = (

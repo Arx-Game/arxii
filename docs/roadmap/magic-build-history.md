@@ -1080,7 +1080,13 @@ What was built:
   Strain), `SoulTetherActiveTemplate` (ConditionTemplate installed on Sinner at formation;
   carries reactive trigger M2M), `accept_soul_tether` Ritual, `soul_tether_rescue` Ritual,
   `soul_tether_redirect` TriggerDefinition, `soul_tether_stage_advance_prompt`
-  TriggerDefinition. All wired via `wire_soul_tether_content()` factory orchestrator.
+  TriggerDefinition. All wired via `wire_soul_tether_content()` factory orchestrator, which
+  was itself only invoked by tests/factories until #2027 wired it into `seed_magic_dev()` —
+  before that fix, Soul Tether formation was unreachable in a live (non-test) game because
+  its Rituals/ConditionTemplates/TriggerDefinitions never existed outside test setup.
+  `seed_relationship_track_thread_unlock()` (also #2027) seeds the RELATIONSHIP_TRACK
+  `ThreadWeavingUnlock` (+ canonical "Devotion" `RelationshipTrack`) that `accept_soul_tether`
+  requires the Sinner to hold before it can weave a RELATIONSHIP_CAPSTONE Thread.
 - **Relationship side:** `RelationshipCapstone.is_ritual_capstone` BooleanField +
   `RelationshipCapstone.ritual` FK (nullable) added to support capstone-gated ritual dispatch.
 - **API endpoints:** `POST /api/magic/soul-tether/accept/`,

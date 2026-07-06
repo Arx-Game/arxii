@@ -64,6 +64,8 @@ _CHARACTER_ID_PARAM = OpenApiParameter(
     description="ObjectDB id of the viewing character (must be your own).",
 )
 
+_CHARACTER_NOT_FOUND = "Character not found."
+
 
 def _viewer_persona(request: Request) -> Persona | None:
     """The active persona of the ``?character_id=`` character, if the account plays it."""
@@ -117,7 +119,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
         """GET /api/buildings/manager/<building_id>/ — the full manager payload."""
         persona = _viewer_persona(request)
         if persona is None:
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND}, status=status.HTTP_404_NOT_FOUND)
         building = (
             Building.objects.select_related("area", "kind", "architectural_style", "entry_room")
             .filter(pk=pk)
@@ -205,7 +207,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
         """GET /api/buildings/manager/for-room/<room_id>/ — ids + permission flags only."""
         persona = _viewer_persona(request)
         if persona is None:
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND}, status=status.HTTP_404_NOT_FOUND)
         profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
         if profile is None:
             return Response({"detail": "No such room."}, status=status.HTTP_404_NOT_FOUND)
@@ -237,7 +239,7 @@ class BuildingManagerViewSet(viewsets.ViewSet):
         """
         persona = _viewer_persona(request)
         if persona is None:
-            return Response({"detail": "Character not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": _CHARACTER_NOT_FOUND}, status=status.HTTP_404_NOT_FOUND)
         profile = RoomProfile.objects.filter(objectdb_id=room_id).select_related("objectdb").first()
         if profile is None:
             return Response({"detail": "No such room."}, status=status.HTTP_404_NOT_FOUND)
