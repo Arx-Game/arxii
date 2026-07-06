@@ -132,6 +132,17 @@ class CmdCompanion(DispatchCommand):
             raise CommandError(msg)
         return sheet
 
+    @staticmethod
+    def _resolve_by_name_or_pk(qs: Any, value: str, *, pk_field: str, name_field: str) -> Any:
+        """Resolve *value* (digit → pk lookup, else iexact name) on *qs*.
+
+        Returns the first match or None. The caller validates and raises
+        ``CommandError`` with a context-specific message on None.
+        """
+        if value.isdigit():
+            return qs.filter(**{pk_field: int(value)}).first()
+        return qs.filter(**{name_field: value}).first()
+
     def _resolve_archetype(self, value: str) -> Any:
         """Resolve *value* (name iexact or pk) to a CompanionArchetype."""
         from world.companions.models import CompanionArchetype  # noqa: PLC0415
@@ -139,10 +150,12 @@ class CmdCompanion(DispatchCommand):
         if not value:
             msg = "Specify an archetype: archetype=<name|id>."
             raise CommandError(msg)
-        if value.isdigit():
-            archetype = CompanionArchetype.objects.filter(pk=int(value)).first()
-        else:
-            archetype = CompanionArchetype.objects.filter(name__iexact=value).first()
+        archetype = self._resolve_by_name_or_pk(
+            CompanionArchetype.objects,
+            value,
+            pk_field="pk",
+            name_field="name__iexact",
+        )
         if archetype is None:
             msg = f"No companion archetype found for '{value}'."
             raise CommandError(msg)
@@ -160,12 +173,12 @@ class CmdCompanion(DispatchCommand):
             msg = "Specify a gift: gift=<name|id>."
             raise CommandError(msg)
         sheet = self._sheet()
-        if value.isdigit():
-            char_gift = CharacterGift.objects.filter(character=sheet, gift_id=int(value)).first()
-        else:
-            char_gift = CharacterGift.objects.filter(
-                character=sheet, gift__name__iexact=value
-            ).first()
+        char_gift = self._resolve_by_name_or_pk(
+            CharacterGift.objects.filter(character=sheet),
+            value,
+            pk_field="gift_id",
+            name_field="gift__name__iexact",
+        )
         if char_gift is None:
             msg = f"You do not own a gift matching '{value}'."
             raise CommandError(msg)
@@ -180,11 +193,12 @@ class CmdCompanion(DispatchCommand):
             msg = f"Specify a companion: companion {self._subverb} <name|id>."
             raise CommandError(msg)
         sheet = self._sheet()
-        qs = Companion.objects.filter(owner=sheet, released_at__isnull=True)
-        if value.isdigit():
-            companion = qs.filter(pk=int(value)).first()
-        else:
-            companion = qs.filter(name__iexact=value).first()
+        companion = self._resolve_by_name_or_pk(
+            Companion.objects.filter(owner=sheet, released_at__isnull=True),
+            value,
+            pk_field="pk",
+            name_field="name__iexact",
+        )
         if companion is None:
             msg = f"No active companion found for '{value}'."
             raise CommandError(msg)
