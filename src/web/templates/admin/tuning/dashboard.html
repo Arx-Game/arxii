@@ -1,0 +1,70 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+<style>
+  .tuning-panel {
+    border: 1px solid var(--hairline-color);
+    background: var(--body-bg);
+    color: var(--body-fg);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .tuning-panel h2 {
+    margin-top: 0;
+  }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.25rem 0;
+  }
+  .bar-track {
+    flex: 1;
+    background: var(--hairline-color);
+    border-radius: 2px;
+    height: 0.75rem;
+    overflow: hidden;
+  }
+  .bar {
+    display: block;
+    height: 100%;
+    background: var(--primary);
+  }
+  .bar-label {
+    min-width: 3.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+<div id="tuning-root" hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
+  <h1>Game Tuning</h1>
+  <p>Difficulty analytics and simulation for the check engine, consequences, and conditions.</p>
+
+  <section class="tuning-panel" id="panel-checks"
+           hx-get="{% url 'admin_tuning_checks' %}" hx-trigger="load">
+    <p>Loading checks analytics&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-consequences"
+           hx-get="{% url 'admin_tuning_consequences' %}" hx-trigger="load">
+    <p>Loading consequences analytics&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-conditions"
+           hx-get="{% url 'admin_tuning_conditions' %}" hx-trigger="load">
+    <p>Loading conditions analytics&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-simulation"
+           hx-get="{% url 'admin_tuning_simulation' %}" hx-trigger="load">
+    <p>Loading simulation&hellip;</p>
+  </section>
+</div>
+{% endblock %}
