@@ -127,8 +127,7 @@
       <td class="success-probability-cell">{% widthratio dist.success_probability 1 100 %}%</td>
       <td>{{ dist.expected_success_level|floatformat:2 }}</td>
       <td>
-        <div class="stacked-bar" role="img"
-             aria-label="{{ dist.chart_name }} outcome distribution">
+        <div class="stacked-bar" aria-hidden="true">
           {% for band in dist.bands %}
           <span class="bar-segment {% if band.success_level > 0 %}bar-success
                        {% elif band.success_level < 0 %}bar-failure
@@ -162,7 +161,7 @@
   {% translate "success" %} <span class="success-probability-cell">{% widthratio matchup.success_probability 1 100 %}%</span>,
   {% translate "expected SL" %} {{ matchup.expected_success_level|floatformat:2 }}
 </p>
-<div class="stacked-bar" role="img" aria-label="{{ matchup.chart_name }} matchup distribution">
+<div class="stacked-bar" aria-hidden="true">
   {% for band in matchup.bands %}
   <span class="bar-segment {% if band.success_level > 0 %}bar-success
                {% elif band.success_level < 0 %}bar-failure

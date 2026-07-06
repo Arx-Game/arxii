@@ -86,9 +86,12 @@ _EFFECT_PROPERTY_DEFINITIONS: list[tuple[str, str]] = [
 # Outcome-tier labels and content names reused across seed rows (S1192).
 _CRITICAL_SUCCESS = "Critical Success"
 _CRITICAL_FAILURE = "Critical Failure"
+_PARTIAL_SUCCESS = "Partial Success"
 _TEMPERED_AGAINST_LIGHT = "Tempered Against Light"
 _HALLOWED_BURN = "Hallowed Burn"
 _MARKED_PATH = "Marked Path"
+_WEAPON_ENHANCEMENT = "Weapon Enhancement"
+_RANGED_ATTACK = "Ranged Attack"
 
 
 @dataclass
@@ -1603,11 +1606,11 @@ def seed_magic_config() -> MagicConfigResult:
 
     seed_check_resolution_tables()
     for name, budget in (
-        ("Critical Success", 10),
+        (_CRITICAL_SUCCESS, 10),
         ("Success", 6),
-        ("Partial Success", 3),
+        (_PARTIAL_SUCCESS, 3),
         ("Failure", 1),
-        ("Critical Failure", 1),
+        (_CRITICAL_FAILURE, 1),
     ):
         AnimaRitualBudgetAward.objects.get_or_create(
             outcome_tier=CheckOutcome.objects.get(name=name),
@@ -1629,11 +1632,11 @@ def seed_magic_config() -> MagicConfigResult:
     # the midpoint between the original Success/Failure values, per the plan's own
     # seed guidance.
     for name, gain_multiplier in (
-        ("Critical Success", Decimal("1.25")),
+        (_CRITICAL_SUCCESS, Decimal("1.25")),
         ("Success", Decimal("1.00")),
-        ("Partial Success", Decimal("0.75")),
+        (_PARTIAL_SUCCESS, Decimal("0.75")),
         ("Failure", Decimal("0.50")),
-        ("Critical Failure", Decimal("0.25")),
+        (_CRITICAL_FAILURE, Decimal("0.25")),
     ):
         SanctumHomecomingGainAward.objects.get_or_create(
             outcome_tier=CheckOutcome.objects.get(name=name),
@@ -1641,11 +1644,11 @@ def seed_magic_config() -> MagicConfigResult:
         )
 
     for name, retention_modifier in (
-        ("Critical Success", Decimal("0.25")),
+        (_CRITICAL_SUCCESS, Decimal("0.25")),
         ("Success", Decimal("0.00")),
-        ("Partial Success", Decimal("-0.075")),
+        (_PARTIAL_SUCCESS, Decimal("-0.075")),
         ("Failure", Decimal("-0.15")),
-        ("Critical Failure", Decimal("-0.30")),
+        (_CRITICAL_FAILURE, Decimal("-0.30")),
     ):
         SanctumPurgingRetentionAward.objects.get_or_create(
             outcome_tier=CheckOutcome.objects.get(name=name),
@@ -1653,11 +1656,11 @@ def seed_magic_config() -> MagicConfigResult:
         )
 
     for name, recovery_fraction in (
-        ("Critical Success", Decimal("0.80")),
+        (_CRITICAL_SUCCESS, Decimal("0.80")),
         ("Success", Decimal("0.50")),
-        ("Partial Success", Decimal("0.30")),
+        (_PARTIAL_SUCCESS, Decimal("0.30")),
         ("Failure", Decimal("0.10")),
-        ("Critical Failure", Decimal("0.0")),
+        (_CRITICAL_FAILURE, Decimal("0.0")),
     ):
         SanctumDissolutionRecoveryAward.objects.get_or_create(
             outcome_tier=CheckOutcome.objects.get(name=name),
@@ -1994,8 +1997,8 @@ _TECHNIQUE_STYLES: list[tuple[str, str, str]] = [
 
 #: 6 canonical EffectType definitions (name, description, base_power, base_anima_cost).
 _EFFECT_TYPES: list[tuple[str, str, int | None, int]] = [
-    ("Weapon Enhancement", "Imbues a held weapon with magical force.", 10, 3),
-    ("Ranged Attack", "Projects destructive energy at a distant target.", 10, 3),
+    (_WEAPON_ENHANCEMENT, "Imbues a held weapon with magical force.", 10, 3),
+    (_RANGED_ATTACK, "Projects destructive energy at a distant target.", 10, 3),
     ("Buff", "Enhances the caster or an ally with a temporary magical boon.", None, 2),
     ("Debuff", "Weakens or hampers a target with a magical affliction.", None, 2),
     ("Defense", "Interposes magical protection between the caster and harm.", 8, 3),
@@ -2012,35 +2015,35 @@ _CANTRIP_GRID: list[tuple[str, str, str, str, str]] = [
         "Manifestation",
         "Burning Strike",
         "A lance of raw fire conjured from personal will and hurled at the enemy.",
-        "Ranged Attack",
+        _RANGED_ATTACK,
     ),
     (
         "attack",
         "Subtle",
         "Shadow Blade",
         "A blade wreathed in shadow strikes from an unexpected angle.",
-        "Weapon Enhancement",
+        _WEAPON_ENHANCEMENT,
     ),
     (
         "attack",
         "Performance",
         "Shattering Chorus",
         "A keening note tears through armor and resolve alike.",
-        "Ranged Attack",
+        _RANGED_ATTACK,
     ),
     (
         "attack",
         "Prayer",
         "Smiting Light",
         "Holy radiance descends on the unworthy, burning like judgment.",
-        "Weapon Enhancement",
+        _WEAPON_ENHANCEMENT,
     ),
     (
         "attack",
         "Incantation",
         "Force Sigil",
         "A rune of impact is inscribed mid-air, detonating on contact.",
-        "Ranged Attack",
+        _RANGED_ATTACK,
     ),
     # --- DEFENSE ---
     (

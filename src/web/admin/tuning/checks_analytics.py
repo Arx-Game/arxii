@@ -142,4 +142,5 @@ def compute_matchup(
     # `_distribution_for_chart` stamps the *chart's own* rank_difference field,
     # which is only correct on an exact match. Override with the derived value
     # so a fallback chart's rank_difference doesn't leak into the result.
-    return replace(distribution, rank_difference=rank_difference)
+    adjusted: ChartDistribution = replace(distribution, rank_difference=rank_difference)
+    return adjusted

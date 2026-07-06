@@ -136,7 +136,7 @@
   &mdash; {% translate "Mean rounds" %}: {{ report.mean_rounds|floatformat:1 }}
 </p>
 
-<div class="stacked-bar" role="img" aria-label="{% translate 'Encounter outcome distribution' %}">
+<div class="stacked-bar" aria-hidden="true">
   <span class="bar-segment bar-success"
         style="width: {% widthratio report.victories report.iterations_run 100 %}%"></span>
   <span class="bar-segment bar-failure"
