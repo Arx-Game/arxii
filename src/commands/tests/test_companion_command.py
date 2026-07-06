@@ -30,8 +30,8 @@ def _make_cmd(args: str) -> CmdCompanion:
 
 
 class CompanionCommandParsingTests(TestCase):
-    def test_subverb_map_covers_four_ops(self) -> None:
-        self.assertEqual(set(_SUBVERBS), {"bind", "fight", "deploy", "release"})
+    def test_subverb_map_covers_all_ops(self) -> None:
+        self.assertEqual(set(_SUBVERBS), {"bind", "fight", "deploy", "release", "order"})
 
     def test_unknown_subverb_messages_and_does_not_dispatch(self) -> None:
         cmd = _make_cmd("frobnicate")

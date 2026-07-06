@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from actions.constants import ActionBackend
 from commands.command import DispatchCommand, parse_greedy_kwargs
 from commands.exceptions import CommandError
+from world.companions.constants import CompanionOrderKind
 
 if TYPE_CHECKING:
     from actions.types import ActionRef
@@ -25,6 +26,7 @@ _SUBVERBS: dict[str, str] = {
     "fight": "companion_fight",
     "deploy": "deploy_companion",
     "release": "release_companion",
+    "order": "order_companion",
 }
 # "list" and "status" are handled locally (status hub), not dispatched.
 
@@ -44,9 +46,19 @@ _BIND_SUBVERB = "bind"
 # Subverbs that take a single bare companion identifier (positional, not key=value).
 _POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy"})
 
+# The order subverb has its own multi-token parser.
+_ORDER_SUBVERB = "order"
+_MIN_ORDER_TOKENS = 2  # <name> <verb>
+_MIN_ATTACK_TOKENS = 3  # <name> attack <target>
+_MIN_ATTACK_WITH_ABILITY_TOKENS = 5  # <name> attack <target> with <ability>
+_ORDER_ATTACK = "attack"
+_ORDER_HOLD = "hold"
+_ORDER_DEFEND = "defend"
+_ORDER_WITH = "with"
+
 
 class CmdCompanion(DispatchCommand):
-    """Manage your bonded companions — bind, release, fight, deploy (#1918).
+    """Manage your bonded companions — bind, release, fight, deploy, order (#1918, #1921).
 
     Usage:
         companion                             — list active companions + capacity
@@ -57,6 +69,10 @@ class CmdCompanion(DispatchCommand):
         companion release <name|id>           — release a bonded companion
         companion fight <name|id>             — commit a companion into combat
         companion deploy <name|id>            — deploy a companion into a battle
+        companion order <name> attack <target> [with <ability>]
+                                              — direct a deployed companion
+        companion order <name> hold           — tell a companion to hold
+        companion order <name> defend <ally>  — tell a companion to defend an ally
 
     ``name=`` must be the final token on ``bind`` (it greedily consumes the rest
     of the line so names with spaces work).
@@ -93,6 +109,8 @@ class CmdCompanion(DispatchCommand):
         """Resolve the subverb's arguments into dispatch kwargs."""
         if self._subverb == _BIND_SUBVERB:
             return self._args_bind(parse_greedy_kwargs(self._rest, greedy_key=_NAME_KWARG))
+        if self._subverb == _ORDER_SUBVERB:
+            return self._args_order(self._rest)
         if self._subverb in _POSITIONAL_SUBVERBS:
             return {"companion_id": self._resolve_companion_id(self._rest)}
         return {}  # all subverbs gated in func(); this path is unreachable
@@ -196,11 +214,106 @@ class CmdCompanion(DispatchCommand):
             "name": name,
         }
 
+    def _args_order(self, rest: str) -> dict[str, Any]:
+        """Parse ``order <name> <verb> [target] [with <ability>]`` into kwargs.
+
+        Verbs: attack <target> [with <ability>], hold, defend <ally>.
+        """
+        parts = rest.split()
+        if len(parts) < _MIN_ORDER_TOKENS:
+            msg = "Usage: companion order <name> <attack|hold|defend> [target]"
+            raise CommandError(msg)
+
+        companion_id = self._resolve_companion_id(parts[0])
+        verb = parts[1].lower()
+
+        if verb == _ORDER_HOLD:
+            return {"companion_id": companion_id, "order_kind": CompanionOrderKind.HOLD}
+
+        if verb == _ORDER_ATTACK:
+            if len(parts) < _MIN_ATTACK_TOKENS:
+                msg = "Usage: companion order <name> attack <target> [with <ability>]"
+                raise CommandError(msg)
+            target_name = parts[2]
+            target_id = self._resolve_order_target(target_name)
+            kwargs: dict[str, Any] = {
+                "companion_id": companion_id,
+                "order_kind": CompanionOrderKind.ATTACK_TARGET,
+                "target_id": target_id,
+            }
+            # Optional: with <ability>
+            if len(parts) >= _MIN_ATTACK_WITH_ABILITY_TOKENS and parts[3].lower() == _ORDER_WITH:
+                ability_id = self._resolve_order_ability(parts[4], companion_id)
+                kwargs["ability_id"] = ability_id
+            return kwargs
+
+        if verb == _ORDER_DEFEND:
+            if len(parts) < _MIN_ATTACK_TOKENS:
+                msg = "Usage: companion order <name> defend <ally>"
+                raise CommandError(msg)
+            ally_name = parts[2]
+            ally_id = self._resolve_order_ally(ally_name)
+            return {
+                "companion_id": companion_id,
+                "order_kind": CompanionOrderKind.DEFEND_ALLY,
+                "ally_id": ally_id,
+            }
+
+        msg = f"Unknown order verb '{verb}'. Try: attack, hold, defend."
+        raise CommandError(msg)
+
+    def _resolve_order_target(self, name: str) -> int:
+        """Resolve a target name/pk to a CombatOpponent or BattleUnit pk."""
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+        if name.isdigit():
+            # Could be a CombatOpponent or BattleUnit; the Action resolves it
+            return int(name)
+        # Try CombatOpponent by name (iexact)
+        opponent = CombatOpponent.objects.filter(name__iexact=name).first()
+        if opponent is not None:
+            return opponent.pk
+        msg = f"No target found for '{name}'."
+        raise CommandError(msg)
+
+    def _resolve_order_ability(self, name: str, companion_id: int) -> int:
+        """Resolve an ability name/pk on the companion's archetype."""
+        from world.companions.models import Companion, CompanionAbility  # noqa: PLC0415
+
+        companion = Companion.objects.get(pk=companion_id)
+        if name.isdigit():
+            ability = CompanionAbility.objects.filter(
+                pk=int(name), archetype=companion.archetype
+            ).first()
+        else:
+            ability = CompanionAbility.objects.filter(
+                name__iexact=name, archetype=companion.archetype
+            ).first()
+        if ability is None:
+            msg = f"No ability '{name}' found for {companion.name}."
+            raise CommandError(msg)
+        return ability.pk
+
+    def _resolve_order_ally(self, name: str) -> int:
+        """Resolve an ally name/pk to a CombatParticipant or BattleParticipant pk."""
+        from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+        if name.isdigit():
+            return int(name)
+        # Try CombatParticipant by character name
+        participant = CombatParticipant.objects.filter(
+            character_sheet__character__db_key__iexact=name
+        ).first()
+        if participant is not None:
+            return participant.pk
+        msg = f"No ally found for '{name}'."
+        raise CommandError(msg)
+
     # -- status hub ------------------------------------------------------------
 
     def _show_status_hub(self) -> None:
         """List the caller's active companions + remaining capacity per gift."""
-        lines = ["|wCompanion actions|n: bind, release, fight, deploy"]
+        lines = ["|wCompanion actions|n: bind, release, fight, deploy, order"]
 
         sheet = getattr(self.caller, "sheet_data", None)  # noqa: GETATTR_LITERAL
         if sheet is None:
