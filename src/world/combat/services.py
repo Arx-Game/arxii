@@ -2370,6 +2370,31 @@ def select_npc_actions(
     return actions
 
 
+def _get_companion_order(opponent: CombatOpponent, round_number: int) -> object | None:
+    """Fetch the CompanionOrder for an ALLY summon this round, if any (#1921).
+
+    Returns None for non-summons or when no order exists.
+    """
+    if opponent.summoned_by_id is None or opponent.allegiance != CombatAllegiance.ALLY:
+        return None
+
+    from world.companions.models import Companion, CompanionOrder  # noqa: PLC0415
+
+    try:
+        companion = Companion.objects.get(
+            owner_id=opponent.summoned_by_id,
+            released_at__isnull=True,
+        )
+    except (Companion.DoesNotExist, Companion.MultipleObjectsReturned):
+        return None
+
+    return CompanionOrder.objects.filter(
+        companion=companion,
+        encounter=opponent.encounter,
+        round_number=round_number,
+    ).first()
+
+
 def _build_opponent_round_actions(
     opponent: CombatOpponent,
     pool_entries: list[ThreatPoolEntry],
@@ -2393,6 +2418,25 @@ def _build_opponent_round_actions(
     )
     if not target_pool:
         return []
+
+    # --- Companion order integration (#1921) ---
+    # An ALLY summon with a CompanionOrder may override its target or skip.
+    companion_order = _get_companion_order(opponent, encounter.round_number)
+    if companion_order is not None:
+        from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+
+        if companion_order.order_kind == CompanionOrderKind.HOLD:
+            return []  # HOLD: skip this round
+
+        if (
+            companion_order.order_kind == CompanionOrderKind.ATTACK_TARGET
+            and companion_order.target_opponent_id is not None
+        ):
+            # Filter the pool to just the directed target (if still alive)
+            directed = [opp for opp in target_pool if opp.pk == companion_order.target_opponent_id]
+            if directed:
+                target_pool = directed
+            # else: target is dead/gone, fall back to auto-selection
 
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
         n_attacks = swarm_attack_count(
