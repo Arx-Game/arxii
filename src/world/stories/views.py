@@ -24,6 +24,7 @@ from world.character_sheets.models import CharacterSheet
 from world.narrative.permissions import IsStoryLeadGMOrStaff
 from world.stories.constants import (
     AssistantClaimStatus,
+    BeatVisibility,
     SessionRequestStatus,
     StoryScope,
 )
@@ -1388,6 +1389,73 @@ class BeatViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["order", "created_at", "updated_at"]
     ordering = ["episode", "order"]
+
+    def get_queryset(self) -> QuerySet[Beat]:
+        """Scope the Beat queryset by story read-visibility (#1923).
+
+        ``IsBeatStoryOwnerOrStaff.has_permission`` only checks authentication,
+        and DRF's ``list()`` never calls ``has_object_permission`` per row — so
+        without a queryset filter any authenticated user could enumerate every
+        beat of any episode, including SECRET beats. This mirrors the read
+        rule ``IsBeatStoryOwnerOrStaff.has_object_permission`` delegates to
+        (``IsStoryOwnerOrStaff._can_read_story``) at the queryset level:
+
+        - Staff: all beats.
+        - PUBLIC story: visible to all authenticated users.
+        - PRIVATE story: owners or active participants.
+        - INVITE_ONLY story: owners or active *trusted* participants.
+        - Non-staff viewers never see SECRET beats (matching the story-log
+          contract, where SECRET beats surface only on completion for the
+          player who completed them).
+
+        ``retrieve``/``update``/etc. still get the real per-object check via
+        ``has_object_permission``; this filter only narrows ``list()``.
+        """
+        from world.stories.types import StoryPrivacy  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+
+        if not user.is_authenticated:
+            return qs.none()
+
+        if user.is_staff:
+            return qs
+
+        # Story FK chain: beat -> episode -> chapter -> story.
+        story__ = "episode__chapter__story__"
+
+        # PUBLIC stories are readable by any authenticated user.
+        public_q = models.Q(**{f"{story__}privacy": StoryPrivacy.PUBLIC})
+
+        # PRIVATE / INVITE_ONLY: owners ...
+        owned_q = models.Q(**{f"{story__}owners": user})
+
+        # ... or active participants. INVITE_ONLY additionally requires
+        # trusted_by_owner (mirrors _can_read_story's invite-only branch).
+        participant_q = models.Q(
+            **{f"{story__}participants__character__db_account": user},
+            **{f"{story__}participants__is_active": True},
+        )
+        trusted_participant_q = participant_q & models.Q(
+            **{f"{story__}participants__trusted_by_owner": True},
+        )
+
+        private_q = owned_q | participant_q
+        invite_only_q = owned_q | trusted_participant_q
+
+        visible_q = (
+            public_q
+            | (models.Q(**{f"{story__}privacy": StoryPrivacy.PRIVATE}) & private_q)
+            | (models.Q(**{f"{story__}privacy": StoryPrivacy.INVITE_ONLY}) & invite_only_q)
+        )
+
+        # SECRET beats are never surfaced to non-staff via the list endpoint
+        # (matching the story-log contract — they surface only on completion).
+        secret_q = models.Q(visibility=BeatVisibility.SECRET)
+        visible_q &= ~secret_q
+
+        return qs.filter(visible_q).distinct()
 
     @action(
         detail=True,
