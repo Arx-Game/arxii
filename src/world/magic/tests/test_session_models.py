@@ -117,3 +117,23 @@ class RitualSessionReferenceCheckConstraintTests(TestCase):
                     session=session,
                     kind=ReferenceKind.ORGANIZATION,
                 )
+
+
+class OrganizationInductionRitualFactoryTests(TestCase):
+    def test_factory_produces_valid_bilateral_ritual(self):
+        from world.magic.constants import ParticipationRule, RitualExecutionKind
+        from world.magic.factories import OrganizationInductionRitualFactory
+
+        ritual = OrganizationInductionRitualFactory()
+        self.assertEqual(ritual.execution_kind, RitualExecutionKind.SERVICE)
+        self.assertEqual(ritual.participation_rule, ParticipationRule.BILATERAL)
+        self.assertEqual(ritual.min_participants, 2)
+        self.assertEqual(ritual.max_participants, 2)
+        self.assertEqual(
+            ritual.service_function_path,
+            "world.societies.membership_services.induct_organization_member_via_session",
+        )
+        self.assertEqual(
+            ritual.draft_validator_path,
+            "world.societies.membership_services.assert_initiator_can_lead_org_ritual",
+        )

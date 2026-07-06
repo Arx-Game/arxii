@@ -2573,6 +2573,36 @@ class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
     )
 
 
+class OrganizationInductionRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the generic (non-Covenant) organization induction ritual (#1868).
+
+    BILATERAL, not INDUCTION like Covenant Induction: generic org membership has no
+    role to choose (join_organization assigns the base rank automatically), so there's
+    no need for a candidate-carries-a-role-reference disambiguation trick — the sole
+    non-initiator ACCEPTED participant is unambiguously the candidate.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Organization Induction"
+    description = "Formally induct a new member into a non-Covenant organization."
+    narrative_prose = "A ranking member leads the rite that welcomes a new member in."
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = (
+        "world.societies.membership_services.induct_organization_member_via_session"
+    )
+    draft_validator_path = (
+        "world.societies.membership_services.assert_initiator_can_lead_org_ritual"
+    )
+    flow = None
+    participation_rule = ParticipationRule.BILATERAL
+    min_participants = 2
+    max_participants = 2
+    input_schema = factory.LazyFunction(lambda: {"fields": [], "participant_fields": []})
+
+
 class RenewTheOathRitualFactory(factory.django.DjangoModelFactory):
     """Seed factory for the canonical 'Renew the Oath' covenant rite ritual.
 
