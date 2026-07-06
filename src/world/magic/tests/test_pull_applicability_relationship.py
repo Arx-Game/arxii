@@ -10,7 +10,6 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import EffectKind, InapplicabilityReason, TargetKind
 from world.magic.factories import ThreadFactory, ThreadPullEffectFactory
-from world.magic.models import RelationshipBondPullTuning
 from world.magic.services.pull_applicability import (
     PullActionContext,
     compute_thread_applicability,
@@ -74,15 +73,11 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
             resonance=thread.resonance,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        # Owner needs an active bond to threaded_sheet for step-4 "has a rewardable
-        # bond" to pass, else it's equally a no-stake case. _relationship_track_thread
-        # already created the owner->threaded_sheet CharacterRelationship (as the
-        # thread's own anchor) -- CharacterRelationship has a unique_relationship_pair
-        # constraint on (source, target), so add a SECOND track's progress to that
-        # SAME relationship rather than creating a new one.
-        bond = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond, developed_points=10)
-        RelationshipBondPullTuning.objects.create(pk=1)
+        # Owner needs an active, non-pending bond to threaded_sheet for step-4 "has a
+        # rewardable bond" to pass (else it's equally a no-stake case), but the picker
+        # only checks row *existence* -- _relationship_track_thread's own anchor
+        # relationship (is_active=True, is_pending=False) already satisfies it; no
+        # additional developed_points or tuning config is read here.
         context = _context(active_persona_for_sheet(threaded_sheet).pk)
 
         rows = compute_thread_applicability(owner, context)
@@ -100,10 +95,8 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
             resonance=thread.resonance,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        # Same unique-pair note as above: reuse the anchor's own relationship.
-        bond = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond, developed_points=10)
-        RelationshipBondPullTuning.objects.create(pk=1)
+        # Owner's bond to threaded_sheet is already satisfied by the anchor
+        # relationship _relationship_track_thread created (see the note above).
         x_sheet = CharacterSheetFactory()
         hostile = CharacterRelationshipFactory(
             source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False
@@ -166,10 +159,8 @@ class RelationshipNoStakePrivacyTests(TestCase):
             resonance=thread.resonance,
             effect_kind=EffectKind.FLAT_BONUS,
         )
-        # Reuse the anchor's own owner->threaded_sheet relationship (unique_relationship_pair).
-        bond = owner.relationships_as_source.get(target=threaded_sheet)
-        RelationshipTrackProgressFactory(relationship=bond, developed_points=10)
-        RelationshipBondPullTuning.objects.create(pk=1)
+        # Owner's bond to threaded_sheet is already satisfied by the anchor
+        # relationship _relationship_track_thread created.
         x_sheet = CharacterSheetFactory()
         hostile = CharacterRelationshipFactory(
             source=x_sheet, target=threaded_sheet, is_active=True, is_pending=False

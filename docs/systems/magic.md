@@ -578,7 +578,7 @@ regard's sign) — so the player isn't offered a pull that won't actually do
 anything extra. No-op (thread stays applicable) when no Court leader is
 resolvable at all — the base pull is simply unmodulated in that case.
 
-### Relationship Bond Pull Modulation (#1849 — ADR-0092)
+### Relationship Bond Pull Modulation (#1849 — ADR-0092) [BUILT & WIRED]
 
 The `RELATIONSHIP_TRACK` sibling rule, `relationship_bond_modulation(thread,
 target, effect_row, base_scaled)` (`world/magic/services/pull_modulation_relationship.py`).
