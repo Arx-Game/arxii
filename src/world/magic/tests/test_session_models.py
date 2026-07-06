@@ -83,3 +83,37 @@ class RitualSessionReferenceCheckConstraintTests(TestCase):
                     session=session,
                     kind=ReferenceKind.COVENANT,
                 )
+
+    def test_organization_kind_requires_ref_organization(self):
+        from datetime import datetime, timedelta
+
+        from django.db import IntegrityError, transaction
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession, RitualSessionReference
+        from world.societies.factories import OrganizationFactory
+
+        ritual = RitualFactory()
+        sheet = CharacterSheetFactory()
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=sheet,
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        org = OrganizationFactory()
+        # Valid: kind=ORGANIZATION with ref_organization set.
+        ref = RitualSessionReference.objects.create(
+            session=session,
+            kind=ReferenceKind.ORGANIZATION,
+            ref_organization=org,
+        )
+        self.assertEqual(ref.ref_organization, org)
+        # Invalid: kind=ORGANIZATION with ref_organization null.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                RitualSessionReference.objects.create(
+                    session=session,
+                    kind=ReferenceKind.ORGANIZATION,
+                )
