@@ -46,6 +46,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "promote": "_handle_promote",
     "mark": "_handle_mark",
     "list": "_handle_list",
+    "beats": "_handle_beats",
 }
 
 
@@ -94,6 +95,70 @@ class CmdStory(ArxNamespaceCommand):
                 f"  [{entry['story_id']}] {entry['story_title']}{episode_bit} "
                 f"({entry['status_label']})"
             )
+        self.msg("\n".join(lines))
+
+    def _handle_beats(self, rest: str) -> None:
+        """List a caller's-own-active-episode's beats, flagging pending sign-offs (#1853)."""
+        from world.stories.constants import BeatVisibility  # noqa: PLC0415
+        from world.stories.models import Beat  # noqa: PLC0415
+        from world.stories.services.boundaries import (  # noqa: PLC0415
+            player_pending_treasured_signoffs,
+        )
+        from world.stories.services.dashboards import active_stories_for_account  # noqa: PLC0415
+
+        episode_id = self._require_arg(rest, "Usage: story beats <episode-id>.")
+        if not episode_id.isdigit():
+            msg = "An episode must be specified by its numeric ID."
+            raise CommandError(msg)
+
+        result = active_stories_for_account(self.caller.account)
+        my_episode_ids = {
+            entry["current_episode_id"]
+            for entry in (
+                *result["character_stories"],
+                *result["group_stories"],
+                *result["global_stories"],
+            )
+            if entry["current_episode_id"] is not None
+        }
+        if int(episode_id) not in my_episode_ids:
+            msg = "That's not one of your active stories."
+            raise CommandError(msg)
+
+        beats = list(Beat.objects.filter(episode_id=episode_id).order_by("order"))
+        if not beats:
+            self.msg("No beats yet for that episode.")
+            return
+
+        player_data = getattr(self.caller.account, "player_data", None)  # noqa: GETATTR_LITERAL
+        pending_by_beat: dict[int, tuple[int, ...]] = {}
+        if player_data is not None:
+            for entry in player_pending_treasured_signoffs(player_data, beats):
+                pending_by_beat[entry.beat_id] = entry.treasured_subject_ids
+
+        from world.boundaries.models import TreasuredSubject  # noqa: PLC0415
+
+        pending_subject_ids = {tid for ids in pending_by_beat.values() for tid in ids}
+        label_by_id = dict(
+            TreasuredSubject.objects.filter(pk__in=pending_subject_ids).values_list(
+                "pk", "subject_label"
+            )
+        )
+
+        lines = ["Beats:"]
+        for beat in beats:
+            if beat.player_hint and beat.player_hint.strip():
+                title = beat.player_hint
+            elif beat.visibility == BeatVisibility.SECRET:
+                title = "(Hidden Beat)"
+            else:
+                title = "Beat"
+            outcome = beat.outcome or "unsatisfied"
+            line = f"  [{beat.pk}] {title} ({outcome})"
+            pending_ids = pending_by_beat.get(beat.pk, ())
+            for tid in pending_ids:
+                line += f"\n      SIGN-OFF NEEDED: {label_by_id.get(tid, '(unknown)')}"
+            lines.append(line)
         self.msg("\n".join(lines))
 
     def _handle_complete(self, rest: str) -> None:

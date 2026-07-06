@@ -312,3 +312,100 @@ class CmdStoryPlayerListTests(TestCase):
 
         joined = " ".join(messages)
         self.assertIn(story.title, joined)
+
+
+class CmdStoryPlayerBeatsTests(TestCase):
+    """`story beats <episode-id>` — beats in one of the caller's active episodes (#1853)."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.stories.factories import (
+            ChapterFactory,
+            EpisodeFactory,
+            StoryFactory,
+            StoryProgressFactory,
+        )
+
+        self.account = AccountFactory()
+        self.char = CharacterFactory()
+        self.char.db_account = self.account
+        self.char.save()
+        self.sheet = CharacterSheetFactory(character=self.char)
+
+        self.story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        self.chapter = ChapterFactory(story=self.story, order=1)
+        self.episode = EpisodeFactory(chapter=self.chapter, order=1)
+        StoryProgressFactory(
+            story=self.story, character_sheet=self.sheet, current_episode=self.episode
+        )
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_beats_requires_episode_id(self) -> None:
+        messages = self._run("beats")
+        self.assertTrue(any("Usage" in m for m in messages))
+
+    def test_beats_rejects_episode_not_in_an_active_story_of_the_caller(self) -> None:
+        from world.stories.factories import EpisodeFactory
+
+        other_episode = EpisodeFactory(chapter=self.chapter, order=2)
+        messages = self._run(f"beats {other_episode.pk}")
+        joined = " ".join(messages)
+        self.assertIn("not one of your active stories", joined.lower())
+
+    def test_beats_lists_visible_beat_with_player_hint(self) -> None:
+        from world.stories.factories import BeatFactory
+
+        BeatFactory(episode=self.episode, player_hint="A stranger arrives.")
+        messages = self._run(f"beats {self.episode.pk}")
+        joined = " ".join(messages)
+        self.assertIn("A stranger arrives.", joined)
+
+    def test_beats_hides_secret_beat_with_no_hint(self) -> None:
+        from world.stories.constants import BeatVisibility
+        from world.stories.factories import BeatFactory
+
+        BeatFactory(episode=self.episode, player_hint="", visibility=BeatVisibility.SECRET)
+        messages = self._run(f"beats {self.episode.pk}")
+        joined = " ".join(messages)
+        self.assertIn("(Hidden Beat)", joined)
+
+    def test_beats_flags_pending_signoff(self) -> None:
+        from world.boundaries.factories import TreasuredSubjectFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.stories.constants import StakeSubjectKind
+        from world.stories.factories import BeatFactory, StakeFactory
+
+        beat = BeatFactory(episode=self.episode, player_hint="A duel is proposed.")
+        entry = RosterEntryFactory(character_sheet=self.sheet)
+        player_data = PlayerDataFactory(account=self.account)
+        tenure = RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        TreasuredSubjectFactory(
+            owner=tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+        StakeFactory(
+            beat=beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+
+        messages = self._run(f"beats {self.episode.pk}")
+
+        joined = " ".join(messages)
+        self.assertIn("SIGN-OFF NEEDED", joined)
+        self.assertIn("Signet Ring", joined)
