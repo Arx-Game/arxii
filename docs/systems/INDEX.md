@@ -1823,9 +1823,17 @@ capability trait gate is met. Modeled as a plain `NPCServiceOffer` on the
 existing offer/effect-dispatch framework — see ADR-0091.
 
 - **Models:** `NPCAsset` (`promoter_persona`, `asset_persona` — both FK
-  `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`;
+  `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`
+  (nullable — NULL for CG-granted assets); `acquisition_source` enum
+  (`PROMOTION` runtime, `DISTINCTION_GRANT` CG); `source_distinction_grant` FK
+  `DistinctionAssetGrant` (nullable — idempotency key for CG grants);
   `status`; `created_at`). No `standing` field — ongoing affection reads
   through the existing `NPCStanding` row for the same persona pair.
+- **`DistinctionAssetGrant`** sidecar (`world.assets.models`): staff-authored
+  mapping of a `Distinction` → `NPCRole` + `role_context` + `starting_affection`
+  + `asset_display_name`. Reconciled at CG finalization via
+  `reconcile_distinction_asset_grants` (#1906), mirroring the
+  `DistinctionResonanceGrant` pattern. Lives in `world.assets` per ADR-0010.
 - **`OfferKind`** additions: `INFORMANT`, `CONTACT`, `PERSONAL_FAVOR`
   (`world.npc_services.constants`).
 - **Effect handlers** (`world.assets.effects`): resolve the Functionary from
@@ -1843,9 +1851,9 @@ existing offer/effect-dispatch framework — see ADR-0091.
   at `/api/assets/`, scoped to the requesting user's own promoted assets.
 - **Source:** `src/world/assets/`
 
-Deferred follow-ups: distinction-granted starting assets (`needs-design`),
-asset gameplay loops (tasking/intel/income), compromise/loss lifecycle,
-voluntary asset sharing, guard/fan/minor-ally variants.
+Deferred follow-ups: asset gameplay loops (tasking/intel/income),
+compromise/loss lifecycle, voluntary asset sharing, guard/fan/minor-ally
+variants.
 
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
