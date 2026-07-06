@@ -109,6 +109,71 @@ coppers-only repair economy. Fully playable end-to-end (telnet + web).
   `station repair points=<n>`.
 - **Frontend** — `LabStationStatusCard` wired into `AttachFacetDialog`.
 
+### Physical currency interplay: coin caches, container access policy, consent-gated theft (#1909) — DONE
+
+Ledger money can leave the books and become a real, holdable item — closing the gap between
+"money" (an integer on `CharacterPurse`) and "an item in the world" (droppable, giveable,
+stowable, and — deliberately, with consequences — stealable). Fully playable end-to-end
+(telnet + web).
+
+**What was built:**
+
+- **`Denomination.LOOSE` + `mint_loose_cache`** (`world.currency`) — everyday pocket cash: an
+  arbitrary `face_value`, no mint fee (unlike the six fixed grand-coin denominations, which
+  carry `MINT_FEE_PCT` as a deliberate sink). `parse_coppers` (`world.currency.constants`)
+  parses free-text `"1g 2s 3c"` amounts so telnet's `CmdGive` can auto-detect money and
+  branch into `give_coins` instead of a plain item give.
+- **Minted money is born physical** — both `mint_instrument` and `mint_loose_cache` call
+  `world.items.services.materialize.materialize_item_game_object`, so a freshly minted coin
+  is a real `ItemInstance` + `game_object` in the minter's inventory from the moment it
+  exists, not a row waiting to be materialized later. `redeem_instrument` (deposit) is the
+  fee-free reverse for *any* instrument (loose or grand) — it consumes the physical object
+  (`game_object.delete()` CASCADEs the `ItemInstance` row; `OwnershipEvent` provenance rows
+  survive via `SET_NULL`, #1025) so a redeemed coin never lingers as a ghost item.
+- **Container Access Policy** (`ItemInstance.access_policy`: Open / Friends / Owner Only,
+  `world.items`) — governs who may take items *out* of a container with a plain take;
+  non-containers ignore it; only the immediate container's policy applies (no chaining up
+  nested containers). Owner-only via `flows.service_functions.inventory
+  .set_container_policy`.
+- **Ownership/policy gate on plain take** (`take_requires_steal`, `flows.service_functions
+  .inventory`) — a room item owned by someone else, or a container-item barred by the
+  container's policy, raises `OwnedByAnother` / `ContainerAccessDenied` on `pick_up` /
+  `take_out`. Sheet-less actors (GM/staff/companion tooling) keep the legacy free-take
+  behavior — theft consequence machinery is sheet-anchored and cannot apply to them.
+- **Consent-gated Steal** (`flows.service_functions.inventory.steal`) — the deliberate
+  bypass: ownership genuinely transfers (`OwnershipEvent(STOLEN)`, never destroyed, #1025)
+  and the act births a crime-tagged, concealed Legend deed (`create_solo_deed`,
+  `concealed=True` rolls Stealth to shed witnesses, #1824). Availability
+  (`steal_permitted`) is target-side only: an NPC's holdings (no active `RosterTenure`) are
+  always antagonism-allowed; a player's holdings gate on `world.consent.services
+  .consent_blocks_targeting` against a new `theft_category()` (default-deny — victims must
+  opt in). This is the Golden Rule in code: no consequence-free trolling, but a sanctioned
+  playground exists for players who opt in to the crime-economy fiction.
+- **`SocialConsentCategory.default_mode`** (`world.consent`) — the targeting mode used when
+  a tenure has set no per-category rule; `EVERYONE` (default) preserves every pre-existing
+  category's legacy allow-all behavior, while `theft_category()` opts into `ALLOWLIST`
+  (default-deny). The single-tenure decision moved to the public
+  `world.consent.services.consent_blocks_targeting` so non-social-action callers (the theft
+  gate) don't reach into the dispatch layer.
+- **Actions + telnet** — `withdraw_coins` / `deposit_coins` / `give_coins` / `steal` /
+  `set_container_policy` (`actions/definitions/currency.py`), `CanStealPrerequisite`.
+  Telnet: `withdraw coins <amount>` (via the existing `CmdWithdraw`), `CmdDeposit`
+  (`deposit <item>`), `CmdSteal` (`steal <item>` / `steal <item> from <container>`),
+  `CmdSecure` (`secure <container>=<open|friends|owner_only>`); `CmdGive` auto-detects money
+  via `parse_coppers`.
+- **Web** — `ItemInstanceReadSerializer` gained `game_object_id`, `access_policy`,
+  `is_currency_instrument`, and `can_steal`; Drop/Give/Put-in/Deposit/Secure/Steal/Withdraw
+  are wired through the existing inventory-action dispatch.
+- **Journey test** (`world.items.tests.test_theft_journey`) — service-seam end-to-end:
+  withdraw → stow in an owner-only chest → steal (permitted only because the victim opted
+  in) → deposit, alongside a non-consenting third party's item staying out of reach; ledger
+  conservation (purse balances + outstanding instrument face values) holds at every step.
+- **Decision record:** [ADR-0091](../adr/0091-theft-is-consent-gated-target-side.md) (target-side
+  theft-consent gate + always-antagonism-allowed NPC holdings).
+
+**Deferred (out of scope, per the #1909 spec):** none filed as follow-ups — the spec's
+out-of-scope list stands as written on the issue.
+
 ## What's Needed for MVP
 - Material/resource models — types, sources, quantities, storage
 - Item creation pipeline — crafted items with stats, facets, and fashion properties

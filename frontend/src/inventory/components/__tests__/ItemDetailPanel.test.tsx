@@ -109,6 +109,10 @@ function setupDefaultMocks() {
 function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
   return {
     id: 7,
+    game_object_id: 700,
+    access_policy: 'open',
+    is_currency_instrument: false,
+    can_steal: false,
     template: {
       id: 70,
       name: 'Silver Brooch',

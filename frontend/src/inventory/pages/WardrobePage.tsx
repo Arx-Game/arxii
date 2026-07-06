@@ -22,9 +22,14 @@
  * Mutations land via two paths:
  *   - REST hooks (useCreateOutfit, useDeleteOutfit, useUpdateOutfit, etc.)
  *     handle outfit CRUD — invalidation is owned by those hooks.
- *   - Equip/unequip and apply/undress travel through the websocket action
- *     dispatcher. We listen for the `ACTION_RESULT` reply on the bus and
- *     invalidate inventory + equipped queries on success.
+ *   - Equip/unequip, apply/undress, and the item-detail action row
+ *     (drop/give/put-in/deposit/secure, #1909) travel through the websocket
+ *     action dispatcher. We listen for the `ACTION_RESULT` reply on the bus
+ *     and invalidate inventory + equipped queries on success.
+ *
+ * The dispatcher's `objectdb_target_kwargs` resolve `<name>_id` kwargs
+ * against `ObjectDB.pk` — items carry that as `game_object_id`, distinct
+ * from the `id` (ItemInstance pk) used to key React state/props.
  */
 
 import { useCallback, useMemo, useState } from 'react';
@@ -36,10 +41,12 @@ import { Separator } from '@/components/ui/separator';
 import { useAppSelector } from '@/store/hooks';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
-import type { ActionResultPayload } from '@/hooks/types';
+import type { ActionResultPayload, RoomStateObject } from '@/hooks/types';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { ItemCard } from '../components/ItemCard';
 import { ItemDetailPanel } from '../components/ItemDetailPanel';
+import { GiveItemDialog } from '../components/GiveItemDialog';
+import { PutInDialog } from '../components/PutInDialog';
 import { OutfitCard } from '../components/OutfitCard';
 import { PaperDoll, type EquippedItemDisplay } from '../components/PaperDoll';
 import { SaveOutfitDialog } from '../components/SaveOutfitDialog';
@@ -48,7 +55,7 @@ import { DeleteOutfitDialog } from '../components/DeleteOutfitDialog';
 import { UndressButton } from '../components/UndressButton';
 import { useEquippedItems, useInventory, inventoryKeys } from '../hooks/useInventory';
 import { useOutfits } from '../hooks/useOutfits';
-import type { ItemInstance, Outfit } from '../types';
+import type { ContainerAccessPolicy, ItemInstance, Outfit } from '../types';
 
 export function WardrobePage() {
   const activeCharacter = useAppSelector((state) => state.game.active);
@@ -75,6 +82,18 @@ export function WardrobePage() {
   const [editingOutfit, setEditingOutfit] = useState<Outfit | null>(null);
   const [deletingOutfit, setDeletingOutfit] = useState<Outfit | null>(null);
   const [detailItem, setDetailItem] = useState<ItemInstance | null>(null);
+  // Item awaiting a recipient/container pick (#1909) — set by the detail
+  // panel's Give/Put-in buttons, consumed once the picker dialog confirms.
+  const [givingItemId, setGivingItemId] = useState<number | null>(null);
+  const [puttingInItemId, setPuttingInItemId] = useState<number | null>(null);
+
+  // Co-located characters for the Give recipient picker — the room state
+  // the game rail already tracks (self is excluded server-side). Empty
+  // outside an active room/session.
+  const roomCharacters = useAppSelector<RoomStateObject[]>(
+    (state) =>
+      (activeCharacter ? state.game.sessions[activeCharacter]?.room?.characters : undefined) ?? []
+  );
 
   // -------------------------------------------------------------------------
   // WS action_result subscription
@@ -172,6 +191,97 @@ export function WardrobePage() {
     if (!activeCharacter) return;
     executeAction(activeCharacter, 'undress', {});
   }, [activeCharacter, executeAction]);
+
+  // Resolve an ItemInstance id (React-facing) to its underlying ObjectDB pk
+  // (`game_object_id`) — the id the action dispatcher's `<name>_id` kwargs
+  // actually resolve against. Looks up the same inventoryById map equipped
+  // items are hydrated from, so it covers both worn and carried items.
+  const resolveGameObjectId = useCallback(
+    (itemId: number) => inventoryById.get(itemId)?.game_object_id ?? null,
+    [inventoryById]
+  );
+
+  const handleWear = useCallback(
+    (itemId: number) => {
+      const targetId = resolveGameObjectId(itemId);
+      if (!activeCharacter || targetId == null) return;
+      executeAction(activeCharacter, 'equip', { target_id: targetId });
+    },
+    [activeCharacter, executeAction, resolveGameObjectId]
+  );
+
+  const handleRemove = useCallback(
+    (itemId: number) => {
+      const targetId = resolveGameObjectId(itemId);
+      if (!activeCharacter || targetId == null) return;
+      executeAction(activeCharacter, 'unequip', { target_id: targetId });
+    },
+    [activeCharacter, executeAction, resolveGameObjectId]
+  );
+
+  const handleDrop = useCallback(
+    (itemId: number) => {
+      const targetId = resolveGameObjectId(itemId);
+      if (!activeCharacter || targetId == null) return;
+      executeAction(activeCharacter, 'drop', { target_id: targetId });
+    },
+    [activeCharacter, executeAction, resolveGameObjectId]
+  );
+
+  const handleGiveClick = useCallback((itemId: number) => {
+    setGivingItemId(itemId);
+  }, []);
+
+  const handleGiveConfirm = useCallback(
+    (recipientId: number) => {
+      const targetId = givingItemId != null ? resolveGameObjectId(givingItemId) : null;
+      setGivingItemId(null);
+      if (!activeCharacter || targetId == null) return;
+      executeAction(activeCharacter, 'give', { target_id: targetId, recipient_id: recipientId });
+    },
+    [activeCharacter, executeAction, givingItemId, resolveGameObjectId]
+  );
+
+  const handlePutInClick = useCallback((itemId: number) => {
+    setPuttingInItemId(itemId);
+  }, []);
+
+  const handlePutInConfirm = useCallback(
+    (containerId: number) => {
+      const targetId = puttingInItemId != null ? resolveGameObjectId(puttingInItemId) : null;
+      const containerTargetId = resolveGameObjectId(containerId);
+      setPuttingInItemId(null);
+      if (!activeCharacter || targetId == null || containerTargetId == null) return;
+      executeAction(activeCharacter, 'put_in', {
+        target_id: targetId,
+        container_id: containerTargetId,
+      });
+    },
+    [activeCharacter, executeAction, puttingInItemId, resolveGameObjectId]
+  );
+
+  const handleDeposit = useCallback(
+    (itemId: number) => {
+      const targetId = resolveGameObjectId(itemId);
+      if (!activeCharacter || targetId == null) return;
+      executeAction(activeCharacter, 'deposit_coins', { target_id: targetId });
+    },
+    [activeCharacter, executeAction, resolveGameObjectId]
+  );
+
+  const handleSetContainerPolicy = useCallback(
+    (itemId: number, policy: ContainerAccessPolicy) => {
+      const targetId = resolveGameObjectId(itemId);
+      if (!activeCharacter || targetId == null) return;
+      executeAction(activeCharacter, 'set_container_policy', { target_id: targetId, policy });
+    },
+    [activeCharacter, executeAction, resolveGameObjectId]
+  );
+
+  const containerCandidates = useMemo(
+    () => inventory.filter((item) => item.template?.is_container && item.id !== puttingInItemId),
+    [inventory, puttingInItemId]
+  );
 
   // -------------------------------------------------------------------------
   // Render
@@ -272,6 +382,31 @@ export function WardrobePage() {
         }}
         isEquipped={detailItem ? equippedItemIds.has(detailItem.id) : false}
         characterId={characterId}
+        onWear={handleWear}
+        onRemove={handleRemove}
+        onDrop={handleDrop}
+        onGive={handleGiveClick}
+        onPutIn={handlePutInClick}
+        onDeposit={handleDeposit}
+        onSetContainerPolicy={handleSetContainerPolicy}
+      />
+
+      <GiveItemDialog
+        open={givingItemId !== null}
+        onOpenChange={(open) => {
+          if (!open) setGivingItemId(null);
+        }}
+        recipients={roomCharacters}
+        onConfirm={handleGiveConfirm}
+      />
+
+      <PutInDialog
+        open={puttingInItemId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPuttingInItemId(null);
+        }}
+        containers={containerCandidates}
+        onConfirm={handlePutInConfirm}
       />
 
       <SaveOutfitDialog

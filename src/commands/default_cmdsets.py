@@ -41,6 +41,7 @@ from commands.consent import (
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
 from commands.crafting_station import CmdLabStation
+from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
@@ -167,6 +168,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPut,
             CmdWithdraw,
             CmdUse,
+            # #1909 — physical-currency interplay: deposit/steal/secure containers.
+            CmdDeposit,
+            CmdSteal,
+            CmdSecure,
             CmdHome,
             CmdInventory,
             CmdSay,

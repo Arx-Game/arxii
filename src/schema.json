@@ -36620,11 +36620,19 @@ components:
       - item_instance
     ItemInstanceRead:
       type: object
-      description: Read serializer for ItemInstance — used by the inventory listing.
+      description: |-
+        Read serializer for ItemInstance — used by the inventory listing.
+
+        Also backs ``VisibleItemDetailViewSet`` (looking at another character's
+        worn item) — the ``can_steal`` field is only meaningful there.
       properties:
         id:
           type: integer
           readOnly: true
+        game_object_id:
+          type: integer
+          readOnly: true
+          nullable: true
         template:
           allOf:
           - $ref: '#/components/schemas/ItemTemplateList'
@@ -36666,13 +36674,43 @@ components:
           type: boolean
           readOnly: true
           description: Whether this item is currently open.
+        access_policy:
+          type: string
+          readOnly: true
+        is_currency_instrument:
+          type: boolean
+          description: |-
+            True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).
+
+            Gates the Deposit affordance client-side. A boolean, not the nested
+            ``CurrencyInstrumentDetails`` — the client only needs to know whether
+            to render the button, not the denomination/face-value breakdown.
+          readOnly: true
+        can_steal:
+          type: boolean
+          description: |-
+            True iff the viewer could steal ``obj`` right now (#1909).
+
+            Visibility = eligibility: delegates to the same ``steal_permitted``
+            predicate the ``steal`` service re-checks at execution time. No
+            viewer in context → False (IC reads scope to the active character) —
+            this is the case for the plain inventory list/retrieve endpoints,
+            where the viewer is always looking at their own items anyway.
+            ``VisibleItemDetailViewSet`` passes the observer's ``CharacterSheet``
+            as ``viewer_sheet`` so looking at someone else's worn item can
+            surface the affordance.
+          readOnly: true
       required:
+      - access_policy
+      - can_steal
       - charges
       - contained_in
       - display_description
       - display_image_url
       - display_name
+      - game_object_id
       - id
+      - is_currency_instrument
       - is_open
       - is_usable
       - quality_tier

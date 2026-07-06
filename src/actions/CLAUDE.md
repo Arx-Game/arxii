@@ -190,7 +190,30 @@ They do not use the command system, dispatchers, or handlers.
   the actor's purse in coppers. Both gated by `_resolve_active_persona` +
   `can_modify_room_features`. Shared by telnet `CmdLabStation` (`station <subverb>`,
   `src/commands/crafting_station.py`) and the web `LabStationViewSet`
-  (`/api/items/lab-stations/`).)
+  (`/api/items/lab-stations/`);
+  `currency.py` (#1909) — the physical-cash face of the currency ledger, all
+  `target_type=SELF`/`SINGLE`, `category="items"`: `WithdrawCoinsAction` (key
+  `"withdraw_coins"`) mints a loose-coin cache via `mint_loose_cache`;
+  `DepositCoinsAction` (`"deposit_coins"`) redeems any coin instrument (a loose
+  cache or one of the six grand coins) back into the purse via
+  `redeem_instrument` — deposit is redemption regardless of denomination;
+  `GiveCoinsAction` (`"give_coins"`) hands coppers straight to a co-located
+  recipient's purse via `transfer`. Telnet's `CmdGive` swaps to this action
+  (instead of `GiveAction`) when the item-name text parses as money via
+  `world.currency.constants.parse_coppers`. Alongside `PutInAction`/
+  `TakeOutAction` in `items.py`: `StealAction` (`"steal"`) — the deliberate
+  ownership-gate bypass wrapping `flows.service_functions.inventory.steal`,
+  gated by `CanStealPrerequisite` (visibility = eligibility, delegates to the
+  target-side `steal_permitted` predicate the service re-checks); the telnet
+  `withdraw coins <amount>` grammar rides the existing `CmdWithdraw` (the
+  `withdraw` command key was already spoken for by `TakeOutAction`) rather than
+  a colliding new command. `SetContainerPolicyAction` (`"set_container_policy"`)
+  — owner-only container access-policy set, wrapping
+  `flows.service_functions.inventory.set_container_policy`. New telnet
+  commands in `src/commands/currency.py`: `CmdDeposit` (`deposit <item>`),
+  `CmdSteal` (`steal <item>` / `steal <item> from <container>`, mirrors
+  `CmdGet`'s two grammars but always dispatches `StealAction`), `CmdSecure`
+  (`secure <container>=<open|friends|owner_only>`).)
 
   **Dissolution is a soft-delete**: `perform_dissolution` sets `RoomFeatureInstance.dissolved_at`
   (nullable DateTimeField) rather than deleting the row. The `.active()` queryset manager
@@ -290,6 +313,10 @@ coupled to the action's kwarg names by the base class.
   reachable and visible. Visibility (`_is_visible_to`) now delegates to the real
   perception/concealment seam, `can_perceive` (`world.conditions.services`, #1225) —
   see ADR-0083 for the OOC unseen-observer transparency guarantee it composes with.
+- **`CanStealPrerequisite`** (#1909) — reads the `target` kwarg via the
+  kwargs-via-context convention, resolves its `ItemInstance`, and delegates to
+  `flows.service_functions.inventory.steal_permitted` (visibility = eligibility;
+  the `steal` service re-checks the same predicate at execution time).
 
 ## Adding a New Action
 

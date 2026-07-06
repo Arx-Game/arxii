@@ -34,6 +34,10 @@ import { toast } from 'sonner';
 function makeItem(id: number, name: string): ItemInstance {
   return {
     id,
+    game_object_id: id + 1000,
+    access_policy: 'open',
+    is_currency_instrument: false,
+    can_steal: false,
     template: {
       id: id + 100,
       name,

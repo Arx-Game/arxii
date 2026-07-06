@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar
 
+from actions.definitions.currency import WithdrawCoinsAction
 from actions.definitions.items import (
     EquipAction,
     PutInAction,
@@ -15,6 +16,7 @@ from actions.definitions.items import (
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+from world.currency.constants import parse_coppers
 from world.items.models import Outfit
 
 
@@ -94,10 +96,19 @@ class CmdPut(ArxCommand):
 
 
 class CmdWithdraw(ArxCommand):
-    """Take an item out of a container in your inventory.
+    """Take an item out of a container in your inventory — or pull loose coins.
 
     Uses the key ``withdraw`` to avoid colliding with ``CmdGet``'s ``take``
-    alias. Telnet: ``withdraw <item> from <container>``.
+    alias. The ``withdraw`` command key is already spoken for here, so the
+    #1909 loose-cash withdrawal rides a ``coins`` prefix on the same verb
+    (per-invocation action swap, the same idiom ``CmdGet`` uses for its
+    ``from <container>`` branch) rather than a second colliding command.
+
+    Telnet grammars:
+        ``withdraw <item> from <container>`` — take an item out (``TakeOutAction``)
+        ``withdraw coins <amount>``          — e.g. ``withdraw coins 3s 5c``;
+        pulls coppers from your purse as a carriable loose-coin cache
+        (``WithdrawCoinsAction``).
     """
 
     key = "withdraw"
@@ -105,6 +116,16 @@ class CmdWithdraw(ArxCommand):
     action = TakeOutAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
+        args = self.require_args("Withdraw what?")
+        coins_match = re.match(r"^coins\s+(.+)$", args, flags=re.IGNORECASE)
+        if coins_match:
+            amount = parse_coppers(coins_match.group(1).strip())
+            if amount is None:
+                msg = "Usage: withdraw coins <amount> (e.g. 'withdraw coins 3s 5c')"
+                raise CommandError(msg)
+            self.action = WithdrawCoinsAction()
+            return {"amount": amount}
+
         item_name, container_name = self.parse_two_args(
             "from",
             empty_msg="Withdraw what from what?",

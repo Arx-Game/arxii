@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCoppers } from '../currency';
+import { formatCoppers, parseCoppers } from '../currency';
 
 describe('formatCoppers', () => {
   it('formats zero as 0c', () => {
@@ -46,5 +46,49 @@ describe('formatCoppers', () => {
     expect(formatCoppers(NaN)).toBe('0c');
     expect(formatCoppers(Infinity)).toBe('0c');
     expect(formatCoppers(-Infinity)).toBe('0c');
+  });
+});
+
+describe('parseCoppers', () => {
+  it('parses a single unit', () => {
+    expect(parseCoppers('7c')).toBe(7);
+    expect(parseCoppers('4s')).toBe(40);
+    expect(parseCoppers('3g')).toBe(300);
+  });
+
+  it('parses the mixed form regardless of token order', () => {
+    expect(parseCoppers('3g 4s 7c')).toBe(347);
+    expect(parseCoppers('7c 3g 4s')).toBe(347);
+  });
+
+  it('is case-insensitive', () => {
+    expect(parseCoppers('3G 4S 7C')).toBe(347);
+  });
+
+  it('tolerates extra whitespace between tokens', () => {
+    expect(parseCoppers('  3g   4s  7c  ')).toBe(347);
+  });
+
+  it('rejects a duplicate unit', () => {
+    expect(parseCoppers('1g 2g')).toBeNull();
+  });
+
+  it('rejects item-ish text with no unit match', () => {
+    expect(parseCoppers('a sword')).toBeNull();
+    expect(parseCoppers('50')).toBeNull();
+  });
+
+  it('rejects an all-zero total', () => {
+    expect(parseCoppers('0c')).toBeNull();
+    expect(parseCoppers('0g 0s 0c')).toBeNull();
+  });
+
+  it('rejects empty input', () => {
+    expect(parseCoppers('')).toBeNull();
+    expect(parseCoppers('   ')).toBeNull();
+  });
+
+  it('rejects negative amounts (no sign in the grammar)', () => {
+    expect(parseCoppers('-3g')).toBeNull();
   });
 });
