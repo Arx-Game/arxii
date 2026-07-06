@@ -858,7 +858,6 @@ class OutfitViewSet(viewsets.ViewSet):
             # See the create() note above: RenameOutfitAction's ActionResult carries only
             # a message, not a field key, so any field-specific error collapses here.
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
-        outfit.refresh_from_db()
         read = OutfitReadSerializer(outfit)
         return Response(read.data)
 
