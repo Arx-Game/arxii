@@ -814,6 +814,48 @@ def wire_flee_modifier_target():
     )
 
 
+def wire_melee_attack_action_template():
+    """Seed the combat 'Melee Attack' ActionTemplate (#1706).
+
+    The combat-flavored sibling of the magic standalone cast template
+    (``seeds_cast.ensure_technique_cast_content``). Carries the seeded
+    'Melee Attack' CheckType so physical techniques roll a combat check
+    (strength + Melee Combat) instead of the magic fallback. Idempotent —
+    ``get_or_create`` on the name; FK re-wiring ensures the link lands even on
+    a pre-existing row.
+    """
+    from actions.constants import ActionTargetType, Pipeline
+    from actions.models import ActionTemplate
+    from world.checks.models import CheckCategory, CheckType
+
+    # Resolve the 'Melee Attack' CheckType: prefer the authored seed
+    # (seed_combat_check_content writes the full composition); fall back to a
+    # minimal get_or_create so the wire function is self-sufficient in test
+    # setups that haven't run the combat_checks seed (mirrors how
+    # get_standalone_cast_template self-seeds the magic template).
+    category, _ = CheckCategory.objects.get_or_create(name="Combat")
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Melee Attack",
+        category=category,
+        defaults={"description": "A melee attack roll: strength + Melee Combat."},
+    )
+    template, _ = ActionTemplate.objects.get_or_create(
+        name="Melee Attack",
+        defaults={
+            "check_type": check_type,
+            "consequence_pool": None,
+            "category": "combat",
+            "pipeline": Pipeline.SINGLE,
+            "target_type": ActionTargetType.SINGLE,
+            "description": "Standalone resolution spec for a melee attack.",
+        },
+    )
+    if template.check_type_id != check_type.pk:
+        template.check_type = check_type
+        template.save(update_fields=["check_type"])
+    return template
+
+
 class DuelChallengeFactory(factory_django.DjangoModelFactory):
     """Factory for DuelChallenge.
 
