@@ -14,7 +14,7 @@ than propagating.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.prerequisites import OwnsItemInstancePrerequisite, Prerequisite
@@ -31,9 +31,9 @@ from world.items.exceptions import (
 )
 from world.items.services.crafting import craft_attach_facet, craft_attach_style
 from world.items.services.facets import remove_facet_from_item
+from world.roster.selectors import get_account_for_character
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
@@ -75,9 +75,12 @@ class AttachFacetAction(Action):
         facet: Facet | None = kwargs.get("facet")
         if item_instance is None or facet is None:
             return ActionResult(success=False, message="Attach what facet, to what item?")
+        crafter_account = get_account_for_character(actor)
+        if crafter_account is None:
+            return ActionResult(success=False, message="No account plays this character.")
         try:
             result = craft_attach_facet(
-                crafter_account=cast("AccountDB", actor.account),
+                crafter_account=crafter_account,
                 crafter_character=actor,
                 item_instance=item_instance,
                 facet=facet,
@@ -141,9 +144,12 @@ class AttachStyleAction(Action):
         style = kwargs.get("style")
         if item_instance is None or style is None:
             return ActionResult(success=False, message="Attach what style, to what item?")
+        crafter_account = get_account_for_character(actor)
+        if crafter_account is None:
+            return ActionResult(success=False, message="No account plays this character.")
         try:
             result = craft_attach_style(
-                crafter_account=cast("AccountDB", actor.account),
+                crafter_account=crafter_account,
                 crafter_character=actor,
                 item_instance=item_instance,
                 style=style,

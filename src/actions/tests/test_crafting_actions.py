@@ -16,6 +16,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.items.exceptions import FacetAlreadyAttached
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.types import FacetCraftResult, StyleCraftResult
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 
 
 class AttachFacetActionTests(TestCase):
@@ -23,9 +24,12 @@ class AttachFacetActionTests(TestCase):
         room = ObjectDBFactory(db_key="AttachFacetRoom", db_typeclass_path="typeclasses.rooms.Room")
         account = AccountFactory(username="attach_facet_account")
         actor = CharacterFactory(db_key="AttachFacetAlice", location=room)
-        actor.db_account = account
-        actor.save()
         sheet = CharacterSheetFactory(character=actor)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=account),
+        )
         template = ItemTemplateFactory(name="AttachFacetSword")
         instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
         return actor, instance
@@ -59,14 +63,20 @@ class AttachFacetActionTests(TestCase):
         )
         account = AccountFactory(username="attach_facet_account_2")
         actor = CharacterFactory(db_key="AttachFacetBob", location=room)
-        actor.db_account = account
-        actor.save()
-        CharacterSheetFactory(character=actor)
+        sheet = CharacterSheetFactory(character=actor)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=account),
+        )
         other_account = AccountFactory(username="attach_facet_account_2_other")
         other_actor = CharacterFactory(db_key="AttachFacetOtherOwner", location=room)
-        other_actor.db_account = other_account
-        other_actor.save()
         other_sheet = CharacterSheetFactory(character=other_actor)
+        other_roster_entry = RosterEntryFactory(character_sheet=other_sheet)
+        RosterTenureFactory(
+            roster_entry=other_roster_entry,
+            player_data=PlayerDataFactory(account=other_account),
+        )
         template = ItemTemplateFactory(name="AttachFacetElsewhereSword")
         instance = ItemInstanceFactory(template=template, holder_character_sheet=other_sheet)
 
@@ -91,9 +101,12 @@ class AttachStyleActionTests(TestCase):
         room = ObjectDBFactory(db_key="AttachStyleRoom", db_typeclass_path="typeclasses.rooms.Room")
         account = AccountFactory(username="attach_style_account")
         actor = CharacterFactory(db_key="AttachStyleAlice", location=room)
-        actor.db_account = account
-        actor.save()
         sheet = CharacterSheetFactory(character=actor)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=account),
+        )
         template = ItemTemplateFactory(name="AttachStyleCoat")
         instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
         result = StyleCraftResult(
@@ -120,14 +133,20 @@ class DetachFacetActionTests(TestCase):
         room = ObjectDBFactory(db_key="DetachFacetRoom", db_typeclass_path="typeclasses.rooms.Room")
         account = AccountFactory(username="detach_facet_account")
         actor = CharacterFactory(db_key="DetachFacetAlice", location=room)
-        actor.db_account = account
-        actor.save()
-        CharacterSheetFactory(character=actor)
+        sheet = CharacterSheetFactory(character=actor)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=account),
+        )
         other_account = AccountFactory(username="detach_facet_account_other")
         other_actor = CharacterFactory(db_key="DetachFacetOtherOwner", location=room)
-        other_actor.db_account = other_account
-        other_actor.save()
         other_sheet = CharacterSheetFactory(character=other_actor)
+        other_roster_entry = RosterEntryFactory(character_sheet=other_sheet)
+        RosterTenureFactory(
+            roster_entry=other_roster_entry,
+            player_data=PlayerDataFactory(account=other_account),
+        )
         template = ItemTemplateFactory(name="DetachFacetShield")
         instance = ItemInstanceFactory(template=template, holder_character_sheet=other_sheet)
 
@@ -143,9 +162,12 @@ class DetachFacetActionTests(TestCase):
         )
         account = AccountFactory(username="detach_facet_account_2")
         actor = CharacterFactory(db_key="DetachFacetBob", location=room)
-        actor.db_account = account
-        actor.save()
         sheet = CharacterSheetFactory(character=actor)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=account),
+        )
         template = ItemTemplateFactory(name="DetachFacetSword")
         instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
 
