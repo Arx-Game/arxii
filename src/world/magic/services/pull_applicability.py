@@ -50,6 +50,12 @@ def compute_thread_applicability(
       persona's character or this never fires (nothing leaks about the
       leader's private regard for an unperceivable target — see
       ``_court_pull_would_have_effect``).
+    - RELATIONSHIP_NO_STAKE: RELATIONSHIP_TRACK threads (#1849) with a
+      target_persona_id in context are inapplicable unless the live target IS
+      the threaded person, or is hostile toward them, AND the owner has an
+      active, mutually-consented ``CharacterRelationship`` to the threaded
+      person to reward. Gated on perception for the indirect (hostile-third-party)
+      case — see ``_relationship_pull_would_have_effect``.
 
     The following InapplicabilityReason values are defined in the enum for future
     phases but not yet wired here (their data dependencies are not yet available):
@@ -94,6 +100,19 @@ def _check_applicability(
     if thread.target_kind == TargetKind.COVENANT_ROLE and context.target_persona_id is not None:
         if not _court_pull_would_have_effect(thread, context.target_persona_id):
             return False, InapplicabilityReason.COURT_LEADER_NO_STAKE.value
+
+    # Rule: relationship-no-stake (#1849). A RELATIONSHIP_TRACK thread's pull only
+    # gets a relationship-bond empowerment bonus when the live target IS the
+    # threaded person, or is hostile toward them, AND the owner has an active,
+    # rewardable bond to the threaded person. When neither holds, flag the thread
+    # inapplicable so the player doesn't spend resonance expecting a boost that
+    # won't happen.
+    if (
+        thread.target_kind == TargetKind.RELATIONSHIP_TRACK
+        and context.target_persona_id is not None
+    ):
+        if not _relationship_pull_would_have_effect(thread, context.target_persona_id):
+            return False, InapplicabilityReason.RELATIONSHIP_NO_STAKE.value
 
     return True, None
 
@@ -146,3 +165,42 @@ def _court_pull_would_have_effect(thread: Thread, target_persona_id: int) -> boo
 
     rows = get_pull_effects_for_thread(thread, min_thread_level__lte=thread.level)
     return any(_regard_polarity_matches(row.regard_polarity, regard) for row in rows)
+
+
+def _relationship_pull_would_have_effect(thread: Thread, target_persona_id: int) -> bool:
+    """Whether a relationship-bond pull on ``thread`` would be empowered against
+    the persona identified by ``target_persona_id`` (#1849).
+
+    Returns True (don't block) when the target persona can't be resolved, has no
+    character, or isn't perceivable by the owner (privacy — mirrors
+    ``_court_pull_would_have_effect``'s gate). Returns False when the shared
+    trigger check fails, or when the trigger holds but the owner has no active,
+    mutually-consented bond to the threaded person to reward.
+    """
+    from world.conditions.services import can_perceive  # noqa: PLC0415
+    from world.magic.services.pull_modulation_relationship import (  # noqa: PLC0415
+        _relationship_pull_would_trigger,
+    )
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    target_persona = Persona.objects.filter(pk=target_persona_id).first()
+    if target_persona is None:
+        return True
+    target_character = target_persona.character_sheet.character
+    x_sheet = target_persona.character_sheet
+
+    y_sheet = thread.target_relationship_track.relationship.target
+
+    if x_sheet.pk != y_sheet.pk:
+        requester_character = thread.owner.character
+        if not can_perceive(requester_character, target_character):
+            return True
+
+    if not _relationship_pull_would_trigger(x_sheet, y_sheet):
+        return False
+
+    bond = CharacterRelationship.objects.filter(
+        source=thread.owner, target=y_sheet, is_active=True, is_pending=False
+    ).first()
+    return bond is not None
