@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Load private content repo</h2>
+        <p>
+            Builds and loads content from the checkout at <code>CONTENT_REPO_PATH</code>
+            (set in <code>src/.env</code>). Safe to re-run at any time.
+        </p>
+        <p>
+            Unlike "Load sane defaults", this operation <strong>upserts</strong>:
+            it updates existing rows by natural key (e.g. re-running after an
+            author edits a file's prose updates that row's description), and
+            creates rows that don't exist yet. Nothing is ever deleted.
+        </p>
+    </div>
+
+    <div class="module" style="padding: 15px;">
+        <form method="post" action="{% url 'admin_content_load_run' %}">
+            {% csrf_token %}
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Load content repo" class="default"
+                       style="padding: 10px 20px;">
+                <a href="{% url 'admin:index' %}"
+                   style="padding: 10px 20px; margin-left: 10px;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

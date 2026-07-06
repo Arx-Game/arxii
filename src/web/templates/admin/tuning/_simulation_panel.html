@@ -1,0 +1,190 @@
+{% load i18n %}
+<style>
+  #panel-simulation {
+    /* Django admin ships no "success" foreground var, so define the shade the
+       bar/table needs locally, following the same light/dark toggle mechanism
+       as admin's own dark_mode.css (media query + html[data-theme] override),
+       matching the pattern _checks_panel.html uses for --tuning-success. */
+    --tuning-success: #2e7d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    #panel-simulation {
+      --tuning-success: #66bb6a;
+    }
+  }
+  html[data-theme="dark"] #panel-simulation {
+    --tuning-success: #66bb6a;
+  }
+  #panel-simulation .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-simulation .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 10rem;
+  }
+  #panel-simulation .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-simulation table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  #panel-simulation table.tuning-table th,
+  #panel-simulation table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-simulation .stacked-bar {
+    display: flex;
+    width: 100%;
+    min-width: 8rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--hairline-color);
+  }
+  #panel-simulation .bar-segment {
+    display: block;
+    height: 100%;
+  }
+  #panel-simulation .bar-success {
+    background: var(--tuning-success);
+  }
+  #panel-simulation .bar-failure {
+    background: var(--error-fg);
+  }
+  #panel-simulation .bar-neutral {
+    background: var(--border-color);
+  }
+  #panel-simulation .band-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    margin: 0.4rem 0 1rem;
+    color: var(--body-quiet-color);
+  }
+  #panel-simulation .band-detail .swatch {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 1px;
+    margin-right: 0.25rem;
+    vertical-align: middle;
+  }
+  #panel-simulation .errorlist {
+    color: var(--error-fg);
+    font-size: 0.8rem;
+    margin: 0.2rem 0 0;
+    padding-left: 1rem;
+  }
+</style>
+
+<h2>{% translate "Party vs. Boss Simulation" %}</h2>
+<p>
+  {% translate "Monte Carlo batch of synthetic party-vs-opponent encounters driven through the real combat engine, previewing a win-rate distribution for a candidate tuning before it touches live content." %}
+</p>
+
+<form id="panel-simulation-form" class="tuning-form" method="post"
+      hx-post="{% url 'admin_tuning_simulation' %}" hx-target="#panel-simulation">
+  <div class="tuning-field">
+    <label for="{{ form.party_size.id_for_label }}">{% translate "Party size" %}</label>
+    {{ form.party_size }}
+    {{ form.party_size.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.avg_level.id_for_label }}">{% translate "Average level" %}</label>
+    {{ form.avg_level }}
+    {{ form.avg_level.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.tier.id_for_label }}">{% translate "Opponent tier" %}</label>
+    {{ form.tier }}
+    {{ form.tier.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.risk_level.id_for_label }}">{% translate "Risk level" %}</label>
+    {{ form.risk_level }}
+    {{ form.risk_level.errors }}
+  </div>
+  <div class="tuning-field">
+    <label for="{{ form.iterations.id_for_label }}">{% translate "Iterations" %}</label>
+    {{ form.iterations }}
+    {{ form.iterations.errors }}
+  </div>
+  <div class="tuning-field">
+    <button type="submit">{% translate "Run simulation" %}</button>
+  </div>
+</form>
+
+{% if report %}
+<h3>{% translate "Results" %}</h3>
+<p>
+  {% translate "Win rate" %}:
+  <strong>{% widthratio report.win_rate 1 100 %}%</strong>
+  ({{ report.victories }}/{{ report.iterations_run }})
+  &mdash; {% translate "Opponent HP" %}: {{ report.opponent_max_health }}
+  &mdash; {% translate "Mean rounds" %}: {{ report.mean_rounds|floatformat:1 }}
+</p>
+
+<div class="stacked-bar" aria-hidden="true">
+  <span class="bar-segment bar-success"
+        style="width: {% widthratio report.victories report.iterations_run 100 %}%"></span>
+  <span class="bar-segment bar-failure"
+        style="width: {% widthratio report.defeats report.iterations_run 100 %}%"></span>
+  <span class="bar-segment bar-neutral"
+        style="width: {% widthratio report.stalemates report.iterations_run 100 %}%"></span>
+</div>
+<div class="band-detail">
+  <span>
+    <span class="swatch bar-success"></span>
+    {% translate "Victories" %} {{ report.victories }}
+  </span>
+  <span>
+    <span class="swatch bar-failure"></span>
+    {% translate "Defeats" %} {{ report.defeats }}
+  </span>
+  <span>
+    <span class="swatch bar-neutral"></span>
+    {% translate "Stalemates" %} {{ report.stalemates }}
+  </span>
+</div>
+
+<h3>{% translate "Round-count distribution" %}</h3>
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Rounds to resolve" %}</th>
+      <th>{% translate "Iterations" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for bucket in histogram %}
+    <tr>
+      <td>{{ bucket.rounds }}</td>
+      <td>
+        <div class="bar-row">
+          <div class="bar-track">
+            <span class="bar" style="width: {{ bucket.pct }}%"></span>
+          </div>
+          <span class="bar-label">{{ bucket.count }}</span>
+        </div>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="2">{% translate "No round-count data." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>{% translate "No simulation has been run yet — set parameters above and run one." %}</p>
+{% endif %}

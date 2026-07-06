@@ -3,8 +3,24 @@
 from django.urls import path
 
 from web.admin import arx_admin_site
+from web.admin.content_load_views import content_load_confirm, content_load_run
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
+from web.admin.tuning.ops_views import (
+    ops_dashboard,
+    ops_economy_fragment,
+    ops_progression_fragment,
+    ops_reports_fragment,
+    ops_story_fragment,
+    ops_tech_fragment,
+)
+from web.admin.tuning.views import (
+    tuning_checks_fragment,
+    tuning_conditions_fragment,
+    tuning_consequences_fragment,
+    tuning_dashboard,
+    tuning_simulation_fragment,
+)
 from web.admin.views import (
     export_data,
     export_preview,
@@ -27,6 +43,19 @@ urlpatterns = [
     path("_import_execute/", import_execute, name="admin_import_execute"),
     path("_seed/", seed_confirm, name="admin_seed"),
     path("_seed_run/", seed_run, name="admin_seed_run"),
+    path("_content_load/", content_load_confirm, name="admin_content_load"),
+    path("_content_load_run/", content_load_run, name="admin_content_load_run"),
     path("_game_setup/", game_setup, name="admin_game_setup"),
+    path("_tuning/", tuning_dashboard, name="admin_tuning"),
+    path("_tuning/checks/", tuning_checks_fragment, name="admin_tuning_checks"),
+    path("_tuning/consequences/", tuning_consequences_fragment, name="admin_tuning_consequences"),
+    path("_tuning/conditions/", tuning_conditions_fragment, name="admin_tuning_conditions"),
+    path("_tuning/simulation/", tuning_simulation_fragment, name="admin_tuning_simulation"),
+    path("_ops/", ops_dashboard, name="admin_ops"),
+    path("_ops/progression/", ops_progression_fragment, name="admin_ops_progression"),
+    path("_ops/economy/", ops_economy_fragment, name="admin_ops_economy"),
+    path("_ops/story/", ops_story_fragment, name="admin_ops_story"),
+    path("_ops/reports/", ops_reports_fragment, name="admin_ops_reports"),
+    path("_ops/tech/", ops_tech_fragment, name="admin_ops_tech"),
     path("", arx_admin_site.urls),
 ]

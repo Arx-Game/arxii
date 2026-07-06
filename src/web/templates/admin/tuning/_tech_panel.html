@@ -1,0 +1,61 @@
+{% load i18n %}
+
+<p>{% translate "Process memory/CPU, idmapper cache footprint, open system errors, and deploy info." %}</p>
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <span class="stat-value">{{ health.process_rss_bytes|filesizeformat }}</span>
+    <span class="stat-label">{% translate "Process RSS" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ health.process_cpu_percent|floatformat:1 }}%</span>
+    <span class="stat-label">{% translate "Process CPU" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">
+      <a href="{{ health.system_errors_url }}">{{ health.open_system_errors }}</a>
+    </span>
+    <span class="stat-label">{% translate "Open system errors" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">
+      {% if health.git_sha %}{{ health.git_sha|slice:":7" }}{% else %}&mdash;{% endif %}
+    </span>
+    <span class="stat-label">{% translate "Git SHA" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">
+      {% if health.sentry_dsn_configured %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}
+    </span>
+    <span class="stat-label">{% translate "Sentry configured" %}</span>
+  </div>
+</div>
+
+<h3>{% translate "Idmapper cache — top 15 models by size" %}</h3>
+<p>
+  {% translate "Total cached:" %}
+  {{ health.idmapper_total_bytes|filesizeformat }}
+</p>
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Model" %}</th>
+      <th>{% translate "Instances" %}</th>
+      <th>{% translate "Approx. size" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in idmapper_rows %}
+    <tr>
+      <td>{{ row.label }}</td>
+      <td>{{ row.count }}</td>
+      <td class="bar-row">
+        <span class="bar-track">
+          <span class="bar" style="width: {{ row.pct }}%"></span>
+        </span>
+        <span class="bar-label">{{ row.approx_bytes|filesizeformat }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

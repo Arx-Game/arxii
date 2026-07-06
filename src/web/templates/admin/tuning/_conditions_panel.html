@@ -1,0 +1,107 @@
+{% load i18n %}
+<style>
+  #panel-conditions {
+    /* Django admin ships no dedicated "excluded" foreground var — define the
+       shade locally, following the same light/dark toggle mechanism as
+       admin's own dark_mode.css (media query + html[data-theme] override),
+       matching the pattern _checks_panel.html uses for --tuning-success. */
+    --tuning-muted: #6c757d;
+  }
+  @media (prefers-color-scheme: dark) {
+    #panel-conditions {
+      --tuning-muted: #adb5bd;
+    }
+  }
+  html[data-theme="dark"] #panel-conditions {
+    --tuning-muted: #adb5bd;
+  }
+  #panel-conditions .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-conditions .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 16rem;
+  }
+  #panel-conditions .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-conditions table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  #panel-conditions table.tuning-table th,
+  #panel-conditions table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-conditions .badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    border: 1px solid var(--hairline-color);
+    color: var(--tuning-muted);
+  }
+</style>
+
+<h2>{% translate "Condition Danger" %}</h2>
+<p>
+  {% translate "Ranks every condition template by a danger score combining worst-stage effective severity and damage-over-time throughput at a chosen severity level." %}
+</p>
+
+<form class="tuning-form" hx-get="{% url 'admin_tuning_conditions' %}"
+      hx-target="#panel-conditions" hx-trigger="input changed delay:300ms">
+  <div class="tuning-field">
+    <label for="conditions-severity">
+      {% translate "Severity" %}: <span>{{ severity }}</span>
+    </label>
+    <input type="range" id="conditions-severity" name="severity"
+           min="1" max="10" step="1" value="{{ severity }}">
+  </div>
+</form>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Condition" %}</th>
+      <th>{% translate "Effective Severity" %}</th>
+      <th>{% translate "DoT / round" %}</th>
+      <th>{% translate "Days to Decay" %}</th>
+      <th>{% translate "Danger Score" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.template_name }}</td>
+      <td>
+        <div class="bar-row">
+          <div class="bar-track">
+            <span class="bar" style="width: {% widthratio row.effective_severity 10 100 %}%"></span>
+          </div>
+          <span class="bar-label">{{ row.effective_severity|floatformat:2 }}</span>
+        </div>
+      </td>
+      <td>{{ row.dot_per_round|floatformat:2 }}</td>
+      <td>
+        {% if row.days_to_decay is None %}
+        <span class="badge">{% translate "No passive exit" %}</span>
+        {% else %}
+        {{ row.days_to_decay|floatformat:1 }}
+        {% endif %}
+      </td>
+      <td>{{ row.danger_score|floatformat:2 }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">{% translate "No condition templates are seeded yet." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

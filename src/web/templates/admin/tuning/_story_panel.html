@@ -1,0 +1,47 @@
+{% load i18n %}
+
+<h2>{% translate "Story &amp; GM Activity" %}</h2>
+<p>{% translate "Weekly beats completed and scenes started, plus a point-in-time activity snapshot." %}</p>
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <span class="stat-value">{{ snapshot.active_stories }}</span>
+    <span class="stat-label">{% translate "Active stories" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ snapshot.active_gm_tables }}</span>
+    <span class="stat-label">{% translate "Active GM tables" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ snapshot.pending_session_requests }}</span>
+    <span class="stat-label">{% translate "Pending session requests" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ snapshot.gms_active_30d }}</span>
+    <span class="stat-label">{% translate "GMs active (30d)" %}</span>
+  </div>
+</div>
+
+{% for row in series %}
+<h3>{{ row.label }}</h3>
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th scope="col" class="visually-hidden">{{ row.label }} {% translate "by week" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for point in row.points %}
+    <tr>
+      <td class="bar-row">
+        <span class="bar-label">{{ point.week_start|date:"M j" }}</span>
+        <span class="bar-track">
+          <span class="bar" style="width: {{ point.pct }}%"></span>
+        </span>
+        <span class="bar-label">{{ point.value|floatformat:0 }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}

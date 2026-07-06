@@ -3110,11 +3110,40 @@ Production-callable seed layer for populating sane defaults on a fresh dev insta
   - `arx seed dev` — CLI entry point (management command `src/core_management/management/commands/seed.py`; `--verbose` flag prints per-cluster row deltas).
   - Django admin **"Load sane defaults"** button (`src/web/admin/seed_views.py`) — superuser-only; runs `seed_dev_database()` and flashes a success/error message; redirects to the Game Setup hub on success.
   - Django admin **"Game Setup"** hub (`src/web/admin/game_setup_views.py`, `_game_setup/` URL, `admin_game_setup` name) — superuser-only landing page ("Welcome to a new Arx-based instance"): the clone→seed→tweak→export flow, a per-cluster content inventory (via `seeded_models_by_cluster()`) with live row counts, and links to the Big Button, Export/Import, and the World authoring apps. Header link visible to superusers next to the Big Button.
-- **Interim design (Phase A):** `src/world/seeds/clusters.py` imports existing cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `integration_tests.game_content` at call time — a facade until roadmap task 3.2 relocates the helpers (#1220). The natively-owned clusters (`checks`, `consent`, `character_creation`) live directly under `src/world/seeds/`.
+- **Cluster masters:** `src/world/seeds/clusters.py` imports the seed cluster masters (`seed_magic_dev`, `seed_items_dev`, etc.) from `world.seeds.game_content` — relocated there from `integration_tests.game_content` by roadmap task 3.2 (#1220); `integration_tests.game_content` keeps a thin compatibility facade so existing test imports keep working. The natively-owned clusters (`checks`, `consent`, `character_creation`) live directly under `src/world/seeds/`.
 - **Key modules:** `database.py` (orchestrator), `clusters.py` (per-cluster dispatch + inventory helpers), `checks.py` (`seed_check_resolution_tables()` — the checks spine), `consent.py` (`seed_social_consent_categories()`), `character_creation.py` (`seed_character_creation_dev()` — CG-world content: Realm/StartingArea/Beginnings/Species/Gender/TarotCard/HeightBand/Build/12 stats/Rosters/Path), `types.py` (`SeedReport` dataclass).
 - **Tests:** `src/world/seeds/tests/` — idempotency, non-overwrite, and playable-slice regression (including `TestSeededCharacterCreation` — `finalize_character` runs end-to-end on a seeded-only DB).
 - **Source:** `src/world/seeds/`
 - **Details:** [seed-and-integration-tests.md](../roadmap/seed-and-integration-tests.md) (Phase 3)
+
+### Game Tuning & Game Ops Dashboards (#1220 / #1221)
+Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation and live-game analytics.
+
+- **Game Tuning** (`/admin/_tuning/`, `admin_tuning`) — four HTMX-fragment panels: checks
+  probability distributions (`web/admin/tuning/checks_analytics.py` —
+  `compute_chart_distributions`, `compute_matchup`), consequence-pool inspector
+  (`consequence_analytics.py` — `inspect_pool`, `list_pools`), condition danger ranking
+  (`condition_analytics.py` — `compute_condition_danger`), and a Monte Carlo
+  party-vs-boss simulation form (`SimulationRunForm` in `web/admin/tuning/views.py`).
+- **Simulator:** `world.combat.simulation.run_party_vs_boss_simulation(SimulationParams) -> SimulationReport`
+  drives the real `world.combat.services.resolve_round` pipeline through synthetic,
+  locationless encounters inside nested transaction savepoints that are always rolled
+  back (isolation contract in the module docstring) — nothing it does is ever persisted,
+  and existing `EncounterScalingConfig` tuning is never overwritten.
+- **Game Ops** (`/admin/_ops/`, `admin_ops`) — five panels: progression, economy,
+  story/GM, and reports-queue analytics (`web/admin/tuning/metrics.py` —
+  `progression_series`, `economy_series`, `story_series`, `reports_snapshot`, etc.), plus
+  a refresh-on-demand Technical Health panel (`tech_health.py` — `collect_tech_health`:
+  idmapper RAM, process RSS/CPU, open system errors, deploy SHA).
+- **Content-repo load:** `web/admin/content_load_views.py` — superuser upsert of the
+  maintainers' private content repository (`CONTENT_REPO_PATH` env var) via
+  `core_management.content_fixtures.build_all` + `load_entries`; linked from the Game
+  Setup hub.
+- **Permissions:** every view superuser-only (`web.admin.tuning.views.superuser_required`,
+  mirroring `game_setup_views.py`'s gate).
+- **Source:** `src/web/admin/tuning/`, `src/web/admin/content_load_views.py`,
+  `src/world/combat/simulation.py`.
+- **Details:** [tuning.md](tuning.md)
 
 ---
 

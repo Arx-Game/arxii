@@ -352,6 +352,36 @@ surfacing the *local* tidings slice (room → area → local societies). Distinc
 **venue** (a PC-owned RP hub, future umbrella); a room can be both. _Avoid_: news kiosk,
 bulletin board (Notice Board is the canonical kind name).
 
+## Admin tooling surface (#1220 / #1221)
+
+**Game Tuning dashboard**:
+The superuser-only admin page at `/admin/_tuning/` (`admin_tuning`) with four HTMX-fragment
+panels — check-engine probability distributions, a consequence-pool inspector, condition danger
+ranking, and a Monte Carlo party-vs-boss simulation form — for previewing mechanics tuning without
+touching live content. Read+preview only; edits still flow through normal admin change forms. See
+`docs/systems/tuning.md`. _Avoid_: balance panel, difficulty editor.
+
+**Game Ops dashboard**:
+The superuser-only admin page at `/admin/_ops/` (`admin_ops`) with five HTMX-fragment panels —
+progression, economy, story/GM, player-submissions reports, and a refresh-on-demand Technical
+Health snapshot — for watching the live game's throughput and process health. See
+`docs/systems/tuning.md`. _Avoid_: GM dashboard (that term names the separate `gm` app's
+table-management surface), monitoring page.
+
+**Monte Carlo simulation (tuning)**:
+`world.combat.simulation.run_party_vs_boss_simulation` — a batch of independent, fully-synthetic
+party-vs-opponent encounters driven through the real `world.combat.services.resolve_round`
+pipeline inside rolled-back transaction savepoints, tallied into a win-rate distribution for the
+Game Tuning dashboard's simulation panel. Never reimplements combat math and never persists
+anything. _Avoid_: dry-run combat, mock battle.
+
+**Content load**:
+The superuser-only admin flow (`/admin/_content_load/`, `web/admin/content_load_views.py`) that
+builds and upserts (`update_or_create` by natural key) the maintainers' private content repository
+— located via the `CONTENT_REPO_PATH` env var — into the database. Distinct from the "Load sane
+defaults" seed button, which is create-if-missing over in-repo seed content, not an external
+upsert. _Avoid_: seed run, import (Import Data is the separate ad-hoc-fixture-upload path).
+
 ## Process & design tenets
 
 **Journey**:

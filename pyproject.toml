@@ -34,6 +34,7 @@ dependencies = [
     "pympler>=1.1",
     "pyyaml>=6.0",
     "django-linear-migrations>=2.19.0",
+    "django-htmx>=1.27.0",
 ]
 
 [tool.ruff]

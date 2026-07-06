@@ -1,0 +1,89 @@
+<style>
+  .tuning-panel {
+    border: 1px solid var(--hairline-color);
+    background: var(--body-bg);
+    color: var(--body-fg);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .tuning-panel h2 {
+    margin-top: 0;
+  }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.25rem 0;
+  }
+  .bar-track {
+    flex: 1;
+    background: var(--hairline-color);
+    border-radius: 2px;
+    height: 0.75rem;
+    overflow: hidden;
+  }
+  .bar {
+    display: block;
+    height: 100%;
+    background: var(--primary);
+  }
+  .bar-label {
+    min-width: 3.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  table.tuning-table th,
+  table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  .stat-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .stat-tile {
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    min-width: 8rem;
+  }
+  .stat-tile .stat-value {
+    display: block;
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-tile .stat-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--body-quiet-color);
+  }
+  .panel-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  /* Screen-reader-only utility: keeps a <th> in the accessibility tree without
+     duplicating an adjacent visible heading (standard clip-based hiding). */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>

@@ -1,0 +1,144 @@
+{% load i18n %}
+<style>
+  #panel-consequences {
+    /* Django admin ships no dedicated "excluded" foreground var — define the
+       shade locally, following the same light/dark toggle mechanism as
+       admin's own dark_mode.css (media query + html[data-theme] override),
+       matching the pattern _checks_panel.html uses for --tuning-success. */
+    --tuning-muted: #6c757d;
+  }
+  @media (prefers-color-scheme: dark) {
+    #panel-consequences {
+      --tuning-muted: #adb5bd;
+    }
+  }
+  html[data-theme="dark"] #panel-consequences {
+    --tuning-muted: #adb5bd;
+  }
+  #panel-consequences .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-consequences .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 16rem;
+  }
+  #panel-consequences .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-consequences table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  #panel-consequences table.tuning-table th,
+  #panel-consequences table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-consequences .badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    margin-right: 0.25rem;
+    border: 1px solid var(--hairline-color);
+    color: var(--body-quiet-color);
+  }
+  #panel-consequences .badge-loss {
+    color: var(--error-fg);
+    border-color: var(--error-fg);
+  }
+  #panel-consequences .excluded-list {
+    color: var(--tuning-muted);
+    font-size: 0.9rem;
+  }
+</style>
+
+<h2>{% translate "Consequence Pool Inspector" %}</h2>
+<p>
+  {% translate "Resolved consequence entries for a pool, honoring parent inheritance, weight overrides, and exclusions." %}
+</p>
+
+<form class="tuning-form" hx-get="{% url 'admin_tuning_consequences' %}"
+      hx-target="#panel-consequences" hx-trigger="change">
+  <div class="tuning-field">
+    <label for="consequences-pool">{% translate "Pool" %}</label>
+    <select id="consequences-pool" name="pool">
+      {% for pool_id, pool_name in pools %}
+      <option value="{{ pool_id }}" {% if pool_id == selected_pool_id %}selected{% endif %}>
+        {{ pool_name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+{% if inspection %}
+<p>
+  <strong>{{ inspection.pool_name }}</strong>
+  {% if inspection.parent_name %}
+    &mdash; {% translate "inherits from" %} <em>{{ inspection.parent_name }}</em>
+  {% else %}
+    &mdash; {% translate "no parent pool" %}
+  {% endif %}
+</p>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Consequence" %}</th>
+      <th>{% translate "Outcome Tier" %}</th>
+      <th>{% translate "Weight" %}</th>
+      <th>{% translate "Share within tier" %}</th>
+      <th>{% translate "Flags" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in inspection.rows %}
+    <tr>
+      <td>{{ row.consequence_label }}</td>
+      <td>{{ row.outcome_tier_name }} ({{ row.tier_success_level }})</td>
+      <td>{{ row.effective_weight }}</td>
+      <td>
+        <div class="bar-row">
+          <div class="bar-track">
+            <span class="bar"
+                  style="width: {% widthratio row.selection_probability_within_tier 1 100 %}%"></span>
+          </div>
+          <span class="bar-label">
+            {% widthratio row.selection_probability_within_tier 1 100 %}%
+          </span>
+        </div>
+      </td>
+      <td>
+        {% if row.inherited %}<span class="badge">{% translate "Inherited" %}</span>{% endif %}
+        {% if row.overridden %}<span class="badge">{% translate "Overridden" %}</span>{% endif %}
+        {% if row.character_loss %}
+        <span class="badge badge-loss">{% translate "Character Loss" %}</span>
+        {% endif %}
+        {% if row.theater %}<span class="badge">{% translate "Theater" %}</span>{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">{% translate "This pool has no consequence entries." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if inspection.excluded_labels %}
+<p class="excluded-list">
+  {% translate "Excluded from parent" %}:
+  {{ inspection.excluded_labels|join:", " }}
+</p>
+{% endif %}
+
+{% else %}
+<p>{% translate "No consequence pools are seeded yet." %}</p>
+{% endif %}

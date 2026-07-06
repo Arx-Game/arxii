@@ -124,6 +124,7 @@ INSTALLED_APPS += [
     "allauth.socialaccount.providers.discord",
     # Load after allauth to override admin
     "evennia_extensions.apps.EvenniaExtensionsConfig",
+    "django_htmx",
 ]
 
 ######################################################################
@@ -149,6 +150,7 @@ SITE_ID = os.environ.get("SITE_ID", 1)
 MIDDLEWARE += [
     "allauth.account.middleware.AccountMiddleware",
     "evennia.web.utils.middleware.SharedLoginMiddleware",
+    "django_htmx.middleware.HtmxMiddleware",
 ]
 
 # Enable webclient
