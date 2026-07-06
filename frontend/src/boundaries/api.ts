@@ -6,6 +6,7 @@ import type {
   PaginatedTreasuredSubjectList,
   PatchedPlayerBoundaryRequest,
   PatchedTreasuredSubjectRequest,
+  PendingTreasuredSignoffsEntry,
   PlayerBoundary,
   PlayerBoundaryRequest,
   SceneLinesAndVeils,
@@ -173,6 +174,24 @@ export async function fetchSceneLinesAndVeils(
   );
   if (!res.ok) {
     throw new Error('Failed to load scene lines & veils');
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Player-safe pending treasured-subject sign-offs (#1853, read-only)
+// ---------------------------------------------------------------------------
+
+export async function fetchMyPendingTreasuredSignoffs(
+  beatIds: number[]
+): Promise<PendingTreasuredSignoffsEntry[]> {
+  const params = new URLSearchParams();
+  for (const id of beatIds) {
+    params.append('beats', String(id));
+  }
+  const res = await apiFetch(`/api/stories/my-pending-signoffs/?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error('Failed to load pending sign-offs');
   }
   return res.json();
 }

@@ -139,6 +139,7 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
         <CurrentEpisodePanel
           episodeId={activeEntry.current_episode_id}
           characterSheetId={story.character_sheet}
+          tenureId={story.tenure_id}
         />
       ) : (
         <section className="rounded-lg border bg-card p-4">

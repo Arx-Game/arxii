@@ -110,9 +110,28 @@ Await-approval, and Implementation.
 - If invoked without an issue number, ask the user. If they describe work
   that doesn't have an issue yet, file one with `scripts/file-followup.sh`
   first and use its number.
-- Run `scripts/pickup-issue.sh <N>`. It checks the superpowers plugin,
-  fetches the issue, infers type, ensures the lane labels exist, claims the
-  issue (assign + `status:spec-draft`), creates the branch, and emits JSON.
+- **STEP 0 (mandatory, before anything else):** Run `scripts/start-work.sh <N>`.
+  This assigns the issue to you, applies `status:spec-draft`, creates the
+  feature branch, and creates the worktree at `.claude/worktrees/<branch>`.
+  **Do not read the issue body, inspect code, or begin design before this
+  succeeds.** If it exits 3 (assigned to another user), the issue is claimed —
+  stop and pick another. It delegates to `pickup-issue.sh` (claim + branch),
+  then creates the worktree in one call, and emits JSON including `worktree_path`.
+  `start-work.sh` is the **single mandatory first call** — it replaces the prior
+  `pickup-issue.sh` + separate worktree-creation sequence. Skipping it is the #1
+  cause of duplicate work (two sessions on the same issue because neither
+  assigned it).
+- After `start-work.sh` succeeds, `cd` into the emitted `worktree_path`. **Do NOT
+  use `EnterWorktree` or create another worktree** — `start-work.sh` already ran
+  `git worktree add`. Using a native worktree tool on top of it recreates the
+  two-branch/phantom-state trap (`references/arxii-worktree-traps.md` §2). The
+  native-tool path in `using-git-worktrees` Step 1a is only for when you enter
+  that skill without having run `start-work.sh`.
+
+  ```bash
+  START_JSON=$(scripts/start-work.sh <N>)
+  cd "$(jq -r '.worktree_path' <<<"$START_JSON")"
+  ```
 - **Model selection.** Read the `model` and `complexity` fields from the
   emitted JSON. If `model` is non-empty, switch now — before any design,
   planning, or implementation work:
@@ -185,9 +204,11 @@ section.
 Entry condition: the issue carries `spec:approved` (a member approved the spec
 on the issue). On entry, flip the lane:
 `gh issue edit <N> --remove-label status:spec-review --add-label status:implementing`.
-Create the worktree (`superpowers:using-git-worktrees`), then invoke
-`superpowers:writing-plans` to produce the **ephemeral** plan (worktree-only,
-never committed).
+Create the worktree (`superpowers:using-git-worktrees`) — but if you ran
+`start-work.sh` during Pickup, the worktree already exists; the
+`using-git-worktrees` skill's Step 0 will detect you're already isolated and
+skip creation. Then invoke `superpowers:writing-plans` to produce the
+**ephemeral** plan (worktree-only, never committed).
 
 When `superpowers:writing-plans` reaches its execution-handoff (the
 "Subagent-Driven vs. Inline? Which approach?" prompt), **do NOT prompt — go
@@ -445,6 +466,8 @@ Load it when you hit one of these, not before.
 
 - CI repeat-failure or thrash cap (see above).
 - Sync conflicts the agent can't auto-resolve confidently.
+- `start-work.sh` exits 3 (issue assigned to another user). Do NOT proceed; the
+  issue is claimed — pick another.
 - During brainstorm, scope feels fundamentally different from the title —
   post on the original issue suggesting a split, exit before opening any PR.
 - Any `gh` command fails with auth errors. Surface the error and the
@@ -460,7 +483,7 @@ where it stopped, what the human should decide.
 
 | Need | Script |
 |---|---|
-| Start work on issue N | `scripts/pickup-issue.sh N` |
+| Start work on issue N | `scripts/start-work.sh N` |
 | Sync with main mid-work | `scripts/sync-with-main.sh <branch>` |
 | Open the PR | `scripts/open-pr.sh <branch> <issue> [followups...]` |
 | File a follow-up issue | `scripts/file-followup.sh <title> <body-path> [labels...]` |

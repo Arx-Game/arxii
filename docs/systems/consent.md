@@ -40,7 +40,7 @@ consent preferences gating which social actions a character may receive (#1141).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`) | `key` (slug), `name`, `description`, `display_order` |
+| `SocialConsentCategory` | Staff-authored category for social action types (NaturalKey on `key`) | `key` (slug), `name`, `description`, `display_order`, `default_mode` (ConsentMode, default `EVERYONE`, #1909 — the targeting mode used when a tenure has set no per-category rule) |
 | `SocialConsentPreference` | Per-tenure opt-out for social action targeting (OneToOne on tenure) | `tenure` (RosterTenure FK), `allow_social_actions` (bool, default True) |
 | `SocialConsentCategoryRule` | Per-category targeting mode on a preference | `preference` FK, `category` FK, `mode` (ConsentMode) |
 | `SocialConsentWhitelist` | Explicit allow entry: allowed_tenure may target owner with social actions | `owner_tenure` FK, `allowed_tenure` FK, `category` FK, `added_at` |
@@ -100,26 +100,50 @@ visible = my_instance.is_visible_to(viewer_tenure)
 # 5. GROUPS: Only tenures who are members of any group in visible_to_groups
 ```
 
-### Social Consent Enforcement (player_interface.py)
+### Social Consent Enforcement
+
+The single-tenure gate decision lives in `world.consent.services.consent_blocks_targeting`
+(#1909) — `actions.player_interface._tenure_blocks_actor` is now a thin delegator kept
+only so existing callers (duels, tests) are untouched.
+
+```python
+from world.consent.services import consent_blocks_targeting, theft_category
+
+# consent_blocks_targeting(*, owner_tenure, category, actor_tenure) -> bool
+#   True if owner_tenure's consent excludes actor_tenure for category.
+#   Absent preference row AND absent per-category rule both fall through to
+#   category.default_mode — EVERYONE (the default) preserves legacy
+#   default-allow; a default-deny category (theft_category(), ALLOWLIST)
+#   blocks by default. category=None (uncategorized) is gated only by the
+#   tenure's master allow_social_actions switch.
+
+# theft_category() -> SocialConsentCategory
+#   Lazy seeded "theft" row (default_mode=ALLOWLIST — opt-in, default-deny).
+#   Consulted by the physical-theft gate (world.items / flows.inventory.steal).
+```
 
 ```python
 # Internal functions (not for direct callers):
-# _tenure_blocks_actor(tenure, actor_tenure, category) -> bool
-#   True if tenure's consent excludes actor_tenure for category.
-#   False when no preference row exists (default: allow).
-
 # _social_consent_exclusions(character, category) -> frozenset[int]
 #   Returns persona IDs excluded from the social action target picker.
 #   Checks all tenures in the character's current scene.
 ```
 
-The picker sweep `_social_consent_exclusions` **batches** its preference / category-rule /
-whitelist lookups across the whole participant set — a bounded number of queries per sweep,
-independent of scene size (one tenure load, one preference load, and when a `category` is
-set one category-rule load plus, when the actor has a tenure, one whitelist/blacklist/friendship
-load each). It shares the per-tenure decision with `_tenure_blocks_actor` via
-`_decide_consent_block` (spans all four modes; #1698); keep new work on this path off any
-per-participant query loop (#1248). A query-count regression test
+The picker sweep `_social_consent_exclusions` (backed by `_consent_excluded_persona_ids`)
+**batches** its preference / category-rule / whitelist lookups across the whole participant
+set — a bounded number of queries per sweep, independent of scene size (one tenure load, one
+preference load, and when a `category` is set one category-rule load plus, when the actor has
+a tenure, one whitelist/blacklist/friendship load each). It shares the per-tenure decision
+logic with `consent_blocks_targeting` via `decide_consent_block` (spans all four modes;
+#1698); keep new work on this path off any per-participant query loop (#1248).
+
+**Divergence (#1909):** the batched sweep does **not** honor `category.default_mode` — an
+absent preference row or absent per-category rule always falls through to legacy
+default-allow in the sweep, unlike `consent_blocks_targeting`. A category with a
+default-deny `default_mode` (e.g. `theft_category()`) must gate through
+`consent_blocks_targeting` directly, never through this sweep; the sweep stays correct only
+for `EVERYONE`-default categories (the social-action-picker categories it currently serves).
+A query-count regression test
 (`actions/tests/test_social_consent_enforcement.py::SocialConsentExclusionsQueryBudgetTest`)
 pins that the sweep stays constant in participant count.
 
@@ -165,12 +189,19 @@ from world.consent.services import (
     add_social_consent_blacklist,      # (#1698)
     remove_social_consent_blacklist,   # (#1698)
     get_social_consent_summary,
+    consent_blocks_targeting,          # (#1909)
+    theft_category,                    # (#1909)
 )
 ```
 
 `get_social_consent_summary()` is read-only; it supports the bare `consent`, `consent
 whitelist list`, and `consent blacklist list` summaries by returning the preference, category
 rules, and whitelist **and blacklist** entries for a tenure.
+
+`consent_blocks_targeting()` / `theft_category()` (#1909) are not action-wrapped mutations —
+they are the read-side single-tenure gate decision consumed by non-social-action callers
+(the physical-theft gate in `flows.service_functions.inventory.steal_permitted`). See "Social
+Consent Enforcement" above for the full contract.
 
 ---
 

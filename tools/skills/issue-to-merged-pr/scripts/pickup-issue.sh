@@ -72,7 +72,7 @@ fi
 # 3. Infer type from labels
 LABELS=$(jq -r '.labels[].name' <<<"$ISSUE_JSON")
 TYPE=""
-for candidate in feature fix chore refactor test tests docs perf performance; do
+for candidate in feature fix chore refactor test tests docs perf performance tech-debt; do
   if grep -qx "$candidate" <<<"$LABELS"; then
     TYPE="$candidate"
     break
@@ -85,11 +85,13 @@ fi
 if [[ "$TYPE" == "tests" ]]; then
   TYPE="test"
 fi
+if [[ "$TYPE" == "tech-debt" ]]; then
+  TYPE="chore"
+fi
 if [[ -z "$TYPE" ]]; then
-  echo "ERROR: issue #$ISSUE has no recognized type label" >&2
-  echo "(expected one of: feature, fix, chore, refactor, test, docs, perf/performance)." >&2
+  echo "WARN: issue #$ISSUE has no recognized type label; defaulting branch prefix to 'feature'." >&2
   echo "Labels found: $LABELS" >&2
-  exit 1
+  TYPE="feature"
 fi
 
 # 4. Ensure lane labels exist (idempotent) and claim the issue.
@@ -120,7 +122,10 @@ BRANCH="${TYPE}-${ISSUE}-${SLUG}"
 # a worktree on the .claude/worktrees named volume by the using-git-worktrees
 # skill, not worked on in place on the slow 9p bind mount.
 git fetch origin main --quiet
-git branch "$BRANCH" origin/main
+# Idempotent: reuse the branch if a prior start-work.sh run already created it
+# (re-invocation), instead of failing. Safe — the branch is still based on
+# origin/main only when first created.
+git show-ref --verify --quiet "refs/heads/$BRANCH" || git branch "$BRANCH" origin/main
 
 # 7. Emit JSON (includes model recommendation from complexity:* label)
 URL=$(jq -r '.url' <<<"$ISSUE_JSON")

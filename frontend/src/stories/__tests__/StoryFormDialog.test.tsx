@@ -86,6 +86,7 @@ const existingStory: Story = {
   active_gms: [],
   trust_requirements: '',
   character_sheet: 1,
+  tenure_id: null,
   chapters_count: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',

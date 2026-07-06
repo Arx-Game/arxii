@@ -35,6 +35,7 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    ReleaseCompanionAction,
 )
 from actions.definitions.conditions import treat_condition
 from actions.definitions.consent_preferences import (
@@ -59,6 +60,7 @@ from actions.definitions.crafting import (
     AttachStyleAction,
     DetachFacetAction,
 )
+from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.doors import LockAction, UnlockAction
 from actions.definitions.duels import (
@@ -110,6 +112,8 @@ from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
     PutInAction,
+    SetContainerPolicyAction,
+    StealAction,
     TakeOutAction,
     UnequipAction,
     UseItemAction,
@@ -304,6 +308,11 @@ _ALL_ACTIONS: list[Action] = [
     SaveDeedStoryAction(),
     PutInAction(),
     TakeOutAction(),
+    StealAction(),
+    SetContainerPolicyAction(),
+    WithdrawCoinsAction(),
+    DepositCoinsAction(),
+    GiveCoinsAction(),
     ActivatePermitAction(),
     UseItemAction(),
     # #1866 — crafting telnet coverage.
@@ -457,6 +466,7 @@ _ALL_ACTIONS: list[Action] = [
     BindCompanionAction(),
     CompanionFightAction(),
     DeployCompanionAction(),
+    ReleaseCompanionAction(),
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),

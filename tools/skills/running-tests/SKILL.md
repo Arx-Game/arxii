@@ -126,6 +126,24 @@ See `src/world/checks/tests/test_legend_award_handler.py:189-195` for the canoni
 
 Then push and **monitor the PR**. CI runs the full Postgres parity suite on every PR (6 parallel shards, ~2,500 tests each) — let it catch regressions and fix what it reports there. Run a local `just regression` only to reproduce a CI failure the fast tier doesn't surface.
 
+## Background-run lifecycle (kills, hangs, branch switches)
+
+A background `arx test` run holds live shared state; three recurring traps:
+
+- **After killing a run, reset the test DB before relaunching.** A killed run
+  can leave a stale PG session on `test_arxiidev`; the next run then blocks at
+  the destroy/create step or errors "database is being accessed by other
+  users." Fix: `pg_terminate_backend` the `test_arxiidev` sessions and
+  `DROP DATABASE IF EXISTS test_arxiidev` via psql, then relaunch.
+- **"Creating test database..." silence up to ~5 minutes is NORMAL on PG** —
+  it's ~80 migrations applying with no streamed output, not a hang. Check
+  `pg_stat_activity` before killing: an active/committing session is healthy;
+  an idle blocked session is the stale-session trap above.
+- **Never `git checkout` while a background run is live.** Runs read source
+  files live from the shared tree; a mid-run branch switch makes modules
+  inconsistent and produces bogus import tracebacks. Finish or kill the run
+  first (then see the reset step above).
+
 ## `--keepdb` and faithful local repro
 
 CI always starts from a fresh DB. To reproduce a CI failure locally, run without `--keepdb` so Evennia setup objects (Limbo room #2, default Account #1) and prior-run state don't leak in:

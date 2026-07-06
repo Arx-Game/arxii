@@ -96,7 +96,9 @@ export function GamePage() {
             eventsPanel={<EventsSidebarPanel />}
             presencePanel={<PresencePanel />}
             statusPanel={
-              activeCharacterId ? <StatusPanel characterId={activeCharacterId} /> : undefined
+              activeCharacterId ? (
+                <StatusPanel characterId={activeCharacterId} characterName={active ?? undefined} />
+              ) : undefined
             }
             inventoryPanel={
               activeCharacterId ? (

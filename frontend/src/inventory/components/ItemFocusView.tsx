@@ -4,25 +4,37 @@
  *
  * Renders the same content body as ``ItemDetailPanel`` (image, name,
  * quality tier badge, markdown description, stats grid, facet chips) but
- * inline rather than inside a Sheet drawer, and without the action
- * buttons row — this is read-only, the looker doesn't own the item.
+ * inline rather than inside a Sheet drawer. Read-only except for one
+ * affordance: a Steal button that renders ONLY when the backend's
+ * ``can_steal`` flag is true (visibility = eligibility, #1909) — the
+ * looker doesn't own the item, but may still be allowed to take it.
  *
  * Data is fetched via ``useVisibleItemDetail``; the backend endpoint
  * already enforces the visibility rules (own / same-room / staff bypass)
  * so concealed items return 404 and we render an "unavailable" state.
  */
 
-import { Hand } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Hand, HandMetal } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { useActionResult } from '@/hooks/actionResultBus';
+import type { ActionResultPayload } from '@/hooks/types';
+import { useGameSocket } from '@/hooks/useGameSocket';
+import type { MyRosterEntry } from '@/roster/types';
 
 import { RankingBoardCard } from '@/renown/components/RankingBoardCard';
+import { inventoryKeys } from '../hooks/useInventory';
 import { useVisibleItemDetail } from '../hooks/useVisibleItemDetail';
+import { visibleWornKeys } from '../hooks/useVisibleWornItems';
 import type { ItemInstance } from '../types';
 
 interface ItemFocusViewProps {
@@ -32,14 +44,60 @@ interface ItemFocusViewProps {
    * backend as the ``observer`` query parameter so visibility rules
    * (same room / self-look / staff) can be enforced. ``null`` when no
    * puppet is active; the detail fetch is then disabled and the
-   * "unavailable" state renders.
+   * "unavailable" state renders. Doubles as "my own character id" for
+   * invalidating my inventory after a successful steal.
    */
   observerId: number | null;
+  /** Active puppet name — required to dispatch Steal; the button is
+   * inert without it. */
+  character?: MyRosterEntry['name'] | null;
+  /** Called after a successful steal (e.g. to pop the focus stack back to
+   * the character view, since the item is no longer theirs to look at). */
+  onStolen?: () => void;
   className?: string;
 }
 
-export function ItemFocusView({ item, observerId, className }: ItemFocusViewProps) {
+export function ItemFocusView({
+  item,
+  observerId,
+  character = null,
+  onStolen,
+  className,
+}: ItemFocusViewProps) {
   const { data, isLoading, isError } = useVisibleItemDetail(item.id, observerId ?? undefined);
+  const { executeAction } = useGameSocket();
+  const queryClient = useQueryClient();
+
+  // The action-result bus carries no action key (#1909 limitation shared
+  // with WardrobePage's own broad invalidation) — scope the handler to
+  // results that follow a steal *we* dispatched, so an unrelated action
+  // succeeding elsewhere doesn't pop this view or invalidate caches.
+  const [stealPending, setStealPending] = useState(false);
+  const handleActionResult = useCallback(
+    (payload: ActionResultPayload) => {
+      if (!stealPending) return;
+      setStealPending(false);
+      if (!payload.success) {
+        toast.error(payload.message ?? 'Failed to steal.');
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: visibleWornKeys.all }).catch(() => {});
+      if (observerId != null) {
+        queryClient
+          .invalidateQueries({ queryKey: inventoryKeys.inventory(observerId) })
+          .catch(() => {});
+      }
+      onStolen?.();
+    },
+    [stealPending, queryClient, observerId, onStolen]
+  );
+  useActionResult(handleActionResult);
+
+  const handleSteal = useCallback(() => {
+    if (!character || data?.game_object_id == null) return;
+    setStealPending(true);
+    executeAction(character, 'steal', { target_id: data.game_object_id });
+  }, [character, data, executeAction]);
 
   if (isLoading) {
     return (
@@ -64,6 +122,14 @@ export function ItemFocusView({ item, observerId, className }: ItemFocusViewProp
   return (
     <div className={cn('flex flex-col gap-3', className)}>
       <ItemFocusBody item={data} />
+      {data.can_steal && (
+        <div className="px-4">
+          <Button size="sm" variant="outline" onClick={handleSteal} disabled={stealPending}>
+            <HandMetal className="mr-1.5 h-3.5 w-3.5" />
+            Steal
+          </Button>
+        </div>
+      )}
       {/* #761: an in-world object may carry a diegetic ranking board
           (herald, plaque, Academy tablet) — renders only when it does. */}
       <div className="px-4 pb-4">

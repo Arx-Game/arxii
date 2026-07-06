@@ -21,3 +21,16 @@ class CompanionSerializer(serializers.ModelSerializer):
         model = Companion
         fields = ["id", "name", "archetype", "bonded_at", "released_at"]
         read_only_fields = fields
+
+
+class BindActionSerializer(serializers.Serializer):
+    """Body serializer for the ``POST /api/companions/companions/bind/`` endpoint.
+
+    Mirrors ``HomecomingActionSerializer`` (sanctum) — the view resolves the
+    actor via ``PuppetActorMixin`` and calls ``BindCompanionAction().run()``;
+    ownership/validity of the gift and archetype is validated inside the Action.
+    """
+
+    archetype_id = serializers.IntegerField()
+    gift_id = serializers.IntegerField()
+    name = serializers.CharField(max_length=100)

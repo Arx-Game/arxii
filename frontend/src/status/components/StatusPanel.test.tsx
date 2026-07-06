@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { StatusPanel } from './StatusPanel';
@@ -15,6 +16,16 @@ vi.mock('@/magic/queries', () => ({
 vi.mock('../queries', () => ({
   useCharacterPurse: vi.fn(),
   useActionPoints: vi.fn(),
+}));
+
+const executeActionMock = vi.fn();
+vi.mock('@/hooks/useGameSocket', () => ({
+  useGameSocket: () => ({
+    connect: vi.fn(),
+    disconnectAll: vi.fn(),
+    send: vi.fn(),
+    executeAction: executeActionMock,
+  }),
 }));
 
 import { useCharacterVitalsQuery } from '@/vitals/vitalsQueries';
@@ -86,6 +97,7 @@ describe('StatusPanel', () => {
     mockResonances.mockReset();
     mockPurse.mockReset();
     mockActionPoints.mockReset();
+    executeActionMock.mockReset();
   });
 
   it('renders wound description as words, never a numeric health fraction', () => {
@@ -154,5 +166,62 @@ describe('StatusPanel', () => {
     renderWithProviders(<StatusPanel characterId={7} />);
     expect(screen.getByTestId('status-panel-loading')).toBeInTheDocument();
     expect(screen.queryByTestId('status-panel')).not.toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------
+  // #1909: Withdraw control on the coin line
+  // -------------------------------------------------------------------
+
+  describe('withdraw control (#1909)', () => {
+    it('hides the withdraw control without a characterName', () => {
+      setQueries();
+      renderWithProviders(<StatusPanel characterId={7} />);
+      expect(screen.queryByLabelText('Amount to withdraw')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /withdraw/i })).not.toBeInTheDocument();
+    });
+
+    it('disables Withdraw while the amount text does not parse as coppers', async () => {
+      const user = userEvent.setup();
+      setQueries();
+      renderWithProviders(<StatusPanel characterId={7} characterName="Aria" />);
+
+      const withdrawButton = screen.getByRole('button', { name: /withdraw/i });
+      // Empty input parses to null → disabled.
+      expect(withdrawButton).toBeDisabled();
+
+      await user.type(screen.getByLabelText('Amount to withdraw'), 'a sword');
+      expect(withdrawButton).toBeDisabled();
+    });
+
+    it('enables Withdraw for a valid mixed amount and rejects a zero total', async () => {
+      const user = userEvent.setup();
+      setQueries();
+      renderWithProviders(<StatusPanel characterId={7} characterName="Aria" />);
+
+      const input = screen.getByLabelText('Amount to withdraw');
+      const withdrawButton = screen.getByRole('button', { name: /withdraw/i });
+
+      await user.type(input, '1g 2s');
+      expect(withdrawButton).toBeEnabled();
+
+      await user.clear(input);
+      await user.type(input, '0c');
+      expect(withdrawButton).toBeDisabled();
+    });
+
+    it('dispatches withdraw_coins with the parsed int coppers and clears the input', async () => {
+      const user = userEvent.setup();
+      setQueries();
+      renderWithProviders(<StatusPanel characterId={7} characterName="Aria" />);
+
+      const input = screen.getByLabelText('Amount to withdraw');
+      await user.type(input, '1g 2s');
+      await user.click(screen.getByRole('button', { name: /withdraw/i }));
+
+      // parseCoppers('1g 2s') = 100 + 20 — the int, not the raw string.
+      expect(executeActionMock).toHaveBeenCalledWith('Aria', 'withdraw_coins', { amount: 120 });
+      // Implementation clears the text on dispatch (not on the result).
+      expect(input).toHaveValue('');
+    });
   });
 });

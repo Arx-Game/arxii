@@ -454,6 +454,7 @@
   - dominant_society -> societies.Society [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
+  - gang_turf_projects <- societies.GangTurfDetails
   - income_streams <- currency.OrgIncomeStream
   - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
@@ -550,7 +551,15 @@
 **Foreign Keys:**
   - promoter_persona -> scenes.Persona [FK]
   - asset_persona -> scenes.Persona [OneToOne]
-  - source_functionary -> npc_services.Functionary [FK]
+  - source_functionary -> npc_services.Functionary [FK] (nullable)
+  - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
+**Pointed to by:**
+  - granted_assets <- assets.DistinctionAssetGrant
+
+### DistinctionAssetGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - npc_role -> npc_services.NPCRole [FK]
 
 
 ## world.battles
@@ -562,6 +571,7 @@
   - region -> areas.Area [FK] (nullable)
   - weather_override -> weather.WeatherType [FK] (nullable)
 **Pointed to by:**
+  - companion_deployments <- companions.CompanionDeployment
   - sides <- battles.BattleSide
   - places <- battles.BattlePlace
   - units <- battles.BattleUnit
@@ -675,6 +685,7 @@
   - unit -> battles.BattleUnit [OneToOne]
   - place -> battles.BattlePlace [OneToOne]
 **Pointed to by:**
+  - companion_deployment <- companions.CompanionDeployment
   - ship_deployment <- ships.ShipDeployment
 
 ### Service Functions
@@ -686,13 +697,14 @@
 - `begin_battle_round(*, battle: 'Battle') -> 'BattleRound' — Close any open round and open a new DECLARING round.`
 - `check_victory(*, battle: 'Battle') -> 'BattleOutcome | None' — Check whether any side has reached its victory threshold.`
 - `conclude_battle(*, battle: 'Battle', outcome: 'str') -> 'Battle' — Set the battle's outcome, end the backing scene, and resolve any linked`
-- `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10) -> 'Battle' — Create a new Battle (and its backing Scene).`
+- `create_battle(*, name: 'str', campaign_story: 'Story | None' = None, round_limit: 'int' = 10, risk_level: 'str' = RiskLevel.LOW) -> 'Battle' — Create a new Battle (and its backing Scene).`
 - `create_battle_vehicle(*, battle: 'Battle', side: 'BattleSide', place_name: 'str', vehicle_kind: 'str' = VehicleKind.SHIP, is_structural: 'bool' = True) -> 'BattleVehicle' — Create a vessel/mount: a paired BattleUnit + BattlePlace, plus a hull`
 - `create_fortification(*, place: 'BattlePlace', defending_side: 'BattleSide', kind: 'str' = FortificationKind.WALL, building: 'Building | None' = None) -> 'Fortification' — Create a Fortification at *place*, snapshotting its integrity ceiling (#1713).`
 - `declare_battle_action(*, participant: 'BattleParticipant', action_kind: 'str', technique: 'Technique', target_unit: 'BattleUnit | None' = None, target_ally: 'BattleParticipant | None' = None, scope: 'str' = BattleActionScope.UNIT, target_place: 'BattlePlace | None' = None, target_side: 'BattleSide | None' = None, target_fortification: 'Fortification | None' = None, reposition_dx: 'Decimal | None' = None, reposition_dy: 'Decimal | None' = None) -> 'BattleActionDeclaration' — Record or update the participant's action declaration for the current round.`
 - `eject_vehicle_occupants(*, vehicle: 'BattleVehicle') -> 'None' — Eject every unit/participant embedded on *vehicle*'s place, applying the`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
+- `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
@@ -1341,6 +1353,7 @@
   - aspect -> classes.Aspect [FK]
 
 ### Service Functions
+- `is_crossing_level(level: int) -> bool — Return True if ``level`` is a PathStage crossing boundary.`
 - `set_primary_class_level(character: object, character_class: object, level: int) -> object — Set the character's primary class level and recompute level-derived health.`
 - `stage_for_level(level: int) -> int — Map a class level to its PathStage value (clamps <1 to PROSPECT).`
 
@@ -1484,12 +1497,23 @@
   - archetype -> companions.CompanionArchetype [FK]
   - granting_gift -> magic.Gift [FK]
   - objectdb -> objects.ObjectDB [FK] (nullable)
+**Pointed to by:**
+  - deployments <- companions.CompanionDeployment
+
+### CompanionDeployment
+**Foreign Keys:**
+  - companion -> companions.Companion [FK]
+  - battle -> battles.Battle [FK]
+  - vehicle -> battles.BattleVehicle [OneToOne]
 
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' — Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
+- `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' — Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
+- `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
+- `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Companion Capacity currently consumed by character_sheet's active companions via gift.`
 
 
@@ -1796,12 +1820,14 @@
 ### Service Functions
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
+- `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `set_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory', mode: 'str') -> 'SocialConsentCategoryRule'`
 - `set_social_consent_preference(tenure: 'RosterTenure', allow_social_actions: 'bool') -> 'SocialConsentPreference'`
+- `theft_category() -> 'SocialConsentCategory' — Lazy seeded row for the theft/antagonism gate (#1909) — default-deny.`
 
 
 ## world.covenants
@@ -1959,6 +1985,128 @@
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
 - `swear_court_pact(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet', granted_pull_cap: 'int') -> 'CourtPact' — Create an active CourtPact binding servant_sheet to covenant.`
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
+
+
+## world.currency
+
+### CharacterPurse
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - transfers_out <- currency.CurrencyTransfer
+  - transfers_in <- currency.CurrencyTransfer
+
+### OrganizationTreasury
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+**Pointed to by:**
+  - transfers_out <- currency.CurrencyTransfer
+  - transfers_in <- currency.CurrencyTransfer
+
+### CurrencyTransfer
+**Foreign Keys:**
+  - from_purse -> currency.CharacterPurse [FK] (nullable)
+  - from_treasury -> currency.OrganizationTreasury [FK] (nullable)
+  - to_purse -> currency.CharacterPurse [FK] (nullable)
+  - to_treasury -> currency.OrganizationTreasury [FK] (nullable)
+**Pointed to by:**
+  - contribution_records <- currency.ContributionRecord
+
+### CurrencyInstrumentDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+
+### OrgEconomicsProfile
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+
+### OrgIncomeStream
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - area -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - declarations <- currency.IncomeDeclaration
+  - garnishing_contracts <- currency.Contract
+
+### IncomeDeclaration
+**Foreign Keys:**
+  - stream -> currency.OrgIncomeStream [FK]
+
+### OrgObligation
+**Foreign Keys:**
+  - from_organization -> societies.Organization [FK]
+  - to_organization -> societies.Organization [FK]
+
+### ContributionRecord
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - organization -> societies.Organization [FK]
+  - transfer -> currency.CurrencyTransfer [FK] (nullable)
+
+### DebtInstrument
+**Foreign Keys:**
+  - debtor_organization -> societies.Organization [FK]
+  - creditor_organization -> societies.Organization [FK]
+
+### Contract
+**Foreign Keys:**
+  - proposer_persona -> scenes.Persona [FK] (nullable)
+  - proposer_organization -> societies.Organization [FK] (nullable)
+  - counterparty_persona -> scenes.Persona [FK] (nullable)
+  - counterparty_organization -> societies.Organization [FK] (nullable)
+  - notary_organization -> societies.Organization [FK] (nullable)
+  - garnish_stream -> currency.OrgIncomeStream [FK] (nullable)
+**Pointed to by:**
+  - payment_terms <- currency.ContractTerm
+
+### ContractTerm
+**Foreign Keys:**
+  - contract -> currency.Contract [FK]
+
+### Profession
+**Foreign Keys:**
+  - chore_check_type -> checks.CheckType [FK] (nullable)
+**Pointed to by:**
+  - employees <- currency.CharacterEmployment
+
+### CharacterEmployment
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - profession -> currency.Profession [FK]
+
+### Business
+**Foreign Keys:**
+  - owner_persona -> scenes.Persona [FK]
+
+### Service Functions
+- `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' — One weekly cycle: the gross amasses in the uncollected pool (#930).`
+- `accrue_monthly_interest(organization: 'Organization') -> 'int' — One month's interest lands in arrears (#927). Returns total accrued.`
+- `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' — Spend authority: an active membership at tier <= spend_rank_max.`
+- `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' — Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
+- `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' — Create a loan: principal moves creditor→debtor, instrument records it (#927).`
+- `format_coppers(amount: int) -> str — Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`
+- `fund_fame_display(persona: 'Persona', *, amount: 'int') -> 'int' — Spend money maintaining fame against decay (#932 fame churn).`
+- `get_or_create_economics(organization: 'Organization') -> 'OrgEconomicsProfile'`
+- `get_or_create_purse(character_sheet: 'CharacterSheet') -> 'CharacterPurse'`
+- `get_or_create_treasury(organization: 'Organization') -> 'OrganizationTreasury'`
+- `improve_org_domain(*, organization: 'Organization', character) -> 'ImprovementResult' — One domain-investment attempt (#930): Scholarship/Economics against the ledgers.`
+- `invest_in_business(business: 'Business', *, amount: 'int') -> 'Business' — Sink owner money into a venture (#929); investment raises the level.`
+- `mint_instrument(*, denomination: 'str', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a physical coin (face value + mint fee).`
+- `mint_loose_cache(*, amount: 'int', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a loose-coin cache item (#1909).`
+- `process_income_stream(stream: 'OrgIncomeStream', amount: 'int', *, declared_amount: 'int | None' = None) -> 'IncomeDeclaration' — Land ``amount`` collected coppers from one stream (#926, reshaped by #930).`
+- `record_contribution(*, persona: 'Persona', organization: 'Organization', amount: 'int', reason: 'str' = '') -> 'ContributionRecord' — A member pays into the org treasury, on the books (#926).`
+- `redeem_instrument(*, instance: 'ItemInstance', to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Convert a physical coin back into ledger money (fee-free).`
+- `repay_principal(debt: 'DebtInstrument', amount: 'int') -> 'CurrencyTransfer' — Pay down (or off) a debt's principal, treasury→treasury (#927).`
+- `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' — One week's business result (#929). ``fortune`` is -100..100.`
+- `run_weekly_economy() -> 'dict[str, int]' — The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.`
+- `run_weekly_employment(employment: 'CharacterEmployment', *, was_active: 'bool') -> 'int' — One week's automated wages for a held job (#929).`
+- `settle_contract_cycle(contract: 'Contract') -> 'list[CurrencyTransfer]' — Run one settlement cycle for an ACTIVE notarized contract (#928).`
+- `settle_obligations(organization: 'Organization') -> 'list[CurrencyTransfer]' — Settle all active obligations against unsettled declared income (#926).`
+- `sign_contract(contract: 'Contract') -> 'Contract' — The consent moment (#928): counterparty accepts the fixed terms.`
+- `transfer(*, amount: 'int', reason: 'str', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None, to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Move ``amount`` coppers; null source = mint (faucet), null dest = sink.`
+- `treat_servants(organization: 'Organization', *, payment: 'int', graft_reduction: 'int') -> 'OrgEconomicsProfile' — Spend treasury money treating servants to buy graft down (#926).`
+- `work_chore(employment: 'CharacterEmployment', *, ap_spent: 'int') -> 'int' — Active on-grid chore work (#929): spend AP now, roll, earn up to 2×.`
 
 
 ## world.forms
@@ -2737,6 +2885,18 @@
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
 
+### ThreadCrossingThreshold
+**Pointed to by:**
+  - traitrequirement_requirements <- progression.TraitRequirement
+  - levelrequirement_requirements <- progression.LevelRequirement
+  - classlevelrequirement_requirements <- progression.ClassLevelRequirement
+  - multiclassrequirement_requirements <- progression.MultiClassRequirement
+  - achievementrequirement_requirements <- progression.AchievementRequirement
+  - relationshiprequirement_requirements <- progression.RelationshipRequirement
+  - legendrequirement_requirements <- progression.LegendRequirement
+  - tierrequirement_requirements <- progression.TierRequirement
+  - itemrequirement_requirements <- progression.ItemRequirement
+
 ### DramaticMomentType
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK]
@@ -3067,6 +3227,7 @@
   - participant -> magic.RitualSessionParticipant [FK] (nullable)
   - ref_covenant -> covenants.Covenant [FK] (nullable)
   - ref_covenant_role -> covenants.CovenantRole [FK] (nullable)
+  - ref_organization -> societies.Organization [FK] (nullable)
 
 ### SignatureMotifBonus
 **Foreign Keys:**
@@ -4016,21 +4177,25 @@
 
 ### TraitRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - trait -> traits.Trait [FK]
 
 ### LevelRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
 
 ### ClassLevelRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - character_class -> classes.CharacterClass [FK]
 
 ### MultiClassRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - required_classes -> classes.CharacterClass [M2M]
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
@@ -4042,24 +4207,29 @@
 
 ### AchievementRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - achievement -> achievements.Achievement [FK]
 
 ### RelationshipRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
 
 ### LegendRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
 
 ### TierRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
 
 ### ItemRequirement
 **Foreign Keys:**
-  - class_level_unlock -> progression.ClassLevelUnlock [FK]
+  - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
+  - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
   - min_touchstone_tier -> magic.ResonanceTier [FK] (nullable)
   - min_quality_tier -> items.QualityTier [FK] (nullable)
@@ -4118,6 +4288,7 @@
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - gang_turf_details <- societies.GangTurfDetails
   - research_details <- clues.ResearchProjectDetails
   - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
@@ -4152,12 +4323,15 @@
 - `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, contribution_method: 'ContributionMethod | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
 - `clear_instant_completion_kinds() -> 'None' — Test-only: clear the instant-completion registry.`
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
+- `clear_tiered_resolvers() -> 'None' — Test-only: clear the tiered-resolver registry.`
 - `contribute_check_to_project(project: 'Project', *, actor: 'ObjectDB', contributor_persona: 'Persona', method: 'ContributionMethod') -> 'Contribution' — Make a check-based contribution: spend AP, roll the check, advance on success (#1574).`
 - `donate_to_project(project: 'Project', *, donor_persona: 'Persona', amount: 'int') -> 'Contribution' — Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
+- `get_tiered_resolver(kind: 'str') -> 'TieredResolver' — Return the registered tiered resolver for ``kind``, or raise LookupError.`
 - `maybe_complete_immediately(project: 'Project') -> 'bool' — Resolve an instant-completion project the moment its threshold is funded (#1500).`
 - `register_instant_completion_kind(kind: 'str') -> 'None' — Mark a ProjectKind as completing immediately on threshold (re-register safe).`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
+- `register_tiered_resolver(kind: 'str', resolver: 'TieredResolver') -> 'None' — Register a TIERED_PERIOD kind's tier-grading resolver. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
 - `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' — Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
@@ -4997,10 +5171,12 @@
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
+  - ritualsessionreference_set <- magic.RitualSessionReference
   - ranks <- societies.OrganizationRank
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
+  - gang_turf_projects <- societies.GangTurfDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
@@ -5156,6 +5332,23 @@
   - legend_entries <- societies.LegendEntry
   - secrets <- secrets.Secret
   - mission_awards <- missions.MissionRenownAward
+
+### GangTurfDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - organization -> societies.Organization [FK]
+  - target_area -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - tier_thresholds <- societies.GangTurfTierThreshold
+
+### GangTurfTierThreshold
+**Foreign Keys:**
+  - details -> societies.GangTurfDetails [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
+
+### GangTurfReputationAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
@@ -5515,6 +5708,8 @@
   - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - beat_completions <- stories.BeatCompletion
+  - gang_turf_thresholds <- societies.GangTurfTierThreshold
+  - gang_turf_award <- societies.GangTurfReputationAward
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence

@@ -65,6 +65,37 @@ class DraftSessionTests(TestCase):
         self.assertEqual(session.references.filter(participant__isnull=True).count(), 1)
         self.assertEqual(session.references.first().ref_covenant, target)
 
+    def test_draft_attaches_organization_reference(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule, ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import draft_session
+        from world.magic.types.sessions import RitualSessionReferenceSpec
+        from world.societies.factories import OrganizationFactory
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.BILATERAL)
+        initiator = CharacterSheetFactory()
+        candidate = CharacterSheetFactory()
+        org = OrganizationFactory()
+
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="Induct member",
+            session_kwargs={},
+            invitee_sheets=[candidate],
+            session_references=[
+                RitualSessionReferenceSpec(kind=ReferenceKind.ORGANIZATION, ref_organization=org),
+            ],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+        ref = session.references.get(participant__isnull=True)
+        self.assertEqual(ref.ref_organization, org)
+        self.assertEqual(ref.kind, ReferenceKind.ORGANIZATION)
+
     def test_draft_rejects_bilateral_with_wrong_participant_count(self):
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import ParticipationRule

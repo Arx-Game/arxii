@@ -6,6 +6,7 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBeatList, useAggregateBeatContributions } from '../queries';
+import { useMyPendingTreasuredSignoffs } from '@/boundaries/queries';
 import { BeatRow } from './BeatRow';
 
 interface BeatListProps {
@@ -15,9 +16,16 @@ interface BeatListProps {
    * Pass story.character_sheet for CHARACTER-scope stories.
    */
   characterSheetId?: number | null;
+  /**
+   * Roster tenure ID for the viewer's character on this story (#1853) —
+   * forwarded to BeatRow so it can render TreasuredSignoffPrompt when a
+   * beat has a pending sign-off. Pass story.character_sheet's tenure, same
+   * scope rule as characterSheetId.
+   */
+  tenureId?: number | null;
 }
 
-export function BeatList({ episodeId, characterSheetId }: BeatListProps) {
+export function BeatList({ episodeId, characterSheetId, tenureId }: BeatListProps) {
   const { data: beatsPage, isLoading: beatsLoading } = useBeatList({ episode: episodeId });
   const beats = beatsPage?.results ?? [];
 
@@ -46,6 +54,12 @@ export function BeatList({ episodeId, characterSheetId }: BeatListProps) {
     }
   }
 
+  const beatIds = beats.map((b) => b.id);
+  const { data: pendingSignoffs } = useMyPendingTreasuredSignoffs(tenureId != null ? beatIds : []);
+  const pendingByBeatId = new Map(
+    (pendingSignoffs ?? []).map((entry) => [entry.beat_id, entry.treasured_subject_ids])
+  );
+
   if (beatsLoading) {
     return (
       <div className="space-y-2">
@@ -68,6 +82,8 @@ export function BeatList({ episodeId, characterSheetId }: BeatListProps) {
           beat={beat}
           aggregateTotal={totalsByBeatId[beat.id] ?? 0}
           characterSheetId={characterSheetId}
+          tenureId={tenureId}
+          pendingSignoffSubjectIds={pendingByBeatId.get(beat.id)}
         />
       ))}
     </ul>

@@ -49,7 +49,19 @@ actions, backends, and service functions.
 ### Command Files
 - **`evennia_overrides/perception.py`**: `CmdLook`, `CmdInventory`
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`
-- **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
+- **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive` (#1909: swaps to
+  `GiveCoinsAction` when the item-name text parses as money via `parse_coppers`),
+  `CmdHome`
+- **`evennia_overrides/items.py`**: `CmdWear`, `CmdUndress`, `CmdRemove`, `CmdPut`,
+  `CmdWithdraw` (`withdraw <item> from <container>`; also the `withdraw coins <amount>`
+  loose-cash branch, #1909 — the `withdraw` command key was already spoken for by
+  `TakeOutAction`, so the coin path rides a `coins` prefix on the same command rather
+  than a colliding new one), `CmdUse`
+- **`currency.py`**: `CmdDeposit` (`deposit <item>`), `CmdSteal` (`steal <item>` /
+  `steal <item> from <container>`, mirrors `CmdGet`'s two grammars but always
+  dispatches `StealAction` — no plain-take fallback), `CmdSecure`
+  (`secure <container>=<open|friends|owner_only>`) — the #1909 physical-currency
+  interplay commands.
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`crafting.py`**: `CmdCraft` (`craft`, #1866) — the telnet face of facet/style
   crafting. One `ArxCommand` parses `craft facet <name> item=<id>`,
@@ -99,6 +111,7 @@ actions, backends, and service functions.
     - soul-tether BILATERAL: `role=sinner|sineater resonance=<name> [writeup=...]`
     - covenant induction: `covenant=<name>` (the covenant to induct into)
     - banner-call rise: `covenant=<name>` (the dormant STANDING covenant to rise)
+    - organization induction: `organization=<name>` (the non-Covenant organization to induct into)
   - `ritual join <id> [<extra k=v ...>]` — accept your invitation; adapter-specific join
     kwargs:
     - soul-tether: `role=sinner|sineater`
@@ -119,7 +132,7 @@ actions, backends, and service functions.
 - **`ritual_adapters.py`**: per-ritual draft/join adapter registry, keyed on
   `ritual.service_function_path`. Adapters translate the flat `key=value` tokens that
   `CmdRitual._handle_draft`/`_handle_join` parse into `DraftParse`/`JoinParse` dataclasses
-  the session services accept. Three concrete adapters:
+  the session services accept. Five concrete adapters:
   - `SoulTetherAdapter` — `role=` / `resonance=` / `writeup=` for the soul-tether BILATERAL
     session.
   - `CovenantInductionAdapter` — `covenant=<name>` on draft (emits a session-level COVENANT
@@ -127,6 +140,11 @@ actions, backends, and service functions.
     induction service reads).
   - `BannerCallAdapter` — `covenant=<name>` on draft; no join tokens (members simply accept
     the rise).
+  - `OrganizationInductionAdapter` — `organization=<name>` on draft (emits a
+    session-level ORGANIZATION reference for the generic, non-Covenant org-induction
+    ritual, #1868); no join tokens (members simply accept — unlike Covenant Induction,
+    there is no rank to choose since `join_organization` assigns the base rank
+    automatically).
   - `DuranceAdapter` — Ritual of the Durance (class-level advancement). `parse_join`:
     `testament=<oration>` → `participant_kwargs["testament"]`; `path=<name>` → path pk via
     `resolve_advanced_path_by_name` (for the level-3 POTENTIAL semi-crossing). `should_auto_fire`:
@@ -430,6 +448,15 @@ actions, backends, and service functions.
   `sanctum dissolve`, `sanctum absorb`, `sanctum sever <thread name|id>`.
   Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdCombat`). No
   business logic in the command.
+- **`companion.py`**: `CmdCompanion` (`companion`, #1918) — the companion lifecycle namespace. One
+  `DispatchCommand` routes a leading subverb (`bind` / `fight` / `deploy` / `release`) through
+  `dispatch_player_action` — the same seam the web `CompanionViewSet` uses — reaching the Actions in
+  `actions/definitions/companions.py`. Bare `companion`/`companion status`/`companion list` = status hub
+  (active companions + remaining capacity). Grammar:
+  `companion bind archetype=<name|id> gift=<name|id> name=<text>`,
+  `companion release <name|id>`, `companion fight <name|id>`, `companion deploy <name|id>`.
+  Namespaced subverbs avoid exit/channel/alias collisions (mirrors `CmdSanctum`/`CmdCombat`).
+  No business logic in the command.
 - **`crafting_station.py`**: `CmdLabStation` (`station`, #1234) — the Lab
   crafting-station namespace. One `DispatchCommand` routes a leading subverb
   (`station install [level=<n>]` / `station upgrade level=<n>` / `station repair
@@ -452,6 +479,18 @@ actions, backends, and service functions.
   (`place_functionary`/`remove_functionary`/`functionaries_in_room`); the room the caller stands
   in is resolved via `areas.services.get_room_profile`. Functionaries also surface on `look`
   (`Room.return_appearance` appends them, since they are object-less and never in `contents`).
+- **`story.py`**: `CmdStory` (`story`, #1495/#1853) — GM lifecycle actions + player self-service
+  under one namespace (mirrors `CmdGMTable`'s precedent of mixed permission tiers in one command).
+  GM subverbs (`complete <story-id>` / `resolve <episode-id> ...` / `promote <episode-id> ...` /
+  `mark <beat-id> ...`) delegate to `Action().run()` and are gated by the story's Lead GM or staff
+  status in the backing action layer — unchanged from #1495. Player subverbs are self-scoped, no
+  GM/staff gate: bare `story` / `story list` shows the caller's active stories
+  (`world.stories.services.dashboards.active_stories_for_account` — the same service
+  `MyActiveStoriesView` calls); `story beats <episode-id>` lists one of the caller's own active
+  episode's beats, flagging any staked-without-signoff treasured subject inline
+  (`player_pending_treasured_signoffs`); `story signoff <beat-id> <subject> [withdraw]`
+  grants/withdraws via `grant_treasured_signoff`/`withdraw_treasured_signoff` — the same service
+  functions `TreasuredSignoffViewSet` calls. No business logic in the command.
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`

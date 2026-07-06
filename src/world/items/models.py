@@ -21,6 +21,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.items.constants import (
     PROVENANCE_EVENT_TYPES,
     BodyRegion,
+    ContainerAccessPolicy,
     EquipmentLayer,
     GearArchetype,
     OwnershipEventType,
@@ -555,6 +556,12 @@ class ItemInstance(SharedMemoryModel):
     is_open = models.BooleanField(
         default=False,
         help_text="Whether this item is currently open.",
+    )
+    access_policy = models.CharField(
+        max_length=20,
+        choices=ContainerAccessPolicy.choices,
+        default=ContainerAccessPolicy.OPEN,
+        help_text="Container-only: who may take contents (#1909). Non-containers ignore it.",
     )
     # #684: ownership is CharacterSheet-scoped — the body owns the item, not
     # the account. One inventory per character; personas are a display layer

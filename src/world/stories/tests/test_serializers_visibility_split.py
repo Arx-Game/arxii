@@ -21,6 +21,7 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.stories.constants import StoryMaturity, StoryScope
 from world.stories.factories import ChapterFactory, EpisodeFactory, StoryFactory
 from world.stories.serializers import (
@@ -353,3 +354,49 @@ class DefaultDenyVisibilityTests(TestCase):
             self.assertEqual(ep_data["description"], DESCRIPTION_SENTINEL)
             self.assertEqual(ep_data["consequences"], CONSEQUENCES_SENTINEL)
             self.assertEqual(ep_data["summary"], SUMMARY_SENTINEL)
+
+
+class StoryDetailTenureIdTests(TestCase):
+    """#1853: ``tenure_id`` lets the frontend scope pending-signoff surfacing.
+
+    Covers the null-safe FK chain ``character_sheet -> roster_entry ->
+    current_tenure -> pk`` on ``StoryDetailSerializer``.
+    """
+
+    def test_character_scope_story_with_current_tenure_returns_tenure_id(self):
+        """A CHARACTER-scope story whose character has a current tenure."""
+        sheet = CharacterSheetFactory()
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        tenure = RosterTenureFactory(roster_entry=roster_entry)
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+
+        data = StoryDetailSerializer(story, context={}).data
+
+        self.assertEqual(data["tenure_id"], tenure.pk)
+
+    def test_group_scope_story_has_no_character_sheet_and_null_tenure_id(self):
+        """A GROUP-scope story has no ``character_sheet`` — ``tenure_id`` is null."""
+        story = StoryFactory(scope=StoryScope.GROUP, character_sheet=None)
+
+        data = StoryDetailSerializer(story, context={}).data
+
+        self.assertIsNone(data["character_sheet"])
+        self.assertIsNone(data["tenure_id"])
+
+    def test_global_scope_story_has_no_character_sheet_and_null_tenure_id(self):
+        """A GLOBAL-scope story has no ``character_sheet`` — ``tenure_id`` is null."""
+        story = StoryFactory(scope=StoryScope.GLOBAL, character_sheet=None)
+
+        data = StoryDetailSerializer(story, context={}).data
+
+        self.assertIsNone(data["character_sheet"])
+        self.assertIsNone(data["tenure_id"])
+
+    def test_character_with_no_current_tenure_returns_null_tenure_id(self):
+        """A CHARACTER-scope story whose character has no roster tenure at all."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+
+        data = StoryDetailSerializer(story, context={}).data
+
+        self.assertIsNone(data["tenure_id"])

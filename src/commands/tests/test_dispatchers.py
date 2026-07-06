@@ -8,13 +8,15 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from actions.definitions.items import EquipAction, TakeOutAction
-from actions.definitions.movement import GetAction
+from actions.definitions.currency import GiveCoinsAction, WithdrawCoinsAction
+from actions.definitions.items import EquipAction, StealAction, TakeOutAction
+from actions.definitions.movement import GetAction, GiveAction
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import LookAction, LookAtItemAction
 from actions.types import ActionResult
+from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
-from commands.evennia_overrides.items import CmdUndress, CmdWear
+from commands.evennia_overrides.items import CmdUndress, CmdWear, CmdWithdraw
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 from commands.exceptions import CommandError
@@ -651,6 +653,191 @@ class CmdGiveTests(TestCase):
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
             cmd.func()
             mock_run.assert_called_once_with(actor=caller, target=item, recipient=recipient)
+
+
+class CmdGiveCoinsTests(TestCase):
+    """``give <amount> to <recipient>`` swaps dispatch to GiveCoinsAction (#1909)."""
+
+    def test_give_amount_swaps_to_give_coins_action(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        recipient = ObjectDBFactory(db_key="Bob", location=room)
+        caller.search = MagicMock(return_value=recipient)
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdGive, caller, args=" 3s 5c to Bob")
+        with patch.object(
+            GiveCoinsAction, "run", return_value=ActionResult(success=True)
+        ) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, recipient=recipient, amount=35)
+        assert isinstance(cmd.action, GiveCoinsAction)
+
+    def test_give_item_name_still_uses_give_action(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        item = ObjectDBFactory(db_key="Sword", location=caller)
+        recipient = ObjectDBFactory(db_key="Bob", location=room)
+        caller.search = MagicMock(side_effect=[item, recipient])
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdGive, caller, args=" Sword to Bob")
+        with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=item, recipient=recipient)
+        assert isinstance(cmd.action, GiveAction)
+
+
+class CmdWithdrawCoinsTests(TestCase):
+    """``withdraw coins <amount>`` branch on the existing CmdWithdraw (#1909).
+
+    The ``withdraw`` command key was already spoken for by ``TakeOutAction``
+    (``withdraw <item> from <container>``), so the loose-cash path rides a
+    ``coins`` prefix on the same command rather than a colliding new one.
+    """
+
+    def test_withdraw_coins_parses_amount(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdWithdraw, caller, args=" coins 3s 5c")
+        with patch.object(
+            WithdrawCoinsAction, "run", return_value=ActionResult(success=True)
+        ) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, amount=35)
+        assert isinstance(cmd.action, WithdrawCoinsAction)
+
+    def test_withdraw_coins_invalid_amount_raises(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cmd = _make_cmd(CmdWithdraw, caller, args=" coins sword")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_withdraw_from_container_unchanged(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        chest = ObjectDBFactory(db_key="Chest", location=caller)
+        ring = ObjectDBFactory(db_key="Ring", location=chest)
+        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdWithdraw, caller, args=" Ring from Chest")
+        with patch.object(
+            TakeOutAction, "run", return_value=ActionResult(success=True)
+        ) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=ring, container=chest)
+        assert isinstance(cmd.action, TakeOutAction)
+
+
+class CmdDepositTests(TestCase):
+    def test_deposit_resolves_target(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        coin_cache = ObjectDBFactory(db_key="Coins", location=caller)
+        caller.search = MagicMock(return_value=coin_cache)
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdDeposit, caller, args=" Coins")
+        with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=coin_cache)
+
+    def test_deposit_empty_args_raises(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cmd = _make_cmd(CmdDeposit, caller, args="")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+
+class CmdStealTests(TestCase):
+    def test_steal_resolves_target(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        item = ObjectDBFactory(db_key="Sword", location=room)
+        caller.search = MagicMock(return_value=item)
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdSteal, caller, args=" Sword")
+        with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=item)
+        assert isinstance(cmd.action, StealAction)
+
+    def test_steal_from_container_still_uses_steal_action(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        chest = ObjectDBFactory(db_key="Chest", location=room)
+        ring = ObjectDBFactory(db_key="Ring", location=chest)
+        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdSteal, caller, args=" Ring from Chest")
+        with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=ring)
+        assert isinstance(cmd.action, StealAction)
+
+
+class CmdSecureTests(TestCase):
+    def test_secure_sets_policy_kwargs(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        chest = ObjectDBFactory(db_key="Chest", location=caller)
+        caller.search = MagicMock(return_value=chest)
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdSecure, caller, args=" Chest=owner_only")
+        with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=chest, policy="owner_only")
+
+    def test_secure_missing_equals_raises(self):
+        room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cmd = _make_cmd(CmdSecure, caller, args=" Chest")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
 
 
 class CmdHomeTests(TestCase):

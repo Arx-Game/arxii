@@ -19,7 +19,7 @@ The social hierarchy of the game world — from massive NPC-backed societies too
 
 ## What Exists
 - **Models:** Society (groupings within realms with 6 principle axes), OrganizationType (templates with rank titles), Organization (specific groups with principle overrides), OrganizationRank (five-tier authority ladder with capability flags), OrganizationMembership (persona membership with rank FK and voluntary/left/exiled timestamps), OrganizationMembershipOffer (pending/resolved invitations and applications), SocietyReputation and OrganizationReputation (hidden reputation shown as tiers), LegendEntry (deeds with base value and society awareness), LegendSpread (embellished tales with added value)
-- **Membership lifecycle:** Generic (non-covenant) organizations support invite/apply join paths, accept/decline via the offer registry, voluntary leave, promote/demote, and expel/exile. All transitions are shared Action subclasses on the `action.run()` / `dispatch_player_action()` seam, with a namespaced `org <subverb>` telnet command.
+- **Membership lifecycle:** Generic (non-covenant) organizations support invite/apply join paths, accept/decline via the offer registry, voluntary leave, promote/demote, and expel/exile. All transitions are shared Action subclasses on the `action.run()` / `dispatch_player_action()` seam, with a namespaced `org <subverb>` telnet command. A member with a `can_lead_rituals` rank may additionally lead a ceremonial ritual-dispatched induction (#1868), riding the generic `RitualSession` machinery; telnet-only for now.
 - **Tests:** Model tests, membership lifecycle service tests, action/command tests, API read-view tests, fixture integrity tests
 
 ## What's Needed for MVP

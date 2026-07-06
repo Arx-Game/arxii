@@ -180,6 +180,7 @@ class ParticipantState(models.TextChoices):
 class ReferenceKind(models.TextChoices):
     COVENANT = "COVENANT", "Covenant"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
+    ORGANIZATION = "ORGANIZATION", "Organization"
 
 
 class SoulTetherRole(models.TextChoices):
@@ -355,6 +356,10 @@ class InapplicabilityReason(models.TextChoices):
     LOCATION_MISMATCH = "location_mismatch", "Location/property mismatch"
     THREAD_RETIRED = "thread_retired", "Thread is retired"
     COURT_LEADER_NO_STAKE = "court_leader_no_stake", "Court pull has no effect on this target"
+    RELATIONSHIP_NO_STAKE = (
+        "relationship_no_stake",
+        "Relationship pull has no effect on this target",
+    )
     OTHER = "other", "Other (see details)"
 
 

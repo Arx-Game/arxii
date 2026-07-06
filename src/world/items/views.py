@@ -505,6 +505,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
                     "game_object",
                     "image",
                     "template__image",
+                    "currency_instrument",
                 )
                 .prefetch_related(
                     Prefetch(
@@ -526,6 +527,8 @@ class ItemInstanceViewSet(viewsets.ViewSet):
             if holder is None or not _user_plays_pk(user, holder.pk):
                 raise NotFound
 
+        # No ``viewer_sheet`` context: this endpoint only ever shows the
+        # requester their own items, where ``can_steal`` is trivially False.
         serializer = ItemInstanceReadSerializer(item)
         return Response(serializer.data)
 
@@ -775,6 +778,7 @@ class OutfitViewSet(viewsets.ViewSet):
                             "item_instance",
                             "item_instance__template",
                             "item_instance__quality_tier",
+                            "item_instance__currency_instrument",
                         ),
                         to_attr="cached_outfit_slots",
                     ),
@@ -927,6 +931,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
                             "item_instance",
                             "item_instance__template",
                             "item_instance__quality_tier",
+                            "item_instance__currency_instrument",
                         ),
                         to_attr="cached_outfit_slots",
                     ),
@@ -959,6 +964,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
                 "item_instance",
                 "item_instance__template",
                 "item_instance__quality_tier",
+                "item_instance__currency_instrument",
             ).get(pk=slot_pk)
         except OutfitSlot.DoesNotExist as exc:
             raise NotFound from exc
@@ -1227,6 +1233,7 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
                     "game_object",
                     "image",
                     "template__image",
+                    "currency_instrument",
                 )
                 .prefetch_related(
                     Prefetch(
@@ -1246,8 +1253,28 @@ class VisibleItemDetailViewSet(viewsets.ViewSet):
         if not self._user_can_view(user, item, request):
             raise NotFound  # don't leak existence
 
-        serializer = ItemInstanceReadSerializer(item)
+        # #1909: surface can_steal from the observer's perspective — the
+        # only place this serializer is used to look at somebody else's
+        # item. Re-fetches ``?observer=`` (already validated above by
+        # ``_user_can_view``); a single extra pk lookup on a detail
+        # endpoint, not worth threading through the permission check.
+        serializer = ItemInstanceReadSerializer(
+            item, context={"viewer_sheet": self._resolve_viewer_sheet(user, request)}
+        )
         return Response(serializer.data)
+
+    def _resolve_viewer_sheet(self, user: AccountDB, request: Request) -> CharacterSheet | None:
+        """The observer's ``CharacterSheet`` for ``can_steal``, or None (#1909).
+
+        None for staff (no observer concept here) and for requests with no
+        owned observer — ``can_steal`` then defaults to False.
+        """
+        if user.is_staff:
+            return None
+        observer = _fetch_owned_observer(request, user)
+        if observer is None:
+            return None
+        return getattr(observer, "sheet_data", None)  # noqa: GETATTR_LITERAL
 
     def _user_can_view(self, user: AccountDB, item: ItemInstance, request: Request) -> bool:
         """Permission check for ``item`` against ``user`` and the observer."""

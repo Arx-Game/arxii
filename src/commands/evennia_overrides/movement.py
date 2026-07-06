@@ -5,9 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar
 
+from actions.definitions.currency import GiveCoinsAction
 from actions.definitions.items import TakeOutAction
 from actions.definitions.movement import DropAction, GetAction, GiveAction, HomeAction
 from commands.command import ArxCommand
+from world.currency.constants import parse_coppers
 
 
 class CmdGet(ArxCommand):
@@ -59,7 +61,14 @@ class CmdDrop(ArxCommand):
 
 
 class CmdGive(ArxCommand):
-    """Give an item to someone."""
+    """Give an item to someone — or hand them coppers directly.
+
+    Telnet grammars:
+        ``give <item> to <recipient>``   — hand over an item (``GiveAction``)
+        ``give <amount> to <recipient>`` — e.g. ``give 3s 5c to Bob``; the
+        amount-shaped item name swaps dispatch to ``GiveCoinsAction`` for
+        this invocation (mirrors ``CmdGet``'s ``from <container>`` swap).
+    """
 
     key = "give"
     locks = "cmd:all()"
@@ -71,6 +80,10 @@ class CmdGive(ArxCommand):
             empty_msg="Give what to whom?",
             usage_msg="Usage: give <item> to <recipient>",
         )
+        amount = parse_coppers(item_name)
+        if amount is not None:
+            self.action = GiveCoinsAction()
+            return {"recipient": self.search_or_raise(recipient_name), "amount": amount}
         target = self.search_or_raise(item_name, location=self.caller)
         recipient = self.search_or_raise(recipient_name)
         return {"target": target, "recipient": recipient}

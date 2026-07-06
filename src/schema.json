@@ -5021,7 +5021,13 @@ paths:
   /api/companions/companions/:
     get:
       operationId: companions_companions_list
-      description: Read endpoints for the player's own active companions.
+      description: |-
+        Read + action endpoints for the player's companion surface.
+
+        `list`/`retrieve` return the caller's own active companions (read-only).
+        POST actions delegate to the four Actions in
+        ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+        the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
       - in: query
         name: archetype__domain
@@ -5059,7 +5065,13 @@ paths:
   /api/companions/companions/{id}/:
     get:
       operationId: companions_companions_retrieve
-      description: Read endpoints for the player's own active companions.
+      description: |-
+        Read + action endpoints for the player's companion surface.
+
+        `list`/`retrieve` return the caller's own active companions (read-only).
+        POST actions delegate to the four Actions in
+        ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+        the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
       - in: path
         name: id
@@ -5067,6 +5079,103 @@ paths:
           type: integer
         description: A unique integer value identifying this Companion.
         required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/deploy/:
+    post:
+      operationId: companions_companions_deploy_create
+      description: |-
+        Deploy a companion into a battle — ``POST /api/companions/companions/{id}/deploy/``.
+
+        Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/fight/:
+    post:
+      operationId: companions_companions_fight_create
+      description: |-
+        Commit a companion into combat — ``POST /api/companions/companions/{id}/fight/``.
+
+        Wraps :class:`actions.definitions.companions.CompanionFightAction`.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/release/:
+    post:
+      operationId: companions_companions_release_create
+      description: |-
+        Release a bonded companion — ``POST /api/companions/companions/{id}/release/``.
+
+        Wraps :class:`actions.definitions.companions.ReleaseCompanionAction`.
+        The companion id comes from the URL; ``get_queryset`` scopes it to the
+        caller's active companions (foreign → 404). The Action re-validates
+        ownership via ``_resolve_owned_companion`` (defense in depth).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/bind/:
+    post:
+      operationId: companions_companions_bind_create
+      description: |-
+        Bind a new companion — ``POST /api/companions/companions/bind/``.
+
+        Body: ``{archetype_id, gift_id, name}``.
+        Wraps :class:`actions.definitions.companions.BindCompanionAction`.
       tags:
       - companions
       security:
@@ -24816,6 +24925,31 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/stories/my-pending-signoffs/:
+    get:
+      operationId: stories_my_pending_signoffs_list
+      description: |-
+        GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+
+        Player-safe (never GM-facing): for the requesting player's own account,
+        which of the given beats have one of THEIR OWN treasured subjects staked
+        without an active sign-off. Batched across beats — the caller passes the
+        beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+        multi-value query-param style, but scoped to the caller instead of a
+        GM-supplied party).
+      tags:
+      - stories
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingTreasuredSignoffs'
+          description: ''
   /api/stories/staff-workload/:
     get:
       operationId: stories_staff_workload_retrieve
@@ -36620,11 +36754,19 @@ components:
       - item_instance
     ItemInstanceRead:
       type: object
-      description: Read serializer for ItemInstance — used by the inventory listing.
+      description: |-
+        Read serializer for ItemInstance — used by the inventory listing.
+
+        Also backs ``VisibleItemDetailViewSet`` (looking at another character's
+        worn item) — the ``can_steal`` field is only meaningful there.
       properties:
         id:
           type: integer
           readOnly: true
+        game_object_id:
+          type: integer
+          readOnly: true
+          nullable: true
         template:
           allOf:
           - $ref: '#/components/schemas/ItemTemplateList'
@@ -36666,13 +36808,43 @@ components:
           type: boolean
           readOnly: true
           description: Whether this item is currently open.
+        access_policy:
+          type: string
+          readOnly: true
+        is_currency_instrument:
+          type: boolean
+          description: |-
+            True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).
+
+            Gates the Deposit affordance client-side. A boolean, not the nested
+            ``CurrencyInstrumentDetails`` — the client only needs to know whether
+            to render the button, not the denomination/face-value breakdown.
+          readOnly: true
+        can_steal:
+          type: boolean
+          description: |-
+            True iff the viewer could steal ``obj`` right now (#1909).
+
+            Visibility = eligibility: delegates to the same ``steal_permitted``
+            predicate the ``steal`` service re-checks at execution time. No
+            viewer in context → False (IC reads scope to the active character) —
+            this is the case for the plain inventory list/retrieve endpoints,
+            where the viewer is always looking at their own items anyway.
+            ``VisibleItemDetailViewSet`` passes the observer's ``CharacterSheet``
+            as ``viewer_sheet`` so looking at someone else's worn item can
+            surface the affordance.
+          readOnly: true
       required:
+      - access_policy
+      - can_steal
       - charges
       - contained_in
       - display_description
       - display_image_url
       - display_name
+      - game_object_id
       - id
+      - is_currency_instrument
       - is_open
       - is_usable
       - quality_tier
@@ -38905,6 +39077,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         status:
           allOf:
           - $ref: '#/components/schemas/NPCAssetStatusEnum'
@@ -39020,6 +39195,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         label:
           type: string
           description: UI display text for the menu option.
@@ -39091,6 +39269,9 @@ components:
       - informant
       - contact
       - personal_favor
+      - guard
+      - fan
+      - minor_ally
       type: string
       description: |-
         * `permit` - Permit
@@ -39102,6 +39283,9 @@ components:
         * `informant` - Informant
         * `contact` - Contact
         * `personal_favor` - Personal Favor
+        * `guard` - Guard
+        * `fan` - Fan
+        * `minor_ally` - Minor Ally
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -39122,6 +39306,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         label:
           type: string
           minLength: 1
@@ -44659,6 +44846,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         label:
           type: string
           minLength: 1
@@ -46117,6 +46307,26 @@ components:
       - sinner_persona_name
       - sinner_sheet_id
       - strain_cost_per_unit
+    PendingTreasuredSignoffs:
+      type: object
+      description: |-
+        Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+
+        Exposes only the requesting player's own beat_id + treasured_subject_ids —
+        the view-level query already guarantees no other player's data can appear
+        here (ADR-0033); this serializer adds no fields beyond that.
+      properties:
+        beat_id:
+          type: integer
+          readOnly: true
+        treasured_subject_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+      required:
+      - beat_id
+      - treasured_subject_ids
     PermitOfferDetails:
       type: object
       properties:
@@ -48786,11 +48996,17 @@ components:
       - informant
       - contact
       - personal_favor
+      - guard
+      - fan
+      - minor_ally
       type: string
       description: |-
         * `informant` - Informant
         * `contact` - Contact
         * `personal_favor` - Personal Favor
+        * `guard` - Guard
+        * `fan` - Fan
+        * `minor_ally` - Minor Ally
     RoomComfortBreakdown:
       type: object
       description: The owner build-HUD payload for one room (#1514).
@@ -52002,6 +52218,19 @@ components:
           type: integer
           description: The character this sheet belongs to
           readOnly: true
+        tenure_id:
+          type: integer
+          nullable: true
+          description: |-
+            The current tenure of this CHARACTER-scope story's character (whoever is
+            currently playing them) — coincides with the viewer's own tenure only for
+            that player; other viewers get an inert value since
+            `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+            `tenure_id` that isn't theirs.
+
+            Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
+            CHARACTER-scope story whose character has no current tenure.
+          readOnly: true
         primary_table:
           type: integer
           readOnly: true
@@ -52037,6 +52266,7 @@ components:
       - id
       - owners
       - primary_table
+      - tenure_id
       - title
       - trust_requirements
       - updated_at

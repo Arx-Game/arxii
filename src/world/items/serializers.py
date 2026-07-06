@@ -291,7 +291,11 @@ class ItemTemplateListSerializer(serializers.ModelSerializer):
 
 
 class ItemInstanceReadSerializer(serializers.ModelSerializer):
-    """Read serializer for ItemInstance — used by the inventory listing."""
+    """Read serializer for ItemInstance — used by the inventory listing.
+
+    Also backs ``VisibleItemDetailViewSet`` (looking at another character's
+    worn item) — the ``can_steal`` field is only meaningful there.
+    """
 
     template = ItemTemplateListSerializer(read_only=True)
     quality_tier = QualityTierSerializer(read_only=True)
@@ -300,11 +304,22 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     display_image_url = serializers.SerializerMethodField()
     is_usable = serializers.SerializerMethodField()
     contained_in = serializers.PrimaryKeyRelatedField(read_only=True)
+    # #1909: the underlying ObjectDB pk — distinct from ``id`` (the
+    # ItemInstance pk). Actions dispatched via the websocket action
+    # dispatcher target ObjectDB instances (``objectdb_target_kwargs``
+    # resolves ``<name>_id`` kwargs against ``ObjectDB.pk``), so the
+    # frontend needs this to send e.g. ``target_id`` for drop/give/steal.
+    game_object_id = serializers.IntegerField(read_only=True, allow_null=True)
+    # #1909: container-only; non-containers ignore it (default "open").
+    access_policy = serializers.CharField(read_only=True)
+    is_currency_instrument = serializers.SerializerMethodField()
+    can_steal = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemInstance
         fields = [
             "id",
+            "game_object_id",
             "template",
             "quality_tier",
             "display_name",
@@ -315,6 +330,9 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "quantity",
             "charges",
             "is_open",
+            "access_policy",
+            "is_currency_instrument",
+            "can_steal",
         ]
         read_only_fields = fields
 
@@ -327,6 +345,34 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
         """True iff use_item would proceed: the template has an on-use pool.
         Delegates to the canonical ``ItemTemplate.is_usable`` predicate."""
         return obj.template.is_usable
+
+    def get_is_currency_instrument(self, obj: ItemInstance) -> bool:
+        """True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).
+
+        Gates the Deposit affordance client-side. A boolean, not the nested
+        ``CurrencyInstrumentDetails`` — the client only needs to know whether
+        to render the button, not the denomination/face-value breakdown.
+        """
+        return hasattr(obj, "currency_instrument")
+
+    def get_can_steal(self, obj: ItemInstance) -> bool:
+        """True iff the viewer could steal ``obj`` right now (#1909).
+
+        Visibility = eligibility: delegates to the same ``steal_permitted``
+        predicate the ``steal`` service re-checks at execution time. No
+        viewer in context → False (IC reads scope to the active character) —
+        this is the case for the plain inventory list/retrieve endpoints,
+        where the viewer is always looking at their own items anyway.
+        ``VisibleItemDetailViewSet`` passes the observer's ``CharacterSheet``
+        as ``viewer_sheet`` so looking at someone else's worn item can
+        surface the affordance.
+        """
+        from flows.service_functions.inventory import steal_permitted  # noqa: PLC0415
+
+        viewer_sheet = self.context.get("viewer_sheet")
+        if viewer_sheet is None:
+            return False
+        return steal_permitted(viewer_sheet, obj)
 
 
 class VisibleWornItemSerializer(serializers.Serializer):

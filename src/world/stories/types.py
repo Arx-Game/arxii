@@ -172,6 +172,14 @@ class MyActiveStoryEntry(TypedDict):
     scheduled_real_time: datetime | None
 
 
+class MyActiveStoriesResult(TypedDict):
+    """Response shape for MyActiveStoriesView / active_stories_for_account (#1853)."""
+
+    character_stories: list[MyActiveStoryEntry]
+    group_stories: list[MyActiveStoryEntry]
+    global_stories: list[MyActiveStoryEntry]
+
+
 class EligibleTransitionEntry(TypedDict):
     """A single eligible Transition surfaced in the GM queue."""
 
@@ -309,6 +317,21 @@ class StakeAvailability:
     available: int = 0
     blocked: int = 0
     needs_signoff: int = 0
+
+
+@dataclass(frozen=True)
+class PendingTreasuredSignoffs:
+    """Player-safe pending-signoff tally for one beat (#1853).
+
+    Produced by ``world.stories.services.boundaries.player_pending_treasured_signoffs``.
+    Player-safe (ADR-0033): ``treasured_subject_ids`` names only the REQUESTING
+    player's own TreasuredSubjects that are staked on this beat without an
+    active sign-off — never another player's, never the GM's broader stake
+    plan, never a reason.
+    """
+
+    beat_id: int
+    treasured_subject_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -119,3 +119,15 @@ def promote_as_contact(offer: NPCServiceOffer, persona: Persona) -> EffectResult
 
 def promote_as_personal_favor(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     return _promote_functionary(offer, persona, role_context=AssetRoleContext.PERSONAL_FAVOR)
+
+
+def promote_as_guard(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    return _promote_functionary(offer, persona, role_context=AssetRoleContext.GUARD)
+
+
+def promote_as_fan(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    return _promote_functionary(offer, persona, role_context=AssetRoleContext.FAN)
+
+
+def promote_as_minor_ally(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
+    return _promote_functionary(offer, persona, role_context=AssetRoleContext.MINOR_ALLY)

@@ -15,6 +15,7 @@ from world.character_sheets.models import CharacterSheet
 from world.covenants.models import Covenant, CovenantRole
 from world.magic.constants import ParticipantState, ReferenceKind
 from world.magic.models.rituals import Ritual
+from world.societies.models import Organization
 
 
 class RitualSession(SharedMemoryModel):
@@ -94,6 +95,13 @@ class RitualSessionReference(SharedMemoryModel):
         blank=True,
         related_name="ritualsessionreference_set",
     )
+    ref_organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="ritualsessionreference_set",
+    )
 
     class Meta:
         constraints = [
@@ -103,11 +111,19 @@ class RitualSessionReference(SharedMemoryModel):
                         Q(kind=ReferenceKind.COVENANT)
                         & Q(ref_covenant__isnull=False)
                         & Q(ref_covenant_role__isnull=True)
+                        & Q(ref_organization__isnull=True)
                     )
                     | (
                         Q(kind=ReferenceKind.COVENANT_ROLE)
                         & Q(ref_covenant__isnull=True)
                         & Q(ref_covenant_role__isnull=False)
+                        & Q(ref_organization__isnull=True)
+                    )
+                    | (
+                        Q(kind=ReferenceKind.ORGANIZATION)
+                        & Q(ref_covenant__isnull=True)
+                        & Q(ref_covenant_role__isnull=True)
+                        & Q(ref_organization__isnull=False)
                     )
                 ),
                 name="ritual_session_reference_exactly_one_ref",

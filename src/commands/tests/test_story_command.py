@@ -8,11 +8,15 @@ from django.test import TestCase
 
 from actions.types import ActionResult
 from commands.story import CmdStory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.stories.constants import StoryScope
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
     StoryFactory,
+    StoryProgressFactory,
 )
 
 
@@ -34,19 +38,21 @@ class CmdStoryRoutingTests(TestCase):
     """Usage and unknown subcommand handling."""
 
     def setUp(self) -> None:
+        self.account = AccountFactory()
         self.caller = MagicMock()
         self.caller.msg = MagicMock()
+        self.caller.account = self.account
 
     def _run(self, args: str) -> list[str]:
         cmd = _make_cmd(self.caller, args)
         cmd.func()
         return _messages(self.caller)
 
-    def test_bare_command_shows_usage(self) -> None:
+    def test_bare_command_with_no_stories_says_so(self) -> None:
         messages = self._run("")
         self.assertTrue(
-            any("Usage" in m for m in messages),
-            f"Expected usage message; got {messages}",
+            any("no active stories" in m.lower() for m in messages),
+            f"Expected 'no active stories' message; got {messages}",
         )
 
     def test_unknown_subverb_shows_usage(self) -> None:
@@ -263,3 +269,291 @@ class CmdStoryResolutionTests(TestCase):
             any("numeric" in m.lower() for m in messages),
             f"Expected numeric-beat error; got {messages}",
         )
+
+
+class CmdStoryPlayerListTests(TestCase):
+    """Bare `story` / `story list` — the caller's own active stories (#1853)."""
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.char = CharacterFactory()
+        self.char.db_account = self.account
+        self.char.save()
+        self.sheet = CharacterSheetFactory(character=self.char)
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_bare_story_with_no_active_stories(self) -> None:
+        messages = self._run("")
+        joined = " ".join(messages)
+        self.assertIn("no active stories", joined.lower())
+
+    def test_bare_story_lists_active_character_story(self) -> None:
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        StoryProgressFactory(story=story, character_sheet=self.sheet, current_episode=None)
+
+        messages = self._run("")
+
+        joined = " ".join(messages)
+        self.assertIn(story.title, joined)
+
+    def test_story_list_is_an_explicit_alias_for_bare(self) -> None:
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        StoryProgressFactory(story=story, character_sheet=self.sheet, current_episode=None)
+
+        messages = self._run("list")
+
+        joined = " ".join(messages)
+        self.assertIn(story.title, joined)
+
+
+class CmdStoryPlayerBeatsTests(TestCase):
+    """`story beats <episode-id>` — beats in one of the caller's active episodes (#1853)."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.stories.factories import (
+            ChapterFactory,
+            EpisodeFactory,
+            StoryFactory,
+            StoryProgressFactory,
+        )
+
+        self.account = AccountFactory()
+        self.char = CharacterFactory()
+        self.char.db_account = self.account
+        self.char.save()
+        self.sheet = CharacterSheetFactory(character=self.char)
+
+        self.story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        self.chapter = ChapterFactory(story=self.story, order=1)
+        self.episode = EpisodeFactory(chapter=self.chapter, order=1)
+        StoryProgressFactory(
+            story=self.story, character_sheet=self.sheet, current_episode=self.episode
+        )
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_beats_requires_episode_id(self) -> None:
+        messages = self._run("beats")
+        self.assertTrue(any("Usage" in m for m in messages))
+
+    def test_beats_rejects_episode_not_in_an_active_story_of_the_caller(self) -> None:
+        from world.stories.factories import EpisodeFactory
+
+        other_episode = EpisodeFactory(chapter=self.chapter, order=2)
+        messages = self._run(f"beats {other_episode.pk}")
+        joined = " ".join(messages)
+        self.assertIn("not one of your active stories", joined.lower())
+
+    def test_beats_lists_visible_beat_with_player_hint(self) -> None:
+        from world.stories.factories import BeatFactory
+
+        BeatFactory(episode=self.episode, player_hint="A stranger arrives.")
+        messages = self._run(f"beats {self.episode.pk}")
+        joined = " ".join(messages)
+        self.assertIn("A stranger arrives.", joined)
+
+    def test_beats_hides_secret_beat_with_no_hint(self) -> None:
+        from world.stories.constants import BeatVisibility
+        from world.stories.factories import BeatFactory
+
+        BeatFactory(episode=self.episode, player_hint="", visibility=BeatVisibility.SECRET)
+        messages = self._run(f"beats {self.episode.pk}")
+        joined = " ".join(messages)
+        self.assertIn("(Hidden Beat)", joined)
+
+    def test_beats_flags_pending_signoff(self) -> None:
+        from world.boundaries.factories import TreasuredSubjectFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.stories.constants import StakeSubjectKind
+        from world.stories.factories import BeatFactory, StakeFactory
+
+        beat = BeatFactory(episode=self.episode, player_hint="A duel is proposed.")
+        entry = RosterEntryFactory(character_sheet=self.sheet)
+        player_data = PlayerDataFactory(account=self.account)
+        tenure = RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        TreasuredSubjectFactory(
+            owner=tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+        StakeFactory(
+            beat=beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+
+        messages = self._run(f"beats {self.episode.pk}")
+
+        joined = " ".join(messages)
+        self.assertIn("SIGN-OFF NEEDED", joined)
+        self.assertIn("Signet Ring", joined)
+
+
+class CmdStoryPlayerSignoffTests(TestCase):
+    """`story signoff <beat-id> <subject> [withdraw]` (#1853)."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.boundaries.factories import TreasuredSubjectFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.stories.constants import StakeSubjectKind
+        from world.stories.factories import BeatFactory, StakeFactory
+
+        self.account = AccountFactory()
+        self.char = CharacterFactory()
+        self.char.db_account = self.account
+        self.char.save()
+        self.sheet = CharacterSheetFactory(character=self.char)
+        self.entry = RosterEntryFactory(character_sheet=self.sheet)
+        self.player_data = PlayerDataFactory(account=self.account)
+        self.tenure = RosterTenureFactory(roster_entry=self.entry, player_data=self.player_data)
+        self.treasured = TreasuredSubjectFactory(
+            owner=self.tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+        self.beat = BeatFactory()
+        StakeFactory(
+            beat=self.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_signoff_requires_beat_and_subject(self) -> None:
+        messages = self._run(f"signoff {self.beat.pk}")
+        self.assertTrue(any("Usage" in m for m in messages))
+
+    def test_signoff_grants_by_subject_name(self) -> None:
+        from world.stories.models import TreasuredSignoff
+
+        messages = self._run(f"signoff {self.beat.pk} Signet Ring")
+
+        self.assertTrue(
+            TreasuredSignoff.objects.filter(
+                beat=self.beat,
+                player_data=self.player_data,
+                treasured_subject=self.treasured,
+                withdrawn_at__isnull=True,
+            ).exists()
+        )
+        joined = " ".join(messages)
+        self.assertIn("Signed off", joined)
+
+    def test_signoff_grants_by_subject_id(self) -> None:
+        from world.stories.models import TreasuredSignoff
+
+        self._run(f"signoff {self.beat.pk} {self.treasured.pk}")
+
+        self.assertTrue(
+            TreasuredSignoff.objects.filter(
+                beat=self.beat,
+                player_data=self.player_data,
+                treasured_subject=self.treasured,
+                withdrawn_at__isnull=True,
+            ).exists()
+        )
+
+    def test_signoff_unknown_subject_errors(self) -> None:
+        messages = self._run(f"signoff {self.beat.pk} Nonexistent Thing")
+        joined = " ".join(messages)
+        self.assertIn("no pending sign-off", joined.lower())
+
+    def test_signoff_withdraw_reopens_the_gate(self) -> None:
+        from world.stories.models import TreasuredSignoff
+        from world.stories.services.boundaries import grant_treasured_signoff
+
+        grant_treasured_signoff(self.beat, self.player_data, self.treasured)
+
+        messages = self._run(f"signoff {self.beat.pk} Signet Ring withdraw")
+
+        signoff = TreasuredSignoff.objects.get(
+            beat=self.beat, player_data=self.player_data, treasured_subject=self.treasured
+        )
+        self.assertIsNotNone(signoff.withdrawn_at)
+        joined = " ".join(messages)
+        self.assertIn("Withdrawn", joined)
+
+    def test_signoff_withdraw_unknown_active_signoff_errors(self) -> None:
+        messages = self._run(f"signoff {self.beat.pk} Signet Ring withdraw")
+        joined = " ".join(messages)
+        self.assertIn("no active sign-off", joined.lower())
+
+    def test_signoff_withdraw_cannot_touch_another_players_signoff(self) -> None:
+        from world.boundaries.factories import TreasuredSubjectFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.stories.constants import StakeSubjectKind
+        from world.stories.factories import StakeFactory
+        from world.stories.models import TreasuredSignoff
+        from world.stories.services.boundaries import grant_treasured_signoff
+
+        # A second, unrelated player who treasures a DIFFERENT subject, staked on the
+        # same beat, with an active sign-off of their own.
+        other_sheet = CharacterSheetFactory()
+        other_entry = RosterEntryFactory(character_sheet=other_sheet)
+        other_player_data = PlayerDataFactory()
+        other_tenure = RosterTenureFactory(roster_entry=other_entry, player_data=other_player_data)
+        other_treasured = TreasuredSubjectFactory(
+            owner=other_tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Other Player's Locket",
+        )
+        StakeFactory(
+            beat=self.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Other Player's Locket",
+        )
+        other_signoff = grant_treasured_signoff(self.beat, other_player_data, other_treasured)
+
+        # The FIRST caller (self.player_data / self.account) tries to withdraw the OTHER
+        # player's subject by its real label — must not find or touch it.
+        messages = self._run(f"signoff {self.beat.pk} Other Player's Locket withdraw")
+
+        joined = " ".join(messages)
+        self.assertIn("no active sign-off", joined.lower())
+        other_signoff.refresh_from_db()
+        self.assertTrue(other_signoff.active)
+        self.assertIsNone(other_signoff.withdrawn_at)
+        # And the caller's own unrelated signoff-count is untouched.
+        self.assertEqual(TreasuredSignoff.objects.filter(player_data=other_player_data).count(), 1)

@@ -48,7 +48,7 @@ tier.range_description                       # "+250 to +499"
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks` |
+| `OrganizationRank` | One rung on an org's five-tier authority ladder | `organization`, `name`, `tier` (1 highest, 5 lowest), `can_invite`, `can_kick`, `can_manage_ranks`, `can_lead_rituals` |
 | `OrganizationMembership` | Links a Persona to an Organization at a rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (FK to `OrganizationRank`), `joined_date`, `left_at`, `exiled_at` |
 | `OrganizationMembershipOffer` | Pending or resolved invitation/application | `organization`, `from_persona`, `to_persona`, `kind` (`INVITE`/`APPLICATION`), `status` (`PENDING`/`ACCEPTED`/`DECLINED`/`CANCELLED`), `created_at`, `resolved_at` |
 | `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
@@ -188,6 +188,27 @@ All major transitions are actions on the shared `action.run()` / `dispatch_playe
 Invitation accept/decline also flows through the existing `accept org` / `decline org`
 offer registry (`commands/offer_registry`) with `OrgInviteHandler` registered under
 keyword `org`.
+
+### Ritual-dispatched induction (#1868)
+
+Alongside the plain `org_invite`/`org_join` path above, a member holding a rank with
+`can_lead_rituals=True` may lead a ceremonial "Organization Induction" `Ritual`,
+dispatched through the generic `world.magic` `RitualSession` machinery (the same
+substrate Covenant Induction uses). This is an **additional**, optional path — the
+plain invite/join path above is untouched and keeps working for every organization.
+
+- `world.societies.membership_services.assert_initiator_can_lead_org_ritual` —
+  draft-time validator; the first real consumer of `OrganizationRank.can_lead_rituals`.
+- `world.societies.membership_services.induct_organization_member_via_session` —
+  fire-time service; reuses `join_organization` unchanged.
+- Telnet: `ritual draft "Organization Induction" invite=<candidate> organization=<name>`,
+  then the candidate `ritual join <id>`, then the officiant `ritual fire <id>`. See
+  `commands/ritual_adapters.py`'s `OrganizationInductionAdapter`.
+- Covenant-kind organizations are rejected (they keep their own bespoke induction
+  ritual via `world.covenants.services`).
+- **Telnet-only for v1** — no web entry point exists yet, since no generic-Organization
+  frontend exists at all (tracked under "Organization UI" in
+  `docs/roadmap/societies.md`'s MVP list). Nothing here blocks adding one later.
 
 ### DRF endpoints
 
