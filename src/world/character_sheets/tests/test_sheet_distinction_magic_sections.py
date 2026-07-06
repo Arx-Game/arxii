@@ -11,7 +11,12 @@ from django.test import TestCase
 from commands.account.sheet_sections import SHEET_SECTIONS
 from world.character_sheets.factories import CharacterFactory, CharacterSheetFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
-from world.magic.factories import CharacterGiftFactory, GiftFactory
+from world.magic.factories import (
+    CharacterGiftFactory,
+    CharacterResonanceFactory,
+    GiftFactory,
+    ResonanceFactory,
+)
 from world.secrets.factories import SecretFactory
 
 
@@ -77,3 +82,19 @@ class SheetMagicSectionTests(TestCase):
     def test_empty_state(self) -> None:
         lines = SHEET_SECTIONS["magic"](_command_for(self.character))
         self.assertEqual(lines, ["Nothing is known of your magic."])
+
+    def test_lists_resonance_balances(self) -> None:
+        """#2032 — claimed resonances render with balance + lifetime earned."""
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=ResonanceFactory(name="Ember"),
+            balance=15,
+            lifetime_earned=40,
+        )
+
+        lines = SHEET_SECTIONS["magic"](_command_for(self.character))
+        text = "\n".join(lines)
+
+        self.assertIn("Ember", text)
+        self.assertIn("15", text)
+        self.assertIn("40", text)

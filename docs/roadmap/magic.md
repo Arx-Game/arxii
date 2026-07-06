@@ -160,6 +160,24 @@ Closes the `#1328` telnet-coverage gap for technique authoring. Surfaces built:
 The `PlayerPolicy` seam and web `author` endpoint are already wired; the player-tier gate
 is a permissive `TODO` in `technique_builder.py`.
 
+## Telnet resonance visibility (#2032 — BUILT)
+
+Telnet players could earn and spend `CharacterResonance.balance` (thread pulls, imbuing,
+sanctum weaving, entry flourishes, pose endorsements, ...) but had no telnet surface that
+ever rendered it. Two read-only faces now expose it, both reading the same
+handler/service the web uses — no parallel query pipeline:
+
+- **`sheet/magic`** (`commands/account/sheet_sections.py`) gained a `Resonance:` block —
+  every claimed resonance's balance + lifetime earned, from `_build_magic_resonances`
+  (`world/character_sheets/serializers.py`), which reads `character.resonances`
+  (`CharacterResonanceHandler`, the cached identity-mapped accessor). Folded into
+  `MagicSection.resonances`, shared by telnet and the web Magic tab.
+- **`resonance`** (`commands/resonance.py`, new command key) — bare `resonance` reuses the
+  same builder for the balance listing; `resonance history [<name>]` shows the caller's
+  last 10 `ResonanceGrant` rows (newest first, source label), optionally narrowed to one
+  claimed resonance, via `resonance_grant_history_for_sheet`
+  (`world/magic/services/gain.py`) — mirrors `ResonanceGrantViewSet`'s ordering.
+
 ## Ritual of the Durance (#1352 — BUILT)
 
 The within-tier class-level advancement ceremony is complete. Magic's contribution:

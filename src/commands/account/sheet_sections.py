@@ -394,6 +394,13 @@ def _render_magic_section(command: Command) -> list[str]:
     aura = magic["aura"]
     if aura and aura["glimpse_story"]:
         lines.append(f"  Aura: {aura['glimpse_story']}")
+    resonances = magic["resonances"]
+    if resonances:
+        lines.append("  Resonance:")
+        lines.extend(
+            f"    {entry['name']}: {entry['balance']} (lifetime {entry['lifetime_earned']})"
+            for entry in resonances
+        )
     return lines
 
 
