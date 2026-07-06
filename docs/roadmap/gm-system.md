@@ -60,12 +60,29 @@ The GM system defines these role relationships; the stories app uses them for pe
 - Anti-abuse tracking: per-GM/per-week caps, unusual patterns flagged to staff
 - Rewards tie into existing XP/codex/kudos systems, not a new reward pipeline
 
-### Trust and Feedback
-- **Stub data model early** — just record upvotes and feedback entries
-- Player feedback on stories feeds trust
-- Trust feeds GM level progression
-- **Progression math is late design** — the curves, thresholds, decay rates all come later
-- Tangentially related to kudos system
+### Trust and Feedback ✅ (#2000)
+- **`GMProfile.level` is the canonical trust ladder** — see ADR-0095. `GMLevelCap`
+  (one row per `GMLevel`, seeded via `seed_default_gm_level_caps`) holds the
+  per-level caps: `max_beat_risk`, `allow_custom_stakes`, `allow_global_scope_authoring`.
+  Staff-tunable in admin, not hardcoded.
+- **Advancement is staff-only and audited** — `world.gm.services.promote_gm` is the
+  only path that changes `profile.level` (promotion or demotion); every call writes a
+  `GMLevelChange` row (old level, new level, `changed_by`, `reason`). No automatic
+  feedback-driven promotion yet (deliberately deferred — see ADR-0095).
+- **Evidence for the promotion decision** — `gm_evidence_summary(profile)` aggregates
+  stories currently running, beats completed by risk tier, feedback by trust category,
+  and the `GMLevelChange` audit trail, for a staff reviewer deciding on a level change.
+- **API** — `GMProfileViewSet.promote` (`POST /api/gm-profiles/{id}/promote/`,
+  `IsAdminUser`) and `.evidence` (`GET /api/gm-profiles/{id}/evidence/`, `IsAdminUser`).
+- **Telnet** — `CmdGMTrust` (`gmtrust show [account]` / `gmtrust evidence <account>`
+  / `gmtrust promote <account>=<level> reason=<why>`), thin over the same services.
+- **Consumers of the ladder** — `stories.BeatSerializer`'s risk gate and
+  `stories.StakeSerializer`'s custom-stakes gate read `GMLevelCap` for the acting
+  GM's level (staff bypass unchanged); `combat.StakesLevelRequirement.minimum_gm_level`
+  gates a stakes-level requirement against `gm_account.gm_profile.level`
+  (no profile → STARTING).
+- Frontend (evidence panel + promote action on a staff GM-review page) is a
+  deliberate scope note, not a silent skip — it rides the GM dashboard work (#2004).
 
 ### Staff Character and Staff Tooling
 - Staff has commands to edit world state, manage GMs, override any system
@@ -96,7 +113,9 @@ The GM system defines these role relationships; the stories app uses them for pe
 - ✅ GM level TextChoices (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR)
 - ✅ GMApplication ViewSet (create for players, list/review/update for staff, filters)
 - ✅ Staff inbox integration (GM applications appear as triage category)
-- ✅ Trust/feedback — reuses existing `PlayerTrust.gm_trust_level` from stories app
+- ✅ Trust/feedback — `GMProfile.level` is canonical (ADR-0095); ladder built out in
+  full in #2000 (see "Trust and Feedback" above) — `GMLevelCap`, `promote_gm` +
+  `GMLevelChange` audit, `gm_evidence_summary`
 - Permission checks deferred to individual commands (each checks `GMProfile.level` as needed)
 
 ### Phase 2 — GM Tables ✅

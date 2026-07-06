@@ -39,6 +39,7 @@ TARGET_APPS = [
     "world.covenants",
     "world.currency",
     "world.forms",
+    "world.gm",
     "world.goals",
     "world.items",
     "world.locations",

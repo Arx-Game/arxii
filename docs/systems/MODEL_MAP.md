@@ -142,6 +142,7 @@
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
   - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
+  - companion_abilities <- companions.CompanionAbility
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -178,6 +179,7 @@
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
+  - companion_abilities <- companions.CompanionAbility
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -553,13 +555,16 @@
   - asset_persona -> scenes.Persona [OneToOne]
   - source_functionary -> npc_services.Functionary [FK] (nullable)
   - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
-**Pointed to by:**
-  - granted_assets <- assets.DistinctionAssetGrant
 
 ### DistinctionAssetGrant
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [FK]
   - npc_role -> npc_services.NPCRole [FK]
+**Pointed to by:**
+  - granted_assets <- assets.NPCAsset
+
+### Service Functions
+- `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' — Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 
 
 ## world.battles
@@ -572,6 +577,7 @@
   - weather_override -> weather.WeatherType [FK] (nullable)
 **Pointed to by:**
   - companion_deployments <- companions.CompanionDeployment
+  - companion_orders <- companions.CompanionOrder
   - sides <- battles.BattleSide
   - places <- battles.BattlePlace
   - units <- battles.BattleUnit
@@ -1489,7 +1495,19 @@
 
 ### CompanionArchetype
 **Pointed to by:**
+  - abilities <- companions.CompanionAbility
   - companions <- companions.Companion
+
+### CompanionAbility
+**Foreign Keys:**
+  - archetype -> companions.CompanionArchetype [FK]
+  - damage_type -> conditions.DamageType [FK] (nullable)
+  - grants_property -> mechanics.Property [FK] (nullable)
+  - technique -> magic.Technique [FK] (nullable)
+  - conditions_applied -> conditions.ConditionTemplate [M2M]
+  - effect_properties -> mechanics.Property [M2M]
+**Pointed to by:**
+  - orders <- companions.CompanionOrder
 
 ### Companion
 **Foreign Keys:**
@@ -1499,6 +1517,7 @@
   - objectdb -> objects.ObjectDB [FK] (nullable)
 **Pointed to by:**
   - deployments <- companions.CompanionDeployment
+  - orders <- companions.CompanionOrder
 
 ### CompanionDeployment
 **Foreign Keys:**
@@ -1506,12 +1525,24 @@
   - battle -> battles.Battle [FK]
   - vehicle -> battles.BattleVehicle [OneToOne]
 
+### CompanionOrder
+**Foreign Keys:**
+  - companion -> companions.Companion [FK]
+  - encounter -> combat.CombatEncounter [FK] (nullable)
+  - battle -> battles.Battle [FK] (nullable)
+  - ability -> companions.CompanionAbility [FK] (nullable)
+  - target_opponent -> combat.CombatOpponent [FK] (nullable)
+  - target_unit -> battles.BattleUnit [FK] (nullable)
+  - defending_participant -> combat.CombatParticipant [FK] (nullable)
+  - target_ally -> battles.BattleParticipant [FK] (nullable)
+
 ### Service Functions
 - `bind_companion(*, owner: 'CharacterSheet', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' — Create a bonded Companion + its live CompanionObject in owner's current room.`
 - `companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Total Companion Capacity character_sheet has via gift's Thread level.`
 - `get_pull_effects_for_thread(thread: 'Thread', **filters: 'object') -> 'list[ThreadPullEffect]' — Return ThreadPullEffect rows for ``thread`` with gift-specific preference.`
 - `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' — Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' — Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
+- `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) — Validate and upsert a CompanionOrder directive (#1921).`
 - `release_companion(companion: 'Companion') -> 'None' — Release a bonded companion: destroy its live object, keep the row.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' — Resolve a bridged companion's defeat consequence (#1873).`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' — Companion Capacity currently consumed by character_sheet's active companions via gift.`
@@ -1556,6 +1587,7 @@
   - techniquedraftdamageprofile_damage_profiles <- magic.TechniqueDraftDamageProfile
   - thread_pull_resistances <- magic.ThreadPullEffect
   - pending_sudden_harm_entries <- scenes.PendingSuddenHarm
+  - companion_abilities <- companions.CompanionAbility
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditiondamageinteraction_set <- conditions.ConditionDamageInteraction
@@ -1592,6 +1624,7 @@
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
   - techniquedraftappliedcondition_applied <- magic.TechniqueDraftAppliedCondition
   - techniquedraftremovedcondition_applied <- magic.TechniqueDraftRemovedCondition
+  - companion_abilities <- companions.CompanionAbility
   - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
   - applied_on_entry_of <- conditions.ConditionStage
@@ -1821,6 +1854,7 @@
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
 - `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
+- `decide_consent_block(rule_mode: 'str | None', *, actor_present: 'bool', whitelisted: 'bool', blacklisted: 'bool', is_friend: 'bool') -> 'bool' — Per-category consent decision, given a pref exists with the master switch on.`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
@@ -2239,6 +2273,82 @@
 - `revert_alternate_self(sheet: 'CharacterSheet') -> 'None' — Revert the active alternate self — restore return anchors, delete the`
 - `revert_to_true_form(character) -> 'None' — Revert a character to their true form.`
 - `switch_form(character, target_form: 'CharacterForm') -> 'None' — Switch a character to a different form.`
+
+
+## world.gm
+
+### GMProfile
+**Foreign Keys:**
+  - account -> accounts.AccountDB [OneToOne]
+  - approved_by -> accounts.AccountDB [FK]
+**Pointed to by:**
+  - active_stories <- stories.Story
+  - episode_resolutions <- stories.EpisodeResolution
+  - group_progress_resolved <- stories.GroupStoryProgress
+  - global_progress_resolved <- stories.GlobalStoryProgress
+  - character_progress_resolved <- stories.StoryProgress
+  - assistant_claims_made <- stories.AssistantGMClaim
+  - assistant_claims_approved <- stories.AssistantGMClaim
+  - assigned_session_requests <- stories.SessionRequest
+  - story_offers_received <- stories.StoryGMOffer
+  - stake_outcomes <- stories.StakeOutcome
+  - tables <- gm.GMTable
+  - invites_created <- gm.GMRosterInvite
+  - level_changes <- gm.GMLevelChange
+
+### GMApplication
+**Foreign Keys:**
+  - account -> accounts.AccountDB [FK]
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
+
+### GMTable
+**Foreign Keys:**
+  - gm -> gm.GMProfile [FK]
+**Pointed to by:**
+  - authored_roster_entries <- roster.RosterEntry
+  - draft_characters <- character_creation.CharacterDraft
+  - primary_stories <- stories.Story
+  - beat_completions <- stories.BeatCompletion
+  - episode_resolutions <- stories.EpisodeResolution
+  - story_progress <- stories.GroupStoryProgress
+  - bulletin_posts <- stories.TableBulletinPost
+  - memberships <- gm.GMTableMembership
+
+### GMTableMembership
+**Foreign Keys:**
+  - table -> gm.GMTable [FK]
+  - persona -> scenes.Persona [FK]
+
+### GMRosterInvite
+**Foreign Keys:**
+  - roster_entry -> roster.RosterEntry [FK]
+  - created_by -> gm.GMProfile [FK]
+  - claimed_by -> accounts.AccountDB [FK] (nullable)
+
+### GMLevelCap
+
+### GMLevelChange
+**Foreign Keys:**
+  - profile -> gm.GMProfile [FK]
+  - changed_by -> accounts.AccountDB [FK]
+
+### Service Functions
+- `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
+- `archive_table(table: 'GMTable') -> 'None' — Mark a table archived. Sets archived_at timestamp.`
+- `claim_invite(invite: 'GMRosterInvite', account: 'AccountDB') -> 'RosterApplication' — Mark an invite claimed and create (or reuse) a RosterApplication.`
+- `create_invite(gm: 'GMProfile', roster_entry: 'RosterEntry', is_public: 'bool' = False, invited_email: 'str' = '', expires_at: 'datetime | None' = None) -> 'GMRosterInvite' — Create a GMRosterInvite. Callers must validate GM oversight.`
+- `create_table(gm: 'GMProfile', name: 'str', description: 'str' = '') -> 'GMTable' — Create a new GM table owned by the given GM.`
+- `deny_application_as_gm(gm: 'GMProfile', application: 'RosterApplication', review_notes: 'str' = '') -> 'None' — Deny an application on behalf of the overseeing GM.`
+- `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' — Resolve the CharacterSheet to use as the notification recipient for a GM.`
+- `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' — Pending applications for characters at tables this GM owns.`
+- `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' — Aggregate a GM's track record for staff reviewing a level change.`
+- `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' — Add a persona to a table. Idempotent — returns existing active`
+- `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
+- `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
+- `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
+- `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
+- `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
+- `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' — Reassign a table to a different GM. Staff-only action.`
 
 
 ## world.goals
@@ -2772,6 +2882,7 @@
   - anchored_threads <- magic.Thread
   - scene_action_requests <- scenes.SceneActionRequest
   - alternate_self_grants <- forms.AlternateSelf
+  - companion_abilities <- companions.CompanionAbility
   - conditions_caused <- conditions.ConditionInstance
   - battle_declarations <- battles.BattleActionDeclaration
   - battle_property_affinities <- battles.TechniquePropertyAffinity
@@ -3103,6 +3214,8 @@
   - character -> character_sheets.CharacterSheet [FK]
   - gift -> magic.Gift [OneToOne]
 
+### RelationshipBondPullTuning
+
 ### AffinityInteraction
 **Foreign Keys:**
   - source_affinity -> magic.Affinity [FK]
@@ -3389,7 +3502,7 @@
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
   - treatment_action_requests <- scenes.SceneActionRequest
-  - cast_pull_declarations <- scenes.SceneCastPullDeclaration
+  - action_pull_declarations <- scenes.SceneActionPullDeclaration
   - treatment_attempts <- conditions.TreatmentAttempt
   - related_journal_entries <- journals.JournalEntry
   - combat_pulls <- combat.CombatPull
@@ -3447,7 +3560,7 @@
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
-- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
+- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
 - `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
@@ -3457,7 +3570,7 @@
 - `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' — Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' — Deduct resonance balance and greedily advance thread level.`
-- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0) -> 'ResonancePullResult' — Atomic pull commit (Spec A §5.4 + §7.4).`
+- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None) -> 'ResonancePullResult' — Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' — Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `survivability_baseline(character: 'ObjectDB', vital_target: 'str') -> 'int' — Universal soft-capped survivability baseline from thread investment (#1175),`
 - `survivability_save_baselines(character: 'ObjectDB') -> 'ThreadSurvivabilitySaves' — Per-tier survivability save modifiers from thread investment (#1250).`
@@ -3533,6 +3646,8 @@
   - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
   - personas <- scenes.Persona
+  - granted_by_companion_abilities <- companions.CompanionAbility
+  - companion_abilities <- companions.CompanionAbility
   - condition_templates <- conditions.ConditionTemplate
   - condition_stages_carrying <- conditions.ConditionStage
   - prerequisites <- mechanics.Prerequisite
@@ -3960,6 +4075,7 @@
 **Foreign Keys:**
   - faction_affiliation -> societies.Organization [FK] (nullable)
 **Pointed to by:**
+  - distinction_grants <- assets.DistinctionAssetGrant
   - missions_reported_to <- missions.MissionTemplate
   - functionaries <- npc_services.Functionary
   - offers <- npc_services.NPCServiceOffer
@@ -4922,7 +5038,7 @@
   - target_personas -> scenes.Persona [M2M]
 **Pointed to by:**
   - additional_targets <- scenes.SceneActionTarget
-  - pull_declaration <- scenes.SceneCastPullDeclaration
+  - pull_declaration <- scenes.SceneActionPullDeclaration
 
 ### SceneActionTarget
 **Foreign Keys:**
@@ -4930,7 +5046,7 @@
   - target_persona -> scenes.Persona [FK]
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
 
-### SceneCastPullDeclaration
+### SceneActionPullDeclaration
 **Foreign Keys:**
   - request -> scenes.SceneActionRequest [OneToOne]
   - resonance -> magic.Resonance [FK]

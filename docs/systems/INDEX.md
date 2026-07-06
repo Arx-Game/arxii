@@ -1043,6 +1043,65 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
+
+### GM
+Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a
+GM at a given level may author (#2000, ADR-0095).
+
+- **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
+  `last_active_at` stub), `GMApplication` (freeform text, staff response, one PENDING
+  per account), `GMTable` (a GM's working group; ACTIVE/ARCHIVED lifecycle),
+  `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
+  (single-use recruitment code, public or private-with-email-match, 30-day default
+  expiry), `GMLevelCap` (one row per `GMLevel`, staff-tunable: `max_beat_risk`
+  (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
+  `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
+  `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
+  `promote_gm`, never edited by hand)
+- **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
+  `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
+  `GMApplicationStatus`, `GMTableStatus`
+- **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
+  `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
+  `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
+  `average_rating`, `rating_count`)
+- **Key Services (`services.py`):** `create_table`/`archive_table`/`transfer_ownership`,
+  `join_table`/`leave_table` (auto-detaches CHARACTER-scope stories on leave),
+  `gm_application_queue(gm)`/`approve_application_as_gm`/`deny_application_as_gm`,
+  `surrender_character_story`, `create_invite`/`revoke_invite`/`claim_invite`
+  (`select_for_update`-raced), **`promote_gm(profile, new_level, *, changed_by, reason) ->
+  GMLevelChange`** — the only path that writes `GMProfile.level`; raises `ValueError` on
+  same-level or unknown-level input (programmer-error guard, real validation lives in
+  `PromoteGMInputSerializer`), **`gm_evidence_summary(profile) -> GMEvidenceSummary`** —
+  aggregate track record (stories running, beats completed by risk, feedback by trust
+  category, level-change audit trail) backing a staff promotion/demotion decision
+- **Trust-ladder consumers:** `stories.BeatSerializer`'s risk gate and
+  `stories.StakeSerializer`'s custom-stakes gate read the acting GM's `GMLevelCap` via
+  `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
+  `combat.StakesLevelRequirement.minimum_gm_level` gates on `gm_account.gm_profile.level`
+  (no profile → STARTING)
+- **API Endpoints:** `GMApplicationViewSet` (`/api/gm-applications/`; create for
+  players, list/review/update for staff — approval auto-creates a `GMProfile`),
+  `GMProfileViewSet` (`/api/gm-profiles/`, read-only list for any authenticated user;
+  `POST /api/gm-profiles/{id}/promote/` and `GET /api/gm-profiles/{id}/evidence/`, both
+  `IsAdminUser`), `GMTableViewSet` (`/api/gm-tables/`; staff sees all, GMs their own,
+  players tables where an active persona holds membership; `archive`/`transfer_ownership`
+  staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
+  `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
+  queue), `GMInviteClaimView`, `DemandRansomView`
+- **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
+  #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
+  `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
+  reason=<why>` (staff-only; `reason` required) — thin over the same `promote_gm` /
+  `gm_evidence_summary` services the web actions call.
+- **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates),
+  combat (`StakesLevelRequirement.minimum_gm_level`), roster (`GMRosterInvite` →
+  `RosterApplication`), scenes (`GMTableMembership` pinned to `Persona`)
+- **Source:** `src/world/gm/`
+- **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
+- **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
+  [../adr/0095-gm-trust-is-gmprofile-level.md](../adr/0095-gm-trust-is-gmprofile-level.md)
+
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
 action consent flow, and a three-mode non-combat round framework.

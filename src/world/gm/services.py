@@ -319,7 +319,7 @@ def promote_gm(
 
     old_level = profile.level
     profile.level = new_level
-    profile.save(update_fields=["level"])
+    profile.save(update_fields=["level", "updated_at"])
 
     return GMLevelChange.objects.create(
         profile=profile,
@@ -338,7 +338,6 @@ def gm_evidence_summary(profile: GMProfile) -> GMEvidenceSummary:
     """
     from django.db.models import Avg, Count  # noqa: PLC0415
 
-    from world.gm.constants import GMTableStatus as _GMTableStatus  # noqa: PLC0415
     from world.stories.models import (  # noqa: PLC0415
         BeatCompletion,
         Story,
@@ -348,7 +347,7 @@ def gm_evidence_summary(profile: GMProfile) -> GMEvidenceSummary:
 
     stories_running = Story.objects.filter(
         primary_table__gm=profile,
-        primary_table__status=_GMTableStatus.ACTIVE,
+        primary_table__status=GMTableStatus.ACTIVE,
         status=StoryStatus.ACTIVE,
     ).count()
 
