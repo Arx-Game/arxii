@@ -119,13 +119,21 @@ class CmdOutfit(ArxCommand):
             raise CommandError(msg)
         return outfit
 
+    # `use_dbref=True` is required below: Evennia's `search()` gates dbref
+    # (`#123`) lookups behind a Builder-permission lock by default
+    # (`use_dbref=None` → checks `perm(Builder)`), so a bare `#{id}` search
+    # would silently fail to match for ordinary players. It's safe here
+    # because `location=self.caller` already scopes the search to items the
+    # caller physically holds — this can't be used to reference another
+    # player's or room's objects by id.
+
     def _do_save(self, rest: str) -> None:
         kwargs = _parse_kwargs(rest)
         name = _leading_text(rest)
         wardrobe_id = kwargs.get("wardrobe", "")
         if not name or not wardrobe_id.isdigit():
             raise CommandError(_USAGE)
-        wardrobe_obj = self.caller.search(f"#{wardrobe_id}", location=self.caller)
+        wardrobe_obj = self.caller.search(f"#{wardrobe_id}", location=self.caller, use_dbref=True)
         if not wardrobe_obj:
             msg = "You aren't holding that wardrobe."
             raise CommandError(msg)
@@ -166,7 +174,7 @@ class CmdOutfit(ArxCommand):
         layer = kwargs.get("layer", "")
         if not item_id.isdigit() or not region or not layer:
             raise CommandError(_USAGE)
-        item_obj = self.caller.search(f"#{item_id}", location=self.caller)
+        item_obj = self.caller.search(f"#{item_id}", location=self.caller, use_dbref=True)
         if not item_obj:
             msg = "You aren't holding that item."
             raise CommandError(msg)

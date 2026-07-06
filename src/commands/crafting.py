@@ -85,7 +85,7 @@ class CmdCraft(ArxCommand):
 
         if not item_id_raw or not item_id_raw.isdigit():
             raise CommandError(_USAGE)
-        obj = self.caller.search(f"#{item_id_raw}", location=self.caller)
+        obj = self.caller.search(f"#{item_id_raw}", location=self.caller, use_dbref=True)
         if not obj:
             msg = "You aren't holding that item."
             raise CommandError(msg)
