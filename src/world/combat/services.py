@@ -2993,6 +2993,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
             )
 
         _try_interpose(participant, pre_payload)
+        _try_companion_defend(participant, pre_payload)
     if pre_payload.amount <= 0:
         return ParticipantDamageResult(
             damage_dealt=0,
@@ -5040,6 +5041,64 @@ def _try_interpose(
             INTERPOSE_BASE_FATIGUE_COST,
             action.effort_level,
         )
+
+
+def _try_companion_defend(
+    participant: CombatParticipant,
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Check for a companion ordered to DEFEND_ALLY for this participant (#1921).
+
+    If found, redirect the damage to the companion's CombatOpponent via
+    ``apply_damage_to_opponent`` (which handles soak, resistance, and defeat).
+    The companion's soak applies. If the companion is defeated, overflow
+    damage passes through to the original target.
+
+    **Guard:** no-op when the encounter is not ``RESOLVING`` so that
+    non-combat callers of :func:`apply_damage_to_participant` are unaffected.
+    """
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionOrder  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.RESOLVING:
+        return
+
+    order = (
+        CompanionOrder.objects.filter(
+            defending_participant=participant,
+            encounter=encounter,
+            round_number=encounter.round_number,
+            order_kind=CompanionOrderKind.DEFEND_ALLY,
+        )
+        .select_related("companion")
+        .first()
+    )
+    if order is None:
+        return
+
+    # Find the companion's materialized CombatOpponent
+    companion_opponent = CombatOpponent.objects.filter(
+        summoned_by=order.companion.owner,
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+    ).first()
+    if companion_opponent is None:
+        return
+
+    # Redirect damage to the companion
+    apply_damage_to_opponent(
+        companion_opponent,
+        pre_payload.amount,
+        damage_type=pre_payload.damage_type,
+    )
+
+    # If companion survived, zero out the damage to the ally
+    if companion_opponent.status == OpponentStatus.ACTIVE:
+        pre_payload.amount = 0
+    else:
+        # Companion defeated; overflow damage goes to the ally
+        pre_payload.amount = max(0, pre_payload.amount - companion_opponent.max_health)
 
 
 def _fire_on_hit_pool(
