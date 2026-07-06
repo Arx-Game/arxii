@@ -209,7 +209,7 @@ def _loose_cache_template():
 
     template, _ = ItemTemplate.objects.get_or_create(
         name="Loose coins",
-        defaults={"description": "A handful of mixed coins."},
+        defaults={"description": "PLACEHOLDER A handful of mixed coins."},
     )
     return template
 

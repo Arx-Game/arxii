@@ -27,3 +27,11 @@ _Avoid_: skill gate, quality limit
 **lore-critical**:
 The property of an ItemInstance that must never be auto-purged by soft-delete cleanup because it carries material lore value, attached facets, or transfer provenance (it changed hands). A strict subset of "differs from template" — cosmetic-only data like a custom name or quality tier is not lore-critical.
 _Avoid_: significant, important, protected
+
+**Container Access Policy**:
+A container-only setting (`ItemInstance.access_policy`: Open / Friends / Owner Only) controlling who may take items *out* of that container with a plain take. Non-containers ignore it. It governs only the immediate container an item sits in — no chaining up nested containers — and it never blocks Steal, which is the deliberate bypass.
+_Avoid_: container lock, container permissions
+
+**Steal**:
+The deliberate ownership-gate bypass (`flows.service_functions.inventory.steal`) that takes an item a plain Take refuses — the item is owned by someone else, or barred by a container's Access Policy. Unlike Take, Steal always leaves consequences: an `OwnershipEvent(STOLEN)` (ownership genuinely transfers, the item is never destroyed) and a crime-tagged, concealed Legend deed. Whether Steal is even offered is target-side only: an NPC's holdings are always antagonism-allowed, a player's holdings gate on that player's theft consent (default-deny — opt-in required).
+_Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's item)

@@ -1341,6 +1341,12 @@ def _consent_excluded_persona_ids(
     Mirrors the per-tenure decision in :func:`_tenure_blocks_actor` but loads the
     preference / category-rule / whitelist / blacklist / friendship data once for the
     whole set (one preference query plus the loads in :func:`_load_category_consent_data`).
+
+    CAUTION (#1909): this batched sweep does NOT honor ``category.default_mode`` — an
+    absent preference row or absent per-category rule always falls through to legacy
+    default-allow here, unlike :func:`world.consent.services.consent_blocks_targeting`.
+    A category with a default-deny ``default_mode`` (e.g. theft) must gate through
+    ``consent_blocks_targeting`` directly; never wire it through this sweep.
     """
     from world.consent.models import SocialConsentPreference  # noqa: PLC0415
     from world.consent.services import _decide_consent_block  # noqa: PLC0415

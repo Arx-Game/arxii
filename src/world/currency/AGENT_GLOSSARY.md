@@ -8,6 +8,10 @@ _Avoid_: gold, money, coin (as the unit of account)
 One of the named minted instrument coins above gold (Gold Knight, Baroness, Countess, Duchess, Queen, Empress), each worth ten times the last. A denomination is a physical instrument for theater, transport, and theft — not an account unit.
 _Avoid_: coin type, bill
 
+**Coin Cache**:
+Everyday pocket cash withdrawn from a purse as a real, holdable item (`Denomination.LOOSE`) — arbitrary face value, no mint fee, unlike the six fixed grand-coin Denominations. Minted via `mint_loose_cache` and redeemed (deposited) via the same fee-free `redeem_instrument` path every instrument uses. Like every minted instrument it is born physical: a materialized `game_object` in the minter's inventory, so it can be dropped, given, stowed in a container, or stolen.
+_Avoid_: loose coins (field/display name only), pocket money, cash
+
 **CharacterPurse**:
 The ledger holding one character's personal money as a copper balance, anchored to the body (CharacterSheet) rather than a persona.
 _Avoid_: wallet, personal account
