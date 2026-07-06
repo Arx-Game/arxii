@@ -1541,6 +1541,10 @@ def seed_magic_config() -> MagicConfigResult:
     - IntensityTier rows: Minor (threshold=5), Moderate (threshold=10), Major (threshold=15)
     - AudereThreshold (minimum_intensity_tier=Major, minimum_warp_stage=Soulfray "Ripping")
     - MishapPoolTier (min_deficit=1, max_deficit=None) backed by a minimal ConsequencePool
+    - AnimaRitualBudgetAward / SanctumHomecomingGainAward / SanctumPurgingRetentionAward /
+      SanctumDissolutionRecoveryAward: one row per canonical CheckOutcome tier for each of
+      the 4 outcome-tier award tables (#1207). Without these, the corresponding
+      ``.objects.get(outcome_tier=...)`` lookups raise ``DoesNotExist`` on a missing row.
 
     Returns:
         MagicConfigResult dataclass with all created/fetched instances.
@@ -1556,6 +1560,11 @@ def seed_magic_config() -> MagicConfigResult:
     )
     from world.magic.models.corruption_config import CorruptionConfig  # noqa: PLC0415
     from world.magic.models.gain_config import ResonanceGainConfig  # noqa: PLC0415
+    from world.magic.models.sanctum import (  # noqa: PLC0415
+        SanctumDissolutionRecoveryAward,
+        SanctumHomecomingGainAward,
+        SanctumPurgingRetentionAward,
+    )
     from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
     # --- AnimaConfig (has its own get_or_create helper) ---
@@ -1603,6 +1612,56 @@ def seed_magic_config() -> MagicConfigResult:
         AnimaRitualBudgetAward.objects.get_or_create(
             outcome_tier=CheckOutcome.objects.get(name=name),
             defaults={"budget": budget},
+        )
+
+    # --- Sanctum ritual award tables: one authored row per canonical CheckOutcome
+    # tier for each of the 3 award models (#1207). These replace the deleted
+    # module-level HOMECOMING_GAIN_MULTIPLIERS / PURGING_RETENTION_MODIFIERS /
+    # DISSOLUTION_RECOVERY_* constants (Tasks 5/6) — without these seeded rows,
+    # `perform_homecoming_ritual`/`perform_purging_ritual`
+    # (`world/magic/services/sanctum_rituals.py`) and `_dissolution_recovery_fraction`
+    # (`world/magic/services/sanctum_install.py`) all do a bare `.objects.get(...)`
+    # that raises `DoesNotExist` on a missing row — an exception NOT in
+    # `actions.definitions.sanctum.SANCTUM_EXC`, so it would surface as an
+    # unhandled 500. The 4-tier tuning values below are the original module
+    # constants (see the plan's Task 4/5/6 sections); "Partial Success" is a new
+    # tier introduced by the canonical 5-tier CheckOutcome spine and is seeded at
+    # the midpoint between the original Success/Failure values, per the plan's own
+    # seed guidance.
+    for name, gain_multiplier in (
+        ("Critical Success", Decimal("1.25")),
+        ("Success", Decimal("1.00")),
+        ("Partial Success", Decimal("0.75")),
+        ("Failure", Decimal("0.50")),
+        ("Critical Failure", Decimal("0.25")),
+    ):
+        SanctumHomecomingGainAward.objects.get_or_create(
+            outcome_tier=CheckOutcome.objects.get(name=name),
+            defaults={"gain_multiplier": gain_multiplier},
+        )
+
+    for name, retention_modifier in (
+        ("Critical Success", Decimal("0.25")),
+        ("Success", Decimal("0.00")),
+        ("Partial Success", Decimal("-0.075")),
+        ("Failure", Decimal("-0.15")),
+        ("Critical Failure", Decimal("-0.30")),
+    ):
+        SanctumPurgingRetentionAward.objects.get_or_create(
+            outcome_tier=CheckOutcome.objects.get(name=name),
+            defaults={"retention_modifier": retention_modifier},
+        )
+
+    for name, recovery_fraction in (
+        ("Critical Success", Decimal("0.80")),
+        ("Success", Decimal("0.50")),
+        ("Partial Success", Decimal("0.30")),
+        ("Failure", Decimal("0.10")),
+        ("Critical Failure", Decimal("0.0")),
+    ):
+        SanctumDissolutionRecoveryAward.objects.get_or_create(
+            outcome_tier=CheckOutcome.objects.get(name=name),
+            defaults={"recovery_fraction": recovery_fraction},
         )
 
     # --- ResonanceGainConfig (pk=1) ---
