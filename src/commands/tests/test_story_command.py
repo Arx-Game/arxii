@@ -409,3 +409,108 @@ class CmdStoryPlayerBeatsTests(TestCase):
         joined = " ".join(messages)
         self.assertIn("SIGN-OFF NEEDED", joined)
         self.assertIn("Signet Ring", joined)
+
+
+class CmdStoryPlayerSignoffTests(TestCase):
+    """`story signoff <beat-id> <subject> [withdraw]` (#1853)."""
+
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.boundaries.factories import TreasuredSubjectFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.stories.constants import StakeSubjectKind
+        from world.stories.factories import BeatFactory, StakeFactory
+
+        self.account = AccountFactory()
+        self.char = CharacterFactory()
+        self.char.db_account = self.account
+        self.char.save()
+        self.sheet = CharacterSheetFactory(character=self.char)
+        self.entry = RosterEntryFactory(character_sheet=self.sheet)
+        self.player_data = PlayerDataFactory(account=self.account)
+        self.tenure = RosterTenureFactory(roster_entry=self.entry, player_data=self.player_data)
+        self.treasured = TreasuredSubjectFactory(
+            owner=self.tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+        self.beat = BeatFactory()
+        StakeFactory(
+            beat=self.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Signet Ring",
+        )
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_signoff_requires_beat_and_subject(self) -> None:
+        messages = self._run(f"signoff {self.beat.pk}")
+        self.assertTrue(any("Usage" in m for m in messages))
+
+    def test_signoff_grants_by_subject_name(self) -> None:
+        from world.stories.models import TreasuredSignoff
+
+        messages = self._run(f"signoff {self.beat.pk} Signet Ring")
+
+        self.assertTrue(
+            TreasuredSignoff.objects.filter(
+                beat=self.beat,
+                player_data=self.player_data,
+                treasured_subject=self.treasured,
+                withdrawn_at__isnull=True,
+            ).exists()
+        )
+        joined = " ".join(messages)
+        self.assertIn("Signed off", joined)
+
+    def test_signoff_grants_by_subject_id(self) -> None:
+        from world.stories.models import TreasuredSignoff
+
+        self._run(f"signoff {self.beat.pk} {self.treasured.pk}")
+
+        self.assertTrue(
+            TreasuredSignoff.objects.filter(
+                beat=self.beat,
+                player_data=self.player_data,
+                treasured_subject=self.treasured,
+                withdrawn_at__isnull=True,
+            ).exists()
+        )
+
+    def test_signoff_unknown_subject_errors(self) -> None:
+        messages = self._run(f"signoff {self.beat.pk} Nonexistent Thing")
+        joined = " ".join(messages)
+        self.assertIn("no pending sign-off", joined.lower())
+
+    def test_signoff_withdraw_reopens_the_gate(self) -> None:
+        from world.stories.models import TreasuredSignoff
+        from world.stories.services.boundaries import grant_treasured_signoff
+
+        grant_treasured_signoff(self.beat, self.player_data, self.treasured)
+
+        messages = self._run(f"signoff {self.beat.pk} Signet Ring withdraw")
+
+        signoff = TreasuredSignoff.objects.get(
+            beat=self.beat, player_data=self.player_data, treasured_subject=self.treasured
+        )
+        self.assertIsNotNone(signoff.withdrawn_at)
+        joined = " ".join(messages)
+        self.assertIn("Withdrawn", joined)
+
+    def test_signoff_withdraw_unknown_active_signoff_errors(self) -> None:
+        messages = self._run(f"signoff {self.beat.pk} Signet Ring withdraw")
+        joined = " ".join(messages)
+        self.assertIn("no active sign-off", joined.lower())
