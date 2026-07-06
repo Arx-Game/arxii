@@ -21,6 +21,7 @@ from world.societies.exceptions import (
     NotAGenericOrganizationError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
+    NotAuthorizedToLeadOrgRitualError,
     NotAuthorizedToManageOrganizationError,
     NotAuthorizedToManageRanksError,
     NotOrganizationMemberError,
@@ -31,6 +32,7 @@ from world.societies.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from world.magic.models.sessions import RitualSession
     from world.scenes.models import Persona
     from world.societies.models import (
         Organization,
@@ -377,3 +379,62 @@ def expel_member(
     target_membership.exiled_at = timezone.now()
     target_membership.left_at = timezone.now()
     target_membership.save(update_fields=["exiled_at", "left_at"])
+
+
+def assert_initiator_can_lead_org_ritual(*, session: RitualSession) -> None:
+    """Draft-time gate for the generic org-induction ritual: the initiator must hold
+    a can_lead_rituals rank in the target organization. Dispatched via
+    Ritual.draft_validator_path from draft_session. Mirrors
+    world.covenants.services.assert_initiator_can_induct, but keys on
+    can_lead_rituals (ceremony-leadership authority) rather than can_invite
+    (plain-invite authority) — these are deliberately distinct authorities for
+    generic orgs (#1868).
+    """
+    from world.magic.constants import ReferenceKind  # noqa: PLC0415
+    from world.magic.exceptions import SessionTargetMissingError  # noqa: PLC0415
+
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.ORGANIZATION,
+    ).first()
+    if target_ref is None or target_ref.ref_organization is None:
+        raise SessionTargetMissingError
+    organization = target_ref.ref_organization
+
+    _assert_generic_organization(organization)
+
+    initiator_persona = session.initiator.primary_persona
+    actor_membership = active_membership_for_persona(organization, initiator_persona)
+    if actor_membership is None or not actor_membership.rank.can_lead_rituals:
+        raise NotAuthorizedToLeadOrgRitualError
+
+
+def induct_organization_member_via_session(*, session: RitualSession) -> OrganizationMembership:
+    """Dispatched on fire of the generic org-induction ritual. Unpacks the session
+    into join_organization args.
+
+    Walks the session-level ORGANIZATION reference to get the target organization,
+    then finds the candidate — the one ACCEPTED participant who isn't the initiator
+    (guaranteed unique: the ritual's participation_rule is BILATERAL, which requires
+    exactly 2 accepted participants to fire). Reuses join_organization unchanged —
+    every one of its existing failure modes (AlreadyOrganizationMemberError,
+    InvalidOrganizationPersonaError, OrganizationMemberBlockError) applies here too.
+    """
+    from world.magic.constants import ParticipantState, ReferenceKind  # noqa: PLC0415
+    from world.magic.exceptions import SessionTargetMissingError  # noqa: PLC0415
+
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.ORGANIZATION,
+    ).first()
+    if target_ref is None or target_ref.ref_organization is None:
+        raise SessionTargetMissingError
+    organization = target_ref.ref_organization
+
+    candidate_sheet = None
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        if p.character_sheet_id != session.initiator_id:
+            candidate_sheet = p.character_sheet
+            break
+
+    return join_organization(organization, candidate_sheet.primary_persona)
