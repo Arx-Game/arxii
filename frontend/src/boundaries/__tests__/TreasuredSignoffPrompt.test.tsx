@@ -35,6 +35,13 @@ const SUBJECT_UNSIGNED = {
 
 const SUBJECT_SIGNED = { ...SUBJECT_UNSIGNED, id: 11, subject_label: 'The old windmill' };
 
+const SUBJECT_SIGNET_RING = { ...SUBJECT_UNSIGNED, id: 1, subject_label: 'Signet Ring' };
+const SUBJECT_COUSIN_ROWAN = {
+  ...SUBJECT_UNSIGNED,
+  id: 2,
+  subject_label: 'Bond with Cousin Rowan',
+};
+
 const ACTIVE_SIGNOFF_FOR_11 = {
   id: 99,
   beat: 5,
@@ -167,5 +174,69 @@ describe('TreasuredSignoffPrompt', () => {
     await userEvent.click(button);
 
     expect(withdrawMutate).toHaveBeenCalledWith({ id: 99, beat: 5 });
+  });
+
+  it('narrows to only pendingSubjectIds when provided', async () => {
+    mockMutations();
+    vi.mocked(queries.useTreasuredSubjects).mockReturnValue({
+      data: { count: 2, results: [SUBJECT_SIGNET_RING, SUBJECT_COUSIN_ROWAN] },
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    vi.mocked(queries.useTreasuredSignoffs).mockReturnValue({
+      data: { count: 0, results: [] },
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    renderWithProviders(
+      <TreasuredSignoffPrompt beatId={42} tenureId={7} pendingSubjectIds={[1]} />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Signet Ring')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Bond with Cousin Rowan')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing when pendingSubjectIds is an empty array', () => {
+    mockMutations();
+    vi.mocked(queries.useTreasuredSubjects).mockReturnValue({
+      data: { count: 1, results: [SUBJECT_SIGNET_RING] },
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    vi.mocked(queries.useTreasuredSignoffs).mockReturnValue({
+      data: { count: 0, results: [] },
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    const { container } = renderWithProviders(
+      <TreasuredSignoffPrompt beatId={42} tenureId={7} pendingSubjectIds={[]} />
+    );
+
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('shows every subject when pendingSubjectIds is omitted (existing behavior)', async () => {
+    mockMutations();
+    vi.mocked(queries.useTreasuredSubjects).mockReturnValue({
+      data: { count: 2, results: [SUBJECT_SIGNET_RING, SUBJECT_COUSIN_ROWAN] },
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    vi.mocked(queries.useTreasuredSignoffs).mockReturnValue({
+      data: { count: 0, results: [] },
+      isLoading: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    renderWithProviders(<TreasuredSignoffPrompt beatId={42} tenureId={7} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Signet Ring')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Bond with Cousin Rowan')).toBeInTheDocument();
   });
 });
