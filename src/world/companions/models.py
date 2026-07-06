@@ -7,12 +7,14 @@ Companion (added in Task 2) is the per-PC bound instance.
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.combat.constants import OpponentTier
-from world.companions.constants import CompanionDomain
+from world.companions.constants import CompanionAbilityKind, CompanionDomain, CompanionOrderKind
 
 
 class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
@@ -67,6 +69,103 @@ class CompanionArchetype(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class CompanionAbility(NaturalKeyMixin, SharedMemoryModel):
+    """Staff-authored ability a companion archetype can perform (#1921).
+
+    ATTACK abilities carry damage stats (mirroring ThreatPoolEntry columns).
+    UTILITY abilities grant a Property (e.g. FLYING) for the round.
+    ATTACK abilities link to a Technique for battle-scale resolution.
+    """
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    archetype = models.ForeignKey(
+        CompanionArchetype,
+        on_delete=models.CASCADE,
+        related_name="abilities",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    ability_kind = models.CharField(
+        max_length=10,
+        choices=CompanionAbilityKind.choices,
+        default=CompanionAbilityKind.ATTACK,
+    )
+    # Attack fields (inert when UTILITY)
+    attack_category = models.CharField(
+        max_length=20,
+        choices=ActionCategory.choices,
+        blank=True,
+        default="",
+    )
+    base_damage = models.PositiveIntegerField(default=0)
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="companion_abilities",
+    )
+    conditions_applied = models.ManyToManyField(
+        "conditions.ConditionTemplate",
+        blank=True,
+        related_name="companion_abilities",
+    )
+    effect_properties = models.ManyToManyField(
+        "mechanics.Property",
+        blank=True,
+        related_name="companion_abilities",
+    )
+    # Utility fields (inert when ATTACK)
+    grants_property = models.ForeignKey(
+        "mechanics.Property",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="granted_by_companion_abilities",
+    )
+    # Battle-scale bridge: the Technique this ability resolves as
+    technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="companion_abilities",
+    )
+    weight = models.PositiveIntegerField(
+        default=10,
+        help_text="Selection weight when auto-attacking (no order).",
+    )
+
+    class Meta:
+        ordering = ["archetype", "name"]
+        verbose_name = "Companion Ability"
+        verbose_name_plural = "Companion Abilities"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["archetype", "name"],
+                name="unique_ability_per_archetype",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.archetype.name})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.ability_kind == CompanionAbilityKind.ATTACK:
+            if not self.attack_category:
+                msg = "ATTACK abilities must set attack_category."
+                raise ValidationError(msg)
+        elif self.ability_kind == CompanionAbilityKind.UTILITY:
+            if self.grants_property is None:
+                msg = "UTILITY abilities must set grants_property."
+                raise ValidationError(msg)
 
 
 class Companion(SharedMemoryModel):
@@ -149,3 +248,97 @@ class CompanionDeployment(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Deployment of companion {self.companion_id} into battle {self.battle_id}"
+
+
+class CompanionOrder(SharedMemoryModel):
+    """Round-scoped directive linking a companion to its order (#1921).
+
+    One order per companion per round per scale (duel/battle).
+    The round-tick reads this to override auto-selected behavior.
+    """
+
+    companion = models.ForeignKey(
+        Companion,
+        on_delete=models.CASCADE,
+        related_name="orders",
+    )
+    encounter = models.ForeignKey(
+        "combat.CombatEncounter",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="companion_orders",
+    )
+    battle = models.ForeignKey(
+        "battles.Battle",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="companion_orders",
+    )
+    round_number = models.PositiveIntegerField()
+    order_kind = models.CharField(
+        max_length=20,
+        choices=CompanionOrderKind.choices,
+    )
+    ability = models.ForeignKey(
+        CompanionAbility,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
+    )
+    target_opponent = models.ForeignKey(
+        "combat.CombatOpponent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    target_unit = models.ForeignKey(
+        "battles.BattleUnit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    defending_participant = models.ForeignKey(
+        "combat.CombatParticipant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    target_ally = models.ForeignKey(
+        "battles.BattleParticipant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["companion", "encounter", "round_number"],
+                name="unique_order_per_companion_per_duel_round",
+            ),
+            models.UniqueConstraint(
+                fields=["companion", "battle", "round_number"],
+                name="unique_order_per_companion_per_battle_round",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.companion.name} R{self.round_number}: {self.get_order_kind_display()}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.encounter is None and self.battle is None:
+            msg = "CompanionOrder requires either an encounter or a battle."
+            raise ValidationError(msg)
+        if self.encounter is not None and self.battle is not None:
+            msg = "CompanionOrder cannot have both an encounter and a battle."
+            raise ValidationError(msg)

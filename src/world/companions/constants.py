@@ -19,3 +19,18 @@ class CompanionDomain(models.TextChoices):
     ELEMENTAL = "ELEMENTAL", "Elemental"
     CONSTRUCT = "CONSTRUCT", "Construct"
     SPIRIT = "SPIRIT", "Spirit"
+
+
+class CompanionAbilityKind(models.TextChoices):
+    """Discriminator for what kind of ability a CompanionAbility is (#1921)."""
+
+    ATTACK = "attack", "Attack"
+    UTILITY = "utility", "Utility"
+
+
+class CompanionOrderKind(models.TextChoices):
+    """What a player orders their companion to do this round (#1921)."""
+
+    ATTACK_TARGET = "attack_target", "Attack Target"
+    HOLD = "hold", "Hold"
+    DEFEND_ALLY = "defend_ally", "Defend Ally"
