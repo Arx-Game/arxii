@@ -20,6 +20,7 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    OrderCompanionAction,
     ReleaseCompanionAction,
 )
 from world.companions.filters import CompanionFilterSet
@@ -28,6 +29,7 @@ from world.companions.serializers import (
     BindActionSerializer,
     CompanionArchetypeSerializer,
     CompanionSerializer,
+    OrderActionSerializer,
 )
 from world.magic.views_actor import PuppetActorMixin
 
@@ -162,6 +164,32 @@ class CompanionViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
                 {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
             )
         result = DeployCompanionAction().run(actor=actor, companion_id=companion.pk)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data)
+
+    @action(detail=True, methods=["post"], url_path="order")
+    def order(self, request, pk=None):
+        """Order a deployed companion — ``POST /api/companions/companions/{id}/order/``.
+
+        Wraps :class:`actions.definitions.companions.OrderCompanionAction` (#1921).
+        """
+        serializer = OrderActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        companion = self.get_object()
+        actor = self._resolve_actor(request)
+        if actor is None:
+            return Response(
+                {"detail": NO_ACTIVE_CHARACTER_DETAIL}, status=status.HTTP_400_BAD_REQUEST
+            )
+        result = OrderCompanionAction().run(
+            actor=actor,
+            companion_id=companion.pk,
+            order_kind=serializer.validated_data["order_kind"],
+            target_id=serializer.validated_data.get("target_id"),
+            ability_id=serializer.validated_data.get("ability_id"),
+            ally_id=serializer.validated_data.get("ally_id"),
+        )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(result.data)
