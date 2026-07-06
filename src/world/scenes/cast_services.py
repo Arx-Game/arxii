@@ -116,15 +116,15 @@ def _resolve_cast(  # noqa: PLR0913 - cohesive cast-resolution params
     if no fury).
     """
     from world.magic.services import use_technique  # noqa: PLC0415
-    from world.magic.services.anima import get_character_cast_check  # noqa: PLC0415
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.cast_threads import applicable_threads_for_cast  # noqa: PLC0415
 
     action_template = technique.action_template
     context = ResolutionContext(character=character, target=target)
 
-    # The cast rolls the CASTER'S personal magic check (their anima-ritual check);
-    # falls back to the template's own check (None) when no ritual is provisioned.
-    cast_check = get_character_cast_check(character)
+    # The cast rolls the CASTER'S personal magic check, falling back to the
+    # template's own check — the shared rule every cast path uses (ADR-0095).
+    cast_check = resolve_cast_check_type(character, action_template)
 
     from world.magic.services.fury import run_fury_for_action  # noqa: PLC0415
 
