@@ -2473,46 +2473,116 @@ class TreasuredSignoff(SharedMemoryModel):
         return f"TreasuredSignoff(beat={self.beat_id}, player={self.player_data_id}, {status})"
 
 
-class StoryNPCDependency(SharedMemoryModel):
-    """Declares that an NPC is load-bearing for a story.
+class StoryProtectedSubject(SharedMemoryModel):
+    """Declares that a story asset (NPC, item, faction, or freeform subject) is
+    load-bearing for a story and gets GM-authorable custody protection (#2001).
 
-    When active, the NPC is structurally protected from death by actors
-    external to the story. See ``is_death_prevented_by_story`` in
+    Replaces ``StoryNPCDependency`` — generalizes beyond NPCs to the full
+    ``StakeSubjectKind`` vocabulary (item/faction/location/campaign-track/custom),
+    reusing the same typed-subject-FK shape as ``Stake``. For the NPC case, when
+    active, the NPC is structurally protected from death by actors external to
+    the story. See ``is_death_prevented_by_story`` in
     ``world.stories.npc_protection``.
     """
 
     story = models.ForeignKey(
         Story,
         on_delete=models.CASCADE,
-        related_name="npc_dependencies",
+        related_name="protected_subjects",
     )
-    npc_sheet = models.ForeignKey(
+    subject_kind = models.CharField(max_length=20, choices=StakeSubjectKind.choices)
+    # Typed subject pointers mirror Stake field-for-field: a protected subject
+    # is story-significant data, so all four are SET_NULL (never CASCADE) —
+    # deleting the underlying subject must not erase the protection record.
+    subject_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
-        on_delete=models.CASCADE,
-        related_name="story_dependencies",
-        help_text="The NPC character that is load-bearing for this story.",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted.",
+    )
+    subject_item = models.ForeignKey(
+        "items.ItemInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For ITEM subjects. Nulls if the item instance is deleted/consumed.",
+    )
+    subject_society = models.ForeignKey(
+        "societies.Society",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For FACTION subjects (society-level). Nulls if the society is deleted.",
+    )
+    subject_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For FACTION subjects (organization-level). Nulls if the org is deleted.",
+    )
+    subject_label = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback).",
     )
     beat = models.ForeignKey(
         Beat,
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
-        related_name="npc_dependencies",
+        on_delete=models.SET_NULL,
+        related_name="protected_subjects",
         help_text=(
             "For beat-level refinement: protection applies only while this "
-            "beat is unsatisfied. Null = story-level (whole arc)."
+            "beat is unsatisfied. Null = story-level (whole arc). SET_NULL "
+            "(not CASCADE) — a deleted beat must not silently erase the "
+            "protection; it degrades to story-level instead."
         ),
     )
     is_active = models.BooleanField(default=True)
-    notes = models.TextField(blank=True, help_text="GM notes on why this NPC is critical.")
+    notes = models.TextField(
+        blank=True,
+        help_text=(
+            "GM notes on why this subject is critical. GM-only; never serialized to outsiders."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["story", "npc_sheet"]
+        ordering = ["-created_at", "-pk"]
         indexes = [
-            models.Index(fields=["npc_sheet", "is_active"]),
+            models.Index(fields=["subject_sheet", "is_active"]),
         ]
+
+    def clean(self) -> None:
+        """Light exactly-one-subject check; the serializer (future task) enforces the
+        full rule the way ``Stake``'s serializer validates its subject fields."""
+        super().clean()
+        populated = [
+            name
+            for name, value in (
+                ("subject_sheet", self.subject_sheet_id),
+                ("subject_item", self.subject_item_id),
+                ("subject_society", self.subject_society_id),
+                ("subject_organization", self.subject_organization_id),
+                ("subject_label", self.subject_label or None),
+            )
+            if value
+        ]
+        if len(populated) != 1:
+            msg = (
+                "Exactly one of subject_sheet/subject_item/subject_society/"
+                f"subject_organization/subject_label must be set (found: {populated or 'none'})."
+            )
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         scope = f"beat #{self.beat_id}" if self.beat_id else "story-level"
-        return f"StoryNPCDependency(npc_sheet=#{self.npc_sheet_id}, {scope})"
+        subject = self.subject_label or self.pk
+        return f"StoryProtectedSubject({self.get_subject_kind_display()}: {subject}, {scope})"

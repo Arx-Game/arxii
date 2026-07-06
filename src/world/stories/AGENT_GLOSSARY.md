@@ -91,3 +91,18 @@ _Avoid_: consent check (that's the ADR-0024 social-consent app; a boundary is a 
 **Opt-in / Commit Step** (stakes):
 The moment a player commits to a staked scene and the contract activates (#1770 pillar 9): entering combat (duel creation, hostile-cast seed/feed — surfaced via `combat_stakes` on the consent prompt), accepting a risky mission (`MissionRiskAcknowledgement` + the `acknowledge_risk` two-phase inside `npc_resolve`), or a GM's room-visible `declare_stakes` action in freeform play. The summary shown at this step is the Stakes Summary above.
 _Avoid_: consent gate (see Boundary Check note), buy-in.
+
+**Protected Subject**:
+A `StoryProtectedSubject` row (#2001) declaring that a story asset — NPC, item,
+faction, or freeform subject — is load-bearing for a story and structurally
+guarded from actors external to that story. Generalizes the old
+`StoryNPCDependency` (NPC-only) to the full `StakeSubjectKind` vocabulary,
+reusing `Stake`'s typed-subject-FK shape (`subject_sheet`/`subject_item`/
+`subject_society`/`subject_organization`/`subject_label`, exactly one
+populated). Today only the NPC-fate death guard (`npc_protection.
+is_death_prevented_by_story`, flee mechanic) reads it; `CustodyScope`
+(APPEAR/HARM/REMOVE, weakest->strongest) and `CustodyClearanceStatus`
+(PENDING/GRANTED/DENIED/ESCALATED) are the vocabulary for the cross-GM
+clearance workflow that gates the other enforcement points (stake authoring,
+opponent spawning) — landing in follow-up work on #2001.
+_Avoid_: NPC dependency, load-bearing NPC (Protected Subject is the general term now).

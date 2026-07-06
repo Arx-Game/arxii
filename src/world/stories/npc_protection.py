@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.stories.constants import BeatOutcome
-from world.stories.models import StoryNPCDependency, StoryParticipation
+from world.stories.models import StoryParticipation, StoryProtectedSubject
 from world.stories.types import StoryStatus
 
 if TYPE_CHECKING:
@@ -24,10 +24,10 @@ def is_death_prevented_by_story(
 ) -> bool:
     """Return True if the NPC's death is prevented by story-criticality.
 
-    Checks all active ``StoryNPCDependency`` rows for the NPC. For each, verifies
-    whether the attacker is a participant in that story (via
-    ``StoryParticipation``). If ANY active dependency has a non-participant
-    attacker, death is prevented.
+    Checks all active ``StoryProtectedSubject`` rows for the NPC (matched via
+    ``subject_sheet``). For each, verifies whether the attacker is a
+    participant in that story (via ``StoryParticipation``). If ANY active
+    dependency has a non-participant attacker, death is prevented.
 
     Returns False (death permitted) when:
     - No active dependencies exist for this NPC.
@@ -52,8 +52,8 @@ def is_death_prevented_by_story(
         True if death is prevented, False if permitted.
     """
     deps = list(
-        StoryNPCDependency.objects.filter(
-            npc_sheet=npc_sheet,
+        StoryProtectedSubject.objects.filter(
+            subject_sheet=npc_sheet,
             is_active=True,
         ).select_related("story", "beat")
     )

@@ -24,9 +24,9 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
-    StoryNPCDependency,
     StoryParticipation,
     StoryProgress,
+    StoryProtectedSubject,
     StoryTrustRequirement,
     TableBulletinPost,
     TableBulletinReply,
@@ -37,14 +37,31 @@ from world.stories.models import (
 )
 
 
-class StoryNPCDependencyInline(admin.TabularInline):
-    """Inline for declaring story-critical NPCs on a story (#1874)."""
+class StoryProtectedSubjectInline(admin.TabularInline):
+    """Inline for declaring story-critical protected subjects on a story (#2001)."""
 
-    model = StoryNPCDependency
+    model = StoryProtectedSubject
     extra = 1
-    fields = ("npc_sheet", "beat", "is_active", "notes", "created_at")
+    fields = (
+        "subject_kind",
+        "subject_sheet",
+        "subject_item",
+        "subject_society",
+        "subject_organization",
+        "subject_label",
+        "beat",
+        "is_active",
+        "notes",
+        "created_at",
+    )
     readonly_fields = ("created_at",)
-    raw_id_fields = ("npc_sheet", "beat")
+    raw_id_fields = (
+        "subject_sheet",
+        "subject_item",
+        "subject_society",
+        "subject_organization",
+        "beat",
+    )
 
 
 @admin.register(Story)
@@ -62,7 +79,7 @@ class StoryAdmin(admin.ModelAdmin):
     search_fields = ["title", "description"]
     filter_horizontal = ["owners", "active_gms"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [StoryNPCDependencyInline]
+    inlines = [StoryProtectedSubjectInline]
 
     fieldsets = (
         (None, {"fields": ("title", "description", "status", "privacy", "scope")}),

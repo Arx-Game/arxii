@@ -7,9 +7,8 @@ from typeclasses.rooms import Room
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import OpponentStatus
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
-from world.stories.factories import StoryFactory
+from world.stories.factories import StoryFactory, StoryProtectedSubjectFactory
 from world.stories.flee_services import flee_story_critical_npc
-from world.stories.models import StoryNPCDependency
 from world.stories.types import StoryStatus
 
 
@@ -40,20 +39,20 @@ class FleeStoryCriticalNPCTests(TestCase):
         self.story = StoryFactory(status=StoryStatus.ACTIVE)
 
     def test_flee_sets_fled_status(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         flee_story_critical_npc(self.opponent, self.attacker_obj)
         self.opponent.refresh_from_db()
         self.assertEqual(self.opponent.status, OpponentStatus.FLED)
         self.assertGreater(self.opponent.health, 0)
 
     def test_flee_moves_npc_out_of_room(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         flee_story_critical_npc(self.opponent, self.attacker_obj)
         self.npc_obj.refresh_from_db()
         self.assertNotEqual(self.npc_obj.db_location_id, self.room.pk)
 
     def test_flee_floors_health_at_one(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         self.opponent.health = -100
         self.opponent.save(update_fields=["health"])
         flee_story_critical_npc(self.opponent, self.attacker_obj)
@@ -61,7 +60,7 @@ class FleeStoryCriticalNPCTests(TestCase):
         self.assertEqual(self.opponent.health, 1)
 
     def test_flee_no_attacker_still_flees(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         flee_story_critical_npc(self.opponent, None)
         self.opponent.refresh_from_db()
         self.assertEqual(self.opponent.status, OpponentStatus.FLED)

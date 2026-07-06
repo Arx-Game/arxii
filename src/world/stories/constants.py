@@ -242,3 +242,43 @@ DEFAULT_RISK_CALIBRATIONS: Mapping[str, dict[str, int]] = types.MappingProxyType
         },
     }
 )
+
+
+class CustodyScope(models.TextChoices):
+    """How far a StoryProtectedSubject's custody protection reaches (#2001).
+
+    Ordered weakest->strongest, mirroring RISK_LADDER: APPEAR only guarantees
+    the subject can still appear in scenes; HARM additionally blocks
+    non-participant harm; REMOVE additionally blocks removal from play
+    (death/destruction/disbandment) — the strongest guarantee.
+    """
+
+    APPEAR = "appear", "Guaranteed appearance"
+    HARM = "harm", "Protected from harm"
+    REMOVE = "remove", "Protected from removal"
+
+
+# Custody scope ladder for comparisons (index order matters, weakest->strongest).
+CUSTODY_SCOPE_ORDER: tuple[str, ...] = (
+    CustodyScope.APPEAR,
+    CustodyScope.HARM,
+    CustodyScope.REMOVE,
+)
+
+
+def custody_scope_index(scope: str) -> int:
+    """Position of a CustodyScope value on the weakest->strongest ladder."""
+    return CUSTODY_SCOPE_ORDER.index(scope)
+
+
+class CustodyClearanceStatus(models.TextChoices):
+    """Lifecycle of a GM clearance request to act against a protected subject.
+
+    Used by Task 3 (clearance requests); defined here alongside CustodyScope
+    since both are the custody domain's shared vocabulary.
+    """
+
+    PENDING = "pending", "Pending"
+    GRANTED = "granted", "Granted"
+    DENIED = "denied", "Denied"
+    ESCALATED = "escalated", "Escalated"

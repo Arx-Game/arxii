@@ -1127,7 +1127,6 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
-  - story_dependencies <- stories.StoryNPCDependency
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
   - purse <- currency.CharacterPurse
@@ -5414,7 +5413,7 @@
   - notes <- stories.StoryNote
   - gm_offers <- stories.StoryGMOffer
   - bulletin_posts <- stories.TableBulletinPost
-  - npc_dependencies <- stories.StoryNPCDependency
+  - protected_subjects <- stories.StoryProtectedSubject
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
@@ -5526,7 +5525,7 @@
   - stakes <- stories.Stake
   - stake_activations <- stories.StakeContractActivation
   - treasured_signoffs <- stories.TreasuredSignoff
-  - npc_dependencies <- stories.StoryNPCDependency
+  - protected_subjects <- stories.StoryProtectedSubject
   - resolving_encounters <- combat.CombatEncounter
 
 ### EpisodeProgressionRequirement
@@ -5678,10 +5677,13 @@
   - player_data -> evennia_extensions.PlayerData [FK]
   - treasured_subject -> boundaries.TreasuredSubject [FK]
 
-### StoryNPCDependency
+### StoryProtectedSubject
 **Foreign Keys:**
   - story -> stories.Story [FK]
-  - npc_sheet -> character_sheets.CharacterSheet [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - subject_item -> items.ItemInstance [FK] (nullable)
+  - subject_society -> societies.Society [FK] (nullable)
+  - subject_organization -> societies.Organization [FK] (nullable)
   - beat -> stories.Beat [FK] (nullable)
 
 

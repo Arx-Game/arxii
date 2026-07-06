@@ -51,6 +51,7 @@ from world.stories.models import (
     StoryNote,
     StoryParticipation,
     StoryProgress,
+    StoryProtectedSubject,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -654,6 +655,20 @@ class TreasuredSignoffFactory(factory_django.DjangoModelFactory):
     player_data = factory.SubFactory(PlayerDataFactory)
     treasured_subject = factory.SubFactory(TreasuredSubjectFactory)
     withdrawn_at = None
+
+
+class StoryProtectedSubjectFactory(factory_django.DjangoModelFactory):
+    """Defaults to the NPC-fate case (#2001) — mirrors the old StoryNPCDependency shape."""
+
+    class Meta:
+        model = StoryProtectedSubject
+
+    story = factory.SubFactory(StoryFactory)
+    subject_kind = StakeSubjectKind.NPC_FATE
+    subject_sheet = factory.SubFactory(CharacterSheetFactory)
+    beat = None
+    is_active = True
+    notes = ""
 
 
 # Convenience functions for common test scenarios
