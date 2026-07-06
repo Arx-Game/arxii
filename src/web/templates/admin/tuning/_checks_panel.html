@@ -1,5 +1,19 @@
 {% load i18n %}
 <style>
+  #panel-checks {
+    /* Django admin ships no "success" foreground var, so define the shade the
+       bar/table needs locally, following the same light/dark toggle mechanism
+       as admin's own dark_mode.css (media query + html[data-theme] override). */
+    --tuning-success: #2e7d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    #panel-checks {
+      --tuning-success: #66bb6a;
+    }
+  }
+  html[data-theme="dark"] #panel-checks {
+    --tuning-success: #66bb6a;
+  }
   #panel-checks .tuning-form {
     display: flex;
     flex-wrap: wrap;
@@ -41,7 +55,7 @@
     height: 100%;
   }
   #panel-checks .bar-success {
-    background: #2e7d32;
+    background: var(--tuning-success);
   }
   #panel-checks .bar-failure {
     background: var(--error-fg);
@@ -110,7 +124,7 @@
     {% for dist in distributions %}
     <tr>
       <td>{{ dist.chart_name }} ({{ dist.rank_difference }})</td>
-      <td>{{ dist.success_probability|floatformat:1 }}%</td>
+      <td class="success-probability-cell">{% widthratio dist.success_probability 1 100 %}%</td>
       <td>{{ dist.expected_success_level|floatformat:2 }}</td>
       <td>
         <div class="stacked-bar" role="img"
@@ -145,7 +159,7 @@
 {% if matchup %}
 <p>
   {{ matchup.chart_name }} (rank difference {{ matchup.rank_difference }}) &mdash;
-  {% translate "success" %} {{ matchup.success_probability|floatformat:1 }}%,
+  {% translate "success" %} <span class="success-probability-cell">{% widthratio matchup.success_probability 1 100 %}%</span>,
   {% translate "expected SL" %} {{ matchup.expected_success_level|floatformat:2 }}
 </p>
 <div class="stacked-bar" role="img" aria-label="{{ matchup.chart_name }} matchup distribution">

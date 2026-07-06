@@ -129,6 +129,36 @@ class ComputeChartDistributionsTests(TestCase):
         assert matchup.rank_difference == 1
         assert matchup.chart_name == self.chart_hard.name
 
+    def test_matchup_fallback_chart_reports_derived_rank_difference_not_charts_own(
+        self,
+    ) -> None:
+        # No chart is seeded at rank_difference exactly +1, so
+        # `ResultChart.get_chart_for_difference` falls back to the nearest
+        # seeded chart. `chart_hard` (rank_difference=1) from setUpTestData
+        # would make this fallback invisible, so build a fresh, isolated set
+        # of charts: only -2 and +2 exist, and the matchup derives +1 -> the
+        # nearer chart (+2) is selected. The returned rank_difference must be
+        # the *derived* 1, not the fallback chart's own field value of 2.
+        ResultChart.objects.all().delete()
+        ResultChart.clear_cache()
+        minus_two = ResultChartFactory(rank_difference=-2, name="Minus2")
+        plus_two = ResultChartFactory(rank_difference=2, name="Plus2")
+        for chart in (minus_two, plus_two):
+            ResultChartOutcomeFactory(chart=chart, outcome=self.failure, min_roll=1, max_roll=50)
+            ResultChartOutcomeFactory(chart=chart, outcome=self.success, min_roll=51, max_roll=100)
+
+        CheckRankFactory(rank=0, min_points=0, name="Incompetent")
+        CheckRankFactory(rank=1, min_points=10, name="Novice")
+
+        # roller rank 1, target rank 0 -> derived rank_difference = 1, which
+        # has no exact chart -> falls back to the nearer chart, +2 (distance 1
+        # vs. distance 3 for -2).
+        matchup = compute_matchup(roller_points=15, target_difficulty=0, roll_modifier=0)
+
+        assert matchup is not None
+        assert matchup.rank_difference == 1
+        assert matchup.chart_name == plus_two.name
+
 
 class ComputeMatchupNoChartsTests(TestCase):
     """No ResultChart rows exist at all — the lookup has nothing to return."""
@@ -172,7 +202,13 @@ class TuningChecksFragmentViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         assert "Even" in body
-        assert "50.0%" in body or "50%" in body
+        # Unambiguous check on the table's success-probability cell: the chart
+        # is a clean 50/50 split, so the true percentage is "50%". Before the
+        # fix, the 0.0-1.0 fraction was piped through floatformat:1 directly
+        # (`{{ dist.success_probability|floatformat:1 }}%`), rendering "0.5%"
+        # for this exact chart — that string would fail this assertion.
+        assert '<td class="success-probability-cell">50%</td>' in body
+        assert "0.5%" not in body
         assert 'name="roll_modifier"' in body
         assert 'name="roller_points"' in body
         assert 'name="target_difficulty"' in body

@@ -12,7 +12,7 @@ specific roller/target pair" sub-panel mirrors production exactly.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.db.models import Prefetch
 
@@ -32,7 +32,13 @@ class OutcomeBand:
 
 @dataclass(frozen=True)
 class ChartDistribution:
-    """Full probability breakdown for one `ResultChart` under a given roll_modifier."""
+    """Full probability breakdown for one `ResultChart` under a given roll_modifier.
+
+    `rank_difference` is the chart's own field in `compute_chart_distributions`
+    results, but is the *derived* roller-minus-target rank difference in
+    `compute_matchup` results (which can differ from `chart_name`'s chart when
+    `ResultChart.get_chart_for_difference` falls back to the nearest chart).
+    """
 
     rank_difference: int
     chart_name: str
@@ -109,8 +115,14 @@ def compute_matchup(
     """Single-chart distribution for a specific roller-points/target-difficulty matchup.
 
     Derives rank_difference exactly as `_compute_check_breakdown` does: a missing
-    rank (roller or target below every `CheckRank.min_points`) contributes 0.
-    Returns `None` only when no `ResultChart` exists at all.
+    rank (roller or target below every `CheckRank.min_points`) contributes 0. The
+    *returned* `rank_difference` is always this derived roller-minus-target value —
+    even when `ResultChart.get_chart_for_difference` falls back to the nearest
+    seeded chart because there's no exact match, the derived difference (not the
+    fallback chart's own `rank_difference` field) is what's reported, so the UI
+    reflects the true matchup. `chart_name` still names the fallback-selected
+    chart, so the fallback itself stays visible. Returns `None` only when no
+    `ResultChart` exists at all.
     """
     roller_rank = CheckRank.get_rank_for_points(roller_points)
     target_rank = CheckRank.get_rank_for_points(target_difficulty)
@@ -126,4 +138,8 @@ def compute_matchup(
         .select_related("outcome")
         .order_by("min_roll")
     )
-    return _distribution_for_chart(chart, outcome_rows, roll_modifier=roll_modifier)
+    distribution = _distribution_for_chart(chart, outcome_rows, roll_modifier=roll_modifier)
+    # `_distribution_for_chart` stamps the *chart's own* rank_difference field,
+    # which is only correct on an exact match. Override with the derived value
+    # so a fallback chart's rank_difference doesn't leak into the result.
+    return replace(distribution, rank_difference=rank_difference)
