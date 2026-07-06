@@ -25536,10 +25536,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     PatchedStakeRequest: {
@@ -28511,10 +28512,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     Stake: {
@@ -28594,10 +28596,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     StakeRequest: {
