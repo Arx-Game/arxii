@@ -327,3 +327,112 @@ class RenameOutfitActionTests(TestCase):
         assert result.success
         outfit.refresh_from_db()
         assert outfit.name == "New Name"
+
+
+class DeleteOutfitActionTests(TestCase):
+    def test_delete_outfit_requires_ownership(self):
+        from actions.definitions.outfits import DeleteOutfitAction
+
+        room = ObjectDBFactory(
+            db_key="DeleteOutfitRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="delete_outfit_account")
+        actor = CharacterFactory(db_key="DeleteOutfitAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        CharacterSheetFactory(character=actor)
+
+        other_account = AccountFactory(username="delete_outfit_other_account")
+        other = CharacterFactory(db_key="DeleteOutfitBob", location=room)
+        other.db_account = other_account
+        other.save()
+        other_sheet = CharacterSheetFactory(character=other)
+        wardrobe_template = ItemTemplateFactory(
+            name="DeleteOutfitWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=other_sheet
+        )
+        outfit = OutfitFactory(character_sheet=other_sheet, wardrobe=wardrobe, name="Old")
+
+        result = DeleteOutfitAction().run(actor=actor, outfit=outfit)
+        assert not result.success
+
+
+class AddOutfitSlotActionTests(TestCase):
+    def test_add_outfit_slot_requires_ownership(self):
+        from actions.definitions.outfits import AddOutfitSlotAction
+
+        room = ObjectDBFactory(
+            db_key="AddOutfitSlotRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="add_outfit_slot_account")
+        actor = CharacterFactory(db_key="AddOutfitSlotAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        CharacterSheetFactory(character=actor)
+
+        other_account = AccountFactory(username="add_outfit_slot_other_account")
+        other = CharacterFactory(db_key="AddOutfitSlotBob", location=room)
+        other.db_account = other_account
+        other.save()
+        other_sheet = CharacterSheetFactory(character=other)
+        wardrobe_template = ItemTemplateFactory(
+            name="AddOutfitSlotWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=other_sheet
+        )
+        outfit = OutfitFactory(character_sheet=other_sheet, wardrobe=wardrobe, name="Old")
+
+        shirt_template = ItemTemplateFactory(name="AddOutfitSlotShirt")
+        TemplateSlotFactory(
+            template=shirt_template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        shirt = ItemInstanceFactory(template=shirt_template, holder_character_sheet=other_sheet)
+
+        result = AddOutfitSlotAction().run(
+            actor=actor,
+            outfit=outfit,
+            item_instance=shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        assert not result.success
+
+
+class RemoveOutfitSlotActionTests(TestCase):
+    def test_remove_outfit_slot_requires_ownership(self):
+        from actions.definitions.outfits import RemoveOutfitSlotAction
+
+        room = ObjectDBFactory(
+            db_key="RemoveOutfitSlotRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="remove_outfit_slot_account")
+        actor = CharacterFactory(db_key="RemoveOutfitSlotAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        CharacterSheetFactory(character=actor)
+
+        other_account = AccountFactory(username="remove_outfit_slot_other_account")
+        other = CharacterFactory(db_key="RemoveOutfitSlotBob", location=room)
+        other.db_account = other_account
+        other.save()
+        other_sheet = CharacterSheetFactory(character=other)
+        wardrobe_template = ItemTemplateFactory(
+            name="RemoveOutfitSlotWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=other_sheet
+        )
+        outfit = OutfitFactory(character_sheet=other_sheet, wardrobe=wardrobe, name="Old")
+
+        result = RemoveOutfitSlotAction().run(
+            actor=actor,
+            outfit=outfit,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        assert not result.success

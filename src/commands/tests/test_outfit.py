@@ -73,3 +73,105 @@ class CmdOutfitTests(TestCase):
         caller = self._caller()
         messages = self._run(caller, "")
         assert any("outfit" in m.lower() for m in messages)
+
+    def test_outfit_rename_dispatches_rename_outfit_action(self):
+        caller = self._caller()
+        wardrobe_template = ItemTemplateFactory(
+            name="CmdOutfitRenameWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=caller.sheet_data
+        )
+        outfit = OutfitFactory(character_sheet=caller.sheet_data, wardrobe=wardrobe, name="Old")
+        with patch("commands.outfit.RenameOutfitAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Renamed.")
+            self._run(caller, f"rename {outfit.pk}=New Name")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["outfit"] == outfit
+        assert mocked.call_args.kwargs["name"] == "New Name"
+
+    def test_outfit_delete_dispatches_delete_outfit_action(self):
+        caller = self._caller()
+        wardrobe_template = ItemTemplateFactory(
+            name="CmdOutfitDeleteWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=caller.sheet_data
+        )
+        outfit = OutfitFactory(character_sheet=caller.sheet_data, wardrobe=wardrobe, name="Casual")
+        with patch("commands.outfit.DeleteOutfitAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Outfit deleted.")
+            self._run(caller, f"delete {outfit.pk}")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["outfit"] == outfit
+
+    def test_outfit_addslot_dispatches_add_outfit_slot_action(self):
+        caller = self._caller()
+        wardrobe_template = ItemTemplateFactory(
+            name="CmdOutfitAddSlotWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=caller.sheet_data
+        )
+        outfit = OutfitFactory(character_sheet=caller.sheet_data, wardrobe=wardrobe, name="Casual")
+        item_template = ItemTemplateFactory(name="CmdOutfitAddSlotShirt")
+        item_obj = ObjectDBFactory(
+            db_key="CmdOutfitAddSlotShirtObj",
+            db_typeclass_path="typeclasses.objects.Object",
+            location=caller,
+        )
+        item_instance = ItemInstanceFactory(
+            template=item_template,
+            holder_character_sheet=caller.sheet_data,
+            game_object=item_obj,
+        )
+        caller.search = MagicMock(return_value=item_obj)
+        with patch("commands.outfit.AddOutfitSlotAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Slot added.")
+            self._run(caller, f"addslot {outfit.pk} item={item_obj.id} region=torso layer=base")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["outfit"] == outfit
+        assert mocked.call_args.kwargs["item_instance"] == item_instance
+        assert mocked.call_args.kwargs["body_region"] == "torso"
+        assert mocked.call_args.kwargs["equipment_layer"] == "base"
+
+    def test_outfit_removeslot_dispatches_remove_outfit_slot_action(self):
+        caller = self._caller()
+        wardrobe_template = ItemTemplateFactory(
+            name="CmdOutfitRemoveSlotWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=caller.sheet_data
+        )
+        outfit = OutfitFactory(character_sheet=caller.sheet_data, wardrobe=wardrobe, name="Casual")
+        with patch("commands.outfit.RemoveOutfitSlotAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Slot removed.")
+            self._run(caller, f"removeslot {outfit.pk} region=torso layer=base")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["outfit"] == outfit
+        assert mocked.call_args.kwargs["body_region"] == "torso"
+        assert mocked.call_args.kwargs["equipment_layer"] == "base"
+
+    def test_outfit_undress_dispatches_undress_action(self):
+        caller = self._caller()
+        with patch("commands.outfit.UndressAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Undressed.")
+            self._run(caller, "undress")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["actor"] == caller
+
+    def test_outfit_present_dispatches_present_outfit_action(self):
+        caller = self._caller()
+        wardrobe_template = ItemTemplateFactory(
+            name="CmdOutfitPresentWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=caller.sheet_data
+        )
+        outfit = OutfitFactory(character_sheet=caller.sheet_data, wardrobe=wardrobe, name="Casual")
+        with patch("commands.outfit.PresentOutfitAction.run") as mocked:
+            mocked.return_value = ActionResult(success=True, message="Presented.")
+            self._run(caller, f"present {outfit.pk} event=42")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["outfit_id"] == outfit.pk
+        assert mocked.call_args.kwargs["event_id"] == 42

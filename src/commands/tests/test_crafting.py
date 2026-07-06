@@ -88,3 +88,33 @@ class CmdCraftTests(TestCase):
         caller, _, _ = self._make_caller_with_item()
         messages = self._run(caller, "bogus")
         assert any("Unknown" in m for m in messages)
+
+    def test_craft_style_dispatches_attach_style_action(self):
+        caller, item_obj, instance = self._make_caller_with_item()
+        from world.items.models import Style
+
+        style = Style.objects.create(name="CmdCraftSharp")
+        caller.search = MagicMock(return_value=item_obj)
+        with patch("commands.crafting.AttachStyleAction.run") as mocked:
+            from actions.types import ActionResult
+
+            mocked.return_value = ActionResult(success=True, message="Styled.")
+            self._run(caller, f"style {style.name} item={item_obj.id}")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["style"] == style
+        assert mocked.call_args.kwargs["item_instance"] == instance
+
+    def test_craft_quote_calls_build_crafting_quote(self):
+        caller, item_obj, _instance = self._make_caller_with_item()
+        from world.magic.models import Facet
+
+        facet = Facet.objects.create(name="CmdCraftQuoteGlow")
+        caller.search = MagicMock(return_value=item_obj)
+        fake_quote = MagicMock(costs="10 coppers", affordable=True, max_quality_tier="Fine")
+        with patch(
+            "world.items.crafting.services.build_crafting_quote", return_value=fake_quote
+        ) as mocked:
+            messages = self._run(caller, f"quote facet={facet.name} item={item_obj.id}")
+        mocked.assert_called_once()
+        assert mocked.call_args.kwargs["target"] == facet
+        assert any("Fine" in m for m in messages)
