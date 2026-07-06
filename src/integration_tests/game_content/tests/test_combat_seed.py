@@ -17,7 +17,12 @@ class SeedPenetrationContestTests(TestCase):
         # CheckType.DoesNotExist in an unseeded game).
         check_type = get_penetration_check_type()
         self.assertEqual(result.check_type, check_type)
-        self.assertEqual(check_type.traits.count(), 2)
+        # #1706: penetration = willpower + intellect + Melee Combat (skill leg).
+        self.assertEqual(check_type.traits.count(), 3)
+        self.assertEqual(
+            {t.trait.name for t in check_type.traits.all()},
+            {"willpower", "intellect", "Melee Combat"},
+        )
 
         # Factor ladder authored (4 rungs, bounce → overpenetration).
         self.assertEqual(PenetrationOutcomeFactor.objects.count(), 4)

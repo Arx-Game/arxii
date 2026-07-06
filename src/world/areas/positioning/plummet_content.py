@@ -192,8 +192,17 @@ def _ensure_catch_check_type() -> CheckType:
 
     A single shared check type — the fiction differs per capability, but the
     mechanical roll (split-second reaction) is the same, so no per-capability
-    CheckType is authored.
+    CheckType is authored. The single ``wits`` stat leg is the tenet-permitted
+    resist composition (#1706); idempotent ``get_or_create`` preserves any
+    existing staff weight edit. Shared by plummet-catch and interpose (both
+    ``get_or_create`` this row).
     """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckTypeTrait  # noqa: PLC0415
+    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
     category, _ = CheckCategory.objects.get_or_create(name="Exploration")
     obj, _ = CheckType.objects.get_or_create(
         name=CATCH_CHECK_TYPE_NAME,
@@ -201,6 +210,11 @@ def _ensure_catch_check_type() -> CheckType:
         defaults={
             "description": "A split-second reaction to arrest a falling body.",
         },
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=obj,
+        trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
+        defaults={"weight": Decimal("1.00")},
     )
     return obj
 

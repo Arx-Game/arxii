@@ -389,13 +389,26 @@ class ConsequencePoolChoiceAPITests(APITestCase):
         technique = Technique.objects.get(pk=resp.data["id"])
         self.assertEqual(technique.action_template_id, chosen.pk)
 
-    def test_author_without_pool_choice_uses_shared_default(self):
+    def test_author_without_pool_choice_uses_category_default(self):
+        """No pool choice: a physical technique routes to the combat 'Melee Attack'
+        template (#1706); a non-physical technique routes to the magic shared default."""
         from world.magic.seeds_cast import get_standalone_cast_template
 
+        # Physical → combat template.
         resp = self.client.post("/api/magic/techniques/author/", self._payload(), format="json")
         self.assertEqual(resp.status_code, 201, resp.data)
         technique = Technique.objects.get(pk=resp.data["id"])
-        self.assertEqual(technique.action_template_id, get_standalone_cast_template().pk)
+        self.assertEqual(technique.action_template.name, "Melee Attack")
+
+        # Non-physical → magic shared default.
+        mental_resp = self.client.post(
+            "/api/magic/techniques/author/",
+            self._payload(action_category="mental"),
+            format="json",
+        )
+        self.assertEqual(mental_resp.status_code, 201, mental_resp.data)
+        mental_technique = Technique.objects.get(pk=mental_resp.data["id"])
+        self.assertEqual(mental_technique.action_template_id, get_standalone_cast_template().pk)
 
     def test_author_with_invalid_pool_id_returns_400(self):
         resp = self.client.post(

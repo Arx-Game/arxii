@@ -1270,12 +1270,12 @@ class FinalizeMagicDataCantripTests(TestCase):
         self.assertEqual(technique.action_template_id, chosen.pk)
 
     def test_technique_falls_back_to_default_on_invalid_pool_id(self) -> None:
-        """A stale/invalid selected_consequence_pool_id degrades to the shared
-        default rather than crashing finalization (mirrors the resonance fallback)."""
+        """A stale/invalid selected_consequence_pool_id degrades to the
+        category-appropriate default rather than crashing finalization (mirrors
+        the resonance fallback)."""
         from world.character_creation.services import finalize_magic_data
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.models import CharacterGift, Technique
-        from world.magic.seeds_cast import get_standalone_cast_template
 
         sheet = CharacterSheetFactory()
         draft = self._create_draft(cantrip=self.cantrip, consequence_pool_id=999999)
@@ -1284,7 +1284,8 @@ class FinalizeMagicDataCantripTests(TestCase):
 
         gift = CharacterGift.objects.get(character=sheet).gift
         technique = Technique.objects.get(gift=gift)
-        self.assertEqual(technique.action_template_id, get_standalone_cast_template().pk)
+        # No selected path → derived action_category=PHYSICAL → combat template (#1706).
+        self.assertEqual(technique.action_template.name, "Melee Attack")
 
     def test_no_gift_created_without_cantrip(self) -> None:
         """No Gift, CharacterGift, or Technique created when no cantrip is selected."""

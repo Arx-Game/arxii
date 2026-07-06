@@ -356,7 +356,10 @@ spec-in-checks engine foundation (#1688) before they can participate in a `Check
 
 Auto-scaffolded check seeds are **PLACEHOLDER** until a real composition pass: the social
 `CheckType`s (Intimidation/Persuasion/Deception/Seduction/Performance/Presence) shipped as
-stat+stat boilerplate and are slated to be redesigned to stat + skill (+ spec).
+stat+stat boilerplate and were redesigned to stat + skill (+ spec) (#1689); the combat + vitals
+checks (penetration/flee retrofitted, Reflexes/Endurance/Mortal Resolve/Escalation Pace seeded,
+Melee Combat skill catalog + the combat offense check added) followed in #1706. The resist-style
+checks (single-stat) are the tenet-permitted exception.
 
 ---
 

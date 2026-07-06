@@ -492,6 +492,40 @@ class ConsequencePoolCatalogResolutionTests(TestCase):
         self.assertEqual(resolved.pk, min(chosen.pk, duplicate.pk))
         self.assertEqual(resolved.pk, chosen.pk)
 
+    # -- #1706: physical-technique routing to the combat ActionTemplate -------------
+
+    def test_physical_no_pool_resolves_combat_template(self):
+        from actions.constants import ActionCategory
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        template = resolve_cast_action_template(None, action_category=ActionCategory.PHYSICAL)
+        self.assertEqual(template.name, "Melee Attack")
+
+    def test_non_physical_no_pool_resolves_magic_template(self):
+        from actions.constants import ActionCategory
+        from world.magic.seeds_cast import TECHNIQUE_CAST_TEMPLATE_NAME
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        template = resolve_cast_action_template(None, action_category=ActionCategory.MENTAL)
+        self.assertEqual(template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
+
+    def test_explicit_pool_honored_regardless_of_category(self):
+        """An explicit catalog pool_id always wins (today's behavior preserved)."""
+        from actions.constants import ActionCategory
+        from world.magic.seeds_cast import (
+            TECHNIQUE_CAST_TEMPLATE_NAME,
+            ensure_technique_catalog_content,
+        )
+        from world.magic.services.technique_builder import resolve_cast_action_template
+
+        catalog_templates = ensure_technique_catalog_content()
+        chosen = catalog_templates[0]
+        template = resolve_cast_action_template(
+            chosen.consequence_pool_id, action_category=ActionCategory.PHYSICAL
+        )
+        self.assertEqual(template.pk, chosen.pk)
+        self.assertNotEqual(template.name, TECHNIQUE_CAST_TEMPLATE_NAME)
+
 
 class BuildTechniqueConsequencePoolTests(TestCase):
     def _minimal_design_kwargs(self, **overrides):
@@ -515,13 +549,21 @@ class BuildTechniqueConsequencePoolTests(TestCase):
         kwargs.update(overrides)
         return TechniqueDesignInput(**kwargs)
 
-    def test_no_pool_choice_defaults_to_shared_template(self):
+    def test_no_pool_choice_defaults_to_category_template(self):
+        """No pool choice: a physical design routes to the combat template (#1706),
+        a non-physical design routes to the magic shared template."""
         from world.magic.seeds_cast import get_standalone_cast_template
         from world.magic.services.technique_builder import build_technique
 
+        # Physical → combat 'Melee Attack' template.
         design = self._minimal_design_kwargs()
         tech = build_technique(design, creator=None)
-        self.assertEqual(tech.action_template_id, get_standalone_cast_template().pk)
+        self.assertEqual(tech.action_template.name, "Melee Attack")
+
+        # Non-physical → magic shared cast template.
+        mental_design = self._minimal_design_kwargs(action_category="mental")
+        mental_tech = build_technique(mental_design, creator=None)
+        self.assertEqual(mental_tech.action_template_id, get_standalone_cast_template().pk)
 
     def test_catalog_pool_choice_assigns_matching_template(self):
         from world.magic.seeds_cast import ensure_technique_catalog_content
