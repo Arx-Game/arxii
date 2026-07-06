@@ -172,6 +172,14 @@ class MyActiveStoryEntry(TypedDict):
     scheduled_real_time: datetime | None
 
 
+class MyActiveStoriesResult(TypedDict):
+    """Response shape for MyActiveStoriesView / active_stories_for_account (#1853)."""
+
+    character_stories: list[MyActiveStoryEntry]
+    group_stories: list[MyActiveStoryEntry]
+    global_stories: list[MyActiveStoryEntry]
+
+
 class EligibleTransitionEntry(TypedDict):
     """A single eligible Transition surfaced in the GM queue."""
 
