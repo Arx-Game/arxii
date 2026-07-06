@@ -175,6 +175,12 @@ technique-design step or a magical-research unlock — never on-demand) is a def
 system. Anima rituals are set up post-CG. The player-authored `Ritual` row (SCENE_ACTION)
 carries check configuration via its `RitualCheckConfig` sidecar (stat, skill, resonance, check_type).
 
+**Anima/severity budget per outcome tier (#1207):** `anima._budget_for_outcome` reads
+`AnimaRitualBudgetAward` (`world/magic/models/soulfray.py`) — a per-`CheckOutcome`-tier
+authored row — instead of the old `SoulfrayConfig.ritual_budget_critical_success/_success/
+_partial/_failure` fields. Every one of the 5 canonical tiers must have a row; a missing
+one raises rather than silently granting 0 anima.
+
 ### Standalone Casting (#1306)
 
 Every technique now carries an `action_template` FK (defaulted by `create_technique`) so
@@ -1110,6 +1116,20 @@ The sanctum subsystem is a 7-op surface shared by telnet (`CmdSanctum`) and web
   resonance currency; physical presence in the Sanctum's room required (wraps
   `absorb_sanctum_pool`).
 - `sanctum_sever` — soft-retire a SANCTUM-anchored thread by name or id.
+
+**Outcome-tier award tables (#1207):** Homecoming/Purging/Dissolution no longer key on the
+deleted `ritual_checks.OutcomeTier` enum or hardcoded multiplier dicts — each looks up an
+authored per-`CheckOutcome`-tier row via the shared `world.checks.models.OutcomeTierAward`
+base (the pattern generalizes `world.societies.models.GangTurfReputationAward`):
+`perform_homecoming_ritual` reads `SanctumHomecomingGainAward.gain_multiplier`,
+`perform_purging_ritual` reads `SanctumPurgingRetentionAward.retention_modifier` (signed —
+can reduce retention below the base value), and `perform_dissolution`
+(`_dissolution_recovery_fraction`) reads `SanctumDissolutionRecoveryAward.recovery_fraction`
+(all in `world/magic/models/sanctum.py`, consumed from `services/sanctum_rituals.py` and
+`services/sanctum_install.py`). Sanctification itself doesn't use an award table — it was
+ported to plain `success_level` comparisons against literal thresholds
+(`MINIMUM_SANCTIFICATION_SUCCESS_LEVEL` / `SANCTIFICATION_CRIT_SUCCESS_LEVEL` /
+`CRITICAL_FAILURE_SUCCESS_LEVEL` in `services/sanctum_install.py`).
 
 Module helpers: `sanctum_in_room(location)` returns the active `SanctumDetails` for the
 room (excludes dissolved); `room_profile_for_location(location)` resolves a `RoomProfile`.
