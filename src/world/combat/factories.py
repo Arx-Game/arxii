@@ -690,25 +690,28 @@ class PlayableCombatScenarioFactory:
 
 
 def wire_penetration_check_type():
-    """Seed the 'penetration' CheckType for the ward contest (#639, #767).
+    """Seed the 'penetration' CheckType for the ward contest (#639, #767, #1706).
 
     Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
-    category) and get_or_create on (check_type, trait), so re-runs are
-    no-ops and staff weight edits are preserved. The check resolves through
-    the shared rank/chart pipeline (ResultChart.get_chart_for_difference),
-    so no per-CheckType chart row is needed; tests that need a concrete
-    success level force it via force_check_outcome or an offense_check_fn
-    override.
+    category); the trait composition is an authoritative rewrite (delete +
+    recreate) so a re-seed corrects the prior stat+stat seed and converges.
+    Staff weight edits are reset on re-seed (mirrors social_checks.py). The
+    check resolves through the shared rank/chart pipeline
+    (ResultChart.get_chart_for_difference), so no per-CheckType chart row is
+    needed; tests that need a concrete success level force it via
+    force_check_outcome or an offense_check_fn override.
 
-    Trait composition (willpower 1.00, intellect 0.50) mirrors the seeded
-    magical_challenge check so a production caster rolls a real pool against
-    the ward instead of trait_points=0.
+    Trait composition (willpower 1.00, intellect 0.50, Melee Combat 0.50):
+    willpower mirrors the seeded magical_challenge check so a production
+    caster rolls a real pool against the ward; the Melee Combat skill leg
+    rewards martial awareness against warded foes (#1706).
     """
     from decimal import Decimal
 
     from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
     from world.checks.models import CheckTypeTrait
     from world.combat.constants import PENETRATION_CHECK_TYPE_NAME
+    from world.seeds.combat_checks import ensure_melee_combat_skill
     from world.traits.factories import StatTraitFactory
     from world.traits.models import TraitCategory
 
@@ -717,15 +720,15 @@ def wire_penetration_check_type():
         category=CheckCategoryFactory(name="Combat"),
         description="Penetrate a warded target's barrier (#639).",
     )
-    for trait_name, category, weight in [
-        ("willpower", TraitCategory.META, "1.00"),
-        ("intellect", TraitCategory.MENTAL, "0.50"),
-    ]:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type,
-            trait=StatTraitFactory(name=trait_name, category=category),
-            defaults={"weight": Decimal(weight)},
-        )
+    skill = ensure_melee_combat_skill()
+    composition = [
+        (StatTraitFactory(name="willpower", category=TraitCategory.META), Decimal("1.00")),
+        (StatTraitFactory(name="intellect", category=TraitCategory.MENTAL), Decimal("0.50")),
+        (skill.trait, Decimal("0.50")),
+    ]
+    CheckTypeTrait.objects.filter(check_type=check_type).delete()
+    for trait, weight in composition:
+        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
     return check_type
 
 
@@ -753,24 +756,29 @@ def wire_penetration_modifier_target():
 
 
 def wire_flee_check_type():
-    """Seed the 'flee' CheckType for the flee-attempt check (#878).
+    """Seed the 'flee' CheckType for the flee-attempt check (#878, #1706).
 
     Idempotent — uses CheckTypeFactory's django_get_or_create on (name,
-    category) and get_or_create on (check_type, trait), so re-runs are
-    no-ops and staff weight edits are preserved. The check resolves through
-    the shared rank/chart pipeline (ResultChart.get_chart_for_difference),
-    so no per-CheckType chart row is needed.
+    category); the trait composition is an authoritative rewrite (delete +
+    recreate) so a re-seed corrects the prior stat+stat seed and converges.
+    Staff weight edits are reset on re-seed (mirrors social_checks.py). The
+    check resolves through the shared rank/chart pipeline
+    (ResultChart.get_chart_for_difference), so no per-CheckType chart row is
+    needed.
 
-    Trait composition (agility 1.00, wits 0.50): agility drives the raw
-    physical escape burst; wits reflects situational reading and route
-    choice under pressure. Both are seeded by the character seed helpers
-    (_CHALLENGE_STAT_NAMES) so a production character rolls a real pool.
+    Trait composition (agility 1.00, wits 0.50, Melee Combat 0.50): agility
+    drives the raw physical escape burst; wits reflects situational reading
+    and route choice under pressure; the Melee Combat skill leg rewards a
+    trained fighter's situational reading (#1706). Both stats are seeded by
+    the character seed helpers (_CHALLENGE_STAT_NAMES) so a production
+    character rolls a real pool.
     """
     from decimal import Decimal
 
     from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
     from world.checks.models import CheckTypeTrait
     from world.combat.constants import FLEE_CHECK_TYPE_NAME
+    from world.seeds.combat_checks import ensure_melee_combat_skill
     from world.traits.factories import StatTraitFactory
     from world.traits.models import TraitCategory
 
@@ -779,15 +787,15 @@ def wire_flee_check_type():
         category=CheckCategoryFactory(name="Combat"),
         description="Flee-attempt check rolled when a PC declares flee (#878).",
     )
-    for trait_name, category, weight in [
-        ("agility", TraitCategory.PHYSICAL, "1.00"),
-        ("wits", TraitCategory.MENTAL, "0.50"),
-    ]:
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check_type,
-            trait=StatTraitFactory(name=trait_name, category=category),
-            defaults={"weight": Decimal(weight)},
-        )
+    skill = ensure_melee_combat_skill()
+    composition = [
+        (StatTraitFactory(name="agility", category=TraitCategory.PHYSICAL), Decimal("1.00")),
+        (StatTraitFactory(name="wits", category=TraitCategory.MENTAL), Decimal("0.50")),
+        (skill.trait, Decimal("0.50")),
+    ]
+    CheckTypeTrait.objects.filter(check_type=check_type).delete()
+    for trait, weight in composition:
+        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=weight)
     return check_type
 
 
