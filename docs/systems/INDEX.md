@@ -2676,7 +2676,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
   `docs/architecture/damage-scaling.md`,
-  `docs/architecture/combat-conditions.md`
+  `docs/architecture/combat-conditions.md`,
+  `docs/systems/COMBAT_DEFENSES.md`
 
 ### Battles (#1592)
 Large-scale battle scenes (war covenant engagements, sieges, pitched fields) resolved
