@@ -302,7 +302,7 @@ class BeatViewSetPermissionsTest(APITestCase):
         assert response.status_code == status.HTTP_200_OK
 
     def test_authenticated_can_list(self):
-        """list is allowed for any authenticated user (object-level enforced on retrieve)."""
+        """A non-owner can list beats of a PUBLIC story (story-visibility scoping)."""
         self.client.force_authenticate(user=self.non_owner)
         response = self.client.get(reverse("beat-list"))
         assert response.status_code == status.HTTP_200_OK
