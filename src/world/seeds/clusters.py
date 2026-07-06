@@ -6,19 +6,19 @@ from django.db.models import Model
 
 
 def _seed_magic() -> None:
-    from integration_tests.game_content.magic import seed_magic_dev  # noqa: PLC0415
+    from world.seeds.game_content.magic import seed_magic_dev  # noqa: PLC0415
 
     seed_magic_dev()
 
 
 def _seed_items() -> None:
-    from integration_tests.game_content.items import seed_items_dev  # noqa: PLC0415
+    from world.seeds.game_content.items import seed_items_dev  # noqa: PLC0415
 
     seed_items_dev()
 
 
 def _seed_combat() -> None:
-    from integration_tests.game_content.combat import (  # noqa: PLC0415
+    from world.seeds.game_content.combat import (  # noqa: PLC0415
         seed_encounter_beat_wiring,
         seed_flee_check,
         seed_penetration_contest,
@@ -30,7 +30,7 @@ def _seed_combat() -> None:
 
 
 def _seed_battles() -> None:
-    from integration_tests.game_content.battles import (  # noqa: PLC0415
+    from world.seeds.game_content.battles import (  # noqa: PLC0415
         seed_champion_duel_outcome_wiring,
     )
 

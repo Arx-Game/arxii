@@ -312,7 +312,7 @@ class AffinityInteractionAggressor(models.TextChoices):
 
 
 # CheckType name for the OPPOSED backfire endurance roll.
-# Must exactly match the seeded authored name in integration_tests/game_content/magic.py
+# Must exactly match the seeded authored name in world/seeds/game_content/magic.py
 # (_seed_endure_hallowed_ground_check). Fetched via CheckType.objects.get() — never
 # get_or_create — so a missing seed propagates loudly rather than silently creating
 # a chartless CheckType that would break the resolution pipeline.

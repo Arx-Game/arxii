@@ -1,17 +1,14 @@
-"""Game-content seeding for the battles app (#1710)."""
+"""Compatibility facade for ``world.seeds.game_content.battles`` (roadmap 3.2, #1220).
 
-from __future__ import annotations
+Content relocated there; this module re-exports every name so existing
+``integration_tests.game_content.battles`` imports in the test suite keep
+working unchanged. New code should import from ``world.seeds.game_content.battles``.
+"""
 
+from world.seeds.game_content.battles import (
+    seed_champion_duel_outcome_wiring,
+)
 
-def seed_champion_duel_outcome_wiring() -> None:
-    """Seed the ENCOUNTER_COMPLETED -> Champion-duel-outcome TriggerDefinition (#1710).
-
-    Creates (get_or_create) the ``encounter_completed_champion_duel_outcome``
-    FlowDefinition (one CALL_SERVICE_FUNCTION step -> apply_champion_duel_outcome)
-    and its TriggerDefinition. Idempotent. The per-room Trigger is installed
-    at duel-open time by ``open_champion_duel`` (via
-    ``install_champion_duel_trigger``), not here.
-    """
-    from world.battles.duel_wiring import wire_champion_duel_trigger  # noqa: PLC0415
-
-    wire_champion_duel_trigger()
+__all__ = [
+    "seed_champion_duel_outcome_wiring",
+]

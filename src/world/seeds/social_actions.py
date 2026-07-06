@@ -2,7 +2,7 @@
 
 Until now the social ActionTemplates (Intimidate / Persuade / Deceive / Flirt / Perform / Entrance)
 and their consequence pools existed only in test fixtures (``checks/factories.py`` /
-``integration_tests/game_content``) — nothing seeded them authoritatively, so a successful flirt set
+``world/seeds/game_content``) — nothing seeded them authoritatively, so a successful flirt set
 no relationship state in production. This is the authoritative, idempotent (plain-ORM) production
 seed. It also attaches the **directed-allure write side**: a successful **Flirt** sets the target
 **Attracted To** the actor (permanent) + **Very Attracted** (temporary) via the merged

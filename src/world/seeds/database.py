@@ -1,9 +1,9 @@
 """Production-callable seed orchestrator.
 
 Composes the per-cluster ``seed_*_dev()`` masters into one idempotent call.
-INTERIM (Phase A): cluster functions are imported from
-``integration_tests.game_content`` until roadmap 3.2 relocates the helpers
-here. Tracked in the #1220 epic.
+The cluster masters live in ``world.seeds.game_content`` (roadmap 3.2, #1220
+— relocated from ``integration_tests.game_content``, which now keeps a thin
+compatibility facade so existing test imports keep working unchanged).
 """
 
 from __future__ import annotations

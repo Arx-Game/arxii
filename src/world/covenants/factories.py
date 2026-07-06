@@ -484,7 +484,7 @@ def wire_covenant_rite_content() -> CovenantRite:
 
     # ------------------------------------------------------------------
     # Canonical DURANCE roles (get_or_create on slug, mirroring the
-    # pattern in integration_tests/game_content/items.py).
+    # pattern in world/seeds/game_content/items.py).
     # ------------------------------------------------------------------
     sword_role, _ = CovenantRole.objects.get_or_create(
         slug="sword-vanguard",

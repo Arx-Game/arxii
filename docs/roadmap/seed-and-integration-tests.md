@@ -1,6 +1,6 @@
 # Seed Mechanism + Integration Test Coverage
 
-**Status:** Phase 1 complete; Phase 2 in-progress; Phase 3 core delivered (3.1, 3.3–3.7, 3.9–3.10 done; 3.2 deferred; 3.8 optional)
+**Status:** Phase 1 complete; Phase 2 in-progress; Phase 3 core delivered (3.1–3.7, 3.9–3.10 done; 3.8 optional)
 **Audit:** [`docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`](../audits/2026-04-26-seed-and-integration-coverage-audit.md)
 
 ## Why this exists
@@ -141,7 +141,7 @@ These three can run in parallel with the mechanical seeding work.
 | Task | Unlocks |
 |------|---------|
 | ✅ **3.1** — Seed module location: `src/world/seeds/` with `database.py` (orchestrator), `clusters.py` (per-cluster dispatch), `checks.py` (check-resolution cluster), and `types.py` (SeedReport). | A clear home for production-callable seed code. |
-| **3.2** — *(Deferred — interim facade)* Physical relocation of cluster masters out of `integration_tests/game_content/` into `src/world/seeds/`. **Current design:** `src/world/seeds/clusters.py` imports the existing `seed_magic_dev()`, `seed_items_dev()`, `seed_penetration_contest()`, and `seed_flee_check()` masters from `integration_tests.game_content` at call time. This is documented in the module docstring as an interim facade. Tests continue to work unchanged. Full relocation tracked in the #1220 epic. | Single source of truth for seed orchestration. |
+| ✅ **3.2** — Cluster masters relocated: `src/integration_tests/game_content/{battles,challenges,characters,checks,clash,combat,conditions,items,magic,social}.py` moved (`git mv`) to `src/world/seeds/game_content/`. `src/world/seeds/clusters.py` now imports masters from `world.seeds.game_content` directly (no more call-time facade import). `integration_tests/game_content/` keeps a thin per-module compatibility facade (each module re-exports every name from its `world.seeds.game_content` counterpart via explicit `__all__` lists) so every existing `integration_tests.game_content.<module>` test import keeps working unchanged — zero test-file edits. `integration_tests/game_content/tests/` (the moved-masters' own test suite) stays put. | Single source of truth for seed orchestration; `integration_tests.game_content` is now purely a compatibility shim, not the canonical home. |
 | ✅ **3.3** — `arx seed dev` CLI command added (`src/core_management/management/commands/seed.py`). Wraps `seed_dev_database()` with `--verbose` support. **Project-rule exception:** the "no management commands" rule has been overridden by user request for this specific command. | Anyone running `arx seed dev` gets a populated dev DB. |
 | ✅ **3.4** — Create-if-missing semantics enforced: all seed functions use `get_or_create(natural_key, defaults={...})`, never `update_or_create`. | Re-running on an edited DB preserves edits. Per project rule. |
 | ✅ **3.5** — Idempotency regression test: `test_idempotency.py` verifies a fresh `seed_dev_database()` run followed by a second run produces zero additional DB writes. | Guarantee against accidental destructive seeds. |
