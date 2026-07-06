@@ -30,6 +30,13 @@ class PromotionJourneyTests(EvenniaTestCase):
         self.functionary = place_functionary(role=self.role, room=self.room_profile)
         stealth = Trait.objects.get(name="Stealth")
         CharacterTraitValue.objects.create(character=self.character, trait=stealth, value=5)
+        # #1907 — also gate on Persuasion (the GUARD variant's min_trait) and
+        # Scholarship (the MINOR_ALLY variant's min_trait) so the new offers are
+        # eligible once rapport is met.
+        persuasion = Trait.objects.get(name="Persuasion")
+        CharacterTraitValue.objects.create(character=self.character, trait=persuasion, value=5)
+        scholarship = Trait.objects.get(name="Scholarship")
+        CharacterTraitValue.objects.create(character=self.character, trait=scholarship, value=5)
 
     def test_full_promotion_journey(self) -> None:
         from actions.definitions.npc_services import (
@@ -85,3 +92,36 @@ class PromotionJourneyTests(EvenniaTestCase):
             persona=asset.promoter_persona, npc_persona=asset.asset_persona
         )
         self.assertEqual(standing.affection, 5)
+
+    def test_guard_promotion_journey(self) -> None:
+        """#1907 — a GUARD-variant cultivation through the full action seam."""
+        from actions.definitions.npc_services import (
+            ResolveNPCOfferAction,
+            StartNPCInteractionAction,
+        )
+        from world.assets.constants import AssetRoleContext
+        from world.npc_services.services import available_offers
+
+        start_result = StartNPCInteractionAction().run(actor=self.character, role_id=self.role.pk)
+        self.assertTrue(start_result.success, start_result.message)
+        session = start_result.data["session"]
+
+        offer = NPCServiceOffer.objects.get(role=self.role, label="Cultivate as Guard")
+        # Below the rapport_requirement (20) — not yet eligible.
+        self.assertNotIn(offer, available_offers(session))
+
+        session.current_rapport = 25
+        self.assertIn(offer, available_offers(session))
+
+        success = CheckOutcomeFactory(name="Guard Journey Success", success_level=3)
+        with force_check_outcome(success):
+            resolve_result = ResolveNPCOfferAction().run(
+                actor=self.character,
+                session=session,
+                offer_id=offer.pk,
+                acknowledge_risk=False,
+            )
+        self.assertTrue(resolve_result.success, resolve_result.message)
+
+        asset = NPCAsset.objects.get(source_functionary=self.functionary)
+        self.assertEqual(asset.role_context, AssetRoleContext.GUARD)
