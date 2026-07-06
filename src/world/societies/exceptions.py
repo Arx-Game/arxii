@@ -74,6 +74,11 @@ class NotAuthorizedToInviteError(OrganizationMembershipError):
     SAFE_MESSAGES = frozenset({"You are not authorized to invite members to this organization."})
 
 
+class NotAuthorizedToLeadOrgRitualError(OrganizationMembershipError):
+    user_message = "You are not authorized to lead this organization's rituals."
+    SAFE_MESSAGES = frozenset({"You are not authorized to lead this organization's rituals."})
+
+
 class NotAuthorizedToKickError(OrganizationMembershipError):
     user_message = "You are not authorized to remove members from this organization."
     SAFE_MESSAGES = frozenset({"You are not authorized to remove members from this organization."})

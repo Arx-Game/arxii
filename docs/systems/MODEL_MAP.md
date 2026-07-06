@@ -454,6 +454,7 @@
   - dominant_society -> societies.Society [FK] (nullable)
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
+  - gang_turf_projects <- societies.GangTurfDetails
   - income_streams <- currency.OrgIncomeStream
   - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
@@ -703,6 +704,7 @@
 - `eject_vehicle_occupants(*, vehicle: 'BattleVehicle') -> 'None' — Eject every unit/participant embedded on *vehicle*'s place, applying the`
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
+- `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
@@ -3225,6 +3227,7 @@
   - participant -> magic.RitualSessionParticipant [FK] (nullable)
   - ref_covenant -> covenants.Covenant [FK] (nullable)
   - ref_covenant_role -> covenants.CovenantRole [FK] (nullable)
+  - ref_organization -> societies.Organization [FK] (nullable)
 
 ### SignatureMotifBonus
 **Foreign Keys:**
@@ -4285,6 +4288,7 @@
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - gang_turf_details <- societies.GangTurfDetails
   - research_details <- clues.ResearchProjectDetails
   - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
@@ -4319,12 +4323,15 @@
 - `add_contribution(*, project: 'Project', contributor_persona: 'Persona', kind: 'str', ap_amount: 'int | None' = None, money_amount: 'int | None' = None, item_instance: 'ItemInstance | None' = None, check_outcome: 'CheckOutcome | None' = None, contribution_method: 'ContributionMethod | None' = None, intent_text: 'str' = '', privacy_setting: 'str' = 'PRIVATE') -> 'Contribution' — Add a contribution to an ACTIVE Project and advance current_progress.`
 - `clear_instant_completion_kinds() -> 'None' — Test-only: clear the instant-completion registry.`
 - `clear_kind_handlers() -> 'None' — Test-only: clear the handler registry.`
+- `clear_tiered_resolvers() -> 'None' — Test-only: clear the tiered-resolver registry.`
 - `contribute_check_to_project(project: 'Project', *, actor: 'ObjectDB', contributor_persona: 'Persona', method: 'ContributionMethod') -> 'Contribution' — Make a check-based contribution: spend AP, roll the check, advance on success (#1574).`
 - `donate_to_project(project: 'Project', *, donor_persona: 'Persona', amount: 'int') -> 'Contribution' — Debit ``amount`` coppers from the donor's purse and record a MONEY contribution.`
 - `get_kind_handler(kind: 'str') -> 'KindHandler' — Return the registered handler for `kind`, or raise LookupError.`
+- `get_tiered_resolver(kind: 'str') -> 'TieredResolver' — Return the registered tiered resolver for ``kind``, or raise LookupError.`
 - `maybe_complete_immediately(project: 'Project') -> 'bool' — Resolve an instant-completion project the moment its threshold is funded (#1500).`
 - `register_instant_completion_kind(kind: 'str') -> 'None' — Mark a ProjectKind as completing immediately on threshold (re-register safe).`
 - `register_kind_handler(kind: 'str', handler: 'KindHandler') -> 'None' — Register a per-kind resolution handler. Re-registration overwrites.`
+- `register_tiered_resolver(kind: 'str', resolver: 'TieredResolver') -> 'None' — Register a TIERED_PERIOD kind's tier-grading resolver. Re-registration overwrites.`
 - `resolve_project(project: 'Project', *, outcome_tier: 'CheckOutcome') -> 'None' — Finalize a RESOLVING project: dispatch to per-kind handler, set outcome.`
 - `scan_active_projects() -> 'int' — Cron tick: scan ACTIVE projects, transition completion-ready ones to RESOLVING.`
 - `set_contribution_story(project: 'Project', *, contributor_persona: 'Persona', text: 'str') -> 'Contribution | None' — Attach the narrative of how a contributor helped to their most recent contribution (#1574).`
@@ -5164,10 +5171,12 @@
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
+  - ritualsessionreference_set <- magic.RitualSessionReference
   - ranks <- societies.OrganizationRank
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
+  - gang_turf_projects <- societies.GangTurfDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
@@ -5323,6 +5332,23 @@
   - legend_entries <- societies.LegendEntry
   - secrets <- secrets.Secret
   - mission_awards <- missions.MissionRenownAward
+
+### GangTurfDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - organization -> societies.Organization [FK]
+  - target_area -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - tier_thresholds <- societies.GangTurfTierThreshold
+
+### GangTurfTierThreshold
+**Foreign Keys:**
+  - details -> societies.GangTurfDetails [FK]
+  - outcome_tier -> traits.CheckOutcome [FK]
+
+### GangTurfReputationAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
@@ -5682,6 +5708,8 @@
   - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - beat_completions <- stories.BeatCompletion
+  - gang_turf_thresholds <- societies.GangTurfTierThreshold
+  - gang_turf_award <- societies.GangTurfReputationAward
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence

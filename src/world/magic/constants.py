@@ -180,6 +180,7 @@ class ParticipantState(models.TextChoices):
 class ReferenceKind(models.TextChoices):
     COVENANT = "COVENANT", "Covenant"
     COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
+    ORGANIZATION = "ORGANIZATION", "Organization"
 
 
 class SoulTetherRole(models.TextChoices):

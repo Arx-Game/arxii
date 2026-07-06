@@ -203,6 +203,44 @@ class CovenantInductionAdapter(RitualDraftAdapter):
 
 
 # ---------------------------------------------------------------------------
+# Generic organization induction adapter (#1868)
+# ---------------------------------------------------------------------------
+
+_ORGANIZATION_INDUCTION_SERVICE_PATH = (
+    "world.societies.membership_services.induct_organization_member_via_session"
+)
+
+
+class OrganizationInductionAdapter(RitualDraftAdapter):
+    """Adapter for the generic (non-Covenant) organization induction ritual.
+
+    Translates ``organization=`` (draft) into the session-level ORGANIZATION
+    reference that ``induct_organization_member_via_session`` and
+    ``assert_initiator_can_lead_org_ritual`` expect. No join tokens needed — the
+    candidate carries no role/reference, they simply accept (BILATERAL
+    participation_rule; unlike Covenant Induction there is no rank to choose).
+    """
+
+    def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
+        """Resolve ``organization=`` into a session-level ORGANIZATION reference."""
+        from world.magic.constants import ReferenceKind  # noqa: PLC0415
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        organization_name = kwargs.get("organization", "").strip()
+        organization = Organization.objects.filter(name__iexact=organization_name).first()
+        if organization is None:
+            msg = f"No organization named '{organization_name}'."
+            raise CommandError(msg)
+        return DraftParse(
+            session_references=[
+                RitualSessionReferenceSpec(
+                    kind=ReferenceKind.ORGANIZATION, ref_organization=organization
+                )
+            ],
+        )
+
+
+# ---------------------------------------------------------------------------
 # Durance (class-level advancement) adapter
 # ---------------------------------------------------------------------------
 
@@ -284,6 +322,7 @@ _REGISTRY: dict[str, RitualDraftAdapter] = {
     _COVENANT_INDUCTION_SERVICE_PATH: CovenantInductionAdapter(),
     _BANNER_CALL_SERVICE_PATH: BannerCallAdapter(),
     _DURANCE_SERVICE_PATH: DuranceAdapter(),
+    _ORGANIZATION_INDUCTION_SERVICE_PATH: OrganizationInductionAdapter(),
 }
 _DEFAULT_ADAPTER = RitualDraftAdapter()
 

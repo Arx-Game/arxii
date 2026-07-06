@@ -81,6 +81,7 @@ actions, backends, and service functions.
     - soul-tether BILATERAL: `role=sinner|sineater resonance=<name> [writeup=...]`
     - covenant induction: `covenant=<name>` (the covenant to induct into)
     - banner-call rise: `covenant=<name>` (the dormant STANDING covenant to rise)
+    - organization induction: `organization=<name>` (the non-Covenant organization to induct into)
   - `ritual join <id> [<extra k=v ...>]` — accept your invitation; adapter-specific join
     kwargs:
     - soul-tether: `role=sinner|sineater`
@@ -101,7 +102,7 @@ actions, backends, and service functions.
 - **`ritual_adapters.py`**: per-ritual draft/join adapter registry, keyed on
   `ritual.service_function_path`. Adapters translate the flat `key=value` tokens that
   `CmdRitual._handle_draft`/`_handle_join` parse into `DraftParse`/`JoinParse` dataclasses
-  the session services accept. Three concrete adapters:
+  the session services accept. Five concrete adapters:
   - `SoulTetherAdapter` — `role=` / `resonance=` / `writeup=` for the soul-tether BILATERAL
     session.
   - `CovenantInductionAdapter` — `covenant=<name>` on draft (emits a session-level COVENANT
@@ -109,6 +110,11 @@ actions, backends, and service functions.
     induction service reads).
   - `BannerCallAdapter` — `covenant=<name>` on draft; no join tokens (members simply accept
     the rise).
+  - `OrganizationInductionAdapter` — `organization=<name>` on draft (emits a
+    session-level ORGANIZATION reference for the generic, non-Covenant org-induction
+    ritual, #1868); no join tokens (members simply accept — unlike Covenant Induction,
+    there is no rank to choose since `join_organization` assigns the base rank
+    automatically).
   - `DuranceAdapter` — Ritual of the Durance (class-level advancement). `parse_join`:
     `testament=<oration>` → `participant_kwargs["testament"]`; `path=<name>` → path pk via
     `resolve_advanced_path_by_name` (for the level-3 POTENTIAL semi-crossing). `should_auto_fire`:
