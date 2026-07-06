@@ -686,14 +686,18 @@ situationally unwanted. Surfaces:
 - Web cast payload: `use_base_form` boolean field on the cast request body.
 - Combat opt-out and a React toggle UI are deferred follow-ups.
 
-**Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
-(`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
-dispatch on `thread.target_kind` — `COVENANT_ROLE` → the single parent role;
-`GIFT` → iterate `gift.techniques.all()`. For each variant whose `unlock_thread_level`
-falls in `(starting_level, new_level]` at the thread's resonance, it grants the
-`discovery_achievement` (gamewide-first `Discovery` on the first crossing), unlocks the
-`codex_entry`, and sends the `discovery_narrative`. Called from `spend_resonance_for_imbuing`
-on every thread advance; also standalone-callable for ceremony-direct testing.
+**Crossing ceremony — `execute_crossing_ceremonies(*, thread, starting_level, new_level)`**
+(`world/magic/crossing/ceremony.py`, ADR-0094): dispatches on `thread.target_kind` via a
+handler registry so **every** `TargetKind` gets a ceremony at PathStage crossing levels (3, 6,
+11, 16, 21), not just GIFT and COVENANT_ROLE. GIFT/COVENANT_ROLE handlers wrap the existing
+variant-discovery logic (`AbstractSpecializedVariant.newly_crossed_variants` → achievement +
+codex + narrative). The other seven kinds (TECHNIQUE, TRAIT, FACET,
+RELATIONSHIP_TRACK/CAPSTONE, MANTLE, SANCTUM) have stub handlers that log a debug no-op,
+replaced with real logic in #1988–#1993. A shared `execute_ceremony_beat` helper lets non-variant
+kinds fire the same achievement + codex + narrative beat without an `AbstractSpecializedVariant`.
+Called from `spend_resonance_for_imbuing` on every thread advance; also standalone-callable for
+ceremony-direct testing. (`world/covenants/discovery.py` re-exports it as
+`fire_variant_discoveries` for backwards compatibility.)
 
 **GIFT thread substrate (#1578):**
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift.

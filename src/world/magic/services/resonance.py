@@ -377,9 +377,11 @@ def spend_resonance_for_imbuing(  # noqa: C901, PLR0912, PLR0915
 
     recompute_max_health_with_threads(character_sheet)
 
-    from world.covenants.discovery import fire_variant_discoveries  # noqa: PLC0415
+    from world.magic.crossing.ceremony import execute_crossing_ceremonies  # noqa: PLC0415
 
-    fire_variant_discoveries(thread=thread, starting_level=starting_level, new_level=thread.level)
+    execute_crossing_ceremonies(
+        thread=thread, starting_level=starting_level, new_level=thread.level
+    )
 
     return ThreadImbueResult(
         resonance_spent=amount,

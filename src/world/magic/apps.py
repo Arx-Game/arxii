@@ -44,3 +44,29 @@ class MagicConfig(AppConfig):
         register_offer_handler(SurgeOfferHandler())
         register_offer_handler(CrossingOfferHandler())
         register_offer_handler(SoulfrayPendingHandler())
+
+        # Register crossing-ceremony handlers (ADR-0094, #1987).
+        # Each TargetKind dispatches to a handler when a thread crosses a
+        # PathStage crossing level (3, 6, 11, 16, 21).
+        from world.magic.crossing.handlers import (  # noqa: PLC0415
+            CovenantRoleCrossingHandler,
+            FacetCrossingHandler,
+            GiftCrossingHandler,
+            MantleCrossingHandler,
+            RelationshipCapstoneCrossingHandler,
+            RelationshipTrackCrossingHandler,
+            SanctumCrossingHandler,
+            TechniqueCrossingHandler,
+            TraitCrossingHandler,
+        )
+        from world.magic.crossing.registry import register_crossing_handler  # noqa: PLC0415
+
+        register_crossing_handler(GiftCrossingHandler())
+        register_crossing_handler(CovenantRoleCrossingHandler())
+        register_crossing_handler(TechniqueCrossingHandler())
+        register_crossing_handler(TraitCrossingHandler())
+        register_crossing_handler(FacetCrossingHandler())
+        register_crossing_handler(RelationshipTrackCrossingHandler())
+        register_crossing_handler(RelationshipCapstoneCrossingHandler())
+        register_crossing_handler(MantleCrossingHandler())
+        register_crossing_handler(SanctumCrossingHandler())
