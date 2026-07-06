@@ -25,6 +25,7 @@ from web.admin.tuning.metrics import (
     story_series,
     story_snapshot,
 )
+from web.admin.tuning.tech_health import collect_tech_health
 from web.admin.tuning.views import superuser_required
 from world.currency.constants import format_coppers
 
@@ -99,3 +100,29 @@ def ops_reports_fragment(request: HttpRequest) -> HttpResponse:
     """Reports panel: open/total counts per player-submissions queue."""
     context = {"buckets": reports_snapshot()}
     return render(request, "admin/tuning/_reports_panel.html", context)
+
+
+@superuser_required
+def ops_tech_fragment(request: HttpRequest) -> HttpResponse:
+    """Technical health panel: idmapper RAM, process CPU/RSS, errors, deploy info.
+
+    Admin-triggered on demand (Refresh button) rather than loaded on a timer —
+    `collect_tech_health()` walks the idmapper cache with `pympler.asizeof`,
+    which can be slow with a large cache. Per-row bar-fill percentages follow
+    `_series_row`'s pattern: the max across the top-15 rows is the 100%
+    reference, floored at 1 so an empty snapshot doesn't divide by zero.
+    """
+    health = collect_tech_health()
+    byte_values = (approx_bytes for _label, _count, approx_bytes in health.idmapper_top)
+    max_bytes = max(byte_values, default=0) or 1
+    idmapper_rows = [
+        {
+            "label": label,
+            "count": count,
+            "approx_bytes": approx_bytes,
+            "pct": round(approx_bytes / max_bytes * 100),
+        }
+        for label, count, approx_bytes in health.idmapper_top
+    ]
+    context = {"health": health, "idmapper_rows": idmapper_rows}
+    return render(request, "admin/tuning/_tech_panel.html", context)

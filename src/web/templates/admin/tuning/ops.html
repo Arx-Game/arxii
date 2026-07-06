@@ -27,6 +27,15 @@
            hx-get="{% url 'admin_ops_reports' %}" hx-trigger="load">
     <p>Loading reports queue&hellip;</p>
   </section>
+
+  <section class="tuning-panel" id="panel-tech">
+    <h2>{% translate "Technical Health" %}</h2>
+    <button type="button" id="panel-tech-refresh">{% translate "Refresh" %}</button>
+    <div id="panel-tech-body" hx-get="{% url 'admin_ops_tech' %}" hx-swap="innerHTML"
+         hx-trigger="click from:#panel-tech-refresh, load delay:1s">
+      <p>Loading technical health&hellip;</p>
+    </div>
+  </section>
 </div>
 <script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
 {% endblock %}

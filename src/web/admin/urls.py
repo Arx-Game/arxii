@@ -11,6 +11,7 @@ from web.admin.tuning.ops_views import (
     ops_progression_fragment,
     ops_reports_fragment,
     ops_story_fragment,
+    ops_tech_fragment,
 )
 from web.admin.tuning.views import (
     tuning_checks_fragment,
@@ -52,5 +53,6 @@ urlpatterns = [
     path("_ops/economy/", ops_economy_fragment, name="admin_ops_economy"),
     path("_ops/story/", ops_story_fragment, name="admin_ops_story"),
     path("_ops/reports/", ops_reports_fragment, name="admin_ops_reports"),
+    path("_ops/tech/", ops_tech_fragment, name="admin_ops_tech"),
     path("", arx_admin_site.urls),
 ]
