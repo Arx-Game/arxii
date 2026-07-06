@@ -808,6 +808,9 @@ class OutfitViewSet(viewsets.ViewSet):
             description=description,
         )
         if not action_result.success:
+            # Field-specific errors (e.g. "wardrobe") collapse to non_field_errors here —
+            # SaveOutfitAction's ActionResult carries only a message, not the originating
+            # field (#1866). Deliberate trade-off of routing through the Action layer.
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         read = OutfitReadSerializer(action_result.data["outfit"])
         return Response(read.data, status=201)
@@ -852,6 +855,8 @@ class OutfitViewSet(viewsets.ViewSet):
             actor=actor, outfit=outfit, name=name, description=description
         )
         if not action_result.success:
+            # See the create() note above: RenameOutfitAction's ActionResult carries only
+            # a message, not a field key, so any field-specific error collapses here.
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         outfit.refresh_from_db()
         read = OutfitReadSerializer(outfit)
@@ -873,6 +878,8 @@ class OutfitViewSet(viewsets.ViewSet):
         actor = outfit.character_sheet.character
         action_result = DeleteOutfitAction().run(actor=actor, outfit=outfit)
         if not action_result.success:
+            # See OutfitViewSet.create's note above: field-specific errors collapse to
+            # non_field_errors since ActionResult carries only a message.
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
@@ -987,6 +994,8 @@ class OutfitSlotViewSet(viewsets.ViewSet):
             equipment_layer=equipment_layer,
         )
         if not action_result.success:
+            # Field-specific errors (e.g. "item_instance") collapse to non_field_errors
+            # here — AddOutfitSlotAction's ActionResult carries only a message (#1866).
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         read = OutfitSlotReadSerializer(action_result.data["slot"])
         return Response(read.data, status=201)
@@ -1017,6 +1026,8 @@ class OutfitSlotViewSet(viewsets.ViewSet):
             equipment_layer=slot.equipment_layer,
         )
         if not action_result.success:
+            # See OutfitSlotViewSet.create's note above: field-specific errors collapse
+            # to non_field_errors since ActionResult carries only a message.
             raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 

@@ -308,8 +308,10 @@ class OutfitViewSetTests(_OutfitViewSetSetupMixin, TestCase):
 
         Regression test for I4: previously save_outfit's docstring claimed
         REST validated reach, but no permission class actually checked. The
-        service now validates reach itself, and the serializer surfaces it
-        as a 400 ValidationError on the wardrobe field.
+        service now validates reach itself; the view surfaces it as a 400
+        ValidationError under non_field_errors (routed through
+        SaveOutfitAction, #1866 — the Action's ActionResult carries only a
+        message, not the originating field).
         """
         other_room = ObjectDBFactory(
             db_key="OutfitViewOtherRoomForReach",
