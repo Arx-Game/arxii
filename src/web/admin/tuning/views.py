@@ -4,8 +4,9 @@ The dashboard page (`tuning_dashboard`) renders a skeleton of four panels, each
 an HTMX fragment loaded on page load. Task 2 replaced the checks-panel stub
 with `tuning_checks_fragment` (real analytics, see `checks_analytics.py`). Task 3
 replaced the consequences-panel stub with `tuning_consequences_fragment` (see
-`consequence_analytics.py`). Tasks 4/6 still need to replace the remaining stub
-fragment views below (`_conditions_fragment`, `_simulation_fragment`).
+`consequence_analytics.py`). Task 4 replaced the conditions-panel stub with
+`tuning_conditions_fragment` (see `condition_analytics.py`). Task 6 still needs
+to replace the remaining stub fragment view below (`_simulation_fragment`).
 """
 
 from __future__ import annotations
@@ -20,10 +21,12 @@ from django.shortcuts import render
 
 from actions.models.consequence_pools import ConsequencePool
 from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
+from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
 
 _DEFAULT_ROLLER_POINTS = 25
 _DEFAULT_TARGET_DIFFICULTY = 25
+_DEFAULT_CONDITION_SEVERITY = 5
 
 
 def _int_query_param(request: HttpRequest, name: str, default: int) -> int:
@@ -106,9 +109,19 @@ def tuning_consequences_fragment(request: HttpRequest) -> HttpResponse:
 
 
 @superuser_required
-def _conditions_fragment(_request: HttpRequest) -> HttpResponse:
-    """Stub for the conditions panel; replaced in Task 4."""
-    return HttpResponse("<p>Loading soon.</p>")
+def tuning_conditions_fragment(request: HttpRequest) -> HttpResponse:
+    """Condition-danger panel: ranks conditions by severity/DoT danger score (#1221).
+
+    `severity` query param drives the slider re-render (`hx-get` on input) so
+    the form lives inside the fragment template (see `_conditions_panel.html`).
+    """
+    severity = _int_query_param(request, "severity", _DEFAULT_CONDITION_SEVERITY)
+
+    context = {
+        "rows": compute_condition_danger(at_severity=severity),
+        "severity": severity,
+    }
+    return render(request, "admin/tuning/_conditions_panel.html", context)
 
 
 @superuser_required
