@@ -26,6 +26,8 @@ export type PaginatedTreasuredSignoffList = components['schemas']['PaginatedTrea
 
 export type VisibilityModeEnum = components['schemas']['VisibilityModeEnum'];
 
+export type PendingTreasuredSignoffsEntry = components['schemas']['PendingTreasuredSignoffs'];
+
 // ---------------------------------------------------------------------------
 // Hand-authored types (#1771)
 //

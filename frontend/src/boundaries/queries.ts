@@ -13,6 +13,7 @@ import {
   grantTreasuredSignoff,
   withdrawTreasuredSignoff,
   fetchSceneLinesAndVeils,
+  fetchMyPendingTreasuredSignoffs,
 } from './api';
 import type {
   PatchedPlayerBoundaryRequest,
@@ -39,6 +40,8 @@ export const boundariesKeys = {
     ] as const,
   sceneLinesAndVeils: (sceneId: string | number, tenureId: number) =>
     ['boundaries', 'scene-lines-and-veils', sceneId, tenureId] as const,
+  myPendingTreasuredSignoffs: (beatIds: number[]) =>
+    ['boundaries', 'my-pending-treasured-signoffs', [...beatIds].sort((a, b) => a - b)] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -194,6 +197,19 @@ export function useSceneLinesAndVeils(
     queryKey: boundariesKeys.sceneLinesAndVeils(sceneId!, tenureId!),
     queryFn: () => fetchSceneLinesAndVeils(sceneId!, tenureId!),
     enabled: !!sceneId && !!tenureId,
+    throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Player-safe pending treasured-subject sign-offs (#1853, read-only)
+// ---------------------------------------------------------------------------
+
+export function useMyPendingTreasuredSignoffs(beatIds: number[]) {
+  return useQuery({
+    queryKey: boundariesKeys.myPendingTreasuredSignoffs(beatIds),
+    queryFn: () => fetchMyPendingTreasuredSignoffs(beatIds),
+    enabled: beatIds.length > 0,
     throwOnError: true,
   });
 }

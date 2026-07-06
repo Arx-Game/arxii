@@ -31,6 +31,27 @@ vi.mock('../components/ContributeBeatDialog', () => ({
   ),
 }));
 
+vi.mock('@/boundaries/components/TreasuredSignoffPrompt', () => ({
+  TreasuredSignoffPrompt: ({
+    beatId,
+    tenureId,
+    pendingSubjectIds,
+  }: {
+    beatId: number;
+    tenureId: number;
+    pendingSubjectIds?: number[];
+  }) => (
+    <div
+      data-testid="treasured-signoff-prompt"
+      data-beat-id={beatId}
+      data-tenure-id={tenureId}
+      data-pending-subject-ids={JSON.stringify(pendingSubjectIds)}
+    >
+      Sign-off prompt
+    </div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Wrapper
 // ---------------------------------------------------------------------------
@@ -141,5 +162,41 @@ describe('BeatRow — deadline display', () => {
     const beat = makeGmMarkedBeat({ deadline: futureDate });
     render(<BeatRow beat={beat} />, { wrapper: createWrapper() });
     expect(screen.getByText(/expires/i)).toBeInTheDocument();
+  });
+});
+
+describe('BeatRow — pending treasured sign-off prompt (#1853)', () => {
+  it('renders TreasuredSignoffPrompt with matching pendingSubjectIds when tenureId is set and a beat has pending subjects', () => {
+    const beat = makeGmMarkedBeat();
+    render(<BeatRow beat={beat} tenureId={7} pendingSignoffSubjectIds={[10, 20]} />, {
+      wrapper: createWrapper(),
+    });
+    const prompt = screen.getByTestId('treasured-signoff-prompt');
+    expect(prompt).toBeInTheDocument();
+    expect(prompt).toHaveAttribute('data-beat-id', String(beat.id));
+    expect(prompt).toHaveAttribute('data-tenure-id', '7');
+    expect(prompt).toHaveAttribute('data-pending-subject-ids', JSON.stringify([10, 20]));
+  });
+
+  it('does not render TreasuredSignoffPrompt when there are no pending subjects for this beat', () => {
+    const beat = makeGmMarkedBeat();
+    render(<BeatRow beat={beat} tenureId={7} pendingSignoffSubjectIds={[]} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByTestId('treasured-signoff-prompt')).not.toBeInTheDocument();
+  });
+
+  it('does not render TreasuredSignoffPrompt when pendingSignoffSubjectIds is undefined', () => {
+    const beat = makeGmMarkedBeat();
+    render(<BeatRow beat={beat} tenureId={7} />, { wrapper: createWrapper() });
+    expect(screen.queryByTestId('treasured-signoff-prompt')).not.toBeInTheDocument();
+  });
+
+  it('does not render TreasuredSignoffPrompt when tenureId is not provided, even with pending subjects', () => {
+    const beat = makeGmMarkedBeat();
+    render(<BeatRow beat={beat} pendingSignoffSubjectIds={[10]} />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByTestId('treasured-signoff-prompt')).not.toBeInTheDocument();
   });
 });

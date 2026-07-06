@@ -13,9 +13,19 @@ interface CurrentEpisodePanelProps {
    * Pass story.character_sheet for CHARACTER-scope stories.
    */
   characterSheetId?: number | null;
+  /**
+   * Roster tenure ID forwarded to BeatList so it can auto-surface pending
+   * treasured-subject sign-offs on beats (#1853). Same scope rule as
+   * characterSheetId — pass the viewer's tenure for this story's character.
+   */
+  tenureId?: number | null;
 }
 
-export function CurrentEpisodePanel({ episodeId, characterSheetId }: CurrentEpisodePanelProps) {
+export function CurrentEpisodePanel({
+  episodeId,
+  characterSheetId,
+  tenureId,
+}: CurrentEpisodePanelProps) {
   const { data: episode, isLoading } = useEpisode(episodeId);
 
   if (isLoading) {
@@ -50,7 +60,7 @@ export function CurrentEpisodePanel({ episodeId, characterSheetId }: CurrentEpis
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Beats
         </h3>
-        <BeatList episodeId={episodeId} characterSheetId={characterSheetId} />
+        <BeatList episodeId={episodeId} characterSheetId={characterSheetId} tenureId={tenureId} />
       </div>
     </section>
   );
