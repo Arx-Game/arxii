@@ -14871,6 +14871,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/my-pending-signoffs/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+     *
+     *     Player-safe (never GM-facing): for the requesting player's own account,
+     *     which of the given beats have one of THEIR OWN treasured subjects staked
+     *     without an active sign-off. Batched across beats — the caller passes the
+     *     beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+     *     multi-value query-param style, but scoped to the caller instead of a
+     *     GM-supplied party).
+     */
+    get: operations['stories_my_pending_signoffs_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/staff-workload/': {
     parameters: {
       query?: never;
@@ -25893,6 +25919,17 @@ export interface components {
        * @description Prompt expires after this time. Stale rows are deleted on next access.
        */
       readonly expires_at: string;
+    };
+    /**
+     * @description Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+     *
+     *     Exposes only the requesting player's own beat_id + treasured_subject_ids —
+     *     the view-level query already guarantees no other player's data can appear
+     *     here (ADR-0033); this serializer adds no fields beyond that.
+     */
+    PendingTreasuredSignoffs: {
+      readonly beat_id: number;
+      readonly treasured_subject_ids: number[];
     };
     PermitOfferDetails: {
       readonly id: number;
@@ -51643,6 +51680,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  stories_my_pending_signoffs_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingTreasuredSignoffs'][];
+        };
       };
     };
   };
