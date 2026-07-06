@@ -23,6 +23,8 @@ from decimal import Decimal
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.checks.models import OutcomeTierAward
+
 
 class SanctumOwnerMode(models.TextChoices):
     """Whether a Sanctum is a personal home or a covenant's sacred ground."""
@@ -191,3 +193,46 @@ The well overflows once filled — further ticks no-op for that weaver
 until they absorb. At L1 modest income (~1/day) this cap is ~3 IC years
 of stockpile; at L5 endgame (~30/day) it fills in ~33 IC days. Tunable.
 """
+
+
+class SanctumHomecomingGainAward(OutcomeTierAward):
+    """Homecoming-ritual gain multiplier per outcome tier (#1207).
+
+    Replaces the module-level HOMECOMING_GAIN_MULTIPLIERS dict in
+    sanctum_rituals.py, which keyed on the deleted ritual_checks.OutcomeTier
+    enum instead of the canonical CheckOutcome spine.
+    """
+
+    gain_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        help_text="Multiplier applied to the Homecoming ritual's base resonance gain.",
+    )
+
+
+class SanctumPurgingRetentionAward(OutcomeTierAward):
+    """Purging-ritual retention adjustment per outcome tier (#1207).
+
+    Signed — a poor roll can reduce retention below the base value. Replaces
+    the module-level PURGING_RETENTION_MODIFIERS dict in sanctum_rituals.py.
+    """
+
+    retention_modifier = models.DecimalField(
+        max_digits=4,
+        decimal_places=3,
+        help_text="Signed adjustment to the Purging ritual's retention fraction.",
+    )
+
+
+class SanctumDissolutionRecoveryAward(OutcomeTierAward):
+    """Dissolution-ritual resonance recovery fraction per outcome tier (#1207).
+
+    Replaces the module-level DISSOLUTION_RECOVERY_CRIT_SUCCESS/_SUCCESS/
+    _FAILURE/_BOTCH constants in sanctum_install.py.
+    """
+
+    recovery_fraction = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        help_text="Fraction of the Sanctum's reservoir recovered on Dissolution.",
+    )

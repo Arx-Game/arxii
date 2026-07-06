@@ -30,6 +30,9 @@ Submodules (see Scope 6 §4.4):
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 - progression_milestone: MagicProgressionMilestone
+- sanctum: SanctumDetails, SanctumOwnerMode, SanctumPendingPayout,
+  SanctumHomecomingGainAward, SanctumPurgingRetentionAward,
+  SanctumDissolutionRecoveryAward (#1207)
 
 Additionally: ``AudereThreshold`` lives in ``world.magic.audere`` but is
 re-exported here so Django's model registry sees it via the ``magic.models``
@@ -133,8 +136,11 @@ from world.magic.models.rituals import (
 )
 from world.magic.models.sanctum import (
     SanctumDetails,
+    SanctumDissolutionRecoveryAward,
+    SanctumHomecomingGainAward,
     SanctumOwnerMode,
     SanctumPendingPayout,
+    SanctumPurgingRetentionAward,
 )
 from world.magic.models.sessions import (
     RitualSession,
@@ -324,8 +330,11 @@ __all__ = [
     "RitualSessionReference",
     # sanctum (Plan 4 Subsystem F)
     "SanctumDetails",
+    "SanctumDissolutionRecoveryAward",
+    "SanctumHomecomingGainAward",
     "SanctumOwnerMode",
     "SanctumPendingPayout",
+    "SanctumPurgingRetentionAward",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
     # signature motif bonuses (#1582)
