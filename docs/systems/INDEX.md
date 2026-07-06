@@ -1080,11 +1080,11 @@ GM at a given level may author (#2000, ADR-0095).
   `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
   `combat.StakesLevelRequirement.minimum_gm_level` gates on `gm_account.gm_profile.level`
   (no profile → STARTING)
-- **API Endpoints:** `GMApplicationViewSet` (`/api/gm-applications/`; create for
+- **API Endpoints:** `GMApplicationViewSet` (`/api/gm/applications/`; create for
   players, list/review/update for staff — approval auto-creates a `GMProfile`),
   `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
   `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
-  `IsAdminUser`), `GMTableViewSet` (`/api/gm-tables/`; staff sees all, GMs their own,
+  `IsAdminUser`), `GMTableViewSet` (`/api/gm/tables/`; staff sees all, GMs their own,
   players tables where an active persona holds membership; `archive`/`transfer_ownership`
   staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
   `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
