@@ -328,3 +328,43 @@ class GetCharacterCastCheckTests(TestCase):
         ct = get_character_cast_check(sheet.character)
         self.assertIsNotNone(ct)
         self.assertEqual(ct.name, character_magic_check_type_name(sheet))
+
+
+class ResolveCastCheckTypeTests(TestCase):
+    """Precedence: personal check -> template check -> None (ADR-0095)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from actions.factories import ActionTemplateFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.template = ActionTemplateFactory()
+
+    def test_unprovisioned_falls_back_to_template_check(self):
+        from world.magic.services.anima import resolve_cast_check_type
+
+        ct = resolve_cast_check_type(self.sheet.character, self.template)
+        self.assertEqual(ct, self.template.check_type)
+
+    def test_no_template_and_unprovisioned_returns_none(self):
+        from world.magic.services.anima import resolve_cast_check_type
+
+        self.assertIsNone(resolve_cast_check_type(self.sheet.character, None))
+
+    def test_provisioned_personal_check_wins_over_template(self):
+        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.services.anima import resolve_cast_check_type
+
+        account = AccountDB.objects.create(username=f"resolve_cc_{id(self)}")
+        ritual = Ritual.objects.create(
+            name=f"resolve_cc_ritual_{id(self)}",
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        config = RitualCheckConfigFactory(ritual=ritual)
+        self.sheet.character.db_account = account
+        self.sheet.character.save(update_fields=["db_account"])
+
+        ct = resolve_cast_check_type(self.sheet.character, self.template)
+        self.assertEqual(ct, config.check_type)
+        self.assertNotEqual(ct, self.template.check_type)

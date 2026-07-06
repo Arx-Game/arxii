@@ -33,6 +33,7 @@ from world.magic.services.anima import (
     get_character_anima_ritual,
     get_character_cast_check,
     provision_player_anima_ritual,
+    resolve_cast_check_type,
 )
 from world.magic.services.resonance import (
     _anchor_in_action,  # external: world.magic.tests.test_pull_service
@@ -124,6 +125,7 @@ __all__ = [
     "recompute_max_health_with_threads",
     "reconcile_ritual_knowledge",
     "resolve_and_consume_ritual_components",
+    "resolve_cast_check_type",
     "resolve_pending_alteration",
     "resolve_pull_effects",
     "seed_thread_survivability_tuning",
