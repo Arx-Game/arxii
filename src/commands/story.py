@@ -1,8 +1,12 @@
-"""GM story lifecycle telnet namespace (#1495).
+"""Story telnet namespace: GM lifecycle actions + player self-service (#1495, #1853).
 
-A thin command face for the four story actions in ``actions.definitions.gm_stories``.
-Each subverb delegates directly to ``Action().run(actor=self.caller, **kwargs)``.
-No business logic lives here.
+GM subverbs (complete/resolve/promote/mark) delegate directly to
+``Action().run(actor=self.caller, **kwargs)`` and are gated by the story's
+Lead GM or staff status in the backing action layer — unchanged from #1495.
+
+Player subverbs (bare `story` / `list` / `beats` / `signoff`) are self-scoped
+reads/mutations over the caller's own account — no GM/staff gate, mirroring
+CmdGMTable's precedent of mixed permission tiers under one command namespace.
 """
 
 from __future__ import annotations
@@ -17,6 +21,11 @@ from commands.utils.gm_resolution import (
 
 _USAGE = (
     "Usage: story <subcommand>\n"
+    "  story                              — your active stories\n"
+    "  story list                         — same as bare `story`\n"
+    "  story beats <episode-id>           — beats in one of your active episodes\n"
+    "  story signoff <beat-id> <subject> [withdraw]\n"
+    "                                     — grant/withdraw a treasured sign-off\n"
     "  story complete <story-id>\n"
     "  story resolve <episode-id> [transition-id] [notes]\n"
     "  story promote <episode-id> <pitch|outline|plot>\n"
@@ -36,6 +45,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "resolve": "_handle_resolve",
     "promote": "_handle_promote",
     "mark": "_handle_mark",
+    "list": "_handle_list",
 }
 
 
@@ -51,6 +61,40 @@ class CmdStory(ArxNamespaceCommand):
     locks = "cmd:all()"
     _USAGE = _USAGE
     _SUBVERB_HANDLERS = _SUBVERB_HANDLERS
+
+    def func(self) -> None:
+        """Bare `story` is the player's active-stories listing; else route by subverb."""
+        raw = (self.args or "").strip()
+        if not raw:
+            self._handle_list("")
+            return
+        super().func()
+
+    def _handle_list(self, rest: str) -> None:
+        """Show the caller's active stories across all three scopes (#1853)."""
+        from world.stories.services.dashboards import active_stories_for_account  # noqa: PLC0415
+
+        result = active_stories_for_account(self.caller.account)
+        entries = [
+            *result["character_stories"],
+            *result["group_stories"],
+            *result["global_stories"],
+        ]
+        if not entries:
+            self.msg("You have no active stories.")
+            return
+        lines = ["Your active stories:"]
+        for entry in entries:
+            episode_bit = (
+                f' — currently in "{entry["current_episode_title"]}"'
+                if entry["current_episode_title"]
+                else ""
+            )
+            lines.append(
+                f"  [{entry['story_id']}] {entry['story_title']}{episode_bit} "
+                f"({entry['status_label']})"
+            )
+        self.msg("\n".join(lines))
 
     def _handle_complete(self, rest: str) -> None:
         """Parse ``complete <story-id>`` and dispatch CompleteStoryAction."""

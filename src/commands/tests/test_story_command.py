@@ -8,11 +8,15 @@ from django.test import TestCase
 
 from actions.types import ActionResult
 from commands.story import CmdStory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.stories.constants import StoryScope
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
     StoryFactory,
+    StoryProgressFactory,
 )
 
 
@@ -34,19 +38,21 @@ class CmdStoryRoutingTests(TestCase):
     """Usage and unknown subcommand handling."""
 
     def setUp(self) -> None:
+        self.account = AccountFactory()
         self.caller = MagicMock()
         self.caller.msg = MagicMock()
+        self.caller.account = self.account
 
     def _run(self, args: str) -> list[str]:
         cmd = _make_cmd(self.caller, args)
         cmd.func()
         return _messages(self.caller)
 
-    def test_bare_command_shows_usage(self) -> None:
+    def test_bare_command_with_no_stories_says_so(self) -> None:
         messages = self._run("")
         self.assertTrue(
-            any("Usage" in m for m in messages),
-            f"Expected usage message; got {messages}",
+            any("no active stories" in m.lower() for m in messages),
+            f"Expected 'no active stories' message; got {messages}",
         )
 
     def test_unknown_subverb_shows_usage(self) -> None:
@@ -263,3 +269,46 @@ class CmdStoryResolutionTests(TestCase):
             any("numeric" in m.lower() for m in messages),
             f"Expected numeric-beat error; got {messages}",
         )
+
+
+class CmdStoryPlayerListTests(TestCase):
+    """Bare `story` / `story list` — the caller's own active stories (#1853)."""
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.char = CharacterFactory()
+        self.char.db_account = self.account
+        self.char.save()
+        self.sheet = CharacterSheetFactory(character=self.char)
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def test_bare_story_with_no_active_stories(self) -> None:
+        messages = self._run("")
+        joined = " ".join(messages)
+        self.assertIn("no active stories", joined.lower())
+
+    def test_bare_story_lists_active_character_story(self) -> None:
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        StoryProgressFactory(story=story, character_sheet=self.sheet, current_episode=None)
+
+        messages = self._run("")
+
+        joined = " ".join(messages)
+        self.assertIn(story.title, joined)
+
+    def test_story_list_is_an_explicit_alias_for_bare(self) -> None:
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=self.sheet)
+        StoryProgressFactory(story=story, character_sheet=self.sheet, current_episode=None)
+
+        messages = self._run("list")
+
+        joined = " ".join(messages)
+        self.assertIn(story.title, joined)
