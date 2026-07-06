@@ -8,12 +8,14 @@ directly.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import asdict
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
 
+from web.webclient.message_types import BattleStatePayload
 from world.battles.beat_wiring import activate_stakes_for_battle, resolve_battle_beats
 from world.battles.conclusion_hooks import run_battle_conclusion_hooks
 from world.battles.constants import (
@@ -477,6 +479,28 @@ def enlist_participant(
     )
 
 
+def notify_battle_state_changed(battle: Battle) -> None:
+    """Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.
+
+    Battles are location-less (their backing scene has no ``location``), so the
+    existing scene/room broadcast paths never reach participants -- this is the
+    dedicated seam. Called after round transitions (begin_battle_round,
+    resolve_battle_round) and on conclusion (conclude_battle).
+    """
+    current = battle.current_round
+    payload = asdict(
+        BattleStatePayload(
+            battle_id=battle.pk,
+            round_number=current.round_number if current else None,
+        )
+    )
+    for participant in battle.participants.select_related("character_sheet"):
+        character = participant.character_sheet.character
+        if character is None or not character.has_account:
+            continue
+        character.msg(battle_state=((), payload))
+
+
 @transaction.atomic
 def begin_battle_round(*, battle: Battle) -> BattleRound:
     """Close any open round and open a new DECLARING round.
@@ -507,12 +531,14 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         else:
             next_number = last.round_number + 1
 
-    return BattleRound.objects.create(
+    new_round = BattleRound.objects.create(
         battle=battle,
         round_number=next_number,
         status=RoundStatus.DECLARING,
         round_started_at=timezone.now(),
     )
+    notify_battle_state_changed(battle)
+    return new_round
 
 
 # ---------------------------------------------------------------------------
@@ -800,6 +826,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     if the battle is already concluded, returns it unchanged (resolve_battle_beats
     does not re-fire). After beat resolution, runs every hook registered via
     register_battle_conclusion_hook (#1832) — e.g. ships' apply_ship_battle_outcome.
+    Pings connected participants via notify_battle_state_changed (#2009) last,
+    after every other side effect.
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -823,6 +851,7 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
 
     resolve_battle_beats(battle)
     run_battle_conclusion_hooks(battle)
+    notify_battle_state_changed(battle)
 
     return battle
 

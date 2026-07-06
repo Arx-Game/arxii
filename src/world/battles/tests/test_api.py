@@ -9,6 +9,7 @@ visibility, world/scenes/managers.py), staff bypass it entirely.
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest import mock
 
 from django.db import connection
 from django.test import TestCase
@@ -35,7 +36,7 @@ from world.battles.factories import (
     BattleVehicleFactory,
     FortificationFactory,
 )
-from world.battles.services import enlist_participant
+from world.battles.services import begin_battle_round, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory
 from world.covenants.factories import CovenantFactory
@@ -328,3 +329,44 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["id"], self.battle.pk)
         self.assertEqual(results[0]["scene_id"], self.battle.scene_id)
+
+
+class BattleStatePingTest(TestCase):
+    """BATTLE_STATE ping seam (#2009 Task 2).
+
+    Battles are location-less (their backing scene has no ``location``), so the
+    existing scene/room broadcast paths never reach participants -- this
+    dedicated ping fills that gap on round transitions. Clients refetch the
+    REST aggregate on receipt; the payload itself carries no battle data.
+    """
+
+    def setUp(self) -> None:
+        self.battle = BattleFactory(name="Ping Battle")
+        self.side = BattleSideFactory(battle=self.battle, role=BattleSideRole.ATTACKER)
+
+    def test_begin_battle_round_pings_connected_participant(self) -> None:
+        sheet = CharacterSheetFactory()
+        enlist_participant(battle=self.battle, character_sheet=sheet, side=self.side)
+        character = sheet.character
+        # Object.has_account reads session count, not db_account -- fake a
+        # connected session so the ping's guard lets this participant through.
+        character.sessions.count = lambda: 1
+
+        with mock.patch.object(character, "msg") as mock_msg:
+            begin_battle_round(battle=self.battle)
+
+        mock_msg.assert_called_once_with(
+            battle_state=((), {"battle_id": self.battle.pk, "round_number": 1})
+        )
+
+    def test_begin_battle_round_skips_participant_without_account(self) -> None:
+        sheet = CharacterSheetFactory()
+        enlist_participant(battle=self.battle, character_sheet=sheet, side=self.side)
+        character = sheet.character
+
+        # No session attached: has_account is False, so the guard must skip
+        # this participant silently rather than erroring.
+        with mock.patch.object(character, "msg") as mock_msg:
+            begin_battle_round(battle=self.battle)
+
+        mock_msg.assert_not_called()
