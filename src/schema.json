@@ -5140,6 +5140,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Companion'
           description: ''
+  /api/companions/companions/{id}/order/:
+    post:
+      operationId: companions_companions_order_create
+      description: |-
+        Order a deployed companion — ``POST /api/companions/companions/{id}/order/``.
+
+        Wraps :class:`actions.definitions.companions.OrderCompanionAction` (#1921).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
   /api/companions/companions/{id}/release/:
     post:
       operationId: companions_companions_release_create

@@ -247,3 +247,146 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
             return False
 
     return False
+
+
+class CompanionOrderError(Exception):
+    """Raised when a companion order is invalid (#1921)."""
+
+    def __init__(self, message: str, user_message: str | None = None):
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+def order_companion(  # noqa: C901, PLR0912, PLR0913, PLR0915
+    *,
+    companion: Companion,
+    order_kind: str,
+    round_number: int,
+    encounter: CombatEncounter | None = None,
+    battle: Battle | None = None,
+    target_opponent=None,
+    target_unit=None,
+    ability=None,
+    defending_participant=None,
+    target_ally=None,
+):
+    """Validate and upsert a CompanionOrder directive (#1921).
+
+    Branches by scale (encounter = duel, battle = battle-scale).
+    Validates that the companion is deployed in the target context
+    and that targets are valid.
+
+    Args:
+        companion: The persistent Companion being ordered.
+        order_kind: A CompanionOrderKind value.
+        round_number: The current round number.
+        encounter: The CombatEncounter (duel-scale).
+        battle: The Battle (battle-scale).
+        target_opponent: The CombatOpponent to attack (duel ATTACK_TARGET).
+        target_unit: The BattleUnit to attack (battle ATTACK_TARGET).
+        ability: Optional CompanionAbility to use instead of auto-select.
+        defending_participant: The CombatParticipant to defend (duel DEFEND_ALLY).
+        target_ally: The BattleParticipant to defend (battle DEFEND_ALLY).
+
+    Returns:
+        The created or updated CompanionOrder.
+
+    Raises:
+        CompanionOrderError: If the order is invalid (wrong owner, not deployed,
+            invalid target, etc.).
+    """
+    from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionOrder  # noqa: PLC0415
+
+    if ability is not None and ability.archetype_id != companion.archetype_id:
+        msg = f"{companion.name} does not have the ability {ability.name}."
+        raise CompanionOrderError(msg, msg)
+
+    # --- Duel-scale ---
+    if encounter is not None and battle is None:
+        try:
+            CombatOpponent.objects.get(
+                summoned_by=companion.owner,
+                encounter=encounter,
+                status=OpponentStatus.ACTIVE,
+            )
+        except CombatOpponent.DoesNotExist:
+            msg = f"{companion.name} is not deployed in this encounter."
+            raise CompanionOrderError(msg, msg) from None
+
+        if order_kind == CompanionOrderKind.ATTACK_TARGET:
+            if target_opponent is None:
+                msg = "ATTACK_TARGET requires a target."
+                raise CompanionOrderError(msg, msg)
+            if target_opponent.encounter_id != encounter.pk:
+                msg = "Target is not in this encounter."
+                raise CompanionOrderError(msg, msg)
+            if target_opponent.allegiance != CombatAllegiance.ENEMY:
+                msg = "Target is not an enemy."
+                raise CompanionOrderError(msg, msg)
+            if target_opponent.status != OpponentStatus.ACTIVE:
+                msg = "Target is no longer active."
+                raise CompanionOrderError(msg, msg)
+
+        elif order_kind == CompanionOrderKind.DEFEND_ALLY:
+            if defending_participant is None:
+                msg = "DEFEND_ALLY requires an ally to defend."
+                raise CompanionOrderError(msg, msg)
+            if defending_participant.encounter_id != encounter.pk:
+                msg = "Ally is not in this encounter."
+                raise CompanionOrderError(msg, msg)
+
+        order, _ = CompanionOrder.objects.update_or_create(
+            companion=companion,
+            encounter=encounter,
+            round_number=round_number,
+            defaults={
+                "order_kind": order_kind,
+                "ability": ability,
+                "target_opponent": target_opponent,
+                "defending_participant": defending_participant,
+                "battle": None,
+                "target_unit": None,
+                "target_ally": None,
+            },
+        )
+        return order
+
+    # --- Battle-scale ---
+    if battle is not None and encounter is None:
+        from world.companions.models import CompanionDeployment  # noqa: PLC0415
+
+        try:
+            CompanionDeployment.objects.get(companion=companion, battle=battle)
+        except CompanionDeployment.DoesNotExist:
+            msg = f"{companion.name} is not deployed in this battle."
+            raise CompanionOrderError(msg, msg) from None
+
+        if order_kind == CompanionOrderKind.ATTACK_TARGET:
+            if target_unit is None:
+                msg = "ATTACK_TARGET requires a target unit."
+                raise CompanionOrderError(msg, msg)
+            if target_unit.battle_id != battle.pk:
+                msg = "Target unit is not in this battle."
+                raise CompanionOrderError(msg, msg)
+
+        order, _ = CompanionOrder.objects.update_or_create(
+            companion=companion,
+            battle=battle,
+            round_number=round_number,
+            defaults={
+                "order_kind": order_kind,
+                "ability": ability,
+                "target_unit": target_unit,
+                "target_ally": target_ally,
+                "encounter": None,
+                "target_opponent": None,
+                "defending_participant": None,
+            },
+        )
+        return order
+
+    msg = "order_companion requires either an encounter or a battle (not both)."
+    raise CompanionOrderError(msg, msg)

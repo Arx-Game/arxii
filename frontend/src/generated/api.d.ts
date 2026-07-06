@@ -3502,6 +3502,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/companions/companions/{id}/order/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Order a deployed companion — ``POST /api/companions/companions/{id}/order/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.OrderCompanionAction` (#1921).
+     */
+    post: operations['companions_companions_order_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/companions/companions/{id}/release/': {
     parameters: {
       query?: never;
@@ -35011,6 +35032,28 @@ export interface operations {
     };
   };
   companions_companions_fight_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_order_create: {
     parameters: {
       query?: never;
       header?: never;

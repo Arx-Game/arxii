@@ -1133,6 +1133,66 @@ def _block_if_participant_mid_audere_majora_crossing(battle: Battle) -> None:
         )
 
 
+def _process_companion_orders(battle_round: BattleRound) -> list:
+    """Create BattleActionDeclarations for ordered companion vehicles (#1921).
+
+    For each companion vehicle with an ATTACK_TARGET order this round, creates
+    a declaration with the player as participant and the companion vehicle's
+    unit as the target. HOLD orders are skipped (no declaration created).
+    DEFEND_ALLY is handled via the damage-interception path, not here.
+    """
+    from world.battles.constants import BattleActionKind  # noqa: PLC0415
+    from world.battles.models import BattleActionDeclaration  # noqa: PLC0415
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionDeployment, CompanionOrder  # noqa: PLC0415
+
+    orders = list(
+        CompanionOrder.objects.filter(
+            battle=battle_round.battle,
+            round_number=battle_round.round_number,
+        ).select_related("companion", "ability", "ability__technique", "target_unit")
+    )
+    if not orders:
+        return []
+
+    declarations = []
+    for order in orders:
+        if order.order_kind == CompanionOrderKind.HOLD:
+            continue
+
+        try:
+            CompanionDeployment.objects.select_related(
+                "vehicle__unit",
+            ).get(companion=order.companion, battle=battle_round.battle)
+        except CompanionDeployment.DoesNotExist:
+            continue
+
+        if order.order_kind == CompanionOrderKind.ATTACK_TARGET:
+            technique = (
+                order.ability.technique if order.ability and order.ability.technique else None
+            )
+            if technique is None or order.target_unit is None:
+                continue
+
+            # Find the participant (the ordering player)
+            participant = battle_round.battle.participants.filter(
+                character_sheet=order.companion.owner,
+            ).first()
+            if participant is None:
+                continue
+
+            decl = BattleActionDeclaration.objects.create(
+                battle_round=battle_round,
+                participant=participant,
+                technique=technique,
+                action_kind=BattleActionKind.STRIKE,
+                target_unit=order.target_unit,
+            )
+            declarations.append(decl)
+
+    return declarations
+
+
 @transaction.atomic
 def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     """Resolve all unresolved declarations for ``battle_round``.
@@ -1193,14 +1253,20 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     # round (#1712/#1715) — REPEL's success populates place_defense_bonus, and
     # SET_ENVIRONMENT's success sets weather, both in time for STRIKE to read
     # them below. A stable sort preserves every other kind's relative order.
+    place_defense_bonus: dict[int, int] = {}
+    newly_surrounded_participant_ids: set[int] = set()
+
+    # --- Companion order processing (#1921) ---
+    # Create BattleActionDeclarations for ordered companion vehicles before
+    # the main iteration so they resolve alongside player declarations.
+    _companion_decls = _process_companion_orders(battle_round)
+    declarations.extend(_companion_decls)
     declarations.sort(
         key=lambda d: 0
         if d.action_kind in (BattleActionKind.REPEL, BattleActionKind.SET_ENVIRONMENT)
         else 1
     )
 
-    place_defense_bonus: dict[int, int] = {}
-    newly_surrounded_participant_ids: set[int] = set()
     for declaration in declarations:
         check_result = resolve_battle_technique(declaration=declaration)
         sl = check_result.success_level if check_result is not None else 0

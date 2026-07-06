@@ -2370,6 +2370,31 @@ def select_npc_actions(
     return actions
 
 
+def _get_companion_order(opponent: CombatOpponent, round_number: int) -> object | None:
+    """Fetch the CompanionOrder for an ALLY summon this round, if any (#1921).
+
+    Returns None for non-summons or when no order exists.
+    """
+    if opponent.summoned_by_id is None or opponent.allegiance != CombatAllegiance.ALLY:
+        return None
+
+    from world.companions.models import Companion, CompanionOrder  # noqa: PLC0415
+
+    try:
+        companion = Companion.objects.get(
+            owner_id=opponent.summoned_by_id,
+            released_at__isnull=True,
+        )
+    except (Companion.DoesNotExist, Companion.MultipleObjectsReturned):
+        return None
+
+    return CompanionOrder.objects.filter(
+        companion=companion,
+        encounter=opponent.encounter,
+        round_number=round_number,
+    ).first()
+
+
 def _build_opponent_round_actions(
     opponent: CombatOpponent,
     pool_entries: list[ThreatPoolEntry],
@@ -2393,6 +2418,25 @@ def _build_opponent_round_actions(
     )
     if not target_pool:
         return []
+
+    # --- Companion order integration (#1921) ---
+    # An ALLY summon with a CompanionOrder may override its target or skip.
+    companion_order = _get_companion_order(opponent, encounter.round_number)
+    if companion_order is not None:
+        from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+
+        if companion_order.order_kind == CompanionOrderKind.HOLD:
+            return []  # HOLD: skip this round
+
+        if (
+            companion_order.order_kind == CompanionOrderKind.ATTACK_TARGET
+            and companion_order.target_opponent_id is not None
+        ):
+            # Filter the pool to just the directed target (if still alive)
+            directed = [opp for opp in target_pool if opp.pk == companion_order.target_opponent_id]
+            if directed:
+                target_pool = directed
+            # else: target is dead/gone, fall back to auto-selection
 
     if opponent.tier == OpponentTier.SWARM and opponent.swarm_count is not None:
         n_attacks = swarm_attack_count(
@@ -2949,6 +2993,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
             )
 
         _try_interpose(participant, pre_payload)
+        _try_companion_defend(participant, pre_payload)
     if pre_payload.amount <= 0:
         return ParticipantDamageResult(
             damage_dealt=0,
@@ -4996,6 +5041,64 @@ def _try_interpose(
             INTERPOSE_BASE_FATIGUE_COST,
             action.effort_level,
         )
+
+
+def _try_companion_defend(
+    participant: CombatParticipant,
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Check for a companion ordered to DEFEND_ALLY for this participant (#1921).
+
+    If found, redirect the damage to the companion's CombatOpponent via
+    ``apply_damage_to_opponent`` (which handles soak, resistance, and defeat).
+    The companion's soak applies. If the companion is defeated, overflow
+    damage passes through to the original target.
+
+    **Guard:** no-op when the encounter is not ``RESOLVING`` so that
+    non-combat callers of :func:`apply_damage_to_participant` are unaffected.
+    """
+    from world.companions.constants import CompanionOrderKind  # noqa: PLC0415
+    from world.companions.models import CompanionOrder  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.RESOLVING:
+        return
+
+    order = (
+        CompanionOrder.objects.filter(
+            defending_participant=participant,
+            encounter=encounter,
+            round_number=encounter.round_number,
+            order_kind=CompanionOrderKind.DEFEND_ALLY,
+        )
+        .select_related("companion")
+        .first()
+    )
+    if order is None:
+        return
+
+    # Find the companion's materialized CombatOpponent
+    companion_opponent = CombatOpponent.objects.filter(
+        summoned_by=order.companion.owner,
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+    ).first()
+    if companion_opponent is None:
+        return
+
+    # Redirect damage to the companion
+    apply_damage_to_opponent(
+        companion_opponent,
+        pre_payload.amount,
+        damage_type=pre_payload.damage_type,
+    )
+
+    # If companion survived, zero out the damage to the ally
+    if companion_opponent.status == OpponentStatus.ACTIVE:
+        pre_payload.amount = 0
+    else:
+        # Companion defeated; overflow damage goes to the ally
+        pre_payload.amount = max(0, pre_payload.amount - companion_opponent.max_health)
 
 
 def _fire_on_hit_pool(

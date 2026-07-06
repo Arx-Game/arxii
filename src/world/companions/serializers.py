@@ -34,3 +34,12 @@ class BindActionSerializer(serializers.Serializer):
     archetype_id = serializers.IntegerField()
     gift_id = serializers.IntegerField()
     name = serializers.CharField(max_length=100)
+
+
+class OrderActionSerializer(serializers.Serializer):
+    """Body serializer for ``POST /api/companions/companions/{id}/order/`` (#1921)."""
+
+    order_kind = serializers.CharField(max_length=20)
+    target_id = serializers.IntegerField(required=False)
+    ability_id = serializers.IntegerField(required=False)
+    ally_id = serializers.IntegerField(required=False)
