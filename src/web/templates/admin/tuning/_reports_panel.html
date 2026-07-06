@@ -1,0 +1,25 @@
+{% load i18n %}
+
+<h2>{% translate "Reports Queue" %}</h2>
+<p>{% translate "Open vs. total counts per player-submissions queue." %}</p>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Kind" %}</th>
+      <th>{% translate "Open" %}</th>
+      <th>{% translate "Total" %}</th>
+      <th>{% translate "Staff page" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for bucket in buckets %}
+    <tr>
+      <td>{{ bucket.kind }}</td>
+      <td>{{ bucket.open_count }}</td>
+      <td>{{ bucket.total }}</td>
+      <td><a href="{{ bucket.staff_url }}">{% translate "View" %}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

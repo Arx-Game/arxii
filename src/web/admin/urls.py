@@ -5,6 +5,13 @@ from django.urls import path
 from web.admin import arx_admin_site
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
+from web.admin.tuning.ops_views import (
+    ops_dashboard,
+    ops_economy_fragment,
+    ops_progression_fragment,
+    ops_reports_fragment,
+    ops_story_fragment,
+)
 from web.admin.tuning.views import (
     tuning_checks_fragment,
     tuning_conditions_fragment,
@@ -40,5 +47,10 @@ urlpatterns = [
     path("_tuning/consequences/", tuning_consequences_fragment, name="admin_tuning_consequences"),
     path("_tuning/conditions/", tuning_conditions_fragment, name="admin_tuning_conditions"),
     path("_tuning/simulation/", tuning_simulation_fragment, name="admin_tuning_simulation"),
+    path("_ops/", ops_dashboard, name="admin_ops"),
+    path("_ops/progression/", ops_progression_fragment, name="admin_ops_progression"),
+    path("_ops/economy/", ops_economy_fragment, name="admin_ops_economy"),
+    path("_ops/story/", ops_story_fragment, name="admin_ops_story"),
+    path("_ops/reports/", ops_reports_fragment, name="admin_ops_reports"),
     path("", arx_admin_site.urls),
 ]

@@ -1,0 +1,70 @@
+<style>
+  .tuning-panel {
+    border: 1px solid var(--hairline-color);
+    background: var(--body-bg);
+    color: var(--body-fg);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .tuning-panel h2 {
+    margin-top: 0;
+  }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.25rem 0;
+  }
+  .bar-track {
+    flex: 1;
+    background: var(--hairline-color);
+    border-radius: 2px;
+    height: 0.75rem;
+    overflow: hidden;
+  }
+  .bar {
+    display: block;
+    height: 100%;
+    background: var(--primary);
+  }
+  .bar-label {
+    min-width: 3.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  table.tuning-table th,
+  table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  .stat-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .stat-tile {
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    min-width: 8rem;
+  }
+  .stat-tile .stat-value {
+    display: block;
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-tile .stat-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--body-quiet-color);
+  }
+</style>

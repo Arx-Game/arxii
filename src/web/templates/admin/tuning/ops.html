@@ -1,0 +1,32 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+<div id="ops-root" hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
+  <h1>Game Ops</h1>
+  <p>Live-game analytics: progression throughput, the economy, story/GM activity, and the
+    player-submissions queue.</p>
+
+  <section class="tuning-panel" id="panel-ops-progression"
+           hx-get="{% url 'admin_ops_progression' %}" hx-trigger="load">
+    <p>Loading progression analytics&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-ops-economy"
+           hx-get="{% url 'admin_ops_economy' %}" hx-trigger="load">
+    <p>Loading economy analytics&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-ops-story"
+           hx-get="{% url 'admin_ops_story' %}" hx-trigger="load">
+    <p>Loading story/GM analytics&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-ops-reports"
+           hx-get="{% url 'admin_ops_reports' %}" hx-trigger="load">
+    <p>Loading reports queue&hellip;</p>
+  </section>
+</div>
+<script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
+{% endblock %}

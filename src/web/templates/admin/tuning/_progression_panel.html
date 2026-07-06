@@ -1,0 +1,42 @@
+{% load i18n %}
+
+<h2>{% translate "Progression" %}</h2>
+<p>{% translate "Weekly XP earned, development points awarded, and level-ups, over the last 8 ISO weeks." %}</p>
+
+{% for row in series %}
+<h3>{{ row.label }}</h3>
+<table class="tuning-table">
+  <tbody>
+    {% for point in row.points %}
+    <tr>
+      <td class="bar-row">
+        <span class="bar-label">{{ point.week_start|date:"M j" }}</span>
+        <span class="bar-track">
+          <span class="bar" style="width: {{ point.pct }}%"></span>
+        </span>
+        <span class="bar-label">{{ point.value|floatformat:0 }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+
+<h3>{% translate "Level Distribution (primary class)" %}</h3>
+<table class="tuning-table">
+  <tbody>
+    {% for row in level_distribution %}
+    <tr>
+      <td class="bar-row">
+        <span class="bar-label">{% translate "Lvl" %} {{ row.level }}</span>
+        <span class="bar-track">
+          <span class="bar" style="width: {{ row.pct }}%"></span>
+        </span>
+        <span class="bar-label">{{ row.count }}</span>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td>{% translate "No primary class-level assignments yet." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

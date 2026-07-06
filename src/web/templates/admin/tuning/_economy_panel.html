@@ -1,0 +1,38 @@
+{% load i18n %}
+
+<h2>{% translate "Economy" %}</h2>
+<p>{% translate "Weekly minted, sunk, and transferred coppers, over the last 8 ISO weeks." %}</p>
+
+<div class="stat-tiles">
+  <div class="stat-tile">
+    <span class="stat-value">{{ money_supply_display.purses }}</span>
+    <span class="stat-label">{% translate "In player purses" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ money_supply_display.treasuries }}</span>
+    <span class="stat-label">{% translate "In org treasuries" %}</span>
+  </div>
+  <div class="stat-tile">
+    <span class="stat-value">{{ money_supply_display.total }}</span>
+    <span class="stat-label">{% translate "Total money supply" %}</span>
+  </div>
+</div>
+
+{% for row in series %}
+<h3>{{ row.label }}</h3>
+<table class="tuning-table">
+  <tbody>
+    {% for point in row.points %}
+    <tr>
+      <td class="bar-row">
+        <span class="bar-label">{{ point.week_start|date:"M j" }}</span>
+        <span class="bar-track">
+          <span class="bar" style="width: {{ point.pct }}%"></span>
+        </span>
+        <span class="bar-label">{{ point.value|floatformat:0 }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %}

@@ -2,42 +2,7 @@
 {% load i18n static %}
 
 {% block content %}
-<style>
-  .tuning-panel {
-    border: 1px solid var(--hairline-color);
-    background: var(--body-bg);
-    color: var(--body-fg);
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-  }
-  .tuning-panel h2 {
-    margin-top: 0;
-  }
-  .bar-row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 0.25rem 0;
-  }
-  .bar-track {
-    flex: 1;
-    background: var(--hairline-color);
-    border-radius: 2px;
-    height: 0.75rem;
-    overflow: hidden;
-  }
-  .bar {
-    display: block;
-    height: 100%;
-    background: var(--primary);
-  }
-  .bar-label {
-    min-width: 3.5rem;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-</style>
+{% include "admin/tuning/_panel_css.html" %}
 <div id="tuning-root" hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
   <h1>Game Tuning</h1>
   <p>Difficulty analytics and simulation for the check engine, consequences, and conditions.</p>
