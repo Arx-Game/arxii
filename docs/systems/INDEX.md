@@ -2882,7 +2882,22 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (the underlying `declare_battle_action`/`DeclareBattleActionAction` already
   supports REPOSITION generically) remain deferred. See
   [battles.md](battles.md#battlevehicle) for the full mechanism.
-- **Deferred follow-ups:** battle writeup page (#1735); naval/aerial embark actions
+- **REST/WS surface (#2009):** `BattleViewSet` (`IsAuthenticated`, scene-gated exactly like
+  `CombatEncounterViewSet` — staff unfiltered, else `scene__in=Scene.objects.viewable_by`,
+  404s a private battle rather than leaking a 403) exposes `GET /api/battles/` (list,
+  `?scene=`/`?outcome=` filters) and `GET /api/battles/<pk>/` (`BattleDetailSerializer` —
+  the single aggregate: sides → places (x/y/footprint/terrain/`controlled_by`/
+  `encounter_scene_id`/`vehicle`/`fortifications`) → units → participants (persona
+  id/name/thumbnail only)). `notify_battle_state_changed` sends a slim `BATTLE_STATE`
+  WS ping (`{battle_id, round_number}`, no battle data) to connected participants from
+  `begin_battle_round`/`resolve_battle_round`/`conclude_battle`, each via
+  `transaction.on_commit` (see ADR-0095: ping-plus-refetch, not a state payload push).
+  Frontend: `/scenes/:id/battle` — a read-only React Flow `BattleMapPage`, refetching
+  the aggregate via React Query on `BATTLE_STATE` receipt. See
+  [battles.md](battles.md#web-surface-2009) for the full contract.
+- **Deferred follow-ups:** battle writeup page (#1735 — should reuse
+  `BattleDetailSerializer`'s aggregate rather than authoring a second one; the live
+  strategic map itself shipped, #2009); naval/aerial embark actions
   and a dedicated REPOSITION telnet subcommand remain deferred (#1714) — the vehicle
   model, REPOSITION declaration and movement resolution, overlap-gated boarding, and
   hull-breach/living-mount-defeat ejection are built (see the Vehicles subsection

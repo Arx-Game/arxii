@@ -189,3 +189,14 @@ _Avoid_: hero, duelist (descriptive only).
 breadth of a declared battle-round action. `PLACE`/`SIDE` require the matching
 Command Tier on the declaring participant's side's covenant.
 _Avoid_: range, radius, AOE.
+
+**BATTLE_STATE ping**:
+The `BattleStatePayload` (#2009, `web.webclient.message_types`) WS message —
+`{battle_id, round_number}` only, no battle data. Sent to connected
+participants from `notify_battle_state_changed` (`world.battles.services`)
+after `begin_battle_round`/`resolve_battle_round`/`conclude_battle`, deferred
+via `transaction.on_commit`. A slim "go refetch" signal, not a state push —
+the frontend treats receipt as cache invalidation only (`battleKeys.all`),
+then reads the real state back from `GET /api/battles/<pk>/`
+(`BattleDetailSerializer`). See ADR-0095.
+_Avoid_: battle update, state push (implies the payload itself carries state).

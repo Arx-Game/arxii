@@ -126,6 +126,7 @@ treat those names as hints to confirm, not gospel.
 - [0084 — Battle environment reads ambient weather via Battle.region, not the room graph](0084-battle-environment-reads-ambient-weather-via-battle-region.md)
 - [0085 — BattlePlace gains internal battle-map coordinates, additive to ADR-0081](0085-battleplace-internal-battle-map-coordinates.md)
 - [0085 — NPCStanding carries debt and petition-failure-streak, not CourtPact](0085-npcstanding-debt-and-petition-streak-are-generic.md)
+- [0095 — Battle live updates are a slim BATTLE_STATE ping plus REST refetch, not a full-state WS payload](0095-battle-live-updates-are-ping-plus-refetch.md)
 - [0091 — instantiate_situation mints Challenges via an authored target-object name; GM triggers it with a plain staff Action](0091-instantiate-situation-mints-challenges-gm-trigger.md) (supersedes ADR-0090)
 
 ### Gift & resonance economy
