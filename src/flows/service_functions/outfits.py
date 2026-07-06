@@ -156,6 +156,20 @@ def delete_outfit(outfit: Outfit) -> None:
     sheet.saved_outfits.invalidate()
 
 
+def rename_outfit(*, outfit: Outfit, name: str, description: str = "") -> Outfit:
+    """Rename/redescribe an outfit definition. Only ``name``/``description`` change.
+
+    Extracted from ``OutfitRenameSerializer.save()``'s inline model update
+    (#1866) so the Action layer calls a service function instead of touching
+    the model directly.
+    """
+    outfit.name = name
+    outfit.description = description
+    outfit.save(update_fields=["name", "description", "updated_at"])
+    outfit.character_sheet.saved_outfits.invalidate()
+    return outfit
+
+
 @transaction.atomic
 def add_outfit_slot(
     *,

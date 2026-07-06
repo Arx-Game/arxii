@@ -1009,6 +1009,28 @@ class BeatSerializer(serializers.ModelSerializer):
             return False
         return CanMarkBeat().has_object_permission(request, None, obj)  # type: ignore[arg-type]
 
+    def to_representation(self, instance: Beat) -> dict[str, Any]:
+        """Gate ``internal_description`` for non-privileged viewers (#1923).
+
+        ``internal_description`` is GM-only authoring text (the real predicate
+        + meaning). It must not surface to players — mirroring the story-log
+        contract (``visible_internal_description`` is ``None`` unless the
+        viewer's role is staff/lead_gm) and the ``_gm_text_gate`` pattern.
+        Privilege is decided by the shared ``can_view_story_gm_text``
+        predicate (staff / Lead GM / story owner). When there is no request in
+        context we default to the most-restrictive treatment so the field
+        never leaks by default.
+        """
+        from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
+
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        story = instance.episode.chapter.story
+        if user is None or not can_view_story_gm_text(user, story):
+            data["internal_description"] = None
+        return data
+
     def validate(self, attrs: Any) -> Any:
         """Mirror Beat.clean() so predicate-type invariants surface as 400 responses."""
         # Build complete picture for clean(): existing values + incoming attrs.

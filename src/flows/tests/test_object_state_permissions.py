@@ -1,10 +1,14 @@
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.models import RoomProfile
 from flows.factories import SceneDataManagerFactory
 from flows.object_states.character_state import CharacterState
 from flows.object_states.exit_state import ExitState
 from flows.object_states.room_state import RoomState
+from world.character_sheets.factories import CharacterSheetFactory
+from world.locations.services import grant_tenancy, transfer_ownership
+from world.scenes.factories import PersonaFactory
 
 
 class ObjectStatePermissionTests(TestCase):
@@ -61,3 +65,85 @@ class ObjectStatePermissionTests(TestCase):
     def test_object_cannot_move_into_itself(self):
         item_state = self.context.get_state_by_pk(self.item.pk)
         assert not item_state.can_move(item_state, item_state)
+
+    def test_unlocked_exit_allows_traversal(self):
+        """Baseline: an unlocked exit is unaffected by the #1866 lock gate.
+
+        Confirms the new lock-checking branch is a no-op when ``db.locked``
+        is falsy/unset.
+        """
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert exit_state.can_traverse(actor_state)
+
+    def test_locked_exit_blocks_non_owner_non_tenant(self):
+        """A locked exit blocks a caller who is neither owner nor tenant (#1866).
+
+        Exercises the real ``is_owner``/``is_tenant`` gate end-to-end, no mocking.
+        """
+        self.exit.db.locked = True
+        sheet = CharacterSheetFactory(character=self.char)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert not exit_state.can_traverse(actor_state)
+
+    def test_locked_exit_allows_room_owner(self):
+        """A locked exit still allows the source room's owner to traverse (#1866).
+
+        Grants real ownership via ``transfer_ownership`` (matching the pattern
+        in ``actions/tests/test_door_actions.py``); no mocking.
+        """
+        self.exit.db.locked = True
+        sheet = CharacterSheetFactory(character=self.char)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+
+        room_profile = RoomProfile.objects.filter(objectdb=self.room).first()
+        if room_profile is None:
+            room_profile = RoomProfile.objects.create(objectdb=self.room)
+        transfer_ownership(room_profile=room_profile, to_persona=persona)
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert exit_state.can_traverse(actor_state)
+
+    def test_locked_exit_allows_room_tenant(self):
+        """A locked exit still allows a (non-owner) tenant of the source room (#1866).
+
+        Grants real tenancy via ``grant_tenancy`` (mirrors
+        ``test_locked_exit_allows_room_owner``'s ownership-transfer pattern, but
+        for the tenant branch of the ``is_owner(...) or is_tenant(...)`` gate).
+        """
+        self.exit.db.locked = True
+        sheet = CharacterSheetFactory(character=self.char)
+        persona = PersonaFactory(character_sheet=sheet)
+        sheet.active_persona = persona
+        sheet.save(update_fields=["active_persona"])
+
+        room_profile = RoomProfile.objects.filter(objectdb=self.room).first()
+        if room_profile is None:
+            room_profile = RoomProfile.objects.create(objectdb=self.room)
+        grant_tenancy(room_profile=room_profile, tenant_persona=persona)
+
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        actor_state = self.context.get_state_by_pk(self.char.pk)
+        assert exit_state.can_traverse(actor_state)
+
+    def test_locked_exit_blocks_actor_with_no_character_sheet(self):
+        """A locked exit blocks a plain ObjectDB actor with no CharacterSheet at all (#1866).
+
+        Exercises the ``elif room is not None: return False`` branch in
+        ``ExitState.can_traverse`` — distinct from the "has a sheet but isn't
+        owner/tenant" case covered by ``test_locked_exit_blocks_non_owner_non_tenant``.
+        """
+        self.exit.db.locked = True
+
+        # self.item is a plain ObjectDB with no attached CharacterSheet.
+        actor_state = self.context.get_state_by_pk(self.item.pk)
+        exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
+        assert not exit_state.can_traverse(actor_state)

@@ -7034,7 +7034,7 @@ export interface paths {
     /** @description Return ItemFacet rows for ``?item_instance=<pk>``. */
     get: operations['items_item_facets_list'];
     put?: never;
-    /** @description Roll the crafting check and (on success) attach the facet. */
+    /** @description Roll the crafting check and (on success) attach the facet, via the Action. */
     post: operations['items_item_facets_create'];
     delete?: never;
     options?: never;
@@ -7086,7 +7086,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Roll the crafting check and (on success) attach the style. */
+    /** @description Roll the crafting check and (on success) attach the style, via the Action. */
     post: operations['items_item_styles_create'];
     delete?: never;
     options?: never;
@@ -7247,10 +7247,10 @@ export interface paths {
     get: operations['items_outfit_slots_list'];
     put?: never;
     /**
-     * @description Create an OutfitSlot via the existing write serializer.
+     * @description Create an OutfitSlot via AddOutfitSlotAction (validates via the existing serializer).
      *
      *     Cache invalidation lives inside ``add_outfit_slot`` (called by the
-     *     serializer's ``create``), so no manual invalidation is needed here.
+     *     Action), so no manual invalidation is needed here.
      */
     post: operations['items_outfit_slots_create'];
     delete?: never;
@@ -7271,7 +7271,7 @@ export interface paths {
     put?: never;
     post?: never;
     /**
-     * @description Delete via remove_outfit_slot (idempotent).
+     * @description Delete via RemoveOutfitSlotAction (idempotent).
      *
      *     Cache invalidation lives inside ``remove_outfit_slot``.
      */
@@ -7291,7 +7291,7 @@ export interface paths {
     /** @description Return outfits saved on ``?character_sheet=<pk>``. */
     get: operations['items_outfits_list'];
     put?: never;
-    /** @description Create an Outfit via the existing write serializer (calls save_outfit). */
+    /** @description Create an Outfit via SaveOutfitAction (validates via the existing serializer). */
     post: operations['items_outfits_create'];
     delete?: never;
     options?: never;
@@ -7317,7 +7317,7 @@ export interface paths {
      */
     put: operations['items_outfits_update'];
     post?: never;
-    /** @description Delete via the delete_outfit service (cascades slots). */
+    /** @description Delete via DeleteOutfitAction (cascades slots). */
     delete: operations['items_outfits_destroy'];
     options?: never;
     head?: never;
@@ -11786,7 +11786,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Join a place. */
+    /** @description Join a place, via JoinPlaceAction. */
     post: operations['places_join_create'];
     delete?: never;
     options?: never;
@@ -11803,7 +11803,7 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Leave a place. */
+    /** @description Leave a place, via LeavePlaceAction. */
     post: operations['places_leave_create'];
     delete?: never;
     options?: never;
@@ -22337,14 +22337,28 @@ export interface components {
       readonly body_region: components['schemas']['BodyRegionEnum'];
       readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
     };
-    /** @description Write serializer for OutfitSlot — delegates to add_outfit_slot service. */
+    /**
+     * @description Write serializer for OutfitSlot — validates POST input for AddOutfitSlotAction.
+     *
+     *     ``OutfitSlotViewSet.create`` calls ``.is_valid()`` on this serializer and then
+     *     dispatches through ``AddOutfitSlotAction`` directly (which wraps the
+     *     ``add_outfit_slot`` service) rather than calling ``.save()`` — so this
+     *     serializer has no ``create()`` override; it's validation-only.
+     */
     OutfitSlotWriteRequest: {
       outfit: number;
       item_instance: number;
       body_region: components['schemas']['BodyRegionEnum'];
       equipment_layer: components['schemas']['EquipmentLayerEnum'];
     };
-    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
+    /**
+     * @description Write serializer for Outfit — validates POST input for SaveOutfitAction.
+     *
+     *     ``OutfitViewSet.create`` calls ``.is_valid()`` on this serializer and then
+     *     dispatches through ``SaveOutfitAction`` directly (which wraps the
+     *     ``save_outfit`` service) rather than calling ``.save()`` — so this
+     *     serializer has no ``create()``/``update()`` override; it's validation-only.
+     */
     OutfitWriteRequest: {
       name: string;
       description?: string;

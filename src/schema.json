@@ -11065,7 +11065,8 @@ paths:
           description: ''
     post:
       operationId: items_item_facets_create
-      description: Roll the crafting check and (on success) attach the facet.
+      description: Roll the crafting check and (on success) attach the facet, via
+        the Action.
       tags:
       - items
       requestBody:
@@ -11152,7 +11153,8 @@ paths:
   /api/items/item-styles/:
     post:
       operationId: items_item_styles_create
-      description: Roll the crafting check and (on success) attach the style.
+      description: Roll the crafting check and (on success) attach the style, via
+        the Action.
       tags:
       - items
       requestBody:
@@ -11361,10 +11363,10 @@ paths:
     post:
       operationId: items_outfit_slots_create
       description: |-
-        Create an OutfitSlot via the existing write serializer.
+        Create an OutfitSlot via AddOutfitSlotAction (validates via the existing serializer).
 
         Cache invalidation lives inside ``add_outfit_slot`` (called by the
-        serializer's ``create``), so no manual invalidation is needed here.
+        Action), so no manual invalidation is needed here.
       tags:
       - items
       requestBody:
@@ -11406,7 +11408,7 @@ paths:
     delete:
       operationId: items_outfit_slots_destroy
       description: |-
-        Delete via remove_outfit_slot (idempotent).
+        Delete via RemoveOutfitSlotAction (idempotent).
 
         Cache invalidation lives inside ``remove_outfit_slot``.
       parameters:
@@ -11448,7 +11450,8 @@ paths:
           description: ''
     post:
       operationId: items_outfits_create
-      description: Create an Outfit via the existing write serializer (calls save_outfit).
+      description: Create an Outfit via SaveOutfitAction (validates via the existing
+        serializer).
       tags:
       - items
       requestBody:
@@ -11548,7 +11551,7 @@ paths:
           description: ''
     delete:
       operationId: items_outfits_destroy
-      description: Delete via the delete_outfit service (cascades slots).
+      description: Delete via DeleteOutfitAction (cascades slots).
       parameters:
       - in: path
         name: id
@@ -19384,7 +19387,7 @@ paths:
   /api/places/{id}/join/:
     post:
       operationId: places_join_create
-      description: Join a place.
+      description: Join a place, via JoinPlaceAction.
       parameters:
       - in: path
         name: id
@@ -19412,7 +19415,7 @@ paths:
   /api/places/{id}/leave/:
     post:
       operationId: places_leave_create
-      description: Leave a place.
+      description: Leave a place, via LeavePlaceAction.
       parameters:
       - in: path
         name: id
@@ -40250,8 +40253,13 @@ components:
       - outfit
     OutfitSlotWriteRequest:
       type: object
-      description: Write serializer for OutfitSlot — delegates to add_outfit_slot
-        service.
+      description: |-
+        Write serializer for OutfitSlot — validates POST input for AddOutfitSlotAction.
+
+        ``OutfitSlotViewSet.create`` calls ``.is_valid()`` on this serializer and then
+        dispatches through ``AddOutfitSlotAction`` directly (which wraps the
+        ``add_outfit_slot`` service) rather than calling ``.save()`` — so this
+        serializer has no ``create()`` override; it's validation-only.
       properties:
         outfit:
           type: integer
@@ -40268,8 +40276,13 @@ components:
       - outfit
     OutfitWriteRequest:
       type: object
-      description: Write serializer for Outfit — POST snapshots current loadout via
-        save_outfit.
+      description: |-
+        Write serializer for Outfit — validates POST input for SaveOutfitAction.
+
+        ``OutfitViewSet.create`` calls ``.is_valid()`` on this serializer and then
+        dispatches through ``SaveOutfitAction`` directly (which wraps the
+        ``save_outfit`` service) rather than calling ``.save()`` — so this
+        serializer has no ``create()``/``update()`` override; it's validation-only.
       properties:
         name:
           type: string
