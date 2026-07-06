@@ -30,6 +30,12 @@ Isolation contract (the entire point of this module):
 4. Only real dice are used through the normal combat pipeline; this module
    never calls ``force_check_outcome`` and never reinvents check/damage math
    — every round is resolved by ``world.combat.services.resolve_round``.
+5. Existing scaling tuning is ALWAYS respected: ``seed_scaling_defaults()`` is
+   only called when ``EncounterScalingConfig`` has no rows at all (a fresh/
+   unseeded dev DB). Once scaling config exists — including a GM's live
+   tuning edits — this module never overwrites it. A tuning-preview tool that
+   silently reset the very tuning it's supposed to preview would defeat its
+   own purpose.
 """
 
 from __future__ import annotations
@@ -58,6 +64,7 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
+    EncounterScalingConfig,
 )
 from world.combat.scaling import compute_opponent_stat_block
 from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
@@ -67,10 +74,14 @@ from world.scenes.constants import RoundStatus
 from world.seeds.checks import seed_check_resolution_tables
 from world.vitals.models import CharacterVitals
 
-# Ample vitals/anima so a party never starves mid-run for reasons unrelated to
-# the boss fight itself (the simulator measures encounter risk, not resource
-# attrition). Values are arbitrary but generous relative to a basic attack's
-# anima_cost below.
+# Ample vitals so a party never starves mid-run for reasons unrelated to the
+# boss fight itself (the simulator measures encounter risk, not resource
+# attrition). _PC_ANIMA is not sized to outlast round_cap rounds of basic
+# attacks (30 / 3 per round = 10 rounds, less than the default round_cap=20)
+# — that's fine because resolve_round's path never gates an action on the
+# actor's current anima pool; technique.anima_cost only feeds apply_fatigue
+# (services.py's per-action fatigue accrual), so a "low" anima pool can never
+# hard-block a basic attack. The value just needs to be nonzero/plausible.
 _PC_HEALTH = 100
 _PC_ANIMA = 30
 _BASIC_ATTACK_ANIMA_COST = 3
@@ -106,7 +117,14 @@ class SimulationParams:
 
 @dataclass(frozen=True)
 class SimulationReport:
-    """Tallied outcome distribution for a completed simulation batch."""
+    """Tallied outcome distribution for a completed simulation batch.
+
+    ``opponent_max_health`` is the scaled ``max_health`` used for the opponent
+    in the last iteration run (all iterations share the same params, so this
+    is deterministic across the batch). It reflects whatever tier tuning was
+    live in the DB at run time — see the module docstring's isolation
+    contract point 5.
+    """
 
     params: SimulationParams
     iterations_run: int
@@ -116,6 +134,7 @@ class SimulationReport:
     win_rate: float
     round_counts: list[int]
     mean_rounds: float
+    opponent_max_health: int
 
 
 def run_party_vs_boss_simulation(params: SimulationParams) -> SimulationReport:
@@ -126,24 +145,41 @@ def run_party_vs_boss_simulation(params: SimulationParams) -> SimulationReport:
     either side is wiped or ``params.round_cap`` rounds elapse (a
     stalemate). See the module docstring for the isolation contract; nothing
     this function does is ever persisted.
+
+    Existing scaling tuning rows are ALWAYS respected: defaults are seeded
+    only when ``EncounterScalingConfig`` is entirely absent (see the module
+    docstring's isolation contract point 5).
     """
     victories = 0
     defeats = 0
     stalemates = 0
     round_counts: list[int] = []
 
+    opponent_max_health = 0
+
     try:
         with transaction.atomic():
-            # Idempotent production seed helpers — safe to call every batch;
+            # Idempotent production seed helper — safe to call every batch;
             # rolled back with everything else by the _BatchRollback below.
             seed_check_resolution_tables()
-            seed_scaling_defaults()
+            # Scaling config is seeded ONLY when entirely absent (fresh/unseeded
+            # dev DB). `seed_scaling_defaults()` uses `update_or_create` at every
+            # layer, so calling it unconditionally would RESET any GM's live
+            # tuning of OpponentTierTemplate / RiskScalingModifier /
+            # EncounterScalingConfig back to hardcoded defaults before this
+            # batch's opponents are scaled — silently misrepresenting actual
+            # game balance in a tool whose entire purpose is to preview it.
+            if not EncounterScalingConfig.objects.exists():
+                seed_scaling_defaults()
 
             for _ in range(params.iterations):
                 try:
                     with transaction.atomic():
-                        outcome, rounds_used = _run_one_iteration(params)
+                        outcome, rounds_used, iteration_opponent_max_health = _run_one_iteration(
+                            params
+                        )
                         round_counts.append(rounds_used)
+                        opponent_max_health = iteration_opponent_max_health
                         if outcome is None:
                             stalemates += 1
                         elif outcome == EncounterOutcome.VICTORY:
@@ -173,15 +209,18 @@ def run_party_vs_boss_simulation(params: SimulationParams) -> SimulationReport:
         win_rate=win_rate,
         round_counts=round_counts,
         mean_rounds=mean_rounds,
+        opponent_max_health=opponent_max_health,
     )
 
 
-def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int]:
+def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int, int]:
     """Run a single simulated party-vs-opponent combat to completion or the round cap.
 
-    Returns ``(outcome, rounds_used)``. ``outcome`` is an ``EncounterOutcome``
-    value, or ``None`` on a stalemate (the round cap was reached with the
-    encounter still unresolved).
+    Returns ``(outcome, rounds_used, opponent_max_health)``. ``outcome`` is an
+    ``EncounterOutcome`` value, or ``None`` on a stalemate (the round cap was
+    reached with the encounter still unresolved). ``opponent_max_health`` is
+    the scaled stat block's ``max_health`` actually used for this iteration's
+    opponent — read before the iteration's savepoint rolls back.
     """
     # FactoryBoy calls return model instances at runtime; ty sees the factory
     # class (factories.py is ty-excluded), hence the casts here and below.
@@ -216,10 +255,11 @@ def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int]:
                 focused_action=technique,
                 focused_opponent_target=opponent,
             )
-        # select_npc_actions is the real opponent-AI selection service (weighted
-        # random pick from the threat pool) — the same one a live encounter
-        # uses; a passive opponent would make every run an automatic victory
-        # and defeat the point of a win-rate simulator.
+        # select_npc_actions is the production-grade opponent-AI selection
+        # service (weighted random pick from the threat pool) and the only
+        # creator of CombatOpponentAction rows; live-encounter wiring for it
+        # has not been demonstrated. A passive opponent would make every run
+        # an automatic victory and defeat the point of a win-rate simulator.
         services.select_npc_actions(encounter)
 
         services.resolve_round(encounter)
@@ -228,7 +268,7 @@ def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int]:
             outcome = services._classify_encounter_outcome(encounter)  # noqa: SLF001
             break
 
-    return outcome, rounds_used
+    return outcome, rounds_used, opponent.max_health
 
 
 def _build_party(encounter: CombatEncounter, params: SimulationParams) -> list[CombatParticipant]:
