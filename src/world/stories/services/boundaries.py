@@ -370,9 +370,7 @@ def player_pending_treasured_signoffs(
     if not beats:
         return []
 
-    tenure_ids = list(
-        player_data.tenures.filter(end_date__isnull=True).values_list("pk", flat=True)
-    )
+    tenure_ids = [tenure.pk for tenure in player_data.cached_active_tenures]
     if not tenure_ids:
         return []
 
