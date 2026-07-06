@@ -1,11 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% load i18n static %}
 
-{% block extrahead %}
-{{ block.super }}
-<script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
-{% endblock %}
-
 {% block content %}
 <style>
   .tuning-panel {
@@ -67,4 +62,5 @@
     <p>Loading simulation&hellip;</p>
   </section>
 </div>
+<script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
 {% endblock %}
