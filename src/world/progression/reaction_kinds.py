@@ -61,15 +61,17 @@ def _award_pose_kudos(window: ReactionWindow, reaction: WindowReaction) -> None:
     if poser_account is None:
         msg = "There is no player behind that pose to acclaim."
         raise ValidationError(msg)
-    reactor_account = reaction.reactor_persona.character_sheet.character.db_account
 
     category = _get_pose_kudos_category()
+    # Award anonymously — do NOT pass awarded_by=reactor_account.
+    # The reactor is the poser's acclaimer, not staff; surfacing their account
+    # username to the poser would link an IC character to its OOC player account,
+    # violating player-behind-character privacy (ADR-0033).
     award_kudos(
         account=poser_account,
         amount=category.default_amount,
         source_category=category,
         description=f"Kudos from {reaction.reactor_persona.name} for a pose",
-        awarded_by=reactor_account,
     )
 
 
