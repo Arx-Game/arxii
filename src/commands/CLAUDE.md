@@ -351,7 +351,11 @@ actions, backends, and service functions.
   `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/style <name>` →
   `SetBuildingStyleAction` (#1469, knowledge-gated throwback tier); `room/fixture <kind>` /
   `room/removefixture <kind>` → the #1514 comfort-fixture actions; `room/map [floor]` —
-  read-only ASCII floor map (`world.buildings.map_render`). Permissions by relationship
+  read-only ASCII floor map (`world.buildings.map_render`); the #1930 condition family
+  `room/settle [confirm]` / `room/refurbish [confirm]` / `room/prepare [confirm]` →
+  `SettleBuildingArrearsAction`/`RefurbishBuildingAction`/`PrepareBuildingAction` (bare =
+  owner-only status + cost quote, `confirm` pays) and `room/ultraupkeep` →
+  `ToggleUltraUpkeepAction`. Permissions by relationship
   (owner structural / tenant redescribe+home), gated in actions + services. No business
   logic in the command.
 - **`projects.py`**: `CmdProject` (`project`, alias `+project`, #1574) — project status +
