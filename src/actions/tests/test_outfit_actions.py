@@ -243,3 +243,89 @@ class UndressActionTests(TestCase):
 
         assert result.success is False
         assert result.message == NotReachable.user_message
+
+
+class SaveOutfitActionTests(TestCase):
+    def test_save_outfit_creates_outfit_for_actors_sheet(self):
+        from actions.definitions.outfits import SaveOutfitAction
+
+        room = ObjectDBFactory(db_key="SaveOutfitRoom", db_typeclass_path="typeclasses.rooms.Room")
+        account = AccountFactory(username="save_outfit_account")
+        actor = CharacterFactory(db_key="SaveOutfitAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        CharacterSheetFactory(character=actor)
+        wardrobe_template = ItemTemplateFactory(
+            name="SaveOutfitWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe_obj = ObjectDBFactory(
+            db_key="SaveOutfitWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        wardrobe_obj.location = actor
+        wardrobe_obj.save()
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template,
+            game_object=wardrobe_obj,
+            holder_character_sheet=actor.sheet_data,
+        )
+
+        result = SaveOutfitAction().run(
+            actor=actor, wardrobe=wardrobe.game_object, name="Formal Wear"
+        )
+        assert result.success
+        outfit = result.data["outfit"]
+        assert outfit.name == "Formal Wear"
+        assert outfit.character_sheet_id == actor.sheet_data.pk
+
+
+class RenameOutfitActionTests(TestCase):
+    def test_rename_outfit_requires_ownership(self):
+        from actions.definitions.outfits import RenameOutfitAction
+
+        room = ObjectDBFactory(
+            db_key="RenameOutfitRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="rename_outfit_account")
+        actor = CharacterFactory(db_key="RenameOutfitAlice", location=room)
+        actor.db_account = account
+        actor.save()
+        CharacterSheetFactory(character=actor)
+
+        other_account = AccountFactory(username="rename_outfit_other_account")
+        other = CharacterFactory(db_key="RenameOutfitBob", location=room)
+        other.db_account = other_account
+        other.save()
+        other_sheet = CharacterSheetFactory(character=other)
+        wardrobe_template = ItemTemplateFactory(
+            name="RenameOutfitWardrobe", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(
+            template=wardrobe_template, holder_character_sheet=other_sheet
+        )
+        outfit = OutfitFactory(character_sheet=other_sheet, wardrobe=wardrobe, name="Old")
+
+        result = RenameOutfitAction().run(actor=actor, outfit=outfit, name="New")
+        assert not result.success
+
+    def test_rename_outfit_success(self):
+        from actions.definitions.outfits import RenameOutfitAction
+
+        room = ObjectDBFactory(
+            db_key="RenameOutfitRoom2", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="rename_outfit_account_2")
+        actor = CharacterFactory(db_key="RenameOutfitCarol", location=room)
+        actor.db_account = account
+        actor.save()
+        sheet = CharacterSheetFactory(character=actor)
+        wardrobe_template = ItemTemplateFactory(
+            name="RenameOutfitWardrobe2", is_wardrobe=True, is_container=True
+        )
+        wardrobe = ItemInstanceFactory(template=wardrobe_template, holder_character_sheet=sheet)
+        outfit = OutfitFactory(character_sheet=sheet, wardrobe=wardrobe, name="Old")
+
+        result = RenameOutfitAction().run(actor=actor, outfit=outfit, name="New Name")
+        assert result.success
+        outfit.refresh_from_db()
+        assert outfit.name == "New Name"

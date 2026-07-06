@@ -158,7 +158,15 @@ from actions.definitions.organizations import (
     org_leave_action,
     org_promote_action,
 )
-from actions.definitions.outfits import ApplyOutfitAction, UndressAction
+from actions.definitions.outfits import (
+    AddOutfitSlotAction,
+    ApplyOutfitAction,
+    DeleteOutfitAction,
+    RemoveOutfitSlotAction,
+    RenameOutfitAction,
+    SaveOutfitAction,
+    UndressAction,
+)
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
@@ -299,6 +307,12 @@ _ALL_ACTIONS: list[Action] = [
     AttachStyleAction(),
     ApplyOutfitAction(),
     UndressAction(),
+    # #1866 — outfit CRUD telnet coverage.
+    SaveOutfitAction(),
+    RenameOutfitAction(),
+    DeleteOutfitAction(),
+    AddOutfitSlotAction(),
+    RemoveOutfitSlotAction(),
     PresentOutfitAction(),
     JudgePresentationAction(),
     PoseEndorseAction(),

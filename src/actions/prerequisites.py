@@ -206,6 +206,30 @@ class HoldsItemPrerequisite(Prerequisite):
 
 
 @dataclass
+class OwnsOutfitPrerequisite(Prerequisite):
+    """The ``outfit`` kwarg must belong to the actor's own CharacterSheet."""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        outfit = (context or {}).get("kwargs", {}).get("outfit")
+        if outfit is None:
+            return False, "Which outfit?"
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "No active character."
+        if outfit.character_sheet_id == sheet.pk:
+            return True, ""
+        return False, "That isn't your outfit."
+
+
+@dataclass
 class OwnsItemInstancePrerequisite(Prerequisite):
     """The actor's own CharacterSheet must be the item's holder.
 
