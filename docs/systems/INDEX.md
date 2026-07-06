@@ -165,21 +165,25 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`world/mechanics/services.py`) folded into a standalone pull by
     `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
     reads the same modifier via `_derive_power`'s FLAT stage.
-  - **Target-aware pull modulation (#1831):** `resolve_pull_effects`'s `target` param
+  - **Target-aware pull modulation (#1831, #1849):** `resolve_pull_effects`'s `target` param
     (the live cast/combat target; `PullActionContext.target` in `world/magic/types/pull.py`,
     populated by `commit_combat_pull` and `use_technique`'s `pull_target` kwarg) is fed
     through `apply_target_modulation(thread, target, effect_row, base_scaled)`
     (`world/magic/services/pull_modulation.py`) — the per-`target_kind` modulation seam
-    (no-op unless a rule is registered for `thread.target_kind`; the extension point for a
-    future RELATIONSHIP_TRACK rule, deferred). Today's only rule:
+    (no-op unless a rule is registered for `thread.target_kind`). Two rules registered:
     `court_regard_modulation(...)` (`world/magic/services/pull_modulation_court.py`) empowers
     a COVENANT_ROLE pull by the Court leader's signed `NpcRegard` (#1717) for the target,
     sign-directed by `ThreadPullEffect.regard_polarity` (`RegardPolarity`: OFFENSIVE /
     PROTECTIVE / NEUTRAL, `world/magic/constants.py`). Tuning constant
-    `COURT_REGARD_PULL_K` (placeholder, `1.0`). The combat-UI picker
+    `COURT_REGARD_PULL_K` (placeholder, `1.0`). `relationship_bond_modulation(...)`
+    (`world/magic/services/pull_modulation_relationship.py`, #1849) empowers a
+    RELATIONSHIP_TRACK pull by the owner's own `CharacterRelationship.developed_absolute_value`
+    bond to the thread's threaded person, when the live target IS that person or is
+    hostile toward them — no polarity gate, saturating-curve magnitude via
+    `RelationshipBondPullTuning` (staff-tunable singleton). The combat-UI picker
     (`compute_thread_applicability`, `world/magic/services/pull_applicability.py`) surfaces
-    `InapplicabilityReason.COURT_LEADER_NO_STAKE` when no candidate effect on a COVENANT_ROLE
-    thread would ever be empowered against the given `target_persona_id`.
+    `InapplicabilityReason.COURT_LEADER_NO_STAKE` / `RELATIONSHIP_NO_STAKE` respectively when
+    no candidate effect would ever be empowered against the given `target_persona_id`.
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`

@@ -1815,9 +1815,8 @@ Shipped:
 
 - **Modulation seam** — `apply_target_modulation(thread, target, effect_row,
   base_scaled)` (`world/magic/services/pull_modulation.py`): single dispatch on
-  `thread.target_kind`, no-op unless a rule is registered. This is the extension point
-  for a future RELATIONSHIP_TRACK rule (deferred; noted in the module docstring, not
-  built).
+  `thread.target_kind`, no-op unless a rule is registered. The RELATIONSHIP_TRACK
+  rule this seam was built to extend to shipped in #1849, below.
 - **`ThreadPullEffect.regard_polarity`** (`RegardPolarity`: OFFENSIVE / PROTECTIVE /
   NEUTRAL, default NEUTRAL) — authored per pull-effect row; ignored outside
   COVENANT_ROLE.
@@ -1835,6 +1834,35 @@ Shipped:
 See `docs/systems/magic.md` ("Target-Aware Pulls — Court Regard Modulation") and
 `docs/roadmap/covenants.md` ("Magic Integration: COVENANT_ROLE Thread Anchors") for
 the reference detail, and ADR-0086 for the design rationale.
+
+## Relationship Bond Pull Modulation (#1849) — DONE (2026-07-06)
+
+The RELATIONSHIP_TRACK sibling rule to Court regard modulation, above. A
+relationship-thread pull is empowered by the owner's own bond strength
+(`CharacterRelationship.developed_absolute_value`) to the thread's threaded
+person, when the live target IS that person or holds an active,
+mutually-consented, net-negative relationship toward them (hostile — "threatening").
+
+Shipped:
+
+- **`relationship_bond_modulation(...)`** (`world/magic/services/pull_modulation_relationship.py`):
+  the second rule registered on the `apply_target_modulation` seam. Deliberately
+  diverges from Court's shape (ADR-0092): no `RegardPolarity` gate (PC-to-PC
+  relationship investment is rewarded unconditionally, rival or lover alike), and a
+  staff-tunable saturating curve (`RelationshipBondPullTuning` singleton) rather than
+  a fixed ratio, since `CharacterRelationship` values are unbounded (unlike
+  `NpcRegard`'s `0..REGARD_MAX`).
+- **`_relationship_pull_would_trigger(x_sheet, y_sheet)`** — shared trigger-check
+  helper, reused by both the resolution rule and the picker signal below, mirroring
+  `_regard_polarity_matches`'s anti-divergence role for Court.
+- **Picker signal** — `InapplicabilityReason.RELATIONSHIP_NO_STAKE`
+  (`world/magic/services/pull_applicability.py`), gated on `can_perceive` for the
+  indirect (hostile-third-party) trigger case — the one place in this feature that
+  gate belongs; the resolution-time function deliberately has none (mirrors Court's
+  equally ungated resolution path).
+
+See `docs/systems/magic.md` ("Relationship Bond Pull Modulation") and ADR-0092 for
+the design rationale.
 
 ---
 
