@@ -22,6 +22,7 @@ from actions.registry import get_action
 from actions.types import TargetType
 from world.conditions.constants import TARGET_EFFECT_ALTERATION, TARGET_EFFECT_CONDITION
 from world.magic.exceptions import MagicError
+from world.magic.types.pull import CastPullDeclaration
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_filters import SceneActionRequestFilter, SceneActionTargetFilter
 from world.scenes.action_models import SceneActionRequest, SceneActionTarget
@@ -50,6 +51,23 @@ _INITIATOR_NOT_FOUND_DETAIL = "Initiator persona not found for your account."
 
 # Action key for the treat-condition consent flow (matches TreatConditionAction.key).
 TREAT_CONDITION_KEY = "treat_condition"
+
+
+def _build_pull_from_validated(validated_data: dict) -> CastPullDeclaration | None:
+    """Build a CastPullDeclaration from validated serializer data (#1919).
+
+    Returns None when no pull was declared. The serializer's validate() step
+    already resolved the resonance + threads instances and attached them to
+    the pull dict; this helper just wraps them into the in-memory dataclass.
+    """
+    pull_data = validated_data.get("pull")
+    if not pull_data:
+        return None
+    return CastPullDeclaration(
+        resonance=pull_data["resonance"],
+        tier=pull_data["tier"],
+        threads=tuple(pull_data["threads"]),
+    )
 
 
 class SceneActionRequestPagination(PageNumberPagination):
@@ -332,6 +350,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 delivery=delivery,
                 delivery_receivers=delivery_receivers,
                 additional_target_personas=additional,
+                pull=_build_pull_from_validated(serializer.validated_data),
             )
         except DjangoValidationError as exc:
             messages = exc.messages if hasattr(exc, "messages") else ["Unable to create action."]

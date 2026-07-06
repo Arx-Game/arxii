@@ -153,7 +153,7 @@ class CastPullRequestSerializer(serializers.Serializer):
     )
 
 
-def _validate_cast_pull(attrs: dict) -> dict:
+def _validate_pull_declaration(attrs: dict, *, hostile_check: bool = False) -> dict:
     """Resolve + validate a declared pull against the initiator's sheet.
 
     Attaches resolved instances to attrs["pull"]["resonance"|"threads"] so the
@@ -165,21 +165,36 @@ def _validate_cast_pull(attrs: dict) -> dict:
     so there is no duplicate logic here.  The ``ValidationError`` mapping lives here
     at the serializer boundary (per the anti-reinvention rule: MagicError inside the
     helper; ValidationError only at the DRF surface).
+
+    Args:
+        attrs: The serializer attrs dict (must contain ``pull`` and
+            ``initiator_persona``; ``technique_id`` when ``hostile_check``).
+        hostile_check: When True (cast path), reject hostile techniques and
+            require ``technique_id``. When False (social path), skip both.
+
+    Raises:
+        serializers.ValidationError: On ownership/resonance mismatch, unknown
+            technique, hostile technique (cast path only), or unknown persona.
     """
     from world.combat.pull_helpers import build_cast_pull_declaration  # noqa: PLC0415
     from world.magic.exceptions import InvalidImbueAmount  # noqa: PLC0415
-    from world.magic.models import Technique  # noqa: PLC0415
-    from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
     from world.scenes.models import Persona  # noqa: PLC0415
 
     pull = attrs["pull"]
-    try:
-        technique = Technique.objects.select_related("effect_type").get(pk=attrs["technique_id"])
-    except Technique.DoesNotExist:
-        raise serializers.ValidationError({"technique_id": "Unknown technique."}) from None
-    if is_technique_hostile(technique):
-        msg = "Pulls cannot be declared on hostile casts — combat owns that flow."
-        raise serializers.ValidationError({"pull": msg})
+
+    if hostile_check:
+        from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
+
+        try:
+            technique = Technique.objects.select_related("effect_type").get(
+                pk=attrs["technique_id"]
+            )
+        except Technique.DoesNotExist:
+            raise serializers.ValidationError({"technique_id": "Unknown technique."}) from None
+        if is_technique_hostile(technique):
+            msg = "Pulls cannot be declared on hostile casts — combat owns that flow."
+            raise serializers.ValidationError({"pull": msg})
 
     try:
         persona = Persona.objects.get(pk=attrs["initiator_persona"])
@@ -199,6 +214,14 @@ def _validate_cast_pull(attrs: dict) -> dict:
     pull["resonance"] = declaration.resonance
     pull["threads"] = list(declaration.threads)
     return attrs
+
+
+def _validate_cast_pull(attrs: dict) -> dict:
+    """Cast-specific wrapper: validates the pull with the hostile-technique check.
+
+    Delegates to ``_validate_pull_declaration(hostile_check=True)``.
+    """
+    return _validate_pull_declaration(attrs, hostile_check=True)
 
 
 class TechniqueCastCreateSerializer(serializers.Serializer):
@@ -439,6 +462,9 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
     target_condition_instance_id = serializers.IntegerField(required=False, allow_null=True)
     target_pending_alteration_id = serializers.IntegerField(required=False, allow_null=True)
     bond_thread_id = serializers.IntegerField(required=False, allow_null=True)
+    # #1919: Optional thread-pull declaration on social actions. Validated via
+    # _validate_pull_declaration (social path — no hostile-technique check).
+    pull = CastPullRequestSerializer(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
         """Normalize target fields into ``target_ids``; cap strain and fury.
@@ -464,7 +490,10 @@ class SceneActionRequestCreateSerializer(serializers.Serializer):
         else:
             attrs["target_ids"] = []
         attrs = _cap_strain_by_anima(attrs)
-        return _cap_fury_by_provocation(attrs)
+        attrs = _cap_fury_by_provocation(attrs)
+        if attrs.get("pull"):
+            attrs = _validate_pull_declaration(attrs, hostile_check=False)
+        return attrs
 
 
 class ConsentResponseSerializer(serializers.Serializer):

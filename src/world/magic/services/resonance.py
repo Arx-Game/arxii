@@ -630,13 +630,15 @@ def _fold_distinction_pull_bonus(
     ]
 
 
-def preview_resonance_pull(
+def preview_resonance_pull(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
     threads: list[Thread],
     *,
     combat_encounter: CombatEncounter | None = None,
+    scene_id: int | None = None,
+    excluded_kinds: frozenset[str] | None = None,
 ) -> PullPreviewResult:
     """Read-only preview of a resonance pull (Spec A §5.6).
 
@@ -658,13 +660,23 @@ def preview_resonance_pull(
         threads: Non-empty list of owned threads matching ``resonance``.
         combat_encounter: Provided for combat-context previews; ``None``
             for ephemeral / RP previews.
+        scene_id: When provided (#1919), the preview computes the combat/DANGER
+            state on the scene and returns ``anima_cost=0`` when the anima cost
+            is waived (no active combat encounter or DANGER round). When
+            ``None``, the standard formula applies.
+        excluded_kinds: When set (#1919), the preview validates that no pulled
+            thread has a ``target_kind`` in the set and raises
+            ``InvalidImbueAmount`` early. Social-action previews pass
+            ``frozenset({TargetKind.GIFT})`` so a GIFT thread is rejected at
+            preview time (matching the charge-time behavior).
 
     Returns:
         PullPreviewResult with resonance_cost, anima_cost, affordable,
         resolved_effects, capped_intensity.
 
     Raises:
-        InvalidImbueAmount: empty threads, ownership / resonance mismatch.
+        InvalidImbueAmount: empty threads, ownership / resonance mismatch, or
+            a thread whose ``target_kind`` is in ``excluded_kinds``.
     """
     if not threads:
         msg = "Must pull at least one thread."
@@ -677,10 +689,47 @@ def preview_resonance_pull(
         if t.resonance_id != resonance.pk:
             msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
+        if excluded_kinds and t.target_kind in excluded_kinds:
+            msg = "Thread anchor is not involved in this action."
+            raise InvalidImbueAmount(msg)
 
     cost = get_pull_cost(tier, None)
     n_threads = len(threads)
     anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
+
+    # #1919: Anima waiver for social-action previews. When scene_id is provided,
+    # check whether the scene is high-stakes (active combat or DANGER round).
+    # If not, the anima cost is waived (zeroed).
+    if scene_id is not None and anima_cost > 0:
+        from world.combat.models import CombatEncounter  # noqa: PLC0415
+        from world.scenes.constants import (  # noqa: PLC0415
+            RoundStatus,
+            SceneRoundStartReason,
+        )
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        scene = Scene.objects.filter(pk=scene_id).select_related("location").first()
+        if scene is not None:
+            has_active_combat = CombatEncounter.objects.filter(
+                scene=scene,
+                status__in=[
+                    RoundStatus.DECLARING,
+                    RoundStatus.RESOLVING,
+                    RoundStatus.BETWEEN_ROUNDS,
+                ],
+            ).exists()
+            has_danger_round = False
+            if scene.location is not None:
+                has_danger_round = scene.scene_rounds.filter(
+                    start_reason=SceneRoundStartReason.DANGER,
+                    status__in=[
+                        RoundStatus.DECLARING,
+                        RoundStatus.RESOLVING,
+                        RoundStatus.BETWEEN_ROUNDS,
+                    ],
+                ).exists()
+            if not has_active_combat and not has_danger_round:
+                anima_cost = 0
 
     # Balances — no locks, no debit.
     cr = CharacterResonance.objects.filter(
