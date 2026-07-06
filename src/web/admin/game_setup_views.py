@@ -33,6 +33,7 @@ def game_setup(request: HttpRequest) -> HttpResponse:
     if not request.user.is_superuser:
         raise PermissionDenied
 
+    from web.admin.content_load_views import resolve_content_root  # noqa: PLC0415
     from world.seeds.clusters import seeded_models_by_cluster  # noqa: PLC0415
 
     inventory = [
@@ -54,6 +55,8 @@ def game_setup(request: HttpRequest) -> HttpResponse:
         "seed_url": reverse("admin_seed"),
         "export_url": reverse("admin_export_preview"),
         "import_url": reverse("admin_import_upload"),
+        "content_repo_configured": resolve_content_root() is not None,
+        "content_load_url": reverse("admin_content_load"),
         "world_apps": [
             "character_creation",
             "character_sheets",

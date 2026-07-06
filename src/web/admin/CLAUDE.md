@@ -15,8 +15,30 @@ Custom Django admin interface with game data export/import functionality.
 **Location:** Header link ("Game Setup") visible to superusers, next to the "Load sane defaults" Big Button. The Big Button's post-seed redirect lands here.
 
 - `game_setup_views.py` — `game_setup` view; `@staff_member_required` + superuser gate (same gate as the Big Button, ADR-0022). Read-only.
-- `templates/admin/game_setup.html` — extends `base_site.html`. Three regions: (1) the flow (Seed defaults → Author content → Tune mechanics [coming soon, #1221] → Export/Import), (2) a per-cluster content inventory table with live row counts (via `seeded_models_by_cluster()`), (3) "Jump to authoring" links to the World apps.
+- `templates/admin/game_setup.html` — extends `base_site.html`. Three regions: (1) the flow (Seed defaults → Author content → Load private content repo → Tune mechanics [#1221] → Monitor live game → Export/Import), (2) a per-cluster content inventory table with live row counts (via `seeded_models_by_cluster()`), (3) "Jump to authoring" links to the World apps.
 - URL: `_game_setup/` → name `admin_game_setup`.
+
+### External Content-Repo Load (#1220)
+
+**Purpose:** superuser button to build + upsert the maintainers' private
+content repository (never named here; located via the `CONTENT_REPO_PATH` env
+var, already loaded into the process by the `arx` CLI's dotenv handling) into
+the database. Mirrors the seed button's confirm/run shape but is an upsert
+(`update_or_create` by natural key), not create-if-missing — the confirm page
+copy says so.
+
+- `content_load_views.py` — `resolve_content_root()` (env lookup + directory
+  check, reused by `game_setup_views.game_setup` for the
+  `content_repo_configured` flag); `content_load_confirm` (GET) +
+  `content_load_run` (POST, superuser-only) which drive
+  `core_management.content_fixtures.build_all` + `load_entries` the same way
+  `tools/build_content_fixtures.py --load` does.
+- `templates/admin/content_load_confirm.html` — mirrors `seed_confirm.html`.
+- URLs: `_content_load/` → `admin_content_load` (GET confirm);
+  `_content_load_run/` → `admin_content_load_run` (POST run).
+- The Game Setup hub shows a "Load content repo" link when configured, else a
+  hint to set `CONTENT_REPO_PATH` in `src/.env` (the Import Data upload
+  remains the path for ad-hoc fixture files either way).
 
 **When Asked About**
 
@@ -85,6 +107,8 @@ Defined in `services.py` as `HARDCODED_EXCLUDED_APPS` (canonical location, impor
 - `_pinned/` - Check pin status
 - `_seed/` - "Load sane defaults" confirm page (superuser; #651)
 - `_seed_run/` - POST: runs `seed_dev_database()` then redirects to the Game Setup hub (superuser)
+- `_content_load/` - "Load private content repo" confirm page (superuser; #1220)
+- `_content_load_run/` - POST: builds + upserts the external content repo, then redirects to the Game Setup hub (superuser)
 - `_game_setup/` - "Game Setup" hub: wayfinding + per-cluster content inventory (superuser; #1333)
 
 ### When Asked About

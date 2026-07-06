@@ -18,6 +18,19 @@
       <a href="{% url 'admin:index' %}">admin index</a>.
     </li>
     <li>
+      <strong>Load private content repo</strong> —
+      {% if content_repo_configured %}
+        <a href="{{ content_load_url }}">Load content repo</a>
+        builds and upserts entries from your <code>CONTENT_REPO_PATH</code>
+        checkout. Safe to re-run; updates existing rows by natural key.
+      {% else %}
+        set <code>CONTENT_REPO_PATH</code> in <code>src/.env</code> to enable
+        this step. Until then, the
+        <a href="{{ import_url }}">Import Data</a> upload above remains the
+        path for loading ad-hoc fixture files.
+      {% endif %}
+    </li>
+    <li>
       <strong>Tune mechanics</strong> —
       <a href="{% url 'admin_tuning' %}">Game Tuning</a>
       difficulty analytics + simulation.
