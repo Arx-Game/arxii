@@ -6160,6 +6160,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/profiles/{id}/evidence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only aggregate track record backing a level-change decision. */
+    get: operations['gm_profiles_evidence_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/profiles/{id}/promote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Staff changes a GM's trust level (promotion or demotion), with an audit row.
+     *
+     *     Same-level and unknown-level input is rejected in
+     *     ``PromoteGMInputSerializer.validate`` so ``promote_gm``'s ``ValueError``
+     *     guard never fires from user input.
+     */
+    post: operations['gm_profiles_promote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/queue/': {
     parameters: {
       query?: never;
@@ -19684,6 +19724,7 @@ export interface components {
       readonly account: number;
       readonly account_username: string;
       readonly level: components['schemas']['GMProfileLevelEnum'];
+      readonly level_display: string;
       /**
        * Format: date-time
        * @description When this account was approved as a GM.
@@ -38800,6 +38841,50 @@ export interface operations {
     };
   };
   gm_profiles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfile'];
+        };
+      };
+    };
+  };
+  gm_profiles_evidence_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfile'];
+        };
+      };
+    };
+  };
+  gm_profiles_promote_create: {
     parameters: {
       query?: never;
       header?: never;

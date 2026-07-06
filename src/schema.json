@@ -9632,6 +9632,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMProfile'
           description: ''
+  /api/gm/profiles/{id}/evidence/:
+    get:
+      operationId: gm_profiles_evidence_retrieve
+      description: Staff-only aggregate track record backing a level-change decision.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Profile.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMProfile'
+          description: ''
+  /api/gm/profiles/{id}/promote/:
+    post:
+      operationId: gm_profiles_promote_create
+      description: |-
+        Staff changes a GM's trust level (promotion or demotion), with an audit row.
+
+        Same-level and unknown-level input is rejected in
+        ``PromoteGMInputSerializer.validate`` so ``promote_gm``'s ``ValueError``
+        guard never fires from user input.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Profile.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMProfile'
+          description: ''
   /api/gm/queue/:
     get:
       operationId: gm_queue_list
@@ -34881,6 +34930,9 @@ components:
           allOf:
           - $ref: '#/components/schemas/GMProfileLevelEnum'
           readOnly: true
+        level_display:
+          type: string
+          readOnly: true
         approved_at:
           type: string
           format: date-time
@@ -34892,6 +34944,7 @@ components:
       - approved_at
       - id
       - level
+      - level_display
     GMProfileLevelEnum:
       enum:
       - starting
