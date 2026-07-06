@@ -23,10 +23,10 @@ from world.combat.factories import (
     ThreatPoolFactory,
     seed_scaling_defaults,
 )
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
-from world.stories.factories import PlayerTrustFactory
-from world.stories.types import TrustLevel
 
 
 class OpponentDefaultsTestBase(TestCase):
@@ -81,16 +81,16 @@ class OpponentDefaultsGMQualifyingTest(OpponentDefaultsTestBase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        # REGIONAL gate: avg_level >= 5, gm_trust >= BASIC (1).
-        # Default seed sets minimum_party_average_level=5, minimum_gm_trust_level=1.
+        # REGIONAL gate: avg_level >= 5, gm_level >= JUNIOR.
+        # Default seed sets minimum_party_average_level=5, minimum_gm_level=JUNIOR.
         # We override to ensure a controlled threshold.
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=5,
-            minimum_gm_trust_level=TrustLevel.BASIC,
+            minimum_gm_level=GMLevel.JUNIOR,
         )
-        # GM trust is INTERMEDIATE (above BASIC)
-        PlayerTrustFactory(account=cls.gm_account, gm_trust_level=TrustLevel.INTERMEDIATE)
+        # GM level is GM (above JUNIOR)
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.GM)
 
     def test_gm_qualifying_returns_200(self) -> None:
         client = APIClient()
@@ -179,9 +179,9 @@ class OpponentDefaultsStakesFailTest(OpponentDefaultsTestBase):
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=50,  # party avg is 10 → fails
-            minimum_gm_trust_level=TrustLevel.UNTRUSTED,
+            minimum_gm_level=GMLevel.STARTING,
         )
-        # GM has no trust profile (defaults to UNTRUSTED which passes the trust gate,
+        # GM has no GMProfile (defaults to STARTING which passes the level gate,
         # but party level gate fires first)
 
     def test_under_gate_still_returns_200(self) -> None:
@@ -322,7 +322,7 @@ class AddOpponentStakesGateBlocksTest(AddOpponentStakesValidationTestBase):
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=50,
-            minimum_gm_trust_level=TrustLevel.UNTRUSTED,
+            minimum_gm_level=GMLevel.STARTING,
         )
 
     def test_add_opponent_over_gate_returns_400(self) -> None:
@@ -361,9 +361,9 @@ class AddOpponentStakesQualifyingTest(AddOpponentStakesValidationTestBase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        # seed_scaling_defaults() sets REGIONAL minimum_gm_trust_level=1 (BASIC).
-        # Give the GM sufficient trust so both gates pass.
-        PlayerTrustFactory(account=cls.gm_account, gm_trust_level=TrustLevel.INTERMEDIATE)
+        # seed_scaling_defaults() sets REGIONAL minimum_gm_level=JUNIOR.
+        # Give the GM sufficient level so both gates pass.
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.GM)
 
     def test_add_opponent_qualifying_succeeds(self) -> None:
         """setUp creates a fresh encounter to avoid DB contamination from opponent creation."""

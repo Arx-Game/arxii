@@ -1,12 +1,13 @@
-"""Tests for validate_stakes_requirement (Task 4, #566).
+"""Tests for validate_stakes_requirement (Task 4, #566; rewired to GMProfile in #2000).
 
 Covers:
 - Party average level below minimum → StakesRequirementError
-- GM trust level below minimum → StakesRequirementError
+- GM level below minimum → StakesRequirementError
 - Qualifying party + qualifying GM → no raise
 - Staff account bypass → no raise even when under-gated
 - No StakesLevelRequirement row for the stakes level → no raise (ungated)
 - StakesRequirementError carries a user_message attribute
+- No-GMProfile rule: fails any row above STARTING, passes STARTING rows
 """
 
 from django.test import TestCase
@@ -20,8 +21,8 @@ from world.combat.factories import (
     StakesLevelRequirementFactory,
 )
 from world.combat.scaling import StakesRequirementError, validate_stakes_requirement
-from world.stories.factories import PlayerTrustFactory
-from world.stories.types import TrustLevel
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
 
 
 def _make_encounter_with_avg_level(avg_level: float, stakes_level: str) -> object:
@@ -67,16 +68,16 @@ class ValidateStakesRequirementUngatedTest(TestCase):
 
 
 class ValidateStakesRequirementStaffBypassTest(TestCase):
-    """Staff accounts bypass all gates, even when party and trust are below minimum."""
+    """Staff accounts bypass all gates, even when party and GM level are below minimum."""
 
     @classmethod
     def setUpTestData(cls):
         cls.encounter = _make_encounter_with_avg_level(1, StakesLevel.REGIONAL)
-        # Requirement: party avg ≥ 10, GM trust ≥ EXPERT
+        # Requirement: party avg ≥ 10, GM level ≥ SENIOR
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=10,
-            minimum_gm_trust_level=TrustLevel.EXPERT,
+            minimum_gm_level=GMLevel.SENIOR,
         )
         cls.staff_account = AccountFactory(is_staff=True)
 
@@ -94,11 +95,11 @@ class ValidateStakesRequirementPartyLevelGateTest(TestCase):
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=5,
-            minimum_gm_trust_level=TrustLevel.UNTRUSTED,
+            minimum_gm_level=GMLevel.STARTING,
         )
-        # GM with sufficient trust (no trust barrier, but party is too weak).
+        # GM with sufficient level (no level barrier, but party is too weak).
         cls.account = AccountFactory()
-        PlayerTrustFactory(account=cls.account, gm_trust_level=TrustLevel.EXPERT)
+        GMProfileFactory(account=cls.account, level=GMLevel.SENIOR)
 
     def test_party_below_minimum_raises(self):
         with self.assertRaises(StakesRequirementError) as ctx:
@@ -112,8 +113,8 @@ class ValidateStakesRequirementPartyLevelGateTest(TestCase):
         self.assertIn("Party average level", ctx.exception.user_message)
 
 
-class ValidateStakesRequirementGMTrustGateTest(TestCase):
-    """GM trust below minimum → StakesRequirementError."""
+class ValidateStakesRequirementGMLevelGateTest(TestCase):
+    """GM level below minimum → StakesRequirementError."""
 
     @classmethod
     def setUpTestData(cls):
@@ -122,20 +123,20 @@ class ValidateStakesRequirementGMTrustGateTest(TestCase):
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=5,
-            minimum_gm_trust_level=TrustLevel.ADVANCED,
+            minimum_gm_level=GMLevel.EXPERIENCED,
         )
-        # GM has only BASIC trust — below ADVANCED.
+        # GM has only JUNIOR level — below EXPERIENCED.
         cls.account = AccountFactory()
-        PlayerTrustFactory(account=cls.account, gm_trust_level=TrustLevel.BASIC)
+        GMProfileFactory(account=cls.account, level=GMLevel.JUNIOR)
 
-    def test_gm_trust_below_minimum_raises(self):
+    def test_gm_level_below_minimum_raises(self):
         with self.assertRaises(StakesRequirementError) as ctx:
             validate_stakes_requirement(self.encounter, self.account)
         self.assertTrue(ctx.exception.user_message)
 
 
-class ValidateStakesRequirementNoTrustProfileTest(TestCase):
-    """GM with no trust_profile is treated as UNTRUSTED (lowest TrustLevel)."""
+class ValidateStakesRequirementNoGMProfileTest(TestCase):
+    """No-GMProfile rule: fails any row above STARTING, passes STARTING rows."""
 
     @classmethod
     def setUpTestData(cls):
@@ -143,14 +144,24 @@ class ValidateStakesRequirementNoTrustProfileTest(TestCase):
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=0,
-            minimum_gm_trust_level=TrustLevel.BASIC,
+            minimum_gm_level=GMLevel.JUNIOR,
         )
-        # Account with NO PlayerTrust row → treated as UNTRUSTED.
+        # Account with NO GMProfile row → treated as GMLevel.STARTING.
         cls.account = AccountFactory()
 
-    def test_missing_trust_profile_raises_when_minimum_is_basic(self):
+    def test_missing_gm_profile_raises_when_minimum_is_above_starting(self):
         with self.assertRaises(StakesRequirementError):
             validate_stakes_requirement(self.encounter, self.account)
+
+    def test_missing_gm_profile_passes_when_minimum_is_starting(self):
+        encounter = _make_encounter_with_avg_level(10, StakesLevel.NATIONAL)
+        StakesLevelRequirementFactory(
+            stakes_level=StakesLevel.NATIONAL,
+            minimum_party_average_level=0,
+            minimum_gm_level=GMLevel.STARTING,
+        )
+        # Must not raise — no profile passes a STARTING-minimum row.
+        validate_stakes_requirement(encounter, self.account)
 
 
 class ValidateStakesRequirementQualifyingGMTest(TestCase):
@@ -162,22 +173,77 @@ class ValidateStakesRequirementQualifyingGMTest(TestCase):
         StakesLevelRequirementFactory(
             stakes_level=StakesLevel.REGIONAL,
             minimum_party_average_level=5,
-            minimum_gm_trust_level=TrustLevel.BASIC,
+            minimum_gm_level=GMLevel.JUNIOR,
         )
         cls.account = AccountFactory()
-        PlayerTrustFactory(account=cls.account, gm_trust_level=TrustLevel.INTERMEDIATE)
+        GMProfileFactory(account=cls.account, level=GMLevel.GM)
 
     def test_qualifying_gm_does_not_raise(self):
         # Must not raise.
         validate_stakes_requirement(self.encounter, self.account)
 
-    def test_gm_at_exact_trust_minimum_does_not_raise(self):
+    def test_gm_at_exact_level_minimum_does_not_raise(self):
         # Create a second account exactly at the minimum.
         exact_account = AccountFactory()
-        PlayerTrustFactory(account=exact_account, gm_trust_level=TrustLevel.BASIC)
+        GMProfileFactory(account=exact_account, level=GMLevel.JUNIOR)
         validate_stakes_requirement(self.encounter, exact_account)
 
     def test_party_at_exact_level_minimum_does_not_raise(self):
         # Encounter with party avg == minimum_party_average_level (5).
         encounter_exact = _make_encounter_with_avg_level(5, StakesLevel.REGIONAL)
         validate_stakes_requirement(encounter_exact, self.account)
+
+
+class ValidateStakesRequirementJuniorProfileTest(TestCase):
+    """GM with JUNIOR profile passes REGIONAL, fails NATIONAL (brief's example case)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        StakesLevelRequirementFactory(
+            stakes_level=StakesLevel.REGIONAL,
+            minimum_party_average_level=0,
+            minimum_gm_level=GMLevel.JUNIOR,
+        )
+        StakesLevelRequirementFactory(
+            stakes_level=StakesLevel.NATIONAL,
+            minimum_party_average_level=0,
+            minimum_gm_level=GMLevel.GM,
+        )
+        cls.account = AccountFactory()
+        GMProfileFactory(account=cls.account, level=GMLevel.JUNIOR)
+
+    def test_junior_gm_passes_regional(self):
+        encounter = _make_encounter_with_avg_level(10, StakesLevel.REGIONAL)
+        validate_stakes_requirement(encounter, self.account)
+
+    def test_junior_gm_fails_national(self):
+        encounter = _make_encounter_with_avg_level(10, StakesLevel.NATIONAL)
+        with self.assertRaises(StakesRequirementError):
+            validate_stakes_requirement(encounter, self.account)
+
+
+class ValidateStakesRequirementNoProfileLocalVsRegionalTest(TestCase):
+    """Account with no GMProfile fails REGIONAL, passes LOCAL (brief's example case)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        StakesLevelRequirementFactory(
+            stakes_level=StakesLevel.LOCAL,
+            minimum_party_average_level=0,
+            minimum_gm_level=GMLevel.STARTING,
+        )
+        StakesLevelRequirementFactory(
+            stakes_level=StakesLevel.REGIONAL,
+            minimum_party_average_level=0,
+            minimum_gm_level=GMLevel.JUNIOR,
+        )
+        cls.account = AccountFactory()
+
+    def test_no_profile_passes_local(self):
+        encounter = _make_encounter_with_avg_level(10, StakesLevel.LOCAL)
+        validate_stakes_requirement(encounter, self.account)
+
+    def test_no_profile_fails_regional(self):
+        encounter = _make_encounter_with_avg_level(10, StakesLevel.REGIONAL)
+        with self.assertRaises(StakesRequirementError):
+            validate_stakes_requirement(encounter, self.account)

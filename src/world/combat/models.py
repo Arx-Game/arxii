@@ -45,10 +45,10 @@ from world.combat.constants import (
     TargetSelection,
 )
 from world.fatigue.constants import EffortLevel
+from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
 from world.scenes.round_models import AbstractRound
-from world.stories.types import TrustLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
@@ -1742,7 +1742,7 @@ class StakesLevelRequirement(SharedMemoryModel):
     """Authored access requirements per StakesLevel (#566).
 
     One row per stakes level (unique constraint). The minimum_party_average_level
-    and minimum_gm_trust_level gate which GMs can run which stakes-level encounters.
+    and minimum_gm_level gate which GMs can run which stakes-level encounters.
     """
 
     stakes_level = models.CharField(max_length=20, choices=StakesLevel.choices, unique=True)
@@ -1750,10 +1750,11 @@ class StakesLevelRequirement(SharedMemoryModel):
         default=0,
         help_text="Minimum average character level across the party.",
     )
-    minimum_gm_trust_level = models.IntegerField(
-        choices=TrustLevel.choices,
-        default=TrustLevel.UNTRUSTED,
-        help_text="Minimum GM trust level required to run this stakes level.",
+    minimum_gm_level = models.CharField(
+        max_length=20,
+        choices=GMLevel.choices,
+        default=GMLevel.STARTING,
+        help_text="Minimum GMProfile.level required to run this stakes level.",
     )
 
     class Meta:
