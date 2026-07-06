@@ -28790,12 +28790,14 @@ export interface components {
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
       /**
-       * @description The current tenure of this CHARACTER-scope story's character, if any.
+       * @description The current tenure of this CHARACTER-scope story's character (whoever is
+       *     currently playing them) — coincides with the viewer's own tenure only for
+       *     that player; other viewers get an inert value since
+       *     `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+       *     `tenure_id` that isn't theirs.
        *
        *     Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
-       *     CHARACTER-scope story whose character has no current tenure. Lets the
-       *     frontend scope the #1853 pending-treasured-signoff auto-surfacing to
-       *     the viewer's own tenure without a second round-trip.
+       *     CHARACTER-scope story whose character has no current tenure.
        */
       readonly tenure_id: number | null;
       readonly primary_table: number;

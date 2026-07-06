@@ -315,7 +315,7 @@ direction split above):**
 |----------|---------------|-------|
 | `/api/treasured-signoffs/` | `TreasuredSignoffViewSet` (`ModelViewSet`, no `destroy`) | See [Sign-off lifecycle](#sign-off-lifecycle) above. |
 | `/api/beats/{id}/stake-availability/` | `BeatStakeAvailabilityView` (`APIView`) | See [GM availability](#gm-stake-availability-counts-only) above. |
-| `/api/stories/my-pending-signoffs/?beats=<id>&beats=<id>` | `PlayerPendingTreasuredSignoffsView` (`APIView`) | Player-safe batched read — see [Player-safe pending-signoff discovery](#frontend-frontendsrcboundaries) above. |
+| `/api/stories/my-pending-signoffs/?beats=<id>&beats=<id>` | `PlayerPendingTreasuredSignoffsView` (`APIView`) | Player-safe batched read — see [Player-safe pending-signoff discovery](#frontend-frontendsrcboundaries) below. |
 
 ---
 

@@ -238,12 +238,14 @@ class StoryDetailSerializer(serializers.ModelSerializer):
         return obj.get_trust_requirements_summary()
 
     def get_tenure_id(self, obj: Story) -> int | None:
-        """The current tenure of this CHARACTER-scope story's character, if any.
+        """The current tenure of this CHARACTER-scope story's character (whoever is
+        currently playing them) — coincides with the viewer's own tenure only for
+        that player; other viewers get an inert value since
+        `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+        `tenure_id` that isn't theirs.
 
         Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
-        CHARACTER-scope story whose character has no current tenure. Lets the
-        frontend scope the #1853 pending-treasured-signoff auto-surfacing to
-        the viewer's own tenure without a second round-trip.
+        CHARACTER-scope story whose character has no current tenure.
         """
         sheet = obj.character_sheet
         if sheet is None:
