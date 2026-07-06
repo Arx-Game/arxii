@@ -240,7 +240,6 @@ class PlayerTrustModelTestCase(TestCase):
 
     def test_trust_profile_defaults(self):
         """Test that trust profile has correct default values"""
-        assert self.trust_profile.gm_trust_level == TrustLevel.UNTRUSTED
         assert self.trust_profile.total_positive_feedback == 0
         assert self.trust_profile.total_negative_feedback == 0
 

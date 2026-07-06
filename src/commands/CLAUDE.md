@@ -348,6 +348,14 @@ actions, backends, and service functions.
   escalate: create/list/members/invite/kick are table-owner (GM) ops gated on
   `account.gm_profile == table.gm`; `archive` + `transfer` are staff-only (the web gates both behind
   `IsAdminUser`). No business logic in the command.
+- **`gmtrust.py`**: `CmdGMTrust` (`gmtrust`, #2000) — the GM trust-ladder namespace. Subverb-dispatched:
+  `gmtrust show [account]` (self-service; naming another account is staff-only), `gmtrust evidence
+  <account>` (staff-only aggregate track record), `gmtrust promote <account>=<level> reason=<why>`
+  (staff-only level change — `reason` is required and may not be blank, mirroring the web
+  `PromoteGMInputSerializer`; the level text may be a multi-word label like `Junior GM`, matched
+  case-insensitively against both `GMLevel` values and labels). Thin over `world.gm.services`
+  (`promote_gm` / `gm_evidence_summary`) — the same functions `GMProfileViewSet.promote` /
+  `GMProfileViewSet.evidence` call. No business logic in the command.
 - **`locations.py`**: `CmdRoom` (`room`, aliases `build` + legacy `manageroom`; #1470 editor +
   #670 Room Builder) — the room family. Switch-routed, one small verb per switch (the ratified
   incremental rhythm): `room/name|desc|public` → `RoomEditAction`; `room/dig <dir>=<name>

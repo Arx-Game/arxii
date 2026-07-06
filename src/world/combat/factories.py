@@ -55,6 +55,7 @@ from world.combat.models import (
     ThreatPool,
     ThreatPoolEntry,
 )
+from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind
 
 # Factory-path string for the CharacterSheet sub-factory, referenced by
@@ -503,7 +504,7 @@ class StakesLevelRequirementFactory(factory_django.DjangoModelFactory):
 
     stakes_level = StakesLevel.LOCAL
     minimum_party_average_level = 0
-    minimum_gm_trust_level = 0  # TrustLevel.UNTRUSTED = 0
+    minimum_gm_level = GMLevel.STARTING
 
 
 class EncounterScalingConfigFactory(factory_django.DjangoModelFactory):

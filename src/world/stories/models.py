@@ -512,13 +512,6 @@ class PlayerTrust(SharedMemoryModel):
         help_text="Trust categories and levels for this player",
     )
 
-    # GM trust is special and universal
-    gm_trust_level = models.IntegerField(
-        choices=TrustLevel.choices,
-        default=TrustLevel.UNTRUSTED,
-        help_text="General GM trust level, not category-specific",
-    )
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

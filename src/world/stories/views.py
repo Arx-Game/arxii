@@ -888,7 +888,6 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
     filterset_class = PlayerTrustFilter
     pagination_class = StandardResultsSetPagination
     ordering_fields = [
-        "gm_trust_level",
         "antagonism_trust",
         "mature_themes_trust",
         "created_at",

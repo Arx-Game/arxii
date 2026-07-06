@@ -27,7 +27,7 @@ from world.combat.models import (
     StakesLevelRequirement,
 )
 from world.covenants.mentorship import effective_combat_level
-from world.stories.types import TrustLevel
+from world.gm.constants import GMLevel, gm_level_index
 
 
 @dataclass(frozen=True)
@@ -231,19 +231,21 @@ def validate_stakes_requirement(encounter: CombatEncounter, gm_account: AccountD
     1. Staff bypass — ``is_staff`` accounts always pass.
     2. No requirement row for the stakes level → ungated, pass.
     3. Party average level below ``minimum_party_average_level`` → raise.
-    4. GM trust level below ``minimum_gm_trust_level`` → raise.
+    4. GM level below ``minimum_gm_level`` → raise.
 
-    GM trust is read from ``gm_account.trust_profile.gm_trust_level``
-    (PlayerTrust, related_name ``trust_profile``).  When no ``trust_profile``
-    row exists an ``ObjectDoesNotExist`` is caught and the lowest
-    ``TrustLevel`` (``UNTRUSTED``) is used — mirroring ``Story.can_player_apply``.
+    GM level is read from ``gm_account.gm_profile.level`` (GMProfile,
+    related_name ``gm_profile``).  When no ``gm_profile`` row exists a
+    ``GMProfile.DoesNotExist`` is caught and the account's level index is
+    treated as ``gm_level_index(GMLevel.STARTING)`` — i.e. a no-profile
+    account fails any requirement row whose minimum is above STARTING, and
+    passes rows whose minimum is STARTING.
 
     Args:
         encounter: The encounter whose ``stakes_level`` is checked.
         gm_account: The AccountDB of the GM requesting to run the encounter.
 
     Raises:
-        StakesRequirementError: When the party level or GM trust gate is unmet.
+        StakesRequirementError: When the party level or GM level gate is unmet.
     """
     if gm_account.is_staff:
         return
@@ -261,17 +263,18 @@ def validate_stakes_requirement(encounter: CombatEncounter, gm_account: AccountD
         raise StakesRequirementError(msg, user_message=msg)
 
     try:
-        gm_trust: int = gm_account.trust_profile.gm_trust_level
+        gm_level: str = gm_account.gm_profile.level
     except ObjectDoesNotExist:
-        gm_trust = TrustLevel.UNTRUSTED
+        gm_level = GMLevel.STARTING
 
-    if gm_trust < req.minimum_gm_trust_level:
-        required_display = TrustLevel(req.minimum_gm_trust_level).label
-        actual_display = TrustLevel(gm_trust).label
+    account_level_index = gm_level_index(gm_level)
+    required_level_index = gm_level_index(req.minimum_gm_level)
+    if account_level_index < required_level_index:
+        required_display = GMLevel(req.minimum_gm_level).label
+        actual_display = GMLevel(gm_level).label
         msg = (
-            f"GM trust level {gm_trust} ({actual_display}) is below the required "
-            f"{req.minimum_gm_trust_level} ({required_display}) "
-            f"for {encounter.stakes_level} stakes."
+            f"GM level {actual_display} is below the required "
+            f"{required_display} for {encounter.stakes_level} stakes."
         )
         raise StakesRequirementError(msg, user_message=msg)
 

@@ -13,6 +13,20 @@ class GMLevel(models.TextChoices):
     SENIOR = "senior", "Senior GM"
 
 
+GM_LEVEL_ORDER = [
+    GMLevel.STARTING,
+    GMLevel.JUNIOR,
+    GMLevel.GM,
+    GMLevel.EXPERIENCED,
+    GMLevel.SENIOR,
+]
+
+
+def gm_level_index(level: str) -> int:
+    """Return ``level``'s position in ``GM_LEVEL_ORDER`` (STARTING=0 .. SENIOR=4)."""
+    return GM_LEVEL_ORDER.index(level)
+
+
 class GMApplicationStatus(models.TextChoices):
     """Status for GM applications."""
 

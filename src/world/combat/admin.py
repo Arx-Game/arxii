@@ -372,9 +372,9 @@ class StakesLevelRequirementAdmin(admin.ModelAdmin):
     list_display = [
         "stakes_level",
         "minimum_party_average_level",
-        "minimum_gm_trust_level",
+        "minimum_gm_level",
     ]
-    list_filter = ["stakes_level"]
+    list_filter = ["stakes_level", "minimum_gm_level"]
 
 
 @admin.register(EncounterScalingConfig)

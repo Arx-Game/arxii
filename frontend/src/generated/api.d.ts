@@ -6210,6 +6210,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/profiles/{id}/evidence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only aggregate track record backing a level-change decision. */
+    get: operations['gm_profiles_evidence_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/profiles/{id}/promote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Staff changes a GM's trust level (promotion or demotion), with an audit row.
+     *
+     *     Same-level and unknown-level input is rejected in
+     *     ``PromoteGMInputSerializer.validate`` so ``promote_gm``'s ``ValueError``
+     *     guard never fires from user input.
+     */
+    post: operations['gm_profiles_promote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/queue/': {
     parameters: {
       query?: never;
@@ -17002,6 +17042,13 @@ export interface components {
         [key: string]: unknown;
       } | null;
     };
+    /** @description One trust category's aggregated feedback ratings for a GM (read-only). */
+    CategoryFeedback: {
+      category_name: string;
+      /** Format: double */
+      average_rating: number;
+      rating_count: number;
+    };
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -19867,27 +19914,50 @@ export interface components {
       /** @description Why player wants this character */
       readonly application_text: string;
     };
+    /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
+    GMEvidenceSummary: {
+      profile_id: number;
+      level: components['schemas']['NewLevelEnum'];
+      /** Format: date-time */
+      approved_at: string;
+      /** Format: date-time */
+      last_active_at: string | null;
+      stories_running: number;
+      beats_completed_by_risk: {
+        [key: string]: number;
+      };
+      feedback_by_category: components['schemas']['CategoryFeedback'][];
+      level_changes: components['schemas']['GMLevelChange'][];
+    };
+    /** @description Read-only audit row for a staff-driven GM trust-level change (#2000). */
+    GMLevelChange: {
+      readonly id: number;
+      readonly profile: number;
+      readonly old_level: components['schemas']['NewLevelEnum'];
+      readonly old_level_display: string;
+      readonly new_level: components['schemas']['NewLevelEnum'];
+      readonly new_level_display: string;
+      /** @description Staff account that made this change. */
+      readonly changed_by: number;
+      readonly changed_by_username: string;
+      /** @description Why the level changed — shown in the audit trail. */
+      readonly reason: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /** @description Read-only serializer for GM profiles. */
     GMProfile: {
       readonly id: number;
       readonly account: number;
       readonly account_username: string;
-      readonly level: components['schemas']['GMProfileLevelEnum'];
+      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level_display: string;
       /**
        * Format: date-time
        * @description When this account was approved as a GM.
        */
       readonly approved_at: string;
     };
-    /**
-     * @description * `starting` - Starting GM
-     *     * `junior` - Junior GM
-     *     * `gm` - GM
-     *     * `experienced` - Experienced GM
-     *     * `senior` - Senior GM
-     * @enum {string}
-     */
-    GMProfileLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -20191,15 +20261,6 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
-    /**
-     * @description * `0` - Untrusted
-     *     * `1` - Basic
-     *     * `2` - Intermediate
-     *     * `3` - Advanced
-     *     * `4` - Expert
-     * @enum {integer}
-     */
-    GmTrustLevelEnum: 0 | 1 | 2 | 3 | 4;
     /** @description Serializer for goal domains (ModifierTarget with category='goal'). */
     GoalDomain: {
       readonly id: number;
@@ -22217,6 +22278,15 @@ export interface components {
        */
       readonly acknowledged_at: string | null;
     };
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    NewLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /**
      * @description * `personal` - Personal
      *     * `room` - Room
@@ -25595,19 +25665,6 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description Serializer for player trust profiles */
-    PatchedPlayerTrustRequest: {
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
-    };
     /**
      * @description Full serializer for RiskCalibration (#1770 pillar 5).
      *
@@ -25697,10 +25754,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     PatchedStakeRequest: {
@@ -26753,16 +26811,6 @@ export interface components {
     PlayerTrust: {
       readonly id: number;
       readonly account: string;
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
       /** @description Aggregate positive feedback count from all trust levels */
       readonly total_positive_feedback: number;
       /** @description Aggregate negative feedback count from all trust levels */
@@ -26771,19 +26819,6 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
-    };
-    /** @description Serializer for player trust profiles */
-    PlayerTrustRequest: {
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
     /** @description Per-category polish a decoration template grants on completion. */
     PolishIncrement: {
@@ -26958,6 +26993,18 @@ export interface components {
       thread_resonance_name: string | null;
       thread_target_kind: string | null;
       dev_points_to_boundary: number | null;
+    };
+    /**
+     * @description Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
+     *
+     *     ``context["profile"]`` is the ``GMProfile`` being changed — the view passes
+     *     ``self.get_object()``. Rejecting the same-level case here means
+     *     ``promote_gm``'s ``ValueError`` guard is a programmer-error backstop only and
+     *     should never fire from user input.
+     */
+    PromoteGMInputRequest: {
+      new_level: components['schemas']['NewLevelEnum'];
+      reason: string;
     };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
@@ -28705,10 +28752,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     Stake: {
@@ -28788,10 +28836,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     StakeRequest: {
@@ -39186,6 +39235,54 @@ export interface operations {
       };
     };
   };
+  gm_profiles_evidence_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMEvidenceSummary'];
+        };
+      };
+    };
+  };
+  gm_profiles_promote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PromoteGMInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfile'];
+        };
+      };
+    };
+  };
   gm_queue_list: {
     parameters: {
       query?: {
@@ -48116,7 +48213,6 @@ export interface operations {
       query?: {
         /** @description Account Username */
         account?: string;
-        gm_trust_level?: number;
         has_negative_feedback?: boolean;
         has_positive_feedback?: boolean;
         /** @description Which field to use when ordering the results. */
@@ -48149,11 +48245,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       201: {
         headers: {
@@ -48197,11 +48289,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {
@@ -48244,11 +48332,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedPlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

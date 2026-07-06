@@ -78,6 +78,7 @@ from commands.form import CmdForm
 from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
 from commands.gm_tables import CmdGMTable
+from commands.gmtrust import CmdGMTrust
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
@@ -284,6 +285,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
             CmdEncounter,
             CmdStory,
+            # #2000 — GM trust-ladder: view/promote a GM's level (staff-gated).
+            CmdGMTrust,
             # #1574 — project status + money donation (project/donate, +project).
             CmdProject,
             # #1500 — staff: demand a crowdfundable ransom for a held captive.

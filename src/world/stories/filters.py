@@ -185,8 +185,6 @@ class PlayerTrustFilter(django_filters.FilterSet):
         label="Account Username",
     )
 
-    gm_trust_level = django_filters.NumberFilter()
-
     # Feedback filtering
     has_positive_feedback = django_filters.BooleanFilter(
         method="filter_has_positive_feedback",
@@ -197,7 +195,7 @@ class PlayerTrustFilter(django_filters.FilterSet):
 
     class Meta:
         model = PlayerTrust
-        fields = ["gm_trust_level"]
+        fields = []
 
     def filter_account(
         self, queryset: QuerySet[PlayerTrust], name: str, value: str
