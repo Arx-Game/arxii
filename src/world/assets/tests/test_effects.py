@@ -119,3 +119,39 @@ class PromoteFunctionaryEffectTests(EvenniaTestCase):
         self.assertFalse(
             functionaries_in_room(other_room_profile).filter(role=self.functionary.role).exists()
         )
+
+    def test_promote_as_guard_sets_guard_role_context(self) -> None:
+        success = CheckOutcomeFactory(name="Guard Promotion Success", success_level=3)
+        offer = NPCServiceOfferFactory(
+            role=self.functionary.role,
+            kind=OfferKind.GUARD,
+            check_type=self.check_type,
+        )
+        with force_check_outcome(success):
+            dispatch_offer_effect(offer, self.persona)
+        asset = NPCAsset.objects.get(promoter_persona=self.persona)
+        self.assertEqual(asset.role_context, AssetRoleContext.GUARD)
+
+    def test_promote_as_fan_sets_fan_role_context(self) -> None:
+        success = CheckOutcomeFactory(name="Fan Promotion Success", success_level=3)
+        offer = NPCServiceOfferFactory(
+            role=self.functionary.role,
+            kind=OfferKind.FAN,
+            check_type=self.check_type,
+        )
+        with force_check_outcome(success):
+            dispatch_offer_effect(offer, self.persona)
+        asset = NPCAsset.objects.get(promoter_persona=self.persona)
+        self.assertEqual(asset.role_context, AssetRoleContext.FAN)
+
+    def test_promote_as_minor_ally_sets_minor_ally_role_context(self) -> None:
+        success = CheckOutcomeFactory(name="Minor Ally Promotion Success", success_level=3)
+        offer = NPCServiceOfferFactory(
+            role=self.functionary.role,
+            kind=OfferKind.MINOR_ALLY,
+            check_type=self.check_type,
+        )
+        with force_check_outcome(success):
+            dispatch_offer_effect(offer, self.persona)
+        asset = NPCAsset.objects.get(promoter_persona=self.persona)
+        self.assertEqual(asset.role_context, AssetRoleContext.MINOR_ALLY)

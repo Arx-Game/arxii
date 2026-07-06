@@ -49,7 +49,19 @@ actions, backends, and service functions.
 ### Command Files
 - **`evennia_overrides/perception.py`**: `CmdLook`, `CmdInventory`
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`
-- **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
+- **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive` (#1909: swaps to
+  `GiveCoinsAction` when the item-name text parses as money via `parse_coppers`),
+  `CmdHome`
+- **`evennia_overrides/items.py`**: `CmdWear`, `CmdUndress`, `CmdRemove`, `CmdPut`,
+  `CmdWithdraw` (`withdraw <item> from <container>`; also the `withdraw coins <amount>`
+  loose-cash branch, #1909 — the `withdraw` command key was already spoken for by
+  `TakeOutAction`, so the coin path rides a `coins` prefix on the same command rather
+  than a colliding new one), `CmdUse`
+- **`currency.py`**: `CmdDeposit` (`deposit <item>`), `CmdSteal` (`steal <item>` /
+  `steal <item> from <container>`, mirrors `CmdGet`'s two grammars but always
+  dispatches `StealAction` — no plain-take fallback), `CmdSecure`
+  (`secure <container>=<open|friends|owner_only>`) — the #1909 physical-currency
+  interplay commands.
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
 - **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
 - **`offer_registry.py`**: `OfferHandler` protocol, `_REGISTRY`, `register_offer_handler`,

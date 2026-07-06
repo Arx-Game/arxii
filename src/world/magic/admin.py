@@ -31,6 +31,7 @@ from world.magic.models import (
     MotifResonanceStyle,
     PoseEndorsement,
     Reincarnation,
+    RelationshipBondPullTuning,
     Resonance,
     ResonanceEnvironmentConfig,
     ResonanceGainConfig,
@@ -759,6 +760,19 @@ class MagicProgressionMilestoneAdmin(admin.ModelAdmin):
     list_display = ("stage", "kind", "codex_entry", "sort_order")
     list_filter = ("stage", "kind")
     autocomplete_fields = ("codex_entry",)
+
+
+@admin.register(RelationshipBondPullTuning)
+class RelationshipBondPullTuningAdmin(admin.ModelAdmin):
+    """Singleton tuning config for relationship-bond thread-pull modulation (#1849)."""
+
+    list_display = ("pk", "coefficient", "cap", "half_saturation")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not RelationshipBondPullTuning.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(SoulTetherConfig)

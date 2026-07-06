@@ -10,19 +10,26 @@ from world.npc_services.models import NPCServiceOffer
 
 
 class EnsureAssetPromotionContentTests(TestCase):
-    def test_seeds_three_offers_on_one_role(self) -> None:
+    def test_seeds_six_offers_on_one_role(self) -> None:
         role = ensure_asset_promotion_content()
         offers = NPCServiceOffer.objects.filter(role=role)
         kinds = set(offers.values_list("kind", flat=True))
         self.assertEqual(
             kinds,
-            {OfferKind.INFORMANT.value, OfferKind.CONTACT.value, OfferKind.PERSONAL_FAVOR.value},
+            {
+                OfferKind.INFORMANT.value,
+                OfferKind.CONTACT.value,
+                OfferKind.PERSONAL_FAVOR.value,
+                OfferKind.GUARD.value,
+                OfferKind.FAN.value,
+                OfferKind.MINOR_ALLY.value,
+            },
         )
 
     def test_idempotent(self) -> None:
         ensure_asset_promotion_content()
         role = ensure_asset_promotion_content()
-        self.assertEqual(NPCServiceOffer.objects.filter(role=role).count(), 3)
+        self.assertEqual(NPCServiceOffer.objects.filter(role=role).count(), 6)
 
     def test_offers_reuse_existing_check_types_not_new_ones(self) -> None:
         ensure_asset_promotion_content()
@@ -41,5 +48,8 @@ class EnsureAssetPromotionContentTests(TestCase):
                 OfferKind.INFORMANT.value: "Stealth",
                 OfferKind.CONTACT.value: "Household Command",
                 OfferKind.PERSONAL_FAVOR.value: "Seduction",
+                OfferKind.GUARD.value: "Intimidation",
+                OfferKind.FAN.value: "Gossip",
+                OfferKind.MINOR_ALLY.value: "Domain Investment",
             },
         )

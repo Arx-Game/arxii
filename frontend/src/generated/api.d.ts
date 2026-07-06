@@ -20466,9 +20466,15 @@ export interface components {
       item_instance: number;
       facet: number;
     };
-    /** @description Read serializer for ItemInstance — used by the inventory listing. */
+    /**
+     * @description Read serializer for ItemInstance — used by the inventory listing.
+     *
+     *     Also backs ``VisibleItemDetailViewSet`` (looking at another character's
+     *     worn item) — the ``can_steal`` field is only meaningful there.
+     */
     ItemInstanceRead: {
       readonly id: number;
+      readonly game_object_id: number | null;
       readonly template: components['schemas']['ItemTemplateList'];
       readonly quality_tier: components['schemas']['QualityTier'];
       readonly display_name: string;
@@ -20487,6 +20493,28 @@ export interface components {
       readonly charges: number;
       /** @description Whether this item is currently open. */
       readonly is_open: boolean;
+      readonly access_policy: string;
+      /**
+       * @description True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).
+       *
+       *     Gates the Deposit affordance client-side. A boolean, not the nested
+       *     ``CurrencyInstrumentDetails`` — the client only needs to know whether
+       *     to render the button, not the denomination/face-value breakdown.
+       */
+      readonly is_currency_instrument: boolean;
+      /**
+       * @description True iff the viewer could steal ``obj`` right now (#1909).
+       *
+       *     Visibility = eligibility: delegates to the same ``steal_permitted``
+       *     predicate the ``steal`` service re-checks at execution time. No
+       *     viewer in context → False (IC reads scope to the active character) —
+       *     this is the case for the plain inventory list/retrieve endpoints,
+       *     where the viewer is always looking at their own items anyway.
+       *     ``VisibleItemDetailViewSet`` passes the observer's ``CharacterSheet``
+       *     as ``viewer_sheet`` so looking at someone else's worn item can
+       *     surface the affordance.
+       */
+      readonly can_steal: boolean;
     };
     /** @description Read serializer for ItemStyle (GET list/detail). */
     ItemStyleRead: {
@@ -21604,6 +21632,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       readonly role_context: components['schemas']['RoleContextEnum'];
       readonly status: components['schemas']['NPCAssetStatusEnum'];
@@ -21659,6 +21690,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -21697,6 +21731,9 @@ export interface components {
      *     * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
+     *     * `guard` - Guard
+     *     * `fan` - Fan
+     *     * `minor_ally` - Minor Ally
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -21708,7 +21745,10 @@ export interface components {
       | 'court_grant'
       | 'informant'
       | 'contact'
-      | 'personal_favor';
+      | 'personal_favor'
+      | 'guard'
+      | 'fan'
+      | 'minor_ally';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -21723,6 +21763,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25029,6 +25072,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -27159,9 +27205,12 @@ export interface components {
      * @description * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
+     *     * `guard` - Guard
+     *     * `fan` - Fan
+     *     * `minor_ally` - Minor Ally
      * @enum {string}
      */
-    RoleContextEnum: 'informant' | 'contact' | 'personal_favor';
+    RoleContextEnum: 'informant' | 'contact' | 'personal_favor' | 'guard' | 'fan' | 'minor_ally';
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;

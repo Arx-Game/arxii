@@ -30,6 +30,12 @@ export type UseItemResult = components['schemas']['UseItemResult'];
 export type BodyRegion = components['schemas']['BodyRegionEnum'];
 export type EquipmentLayer = components['schemas']['EquipmentLayerEnum'];
 
+// world.items.constants.ContainerAccessPolicy — who may take contents out of
+// a container (#1909). Exposed as a plain string on ItemInstanceRead (not a
+// generated enum, mirroring is_open's plain-boolean treatment), so the
+// literal union is hand-typed here rather than re-derived from the schema.
+export type ContainerAccessPolicy = 'open' | 'friends' | 'owner_only';
+
 // ---------------------------------------------------------------------------
 // Paginated list responses (DRF)
 // ---------------------------------------------------------------------------

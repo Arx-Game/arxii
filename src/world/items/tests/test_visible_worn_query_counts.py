@@ -227,7 +227,13 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
 
         1. Session lookup (DRF auth).
         2. ItemInstance fetch with select_related (template, quality_tier,
-           game_object, image, template image).
+           game_object, image, template image, currency_instrument).
+        3. ``can_steal`` (#1909): active RosterTenure lookup for the coat's
+           owner sheet (``steal_permitted`` -> ``_active_tenure_for_sheet``).
+        4. ``can_steal``: active RosterTenure lookup for the viewer/taker
+           sheet (same helper, other side).
+        5. ``can_steal``: ``SocialConsentCategory`` lookup for the "theft"
+           key (``consent_blocks_targeting`` -> ``theft_category()``).
 
         The observer ``ObjectDB.objects.get(pk=...)`` hits the
         SharedMemoryModel identity map (warmed by prior GETs) and runs no
@@ -246,6 +252,6 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         # Warm-up call (loads session, equipment handlers for observable chars).
         self.client.get(url)
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(5):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)

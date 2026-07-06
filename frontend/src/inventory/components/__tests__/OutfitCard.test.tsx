@@ -11,6 +11,10 @@ import type { ItemInstance, Outfit, OutfitSlot } from '../../types';
 function makeItem(id: number, name: string, color = '#4ade80'): ItemInstance {
   return {
     id,
+    game_object_id: id + 1000,
+    access_policy: 'open',
+    is_currency_instrument: false,
+    can_steal: false,
     template: {
       id: id + 100,
       name,
