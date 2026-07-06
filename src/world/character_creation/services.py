@@ -598,6 +598,9 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     regardless of whether it has any effects at all — a distinction can carry a
     ``DistinctionResonanceGrant`` with no ``DistinctionEffect`` rows.
     """
+    from world.assets.services import (  # noqa: PLC0415
+        reconcile_distinction_asset_grants,
+    )
     from world.magic.services.distinction_resonance import (  # noqa: PLC0415
         reconcile_distinction_resonance_grants,
     )
@@ -636,6 +639,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
 
     for char_dist in char_distinctions:
         reconcile_distinction_resonance_grants(char_dist)
+        reconcile_distinction_asset_grants(char_dist)
 
 
 def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
