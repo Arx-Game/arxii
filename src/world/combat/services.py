@@ -3999,11 +3999,15 @@ def _resolve_pc_action(
         template = technique.action_template
         if template is None:
             raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
+        from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+
         combat_result = resolve_combat_technique(
             participant=participant,
             action=action,
             fatigue_category=fatigue_category,
-            offense_check_type=template.check_type,
+            offense_check_type=resolve_cast_check_type(
+                participant.character_sheet.character, template
+            ),
             offense_check_fn=offense_check_fn,
         )
         outcome.damage_results.extend(combat_result.damage_results)
