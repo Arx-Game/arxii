@@ -40,6 +40,8 @@ from world.mechanics.models import (
     TraitCapabilityDerivation,
 )
 
+_CHECK_TYPE_FACTORY_PATH = "world.checks.factories.CheckTypeFactory"
+
 
 class ModifierCategoryFactory(DjangoModelFactory):
     """Factory for creating ModifierCategory instances."""
@@ -345,7 +347,7 @@ class ChallengeApproachFactory(DjangoModelFactory):
 
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
     application = factory.SubFactory(ApplicationFactory)
-    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    check_type = factory.SubFactory(_CHECK_TYPE_FACTORY_PATH)
     display_name = factory.Sequence(lambda n: f"Approach{n}")
     custom_description = factory.Faker("sentence")
 
@@ -398,8 +400,8 @@ class SituationTrapLinkFactory(DjangoModelFactory):
     situation_template = factory.SubFactory(SituationTemplateFactory)
     name = factory.Sequence(lambda n: f"situation-trap-{n}")
     consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
-    detect_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    disarm_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    detect_check_type = factory.SubFactory(_CHECK_TYPE_FACTORY_PATH)
+    disarm_check_type = factory.SubFactory(_CHECK_TYPE_FACTORY_PATH)
     detect_difficulty = 20
     disarm_difficulty = 20
     is_hidden = True
@@ -436,7 +438,7 @@ class ContextConsequencePoolFactory(DjangoModelFactory):
 
     property = factory.SubFactory(PropertyFactory)
     consequence_pool = factory.SubFactory(ConsequencePoolFactory)
-    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    check_type = factory.SubFactory(_CHECK_TYPE_FACTORY_PATH)
     description = ""
 
 

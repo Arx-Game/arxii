@@ -33,6 +33,7 @@ from world.locations.constants import StatKey
 # Cross-app FK string constants. Django resolves these lazily at app-ready
 # time; centralizing them here avoids the "literal duplicated N times" SonarCloud
 # code smell and gives a single grep target if the source model ever moves.
+_BUILDING_MODEL_PATH = "buildings.Building"
 _PROJECT_FK = "projects.Project"
 _POLISH_CATEGORY_FK = "buildings.PolishCategory"
 _PERSONA_FK = "scenes.Persona"
@@ -507,7 +508,7 @@ class BuildingExtensionDetails(SharedMemoryModel):
         primary_key=True,
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        _BUILDING_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="extension_details",
     )
@@ -545,7 +546,7 @@ class FortificationUpgradeDetails(SharedMemoryModel):
         primary_key=True,
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        _BUILDING_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="fortification_upgrade_details",
     )
@@ -593,7 +594,7 @@ class BuildingRenovationDetails(SharedMemoryModel):
         primary_key=True,
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        _BUILDING_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="renovation_details",
     )
@@ -639,7 +640,7 @@ class BuildingUpgradeDetails(SharedMemoryModel):
         primary_key=True,
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        _BUILDING_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="upgrade_details",
     )
@@ -685,7 +686,7 @@ class InteriorDesignDetails(SharedMemoryModel):
         related_name="design_details",
     )
     building = models.ForeignKey(
-        "buildings.Building",
+        _BUILDING_MODEL_PATH,
         on_delete=models.CASCADE,
         related_name="design_details",
     )

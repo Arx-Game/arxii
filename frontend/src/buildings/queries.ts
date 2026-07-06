@@ -131,9 +131,9 @@ export function useRoomBuilderAction(characterId: number, buildingId: number | n
     onSuccess: (message: string) => {
       toast.success(message);
       if (buildingId != null) {
-        void queryClient.invalidateQueries({ queryKey: buildingKeys.manager(buildingId) });
+        queryClient.invalidateQueries({ queryKey: buildingKeys.manager(buildingId) });
       }
-      void queryClient.invalidateQueries({ queryKey: [...buildingKeys.all, 'room-comfort'] });
+      queryClient.invalidateQueries({ queryKey: [...buildingKeys.all, 'room-comfort'] });
     },
     onError: (error: Error) => {
       toast.error(error.message);

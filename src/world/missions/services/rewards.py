@@ -298,7 +298,35 @@ def _route_crime_watch(
     crime_watch.flag_crime(line, room=room)
 
 
-def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind, sink) pair
+def _deliver_immediate_money(line: MissionDeedRewardLine) -> None:
+    """Deliver an IMMEDIATE MONEY line, falling back to the stub when sheet-less."""
+    try:
+        sheet = line.recipient.sheet_data
+    except Exception:  # noqa: BLE001 - sheet-less recipient: keep stub fallback
+        sheet = None
+    if sheet is not None:
+        deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=line.ref)
+    else:
+        money_stub.deliver_money(line)
+
+
+def _route_unbuilt_propagation(
+    line: MissionDeedRewardLine, *, sink: str, skip_unbuilt: bool
+) -> None:
+    """Route a not-yet-built PROPAGATION sink (RUMOR).
+
+    When ``skip_unbuilt`` is True the line is logged and skipped; otherwise the
+    rumor stub is invoked (always raises in 5b.1, rolling back the apply).
+    """
+    if skip_unbuilt:
+        logger.info(
+            "apply_deed_rewards: skipping not-yet-built %s line pk=%d (#1765)", sink, line.pk
+        )
+        return
+    rumor_stub.propagate_rumor(line)  # always raises in 5b.1
+
+
+def _route_line(  # noqa: PLR0913 — one early-return branch per (kind, sink) pair
     deed: MissionDeedRecord,
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],
@@ -337,14 +365,7 @@ def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind
         return
 
     if kind == DeedRewardKind.IMMEDIATE and sink == DeedRewardSink.MONEY:
-        try:
-            sheet = line.recipient.sheet_data
-        except Exception:  # noqa: BLE001 - sheet-less recipient: keep stub fallback
-            sheet = None
-        if sheet is not None:
-            deliver_mission_money(recipient_sheet=sheet, amount=line.amount, ref=line.ref)
-        else:
-            money_stub.deliver_money(line)
+        _deliver_immediate_money(line)
         stub_calls.append(StubCallRecord(sink=sink, line_id=line.pk))
         return
 
@@ -369,12 +390,7 @@ def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind
     # The not-yet-built RUMOR sink — skipped-and-logged when a caller opts
     # out, else the stub raises (rolls back).
     if kind == DeedRewardKind.PROPAGATION and sink in _UNBUILT_PROPAGATION_SINKS:
-        if skip_unbuilt:
-            logger.info(
-                "apply_deed_rewards: skipping not-yet-built %s line pk=%d (#1765)", sink, line.pk
-            )
-            return
-        rumor_stub.propagate_rumor(line)  # always raises in 5b.1
+        _route_unbuilt_propagation(line, sink=sink, skip_unbuilt=skip_unbuilt)
         return
 
     # Anything else is an author error — the (kind, sink) pair has no

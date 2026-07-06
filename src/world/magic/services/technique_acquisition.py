@@ -30,6 +30,32 @@ if TYPE_CHECKING:
     from world.magic.models import CharacterTechnique, Technique
 
 
+def _training_room_discounted_ap_cost(ap_cost: int, location: object | None) -> int:
+    """Return ``ap_cost`` reduced by an active Training Room feature (#675).
+
+    When ``location`` is provided and a ``RoomProfile`` with an active Training
+    Room is found, the discount is ``level × TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL``
+    (floored at 0). Otherwise the cost is unchanged.
+    """
+    if location is None:
+        return ap_cost
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from world.room_features.constants import (  # noqa: PLC0415
+        TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL,
+    )
+    from world.room_features.services import (  # noqa: PLC0415
+        active_training_room_in,
+    )
+
+    room_profile = RoomProfile.objects.filter(objectdb=location).first()
+    if room_profile is None:
+        return ap_cost
+    training_room = active_training_room_in(room_profile)
+    if training_room is None:
+        return ap_cost
+    return max(0, ap_cost - training_room.level * TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL)
+
+
 @transaction.atomic
 def learn_technique(  # noqa: PLR0913
     learner: CharacterSheet,
@@ -90,24 +116,7 @@ def learn_technique(  # noqa: PLR0913
     if ap_cost > 0:
         from world.magic.exceptions import MagicError  # noqa: PLC0415
 
-        effective_ap_cost = ap_cost
-        if location is not None:
-            from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-            from world.room_features.constants import (  # noqa: PLC0415
-                TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL,
-            )
-            from world.room_features.services import (  # noqa: PLC0415
-                active_training_room_in,
-            )
-
-            room_profile = RoomProfile.objects.filter(objectdb=location).first()
-            if room_profile is not None:
-                training_room = active_training_room_in(room_profile)
-                if training_room is not None:
-                    effective_ap_cost = max(
-                        0,
-                        ap_cost - training_room.level * TRAINING_ROOM_AP_DISCOUNT_PER_LEVEL,
-                    )
+        effective_ap_cost = _training_room_discounted_ap_cost(ap_cost, location)
 
         pool = ActionPointPool.get_or_create_for_character(learner.character)
         if not pool.can_afford(effective_ap_cost):

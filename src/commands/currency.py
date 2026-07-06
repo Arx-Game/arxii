@@ -19,6 +19,7 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 _SECURE_USAGE = "Usage: secure <container>=<open|friends|owner_only>"
+_DEFAULT_LOCKS = "cmd:all()"
 
 
 class CmdDeposit(ArxCommand):
@@ -28,7 +29,7 @@ class CmdDeposit(ArxCommand):
     """
 
     key = "deposit"
-    locks = "cmd:all()"
+    locks = _DEFAULT_LOCKS
     action = DepositCoinsAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -48,7 +49,7 @@ class CmdSteal(ArxCommand):
     """
 
     key = "steal"
-    locks = "cmd:all()"
+    locks = _DEFAULT_LOCKS
     action = StealAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -75,7 +76,7 @@ class CmdSecure(ArxCommand):
     """
 
     key = "secure"
-    locks = "cmd:all()"
+    locks = _DEFAULT_LOCKS
     action = SetContainerPolicyAction()
 
     def resolve_action_args(self) -> dict[str, Any]:

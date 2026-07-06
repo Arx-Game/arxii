@@ -122,11 +122,7 @@ def who_listing(viewer_account: object | None = None) -> list[WhoEntry]:
     """
     from time import time  # noqa: PLC0415
 
-    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
     from evennia import SESSION_HANDLER  # noqa: PLC0415
-
-    from world.conditions.services import is_concealed  # noqa: PLC0415
-    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     now = time()
     idle_by_puppet: dict[int, float] = {}
@@ -143,19 +139,39 @@ def who_listing(viewer_account: object | None = None) -> list[WhoEntry]:
 
     entries: list[WhoEntry] = []
     for puppet_id, puppet in puppets_by_id.items():
-        if hidden_from_viewer(puppet, viewer_account):
-            continue
-        # puppets_by_id is typed loosely (`object`) to match this module's other
-        # puppet-handling helpers; is_concealed's real ObjectDB param is a runtime
-        # guarantee (puppet is always a session's live Character), not a static one.
-        if is_concealed(cast("ObjectDB", puppet)):
-            continue
-        try:
-            sheet = puppet.sheet_data
-        except (AttributeError, ObjectDoesNotExist):
-            continue
-        persona = active_persona_for_sheet(sheet)
-        idle = IDLE_AWAY if puppet.ndb.appear_afk else idle_bucket(idle_by_puppet[puppet_id])
-        entries.append(WhoEntry(name=persona.display_ic(), idle=idle))
+        entry = _who_entry_for_puppet(puppet, puppet_id, idle_by_puppet[puppet_id], viewer_account)
+        if entry is not None:
+            entries.append(entry)
     entries.sort(key=lambda entry: entry.name.lower())
     return entries
+
+
+def _who_entry_for_puppet(
+    puppet: object,
+    _puppet_id: int,
+    idle: float,
+    viewer_account: object | None,
+) -> WhoEntry | None:
+    """Build a single ``WhoEntry`` for ``puppet``, or None to omit it.
+
+    Omits a hidden or concealed character, or one whose sheet can't be resolved.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.conditions.services import is_concealed  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    if hidden_from_viewer(puppet, viewer_account):
+        return None
+    # puppets_by_id is typed loosely (`object`) to match this module's other
+    # puppet-handling helpers; is_concealed's real ObjectDB param is a runtime
+    # guarantee (puppet is always a session's live Character), not a static one.
+    if is_concealed(cast("ObjectDB", puppet)):
+        return None
+    try:
+        sheet = puppet.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None
+    persona = active_persona_for_sheet(sheet)
+    idle_value = IDLE_AWAY if puppet.ndb.appear_afk else idle_bucket(idle)
+    return WhoEntry(name=persona.display_ic(), idle=idle_value)

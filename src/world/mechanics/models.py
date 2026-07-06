@@ -35,6 +35,8 @@ from world.mechanics.constants import (
     ResolutionType,
 )
 
+_DAMAGE_TYPE_MODEL_PATH = "conditions.DamageType"
+
 
 class ModifierCategoryManager(NaturalKeyManager):
     """Manager for ModifierCategory with natural key support."""
@@ -153,7 +155,7 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         help_text="The check type this target represents (check category only).",
     )
     target_damage_type = models.OneToOneField(
-        "conditions.DamageType",
+        _DAMAGE_TYPE_MODEL_PATH,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -644,7 +646,7 @@ class PropertyDamageModifier(NaturalKeyMixin, SharedMemoryModel):
         related_name="damage_modifiers",
     )
     damage_type = models.ForeignKey(
-        "conditions.DamageType",
+        _DAMAGE_TYPE_MODEL_PATH,
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -667,7 +669,7 @@ class PropertyDamageModifier(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["property", "damage_type"]
-        dependencies = ["mechanics.Property", "conditions.DamageType"]
+        dependencies = ["mechanics.Property", _DAMAGE_TYPE_MODEL_PATH]
 
     def __str__(self) -> str:
         dt_name = self.damage_type.name if self.damage_type else "ALL"

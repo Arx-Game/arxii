@@ -11,6 +11,9 @@ from typing import TYPE_CHECKING, Any
 
 CANNOT_BE_USED_MESSAGE = "That can't be used."
 CANNOT_SEE_MESSAGE = "You can't see that."
+NO_ACTIVE_CHARACTER_MESSAGE = "No active character."
+ONLY_CHARACTERS_MESSAGE = "Only characters can do that."
+NOT_HOLDING_MESSAGE = "You aren't holding that."
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -58,7 +61,7 @@ class HasCharacterSheetPrerequisite(Prerequisite):
         try:
             actor.sheet_data  # noqa: B018
         except (AttributeError, ObjectDoesNotExist):
-            return False, "No active character."
+            return False, NO_ACTIVE_CHARACTER_MESSAGE
         return True, ""
 
 
@@ -82,7 +85,7 @@ class HoldsCapabilityPrerequisite(Prerequisite):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return False, "No active character."
+            return False, NO_ACTIVE_CHARACTER_MESSAGE
         capability = CapabilityType.objects.filter(name=self.capability_name).first()
         if capability is None:
             return False, "You cannot shift forms at will."
@@ -129,7 +132,7 @@ class IsRoomTenantPrerequisite(Prerequisite):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return False, "Only characters can do that."
+            return False, ONLY_CHARACTERS_MESSAGE
         persona = active_persona_for_sheet(sheet)
         if is_tenant(persona, room):
             return True, ""
@@ -211,7 +214,7 @@ class IsExitRoomOwnerPrerequisite(Prerequisite):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return False, "Only characters can do that."
+            return False, ONLY_CHARACTERS_MESSAGE
         persona = active_persona_for_sheet(sheet)
         if is_owner(persona, room) or is_tenant(persona, room):
             return True, ""
@@ -238,7 +241,7 @@ class HoldsItemPrerequisite(Prerequisite):
         if instance is None:
             return False, "That isn't an item."
         if not ItemState(instance, context=None).is_in_possession(actor):
-            return False, "You aren't holding that."
+            return False, NOT_HOLDING_MESSAGE
         return True, ""
 
 
@@ -260,7 +263,7 @@ class OwnsOutfitPrerequisite(Prerequisite):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return False, "No active character."
+            return False, NO_ACTIVE_CHARACTER_MESSAGE
         if outfit.character_sheet_id == sheet.pk:
             return True, ""
         return False, "That isn't your outfit."
@@ -296,9 +299,9 @@ class OwnsItemInstancePrerequisite(Prerequisite):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return False, "You aren't holding that."
+            return False, NOT_HOLDING_MESSAGE
         if item_instance.holder_character_sheet_id != sheet.pk:
-            return False, "You aren't holding that."
+            return False, NOT_HOLDING_MESSAGE
         return True, ""
 
 
@@ -532,7 +535,7 @@ class IsShipOwnerPrerequisite(Prerequisite):
         try:
             sheet = actor.sheet_data
         except (AttributeError, ObjectDoesNotExist):
-            return False, "Only characters can do that."
+            return False, ONLY_CHARACTERS_MESSAGE
         persona = active_persona_for_sheet(sheet)
         if ship.building.owner_persona_id == persona.pk:
             return True, ""
