@@ -35,7 +35,11 @@ from world.magic.models import (
     SanctumPendingPayout,
     Thread,
 )
-from world.magic.models.sanctum import SanctumHomecomingGainAward, SanctumPurgingRetentionAward
+from world.magic.models.sanctum import (
+    SanctumDissolutionRecoveryAward,
+    SanctumHomecomingGainAward,
+    SanctumPurgingRetentionAward,
+)
 from world.magic.seeds_checks import ensure_magic_check_content
 from world.magic.seeds_sanctum import ensure_sanctum_rituals
 from world.magic.seeds_touchstone_content import ensure_touchstone_content
@@ -67,9 +71,10 @@ def _mock_check_success() -> object:
     """Return a fake CheckResult wrapping a real SUCCESS-tier CheckOutcome row.
 
     The outcome must be a real DB row (not a duck-typed stand-in) because
-    ``perform_homecoming_ritual``/``perform_purging_ritual`` resolve their
-    tier-scalar via ``SanctumHomecomingGainAward``/``SanctumPurgingRetentionAward
-    .objects.get(outcome_tier=roll.check_result.outcome)`` — a real FK lookup.
+    ``perform_homecoming_ritual``/``perform_purging_ritual``/``perform_dissolution``
+    resolve their tier-scalar via ``SanctumHomecomingGainAward``/
+    ``SanctumPurgingRetentionAward``/``SanctumDissolutionRecoveryAward``
+    ``.objects.get(outcome_tier=roll.check_result.outcome)`` — a real FK lookup.
     """
     outcome = CheckOutcomeFactory(name="JourneyE2E_Success", success_level=1)
     return type("CheckResult", (), {"outcome": outcome})()
@@ -106,6 +111,9 @@ class SanctumTelnetJourneyTests(TestCase):
         )
         SanctumPurgingRetentionAward.objects.create(
             outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("0.000")
+        )
+        SanctumDissolutionRecoveryAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, recovery_fraction=Decimal("0.50")
         )
 
         # Two resonances: R1 (installed / homecoming / purging source),

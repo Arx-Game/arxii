@@ -36,7 +36,6 @@ from world.magic.models import SanctumDetails, SanctumOwnerMode
 if TYPE_CHECKING:
     from evennia_extensions.models import RoomProfile
     from world.magic.models import Resonance
-    from world.magic.services.ritual_checks import OutcomeTier
     from world.scenes.models import Persona
 
 
@@ -108,14 +107,19 @@ class AbsorbNothingPendingError(AbsorbError):
 # ---------------------------------------------------------------------------
 
 
-# Outcome-tier recovery fractions (via ritual_checks.outcome_tier). TUNING PLACEHOLDERS.
-DISSOLUTION_RECOVERY_CRIT_SUCCESS = Decimal("0.80")
-DISSOLUTION_RECOVERY_SUCCESS = Decimal("0.50")
-DISSOLUTION_RECOVERY_FAILURE = Decimal("0.10")
-DISSOLUTION_RECOVERY_BOTCH = Decimal("0.0")
-
 SANCTIFICATION_CRIT_BONUS_IMBUE = 5
 """Bonus initial Homecoming imbue on a crit Sanctification. TUNING PLACEHOLDER."""
+
+# success_level thresholds (canonical −10..+10 scale, mirroring the boundary
+# constants formerly in ritual_checks.OutcomeTier's outcome_tier()).
+MINIMUM_SANCTIFICATION_SUCCESS_LEVEL = 1
+"""Below this, Sanctification fizzles (formerly OutcomeTier.FAIL/BOTCH)."""
+
+SANCTIFICATION_CRIT_SUCCESS_LEVEL = 2
+"""At/above this, Sanctification crits (formerly OutcomeTier.CRIT)."""
+
+CRITICAL_FAILURE_SUCCESS_LEVEL = -2
+"""At/below this, the roll is a Critical Failure (formerly OutcomeTier.BOTCH)."""
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +133,9 @@ class SanctificationResult:
 
     On a failed or botched check, ``fizzled=True`` and ``sanctum_id=None`` —
     no state change occurred. On success or crit, ``fizzled=False`` and
-    ``sanctum_id`` is the new SanctumDetails pk. ``tier`` is the graded
-    OutcomeTier value string (``crit``/``success``/``fail``/``botch``) so the
-    API seam can tell a fizzle (FAIL) from a botch without re-deriving the
-    private tier boundaries.
+    ``sanctum_id`` is the new SanctumDetails pk. ``tier`` is the rolled
+    check's ``CheckOutcome.name`` so the API seam can surface the graded
+    outcome without re-deriving the private tier boundaries.
     """
 
     sanctum_id: int | None
@@ -151,7 +154,7 @@ class DissolutionResult:
     ``is_botch`` is True when the outcome tier is BOTCH (success_level ≤ −2).
     Callers wanting to surface "something bad happened" can read this flag;
     consequence content (status effects, magical mishaps) is future work.
-    ``tier`` is the graded OutcomeTier value string for the API seam.
+    ``tier`` is the rolled check's ``CheckOutcome.name`` for the API seam.
     """
 
     sanctum_id: int
@@ -161,16 +164,14 @@ class DissolutionResult:
     tier: str
 
 
-def sanctification_fizzle_detail(tier: str) -> str:
-    """User-facing copy for a fizzled Sanctification, darker on a botch.
+def sanctification_fizzle_detail(success_level: int) -> str:
+    """User-facing copy for a fizzled Sanctification, darker on a critical failure.
 
-    ``tier`` is an :class:`OutcomeTier` value string (``roll.tier.value``).
-    A BOTCH earns ominous copy — the rite went *wrong*, not merely failed to
-    catch — while an ordinary FAIL gets the gentler "failed to take hold" line.
+    A Critical Failure (success_level <= -2, formerly OutcomeTier.BOTCH) earns
+    ominous copy — the rite went *wrong*, not merely failed to catch — while an
+    ordinary Failure/Partial Success gets the gentler "failed to take hold" line.
     """
-    from world.magic.services.ritual_checks import OutcomeTier  # noqa: PLC0415
-
-    if tier == OutcomeTier.BOTCH.value:
+    if success_level <= CRITICAL_FAILURE_SUCCESS_LEVEL:
         return (
             "The ritual recoils — the rite goes wrong, the gathered power scatters "
             "and sours, and no Sanctum takes shape."
@@ -277,10 +278,7 @@ def perform_sanctification(
         SANCTIFICATION_COVENANT_RITUAL_NAME,
         SANCTIFICATION_PERSONAL_RITUAL_NAME,
     )
-    from world.magic.services.ritual_checks import (  # noqa: PLC0415
-        OutcomeTier,
-        perform_ritual_check,
-    )
+    from world.magic.services.ritual_checks import perform_ritual_check  # noqa: PLC0415
 
     ritual_name = (
         SANCTIFICATION_PERSONAL_RITUAL_NAME
@@ -288,14 +286,14 @@ def perform_sanctification(
         else SANCTIFICATION_COVENANT_RITUAL_NAME
     )
     roll = perform_ritual_check(ritual_name, character)
-    if roll.tier in (OutcomeTier.FAIL, OutcomeTier.BOTCH):
+    if roll.success_level < MINIMUM_SANCTIFICATION_SUCCESS_LEVEL:
         return SanctificationResult(
             sanctum_id=None,
             owner_mode=owner_mode,
             resonance_type_id=resonance_type.pk,
             founder_character_sheet_id=founder_sheet.pk,
             success_level=roll.success_level,
-            tier=roll.tier.value,
+            tier=roll.check_result.outcome.name,
             fizzled=True,
         )
 
@@ -312,7 +310,7 @@ def perform_sanctification(
         founder_character_sheet=founder_sheet,
     )
 
-    if roll.tier is OutcomeTier.CRIT:
+    if roll.success_level >= SANCTIFICATION_CRIT_SUCCESS_LEVEL:
         from world.magic.services.sanctum_lvm import (  # noqa: PLC0415
             apply_homecoming_gain,
             compute_homecoming_cap,
@@ -328,7 +326,7 @@ def perform_sanctification(
         resonance_type_id=details.resonance_type_id,
         founder_character_sheet_id=founder_sheet.pk,
         success_level=roll.success_level,
-        tier=roll.tier.value,
+        tier=roll.check_result.outcome.name,
         fizzled=False,
     )
 
@@ -413,15 +411,12 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
 
     Difficulty is authored on the Ritual's RitualCheckConfig. Non-founder
     actors roll against ``non_founder_target_difficulty`` when set.
-    Outcome tier (CRIT / SUCCESS / FAIL / BOTCH) determines the recovery
-    fraction (see DISSOLUTION_RECOVERY_* constants).
+    Outcome tier determines the recovery fraction, looked up from the
+    authored ``SanctumDissolutionRecoveryAward`` table.
     """
     from world.magic.seeds_sanctum import DISSOLUTION_RITUAL_NAME  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
-    from world.magic.services.ritual_checks import (  # noqa: PLC0415
-        OutcomeTier,
-        perform_ritual_check,
-    )
+    from world.magic.services.ritual_checks import perform_ritual_check  # noqa: PLC0415
     from world.magic.services.sanctum_lvm import sum_homecoming_value  # noqa: PLC0415
 
     # Idempotency guard — reject a second dissolution attempt.
@@ -449,8 +444,8 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
         founder_standing=is_founder,
     )
     success_level = roll.success_level
-    recovery_fraction = _dissolution_recovery_fraction(roll.tier)
-    is_botch = roll.tier is OutcomeTier.BOTCH
+    recovery_fraction = _dissolution_recovery_fraction(roll.check_result.outcome)
+    is_botch = success_level <= CRITICAL_FAILURE_SUCCESS_LEVEL
 
     reservoir_before = sum_homecoming_value(sanctum)
     recovered_amount = int(Decimal(reservoir_before) * recovery_fraction)
@@ -484,21 +479,15 @@ def perform_dissolution(sanctum: SanctumDetails, leader_persona: Persona) -> Dis
         success_level=success_level,
         recovered_amount=recovered_amount,
         is_botch=is_botch,
-        tier=roll.tier.value,
+        tier=roll.check_result.outcome.name,
     )
 
 
-def _dissolution_recovery_fraction(tier: OutcomeTier) -> Decimal:
-    """Map check outcome tier to recovery fraction."""
-    from world.magic.services.ritual_checks import OutcomeTier  # noqa: PLC0415
+def _dissolution_recovery_fraction(outcome: object) -> Decimal:
+    """Look up the authored recovery fraction for this CheckOutcome tier."""
+    from world.magic.models.sanctum import SanctumDissolutionRecoveryAward  # noqa: PLC0415
 
-    if tier is OutcomeTier.CRIT:
-        return DISSOLUTION_RECOVERY_CRIT_SUCCESS
-    if tier is OutcomeTier.SUCCESS:
-        return DISSOLUTION_RECOVERY_SUCCESS
-    if tier is OutcomeTier.FAIL:
-        return DISSOLUTION_RECOVERY_FAILURE
-    return DISSOLUTION_RECOVERY_BOTCH
+    return SanctumDissolutionRecoveryAward.objects.get(outcome_tier=outcome).recovery_fraction
 
 
 def _retire_sanctum_threads(sanctum: SanctumDetails) -> None:

@@ -23,11 +23,17 @@ from world.magic.seeds_sanctum import (
 )
 from world.magic.seeds_touchstone_content import ensure_touchstone_content
 from world.room_features.seeds import ensure_sanctum_kind
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _mock_check_success() -> object:
-    """Return a fake CheckResult whose outcome tier maps to SUCCESS (success_level=1)."""
-    outcome = type("Outcome", (), {"success_level": 1})()
+    """Return a fake CheckResult wrapping a real SUCCESS-tier CheckOutcome row.
+
+    The outcome must be a real DB row (not a duck-typed stand-in) — since #1207,
+    ``perform_sanctification`` reads ``roll.check_result.outcome.name`` for its
+    ``SanctificationResult.tier``.
+    """
+    outcome = CheckOutcomeFactory(name="TouchstoneE2E_Success", success_level=1)
     return type("CheckResult", (), {"outcome": outcome})()
 
 

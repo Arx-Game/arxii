@@ -424,13 +424,17 @@ class InstallEndpointTests(SanctumViewSetTestBase):
 
 
 def _mock_check_success_components() -> object:
-    """Return a fake CheckResult whose outcome tier maps to SUCCESS (success_level=1).
+    """Return a fake CheckResult wrapping a real SUCCESS-tier CheckOutcome row.
 
     Mirrors ``test_sanctum_install_action_components.py``'s helper — the
     Sanctification check is patched deterministic so these tests exercise
-    the component-ownership seam, not the check-roll RNG.
+    the component-ownership seam, not the check-roll RNG. Since #1207, the
+    outcome must be a real DB row (not a duck-typed stand-in) because
+    ``perform_sanctification`` reads ``roll.check_result.outcome.name``.
     """
-    outcome = type("Outcome", (), {"success_level": 1})()
+    from world.traits.factories import CheckOutcomeFactory
+
+    outcome = CheckOutcomeFactory(name="ViewsetComponentsE2E_Success", success_level=1)
     return type("CheckResult", (), {"outcome": outcome})()
 
 

@@ -197,7 +197,7 @@ class SanctumInstallAction(SanctumActionBase):
                     "fizzled": True,
                     "success_level": result.success_level,
                     "tier": result.tier,
-                    "detail": sanctification_fizzle_detail(result.tier),
+                    "detail": sanctification_fizzle_detail(result.success_level),
                 },
             )
         return ActionResult(

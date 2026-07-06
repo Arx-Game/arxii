@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import SimpleTestCase, TestCase
 
 from world.locations.constants import HolderType, LocationParentType
@@ -32,10 +34,6 @@ from world.magic.seeds_sanctum import (
     ensure_sanctum_rituals,
 )
 from world.magic.services.sanctum_install import (
-    DISSOLUTION_RECOVERY_BOTCH,
-    DISSOLUTION_RECOVERY_CRIT_SUCCESS,
-    DISSOLUTION_RECOVERY_FAILURE,
-    DISSOLUTION_RECOVERY_SUCCESS,
     AbsorbNothingPendingError,
     AbsorbNotPhysicallyPresentError,
     DissolutionAlreadyDissolvedError,
@@ -55,41 +53,47 @@ from world.room_features.factories import (
     RoomFeatureKindFactory,
 )
 from world.room_features.models import RoomFeatureInstance
+from world.traits.factories import CheckOutcomeFactory
 
 
 class DissolutionRecoveryMathTests(TestCase):
-    """Outcome-tier → recovery-fraction mapping is testable in isolation.
+    """_dissolution_recovery_fraction looks up the authored award row for the tier."""
 
-    _dissolution_recovery_fraction now takes OutcomeTier directly.
-    """
+    def test_crit_recovery(self):
+        from world.magic.models.sanctum import SanctumDissolutionRecoveryAward
 
-    def test_crit_success_returns_80(self) -> None:
-        from world.magic.services.ritual_checks import OutcomeTier
-
-        self.assertEqual(
-            _dissolution_recovery_fraction(OutcomeTier.CRIT), DISSOLUTION_RECOVERY_CRIT_SUCCESS
+        outcome = CheckOutcomeFactory(success_level=2)
+        SanctumDissolutionRecoveryAward.objects.create(
+            outcome_tier=outcome, recovery_fraction=Decimal("0.80")
         )
+        self.assertEqual(_dissolution_recovery_fraction(outcome), Decimal("0.80"))
 
-    def test_success_returns_50(self) -> None:
-        from world.magic.services.ritual_checks import OutcomeTier
+    def test_success_recovery(self):
+        from world.magic.models.sanctum import SanctumDissolutionRecoveryAward
 
-        self.assertEqual(
-            _dissolution_recovery_fraction(OutcomeTier.SUCCESS), DISSOLUTION_RECOVERY_SUCCESS
+        outcome = CheckOutcomeFactory(success_level=1)
+        SanctumDissolutionRecoveryAward.objects.create(
+            outcome_tier=outcome, recovery_fraction=Decimal("0.50")
         )
+        self.assertEqual(_dissolution_recovery_fraction(outcome), Decimal("0.50"))
 
-    def test_failure_returns_10(self) -> None:
-        from world.magic.services.ritual_checks import OutcomeTier
+    def test_failure_recovery(self):
+        from world.magic.models.sanctum import SanctumDissolutionRecoveryAward
 
-        self.assertEqual(
-            _dissolution_recovery_fraction(OutcomeTier.FAIL), DISSOLUTION_RECOVERY_FAILURE
+        outcome = CheckOutcomeFactory(success_level=0)
+        SanctumDissolutionRecoveryAward.objects.create(
+            outcome_tier=outcome, recovery_fraction=Decimal("0.10")
         )
+        self.assertEqual(_dissolution_recovery_fraction(outcome), Decimal("0.10"))
 
-    def test_botch_returns_0(self) -> None:
-        from world.magic.services.ritual_checks import OutcomeTier
+    def test_critical_failure_recovery(self):
+        from world.magic.models.sanctum import SanctumDissolutionRecoveryAward
 
-        self.assertEqual(
-            _dissolution_recovery_fraction(OutcomeTier.BOTCH), DISSOLUTION_RECOVERY_BOTCH
+        outcome = CheckOutcomeFactory(success_level=-3)
+        SanctumDissolutionRecoveryAward.objects.create(
+            outcome_tier=outcome, recovery_fraction=Decimal("0.0")
         )
+        self.assertEqual(_dissolution_recovery_fraction(outcome), Decimal("0.0"))
 
 
 class RitualSeedTests(TestCase):
@@ -541,8 +545,25 @@ def _build_dissolution_sanctum(*, leader_is_founder: bool = True):
 
 
 def _mock_check_result(success_level: int = 1):
-    """Build a lightweight fake CheckResult for patching perform_check."""
-    outcome = type("O", (), {"success_level": success_level})()
+    """Build a fake CheckResult wrapping a real CheckOutcome row.
+
+    The outcome must be a real DB row (not a duck-typed stand-in) because
+    ``perform_sanctification`` now reads ``roll.check_result.outcome.name`` and
+    ``perform_dissolution``'s ``_dissolution_recovery_fraction`` resolves
+    ``SanctumDissolutionRecoveryAward.objects.get(outcome_tier=roll.check_result.outcome)``
+    — both need a real ``CheckOutcome`` FK target. A matching award row is created
+    too so any test that reaches ``perform_dissolution`` doesn't hit a
+    ``DoesNotExist`` for a tier it doesn't care about.
+    """
+    from world.magic.models.sanctum import SanctumDissolutionRecoveryAward
+
+    outcome = CheckOutcomeFactory(
+        name=f"Outcome_sl_{success_level}_{id(object())}",
+        success_level=success_level,
+    )
+    SanctumDissolutionRecoveryAward.objects.get_or_create(
+        outcome_tier=outcome, defaults={"recovery_fraction": Decimal("0.50")}
+    )
     return type("CR", (), {"outcome": outcome})()
 
 
@@ -634,7 +655,7 @@ class PerformSanctificationGradedCheckTests(TestCase):
         self.assertTrue(result.fizzled)
         self.assertIsNone(result.sanctum_id)
         self.assertEqual(result.success_level, 0)
-        self.assertEqual(result.tier, "fail")
+        self.assertEqual(result.tier, mock_check.return_value.outcome.name)
         # No SanctumDetails or RoomFeatureInstance should have been created
         self.assertFalse(
             SanctumDetails.objects.filter(founder_character_sheet=owner.character_sheet).exists()
@@ -656,7 +677,7 @@ class PerformSanctificationGradedCheckTests(TestCase):
 
         self.assertTrue(result.fizzled)
         self.assertIsNone(result.sanctum_id)
-        self.assertEqual(result.tier, "botch")
+        self.assertEqual(result.tier, mock_check.return_value.outcome.name)
 
     def test_success_creates_sanctum_and_fizzled_false(self) -> None:
         from unittest.mock import patch
@@ -713,11 +734,10 @@ class SanctificationFizzleDetailTests(SimpleTestCase):
     """The fizzle detail copy differs by outcome tier — a botch reads darker."""
 
     def test_fail_and_botch_copy_differ(self) -> None:
-        from world.magic.services.ritual_checks import OutcomeTier
         from world.magic.services.sanctum_install import sanctification_fizzle_detail
 
-        fail_copy = sanctification_fizzle_detail(OutcomeTier.FAIL.value)
-        botch_copy = sanctification_fizzle_detail(OutcomeTier.BOTCH.value)
+        fail_copy = sanctification_fizzle_detail(-1)
+        botch_copy = sanctification_fizzle_detail(-2)
 
         self.assertNotEqual(fail_copy, botch_copy)
         # The ordinary failure keeps the gentle "take hold" framing.
