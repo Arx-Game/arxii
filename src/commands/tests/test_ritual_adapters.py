@@ -15,6 +15,7 @@ from commands.ritual_adapters import (
     CovenantInductionAdapter,
     DraftParse,
     JoinParse,
+    OrganizationInductionAdapter,
     RitualDraftAdapter,
     SoulTetherAdapter,
     get_adapter,
@@ -29,12 +30,14 @@ from world.magic.factories import (
     AffinityFactory,
     BattleCovenantRiseRitualFactory,
     CovenantInductionRitualFactory,
+    OrganizationInductionRitualFactory,
     ResonanceFactory,
     RitualFactory,
     wire_soul_tether_content,
 )
 from world.magic.types.sessions import RitualSessionReferenceSpec
 from world.progression.models import CharacterPathHistory
+from world.societies.factories import OrganizationFactory
 
 
 class SoulTetherAdapterDraftTests(TestCase):
@@ -346,6 +349,46 @@ class DuranceAdapterTests(TestCase):
         from commands.ritual_adapters import DuranceAdapter
 
         parse = DuranceAdapter().parse_join(kwargs={}, caller=self.inductee.character)
+        self.assertIsInstance(parse, JoinParse)
+        self.assertEqual(parse.participant_kwargs, {})
+        self.assertEqual(parse.references, [])
+
+
+class GetAdapterOrganizationInductionTests(TestCase):
+    def test_organization_induction_ritual_gets_organization_induction_adapter(self) -> None:
+        ritual = OrganizationInductionRitualFactory()
+        adapter = get_adapter(ritual)
+        self.assertIsInstance(adapter, OrganizationInductionAdapter)
+
+
+class OrganizationInductionAdapterDraftTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.organization = OrganizationFactory(name="The Ember Guild")
+
+    def test_builds_organization_session_reference(self) -> None:
+        adapter = OrganizationInductionAdapter()
+        parse = adapter.parse_draft(kwargs={"organization": "The Ember Guild"}, caller=None)
+        self.assertIsInstance(parse, DraftParse)
+        self.assertEqual(len(parse.session_references), 1)
+        ref = parse.session_references[0]
+        self.assertEqual(ref.kind, "ORGANIZATION")
+        self.assertEqual(ref.ref_organization, self.organization)
+
+    def test_organization_lookup_is_case_insensitive(self) -> None:
+        adapter = OrganizationInductionAdapter()
+        parse = adapter.parse_draft(kwargs={"organization": "the ember guild"}, caller=None)
+        self.assertEqual(parse.session_references[0].ref_organization, self.organization)
+
+    def test_unknown_organization_raises_command_error(self) -> None:
+        adapter = OrganizationInductionAdapter()
+        with self.assertRaises(CommandError) as ctx:
+            adapter.parse_draft(kwargs={"organization": "No Such Org"}, caller=None)
+        self.assertIn("No organization named", str(ctx.exception))
+
+    def test_parse_join_returns_empty(self) -> None:
+        adapter = OrganizationInductionAdapter()
+        parse = adapter.parse_join(kwargs={}, caller=None)
         self.assertIsInstance(parse, JoinParse)
         self.assertEqual(parse.participant_kwargs, {})
         self.assertEqual(parse.references, [])
