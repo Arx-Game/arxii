@@ -77,15 +77,18 @@ class _CategoryPolishSerializer(serializers.Serializer):
 
 
 class _OwnedDwellingSerializer(serializers.Serializer):
-    """One building the persona owns, with polish breakdown + upkeep state."""
+    """One building the persona owns, with polish breakdown + condition label.
+
+    The renown payload is viewable by any authenticated player, so this
+    carries only the public fiction: the qualitative condition-tier label
+    (#1930, ADR-0031). Arrears / miss counters / mothball state are
+    owner-only and surface through the owner action family instead.
+    """
 
     id = serializers.IntegerField()
     name = serializers.CharField()
     polish_by_category = _CategoryPolishSerializer(many=True)
-    upkeep_warning = serializers.BooleanField()
-    decayed_features_count = serializers.IntegerField()
-    dormant = serializers.BooleanField()
-    dormant_since = serializers.DateTimeField(allow_null=True)
+    condition_label = serializers.CharField()
 
 
 class _TenantedRoomSerializer(serializers.Serializer):
@@ -421,19 +424,18 @@ def _build_tier_label_resolver():
 
 
 def _build_owned_dwellings(persona: Persona, tier_resolver) -> list[dict]:
-    """#742 — Per-owned-building polish breakdown + upkeep state.
+    """#742 — Per-owned-building polish breakdown + condition label.
 
     For each building this persona owns, surface the polish-by-category
-    rows (with tier labels), an upkeep_warning flag (any instance with
-    consecutive_missed_upkeep > 0), the decayed-features count, and the
-    dormancy state. Empty list when the persona owns nothing.
+    rows (with tier labels) and the qualitative condition-tier label
+    (#1930 — the public fiction; financial state stays owner-only).
+    Empty list when the persona owns nothing.
     """
     from django.db.models import Prefetch  # noqa: PLC0415
 
     from world.buildings.models import (  # noqa: PLC0415
         Building,
         BuildingPolish,
-        BuildingProjectInstance,
     )
 
     # ``to_attr`` is omitted intentionally — using it on a
@@ -448,12 +450,6 @@ def _build_owned_dwellings(persona: Persona, tier_resolver) -> list[dict]:
             Prefetch(  # noqa: PREFETCH_STRING — see comment above re identity-map leak.
                 "polish_by_category",
                 queryset=BuildingPolish.objects.select_related("category"),
-            ),
-            Prefetch(  # noqa: PREFETCH_STRING — see comment above.
-                "project_instances",
-                queryset=BuildingProjectInstance.objects.only(
-                    "pk", "building_id", "consecutive_missed_upkeep", "decayed_at"
-                ),
             ),
         )
     )
@@ -470,17 +466,11 @@ def _serialize_owned_building(building, tier_resolver) -> dict:
         }
         for row in building.polish_by_category.all()
     ]
-    instances = list(building.project_instances.all())
-    upkeep_warning = any(inst.consecutive_missed_upkeep > 0 for inst in instances)
-    decayed_count = sum(1 for inst in instances if inst.decayed_at is not None)
     return {
         "id": building.pk,
         "name": building.area.name,
         "polish_by_category": polish_rows,
-        "upkeep_warning": upkeep_warning,
-        "decayed_features_count": decayed_count,
-        "dormant": not building.is_accessible,
-        "dormant_since": building.dormant_since,
+        "condition_label": building.get_condition_tier_display(),
     }
 
 

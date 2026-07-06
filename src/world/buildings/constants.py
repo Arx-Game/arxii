@@ -21,18 +21,67 @@ TARGET_GRANDEUR_MIN = 1
 TARGET_GRANDEUR_MAX = 10
 
 
-# #676 Phase E — Polish upkeep decay constants.
+# #1930 — Condition-tier ladder.
 #
-# Cron fires once per RL week. When upkeep is missed on a building,
-# decay proceeds outermost-first: the lowest-priority active
-# BuildingProjectInstance accumulates ``consecutive_missed_upkeep``
-# ticks; its polish drops each tick by ``DECAY_BASE_AMOUNT ×
-# (DECAY_ACCELERATION_FACTOR ** (ticks - 1))``. When the instance's
-# polish hits 0, decay moves to the next-priority instance (which
-# starts at tick 1 fresh).
-#
-# A successful weekly payment resets ``consecutive_missed_upkeep`` to 0
-# on every instance of that building — the building-as-whole is the
-# unit of maintenance.
-DECAY_BASE_AMOUNT: int = 50
-DECAY_ACCELERATION_FACTOR: float = 1.5
+# A building's condition is a discrete tier (qualitative label player-facing,
+# per ADR-0031's fiction-label rule), NOT a continuously creeping percentage —
+# tiers give visible grace time instead of always-logged-in pressure.
+# EXCELLENT is *normal*: ordinary paid upkeep holds it forever. Tiers above
+# EXCELLENT are reached only via preparation projects and decay back on a
+# short dwell timer; tiers below are reached only through sustained missed
+# upkeep (arrears accrue first) and floor at DECAYED — nonpayment never
+# mutates polish/feature rows (regress, never destroy).
+class ConditionTier(models.IntegerChoices):
+    """Building condition ladder. Labels are PLACEHOLDER fiction prose."""
+
+    DECAYED = 0, "Decayed"
+    RAMSHACKLE = 1, "Ramshackle"
+    WORN = 2, "Worn"
+    FINE = 3, "Fine"
+    GOOD = 4, "Good"
+    EXCELLENT = 5, "Excellent"
+    EXTRAVAGANT = 6, "Extravagantly Polished"
+    IMMACULATE = 7, "Immaculate"
+
+
+# Percent multiplier applied to the building-derived prestige component.
+# A step function of tier — deliberately not continuous. PLACEHOLDER.
+CONDITION_PRESTIGE_MULTIPLIER: dict[int, int] = {
+    ConditionTier.DECAYED: 5,
+    ConditionTier.RAMSHACKLE: 20,
+    ConditionTier.WORN: 40,
+    ConditionTier.FINE: 60,
+    ConditionTier.GOOD: 80,
+    ConditionTier.EXCELLENT: 100,
+    ConditionTier.EXTRAVAGANT: 150,
+    ConditionTier.IMMACULATE: 200,
+}
+
+# Above-normal tiers decay one step once this dwell lapses (checked by the
+# weekly sweep). IMMACULATE can be held past the dwell only while the owner
+# pays the ultra-upkeep premium. PLACEHOLDER.
+ABOVE_NORMAL_DWELL_DAYS: int = 7
+
+# Misses accrue arrears silently for this many weeks before condition
+# starts sliding (grace time), then one tier per SLIP_WEEKS_PER_TIER
+# further missed weeks. Arrears cap at ARREARS_CAP_WEEKS × weekly cost —
+# absence is never punished beyond a bounded bill. PLACEHOLDER.
+GRACE_MISSES: int = 2
+SLIP_WEEKS_PER_TIER: int = 4
+ARREARS_CAP_WEEKS: int = 8
+
+# Consecutive paid weeks needed to climb one tier back toward EXCELLENT
+# (refurbishment is the fast path). PLACEHOLDER.
+REGAIN_WEEKS_PER_TIER: int = 2
+
+# Ultra upkeep: premium charged on top of normal upkeep to hold IMMACULATE
+# past its dwell — an outrageous recurring spend, not a default. PLACEHOLDER.
+ULTRA_UPKEEP_MULTIPLIER: int = 4
+
+# Priced recovery/preparation (coppers, scaled by Building.target_size).
+# Refurbish restores to EXCELLENT; preparation pushes one tier above it.
+# ("Renovation" is the existing kind-swap project — different verb on purpose.)
+# PLACEHOLDER pending the economy pass.
+REFURBISH_COPPER_PER_TIER: int = 500
+PREPARE_COPPER_COST_EXTRAVAGANT: int = 2000
+PREPARE_COPPER_COST_IMMACULATE: int = 5000

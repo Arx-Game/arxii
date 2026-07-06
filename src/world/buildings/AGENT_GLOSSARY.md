@@ -86,3 +86,40 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   polish iff the persona owns that building) and syncs the character-level
   residence (#1514 Evennia `home`). _Avoid:_ residence (that's the
   character-level Evennia `home` consumer), home room.
+- **Condition tier** — `Building.condition_tier` (#1930): the qualitative
+  condition ladder (Decayed → Ramshackle → Worn → Fine → Good → **Excellent**
+  → Extravagantly Polished → Immaculate) whose per-tier multiplier
+  step-modulates `prestige_from_dwellings`. Excellent is *normal*, held
+  indefinitely by paid weekly upkeep; sustained missed upkeep slides tiers
+  down (arrears accrue first — grace before slide); tiers above Excellent
+  come only from a Grand Preparation and dwell-decay back. Nonpayment NEVER
+  mutates polish/feature rows. The player-facing surface is the tier *label*
+  (public fiction, ADR-0031); multipliers/timers stay under the hood.
+  _Avoid:_ condition rating/percentage (it is a step ladder, not a creeping
+  number), durability (that's `LabStationDetails`).
+- **Upkeep arrears** — `Building.upkeep_arrears` (#1930): owed back-upkeep in
+  coppers, accrued on missed weeks and capped at `ARREARS_CAP_WEEKS ×` weekly
+  cost. Owner-only surface (never on the public renown payload); settled via
+  `settle_upkeep_arrears`, and a prerequisite for refurbish/prepare. _Avoid:_
+  debt (that's the org-scoped `DebtInstrument`).
+- **Refurbish** — `refurbish_building` (#1930): the priced owner action
+  restoring `condition_tier` to Excellent (coppers per tier deficit, scaled
+  by `target_size`). _Avoid:_ renovate/renovation (strictly the
+  `BUILDING_RENOVATION` catalog-kind swap), restoration (the deleted #676
+  polish-refill machinery).
+- **Grand Preparation** — `prepare_building` (#1930): the cleaning /
+  party-preparation luxury spend that pushes a building one tier ABOVE
+  Excellent (→ Extravagantly Polished → Immaculate) for a temporary prestige
+  kick; dwell-decays back within about a week. _Avoid:_ polish (that's the
+  per-category `BuildingPolish` value system).
+- **Ultra upkeep** — `Building.ultra_upkeep` (#1930): owner-toggled premium
+  (`ULTRA_UPKEEP_MULTIPLIER ×` weekly cost, on top of normal upkeep) that
+  holds Immaculate past its dwell — a real recurring tradeoff, not a default.
+- **Mothballed** — `Building.mothballed_at` (#1930): long owner inactivity
+  (decay-tier LONG_INACTIVE, 90d+) hides the building's rooms from public
+  listings (prior `is_public` snapshotted in `MothballedRoomState`) and
+  freezes all upkeep/condition accrual; the owner's return restores
+  everything with no back-billing. Indistinguishable from an owner privacy
+  choice — carries no "inactive" label. _Avoid:_ dormant (retired #676
+  concept; collides with `DecayTier.DORMANT`, the 365d player-inactivity
+  tier), hidden.

@@ -97,6 +97,7 @@ treat those names as hints to confirm, not gospel.
 - [0038 — Asymmetrical PvE; NPCs have no character sheets](0038-asymmetrical-pve-npcs-have-no-sheets.md)
 - [0039 — Bulk resolution uses honest terminal states](0039-bulk-resolution-uses-honest-terminal-states.md)
 - [0066 — Legend is earned only from difficult victories](0066-legend-earned-only-from-difficult-victories.md)
+- [0093 — Housing neglect regresses a condition tier, never structure; above-normal shine is a temporary spend; inactivity mothballs, never ruins](0093-housing-neglect-regresses-a-condition-tier-never-structure.md)
 
 ### Domain architecture
 - [0040 — Incapacitation & dying decoupled from a single vitals enum](0040-incapacitation-and-dying-decoupled-from-vitals.md)

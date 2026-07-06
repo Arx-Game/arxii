@@ -25,9 +25,11 @@ from decimal import Decimal
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.buildings import room_constants
+from world.buildings.constants import ConditionTier
 from world.locations.constants import StatKey
 
 # Cross-app FK string constants. Django resolves these lazily at app-ready
@@ -186,20 +188,64 @@ class Building(SharedMemoryModel):
             "double-count when same persona owns building + tenants a room)."
         ),
     )
-    is_accessible = models.BooleanField(
-        default=True,
+    # #1930 — condition-tier ladder. Nonpayment slides this (arrears first,
+    # bounded floor); it NEVER mutates polish/feature rows. The tier
+    # step-modulates the owner's prestige_from_dwellings.
+    condition_tier = models.PositiveSmallIntegerField(
+        choices=ConditionTier.choices,
+        default=ConditionTier.EXCELLENT,
         help_text=(
-            "Renown system: flips False when all building-level polish "
-            "features have decayed to 0 — building goes dormant but "
-            "persists in DB. Restoration project flips it back."
+            "Condition ladder position (#1930). EXCELLENT is the normal "
+            "state held by ordinary paid upkeep; above-normal tiers come "
+            "from preparation and decay on a dwell timer; below-normal "
+            "tiers come from sustained missed upkeep, floored at DECAYED."
         ),
     )
-    dormant_since = models.DateTimeField(
+    condition_since = models.DateTimeField(
+        default=timezone.now,
+        help_text=(
+            "When condition_tier last changed. Drives the above-normal "
+            "dwell decay (ABOVE_NORMAL_DWELL_DAYS)."
+        ),
+    )
+    upkeep_arrears = models.PositiveBigIntegerField(
+        default=0,
+        help_text=(
+            "Owed upkeep in coppers, accrued on missed weeks and capped at "
+            "ARREARS_CAP_WEEKS × weekly cost. Owner-only surface; settled "
+            "via settle_upkeep_arrears."
+        ),
+    )
+    ultra_upkeep = models.BooleanField(
+        default=False,
+        help_text=(
+            "Owner opt-in premium (ULTRA_UPKEEP_MULTIPLIER × weekly cost, "
+            "on top of normal upkeep) that holds IMMACULATE past its dwell."
+        ),
+    )
+    mothballed_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "Set when is_accessible flips False (Phase E decay). Used to "
-            "scale Restoration Project cost with dormancy duration."
+            "Set when long owner inactivity hides this building from the "
+            "grid and freezes all upkeep/condition accrual (#1930). "
+            "Cleared when the owner returns."
+        ),
+    )
+    consecutive_missed_upkeep = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Consecutive missed weekly upkeep cycles for this building "
+            "(building-scoped; upkeep is charged per building). Past "
+            "GRACE_MISSES the condition tier slides every "
+            "SLIP_WEEKS_PER_TIER further misses."
+        ),
+    )
+    consecutive_paid_upkeep = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Consecutive paid weekly cycles — every REGAIN_WEEKS_PER_TIER "
+            "paid weeks climbs one tier back toward EXCELLENT."
         ),
     )
     kind = models.ForeignKey(
@@ -933,13 +979,6 @@ class ProjectTemplate(SharedMemoryModel):
             "active. The weekly cron sinks it from the owner's purse (#932)."
         ),
     )
-    decay_priority = models.PositiveIntegerField(
-        default=100,
-        help_text=(
-            "Lower = outermost = decays first when upkeep is missed. "
-            "Phase E uses this for serial outermost-first decay ordering."
-        ),
-    )
     project_kind = models.CharField(
         max_length=40,
         blank=True,
@@ -993,13 +1032,12 @@ class BuildingProjectInstance(SharedMemoryModel):
     """Snapshot of a completed polish-adding project on a specific building.
 
     Created by ``apply_project_completion`` when a ProjectTemplate
-    finishes on a building. Carries the **current** polish per category
-    (decays write to these values directly) plus upkeep tracking for
-    Phase E. The BuildingPolish row stores the building's total
-    polish-by-category; instances store the per-feature contribution.
-
-    On feature decay to 0, the instance row stays — restoration
-    refills the same row. Removal is rare (admin only).
+    finishes on a building. Carries the polish per category plus the
+    weekly upkeep contribution. The BuildingPolish row stores the
+    building's total polish-by-category; instances store the per-feature
+    contribution. Polish rows are never mutated by missed upkeep
+    (#1930 — neglect slides Building.condition_tier instead); removal
+    is rare (admin only).
     """
 
     building = models.ForeignKey(
@@ -1028,41 +1066,14 @@ class BuildingProjectInstance(SharedMemoryModel):
         default=0,
         help_text="Snapshotted from template at completion (admin-tunable on template).",
     )
-    decay_priority = models.PositiveIntegerField(
-        default=100,
-        help_text=(
-            "Snapshotted from template. Lower = decays first when upkeep "
-            "is missed. Phase E walks instances in (decay_priority, pk) "
-            "order for the serial outermost-first decay."
-        ),
-    )
     last_upkeep_paid_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text="Last successful weekly upkeep deduction.",
     )
-    consecutive_missed_upkeep = models.PositiveIntegerField(
-        default=0,
-        help_text=(
-            "How many consecutive weekly upkeep cycles have missed for "
-            "this instance. Drives the accelerating-decay curve in "
-            "Phase E. Reset to 0 on any successful building-wide payment."
-        ),
-    )
-    decayed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=(
-            "Set when this instance's polish first hits 0 due to missed "
-            "upkeep. Restoration clears this back to null."
-        ),
-    )
 
     class Meta:
-        ordering = ["decay_priority", "pk"]
-        indexes = [
-            models.Index(fields=["building", "decay_priority"]),
-        ]
+        ordering = ["pk"]
 
     def __str__(self) -> str:
         return f"{self.template.name} on {self.building}"
@@ -1277,3 +1288,40 @@ class RoomDecoration(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.kind.name} in room {self.room_profile_id}"
+
+
+class MothballedRoomState(SharedMemoryModel):
+    """Pre-mothball ``RoomProfile.is_public`` snapshot for one room (#1930).
+
+    Written when long owner inactivity mothballs a building (rooms are
+    hidden from public listings); read back — then deleted — when the
+    owner returns, so mixed public/private room setups restore
+    faithfully. FK lives here (buildings → evennia_extensions), keeping
+    the RoomProfile primitive dependency-free (ADR-0010).
+    """
+
+    building = models.ForeignKey(
+        Building,
+        on_delete=models.CASCADE,
+        related_name="mothballed_room_states",
+    )
+    room_profile = models.ForeignKey(
+        _ROOM_PROFILE_FK,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    was_public = models.BooleanField(
+        help_text="RoomProfile.is_public value at mothball time, restored on return.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["building", "room_profile"],
+                name="buildings_mothballed_room_state_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"mothball snapshot: room {self.room_profile_id} (was_public={self.was_public})"

@@ -469,8 +469,9 @@ def register_all_tasks() -> None:
 
     register_fashion_tasks()
 
-    # #676 Phase E: Weekly building-polish upkeep sweep — deducts upkeep
-    # from owner wallets; on miss, decays outermost active feature.
+    # #1930: Weekly building-upkeep sweep — deducts upkeep from owner
+    # wallets; misses accrue bounded arrears then slide the condition
+    # tier (never mutates polish/features).
     from world.buildings.upkeep_services import apply_weekly_upkeep_all_buildings
 
     register_task(
@@ -479,9 +480,27 @@ def register_all_tasks() -> None:
             callable=apply_weekly_upkeep_all_buildings,
             interval=timedelta(days=7),
             description=(
-                "Weekly polish-upkeep sweep: all-or-nothing deduction from "
-                "owner wallet; on miss, one tick of outermost-first "
-                "accelerating decay on the building's active features."
+                "Weekly upkeep sweep: all-or-nothing deduction from the "
+                "owner wallet; misses accrue capped arrears then slide the "
+                "building's condition tier; above-normal tiers dwell-decay."
+            ),
+        )
+    )
+
+    # #1930: Weekly mothball sweep — long owner inactivity hides a
+    # building from the grid and freezes its upkeep/condition accrual;
+    # the owner's return restores it.
+    from world.buildings.mothball_services import sweep_building_mothballs
+
+    register_task(
+        CronDefinition(
+            task_key="buildings.mothball_sweep",
+            callable=sweep_building_mothballs,
+            interval=timedelta(days=7),
+            description=(
+                "Weekly mothball sweep: hide buildings whose owners have "
+                "been inactive 90+ days (freeze accrual); restore them on "
+                "the owner's return."
             ),
         )
     )
