@@ -23,6 +23,31 @@ if TYPE_CHECKING:
     from actions.types import ActionRef, DispatchResult
 
 
+def parse_greedy_kwargs(args: str, *, greedy_key: str | None = None) -> dict[str, str]:
+    """Parse ``key=value`` tokens, left to right.
+
+    When *greedy_key* is set and encountered, its value greedily consumes the
+    rest of the line (so free text with spaces works). All other values are
+    single whitespace-delimited tokens. Tokens that contain no ``=`` are
+    silently skipped (positional leftovers).
+    """
+    out: dict[str, str] = {}
+    tokens = args.split()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if "=" not in token:
+            index += 1
+            continue
+        key, _, value = token.partition("=")
+        if greedy_key is not None and key == greedy_key:
+            out[greedy_key] = " ".join([value, *tokens[index + 1 :]]).strip()
+            break
+        out[key] = value
+        index += 1
+    return out
+
+
 class ArxCommand(Command):
     """Base command class for Arx II.
 

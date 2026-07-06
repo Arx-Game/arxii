@@ -35,6 +35,7 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    ReleaseCompanionAction,
 )
 from actions.definitions.conditions import treat_condition
 from actions.definitions.consent_preferences import (
@@ -437,6 +438,7 @@ _ALL_ACTIONS: list[Action] = [
     BindCompanionAction(),
     CompanionFightAction(),
     DeployCompanionAction(),
+    ReleaseCompanionAction(),
 ]
 
 # Lookup by key

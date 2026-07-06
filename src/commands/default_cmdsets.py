@@ -26,6 +26,7 @@ from commands.captivity import CmdDemandRansom
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.comfort import CmdComfort
+from commands.companion import CmdCompanion
 from commands.conditions import CmdTreatCondition
 from commands.consent import (
     CmdAccept,
@@ -191,6 +192,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1497 — sanctum lifecycle telnet namespace (install/homecoming/purging/
             # weave/dissolve/absorb/sever).
             CmdSanctum,
+            # #1918 — companion lifecycle telnet namespace (bind/fight/deploy/release).
+            CmdCompanion,
             # #1582 — signature-bonus selection namespace (set/clear/list).
             CmdSignature,
             CmdWeaveThread,

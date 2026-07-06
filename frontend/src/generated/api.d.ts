@@ -3419,7 +3419,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own active companions. */
+    /**
+     * @description Read + action endpoints for the player's companion surface.
+     *
+     *     `list`/`retrieve` return the caller's own active companions (read-only).
+     *     POST actions delegate to the four Actions in
+     *     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+     *     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
+     */
     get: operations['companions_companions_list'];
     put?: never;
     post?: never;
@@ -3436,10 +3443,105 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own active companions. */
+    /**
+     * @description Read + action endpoints for the player's companion surface.
+     *
+     *     `list`/`retrieve` return the caller's own active companions (read-only).
+     *     POST actions delegate to the four Actions in
+     *     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+     *     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
+     */
     get: operations['companions_companions_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/deploy/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Deploy a companion into a battle — ``POST /api/companions/companions/{id}/deploy/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
+     */
+    post: operations['companions_companions_deploy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/fight/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Commit a companion into combat — ``POST /api/companions/companions/{id}/fight/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.CompanionFightAction`.
+     */
+    post: operations['companions_companions_fight_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/release/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Release a bonded companion — ``POST /api/companions/companions/{id}/release/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.ReleaseCompanionAction`.
+     *     The companion id comes from the URL; ``get_queryset`` scopes it to the
+     *     caller's active companions (foreign → 404). The Action re-validates
+     *     ownership via ``_resolve_owned_companion`` (defense in depth).
+     */
+    post: operations['companions_companions_release_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/bind/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Bind a new companion — ``POST /api/companions/companions/bind/``.
+     *
+     *     Body: ``{archetype_id, gift_id, name}``.
+     *     Wraps :class:`actions.definitions.companions.BindCompanionAction`.
+     */
+    post: operations['companions_companions_bind_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -34854,6 +34956,91 @@ export interface operations {
         /** @description A unique integer value identifying this Companion. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_deploy_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_fight_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_release_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_bind_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

@@ -174,3 +174,28 @@ class DeployCompanionAction(Action):
             message=f"{companion.name} is deployed into the battle!",
             data={"vehicle_id": vehicle.pk},
         )
+
+
+@dataclass
+class ReleaseCompanionAction(Action):
+    """Release a bonded companion — destroy its live object, keep the row (#1918)."""
+
+    key: str = "release_companion"
+    name: str = "Release Companion"
+    icon: str = "door-open"
+    category: str = "companions"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:
+        from world.companions.services import release_companion  # noqa: PLC0415
+
+        companion_id = kwargs.get("companion_id")
+        if not companion_id:
+            return ActionResult(success=False, message="Pick a companion to release.")
+        companion, failure = _resolve_owned_companion(actor, companion_id)
+        if failure is not None:
+            return failure
+        name = companion.name
+        release_companion(companion)
+        return ActionResult(success=True, message=f"{name} is released from your bond.")
