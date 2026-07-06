@@ -97,3 +97,56 @@ def ensure_companion_content() -> Gift:
         )
 
     return gift
+
+
+def ensure_companion_abilities() -> None:
+    """Idempotently seed sample CompanionAbility rows (#1921).
+
+    Framework-proving seeds — one ATTACK ability per beast archetype.
+    Full per-archetype content catalogs are separate content-authoring work.
+    """
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.companions.constants import CompanionAbilityKind  # noqa: PLC0415
+    from world.companions.models import CompanionAbility  # noqa: PLC0415
+
+    # Rend — a basic physical attack for the Direwolf
+    direwolf = CompanionArchetype.objects.filter(name="Direwolf").first()
+    if direwolf is not None:
+        CompanionAbility.objects.get_or_create(
+            archetype=direwolf,
+            name="Rend",
+            defaults={
+                "ability_kind": CompanionAbilityKind.ATTACK,
+                "attack_category": ActionCategory.PHYSICAL,
+                "base_damage": 8,
+                "description": "A savage tear with claws and teeth.",
+            },
+        )
+
+    # Bite — a basic physical attack for the Wolf
+    wolf = CompanionArchetype.objects.filter(name="Wolf").first()
+    if wolf is not None:
+        CompanionAbility.objects.get_or_create(
+            archetype=wolf,
+            name="Bite",
+            defaults={
+                "ability_kind": CompanionAbilityKind.ATTACK,
+                "attack_category": ActionCategory.PHYSICAL,
+                "base_damage": 5,
+                "description": "A snapping bite.",
+            },
+        )
+
+    # Talon — a basic physical attack for the Hawk
+    hawk = CompanionArchetype.objects.filter(name="Hawk").first()
+    if hawk is not None:
+        CompanionAbility.objects.get_or_create(
+            archetype=hawk,
+            name="Talon",
+            defaults={
+                "ability_kind": CompanionAbilityKind.ATTACK,
+                "attack_category": ActionCategory.PHYSICAL,
+                "base_damage": 4,
+                "description": "A raking talon strike.",
+            },
+        )
