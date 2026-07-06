@@ -52047,6 +52047,17 @@ components:
           type: integer
           description: The character this sheet belongs to
           readOnly: true
+        tenure_id:
+          type: integer
+          nullable: true
+          description: |-
+            The current tenure of this CHARACTER-scope story's character, if any.
+
+            Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
+            CHARACTER-scope story whose character has no current tenure. Lets the
+            frontend scope the #1853 pending-treasured-signoff auto-surfacing to
+            the viewer's own tenure without a second round-trip.
+          readOnly: true
         primary_table:
           type: integer
           readOnly: true
@@ -52082,6 +52093,7 @@ components:
       - id
       - owners
       - primary_table
+      - tenure_id
       - title
       - trust_requirements
       - updated_at
