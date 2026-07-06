@@ -481,7 +481,7 @@ def _has_weaving_unlock(
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913, C901
+def weave_thread(  # noqa: PLR0913, PLR0912, C901
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -535,6 +535,29 @@ def weave_thread(  # noqa: PLR0913, C901
         record_mantle_clearances(character_sheet, target)  # type: ignore[invalid-argument-type]
         if get_max_cleared_mantle_level(character_sheet, target) < 1:  # type: ignore[invalid-argument-type]
             raise MantleNotClearedError
+    elif target_kind == TargetKind.ORGANIZATION:
+        # Gate 1: active membership — the character's persona must be an active
+        # member of the target org. Read through the persona's membership list.
+        persona = character_sheet.primary_persona
+        if persona is None:
+            msg = "Character has no primary persona; cannot verify org membership."
+            raise WeavingUnlockMissing(msg)
+        memberships = list(persona.organization_memberships.all())
+        is_member = any(
+            m.organization_id == target.pk  # type: ignore[union-attr]
+            and m.left_at is None
+            and m.exiled_at is None
+            for m in memberships
+        )
+        if not is_member:
+            msg = "Character is not an active member of this organization."
+            raise WeavingUnlockMissing(msg)
+        # Gate 2: kind-level weaving unlock.
+        if not character_sheet.character.weaving_unlocks.has_unlock_for_kind(
+            TargetKind.ORGANIZATION
+        ):
+            msg = "Character lacks the ORGANIZATION weaving unlock."
+            raise WeavingUnlockMissing(msg)
     elif not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
@@ -574,6 +597,7 @@ def weave_thread(  # noqa: PLR0913, C901
         TargetKind.FACET: "target_facet",
         TargetKind.COVENANT_ROLE: "target_covenant_role",
         TargetKind.MANTLE: "target_mantle",
+        TargetKind.ORGANIZATION: "target_organization",
     }
     kwargs: dict[str, object] = {
         "owner": character_sheet,
@@ -588,6 +612,19 @@ def weave_thread(  # noqa: PLR0913, C901
     thread = Thread.objects.create(**kwargs)
     recompute_max_health_with_threads(character_sheet)
     character_sheet.character.threads.invalidate()
+
+    # For ORGANIZATION threads, mint CharacterTechnique rows for the org's
+    # acquired gifts whose supported-resonance set contains the thread's chosen
+    # resonance. Idempotent — existing technique ownership is skipped.
+    if target_kind == TargetKind.ORGANIZATION:
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        org = target  # type: ignore[assignment]
+        handler = org.gift_grants_handler
+        techniques = handler.acquired_techniques_for(resonance)
+        for technique in techniques:
+            CharacterTechnique.objects.get_or_create(character=character_sheet, technique=technique)
+
     return thread
 
 

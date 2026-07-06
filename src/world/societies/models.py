@@ -23,6 +23,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import connection, models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
@@ -435,6 +436,15 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
             )
 
             ensure_default_rank_ladder(self)
+
+    @cached_property
+    def gift_grants_handler(self):
+        """Cached handler for this org's acquired gift grants (ADR-0093)."""
+        from world.societies.handlers import (  # noqa: PLC0415
+            OrganizationGiftGrantHandler,
+        )
+
+        return OrganizationGiftGrantHandler(self)
 
 
 class OrganizationRank(SharedMemoryModel):
