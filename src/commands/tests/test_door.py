@@ -27,13 +27,23 @@ class CmdLockTests(TestCase):
         exit_obj.save()
         return caller, exit_obj
 
-    def _run(self, cmd_cls, caller, args: str) -> list[str]:
+    def _run(
+        self, cmd_cls, caller, args: str, *, kwargs_out: list[dict] | None = None
+    ) -> list[str]:
         cmd = cmd_cls()
         cmd.caller = caller
         cmd.args = args
         cmd.raw_string = f"{cmd_cls.key} {args}"
         messages: list[str] = []
-        cmd.msg = lambda *a, **kw: messages.append(a[0] if a else "")  # noqa: ARG005
+
+        def _msg(*a, **kw):
+            if a:
+                messages.append(a[0])
+            if kw:
+                if kwargs_out is not None:
+                    kwargs_out.append(kw)
+
+        cmd.msg = _msg
         cmd.func()
         return messages
 
@@ -55,5 +65,11 @@ class CmdLockTests(TestCase):
 
     def test_lock_no_such_exit(self):
         caller, _ = self._caller_and_exit()
-        messages = self._run(CmdLock, caller, "nowhere")
+        kwargs_calls: list[dict] = []
+        messages = self._run(CmdLock, caller, "nowhere", kwargs_out=kwargs_calls)
         assert any("find" in m.lower() or "such" in m.lower() for m in messages)
+
+        assert len(kwargs_calls) == 1
+        payload = kwargs_calls[0]["command_error"]
+        assert "find" in payload["error"].lower() or "such" in payload["error"].lower()
+        assert payload["command"] == "lock nowhere"

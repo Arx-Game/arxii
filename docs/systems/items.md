@@ -96,7 +96,9 @@ reapply, distinct from the live `EquippedItem` grid above. `SaveOutfitAction`/
 `RemoveOutfitSlotAction` (`actions/definitions/outfits.py`) are the seam both
 `OutfitViewSet`/`OutfitSlotViewSet` and telnet `CmdOutfit`
 (`outfit save/rename/delete/addslot/removeslot`, `src/commands/outfit.py`)
-dispatch through.
+dispatch through. `CmdOutfit` also covers the pre-existing `ApplyOutfitAction`/
+`UndressAction`/`PresentOutfitAction` (`outfit wear/undress/present`), not just
+the 5 new CRUD Actions.
 
 ### Ownership Ledger
 `OwnershipEvent` is append-only during normal play — ownership transitions are
