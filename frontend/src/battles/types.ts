@@ -19,3 +19,29 @@ export interface BattleStatePayload {
   battle_id: number;
   round_number: number | null;
 }
+
+/**
+ * BattleDetail nests a few backend dicts as untyped SerializerMethodField
+ * output — OpenAPI can't describe an ad-hoc dict shape, so these fields come
+ * through as ``{[key: string]: unknown} | null`` in the generated schema.
+ * These interfaces mirror the exact keys `world/battles/serializers.py` emits
+ * (BattleDetailSerializer.get_round, BattlePlaceSerializer.get_vehicle,
+ * BattleParticipantSerializer.get_persona) — same convention as
+ * `BattleStatePayload` above. Cast the loose field to these when reading it.
+ */
+export interface BattleRoundSummary {
+  number: number;
+  status: string;
+}
+
+export interface BattleVehicleSummary {
+  unit_id: number;
+  vehicle_kind: string;
+  is_structural: boolean;
+}
+
+export interface BattlePersonaSummary {
+  id: number;
+  name: string;
+  thumbnail_url: string | null;
+}
