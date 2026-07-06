@@ -887,7 +887,7 @@ In `src/world/magic/tests/integration/test_soul_tether_flow.py`:
 - `SoulTetherFactory(initiator_sheet, partner_sheet, sinner_role)` — creates relationship + capstone + ritual + thread + role flags.
 - `SineatingFactory` — creates audit rows for backfill testing.
 - `SoulTetherRescueFactory` — same.
-- `TetherStrainTemplateFactory` + `wire_soul_tether_content()` orchestrator for the integration-test game-content factory layer.
+- `TetherStrainTemplateFactory` + `wire_soul_tether_content()` orchestrator for the integration-test game-content factory layer. `wire_soul_tether_content()` is also called from `seed_magic_dev()` (#2027) so the Rituals/ConditionTemplates/TriggerDefinitions exist in a real deploy, not only under test setup; `seed_relationship_track_thread_unlock()` seeds the paired RELATIONSHIP_TRACK `ThreadWeavingUnlock` (+ canonical "Devotion" `RelationshipTrack`) that `accept_soul_tether` gates on.
 
 ---
 

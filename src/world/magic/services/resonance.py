@@ -641,6 +641,7 @@ def preview_resonance_pull(  # noqa: PLR0913
     combat_encounter: CombatEncounter | None = None,
     scene_id: int | None = None,
     excluded_kinds: frozenset[str] | None = None,
+    target: ObjectDB | None = None,
 ) -> PullPreviewResult:
     """Read-only preview of a resonance pull (Spec A §5.6).
 
@@ -671,6 +672,12 @@ def preview_resonance_pull(  # noqa: PLR0913
             ``InvalidImbueAmount`` early. Social-action previews pass
             ``frozenset({TargetKind.GIFT})`` so a GIFT thread is rejected at
             preview time (matching the charge-time behavior).
+        target: The live target this pull's action would be directed at
+            (#2035), fed through to ``resolve_pull_effects`` exactly as the
+            commit path (``spend_resonance_for_pull``) does — so a
+            relationship-bond/Court-regard modulated amount is visible in the
+            preview instead of only appearing at commit time. ``None`` (the
+            default) reproduces the prior byte-identical, unmodulated preview.
 
     Returns:
         PullPreviewResult with resonance_cost, anima_cost, affordable,
@@ -745,7 +752,7 @@ def preview_resonance_pull(  # noqa: PLR0913
     affordable = balance >= cost.resonance_cost and current_anima >= anima_cost
 
     in_combat = combat_encounter is not None
-    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat, target=target)
     resolved = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, resonance=resonance, threads=threads
     )

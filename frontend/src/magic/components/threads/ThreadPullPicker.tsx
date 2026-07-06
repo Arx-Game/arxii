@@ -77,7 +77,11 @@ function anchorDescription(thread: Thread): string {
 
 type TierPreviews = Record<PaidTier, PullPreviewResponse | null>;
 
-function useRowTierPreviews(thread: Thread, characterSheetId: number): TierPreviews {
+function useRowTierPreviews(
+  thread: Thread,
+  characterSheetId: number,
+  targetPersonaId?: number | null
+): TierPreviews {
   const [previews, setPreviews] = useState<TierPreviews>({ 1: null, 2: null, 3: null });
 
   useEffect(() => {
@@ -90,6 +94,12 @@ function useRowTierPreviews(thread: Thread, characterSheetId: number): TierPrevi
         resonance_id: thread.resonance,
         tier,
         thread_ids: [thread.id],
+        // #2035: thread the currently-selected cast/clash target through so a
+        // relationship-bond/Court-regard modulated amount shows up in the
+        // preview, matching what the commit path would actually grant.
+        ...(targetPersonaId != null
+          ? { action_context: { target_persona_id: targetPersonaId } }
+          : {}),
       })
         .then((result) => {
           if (!ignore) {
@@ -104,7 +114,7 @@ function useRowTierPreviews(thread: Thread, characterSheetId: number): TierPrevi
     return () => {
       ignore = true;
     };
-  }, [thread.id, thread.resonance, characterSheetId]);
+  }, [thread.id, thread.resonance, characterSheetId, targetPersonaId]);
 
   return previews;
 }
@@ -199,6 +209,11 @@ interface ApplicableRowProps {
   characterSheetId: number;
   balanceByResonanceId: Record<number, number>;
   onOpenDetails: (thread: Thread) => void;
+  /** The live target this pull's action would be directed at (#2035), when one
+   *  is currently selected in the cast/clash UI. Optional — passed through to
+   *  the tier previews so a relationship-bond/Court-regard modulated amount is
+   *  visible ahead of commit. */
+  targetPersonaId?: number | null;
 }
 
 function ApplicableRow({
@@ -208,8 +223,9 @@ function ApplicableRow({
   characterSheetId,
   balanceByResonanceId,
   onOpenDetails,
+  targetPersonaId,
 }: ApplicableRowProps) {
-  const tierPreviews = useRowTierPreviews(thread, characterSheetId);
+  const tierPreviews = useRowTierPreviews(thread, characterSheetId, targetPersonaId);
 
   // Use the pre-fetched preview for the selected paid tier.
   const selectedPreview = selectedTier > 0 ? tierPreviews[selectedTier as PaidTier] : null;
@@ -492,6 +508,7 @@ export function ThreadPullPicker({
               characterSheetId={characterSheetId}
               balanceByResonanceId={balanceByResonanceId}
               onOpenDetails={handleOpenDetails}
+              targetPersonaId={actionContext.target_persona_id}
             />
           ))}
         </div>

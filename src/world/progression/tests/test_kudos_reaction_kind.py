@@ -47,7 +47,7 @@ class KudosReactionKindTests(TestCase):
         assert config.lazy_open is True
         assert config.public is True
 
-    def test_kudos_reaction_awards_to_poser_account(self) -> None:
+    def test_kudos_reaction_awards_to_poser_account_anonymously(self) -> None:
         poser_account = self.writer.character_sheet.character.db_account
 
         reaction = react_to_interaction(
@@ -62,7 +62,9 @@ class KudosReactionKindTests(TestCase):
         assert points.total_earned == 1
         txn = KudosTransaction.objects.get(account=poser_account)
         assert txn.source_category.name == POSE_KUDOS_CATEGORY
-        assert txn.awarded_by == self.reactor.character_sheet.character.db_account
+        # ADR-0033: the reactor's account must never be attributed on a pose-kudos
+        # transaction — that would leak the IC↔OOC identity link to the poser.
+        assert txn.awarded_by is None
 
     def test_lazy_open_is_idempotent_across_reactors(self) -> None:
         second_reactor = make_participant(self.scene)

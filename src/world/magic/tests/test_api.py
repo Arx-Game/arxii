@@ -698,6 +698,161 @@ class ThreadPullPreviewTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def _build_relationship_track_pull(self, *, threaded_sheet_db_key: str):
+        """Build a RELATIONSHIP_TRACK thread (owned by self.sheet, anchored to a
+        relationship with a fresh third-party sheet) plus the tuning + effect
+        rows needed for relationship-bond pull modulation (#1849) to fire.
+
+        Mirrors world.magic.tests.test_pull_modulation_relationship's
+        ``_relationship_track_thread`` helper + direct-trigger fixture.
+        """
+        from world.magic.models import RelationshipBondPullTuning
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        threaded_sheet = CharacterSheetFactory(
+            character=CharacterFactory(db_key=threaded_sheet_db_key)
+        )
+        relationship = CharacterRelationshipFactory(
+            source=self.sheet, target=threaded_sheet, is_active=True, is_pending=False
+        )
+        progress = RelationshipTrackProgressFactory(relationship=relationship, developed_points=30)
+        RelationshipBondPullTuning.objects.create(pk=1, coefficient=1, cap=20, half_saturation=30)
+
+        rt_thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship_track=progress,
+            target_trait=None,
+            level=10,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=self.resonance,
+            tier=1,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=4,
+        )
+        return rt_thread, threaded_sheet
+
+    def test_preview_with_relationship_track_target_matches_commit_time_modulation(self) -> None:
+        """#2035: the preview must surface the same relationship-bond-modulated
+        amount spend_resonance_for_pull would grant at commit time (via
+        resolve_pull_effects(target=...)) — not the raw unmodulated authored
+        value the pre-fix preview always showed.
+        """
+        from world.magic.services.resonance import resolve_pull_effects
+
+        rt_thread, threaded_sheet = self._build_relationship_track_pull(
+            threaded_sheet_db_key="ThreadedY"
+        )
+        # Live target IS the threaded person Y — direct trigger (#1849).
+        target_persona = threaded_sheet.primary_persona
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "resonance_id": self.resonance.pk,
+                "tier": 1,
+                "thread_ids": [rt_thread.pk],
+                "action_context": {"target_persona_id": target_persona.pk},
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        # Compute the expected modulated amount the exact same way the commit
+        # path (spend_resonance_for_pull -> resolve_pull_effects) would.
+        expected = resolve_pull_effects(
+            [rt_thread], tier=1, in_combat=False, target=threaded_sheet.character
+        )
+        expected_flat = next(r for r in expected if r.kind == EffectKind.FLAT_BONUS)
+
+        flat_rows = [
+            r for r in response.data["resolved_effects"] if r["kind"] == EffectKind.FLAT_BONUS
+        ]
+        self.assertEqual(len(flat_rows), 1)
+        self.assertEqual(flat_rows[0]["scaled_value"], expected_flat.scaled_value)
+        # Sanity: this must be the MODULATED value (14), not the raw authored
+        # value (4) — proves the preview is no longer blind to the cast target.
+        self.assertEqual(flat_rows[0]["scaled_value"], 14)
+
+    def test_preview_without_target_leaves_relationship_track_pull_unmodulated(self) -> None:
+        """Target-less preview stays byte-identical to the pre-#2035 behavior."""
+        rt_thread, _threaded_sheet = self._build_relationship_track_pull(
+            threaded_sheet_db_key="ThreadedY2"
+        )
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "resonance_id": self.resonance.pk,
+                "tier": 1,
+                "thread_ids": [rt_thread.pk],
+                # No action_context / target_persona_id -> unmodulated.
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        flat_rows = [
+            r for r in response.data["resolved_effects"] if r["kind"] == EffectKind.FLAT_BONUS
+        ]
+        self.assertEqual(len(flat_rows), 1)
+        self.assertEqual(flat_rows[0]["scaled_value"], 4)
+
+    def test_preview_ignores_target_when_not_perceivable(self) -> None:
+        """#2035 privacy guard: an unperceivable live target must not modulate the
+        preview — this is a free, repeatable, uncommitted read (unlike the
+        commit path), so it must not become an oracle for probing private
+        relationship facts about personas the requester cannot perceive
+        (mirrors pull_applicability.py's can_perceive gates, ADR-0086).
+        """
+        from evennia.objects.models import ObjectDB
+
+        rt_thread, threaded_sheet = self._build_relationship_track_pull(
+            threaded_sheet_db_key="ThreadedY3"
+        )
+        target_persona = threaded_sheet.primary_persona
+
+        # Put the requester's and the target's characters in different,
+        # unconnected rooms so can_perceive returns False.
+        owner_room = ObjectDB.objects.create(
+            db_key="PreviewOwnerRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        target_room = ObjectDB.objects.create(
+            db_key="PreviewTargetRoom", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        self.sheet.character.location = owner_room
+        threaded_sheet.character.location = target_room
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "character_sheet_id": self.sheet.pk,
+                "resonance_id": self.resonance.pk,
+                "tier": 1,
+                "thread_ids": [rt_thread.pk],
+                "action_context": {"target_persona_id": target_persona.pk},
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        flat_rows = [
+            r for r in response.data["resolved_effects"] if r["kind"] == EffectKind.FLAT_BONUS
+        ]
+        self.assertEqual(len(flat_rows), 1)
+        # Unperceivable target silently degrades to the unmodulated preview.
+        self.assertEqual(flat_rows[0]["scaled_value"], 4)
+
 
 class RitualPerformViewTests(APITestCase):
     """Tests for POST /api/magic/rituals/perform/."""

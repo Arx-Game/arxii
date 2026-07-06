@@ -63,7 +63,9 @@ ADR-0015 (no polymorphism).
   writeup about them. `account` FK (the commender). Awards `WRITEUP_KUDOS_AMOUNT` kudos to
   the *author* via the existing `award_kudos` path. One commendation per (account, writeup),
   enforced by conditional `UniqueConstraint`s. Awards only fire when the
-  `KudosSourceCategory(name="relationship_writeup")` row is DB-seeded.
+  `KudosSourceCategory(name="relationship_writeup")` row exists — seeded by
+  `world.progression.seeds.seed_relationship_writeup_kudos_category`, part of the
+  "kudos" seed cluster (#2026).
 - **WriteupComplaint** [BUILT & WIRED] — A bad-faith-RP flag filed by any viewer who can see
   a SHARED/PUBLIC writeup. `complainant` FK + `reason` TextField + `resolved` bool. Staff-triage
   only; zero player-facing signal.
@@ -97,8 +99,8 @@ ADR-0015 (no polymorphism).
   commends a writeup about them; raises `WriteupFeedbackError` subclasses (`WriteupNotSharedError`,
   `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`) each with a
   `user_message`. Awards `WRITEUP_KUDOS_AMOUNT` kudos to the author when the
-  `"relationship_writeup"` `KudosSourceCategory` is seeded; logs a warning and still records the
-  row when it is absent.
+  `"relationship_writeup"` `KudosSourceCategory` exists (seeded by the "kudos" cluster,
+  #2026); logs a warning and still records the row when it is absent.
 - **`file_writeup_complaint(*, complainant_account, writeup, reason) -> WriteupComplaint`**
   (#1537) — any viewer of a SHARED/PUBLIC writeup files a bad-faith-RP complaint for staff
   triage. Raises `WriteupNotVisibleError` when the complainant cannot see the writeup.

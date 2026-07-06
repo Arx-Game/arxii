@@ -891,6 +891,31 @@ class ThreadPullPreviewView(APIView):
 
             combat_encounter = get_object_or_404(CombatEncounter, pk=encounter_id)
 
+        # #2035: resolve the optional live target so relationship-bond/Court-regard
+        # pull modulation (apply_target_modulation) shows up in the preview exactly
+        # as it would at commit time (spend_resonance_for_pull). Gated by
+        # can_perceive — this is a free, repeatable, uncommitted read, so (unlike
+        # the commit path) it must not become an oracle for probing private
+        # regard/relationship facts about personas the requester cannot perceive
+        # (mirrors pull_applicability.py's _court_pull_would_have_effect /
+        # _relationship_pull_would_have_effect gates, ADR-0086). An unresolvable or
+        # unperceivable target silently degrades to the unmodulated preview.
+        target = None
+        target_persona_id = action_ctx.get("target_persona_id") if action_ctx else None
+        if target_persona_id:
+            from world.conditions.services import can_perceive  # noqa: PLC0415
+            from world.scenes.models import Persona  # noqa: PLC0415
+
+            target_persona = (
+                Persona.objects.select_related("character_sheet__character")
+                .filter(pk=target_persona_id)
+                .first()
+            )
+            if target_persona is not None:
+                target_character = target_persona.character_sheet.character
+                if can_perceive(sheet.character, target_character):
+                    target = target_character
+
         try:
             result = preview_resonance_pull(
                 character_sheet=sheet,
@@ -900,6 +925,7 @@ class ThreadPullPreviewView(APIView):
                 combat_encounter=combat_encounter,
                 scene_id=data.get("scene_id"),
                 excluded_kinds=frozenset({TargetKind.GIFT}) if data.get("exclude_gift") else None,
+                target=target,
             )
         except InvalidImbueAmount as exc:
             return Response(

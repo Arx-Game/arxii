@@ -1222,10 +1222,22 @@ class AcceptTeachingOfferSerializer(serializers.Serializer):
 class PullActionContextSerializer(serializers.Serializer):
     """Wire shape for the optional ``action_context`` block in a pull preview.
 
-    Only ``combat_encounter_id`` is consumed by the preview path — the rest
-    of the fields are accepted for forward-compatibility with the eventual
-    authoring UI (the pre-commit preview doesn't care about action_kind
-    or anchors_in_play; the full commit path validates those).
+    ``combat_encounter_id`` and ``target_persona_id`` are consumed by the
+    preview path — the rest of the fields are accepted for forward-compatibility
+    with the eventual authoring UI (the pre-commit preview doesn't care about
+    action_kind or anchors_in_play; the full commit path validates those).
+
+    ``target_persona_id`` (#2035) names the Persona the pull's action would be
+    directed at — the same identifier shape as ``ApplicablePullsRequestSerializer``.
+    The view resolves it to the live ``ObjectDB`` target and feeds it to
+    ``preview_resonance_pull`` so a relationship-bond/Court-regard modulated
+    amount is visible in the preview, matching what the commit path
+    (``spend_resonance_for_pull``) would grant. Resolution is gated by
+    ``can_perceive`` (mirrors ``_relationship_pull_would_have_effect`` /
+    ``_court_pull_would_have_effect`` in ``pull_applicability.py``) — this is a
+    free, repeatable, uncommitted read, so it must not become an oracle for
+    probing private regard/relationship facts about personas the requester
+    cannot perceive (see ADR-0086).
     """
 
     action_kind = serializers.CharField(required=False, allow_blank=True)
@@ -1235,6 +1247,7 @@ class PullActionContextSerializer(serializers.Serializer):
         default=list,
     )
     combat_encounter_id = serializers.IntegerField(required=False, allow_null=True)
+    target_persona_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class ThreadPullPreviewRequestSerializer(serializers.Serializer):
