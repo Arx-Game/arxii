@@ -271,8 +271,61 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
 }
 
 
+def _check_imbue_level_advance(  # noqa: PLR0913
+    thread: Thread,
+    next_level: int,
+    cap: int,
+    character_sheet: CharacterSheet,
+    *,
+    amount: int,
+    imbue_multiplier: int,
+) -> tuple[bool, str, list[str]]:
+    """Evaluate whether a thread can advance to ``next_level``.
+
+    Returns ``(should_advance, blocked_by, blocked_requirement_messages)``.
+    When ``should_advance`` is ``False``, ``blocked_by`` names the gate that
+    stopped advancement (or ``"NONE"`` if the bucket is simply exhausted and
+    ``blocked_requirement_messages`` carries crossing-requirement failures.
+    """
+    cost = max((thread.level - 9) * 100, 1) * imbue_multiplier
+    if thread.developed_points < cost:
+        if amount == 0:
+            return False, "INSUFFICIENT_BUCKET", []
+        return False, "NONE", []
+    if next_level % 10 == 0:
+        unlocked = ThreadLevelUnlock.objects.filter(
+            thread=thread,
+            unlocked_level=next_level,
+        ).exists()
+        if not unlocked:
+            return False, "XP_LOCK", []
+    if is_crossing_level(next_level):
+        from world.progression.services.spends import (  # noqa: PLC0415
+            check_requirements_for_thread_crossing,
+        )
+
+        threshold = ThreadCrossingThreshold.objects.filter(
+            target_kind=thread.target_kind,
+            level=next_level,
+        ).first()
+        if threshold is not None:
+            met, failed = check_requirements_for_thread_crossing(
+                character_sheet.character, threshold
+            )
+            if not met:
+                return False, "CROSSING_REQUIREMENT", failed
+    if next_level > cap:
+        blocked_by = (
+            "PATH_CAP"
+            if compute_path_cap(character_sheet) < compute_anchor_cap(thread)
+            else "ANCHOR_CAP"
+        )
+        return False, blocked_by, []
+    return True, "NONE", []
+
+
 @transaction.atomic
-def spend_resonance_for_imbuing(  # noqa: C901, PLR0912, PLR0915
+def spend_resonance_for_imbuing(
     character_sheet: CharacterSheet,
     thread: Thread,
     amount: int,
@@ -330,45 +383,18 @@ def spend_resonance_for_imbuing(  # noqa: C901, PLR0912, PLR0915
     blocked_requirement_messages: list[str] = []
     imbue_multiplier = get_imbue_cost_multiplier(thread.target_kind)
     while True:
-        n = thread.level
-        next_level = n + 1
-        cost = max((n - 9) * 100, 1) * imbue_multiplier  # sub-10 levels cost 1 dp each
-        if thread.developed_points < cost:
-            if amount == 0:
-                blocked_by = "INSUFFICIENT_BUCKET"
+        next_level = thread.level + 1
+        should_advance, blocked_by, blocked_requirement_messages = _check_imbue_level_advance(
+            thread,
+            next_level,
+            cap,
+            character_sheet,
+            amount=amount,
+            imbue_multiplier=imbue_multiplier,
+        )
+        if not should_advance:
             break
-        if next_level % 10 == 0:
-            unlocked = ThreadLevelUnlock.objects.filter(
-                thread=thread,
-                unlocked_level=next_level,
-            ).exists()
-            if not unlocked:
-                blocked_by = "XP_LOCK"
-                break
-        if is_crossing_level(next_level):
-            from world.progression.services.spends import (  # noqa: PLC0415
-                check_requirements_for_thread_crossing,
-            )
-
-            threshold = ThreadCrossingThreshold.objects.filter(
-                target_kind=thread.target_kind,
-                level=next_level,
-            ).first()
-            if threshold is not None:
-                met, failed = check_requirements_for_thread_crossing(
-                    character_sheet.character, threshold
-                )
-                if not met:
-                    blocked_by = "CROSSING_REQUIREMENT"
-                    blocked_requirement_messages = failed
-                    break
-        if next_level > cap:
-            blocked_by = (
-                "PATH_CAP"
-                if compute_path_cap(character_sheet) < compute_anchor_cap(thread)
-                else "ANCHOR_CAP"
-            )
-            break
+        cost = max((thread.level - 9) * 100, 1) * imbue_multiplier
         thread.level = next_level
         thread.developed_points -= cost
 
@@ -632,6 +658,72 @@ def _fold_distinction_pull_bonus(
     ]
 
 
+def _validate_pull_threads(
+    threads: list[Thread],
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    excluded_kinds: frozenset[str] | None,
+) -> None:
+    """Validate ownership, same-resonance, and excluded-kinds for pull threads.
+
+    Raises ``InvalidImbueAmount`` on the first failing thread.
+    """
+    for t in threads:
+        if t.owner_id != character_sheet.pk:
+            msg = "Thread not owned by character."
+            raise InvalidImbueAmount(msg)
+        if t.resonance_id != resonance.pk:
+            msg = "Thread does not share the chosen resonance."
+            raise InvalidImbueAmount(msg)
+        if excluded_kinds and t.target_kind in excluded_kinds:
+            msg = "Thread anchor is not involved in this action."
+            raise InvalidImbueAmount(msg)
+
+
+def _check_anima_waiver(scene_id: int | None, anima_cost: int) -> int:
+    """Return the (possibly zeroed) anima cost after scene waiver checks (#1919).
+
+    When ``scene_id`` is provided and ``anima_cost`` is positive, checks
+    whether the scene is high-stakes (active combat or DANGER round). If not,
+    the anima cost is waived (zeroed).
+    """
+    if scene_id is None or anima_cost <= 0:
+        return anima_cost
+
+    from world.combat.models import CombatEncounter  # noqa: PLC0415
+    from world.scenes.constants import (  # noqa: PLC0415
+        RoundStatus,
+        SceneRoundStartReason,
+    )
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    scene = Scene.objects.filter(pk=scene_id).select_related("location").first()
+    if scene is None:
+        return anima_cost
+
+    has_active_combat = CombatEncounter.objects.filter(
+        scene=scene,
+        status__in=[
+            RoundStatus.DECLARING,
+            RoundStatus.RESOLVING,
+            RoundStatus.BETWEEN_ROUNDS,
+        ],
+    ).exists()
+    has_danger_round = False
+    if scene.location is not None:
+        has_danger_round = scene.scene_rounds.filter(
+            start_reason=SceneRoundStartReason.DANGER,
+            status__in=[
+                RoundStatus.DECLARING,
+                RoundStatus.RESOLVING,
+                RoundStatus.BETWEEN_ROUNDS,
+            ],
+        ).exists()
+    if not has_active_combat and not has_danger_round:
+        return 0
+    return anima_cost
+
+
 def preview_resonance_pull(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
@@ -691,16 +783,7 @@ def preview_resonance_pull(  # noqa: PLR0913
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
 
-    for t in threads:
-        if t.owner_id != character_sheet.pk:
-            msg = "Thread not owned by character."
-            raise InvalidImbueAmount(msg)
-        if t.resonance_id != resonance.pk:
-            msg = "Thread does not share the chosen resonance."
-            raise InvalidImbueAmount(msg)
-        if excluded_kinds and t.target_kind in excluded_kinds:
-            msg = "Thread anchor is not involved in this action."
-            raise InvalidImbueAmount(msg)
+    _validate_pull_threads(threads, character_sheet, resonance, excluded_kinds)
 
     cost = get_pull_cost(tier, None)
     n_threads = len(threads)
@@ -709,36 +792,7 @@ def preview_resonance_pull(  # noqa: PLR0913
     # #1919: Anima waiver for social-action previews. When scene_id is provided,
     # check whether the scene is high-stakes (active combat or DANGER round).
     # If not, the anima cost is waived (zeroed).
-    if scene_id is not None and anima_cost > 0:
-        from world.combat.models import CombatEncounter  # noqa: PLC0415
-        from world.scenes.constants import (  # noqa: PLC0415
-            RoundStatus,
-            SceneRoundStartReason,
-        )
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        scene = Scene.objects.filter(pk=scene_id).select_related("location").first()
-        if scene is not None:
-            has_active_combat = CombatEncounter.objects.filter(
-                scene=scene,
-                status__in=[
-                    RoundStatus.DECLARING,
-                    RoundStatus.RESOLVING,
-                    RoundStatus.BETWEEN_ROUNDS,
-                ],
-            ).exists()
-            has_danger_round = False
-            if scene.location is not None:
-                has_danger_round = scene.scene_rounds.filter(
-                    start_reason=SceneRoundStartReason.DANGER,
-                    status__in=[
-                        RoundStatus.DECLARING,
-                        RoundStatus.RESOLVING,
-                        RoundStatus.BETWEEN_ROUNDS,
-                    ],
-                ).exists()
-            if not has_active_combat and not has_danger_round:
-                anima_cost = 0
+    anima_cost = _check_anima_waiver(scene_id, anima_cost)
 
     # Balances — no locks, no debit.
     cr = CharacterResonance.objects.filter(
@@ -833,8 +887,36 @@ def _persist_combat_pull(  # noqa: PLR0913
         )
 
 
+def _validate_pull_threads_for_commit(
+    threads: list[Thread],
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    action_context: PullActionContext,
+) -> None:
+    """Validate ownership, resonance match, anchor involvement, and facet items.
+
+    Raises ``InvalidImbueAmount``, ``CovenantRoleNotEngagedError``, or
+    ``NoMatchingWornFacetItemsError`` on the first failing thread.
+    """
+    for t in threads:
+        if t.owner_id != character_sheet.pk:
+            msg = "Thread not owned by character."
+            raise InvalidImbueAmount(msg)
+        if t.resonance_id != resonance.pk:
+            msg = "Thread does not share the chosen resonance."
+            raise InvalidImbueAmount(msg)
+        if not _anchor_in_action(t, action_context):
+            if t.target_kind == TargetKind.COVENANT_ROLE:
+                raise CovenantRoleNotEngagedError
+            msg = "Thread anchor is not involved in this action."
+            raise InvalidImbueAmount(msg)
+        if t.target_kind == TargetKind.FACET:
+            if not character_sheet.character.equipped_items.item_facets_for(t.target_facet):
+                raise NoMatchingWornFacetItemsError
+
+
 @transaction.atomic
-def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913, PLR0915
+def spend_resonance_for_pull(  # noqa: PLR0913, C901
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
@@ -888,21 +970,7 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913, PLR0915
     cost = get_pull_cost(tier, None)
     n_threads = len(threads)
 
-    for t in threads:
-        if t.owner_id != character_sheet.pk:
-            msg = "Thread not owned by character."
-            raise InvalidImbueAmount(msg)
-        if t.resonance_id != resonance.pk:
-            msg = "Thread does not share the chosen resonance."
-            raise InvalidImbueAmount(msg)
-        if not _anchor_in_action(t, action_context):
-            if t.target_kind == TargetKind.COVENANT_ROLE:
-                raise CovenantRoleNotEngagedError
-            msg = "Thread anchor is not involved in this action."
-            raise InvalidImbueAmount(msg)
-        if t.target_kind == TargetKind.FACET:
-            if not character_sheet.character.equipped_items.item_facets_for(t.target_facet):
-                raise NoMatchingWornFacetItemsError
+    _validate_pull_threads_for_commit(threads, character_sheet, resonance, action_context)
 
     # select_for_update on cr + anima so concurrent ephemeral pulls cannot
     # both pass the balance check against an unlocked read and double-spend.

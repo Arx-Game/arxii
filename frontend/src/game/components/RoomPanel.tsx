@@ -63,7 +63,7 @@ export function RoomPanel({
     onSuccess: (message: string) => {
       toast.success(message);
       if (room) {
-        void queryClient.invalidateQueries({ queryKey: buildingKeys.forRoom(room.id) });
+        queryClient.invalidateQueries({ queryKey: buildingKeys.forRoom(room.id) });
       }
       if (character) {
         send(character, 'look');

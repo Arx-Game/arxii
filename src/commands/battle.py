@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     from actions.types import ActionResult
     from world.battles.models import BattleParticipant, BattleUnit
 
+_PLACE_PREFIX = "place "
+
 
 class CmdBattle(ArxCommand):
     """Manage your participation in a large-scale battle.
@@ -396,10 +398,10 @@ class CmdBattle(ArxCommand):
                 target_side=target_side,
             )
 
-        if name.lower().startswith("place "):  # noqa: STRING_LITERAL
+        if name.lower().startswith(_PLACE_PREFIX):  # noqa: STRING_LITERAL
             from world.battles.models import BattlePlace  # noqa: PLC0415
 
-            place_name = name[len("place ") :].strip()
+            place_name = name[len(_PLACE_PREFIX) :].strip()
             place = BattlePlace.objects.filter(
                 battle=participant.battle, name__iexact=place_name
             ).first()
@@ -453,10 +455,10 @@ class CmdBattle(ArxCommand):
         from world.battles.constants import BattleActionScope  # noqa: PLC0415
         from world.battles.models import BattlePlace  # noqa: PLC0415
 
-        if not name.lower().startswith("place "):  # noqa: STRING_LITERAL
+        if not name.lower().startswith(_PLACE_PREFIX):  # noqa: STRING_LITERAL
             msg = f"Usage: battle declare {verb} place <name> with <technique>"
             raise CommandError(msg)
-        place_name = name[len("place ") :].strip()
+        place_name = name[len(_PLACE_PREFIX) :].strip()
         participant = self._resolve_participant()
         technique = self._resolve_technique(participant, technique_name)
         place = BattlePlace.objects.filter(
@@ -492,9 +494,9 @@ class CmdBattle(ArxCommand):
             f"Usage: battle declare {verb} place <name> fortification "
             f"<wall|gate|battlement> with <technique>"
         )
-        if not name.lower().startswith("place "):  # noqa: STRING_LITERAL
+        if not name.lower().startswith(_PLACE_PREFIX):  # noqa: STRING_LITERAL
             raise CommandError(usage)
-        remainder = name[len("place ") :]
+        remainder = name[len(_PLACE_PREFIX) :]
         if " fortification " not in remainder:  # noqa: STRING_LITERAL
             raise CommandError(usage)
         place_name, kind_token = remainder.split(" fortification ", 1)
@@ -549,10 +551,10 @@ class CmdBattle(ArxCommand):
                 scope=BattleActionScope.BATTLE,
             )
 
-        if name.lower().startswith("place "):  # noqa: STRING_LITERAL
+        if name.lower().startswith(_PLACE_PREFIX):  # noqa: STRING_LITERAL
             from world.battles.models import BattlePlace  # noqa: PLC0415
 
-            place_name = name[len("place ") :].strip()
+            place_name = name[len(_PLACE_PREFIX) :].strip()
             place = BattlePlace.objects.filter(
                 battle=participant.battle, name__iexact=place_name
             ).first()

@@ -19,6 +19,7 @@ from world.buildings.models import (
 # factories below. Centralized to avoid the duplicated-literal SonarCloud
 # smell (python:S1192).
 _PERSONA_FACTORY = "world.scenes.factories.PersonaFactory"
+_PROJECT_FACTORY_PATH = "world.projects.factories.ProjectFactory"
 
 
 class BuildingKindFactory(DjangoModelFactory):
@@ -94,7 +95,7 @@ class BuildingConstructionDetailsFactory(DjangoModelFactory):
     class Meta:
         model = BuildingConstructionDetails
 
-    project = factory.SubFactory("world.projects.factories.ProjectFactory")
+    project = factory.SubFactory(_PROJECT_FACTORY_PATH)
     permit_details = factory.SubFactory(BuildingPermitDetailsFactory)
     ward = factory.SubFactory("world.areas.factories.AreaFactory", level=30)  # WARD
     target_size = 5
@@ -106,7 +107,7 @@ class FortificationUpgradeDetailsFactory(DjangoModelFactory):
     class Meta:
         model = FortificationUpgradeDetails
 
-    project = factory.SubFactory("world.projects.factories.ProjectFactory")
+    project = factory.SubFactory(_PROJECT_FACTORY_PATH)
     building = factory.SubFactory(BuildingFactory)
     target_level = 1
     applied_at = None
@@ -116,7 +117,7 @@ class BuildingRenovationDetailsFactory(DjangoModelFactory):
     class Meta:
         model = BuildingRenovationDetails
 
-    project = factory.SubFactory("world.projects.factories.ProjectFactory")
+    project = factory.SubFactory(_PROJECT_FACTORY_PATH)
     building = factory.SubFactory(BuildingFactory)
     target_kind = factory.SubFactory(BuildingKindFactory)
     applied_at = None
@@ -126,7 +127,7 @@ class BuildingUpgradeDetailsFactory(DjangoModelFactory):
     class Meta:
         model = BuildingUpgradeDetails
 
-    project = factory.SubFactory("world.projects.factories.ProjectFactory")
+    project = factory.SubFactory(_PROJECT_FACTORY_PATH)
     building = factory.SubFactory(BuildingFactory)
     new_target_size = 6
     applied_at = None

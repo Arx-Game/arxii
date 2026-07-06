@@ -492,7 +492,88 @@ def _blacklist_initiator_for_denier(
     add_social_consent_blacklist(owner_tenure, blocked_tenure, category)
 
 
-def respond_to_action_request(  # noqa: C901
+def _deny_action_request(action_request: SceneActionRequest, blacklist_actor: bool) -> None:
+    """Mark an action request as denied and clean up its pull declaration.
+
+    #1919: The pull declaration is removed so it doesn't linger as an orphan
+    row (the charge never fires on DENY). Optionally blacklists the initiator
+    for the denier's antagonism category (#1698).
+    """
+    action_request.status = ActionRequestStatus.DENIED
+    action_request.resolved_at = timezone.now()
+    action_request.save(update_fields=["status", "resolved_at"])
+    SceneActionPullDeclaration.objects.filter(request=action_request).delete()
+    if blacklist_actor:
+        _blacklist_initiator_for_denier(action_request, action_request.target_persona)
+
+
+def _charge_primary_pull_flat_bonus(
+    action_request: SceneActionRequest,
+) -> tuple[int, str | None]:
+    """Charge the primary target's social pull, returning (flat_bonus, fizzle_note).
+
+    #1919: Charges a persisted social pull declaration exactly once before
+    per-target resolution. The resolved FLAT_BONUS is threaded into
+    _resolve_action_against_persona as pull_flat_bonus. On failure (balance
+    drained, anchor no longer in action, lock acquired, …), the pull fizzles —
+    the action resolves pull-less with a fizzle note.
+    """
+    pull_flat_bonus = 0
+    fizzle_note: str | None = None
+    action_template = action_request.action_template
+    if action_template is not None and action_template.check_type_id is not None:
+        from world.magic.exceptions import (  # noqa: PLC0415
+            MagicError,
+            ProtagonismLockedError,
+        )
+
+        try:
+            pull_flat_bonus = _charge_social_pull(
+                action_request=action_request,
+                check_type=action_template.check_type,
+            )
+        except (MagicError, ProtagonismLockedError) as exc:
+            fizzle_note = str(exc) or "The thread pull fizzled."
+    return pull_flat_bonus, fizzle_note
+
+
+def _resolve_accepted_action_request(
+    action_request: SceneActionRequest, resist_effort: str
+) -> EnhancedSceneActionResult | None:
+    """Resolve an accepted action request via the appropriate pipeline.
+
+    Dispatches to a custom resolver, the standalone-cast pipeline, or the
+    standard action pipeline (charging the social pull first).
+    """
+    custom_resolver = CUSTOM_ACTION_RESOLVERS.get(action_request.action_key)
+    if custom_resolver is not None:
+        return custom_resolver(action_request)
+    if action_request.is_standalone_cast:
+        from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
+
+        return resolve_accepted_cast(action_request)
+    pull_flat_bonus, fizzle_note = _charge_primary_pull_flat_bonus(action_request)
+    difficulty_override = _compute_difficulty_override_for_primary(action_request, resist_effort)
+    return _resolve_standard_action(
+        action_request,
+        difficulty_override=difficulty_override,
+        pull_flat_bonus=pull_flat_bonus,
+        fizzle_note=fizzle_note,
+    )
+
+
+def _invoke_action_resolver(
+    action_request: SceneActionRequest, result: EnhancedSceneActionResult | None
+) -> None:
+    """Fire the registered resolver for an action request's result, if any."""
+    if result is None:
+        return
+    resolver = get_resolver(action_request.action_key)
+    if resolver is not None:
+        resolver(action_request, result)
+
+
+def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
     decision: str,
@@ -531,14 +612,7 @@ def respond_to_action_request(  # noqa: C901
         return None
 
     if decision == ConsentDecision.DENY:
-        action_request.status = ActionRequestStatus.DENIED
-        action_request.resolved_at = timezone.now()
-        action_request.save(update_fields=["status", "resolved_at"])
-        # #1919: Clean up any pull declaration on the denied request so it
-        # doesn't linger as an orphan row (the charge never fires on DENY).
-        SceneActionPullDeclaration.objects.filter(request=action_request).delete()
-        if blacklist_actor:
-            _blacklist_initiator_for_denier(action_request, action_request.target_persona)
+        _deny_action_request(action_request, blacklist_actor)
         return None
 
     if decision == ConsentDecision.ACCEPT:
@@ -548,51 +622,10 @@ def respond_to_action_request(  # noqa: C901
             action_request.resist_effort_level = resist_effort
             action_request.save(update_fields=["difficulty_choice", "resist_effort_level"])
 
-            custom_resolver = CUSTOM_ACTION_RESOLVERS.get(action_request.action_key)
-            if custom_resolver is not None:
-                result = custom_resolver(action_request)
-            elif action_request.is_standalone_cast:
-                from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
-
-                result = resolve_accepted_cast(action_request)
-            else:
-                # #1919: Charge a persisted social pull declaration exactly
-                # once before per-target resolution. The resolved FLAT_BONUS
-                # is threaded into _resolve_action_against_persona as
-                # pull_flat_bonus. On failure (balance drained, anchor no
-                # longer in action, lock acquired, …), the pull fizzles — the
-                # action resolves pull-less with a fizzle note.
-                pull_flat_bonus = 0
-                fizzle_note: str | None = None
-                action_template = action_request.action_template
-                if action_template is not None and action_template.check_type_id is not None:
-                    from world.magic.exceptions import (  # noqa: PLC0415
-                        MagicError,
-                        ProtagonismLockedError,
-                    )
-
-                    try:
-                        pull_flat_bonus = _charge_social_pull(
-                            action_request=action_request,
-                            check_type=action_template.check_type,
-                        )
-                    except (MagicError, ProtagonismLockedError) as exc:
-                        fizzle_note = str(exc) or "The thread pull fizzled."
-                difficulty_override = _compute_difficulty_override_for_primary(
-                    action_request, resist_effort
-                )
-                result = _resolve_standard_action(
-                    action_request,
-                    difficulty_override=difficulty_override,
-                    pull_flat_bonus=pull_flat_bonus,
-                    fizzle_note=fizzle_note,
-                )
+            result = _resolve_accepted_action_request(action_request, resist_effort)
 
             _accrue_engagement_for_primary(action_request)
-            if result is not None:
-                resolver = get_resolver(action_request.action_key)
-                if resolver is not None:
-                    resolver(action_request, result)
+            _invoke_action_resolver(action_request, result)
 
         return result
 
@@ -926,6 +959,80 @@ def _persona_is_npc(persona: Persona) -> bool:
     return persona.character_sheet.character.db_account is None
 
 
+def _deny_action_target(action_target: SceneActionTarget, blacklist_actor: bool) -> None:
+    """Mark an action target row as denied, optionally blacklisting the initiator."""
+    action_target.status = ActionRequestStatus.DENIED
+    action_target.resolved_at = timezone.now()
+    action_target.save(update_fields=["status", "resolved_at"])
+    if blacklist_actor:
+        _blacklist_initiator_for_denier(action_target.action_request, action_target.target_persona)
+
+
+def _compute_target_difficulty_override(
+    action_request: SceneActionRequest,
+    action_target: SceneActionTarget,
+    resist_effort: str,
+) -> int:
+    """Compute the difficulty override for an accepted target row.
+
+    Persists the defender's plausibility band on the target row, then passes it
+    as difficulty_override so the per-target band is used for resolution (the
+    target's band lives on SceneActionTarget, not the request). Applies resist
+    fatigue when a resist effort is supplied.
+    """
+    from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
+
+    base = resolved_base_difficulty(
+        action_request=action_request,
+        difficulty_choice=action_target.difficulty_choice,
+        target_sheet=action_target.target_persona.character_sheet,
+    )
+    if resist_effort:
+        from actions.constants import ActionCategory  # noqa: PLC0415
+        from world.checks.services import compute_resist_increment  # noqa: PLC0415
+        from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+        increment = compute_resist_increment(
+            action_target.target_persona.character_sheet.character,
+            resist_effort,
+        )
+        apply_fatigue(
+            action_target.target_persona.character_sheet,
+            ActionCategory.SOCIAL,
+            RESIST_FATIGUE_BASE,
+            resist_effort,
+        )
+    else:
+        increment = 0
+    return base + increment
+
+
+def _charge_target_pull_flat_bonus(action_request: SceneActionRequest) -> int:
+    """Retrieve the pull flat bonus for an additional target (idempotent).
+
+    #1919: The primary resolution or an earlier NPC auto-resolve may have
+    already charged it. Returns 0 when no declaration exists or it already
+    fizzled (the primary charge's fizzle note already covers the request).
+    """
+    pull_flat_bonus = 0
+    action_template = action_request.action_template
+    if action_template is not None and action_template.check_type_id is not None:
+        from world.magic.exceptions import (  # noqa: PLC0415
+            MagicError,
+            ProtagonismLockedError,
+        )
+
+        try:
+            pull_flat_bonus = _charge_social_pull(
+                action_request=action_request,
+                check_type=action_template.check_type,
+            )
+        except (MagicError, ProtagonismLockedError):
+            # Already fizzled on the primary charge; no bonus for this target.
+            pull_flat_bonus = 0
+    return pull_flat_bonus
+
+
 def respond_to_action_target(
     *,
     action_target: SceneActionTarget,
@@ -954,67 +1061,18 @@ def respond_to_action_target(
     if action_target.status != ActionRequestStatus.PENDING:
         return None
     if decision == ConsentDecision.DENY:
-        action_target.status = ActionRequestStatus.DENIED
-        action_target.resolved_at = timezone.now()
-        action_target.save(update_fields=["status", "resolved_at"])
-        if blacklist_actor:
-            _blacklist_initiator_for_denier(
-                action_target.action_request, action_target.target_persona
-            )
+        _deny_action_target(action_target, blacklist_actor)
         return None
     if decision == ConsentDecision.ACCEPT:
         action_request = action_target.action_request
         with transaction.atomic():
-            # Persist defender's plausibility band on the target row, then pass it
-            # as difficulty_override so the per-target band is used for resolution
-            # (the target's band lives on SceneActionTarget, not the request).
             if difficulty is not None:
                 action_target.difficulty_choice = difficulty
             action_target.resist_effort_level = resist_effort
-            from world.scenes.social_difficulty import resolved_base_difficulty  # noqa: PLC0415
-
-            base = resolved_base_difficulty(
-                action_request=action_request,
-                difficulty_choice=action_target.difficulty_choice,
-                target_sheet=action_target.target_persona.character_sheet,
+            difficulty_override = _compute_target_difficulty_override(
+                action_request, action_target, resist_effort
             )
-            if resist_effort:
-                from actions.constants import ActionCategory  # noqa: PLC0415
-                from world.checks.services import compute_resist_increment  # noqa: PLC0415
-                from world.fatigue.services import apply_fatigue  # noqa: PLC0415
-
-                increment = compute_resist_increment(
-                    action_target.target_persona.character_sheet.character,
-                    resist_effort,
-                )
-                apply_fatigue(
-                    action_target.target_persona.character_sheet,
-                    ActionCategory.SOCIAL,
-                    RESIST_FATIGUE_BASE,
-                    resist_effort,
-                )
-            else:
-                increment = 0
-            difficulty_override = base + increment
-            # #1919: Retrieve the pull flat bonus (idempotent — the primary
-            # resolution or an earlier NPC auto-resolve may have already charged
-            # it). Returns 0 when no declaration exists or it already fizzled.
-            pull_flat_bonus = 0
-            action_template = action_request.action_template
-            if action_template is not None and action_template.check_type_id is not None:
-                from world.magic.exceptions import (  # noqa: PLC0415
-                    MagicError,
-                    ProtagonismLockedError,
-                )
-
-                try:
-                    pull_flat_bonus = _charge_social_pull(
-                        action_request=action_request,
-                        check_type=action_template.check_type,
-                    )
-                except (MagicError, ProtagonismLockedError):
-                    # Already fizzled on the primary charge; no bonus for this target.
-                    pull_flat_bonus = 0
+            pull_flat_bonus = _charge_target_pull_flat_bonus(action_request)
             result, result_interaction, resolved_difficulty = _resolve_action_against_persona(
                 action_request,
                 action_target.target_persona,
@@ -1043,9 +1101,7 @@ def respond_to_action_target(
             # Runs once per accepted target; resolvers registered for multi-target
             # actions must keep cast-level side-effects idempotent. result is None only
             # for hostile consent-accepts (empty action_key → no resolver).
-            resolver = get_resolver(action_request.action_key)
-            if resolver is not None and result is not None:
-                resolver(action_request, result)
+            _invoke_action_resolver(action_request, result)
         return result
     return None
 

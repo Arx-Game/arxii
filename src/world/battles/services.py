@@ -520,7 +520,7 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
 # ---------------------------------------------------------------------------
 
 
-def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration facets + checks
+def declare_battle_action(  # noqa: PLR0913, C901 - many declaration facets + checks
     *,
     participant: BattleParticipant,
     action_kind: str,
@@ -603,29 +603,20 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         raise TechniqueNotBattleReadyError
 
     if (
-        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD)
+        action_kind in (BattleActionKind.REPEL, BattleActionKind.HOLD, BattleActionKind.REPOSITION)
         and scope != BattleActionScope.PLACE
     ):
         raise PlaceScopeRequiredError
 
-    if action_kind == BattleActionKind.REPOSITION and scope != BattleActionScope.PLACE:
-        raise PlaceScopeRequiredError
-
     if action_kind == BattleActionKind.SET_ENVIRONMENT:
-        if scope not in (BattleActionScope.BATTLE, BattleActionScope.PLACE):
-            raise InvalidEnvironmentScopeError
-        if technique.target_weather_type_id is None:
-            raise MissingEnvironmentTargetError
+        _validate_environment_action(scope=scope, technique=technique)
 
     if action_kind == BattleActionKind.REPOSITION:
         _validate_vehicle_command(participant=participant, target_place=target_place)
     elif scope in (BattleActionScope.PLACE, BattleActionScope.SIDE, BattleActionScope.BATTLE):
         _validate_command_scope(participant=participant, scope=scope)
 
-    if scope == BattleActionScope.PLACE and target_place is None:
-        raise MissingScopeTargetError
-    if scope == BattleActionScope.SIDE and target_side is None:
-        raise MissingScopeTargetError
+    _validate_scope_target(scope=scope, target_place=target_place, target_side=target_side)
 
     if (
         action_kind in (BattleActionKind.STRIKE, BattleActionKind.ROUT)
@@ -640,18 +631,7 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         and target_unit is not None
         and participant.place_id is not None
     ):
-        # A vehicle's own BattleUnit never has place set (see BattleVehicle's
-        # docstring) — resolve its paired vehicle's place so a STRIKE against
-        # the vehicle's own unit is gated the same as a BREACH against its hull.
-        target_unit_place = target_unit.place
-        if target_unit_place is None and hasattr(target_unit, "vehicle"):  # noqa: GETATTR_LITERAL
-            target_unit_place = target_unit.vehicle.place
-        if (
-            target_unit_place is not None
-            and target_unit_place.pk != participant.place_id
-            and not places_overlap(target_unit_place, participant.place)
-        ):
-            raise PlacesDoNotOverlapError
+        _validate_unit_place_overlap(participant=participant, target_unit=target_unit)
 
     if action_kind in (BattleActionKind.BREACH, BattleActionKind.FORTIFY):
         _validate_fortification_target(
@@ -659,15 +639,11 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
             action_kind=action_kind,
             target_fortification=target_fortification,
         )
-        if (
-            action_kind == BattleActionKind.BREACH
-            and target_fortification is not None
-            and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
-            and participant.place_id is not None
-            and target_fortification.place_id != participant.place_id
-            and not places_overlap(target_fortification.place, participant.place)
-        ):
-            raise PlacesDoNotOverlapError
+        _validate_fortification_place_overlap(
+            participant=participant,
+            action_kind=action_kind,
+            target_fortification=target_fortification,
+        )
 
     declaration, _ = BattleActionDeclaration.objects.update_or_create(
         battle_round=battle_round,
@@ -687,6 +663,65 @@ def declare_battle_action(  # noqa: PLR0913, PLR0912, C901 - many declaration fa
         },
     )
     return declaration
+
+
+def _validate_environment_action(*, scope: str, technique: Technique) -> None:
+    """Validate a SET_ENVIRONMENT declaration's scope and weather target."""
+    if scope not in (BattleActionScope.BATTLE, BattleActionScope.PLACE):
+        raise InvalidEnvironmentScopeError
+    if technique.target_weather_type_id is None:
+        raise MissingEnvironmentTargetError
+
+
+def _validate_scope_target(
+    *,
+    scope: str,
+    target_place: BattlePlace | None,
+    target_side: BattleSide | None,
+) -> None:
+    """Raise ``MissingScopeTargetError`` when a scope's required target is absent."""
+    if scope == BattleActionScope.PLACE and target_place is None:
+        raise MissingScopeTargetError
+    if scope == BattleActionScope.SIDE and target_side is None:
+        raise MissingScopeTargetError
+
+
+def _validate_unit_place_overlap(
+    *, participant: BattleParticipant, target_unit: BattleUnit
+) -> None:
+    """Raise ``PlacesDoNotOverlapError`` when a UNIT target is out of range.
+
+    A vehicle's own BattleUnit never has place set (see BattleVehicle's
+    docstring) — resolve its paired vehicle's place so a STRIKE against the
+    vehicle's own unit is gated the same as a BREACH against its hull.
+    """
+    target_unit_place = target_unit.place
+    if target_unit_place is None and hasattr(target_unit, "vehicle"):  # noqa: GETATTR_LITERAL
+        target_unit_place = target_unit.vehicle.place
+    if (
+        target_unit_place is not None
+        and target_unit_place.pk != participant.place_id
+        and not places_overlap(target_unit_place, participant.place)
+    ):
+        raise PlacesDoNotOverlapError
+
+
+def _validate_fortification_place_overlap(
+    *,
+    participant: BattleParticipant,
+    action_kind: str,
+    target_fortification: Fortification | None,
+) -> None:
+    """Raise ``PlacesDoNotOverlapError`` when a BREACH target is out of range."""
+    if (
+        action_kind == BattleActionKind.BREACH
+        and target_fortification is not None
+        and hasattr(target_fortification.place, "vehicle")  # noqa: GETATTR_LITERAL
+        and participant.place_id is not None
+        and target_fortification.place_id != participant.place_id
+        and not places_overlap(target_fortification.place, participant.place)
+    ):
+        raise PlacesDoNotOverlapError
 
 
 def _validate_command_scope(*, participant: BattleParticipant, scope: str) -> None:
