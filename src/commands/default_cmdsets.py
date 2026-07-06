@@ -88,6 +88,7 @@ from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
 from commands.persona import CmdPersona
+from commands.places import CmdPlaces  # #1866
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
@@ -322,6 +323,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCraft,
             # #1866 — outfit CRUD + wear/undress/present telnet namespace.
             CmdOutfit,
+            # #1866 — places join/leave telnet namespace.
+            CmdPlaces,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             # #1832 — ship commission/upgrade/repair/status namespace.
