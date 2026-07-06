@@ -498,6 +498,50 @@ class OrganizationRank(SharedMemoryModel):
         return f"{self.name} (Tier {self.tier})"
 
 
+class OrganizationGiftGrant(SharedMemoryModel):
+    """Org→gift bridge: records that an org has acquired a Gift via a project.
+
+    Created by the ORGANIZATION_CAPABILITY project resolver on completion.
+    Members weave ORGANIZATION-anchored threads to channel the gift's techniques
+    through their resonance.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="gift_grants",
+        help_text="The organization that acquired this capability.",
+    )
+    gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        related_name="organization_grants",
+        help_text="The Gift this org has acquired.",
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="organization_gift_grants",
+        help_text="The project that granted this capability (provenance).",
+    )
+    anchor_cap = models.PositiveSmallIntegerField(
+        help_text="Per-capability ceiling on thread level, set by the project template.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "gift"],
+                name="unique_org_gift_grant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization.name} → {self.gift.name}"
+
+
 class OrganizationMembershipOffer(SharedMemoryModel):
     """A pending or resolved invitation or application to join an organization.
 
