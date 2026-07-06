@@ -10,8 +10,9 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from world.gm.constants import GMTableStatus
-from world.gm.models import GMProfile, GMRosterInvite, GMTable, GMTableMembership
+from world.gm.constants import GMLevel, GMTableStatus
+from world.gm.models import GMLevelChange, GMProfile, GMRosterInvite, GMTable, GMTableMembership
+from world.gm.types import CategoryFeedback, GMEvidenceSummary
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
@@ -293,3 +294,97 @@ def claim_invite(invite: GMRosterInvite, account: AccountDB) -> RosterApplicatio
         ) + f"\n[Claimed invite from {invite.created_by.account.username}]"
         app.save(update_fields=["application_text"])
     return app
+
+
+@transaction.atomic
+def promote_gm(
+    profile: GMProfile,
+    new_level: str,
+    *,
+    changed_by: AccountDB,
+    reason: str,
+) -> GMLevelChange:
+    """Set profile.level (promotion OR demotion), writing the audit row.
+
+    Programmer-error guards only (validation lives in the serializer):
+    raises ValueError if new_level == profile.level or new_level not in
+    GMLevel.values.
+    """
+    if new_level not in GMLevel.values:
+        msg = f"{new_level!r} is not a valid GMLevel; expected one of {GMLevel.values}."
+        raise ValueError(msg)
+    if new_level == profile.level:
+        msg = f"profile is already at level {new_level!r}; promote_gm requires a level change."
+        raise ValueError(msg)
+
+    old_level = profile.level
+    profile.level = new_level
+    profile.save(update_fields=["level"])
+
+    return GMLevelChange.objects.create(
+        profile=profile,
+        old_level=old_level,
+        new_level=new_level,
+        changed_by=changed_by,
+        reason=reason,
+    )
+
+
+def gm_evidence_summary(profile: GMProfile) -> GMEvidenceSummary:
+    """Aggregate a GM's track record for staff reviewing a level change.
+
+    Each aggregate below is a single ORM query (no queries in loops).
+    Imported lazily to avoid a top-level gm -> stories dependency.
+    """
+    from django.db.models import Avg, Count  # noqa: PLC0415
+
+    from world.gm.constants import GMTableStatus as _GMTableStatus  # noqa: PLC0415
+    from world.stories.models import (  # noqa: PLC0415
+        BeatCompletion,
+        Story,
+        TrustCategoryFeedbackRating,
+    )
+    from world.stories.types import StoryStatus  # noqa: PLC0415
+
+    stories_running = Story.objects.filter(
+        primary_table__gm=profile,
+        primary_table__status=_GMTableStatus.ACTIVE,
+        status=StoryStatus.ACTIVE,
+    ).count()
+
+    beats_completed_by_risk = {
+        row["beat__risk"]: row["n"]
+        for row in (
+            BeatCompletion.objects.filter(
+                beat__episode__chapter__story__primary_table__gm=profile,
+            )
+            .values("beat__risk")
+            .annotate(n=Count("id"))
+        )
+    }
+
+    feedback_by_category = [
+        CategoryFeedback(
+            category_name=row["trust_category__name"],
+            average_rating=row["avg"],
+            rating_count=row["n"],
+        )
+        for row in (
+            TrustCategoryFeedbackRating.objects.filter(
+                feedback__story__primary_table__gm=profile,
+            )
+            .values("trust_category__name")
+            .annotate(avg=Avg("rating"), n=Count("id"))
+        )
+    ]
+
+    return GMEvidenceSummary(
+        profile_id=profile.pk,
+        level=profile.level,
+        approved_at=profile.approved_at,
+        last_active_at=profile.last_active_at,
+        stories_running=stories_running,
+        beats_completed_by_risk=beats_completed_by_risk,
+        feedback_by_category=feedback_by_category,
+        level_changes=list(profile.level_changes.all()[:20]),
+    )
