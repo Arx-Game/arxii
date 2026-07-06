@@ -1218,13 +1218,19 @@ def _targeted_outcome_content(
     if result.technique_result is not None and action_request.technique is not None:
         technique_name = action_request.technique.name
         anima_spent = result.technique_result.anima_cost.effective_cost
-        return (
+        content = (
             f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
             f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
         )
-    return (
-        f"{initiator_name} attempts to {action_key} {target_name}: {status_word} ({outcome_name})"
-    )
+    else:
+        content = (
+            f"{initiator_name} attempts to {action_key} {target_name}: "
+            f"{status_word} ({outcome_name})"
+        )
+    # #1919: Append a fizzle note when the thread pull failed at charge time.
+    if result.fizzle_note:
+        content += f" — {result.fizzle_note}"
+    return content
 
 
 def _create_result_interaction(

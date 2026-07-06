@@ -590,6 +590,7 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
     technique_result = TechniqueResultSerializer(allow_null=True)
     anima_recovery = serializers.SerializerMethodField()
     power_ledger = serializers.SerializerMethodField()
+    fizzle_note = serializers.CharField(allow_null=True, required=False)
 
     @extend_schema_field(PowerLedgerSerializer)
     def get_power_ledger(self, obj: object) -> dict | None:

@@ -27405,6 +27405,7 @@ export interface components {
       target_condition_instance_id?: number | null;
       target_pending_alteration_id?: number | null;
       bond_thread_id?: number | null;
+      pull?: components['schemas']['CastPullRequestRequest'] | null;
     };
     /** @description Flat read payload for a pending additional-target consent row (#1177). */
     SceneActionTarget: {
@@ -29400,6 +29401,9 @@ export interface components {
       tier: number;
       thread_ids: number[];
       action_context?: components['schemas']['PullActionContextRequest'];
+      scene_id?: number | null;
+      /** @default false */
+      exclude_gift: boolean;
     };
     /** @description Response serializer for POST /api/magic/thread-pull-preview/. */
     ThreadPullPreviewResponse: {

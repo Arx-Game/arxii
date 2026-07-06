@@ -1252,6 +1252,13 @@ class ThreadPullPreviewRequestSerializer(serializers.Serializer):
         allow_empty=False,
     )
     action_context = PullActionContextSerializer(required=False)
+    # #1919: Optional scene-scoped params for social-action pull previews.
+    # scene_id: when provided, the preview computes the combat/DANGER state
+    # on the scene and returns anima_cost=0 when waived.
+    # exclude_gift: when True, GIFT threads are rejected at preview time
+    # (matching the charge-time excluded_kinds behavior for social pulls).
+    scene_id = serializers.IntegerField(required=False, allow_null=True)
+    exclude_gift = serializers.BooleanField(required=False, default=False)
 
     def validate_character_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve + ownership-check the caller-supplied character_sheet_id."""
