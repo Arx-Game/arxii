@@ -315,6 +315,7 @@ direction split above):**
 |----------|---------------|-------|
 | `/api/treasured-signoffs/` | `TreasuredSignoffViewSet` (`ModelViewSet`, no `destroy`) | See [Sign-off lifecycle](#sign-off-lifecycle) above. |
 | `/api/beats/{id}/stake-availability/` | `BeatStakeAvailabilityView` (`APIView`) | See [GM availability](#gm-stake-availability-counts-only) above. |
+| `/api/stories/my-pending-signoffs/?beats=<id>&beats=<id>` | `PlayerPendingTreasuredSignoffsView` (`APIView`) | Player-safe batched read — see [Player-safe pending-signoff discovery](#frontend-frontendsrcboundaries) above. |
 
 ---
 
@@ -332,13 +333,24 @@ Mirrors the `frontend/src/consent/` module layout (`types.ts`/`api.ts`/`queries.
   the read-only aggregate for a chosen viewer tenure.
 - **`components/TreasuredSignoffPrompt.tsx`** — renders nothing when the tenure has
   no treasured subjects; otherwise offers "Sign off" / "Signed off" + "Withdraw" per
-  subject. **Known gap:** there is no player-facing endpoint that says "your
-  treasured subject is staked in beat X" (`BeatStakeAvailabilityView` is
-  GM/story-owner-only and counts-only, by design). The prompt is therefore only
-  auto-wireable from data the player already owns (their own `TreasuredSubject` +
-  `TreasuredSignoff` rows for a beat they already know the number of) — it lives on
-  `BoundariesPage` with a manual Beat # field rather than auto-surfacing from a
-  Beat/Story page. A future player-safe beat-list endpoint would let this move.
+  subject. Accepts an optional `pendingSubjectIds` prop (#1853): when supplied, the
+  panel narrows to only those subject ids instead of showing every treasured
+  subject the tenure owns. `BoundariesPage` still passes nothing (its manual Beat #
+  field keeps the original "browse and preemptively sign off anything" behavior);
+  `BeatRow` (`frontend/src/stories/components/BeatRow.tsx`) passes the ids a
+  player-safe backend query flags as actually staked-without-signoff on that beat,
+  so the prompt auto-surfaces only where it's actually relevant.
+- **Player-safe pending-signoff discovery (#1853):**
+  `world.stories.services.boundaries.player_pending_treasured_signoffs(player_data,
+  beats) -> list[PendingTreasuredSignoffs]` is the query seam — for a batch of
+  beats, which of the *requesting player's own* treasured subjects are staked
+  without an active sign-off. Exposed to web via
+  `GET /api/stories/my-pending-signoffs/?beats=<id>&beats=<id>`
+  (`PlayerPendingTreasuredSignoffsView`) and to telnet via `story beats
+  <episode-id>` (flags them inline) and `story signoff <beat-id> <subject>
+  [withdraw]` (grants/withdraws) — see `src/commands/CLAUDE.md`'s `story.py` entry.
+  Both surfaces call the identical query function; this is the single shared seam,
+  not two parallel implementations.
 - Both form dialogs wire the `visible_to_tenures` ("Specific characters") sharing
   picker via the existing `TenureMultiSearch` component; the "Consent groups"
   visibility mode has no picker UI anywhere in the frontend yet (no prior art to
