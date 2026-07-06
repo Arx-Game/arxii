@@ -182,6 +182,43 @@ class IsRoomOwnerPrerequisite(Prerequisite):
 
 
 @dataclass
+class IsExitRoomOwnerPrerequisite(Prerequisite):
+    """The actor's active persona must own or tenant the exit's source room.
+
+    Mirrors IsRoomOwnerPrerequisite, but resolves the room from the ``exit``
+    kwarg's ``location`` (the room the exit sits in) rather than a
+    ``room_id`` kwarg or the actor's own location — door-lock commands name
+    an exit, not necessarily the room the actor currently stands in.
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        from world.locations.services import is_owner, is_tenant  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        exit_obj = (context or {}).get("kwargs", {}).get("exit")
+        if exit_obj is None:
+            return False, "Lock/unlock which exit?"
+        room = exit_obj.location
+        if room is None:
+            return False, "That exit has no source room."
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "Only characters can do that."
+        persona = active_persona_for_sheet(sheet)
+        if is_owner(persona, room) or is_tenant(persona, room):
+            return True, ""
+        return False, "You don't have standing in that room."
+
+
+@dataclass
 class HoldsItemPrerequisite(Prerequisite):
     """The actor must be holding the item passed as ``kwargs['item']``."""
 
@@ -201,6 +238,66 @@ class HoldsItemPrerequisite(Prerequisite):
         if instance is None:
             return False, "That isn't an item."
         if not ItemState(instance, context=None).is_in_possession(actor):
+            return False, "You aren't holding that."
+        return True, ""
+
+
+@dataclass
+class OwnsOutfitPrerequisite(Prerequisite):
+    """The ``outfit`` kwarg must belong to the actor's own CharacterSheet."""
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        outfit = (context or {}).get("kwargs", {}).get("outfit")
+        if outfit is None:
+            return False, "Which outfit?"
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "No active character."
+        if outfit.character_sheet_id == sheet.pk:
+            return True, ""
+        return False, "That isn't your outfit."
+
+
+@dataclass
+class OwnsItemInstancePrerequisite(Prerequisite):
+    """The actor's own CharacterSheet must be the item's holder.
+
+    Body/tenure-keyed ownership (mirrors ``_user_holds_item`` in
+    ``world.items.views``) — the item need not exist as a physical ObjectDB
+    in the world; crafting operates on ``ItemInstance`` directly. Reads
+    ``item_instance`` from kwargs, or derives it from ``item_facet`` when
+    only that's present (the detach path).
+    """
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        kwargs = (context or {}).get("kwargs", {})
+        item_instance = kwargs.get("item_instance")
+        if item_instance is None:
+            item_facet = kwargs.get("item_facet")
+            if item_facet is not None:
+                item_instance = item_facet.item_instance
+        if item_instance is None:
+            return False, "Use what?"
+        try:
+            sheet = actor.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            return False, "You aren't holding that."
+        if item_instance.holder_character_sheet_id != sheet.pk:
             return False, "You aren't holding that."
         return True, ""
 

@@ -41,6 +41,7 @@ from commands.consent import (
 )
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
+from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
@@ -81,12 +82,15 @@ from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
+from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
 from commands.locations import CmdRoom
 from commands.missions import CmdMission
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
+from commands.outfit import CmdOutfit  # #1866
 from commands.persona import CmdPersona
+from commands.places import CmdPlaces  # #1866
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
@@ -252,6 +256,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHide,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
+            # #1866 — telnet face of SearchAction; search for clues in a room.
+            CmdSearch,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
@@ -321,6 +327,12 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCovenant,
             # #1592 — battle system: GM lifecycle + player declare namespace.
             CmdBattle,
+            # #1866 — facet/style attach/detach telnet namespace.
+            CmdCraft,
+            # #1866 — outfit CRUD + wear/undress/present telnet namespace.
+            CmdOutfit,
+            # #1866 — places join/leave telnet namespace.
+            CmdPlaces,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             # #1832 — ship commission/upgrade/repair/status namespace.

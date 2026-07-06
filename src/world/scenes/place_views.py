@@ -17,7 +17,6 @@ from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import Persona
 from world.scenes.place_filters import PlaceFilter
 from world.scenes.place_models import Place, PlacePresence
-from world.scenes.place_services import join_place, leave_place
 
 
 class PlaceSerializer(serializers.ModelSerializer):
@@ -68,64 +67,47 @@ class PlaceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="join")
     def join(self, request: Request, pk: int | None = None) -> Response:
-        """Join a place."""
-        persona_ids = get_account_personas(request)
-        if not persona_ids:
-            return Response(
-                {"detail": "No personas found for your account."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        """Join a place, via JoinPlaceAction."""
+        from actions.definitions.places import JoinPlaceAction  # noqa: PLC0415
 
         try:
             place = Place.objects.get(pk=pk, status="active")
         except Place.DoesNotExist:
-            return Response(
-                {"detail": "Place not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        persona = Persona.objects.filter(pk__in=persona_ids).first()
+            return Response({"detail": "Place not found."}, status=status.HTTP_404_NOT_FOUND)
+        persona_ids = get_account_personas(request)
+        persona = (
+            Persona.objects.filter(pk__in=persona_ids).select_related("character_sheet").first()
+        )
         if persona is None:
             return Response(
-                {"detail": "No persona found."},
+                {"detail": "No personas found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        presence = join_place(place=place, persona=persona)
-        return Response(
-            PlacePresenceSerializer(presence).data,
-            status=status.HTTP_200_OK,
-        )
+        action_result = JoinPlaceAction().run(actor=persona.character_sheet.character, place=place)
+        if not action_result.success:
+            return Response({"detail": action_result.message}, status=status.HTTP_400_BAD_REQUEST)
+        presence = action_result.data["presence"]
+        return Response(PlacePresenceSerializer(presence).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="leave")
     def leave(self, request: Request, pk: int | None = None) -> Response:
-        """Leave a place."""
-        persona_ids = get_account_personas(request)
-        if not persona_ids:
-            return Response(
-                {"detail": "No personas found for your account."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        """Leave a place, via LeavePlaceAction."""
+        from actions.definitions.places import LeavePlaceAction  # noqa: PLC0415
 
         try:
             place = Place.objects.get(pk=pk, status="active")
         except Place.DoesNotExist:
-            return Response(
-                {"detail": "Place not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        persona = Persona.objects.filter(pk__in=persona_ids).first()
+            return Response({"detail": "Place not found."}, status=status.HTTP_404_NOT_FOUND)
+        persona_ids = get_account_personas(request)
+        persona = (
+            Persona.objects.filter(pk__in=persona_ids).select_related("character_sheet").first()
+        )
         if persona is None:
             return Response(
-                {"detail": "No persona found."},
+                {"detail": "No personas found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        left = leave_place(place=place, persona=persona)
-        if not left:
-            return Response(
-                {"detail": "You are not at this place."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        action_result = LeavePlaceAction().run(actor=persona.character_sheet.character, place=place)
+        if not action_result.success:
+            return Response({"detail": action_result.message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -25,18 +25,10 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from core_management.permissions import PlayerOrStaffPermission
-from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
-    CraftingCostUnaffordable,
     CraftingNotConfigured,
-    CraftingStationBroken,
-    CraftingStationRequired,
-    FacetAlreadyAttached,
-    FacetCapacityExceeded,
     ItemError,
-    StyleAlreadyAttached,
-    StyleCapacityExceeded,
 )
 from world.items.filters import (
     FashionPresentationFilter,
@@ -84,8 +76,6 @@ from world.items.serializers import (
     VisibleWornItemSerializer,
 )
 from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
-from world.items.services.crafting import craft_attach_facet, craft_attach_style
-from world.items.services.facets import remove_facet_from_item
 from world.items.services.usage import use_item
 from world.magic.services.auth import _resolve_actor_sheet
 from world.roster.models import RosterEntry
@@ -350,28 +340,20 @@ class ItemFacetViewSet(viewsets.ViewSet):
 
     @extend_schema(request=ItemFacetWriteSerializer, responses=FacetCraftResultSerializer)
     def create(self, request: Request) -> Response:
-        """Roll the crafting check and (on success) attach the facet."""
+        """Roll the crafting check and (on success) attach the facet, via the Action."""
+        from actions.definitions.crafting import AttachFacetAction  # noqa: PLC0415
+
         serializer = ItemFacetWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
         facet = serializer.validated_data["facet"]
-        crafter_character = item_instance.holder_character_sheet.character
-        try:
-            result = craft_attach_facet(
-                crafter_account=cast(AccountDB, request.user),
-                crafter_character=crafter_character,
-                item_instance=item_instance,
-                facet=facet,
-            )
-        except (
-            FacetAlreadyAttached,
-            FacetCapacityExceeded,
-            CraftingNotConfigured,
-            CraftingCostUnaffordable,
-            CraftingStationRequired,
-            CraftingStationBroken,
-        ) as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        actor = item_instance.holder_character_sheet.character
+        action_result = AttachFacetAction().run(
+            actor=actor, item_instance=item_instance, facet=facet
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        result = action_result.data["result"]
         status_code = 201 if result.attached else 200
         return Response(FacetCraftResultSerializer(result).data, status=status_code)
 
@@ -445,7 +427,12 @@ class ItemFacetViewSet(viewsets.ViewSet):
             raise NotFound from exc
         # Run object-level permission so non-owners are rejected with 403.
         self.check_object_permissions(request, row)
-        remove_facet_from_item(item_facet=row)
+        from actions.definitions.crafting import DetachFacetAction  # noqa: PLC0415
+
+        actor = row.item_instance.holder_character_sheet.character
+        action_result = DetachFacetAction().run(actor=actor, item_facet=row)
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
 
@@ -809,11 +796,27 @@ class OutfitViewSet(viewsets.ViewSet):
 
     @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
     def create(self, request: Request) -> Response:
-        """Create an Outfit via the existing write serializer (calls save_outfit)."""
+        """Create an Outfit via SaveOutfitAction (validates via the existing serializer)."""
+        from actions.definitions.outfits import SaveOutfitAction  # noqa: PLC0415
+
         serializer = OutfitWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        outfit = serializer.save()
-        read = OutfitReadSerializer(outfit)
+        sheet = serializer.validated_data["character_sheet"]
+        wardrobe = serializer.validated_data["wardrobe"]
+        name = serializer.validated_data["name"]
+        description = serializer.validated_data.get("description", "")
+        action_result = SaveOutfitAction().run(
+            actor=sheet.character,
+            wardrobe=wardrobe,
+            name=name,
+            description=description,
+        )
+        if not action_result.success:
+            # Field-specific errors (e.g. "wardrobe") collapse to non_field_errors here —
+            # SaveOutfitAction's ActionResult carries only a message, not the originating
+            # field (#1866). Deliberate trade-off of routing through the Action layer.
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        read = OutfitReadSerializer(action_result.data["outfit"])
         return Response(read.data, status=201)
 
     @extend_schema(request=OutfitRenameSerializer, responses=OutfitReadSerializer)
@@ -835,6 +838,8 @@ class OutfitViewSet(viewsets.ViewSet):
         return self._update(request, pk, partial=True)
 
     def _update(self, request: Request, pk: str | None, *, partial: bool) -> Response:
+        from actions.definitions.outfits import RenameOutfitAction  # noqa: PLC0415
+
         outfit_pk = _parse_int_param(pk)
         if outfit_pk is None:
             raise NotFound
@@ -844,21 +849,27 @@ class OutfitViewSet(viewsets.ViewSet):
             raise NotFound from exc
         self.check_object_permissions(request, outfit)
         serializer = OutfitRenameSerializer(
-            outfit,
-            data=request.data,
-            partial=partial,
-            context={"request": request},
+            outfit, data=request.data, partial=partial, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
-        outfit = serializer.save()
-        # Invalidate the sheet's outfits handler so the rename shows next read.
-        outfit.character_sheet.saved_outfits.invalidate()
+        name = serializer.validated_data.get("name", outfit.name)
+        description = serializer.validated_data.get("description", outfit.description)
+        actor = outfit.character_sheet.character
+        action_result = RenameOutfitAction().run(
+            actor=actor, outfit=outfit, name=name, description=description
+        )
+        if not action_result.success:
+            # See the create() note above: RenameOutfitAction's ActionResult carries only
+            # a message, not a field key, so any field-specific error collapses here.
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         read = OutfitReadSerializer(outfit)
         return Response(read.data)
 
     @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        """Delete via the delete_outfit service (cascades slots)."""
+        """Delete via DeleteOutfitAction (cascades slots)."""
+        from actions.definitions.outfits import DeleteOutfitAction  # noqa: PLC0415
+
         outfit_pk = _parse_int_param(pk)
         if outfit_pk is None:
             raise NotFound
@@ -867,9 +878,12 @@ class OutfitViewSet(viewsets.ViewSet):
         except Outfit.DoesNotExist as exc:
             raise NotFound from exc
         self.check_object_permissions(request, outfit)
-        sheet = outfit.character_sheet
-        delete_outfit(outfit)
-        sheet.saved_outfits.invalidate()
+        actor = outfit.character_sheet.character
+        action_result = DeleteOutfitAction().run(actor=actor, outfit=outfit)
+        if not action_result.success:
+            # See OutfitViewSet.create's note above: field-specific errors collapse to
+            # non_field_errors since ActionResult carries only a message.
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
 
@@ -963,23 +977,42 @@ class OutfitSlotViewSet(viewsets.ViewSet):
 
     @extend_schema(request=OutfitSlotWriteSerializer, responses=OutfitSlotReadSerializer)
     def create(self, request: Request) -> Response:
-        """Create an OutfitSlot via the existing write serializer.
+        """Create an OutfitSlot via AddOutfitSlotAction (validates via the existing serializer).
 
         Cache invalidation lives inside ``add_outfit_slot`` (called by the
-        serializer's ``create``), so no manual invalidation is needed here.
+        Action), so no manual invalidation is needed here.
         """
+        from actions.definitions.outfits import AddOutfitSlotAction  # noqa: PLC0415
+
         serializer = OutfitSlotWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        slot = serializer.save()
-        read = OutfitSlotReadSerializer(slot)
+        outfit = serializer.validated_data["outfit"]
+        item_instance = serializer.validated_data["item_instance"]
+        body_region = serializer.validated_data["body_region"]
+        equipment_layer = serializer.validated_data["equipment_layer"]
+        actor = outfit.character_sheet.character
+        action_result = AddOutfitSlotAction().run(
+            actor=actor,
+            outfit=outfit,
+            item_instance=item_instance,
+            body_region=body_region,
+            equipment_layer=equipment_layer,
+        )
+        if not action_result.success:
+            # Field-specific errors (e.g. "item_instance") collapse to non_field_errors
+            # here — AddOutfitSlotAction's ActionResult carries only a message (#1866).
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        read = OutfitSlotReadSerializer(action_result.data["slot"])
         return Response(read.data, status=201)
 
     @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        """Delete via remove_outfit_slot (idempotent).
+        """Delete via RemoveOutfitSlotAction (idempotent).
 
         Cache invalidation lives inside ``remove_outfit_slot``.
         """
+        from actions.definitions.outfits import RemoveOutfitSlotAction  # noqa: PLC0415
+
         slot_pk = _parse_int_param(pk)
         if slot_pk is None:
             raise NotFound
@@ -990,11 +1023,17 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         except OutfitSlot.DoesNotExist as exc:
             raise NotFound from exc
         self.check_object_permissions(request, slot)
-        remove_outfit_slot(
+        actor = slot.outfit.character_sheet.character
+        action_result = RemoveOutfitSlotAction().run(
+            actor=actor,
             outfit=slot.outfit,
             body_region=slot.body_region,
             equipment_layer=slot.equipment_layer,
         )
+        if not action_result.success:
+            # See OutfitSlotViewSet.create's note above: field-specific errors collapse
+            # to non_field_errors since ActionResult carries only a message.
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
 
@@ -1365,8 +1404,8 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
     """ViewSet for style crafting: POST rolls the check and attaches a Style to an item.
 
     Mirrors ``ItemFacetViewSet.create`` — validates ``item_instance`` + ``style``
-    ownership, calls ``craft_attach_style``, and returns 201 on attach or 200 on
-    a failed roll.
+    ownership, dispatches through ``AttachStyleAction``, and returns 201 on
+    attach or 200 on a failed roll.
     """
 
     http_method_names = ["get", "post", "head", "options"]
@@ -1375,28 +1414,20 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
 
     @extend_schema(request=ItemStyleWriteSerializer, responses=StyleCraftResultSerializer)
     def create(self, request: Request) -> Response:
-        """Roll the crafting check and (on success) attach the style."""
+        """Roll the crafting check and (on success) attach the style, via the Action."""
+        from actions.definitions.crafting import AttachStyleAction  # noqa: PLC0415
+
         serializer = ItemStyleWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
         style = serializer.validated_data["style"]
-        crafter_character = item_instance.holder_character_sheet.character
-        try:
-            result = craft_attach_style(
-                crafter_account=cast(AccountDB, request.user),
-                crafter_character=crafter_character,
-                item_instance=item_instance,
-                style=style,
-            )
-        except (
-            StyleAlreadyAttached,
-            StyleCapacityExceeded,
-            CraftingNotConfigured,
-            CraftingCostUnaffordable,
-            CraftingStationRequired,
-            CraftingStationBroken,
-        ) as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        actor = item_instance.holder_character_sheet.character
+        action_result = AttachStyleAction().run(
+            actor=actor, item_instance=item_instance, style=style
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        result = action_result.data["result"]
         status_code = 201 if result.attached else 200
         return Response(StyleCraftResultSerializer(result).data, status=status_code)
 

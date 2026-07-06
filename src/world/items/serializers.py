@@ -4,16 +4,6 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from flows.service_functions.outfits import (
-    add_outfit_slot,
-    save_outfit,
-)
-from world.items.exceptions import (
-    NotAContainer,
-    NotReachable,
-    PermissionDenied,
-    SlotIncompatible,
-)
 from world.items.models import (
     EquippedItem,
     FashionPresentation,
@@ -448,7 +438,13 @@ class OutfitSlotReadSerializer(serializers.ModelSerializer):
 
 
 class OutfitSlotWriteSerializer(serializers.ModelSerializer):
-    """Write serializer for OutfitSlot — delegates to add_outfit_slot service."""
+    """Write serializer for OutfitSlot — validates POST input for AddOutfitSlotAction.
+
+    ``OutfitSlotViewSet.create`` calls ``.is_valid()`` on this serializer and then
+    dispatches through ``AddOutfitSlotAction`` directly (which wraps the
+    ``add_outfit_slot`` service) rather than calling ``.save()`` — so this
+    serializer has no ``create()`` override; it's validation-only.
+    """
 
     class Meta:
         model = OutfitSlot
@@ -458,24 +454,6 @@ class OutfitSlotWriteSerializer(serializers.ModelSerializer):
         # so add_outfit_slot can replace the existing slot at that (region,
         # layer) instead of erroring out at validation.
         validators: list = []
-
-    def create(self, validated_data: dict) -> OutfitSlot:  # type: ignore[override]
-        """Delegate creation to the add_outfit_slot service.
-
-        The service validates template compatibility and item ownership,
-        and replaces any existing slot at the same (region, layer).
-        """
-        try:
-            return add_outfit_slot(
-                outfit=validated_data["outfit"],
-                item_instance=validated_data["item_instance"],
-                body_region=validated_data["body_region"],
-                equipment_layer=validated_data["equipment_layer"],
-            )
-        except SlotIncompatible as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
-        except PermissionDenied as exc:
-            raise serializers.ValidationError({"item_instance": [exc.user_message]}) from exc
 
 
 class OutfitReadSerializer(serializers.ModelSerializer):
@@ -499,48 +477,17 @@ class OutfitReadSerializer(serializers.ModelSerializer):
 
 
 class OutfitWriteSerializer(serializers.ModelSerializer):
-    """Write serializer for Outfit — POST snapshots current loadout via save_outfit."""
+    """Write serializer for Outfit — validates POST input for SaveOutfitAction.
+
+    ``OutfitViewSet.create`` calls ``.is_valid()`` on this serializer and then
+    dispatches through ``SaveOutfitAction`` directly (which wraps the
+    ``save_outfit`` service) rather than calling ``.save()`` — so this
+    serializer has no ``create()``/``update()`` override; it's validation-only.
+    """
 
     class Meta:
         model = Outfit
         fields = ["id", "name", "description", "character_sheet", "wardrobe"]
-
-    def create(self, validated_data: dict) -> Outfit:  # type: ignore[override]
-        """Delegate creation to the save_outfit service.
-
-        The service captures the current EquippedItem loadout for the
-        sheet's character into OutfitSlot rows.
-        """
-        try:
-            return save_outfit(
-                character_sheet=validated_data["character_sheet"],
-                wardrobe=validated_data["wardrobe"],
-                name=validated_data["name"],
-                description=validated_data.get("description", ""),
-            )
-        except NotAContainer as exc:
-            raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
-        except NotReachable as exc:
-            raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
-
-    def update(self, instance: Outfit, validated_data: dict) -> Outfit:  # type: ignore[override]
-        """Update only renames/redescribes — character_sheet and wardrobe are write-once.
-
-        Allowing PATCH to change ``character_sheet`` would let a user transfer
-        an outfit to a different character; allowing PATCH to change
-        ``wardrobe`` would let them relocate the outfit's anchor item to any
-        item id on the planet. Both are silently dropped here — the serializer
-        accepts the fields on POST (for create) but ignores them on PATCH.
-
-        Note: the OutfitViewSet's PUT/PATCH endpoints declare
-        ``OutfitRenameSerializer`` (below) to the schema instead, so OpenAPI
-        consumers see the accurate field set. This serializer's update path
-        only fires if a caller bypasses the viewset and reuses this class
-        directly for PATCH.
-        """
-        validated_data.pop("character_sheet", None)
-        validated_data.pop("wardrobe", None)
-        return super().update(instance, validated_data)
 
 
 class OutfitRenameSerializer(serializers.ModelSerializer):
