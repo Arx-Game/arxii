@@ -162,7 +162,7 @@ def _bound_covenant_role_cap_by_court_grant(
     return min(base_cap, granted if granted is not None else 0)
 
 
-def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
+def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911, C901
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:
@@ -242,6 +242,12 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             return thread.target_sanctum_details.feature_instance.level * 10
         case TargetKind.GIFT:
             return _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
+        case TargetKind.ORGANIZATION:
+            org = thread.target_organization
+            handler = org.gift_grants_handler
+            grant_cap = handler.anchor_cap_for(thread.resonance)
+            path_cap = _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
+            return min(grant_cap, path_cap)
     return 0
 
 
