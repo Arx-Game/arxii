@@ -124,7 +124,7 @@ def remove_social_consent_blacklist(
     return deleted > 0
 
 
-def _decide_consent_block(
+def decide_consent_block(
     rule_mode: str | None,
     *,
     actor_present: bool,
@@ -154,6 +154,10 @@ def _decide_consent_block(
         return not (actor_present and (is_friend or whitelisted))
     # ALLOWLIST — strict default-deny; friendship alone is not enough.
     return not (actor_present and whitelisted)
+
+
+# Alias for internal callers pre-dating the public rename (cross-module use is public).
+_decide_consent_block = decide_consent_block
 
 
 def _decide_default(category: SocialConsentCategory | None, actor_tenure: object | None) -> bool:

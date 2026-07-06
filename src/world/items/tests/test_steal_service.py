@@ -214,3 +214,13 @@ class StealServiceTests(TestCase):
 
         with self.assertRaises(NotAContainer):
             set_container_policy(self.thief_state, item_state, ContainerAccessPolicy.FRIENDS)
+
+    def test_sheetless_actor_set_container_policy_raises_not_in_possession(self) -> None:
+        """A sheet-less actor owns nothing so can't be the owner — refuse, don't crash."""
+        sheetless = CharacterFactory(db_key="StealSheetlessPolicy", location=self.room)
+        sheetless_state = CharacterState(sheetless, context=MagicMock())
+        container_instance = self._container(owner_sheet=self.victim_sheet)
+        container_state = ItemState(container_instance, context=MagicMock())
+
+        with self.assertRaises(NotInPossession):
+            set_container_policy(sheetless_state, container_state, ContainerAccessPolicy.FRIENDS)

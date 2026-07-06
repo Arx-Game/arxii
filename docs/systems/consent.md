@@ -134,7 +134,7 @@ The picker sweep `_social_consent_exclusions` (backed by `_consent_excluded_pers
 set — a bounded number of queries per sweep, independent of scene size (one tenure load, one
 preference load, and when a `category` is set one category-rule load plus, when the actor has
 a tenure, one whitelist/blacklist/friendship load each). It shares the per-tenure decision
-logic with `consent_blocks_targeting` via `_decide_consent_block` (spans all four modes;
+logic with `consent_blocks_targeting` via `decide_consent_block` (spans all four modes;
 #1698); keep new work on this path off any per-participant query loop (#1248).
 
 **Divergence (#1909):** the batched sweep does **not** honor `category.default_mode` — an

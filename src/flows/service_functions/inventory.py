@@ -18,6 +18,7 @@ from world.items.exceptions import (
     ContainerAccessDenied,
     ContainerClosed,
     ContainerFull,
+    InventoryError,
     ItemTooLarge,
     NoDropLocation,
     NotAContainer,
@@ -80,23 +81,54 @@ def _container_policy_denies(taker_sheet: CharacterSheet, container_instance: It
     return not is_friend(owner_tenure=owner_tenure, friend_tenure=taker_tenure)
 
 
-def take_requires_steal(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
-    """The one ownership/policy test (#1909): True → only ``steal`` may move it.
+def _take_denial(
+    taker_sheet: CharacterSheet | None, item_instance: ItemInstance
+) -> type[InventoryError] | None:
+    """Why plain take refuses this item (#1909), or None when take is allowed.
 
-    Room item owned by someone else → steal. Container item: the container's
-    policy decides; policy pass → plain take even if the item belongs to the
-    container's owner (sanctioned borrowing).
+    Returns the exception class the take gate should raise so the raise sites
+    report the true denial reason: ``ContainerAccessDenied`` when the
+    container's policy bars the taker, ``OwnedByAnother`` when the item's own
+    ownership does.
     """
     if taker_sheet is None:
         # Sheet-less actors (GM/staff/companion tooling) keep legacy free-take
         # behavior — theft consequence machinery is sheet-anchored and cannot
         # apply to them.
-        return False
+        return None
+    owner = item_instance.holder_character_sheet
     container = item_instance.contained_in
     if container is not None:
-        return _container_policy_denies(taker_sheet, container)
-    owner = item_instance.holder_character_sheet
-    return owner is not None and owner.pk != taker_sheet.pk
+        if _container_policy_denies(taker_sheet, container):
+            return ContainerAccessDenied
+        # Third-party stash: an item owned by neither the taker nor the
+        # container's owner is not the container owner's to lend — policy
+        # cannot sanction lending it, so only steal may move it. Also covers
+        # an owned item sitting in an UNOWNED container. The container
+        # owner's own items stay borrowable under a passing policy (case 4).
+        container_owner = container.holder_character_sheet
+        if (
+            owner is not None
+            and owner.pk != taker_sheet.pk
+            and (container_owner is None or owner.pk != container_owner.pk)
+        ):
+            return OwnedByAnother
+        return None
+    if owner is not None and owner.pk != taker_sheet.pk:
+        return OwnedByAnother
+    return None
+
+
+def take_requires_steal(taker_sheet: CharacterSheet | None, item_instance: ItemInstance) -> bool:
+    """The one ownership/policy test (#1909): True → only ``steal`` may move it.
+
+    Room item owned by someone else → steal. Container item: steal is required
+    when the container's policy bars the taker OR the item belongs to a third
+    party (neither the taker nor the container's owner — including an owned
+    item in an unowned container). A passing policy still sanctions borrowing
+    the container OWNER's items (case 4).
+    """
+    return _take_denial(taker_sheet, item_instance) is not None
 
 
 def _fire_item_acquisition_triggers(acquirer: CharacterState, item: ItemState) -> None:
@@ -133,18 +165,18 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     room, ``contained_in`` is cleared so the item ends up plainly in the
     character's inventory.
 
-    The #1909 ownership/policy gate runs before any mutation: a room item
-    owned by someone else raises ``OwnedByAnother``; a container item barred
-    by the container's access policy raises ``ContainerAccessDenied``. Steal
-    (a later task) is the deliberate bypass.
+    The #1909 ownership/policy gate runs before any mutation: an item owned
+    by someone else (a room item, or a third-party stash in a container)
+    raises ``OwnedByAnother``; a container item barred by the container's
+    access policy raises ``ContainerAccessDenied``. Steal is the deliberate
+    bypass.
     """
     if not item.can_take(taker=character):
         raise NotReachable
     taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    if take_requires_steal(taker_sheet, item.instance):
-        if item.instance.contained_in is not None:
-            raise ContainerAccessDenied
-        raise OwnedByAnother
+    denial = _take_denial(taker_sheet, item.instance)
+    if denial is not None:
+        raise denial
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
@@ -349,16 +381,18 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     the character.
 
     The #1909 gate runs before any mutation: if the container's access
-    policy bars this taker, raises ``ContainerAccessDenied``. Steal (a
-    later task) is the deliberate bypass.
+    policy bars this taker, raises ``ContainerAccessDenied``; if the item
+    belongs to a third party (neither the taker nor the container's owner),
+    raises ``OwnedByAnother``. Steal is the deliberate bypass.
     """
     if not item.can_take(taker=character):
         raise NotReachable
     if item.instance.contained_in is None:
         raise NotInContainer
     taker_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    if take_requires_steal(taker_sheet, item.instance):
-        raise ContainerAccessDenied
+    denial = _take_denial(taker_sheet, item.instance)
+    if denial is not None:
+        raise denial
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
@@ -503,7 +537,10 @@ def set_container_policy(character: CharacterState, container: ItemState, policy
     if not container.instance.template.is_container:
         raise NotAContainer
     owner = container.instance.holder_character_sheet
-    if owner is None or owner.pk != character.obj.sheet_data.pk:
+    # getattr, not direct access: a sheet-less actor owns nothing, so it can
+    # never be the container's owner — refuse rather than raise DoesNotExist.
+    actor_sheet = getattr(character.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if owner is None or actor_sheet is None or owner.pk != actor_sheet.pk:
         raise NotInPossession
     container.instance.access_policy = ContainerAccessPolicy(policy)
     container.instance.save(update_fields=["access_policy"])

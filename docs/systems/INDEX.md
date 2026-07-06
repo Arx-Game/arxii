@@ -926,7 +926,7 @@ so web and telnet converge on the same write path.
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
   `scenes.Friendship`) / `ALLOWLIST`
 - **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()` (thin delegator
-  to `consent_blocks_targeting`, #1909), `_decide_consent_block()`, `_social_consent_exclusions()`
+  to `consent_blocks_targeting`, #1909), `decide_consent_block()`, `_social_consent_exclusions()`
   (`actions/player_interface.py`) — the batched picker sweep does NOT honor `default_mode`
   (legacy allow-only); a default-deny category must gate through `consent_blocks_targeting`
   directly. PvP opt-out is the duel-start gate only (#1698): `ChallengeAction` refuses opted-out

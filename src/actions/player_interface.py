@@ -1349,7 +1349,7 @@ def _consent_excluded_persona_ids(
     ``consent_blocks_targeting`` directly; never wire it through this sweep.
     """
     from world.consent.models import SocialConsentPreference  # noqa: PLC0415
-    from world.consent.services import _decide_consent_block  # noqa: PLC0415
+    from world.consent.services import decide_consent_block  # noqa: PLC0415
 
     # One query: preferences for those tenures, keyed by tenure id (missing → default allow).
     prefs_by_tenure: dict[int, object] = {
@@ -1369,7 +1369,7 @@ def _consent_excluded_persona_ids(
             continue
         if category is None:
             continue  # uncategorized → master switch only
-        if _decide_consent_block(
+        if decide_consent_block(
             data.rule_modes.get(pref.pk),
             actor_present=actor_present,
             whitelisted=tenure.pk in data.whitelisted_owner_ids,

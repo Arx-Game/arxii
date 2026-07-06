@@ -14,9 +14,16 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
-from flows.service_functions.inventory import pick_up, take_out
+from flows.service_functions.inventory import pick_up, steal, steal_permitted, take_out
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
+from world.consent.constants import ConsentMode
+from world.consent.services import (
+    add_social_consent_whitelist,
+    set_social_consent_category_rule,
+    set_social_consent_preference,
+    theft_category,
+)
 from world.items.constants import ContainerAccessPolicy
 from world.items.exceptions import ContainerAccessDenied, OwnedByAnother
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
@@ -251,3 +258,62 @@ class ContainerAccessPolicyTests(TestCase):
         take_out(sheetless_state, item_state)
         item_state.instance.game_object.refresh_from_db()
         self.assertEqual(item_state.instance.game_object.location, sheetless)
+
+    # ------------------------------------------------------------------
+    # Third-party stash (#1909 branch review): an item owned by neither the
+    # taker nor the container's owner is not the container owner's to lend —
+    # a passing policy sanctions borrowing only the container OWNER's items.
+    # ------------------------------------------------------------------
+
+    def _third_sheet(self) -> CharacterSheet:
+        third_char = CharacterFactory(db_key="AccessPolicyThird", location=self.room)
+        return CharacterSheetFactory(character=third_char)
+
+    def _allow_theft(self, owner_tenure: RosterTenure, actor_tenure: RosterTenure) -> None:
+        preference = set_social_consent_preference(owner_tenure, allow_social_actions=True)
+        set_social_consent_category_rule(preference, theft_category(), ConsentMode.ALLOWLIST)
+        add_social_consent_whitelist(owner_tenure, actor_tenure, theft_category())
+
+    def test_third_party_item_in_open_container_raises_owned_by_another(self) -> None:
+        third_sheet = self._third_sheet()
+        container = self._container(owner_sheet=self.owner_sheet, policy=ContainerAccessPolicy.OPEN)
+        item_state = self._item_in_container(container, holder=third_sheet)
+        with self.assertRaises(OwnedByAnother):
+            take_out(self.actor_state, item_state)
+
+    def test_owned_item_in_unowned_container_raises_owned_by_another(self) -> None:
+        container = self._container(owner_sheet=None, policy=ContainerAccessPolicy.OPEN)
+        item_state = self._item_in_container(container, holder=self.owner_sheet)
+        with self.assertRaises(OwnedByAnother):
+            take_out(self.actor_state, item_state)
+
+    def test_third_party_stash_steal_gated_by_item_owner_consent(self) -> None:
+        """Steal of a third-party stash consults the ITEM owner's consent, not the container's."""
+        third_sheet = self._third_sheet()
+        third_tenure = self._active_tenure(third_sheet)
+        actor_tenure = self._active_tenure(self.actor_sheet)
+        self._active_tenure(self.owner_sheet)  # container owner: theft default-deny, no rule
+        self._allow_theft(third_tenure, actor_tenure)
+
+        container = self._container(owner_sheet=self.owner_sheet, policy=ContainerAccessPolicy.OPEN)
+        item_state = self._item_in_container(container, holder=third_sheet)
+
+        self.assertTrue(steal_permitted(self.actor_sheet, item_state.instance))
+        steal(self.actor_state, item_state)
+        item_state.instance.refresh_from_db()
+        item_state.instance.game_object.refresh_from_db()
+        self.assertEqual(item_state.instance.holder_character_sheet, self.actor_sheet)
+        self.assertEqual(item_state.instance.game_object.location, self.actor)
+
+    def test_third_party_stash_steal_blocked_when_item_owner_denies(self) -> None:
+        """Container owner's consent cannot green-light stealing someone ELSE's item."""
+        third_sheet = self._third_sheet()
+        self._active_tenure(third_sheet)  # item owner: theft default-deny, no rule
+        actor_tenure = self._active_tenure(self.actor_sheet)
+        owner_tenure = self._active_tenure(self.owner_sheet)
+        self._allow_theft(owner_tenure, actor_tenure)  # container owner consents — irrelevant
+
+        container = self._container(owner_sheet=self.owner_sheet, policy=ContainerAccessPolicy.OPEN)
+        item_state = self._item_in_container(container, holder=third_sheet)
+
+        self.assertFalse(steal_permitted(self.actor_sheet, item_state.instance))
