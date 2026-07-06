@@ -4,6 +4,8 @@ from django.contrib import admin
 
 from world.gm.models import (
     GMApplication,
+    GMLevelCap,
+    GMLevelChange,
     GMProfile,
     GMRosterInvite,
     GMTable,
@@ -53,3 +55,21 @@ class GMRosterInviteAdmin(admin.ModelAdmin):
     list_filter = ["is_public", "claimed_at"]
     search_fields = ["code", "invited_email"]
     raw_id_fields = ["roster_entry", "created_by", "claimed_by"]
+
+
+@admin.register(GMLevelCap)
+class GMLevelCapAdmin(admin.ModelAdmin):
+    list_display = [
+        "level",
+        "max_beat_risk",
+        "allow_custom_stakes",
+        "allow_global_scope_authoring",
+    ]
+    list_filter = ["max_beat_risk", "allow_custom_stakes", "allow_global_scope_authoring"]
+
+
+@admin.register(GMLevelChange)
+class GMLevelChangeAdmin(admin.ModelAdmin):
+    list_display = ["profile", "old_level", "new_level", "changed_by", "created_at"]
+    list_filter = ["old_level", "new_level"]
+    raw_id_fields = ["profile", "changed_by"]

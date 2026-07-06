@@ -10,6 +10,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.gm.constants import GMApplicationStatus, GMLevel, GMTableStatus
 from world.scenes.constants import PersonaType
+from world.societies.constants import RenownRisk
 
 
 class GMProfile(SharedMemoryModel):
@@ -264,3 +265,72 @@ class GMRosterInvite(SharedMemoryModel):
     @property
     def is_usable(self) -> bool:
         return not self.is_claimed and not self.is_expired
+
+
+class GMLevelCap(SharedMemoryModel):
+    """Per-GM-level tuning: what a GM at this level is allowed to do.
+
+    One row per ``GMLevel`` value (seeded via
+    ``world.gm.factories.seed_default_gm_level_caps``). Staff-tunable in
+    admin — these are designer knobs, not hardcoded gates.
+    """
+
+    level = models.CharField(
+        max_length=20,
+        choices=GMLevel.choices,
+        unique=True,
+        db_index=True,
+    )
+    max_beat_risk = models.CharField(
+        max_length=20,
+        choices=RenownRisk.choices,
+        default=RenownRisk.NONE,
+        help_text="Highest beat risk tier a GM at this level may author.",
+    )
+    allow_custom_stakes = models.BooleanField(
+        default=False,
+        help_text="Whether a GM at this level may author custom (template=null) stakes.",
+    )
+    allow_global_scope_authoring = models.BooleanField(
+        default=False,
+        help_text="Whether a GM at this level may author global-scope content.",
+    )
+
+    class Meta:
+        verbose_name = "GM Level Cap"
+        verbose_name_plural = "GM Level Caps"
+        ordering = ["level"]
+
+    def __str__(self) -> str:
+        return f"GMLevelCap({self.get_level_display()})"
+
+
+class GMLevelChange(SharedMemoryModel):
+    """Audit row for a staff-driven change to a GM's trust level.
+
+    Written by ``world.gm.services.promote_gm`` — never edited by hand.
+    """
+
+    profile = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.CASCADE,
+        related_name="level_changes",
+    )
+    old_level = models.CharField(max_length=20, choices=GMLevel.choices)
+    new_level = models.CharField(max_length=20, choices=GMLevel.choices)
+    changed_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Staff account that made this change.",
+    )
+    reason = models.TextField(help_text="Why the level changed — shown in the audit trail.")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "GM Level Change"
+        verbose_name_plural = "GM Level Changes"
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self) -> str:
+        return f"GMLevelChange({self.profile.account.username}, {self.old_level}→{self.new_level})"
