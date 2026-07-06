@@ -167,6 +167,7 @@ from world.stories.serializers import (
     GroupStoryProgressSerializer,
     MarkBeatInputSerializer,
     OfferStoryToGMInputSerializer,
+    PendingTreasuredSignoffsSerializer,
     PlayerTrustSerializer,
     PromoteEpisodeInputSerializer,
     RejectClaimInputSerializer,
@@ -3139,3 +3140,31 @@ class BeatStakeAvailabilityView(APIView):
         sheets = list(CharacterSheet.objects.filter(pk__in=sheet_ids)) if sheet_ids else []
         availability = stake_availability(beat, sheets)
         return Response(StakeAvailabilitySerializer(availability).data)
+
+
+class PlayerPendingTreasuredSignoffsView(APIView):
+    """GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+
+    Player-safe (never GM-facing): for the requesting player's own account,
+    which of the given beats have one of THEIR OWN treasured subjects staked
+    without an active sign-off. Batched across beats — the caller passes the
+    beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+    multi-value query-param style, but scoped to the caller instead of a
+    GM-supplied party).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(responses=PendingTreasuredSignoffsSerializer(many=True))
+    def get(self, request: Request) -> Response:
+        from world.stories.services.boundaries import (  # noqa: PLC0415
+            player_pending_treasured_signoffs,
+        )
+
+        if not hasattr(request.user, "player_data"):
+            return Response([])
+        player_data = cast(PlayerData, request.user.player_data)
+        beat_ids = request.query_params.getlist("beats")
+        beats = list(Beat.objects.filter(pk__in=beat_ids))
+        entries = player_pending_treasured_signoffs(player_data, beats)
+        return Response(PendingTreasuredSignoffsSerializer(entries, many=True).data)

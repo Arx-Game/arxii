@@ -3025,3 +3025,15 @@ class StakeAvailabilitySerializer(serializers.Serializer):
     available = serializers.IntegerField(read_only=True)
     blocked = serializers.IntegerField(read_only=True)
     needs_signoff = serializers.IntegerField(read_only=True)
+
+
+class PendingTreasuredSignoffsSerializer(serializers.Serializer):
+    """Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+
+    Exposes only the requesting player's own beat_id + treasured_subject_ids —
+    the view-level query already guarantees no other player's data can appear
+    here (ADR-0033); this serializer adds no fields beyond that.
+    """
+
+    beat_id = serializers.IntegerField(read_only=True)
+    treasured_subject_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
