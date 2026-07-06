@@ -345,6 +345,7 @@ class ActionRegistryTests(TestCase):
             "companion_fight",
             "deploy_companion",
             "release_companion",
+            "order_companion",
             "lock_exit",
             "unlock_exit",
         }

@@ -199,3 +199,129 @@ class ReleaseCompanionAction(Action):
         name = companion.name
         release_companion(companion)
         return ActionResult(success=True, message=f"{name} is released from your bond.")
+
+
+@dataclass
+class OrderCompanionAction(Action):
+    """Direct a deployed companion in combat (#1921).
+
+    A free directive — does not consume the player's round action or AP.
+    The companion's NPC round-tick action is modified by the order.
+    """
+
+    key: str = "order_companion"
+    name: str = "Order Companion"
+    icon: str = "bullhorn"
+    category: str = "companions"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor, context=None, **kwargs) -> ActionResult:  # noqa: C901, PLR0911
+        from world.combat.constants import ParticipantStatus  # noqa: PLC0415
+        from world.combat.models import CombatOpponent, CombatParticipant  # noqa: PLC0415
+        from world.companions.models import CompanionAbility  # noqa: PLC0415
+        from world.companions.services import (  # noqa: PLC0415
+            CompanionOrderError,
+            order_companion,
+        )
+
+        companion_id = kwargs.get("companion_id")
+        order_kind = kwargs.get("order_kind")
+        if not companion_id or not order_kind:
+            return ActionResult(success=False, message="Pick a companion and an order kind.")
+
+        companion, failure = _resolve_owned_companion(actor, companion_id)
+        if failure is not None:
+            return failure
+
+        target_id = kwargs.get("target_id")
+        ability_id = kwargs.get("ability_id")
+        ally_id = kwargs.get("ally_id")
+
+        ability = None
+        if ability_id:
+            try:
+                ability = CompanionAbility.objects.get(pk=ability_id)
+            except CompanionAbility.DoesNotExist:
+                return ActionResult(success=False, message="No such ability.")
+
+        # Try duel-scale first
+        participant = (
+            CombatParticipant.objects.filter(
+                character_sheet=actor.sheet_data,
+                status=ParticipantStatus.ACTIVE,
+            )
+            .select_related("encounter")
+            .first()
+        )
+        if participant is not None:
+            target_opponent = None
+            defending_participant = None
+            if target_id:
+                target_opponent = CombatOpponent.objects.filter(pk=target_id).first()
+            if ally_id:
+                defending_participant = CombatParticipant.objects.filter(pk=ally_id).first()
+
+            try:
+                order = order_companion(
+                    companion=companion,
+                    order_kind=order_kind,
+                    encounter=participant.encounter,
+                    round_number=participant.encounter.round_number,
+                    target_opponent=target_opponent,
+                    ability=ability,
+                    defending_participant=defending_participant,
+                )
+            except CompanionOrderError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+            return ActionResult(
+                success=True,
+                message=f"{companion.name} has been ordered to {order.get_order_kind_display()}.",
+                data={"order_id": order.pk},
+            )
+
+        # Try battle-scale
+        from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
+        from world.battles.models import BattleParticipant, BattleUnit  # noqa: PLC0415
+
+        battle_participant = (
+            BattleParticipant.objects.filter(
+                character_sheet=actor.sheet_data,
+                status=BattleParticipantStatus.ACTIVE,
+            )
+            .select_related("battle")
+            .first()
+        )
+        if battle_participant is not None:
+            target_unit = None
+            target_ally_bp = None
+            if target_id:
+                target_unit = BattleUnit.objects.filter(pk=target_id).first()
+            if ally_id:
+                target_ally_bp = BattleParticipant.objects.filter(pk=ally_id).first()
+
+            battle_round = battle_participant.battle.current_round
+            round_number = battle_round.round_number if battle_round else 1
+
+            try:
+                order = order_companion(
+                    companion=companion,
+                    order_kind=order_kind,
+                    battle=battle_participant.battle,
+                    round_number=round_number,
+                    target_unit=target_unit,
+                    ability=ability,
+                    target_ally=target_ally_bp,
+                )
+            except CompanionOrderError as exc:
+                return ActionResult(success=False, message=exc.user_message)
+            return ActionResult(
+                success=True,
+                message=f"{companion.name} has been ordered to {order.get_order_kind_display()}.",
+                data={"order_id": order.pk},
+            )
+
+        return ActionResult(
+            success=False,
+            message="You are not in active combat or a battle.",
+        )

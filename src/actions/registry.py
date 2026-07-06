@@ -35,6 +35,7 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    OrderCompanionAction,
     ReleaseCompanionAction,
 )
 from actions.definitions.conditions import treat_condition
@@ -467,6 +468,7 @@ _ALL_ACTIONS: list[Action] = [
     CompanionFightAction(),
     DeployCompanionAction(),
     ReleaseCompanionAction(),
+    OrderCompanionAction(),
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),
