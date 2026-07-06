@@ -25,7 +25,6 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from core_management.permissions import PlayerOrStaffPermission
-from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
     CraftingNotConfigured,
@@ -793,11 +792,24 @@ class OutfitViewSet(viewsets.ViewSet):
 
     @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
     def create(self, request: Request) -> Response:
-        """Create an Outfit via the existing write serializer (calls save_outfit)."""
+        """Create an Outfit via SaveOutfitAction (validates via the existing serializer)."""
+        from actions.definitions.outfits import SaveOutfitAction  # noqa: PLC0415
+
         serializer = OutfitWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        outfit = serializer.save()
-        read = OutfitReadSerializer(outfit)
+        sheet = serializer.validated_data["character_sheet"]
+        wardrobe = serializer.validated_data["wardrobe"]
+        name = serializer.validated_data["name"]
+        description = serializer.validated_data.get("description", "")
+        action_result = SaveOutfitAction().run(
+            actor=sheet.character,
+            wardrobe=wardrobe.game_object,
+            name=name,
+            description=description,
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        read = OutfitReadSerializer(action_result.data["outfit"])
         return Response(read.data, status=201)
 
     @extend_schema(request=OutfitRenameSerializer, responses=OutfitReadSerializer)
@@ -819,6 +831,8 @@ class OutfitViewSet(viewsets.ViewSet):
         return self._update(request, pk, partial=True)
 
     def _update(self, request: Request, pk: str | None, *, partial: bool) -> Response:
+        from actions.definitions.outfits import RenameOutfitAction  # noqa: PLC0415
+
         outfit_pk = _parse_int_param(pk)
         if outfit_pk is None:
             raise NotFound
@@ -828,21 +842,26 @@ class OutfitViewSet(viewsets.ViewSet):
             raise NotFound from exc
         self.check_object_permissions(request, outfit)
         serializer = OutfitRenameSerializer(
-            outfit,
-            data=request.data,
-            partial=partial,
-            context={"request": request},
+            outfit, data=request.data, partial=partial, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
-        outfit = serializer.save()
-        # Invalidate the sheet's outfits handler so the rename shows next read.
-        outfit.character_sheet.saved_outfits.invalidate()
+        name = serializer.validated_data.get("name", outfit.name)
+        description = serializer.validated_data.get("description", outfit.description)
+        actor = outfit.character_sheet.character
+        action_result = RenameOutfitAction().run(
+            actor=actor, outfit=outfit, name=name, description=description
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        outfit.refresh_from_db()
         read = OutfitReadSerializer(outfit)
         return Response(read.data)
 
     @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        """Delete via the delete_outfit service (cascades slots)."""
+        """Delete via DeleteOutfitAction (cascades slots)."""
+        from actions.definitions.outfits import DeleteOutfitAction  # noqa: PLC0415
+
         outfit_pk = _parse_int_param(pk)
         if outfit_pk is None:
             raise NotFound
@@ -851,9 +870,10 @@ class OutfitViewSet(viewsets.ViewSet):
         except Outfit.DoesNotExist as exc:
             raise NotFound from exc
         self.check_object_permissions(request, outfit)
-        sheet = outfit.character_sheet
-        delete_outfit(outfit)
-        sheet.saved_outfits.invalidate()
+        actor = outfit.character_sheet.character
+        action_result = DeleteOutfitAction().run(actor=actor, outfit=outfit)
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
 
@@ -945,23 +965,40 @@ class OutfitSlotViewSet(viewsets.ViewSet):
 
     @extend_schema(request=OutfitSlotWriteSerializer, responses=OutfitSlotReadSerializer)
     def create(self, request: Request) -> Response:
-        """Create an OutfitSlot via the existing write serializer.
+        """Create an OutfitSlot via AddOutfitSlotAction (validates via the existing serializer).
 
         Cache invalidation lives inside ``add_outfit_slot`` (called by the
-        serializer's ``create``), so no manual invalidation is needed here.
+        Action), so no manual invalidation is needed here.
         """
+        from actions.definitions.outfits import AddOutfitSlotAction  # noqa: PLC0415
+
         serializer = OutfitSlotWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        slot = serializer.save()
-        read = OutfitSlotReadSerializer(slot)
+        outfit = serializer.validated_data["outfit"]
+        item_instance = serializer.validated_data["item_instance"]
+        body_region = serializer.validated_data["body_region"]
+        equipment_layer = serializer.validated_data["equipment_layer"]
+        actor = outfit.character_sheet.character
+        action_result = AddOutfitSlotAction().run(
+            actor=actor,
+            outfit=outfit,
+            item=item_instance.game_object,
+            body_region=body_region,
+            equipment_layer=equipment_layer,
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        read = OutfitSlotReadSerializer(action_result.data["slot"])
         return Response(read.data, status=201)
 
     @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        """Delete via remove_outfit_slot (idempotent).
+        """Delete via RemoveOutfitSlotAction (idempotent).
 
         Cache invalidation lives inside ``remove_outfit_slot``.
         """
+        from actions.definitions.outfits import RemoveOutfitSlotAction  # noqa: PLC0415
+
         slot_pk = _parse_int_param(pk)
         if slot_pk is None:
             raise NotFound
@@ -972,11 +1009,15 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         except OutfitSlot.DoesNotExist as exc:
             raise NotFound from exc
         self.check_object_permissions(request, slot)
-        remove_outfit_slot(
+        actor = slot.outfit.character_sheet.character
+        action_result = RemoveOutfitSlotAction().run(
+            actor=actor,
             outfit=slot.outfit,
             body_region=slot.body_region,
             equipment_layer=slot.equipment_layer,
         )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
 
