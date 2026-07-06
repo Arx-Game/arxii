@@ -91,7 +91,7 @@ export function PlaceDetailPanel({ place, sides, units, participants }: PlaceDet
               ) : (
                 <Shield className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
-              <span className="capitalize">{fort.kind}</span>
+              <span className="capitalize">{fort.kind ?? 'fortification'}</span>
               <Progress
                 value={integrityPercent(fort.integrity, fort.max_integrity)}
                 className="h-2 w-24"
@@ -126,10 +126,16 @@ export function PlaceDetailPanel({ place, sides, units, participants }: PlaceDet
               <div className="mt-1 flex items-center gap-2">
                 <span className="w-14 shrink-0 text-[10px] text-muted-foreground">Strength</span>
                 <Progress value={clampResourcePercent(unit.strength)} className="h-1.5 w-full" />
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  {unit.strength ?? 0}/{MAX_RESOURCE}
+                </span>
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <span className="w-14 shrink-0 text-[10px] text-muted-foreground">Morale</span>
                 <Progress value={clampResourcePercent(unit.morale)} className="h-1.5 w-full" />
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  {unit.morale ?? 0}/{MAX_RESOURCE}
+                </span>
               </div>
             </div>
           ))
