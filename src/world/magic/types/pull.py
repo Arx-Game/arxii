@@ -22,6 +22,14 @@ class PullActionContext:
     ``_anchor_in_action`` can avoid introspecting the action graph from inside
     the service layer (caller is responsible for populating them).
 
+    ``excluded_kinds`` (#1919): when set, threads whose ``target_kind`` is in
+    the set fail the anchor-in-action check **before** the
+    ``_ALWAYS_IN_ACTION_KINDS`` shortcut. Social-action pulls pass
+    ``frozenset({TargetKind.GIFT})`` so a GIFT thread (which is always
+    in-action for casts where the technique IS the gift anchor) is rejected
+    for social pulls where no gift technique is involved. Cast pulls leave
+    this ``None`` (default).
+
     Distinct from ``actions.types.ActionContext`` — that dataclass is the
     generic action-resolver context with totally different fields.
     """
@@ -35,6 +43,9 @@ class PullActionContext:
     # ``apply_target_modulation`` in ``resolve_pull_effects``; None for
     # ephemeral / untargeted actions.
     target: ObjectDB | None = None
+    # #1919: kinds excluded from the always-in-action shortcut (social pulls
+    # exclude GIFT — no gift technique is the anchor of a social action).
+    excluded_kinds: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)

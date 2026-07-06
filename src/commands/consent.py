@@ -27,6 +27,7 @@ from django.core.exceptions import ObjectDoesNotExist, ValidationError as Django
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.offer_registry import find_handler, format_pending_listing, get_all_pending
+from commands.pull_parsing import PullParsingMixin
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import create_action_request, respond_to_action_request
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona, Scene
 
 
-class ConsentRequestCommand(ArxCommand):
+class ConsentRequestCommand(PullParsingMixin, ArxCommand):
     """Base for telnet commands that open a consent request.
 
     Subclasses set ``action_key`` (the registry action key, e.g. "intimidate").
@@ -45,8 +46,16 @@ class ConsentRequestCommand(ArxCommand):
     then calls ``create_action_request`` — the same service the consent viewset
     calls. All consent logic stays in the service; this is a thin shell.
 
+    Optionally accepts a thread-pull declaration (#1919):
+        <key> <character> [pull=<thread>[,…] resonance=<name> [tier=<1-3>]]
+
+    The ``pull=`` / ``resonance=`` / ``tier=`` tokens are stripped from the raw
+    args before target-name resolution (same as ``cast``'s approach). The
+    ``beseech=`` token is extracted but discarded — it is a combat-only mechanic
+    (#1718) and has no effect on social actions.
+
     Usage:
-        <key> <character>
+        <key> <character> [pull=<thread> resonance=<name> [tier=<1-3>]]
     """
 
     action_key: ClassVar[str] = ""
@@ -57,13 +66,24 @@ class ConsentRequestCommand(ArxCommand):
         # DjangoValidationError converted to CommandError so the base try/except
         # surfaces it cleanly — mirrors how the web viewset handles it.
         scene, initiator_persona = self._resolve_scene_and_initiator()
+        # #1919: Extract pull keywords BEFORE resolving the target name so
+        # pull= / resonance= / tier= / beseech= tokens don't contaminate the
+        # target-name search. beseech= is discarded (combat-only mechanic).
+        raw = (self.args or "").strip()
+        raw, pull_thread_str, resonance_str, pull_tier, _beseech = self._extract_pull_keywords(raw)
+        # Re-set self.args so _resolve_target_persona searches the cleaned remainder.
+        self.args = raw
         target_persona = self._resolve_target_persona()
+        cast_pull = self._resolve_cast_pull(
+            pull_thread_str, resonance_str, pull_tier, beseech_bonus=0
+        )
         try:
             request = create_action_request(
                 scene=scene,
                 initiator_persona=initiator_persona,
                 target_persona=target_persona,
                 action_key=self.action_key,
+                pull=cast_pull,
             )
         except DjangoValidationError as err:
             msg = "; ".join(err.messages)

@@ -603,7 +603,7 @@ class TestCastPullThroughCastServices(CastScenarioMixin):
 
     A declared pull on an immediate cast charges resonance in-line through
     ``use_technique``. On a benign (consent-gated) cast the declaration is
-    persisted as a ``SceneCastPullDeclaration`` and only charged when the
+    persisted as a ``SceneActionPullDeclaration`` and only charged when the
     target accepts; if the committed resonance is no longer payable at accept
     time, the cast still resolves but the pull fizzles with a narration note.
     """
