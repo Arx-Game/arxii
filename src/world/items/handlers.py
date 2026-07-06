@@ -163,6 +163,7 @@ class CharacterCarriedItemsHandler:
                     "game_object",
                     "image",
                     "template__image",
+                    "currency_instrument",
                 )
                 .prefetch_related(
                     Prefetch(
@@ -231,6 +232,7 @@ class CharacterSheetOutfitsHandler:
                             "item_instance",
                             "item_instance__template",
                             "item_instance__quality_tier",
+                            "item_instance__currency_instrument",
                         ),
                         to_attr="cached_outfit_slots",
                     ),

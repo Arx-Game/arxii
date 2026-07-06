@@ -22,6 +22,7 @@ import { CharacterFocusView } from '@/inventory/components/CharacterFocusView';
 import { ItemFocusView } from '@/inventory/components/ItemFocusView';
 import type { FocusStackApi } from '@/inventory/hooks/useFocusStack';
 import type { RoomStateObject, SceneSummary } from '@/hooks/types';
+import { dbrefToId } from '@/lib/dbref';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 
 import { RoomPanel, type RoomData } from './RoomPanel';
@@ -36,19 +37,6 @@ interface FocusPanelProps {
   roomCharacter: string | null;
   roomData: RoomData | null;
   sceneData: SceneSummary | null;
-}
-
-/**
- * Convert an Evennia dbref like ``#42`` to the numeric id used by REST
- * endpoints. Falls back to ``0`` when parsing fails — the backing
- * detail/list endpoints will return 404 for a bogus id, which the focus
- * views render as their unavailable state. Better than throwing inside
- * a click handler.
- */
-function dbrefToId(dbref: string): number {
-  const stripped = dbref.startsWith('#') ? dbref.slice(1) : dbref;
-  const parsed = Number.parseInt(stripped, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusPanelProps) {
@@ -133,7 +121,14 @@ export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusP
       );
       break;
     case 'item':
-      body = <ItemFocusView item={focus.current.item} observerId={observerId} />;
+      body = (
+        <ItemFocusView
+          item={focus.current.item}
+          observerId={observerId}
+          character={roomCharacter}
+          onStolen={focus.pop}
+        />
+      );
       break;
   }
 

@@ -11,6 +11,31 @@
 const COPPERS_PER_SILVER = 10;
 const COPPERS_PER_GOLD = 100;
 
+const UNIT_COPPERS: Record<string, number> = { g: COPPERS_PER_GOLD, s: COPPERS_PER_SILVER, c: 1 };
+const COIN_TOKEN = /^(\d+)\s*(g|s|c)$/i;
+
+/**
+ * Parse a "1g 2s 3c"-style amount into integer coppers; ``null`` when it
+ * isn't money. Mirrors the backend's ``world.currency.constants.parse_coppers``
+ * exactly: tokens may appear in any order, case-insensitively, but each unit
+ * (g/s/c) may only appear once; an all-zero or negative total is rejected.
+ */
+export function parseCoppers(text: string): number | null {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+  let total = 0;
+  const seen = new Set<string>();
+  for (const token of tokens) {
+    const match = COIN_TOKEN.exec(token);
+    if (match === null) return null;
+    const unit = match[2].toLowerCase();
+    if (seen.has(unit)) return null;
+    seen.add(unit);
+    total += Number.parseInt(match[1], 10) * UNIT_COPPERS[unit];
+  }
+  return total > 0 ? total : null;
+}
+
 /** Format integer coppers as the canonical mixed form, e.g. "3g 4s 7c". */
 export function formatCoppers(coppers: number): string {
   if (!Number.isFinite(coppers)) return '0c';

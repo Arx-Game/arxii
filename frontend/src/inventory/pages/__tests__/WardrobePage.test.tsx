@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { startSession } from '@/store/gameSlice';
+import { startSession, setSessionRoom } from '@/store/gameSlice';
 import { emitActionResult } from '@/hooks/actionResultBus';
 import type { EquippedItem, ItemInstance, Outfit } from '../../types';
 import type { MyRosterEntry } from '@/roster/types';
@@ -93,9 +93,16 @@ function makeRosterEntry(overrides: Partial<MyRosterEntry> = {}): MyRosterEntry 
   };
 }
 
-function makeItem(id: number, name: string): ItemInstance {
+function makeItem(id: number, name: string, overrides: Partial<ItemInstance> = {}): ItemInstance {
   return {
     id,
+    // Deliberately distinct from `id` — regression guard against dispatching
+    // the ItemInstance pk where the action dispatcher expects the ObjectDB
+    // pk (#1909).
+    game_object_id: id + 1000,
+    access_policy: 'open',
+    is_currency_instrument: false,
+    can_steal: false,
     template: {
       id: id + 100,
       name,
@@ -125,6 +132,7 @@ function makeItem(id: number, name: string): ItemInstance {
     charges: 0,
     is_open: false,
     is_usable: false,
+    ...overrides,
   };
 }
 
@@ -351,6 +359,148 @@ describe('WardrobePage', () => {
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('You cannot wear that here.');
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // #1909: item-detail action row (drop/give/put-in/deposit/secure) +
+  // equip/remove — all dispatch the item's game_object_id, not its id.
+  // ---------------------------------------------------------------------
+
+  describe('item detail action row (#1909)', () => {
+    async function openDetailPanel(user: ReturnType<typeof userEvent.setup>, name: string) {
+      // Equipped items render in both "Currently Worn" and "Inventory" —
+      // either card opens the same detail panel, so the first match is fine.
+      await user.click(screen.getAllByText(name)[0]);
+    }
+
+    it('dispatches equip using game_object_id, not the ItemInstance id', async () => {
+      const user = userEvent.setup();
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic')], equipped: [] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Silk Tunic');
+      await user.click(screen.getByRole('button', { name: /^wear$/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'equip', { target_id: 1011 });
+    });
+
+    it('dispatches unequip using game_object_id for an equipped item', async () => {
+      const user = userEvent.setup();
+      const item = makeItem(11, 'Silk Tunic');
+      setupHooks({ inventory: [item], equipped: [makeEquippedRow(11)] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Silk Tunic');
+      await user.click(screen.getByRole('button', { name: /^remove$/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'unequip', { target_id: 1011 });
+    });
+
+    it('dispatches drop using game_object_id', async () => {
+      const user = userEvent.setup();
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic')], equipped: [] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Silk Tunic');
+      await user.click(screen.getByRole('button', { name: /^drop$/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'drop', { target_id: 1011 });
+    });
+
+    it('opens a recipient picker on Give and dispatches give with target + recipient ids', async () => {
+      const user = userEvent.setup();
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic')], equipped: [] });
+      store.dispatch(
+        setSessionRoom({
+          character: ACTIVE_NAME,
+          room: {
+            id: 1,
+            name: 'A Room',
+            description: '',
+            thumbnail_url: null,
+            characters: [{ dbref: '#55', name: 'Bystander', thumbnail_url: null, commands: [] }],
+            objects: [],
+            exits: [],
+            is_owner: false,
+            is_public: false,
+            hub: null,
+          },
+        })
+      );
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Silk Tunic');
+      await user.click(screen.getByRole('button', { name: /^give$/i }));
+
+      expect(await screen.findByText('Give item')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^give$/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'give', {
+        target_id: 1011,
+        recipient_id: 55,
+      });
+    });
+
+    it('opens a container picker on Put In and dispatches put_in with target + container ids', async () => {
+      const user = userEvent.setup();
+      const pouch = makeItem(22, 'Coin Pouch', {
+        template: { ...makeItem(22, 'Coin Pouch').template, is_container: true },
+      });
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic'), pouch], equipped: [] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Silk Tunic');
+      await user.click(screen.getByRole('button', { name: /^put in$/i }));
+
+      expect(await screen.findByText('Put item in…')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^put in$/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'put_in', {
+        target_id: 1011,
+        container_id: 1022,
+      });
+    });
+
+    it('renders Deposit only for currency instruments and dispatches deposit_coins', async () => {
+      const user = userEvent.setup();
+      const coin = makeItem(33, 'Loose Coins', { is_currency_instrument: true });
+      setupHooks({ inventory: [coin], equipped: [] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Loose Coins');
+      await user.click(screen.getByRole('button', { name: /^deposit$/i }));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'deposit_coins', {
+        target_id: 1033,
+      });
+    });
+
+    it('does not render Deposit for a non-currency item', async () => {
+      const user = userEvent.setup();
+      setupHooks({ inventory: [makeItem(11, 'Silk Tunic')], equipped: [] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Silk Tunic');
+      expect(screen.queryByRole('button', { name: /^deposit$/i })).not.toBeInTheDocument();
+    });
+
+    it('dispatches set_container_policy when Secure is changed for an owned container', async () => {
+      const user = userEvent.setup();
+      const chest = makeItem(44, 'Iron Chest', {
+        template: { ...makeItem(44, 'Iron Chest').template, is_container: true },
+      });
+      setupHooks({ inventory: [chest], equipped: [] });
+      renderWithProviders(<WardrobePage />);
+
+      await openDetailPanel(user, 'Iron Chest');
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByText(/owner only/i));
+
+      expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'set_container_policy', {
+        target_id: 1044,
+        policy: 'owner_only',
+      });
     });
   });
 });
