@@ -26,6 +26,10 @@ import { toast } from 'sonner';
 function makeWardrobe(id: number, name: string): ItemInstance {
   return {
     id,
+    game_object_id: id + 10000,
+    access_policy: 'open',
+    is_currency_instrument: false,
+    can_steal: false,
     template: {
       id: id + 1000,
       name,

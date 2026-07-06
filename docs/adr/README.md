@@ -138,6 +138,7 @@ treat those names as hints to confirm, not gospel.
 - [0072 — Signature motif bonus is an additive flourish, not a discovered TechniqueVariant](0072-signature-motif-bonus-is-additive-not-a-variant.md)
 - [0086 — Thread pulls are target-aware via a per-target_kind modulation seam; regard attaches to the pull, not the Prerequisite system](0086-target-aware-pulls-court-regard-modulation-seam.md)
 - [0087 — Touchstone dynamic resonance-match via in-place RitualComponentRequirement extension](0087-touchstone-dynamic-resonance-match.md)
+- [0092 — Relationship Bond Pull Modulation is unsigned and saturating, deliberately diverging from Court Regard Modulation's signed-ratio shape](0092-relationship-bond-pull-modulation-is-unsigned-and-saturating.md)
 - [0063 — The level-3 (Prospect→Potential) semi-crossing lives in the Ritual of the Durance, not Audere Majora](0063-level-3-semi-crossing-lives-in-the-durance.md)
 - [0064 — Dispel is a technique payload row, not an EffectKind (thread-pull) entry](0064-dispel-is-a-technique-payload-not-an-effectkind.md)
 - [0065 — A trainer-of-record bound to a room (DuranceTrainingSite) enables automated self-conduct of the Ritual of the Durance from telnet](0065-durance-trainer-of-record-enables-automated-self-conduct.md)

@@ -69,6 +69,14 @@ PROVENANCE_EVENT_TYPES = frozenset(
 )
 
 
+class ContainerAccessPolicy(models.TextChoices):
+    """Who may take items out of a container (#1909). Steal bypasses with consequences."""
+
+    OPEN = "open", "Open"
+    FRIENDS = "friends", "Friends"
+    OWNER_ONLY = "owner_only", "Owner Only"
+
+
 class GearArchetype(models.TextChoices):
     """Gear categorization for covenant role compatibility.
 

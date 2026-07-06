@@ -34,6 +34,16 @@ _PROMOTION_OFFERS: list[tuple[str, str, str, str, int, int]] = [
         20,
         3,
     ),
+    (OfferKind.GUARD.value, "Cultivate as Guard", "Intimidation", "Persuasion", 20, 3),
+    (OfferKind.FAN.value, "Cultivate as Fan", "Gossip", "Persuasion", 20, 3),
+    (
+        OfferKind.MINOR_ALLY.value,
+        "Cultivate as Minor Ally",
+        "Domain Investment",
+        "Scholarship",
+        20,
+        3,
+    ),
 ]
 
 

@@ -35,6 +35,7 @@ from actions.definitions.companions import (
     BindCompanionAction,
     CompanionFightAction,
     DeployCompanionAction,
+    ReleaseCompanionAction,
 )
 from actions.definitions.conditions import treat_condition
 from actions.definitions.consent_preferences import (
@@ -54,6 +55,7 @@ from actions.definitions.covenants import (
     StandDownBattleCovenantAction,
     TransferTopRankAction,
 )
+from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.duels import (
     AcceptChallengeAction,
@@ -104,6 +106,8 @@ from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
     PutInAction,
+    SetContainerPolicyAction,
+    StealAction,
     TakeOutAction,
     UnequipAction,
     UseItemAction,
@@ -286,6 +290,11 @@ _ALL_ACTIONS: list[Action] = [
     SaveDeedStoryAction(),
     PutInAction(),
     TakeOutAction(),
+    StealAction(),
+    SetContainerPolicyAction(),
+    WithdrawCoinsAction(),
+    DepositCoinsAction(),
+    GiveCoinsAction(),
     ActivatePermitAction(),
     UseItemAction(),
     ApplyOutfitAction(),
@@ -429,6 +438,7 @@ _ALL_ACTIONS: list[Action] = [
     BindCompanionAction(),
     CompanionFightAction(),
     DeployCompanionAction(),
+    ReleaseCompanionAction(),
 ]
 
 # Lookup by key

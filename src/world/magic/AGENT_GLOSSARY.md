@@ -151,9 +151,9 @@ _Avoid_: targeted pull (ambiguous with targeting a technique, not a pull).
 The per-`target_kind` extension seam (`apply_target_modulation`,
 `world/magic/services/pull_modulation.py`) that `resolve_pull_effects` calls for every
 numeric-payload pull effect row, dispatching on `thread.target_kind`. A no-op unless a
-rule is registered for that kind — today only COVENANT_ROLE (Court Regard Modulation,
-below). The documented extension point for a future RELATIONSHIP_TRACK rule (deferred,
-not built). (#1831.)
+rule is registered for that kind. Two rules registered: COVENANT_ROLE (Court Regard
+Modulation, below) and RELATIONSHIP_TRACK (Relationship Bond Pull Modulation, below).
+(#1831, #1849.)
 
 **Regard Polarity**:
 `ThreadPullEffect.regard_polarity` (`RegardPolarity`: OFFENSIVE / PROTECTIVE / NEUTRAL) —
@@ -171,4 +171,31 @@ by the effect row's `Regard Polarity`. The combat-UI picker
 (`compute_thread_applicability`) surfaces `InapplicabilityReason.COURT_LEADER_NO_STAKE`
 when no candidate effect on the thread would ever be empowered against the given target.
 (#1831.)
+
+**Relationship Bond Pull Modulation** (#1849):
+The `RELATIONSHIP_TRACK` sibling to Court Regard Modulation
+(`relationship_bond_modulation`, `world/magic/services/pull_modulation_relationship.py`):
+empowers a relationship-thread pull by the owner's own bond strength
+(`CharacterRelationship.developed_absolute_value`) to the thread's threaded person
+(`Thread.target_relationship_track.relationship.target`), when the live target IS
+that person or holds a net-negative (`affection < 0`) relationship toward them
+(they're "threatening" them). Deliberately **no** `Regard Polarity` gate — unlike
+Court's NPC-preference sign-matching, this rewards any PC-to-PC relationship
+investment unconditionally (rival or lover alike). Magnitude is a staff-tunable
+saturating curve (`RelationshipBondPullTuning`), not a fixed ratio, since
+`CharacterRelationship` values are unbounded (unlike `NpcRegard`'s `0..REGARD_MAX`).
+The combat-UI picker surfaces `InapplicabilityReason.RELATIONSHIP_NO_STAKE`.
+_Avoid_: regard bonus, court modulation (different mechanic, different narrative
+purpose — see Court Regard Modulation above).
+
+**Relationship Trigger Check**:
+`_relationship_pull_would_trigger(x_sheet, y_sheet)`
+(`world/magic/services/pull_modulation_relationship.py`) — shared between
+`relationship_bond_modulation` and the picker's
+`_relationship_pull_would_have_effect`, so the trigger rule can't diverge between
+the two call sites (mirrors `_regard_polarity_matches`'s role for Court
+modulation). True when `x_sheet == y_sheet` (direct) or `x_sheet` holds an active,
+mutually-consented, net-negative `CharacterRelationship` toward `y_sheet`
+(indirect — "threatening"). (#1849.)
+
 _Avoid_: invisible (use "intangible" when referring to the game-mechanical untargetable state)

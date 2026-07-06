@@ -138,3 +138,104 @@ class BindCompanionActionTests(TestCase):
         from world.companions.models import Companion
 
         self.assertFalse(Companion.objects.filter(name="Ghost").exists())
+
+
+class ReleaseCompanionActionTests(TestCase):
+    """Tests for ReleaseCompanionAction (#1918) — the release-via-Action seam."""
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="Release Test Room")
+        self.sheet = CharacterSheetFactory()
+        self.owner = self.sheet.character
+        self.owner.location = self.room
+        self.owner.save()
+        self.gift = ensure_companion_content()
+        self.resonance = self.gift.resonances.first()
+        grant_gift_to_character(self.sheet, self.gift, resonance=self.resonance)
+        from world.companions.models import CompanionArchetype
+        from world.magic.constants import TargetKind
+        from world.magic.models.threads import Thread
+
+        self.archetype = CompanionArchetype.objects.get(name="Hawk")
+        thread = Thread.objects.get(
+            owner=self.sheet, target_kind=TargetKind.GIFT, target_gift=self.gift
+        )
+        thread.level = 10
+        thread.save(update_fields=["level"])
+
+    def _bind_companion(self, name: str = "Skree"):
+        """Bind a companion via the Action with a forced-success check roll."""
+        from actions.definitions.companions import BindCompanionAction
+        from world.checks.test_helpers import force_check_outcome
+        from world.traits.factories import CheckOutcomeFactory
+
+        success = CheckOutcomeFactory(name=f"Forced Release Success {name}", success_level=5)
+        with force_check_outcome(success):
+            result = BindCompanionAction().run(
+                actor=self.owner,
+                gift_id=self.gift.pk,
+                archetype_id=self.archetype.pk,
+                name=name,
+            )
+        self.assertTrue(result.success, result.message)
+        return result.data["companion_id"]
+
+    def test_release_succeeds(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        from actions.definitions.companions import ReleaseCompanionAction
+        from world.companions.models import Companion
+
+        companion_id = self._bind_companion()
+        companion = Companion.objects.get(pk=companion_id)
+        object_id = companion.objectdb_id
+
+        result = ReleaseCompanionAction().run(actor=self.owner, companion_id=companion_id)
+
+        self.assertTrue(result.success, result.message)
+        self.assertIn("released from your bond", result.message)
+        companion.refresh_from_db()
+        self.assertIsNotNone(companion.released_at)
+        self.assertFalse(companion.is_active)
+        self.assertFalse(ObjectDB.objects.filter(pk=object_id).exists())
+
+    def test_release_rejected_for_foreign_companion(self) -> None:
+        from actions.definitions.companions import ReleaseCompanionAction
+        from world.companions.models import Companion
+
+        companion_id = self._bind_companion()
+        # A second character who does NOT own this companion.
+        other_sheet = CharacterSheetFactory()
+
+        result = ReleaseCompanionAction().run(
+            actor=other_sheet.character, companion_id=companion_id
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("not your companion", result.message)
+        # The companion is untouched.
+        companion = Companion.objects.get(pk=companion_id)
+        self.assertTrue(companion.is_active)
+
+    def test_release_rejected_for_already_released(self) -> None:
+        from actions.definitions.companions import ReleaseCompanionAction
+
+        companion_id = self._bind_companion()
+        # Release once via the Action, then attempt to release again.
+        first = ReleaseCompanionAction().run(actor=self.owner, companion_id=companion_id)
+        self.assertTrue(first.success)
+
+        second = ReleaseCompanionAction().run(actor=self.owner, companion_id=companion_id)
+
+        self.assertFalse(second.success)
+        self.assertIn("no longer active", second.message)
+
+    def test_release_without_companion_id_fails(self) -> None:
+        from actions.definitions.companions import ReleaseCompanionAction
+
+        result = ReleaseCompanionAction().run(actor=self.owner)
+
+        self.assertFalse(result.success)
+        self.assertIn("Pick a companion", result.message)

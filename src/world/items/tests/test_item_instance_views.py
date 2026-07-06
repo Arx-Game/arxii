@@ -186,6 +186,39 @@ class ItemInstanceViewSetTests(TestCase):
         quality = row["quality_tier"]
         self.assertEqual(quality["color_hex"], "#00FF00")
 
+    def test_list_includes_game_object_id_and_default_access_policy(self) -> None:
+        """game_object_id is the ObjectDB pk (distinct from id); default policy is open (#1909).
+
+        The websocket action dispatcher resolves ``<name>_id`` kwargs (e.g.
+        ``target_id`` for drop/give/put_in) against ``ObjectDB.pk`` — the
+        frontend needs ``game_object_id``, not the ItemInstance ``id``, to
+        dispatch those actions.
+        """
+        response = self.client.get(f"/api/items/inventory/?character={self.character_a.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next(r for r in response.data["results"] if r["id"] == self.item_a1.pk)
+        self.assertEqual(row["game_object_id"], self.item_a1.game_object_id)
+        self.assertNotEqual(row["game_object_id"], row["id"])
+        self.assertEqual(row["access_policy"], "open")
+        self.assertFalse(row["is_currency_instrument"])
+        # No viewer_sheet context on this endpoint — you're always looking
+        # at your own items here, where stealing is nonsensical.
+        self.assertFalse(row["can_steal"])
+
+    def test_list_flags_currency_instrument(self) -> None:
+        """A minted loose-coin cache reports is_currency_instrument=True (#1909)."""
+        from world.currency.services import get_or_create_purse, mint_loose_cache, transfer
+
+        purse = get_or_create_purse(self.sheet_a)
+        transfer(amount=1_000, reason="seed", to_purse=purse)
+        coin = mint_loose_cache(amount=200, holder_sheet=self.sheet_a, from_purse=purse)
+        self.character_a.carried_items.invalidate()
+
+        response = self.client.get(f"/api/items/inventory/?character={self.character_a.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next(r for r in response.data["results"] if r["id"] == coin.pk)
+        self.assertTrue(row["is_currency_instrument"])
+
     # ------------------------------------------------------------------
     # Permission scoping
     # ------------------------------------------------------------------

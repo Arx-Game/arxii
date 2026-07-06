@@ -471,3 +471,28 @@ class ResonanceSerializerTest(TestCase):
         self.assertIn("description", data)
         self.assertIn("codex_entry_id", data)
         self.assertEqual(data["name"], "PraedariFields")
+
+
+class ParseReferenceSpecsTests(TestCase):
+    def test_organization_reference_spec_resolves(self):
+        from world.magic.constants import ReferenceKind
+        from world.magic.serializers import _parse_reference_specs
+        from world.societies.factories import OrganizationFactory
+
+        org = OrganizationFactory()
+        specs = _parse_reference_specs(
+            [{"kind": ReferenceKind.ORGANIZATION, "ref_organization_id": org.pk}]
+        )
+        self.assertEqual(len(specs), 1)
+        self.assertEqual(specs[0].ref_organization, org)
+
+    def test_organization_reference_spec_unknown_id_raises(self):
+        from rest_framework import serializers as drf_serializers
+
+        from world.magic.constants import ReferenceKind
+        from world.magic.serializers import _parse_reference_specs
+
+        with self.assertRaises(drf_serializers.ValidationError):
+            _parse_reference_specs(
+                [{"kind": ReferenceKind.ORGANIZATION, "ref_organization_id": 999999}]
+            )

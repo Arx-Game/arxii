@@ -26,6 +26,7 @@ from commands.captivity import CmdDemandRansom
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
 from commands.comfort import CmdComfort
+from commands.companion import CmdCompanion
 from commands.conditions import CmdTreatCondition
 from commands.consent import (
     CmdAccept,
@@ -41,6 +42,7 @@ from commands.consent import (
 from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
 from commands.crafting_station import CmdLabStation
+from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
 from commands.duels import CmdDuel
@@ -167,6 +169,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPut,
             CmdWithdraw,
             CmdUse,
+            # #1909 — physical-currency interplay: deposit/steal/secure containers.
+            CmdDeposit,
+            CmdSteal,
+            CmdSecure,
             CmdHome,
             CmdInventory,
             CmdSay,
@@ -186,6 +192,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1497 — sanctum lifecycle telnet namespace (install/homecoming/purging/
             # weave/dissolve/absorb/sever).
             CmdSanctum,
+            # #1918 — companion lifecycle telnet namespace (bind/fight/deploy/release).
+            CmdCompanion,
             # #1582 — signature-bonus selection namespace (set/clear/list).
             CmdSignature,
             CmdWeaveThread,

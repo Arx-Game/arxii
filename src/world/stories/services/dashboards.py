@@ -13,10 +13,26 @@ Public API:
 
 from __future__ import annotations
 
-from world.stories.constants import ProgressStatus, SessionRequestStatus, StoryEpisodeStatus
+from typing import TYPE_CHECKING
+
+from world.stories.constants import (
+    ProgressStatus,
+    SessionRequestStatus,
+    StoryEpisodeStatus,
+    StoryScope,
+)
 from world.stories.exceptions import ProgressionRequirementNotMetError
-from world.stories.models import Episode
-from world.stories.types import AnyStoryProgress, StoryStatusSummary
+from world.stories.models import Episode, GlobalStoryProgress, GroupStoryProgress, StoryProgress
+from world.stories.types import (
+    AnyStoryProgress,
+    MyActiveStoriesResult,
+    MyActiveStoryEntry,
+    StoryStatusSummary,
+)
+
+if TYPE_CHECKING:
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
 
 # Days before a story's last_advanced_at is considered stale.
 STALE_STORY_DAYS = 14
@@ -181,3 +197,100 @@ def compute_story_status_line(progress: AnyStoryProgress) -> str:
     if summary.episode_title is None:
         return "Your story is being prepared. Check back soon."
     return f"Currently in “{summary.episode_title}.” The story continues."
+
+
+def _serialize_progress_entry(progress: AnyStoryProgress, scope: str) -> MyActiveStoryEntry:
+    """Build the dict shape shared by all three scope collectors below."""
+    story = progress.story
+    episode = progress.current_episode
+    summary = compute_story_status(progress)
+
+    current_episode_id: int | None = episode.pk if episode is not None else None
+
+    return {
+        "story_id": story.pk,
+        "story_title": story.title,
+        "scope": scope,
+        "current_episode_id": current_episode_id,
+        "current_episode_title": summary.episode_title,
+        "chapter_title": summary.chapter_title,
+        "status": summary.status,
+        "status_label": StoryEpisodeStatus(summary.status).label,
+        "progress_status": progress.status,
+        "chapter_order": summary.chapter_order,
+        "episode_order": summary.episode_order,
+        "open_session_request_id": summary.open_session_request_id,
+        "scheduled_event_id": summary.scheduled_event_id,
+        "scheduled_real_time": summary.scheduled_real_time,
+    }
+
+
+def _collect_character_stories(
+    account: AbstractBaseUser | AnonymousUser,
+) -> list[MyActiveStoryEntry]:
+    """Return active CHARACTER-scope progress entries owned by this account."""
+    qs = StoryProgress.objects.filter(
+        story__character_sheet__character__db_account=account,
+        is_active=True,
+    ).select_related(
+        "story",
+        "current_episode",
+        "current_episode__chapter",
+    )
+    return [_serialize_progress_entry(p, StoryScope.CHARACTER) for p in qs]
+
+
+def _collect_group_stories(
+    account: AbstractBaseUser | AnonymousUser,
+) -> list[MyActiveStoryEntry]:
+    """Return active GROUP-scope progress entries for tables this account belongs to."""
+    qs = (
+        GroupStoryProgress.objects.filter(
+            gm_table__memberships__persona__character_sheet__character__db_account=account,
+            gm_table__memberships__left_at__isnull=True,
+            is_active=True,
+        )
+        .select_related(
+            "story",
+            "current_episode",
+            "current_episode__chapter",
+        )
+        .distinct()
+    )
+    return [_serialize_progress_entry(p, StoryScope.GROUP) for p in qs]
+
+
+def _collect_global_stories(
+    account: AbstractBaseUser | AnonymousUser,
+) -> list[MyActiveStoryEntry]:
+    """Return active GLOBAL-scope progress entries where the account has a StoryParticipation."""
+    qs = (
+        GlobalStoryProgress.objects.filter(
+            story__participants__character__db_account=account,
+            story__participants__is_active=True,
+            is_active=True,
+        )
+        .select_related(
+            "story",
+            "current_episode",
+            "current_episode__chapter",
+        )
+        .distinct()
+    )
+    return [_serialize_progress_entry(p, StoryScope.GLOBAL) for p in qs]
+
+
+def active_stories_for_account(
+    account: AbstractBaseUser | AnonymousUser,
+) -> MyActiveStoriesResult:
+    """Active stories across all three scopes (CHARACTER / GROUP / GLOBAL) for *account*.
+
+    The shared seam behind both ``MyActiveStoriesView`` (web) and the telnet
+    ``story list`` subverb (#1853) — one query path, not two parallel
+    implementations of "what are my active stories."
+    """
+    return {
+        "character_stories": _collect_character_stories(account),
+        "group_stories": _collect_group_stories(account),
+        "global_stories": _collect_global_stories(account),
+    }

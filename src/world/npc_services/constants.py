@@ -17,6 +17,10 @@ class OfferKind(models.TextChoices):
     INFORMANT = "informant", "Informant"
     CONTACT = "contact", "Contact"
     PERSONAL_FAVOR = "personal_favor", "Personal Favor"
+    # #1907 — guard/fan/minor-ally asset role_context variants.
+    GUARD = "guard", "Guard"
+    FAN = "fan", "Fan"
+    MINOR_ALLY = "minor_ally", "Minor Ally"
     # Future kinds: training/marriage/attunement.
 
 

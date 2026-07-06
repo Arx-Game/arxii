@@ -36,6 +36,11 @@ Explore/research agents). Two concrete failure modes motivate this:
 - **Batched mutating tool calls cascade-cancel**: when one call in a parallel
   batch errors or hits an approval prompt, the harness cancels every sibling
   in that batch, and most of the intended work silently doesn't run.
+- **Subagents must run every command in the foreground.** Background completion
+  notifications re-invoke the main loop only — a subagent that backgrounds a
+  command and ends its turn "waiting for the notification" dies silently holding
+  uncommitted work (two stalls during #1909). Put a foreground-only instruction
+  in every implementer/fix dispatch prompt.
 
 Destructive or approval-gated git operations (`reset --hard`, force-push) go
 alone in their own message. Never cite an issue/PR number that wasn't read
@@ -288,7 +293,11 @@ See "Completing a Unit of Work.")
 
 Run the fast SQLite tier for the apps you changed, then push and **monitor the PR**,
 fixing what CI catches. **CI is the full-regression gate** — run a local
-`just regression` only to reproduce a CI failure the fast tier doesn't surface. For
+`just regression` only to reproduce a CI failure the fast tier doesn't surface.
+**Never pipe exit-code-bearing commands (`arx test`, `git commit`) through
+`tail`/`head`** — the pipe masks the exit code and buries the OK/FAILED summary
+(false-green runs on #947/#948; a silently aborted commit reopened #927). Run
+them bare (backgrounded if long) and read the full output. For
 the per-app tier table, recipes, `@tag("postgres")` decisions, the `--keepdb`
 pitfall, invocation gotchas (`world.`-prefixed test paths, no `-v`, `uv run` for
 ruff/pre-commit), and the "never rely on Evennia defaults in service functions"

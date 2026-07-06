@@ -415,7 +415,7 @@ _ALWAYS_IN_ACTION_KINDS = frozenset(
 )
 
 
-def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
+def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:  # noqa: PLR0911
     """Return True iff ``thread``'s anchor is involved in the action (Spec A §5.2).
 
     Relationship anchors are always considered in-action (player asserts
@@ -424,7 +424,14 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
 
     COVENANT_ROLE threads gate on engagement: the character must currently be
     fulfilling the role for one of their covenants (Slice A §3.6).
+
+    ``ctx.excluded_kinds`` (#1919): checked BEFORE the ``_ALWAYS_IN_ACTION_KINDS``
+    shortcut so a GIFT thread — always in-action for casts where the technique
+    IS the gift anchor — is rejected for social-action pulls where no gift
+    technique is involved. Social pulls pass ``frozenset({TargetKind.GIFT})``.
     """
+    if ctx.excluded_kinds and thread.target_kind in ctx.excluded_kinds:
+        return False
     if thread.target_kind in _ALWAYS_IN_ACTION_KINDS:
         return True
     if thread.target_kind == TargetKind.TRAIT:
@@ -623,13 +630,15 @@ def _fold_distinction_pull_bonus(
     ]
 
 
-def preview_resonance_pull(
+def preview_resonance_pull(  # noqa: PLR0913
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
     threads: list[Thread],
     *,
     combat_encounter: CombatEncounter | None = None,
+    scene_id: int | None = None,
+    excluded_kinds: frozenset[str] | None = None,
 ) -> PullPreviewResult:
     """Read-only preview of a resonance pull (Spec A §5.6).
 
@@ -651,13 +660,23 @@ def preview_resonance_pull(
         threads: Non-empty list of owned threads matching ``resonance``.
         combat_encounter: Provided for combat-context previews; ``None``
             for ephemeral / RP previews.
+        scene_id: When provided (#1919), the preview computes the combat/DANGER
+            state on the scene and returns ``anima_cost=0`` when the anima cost
+            is waived (no active combat encounter or DANGER round). When
+            ``None``, the standard formula applies.
+        excluded_kinds: When set (#1919), the preview validates that no pulled
+            thread has a ``target_kind`` in the set and raises
+            ``InvalidImbueAmount`` early. Social-action previews pass
+            ``frozenset({TargetKind.GIFT})`` so a GIFT thread is rejected at
+            preview time (matching the charge-time behavior).
 
     Returns:
         PullPreviewResult with resonance_cost, anima_cost, affordable,
         resolved_effects, capped_intensity.
 
     Raises:
-        InvalidImbueAmount: empty threads, ownership / resonance mismatch.
+        InvalidImbueAmount: empty threads, ownership / resonance mismatch, or
+            a thread whose ``target_kind`` is in ``excluded_kinds``.
     """
     if not threads:
         msg = "Must pull at least one thread."
@@ -670,10 +689,47 @@ def preview_resonance_pull(
         if t.resonance_id != resonance.pk:
             msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
+        if excluded_kinds and t.target_kind in excluded_kinds:
+            msg = "Thread anchor is not involved in this action."
+            raise InvalidImbueAmount(msg)
 
     cost = get_pull_cost(tier, None)
     n_threads = len(threads)
     anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
+
+    # #1919: Anima waiver for social-action previews. When scene_id is provided,
+    # check whether the scene is high-stakes (active combat or DANGER round).
+    # If not, the anima cost is waived (zeroed).
+    if scene_id is not None and anima_cost > 0:
+        from world.combat.models import CombatEncounter  # noqa: PLC0415
+        from world.scenes.constants import (  # noqa: PLC0415
+            RoundStatus,
+            SceneRoundStartReason,
+        )
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        scene = Scene.objects.filter(pk=scene_id).select_related("location").first()
+        if scene is not None:
+            has_active_combat = CombatEncounter.objects.filter(
+                scene=scene,
+                status__in=[
+                    RoundStatus.DECLARING,
+                    RoundStatus.RESOLVING,
+                    RoundStatus.BETWEEN_ROUNDS,
+                ],
+            ).exists()
+            has_danger_round = False
+            if scene.location is not None:
+                has_danger_round = scene.scene_rounds.filter(
+                    start_reason=SceneRoundStartReason.DANGER,
+                    status__in=[
+                        RoundStatus.DECLARING,
+                        RoundStatus.RESOLVING,
+                        RoundStatus.BETWEEN_ROUNDS,
+                    ],
+                ).exists()
+            if not has_active_combat and not has_danger_round:
+                anima_cost = 0
 
     # Balances — no locks, no debit.
     cr = CharacterResonance.objects.filter(
@@ -769,7 +825,7 @@ def _persist_combat_pull(  # noqa: PLR0913
 
 
 @transaction.atomic
-def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
+def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913, PLR0915
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
@@ -777,6 +833,7 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
     action_context: PullActionContext,
     beseech_bonus_thread_id: int | None = None,
     beseech_bonus: int = 0,
+    anima_cost_override: int | None = None,
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
@@ -796,6 +853,11 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
         beseech_bonus_thread_id: PK of the thread whose effective level gets the
             emergency thread-bond draw bonus for this resolution only (#1718).
         beseech_bonus: The bonus amount to apply to that thread's effective level.
+        anima_cost_override: When set to 0, the anima cost is waived before the
+            balance check — so a player with 0 anima can still pull in a low-stakes
+            social context (#1919). The ``CharacterAnima`` lock query is skipped
+            entirely and ``anima_spent`` reflects 0. When ``None`` (default), the
+            existing per-spec formula applies.
 
     Returns:
         ResonancePullResult with resonance_spent, anima_spent, resolved_effects.
@@ -846,13 +908,21 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912, PLR0913
         raise ResonanceInsufficient(msg)
 
     # Anima cost: per-spec §5.4 lines 1452–1458, anima_per_thread × max(0, n-1).
+    # #1919: social-action pulls may waive anima entirely when no combat encounter
+    # or DANGER round is active — anima_cost_override=0 zeroes the cost before the
+    # balance check and skips the lock query entirely.
     anima_total = cost.anima_per_thread * max(0, n_threads - 1)
-    anima = CharacterAnima.objects.select_for_update().get(
-        character=character_sheet.character,
-    )
-    if anima.current < anima_total:
-        msg = "Insufficient anima for this pull."
-        raise ResonanceInsufficient(msg)
+    if anima_cost_override is not None:
+        anima_total = anima_cost_override
+    if anima_total > 0:
+        anima = CharacterAnima.objects.select_for_update().get(
+            character=character_sheet.character,
+        )
+        if anima.current < anima_total:
+            msg = "Insufficient anima for this pull."
+            raise ResonanceInsufficient(msg)
+    else:
+        anima = None
 
     in_combat = action_context.combat_encounter is not None
     resolved = resolve_pull_effects(

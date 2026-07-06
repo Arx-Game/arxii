@@ -125,6 +125,7 @@ from world.magic.models.motifs import (
 from world.magic.models.power_config import AuraPowerConfig, LevelPowerConfig, StandingCapBand
 from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reincarnation import Reincarnation
+from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
 from world.magic.models.renown_config import RenownAwardConfig
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_check_config import RitualCheckConfig
@@ -306,6 +307,8 @@ __all__ = [
     "PresentationEndorsement",
     # reincarnation
     "Reincarnation",
+    # relationship bond pull modulation (#1849)
+    "RelationshipBondPullTuning",
     # renown award config abstract base (#953)
     "RenownAwardConfig",
     "Resonance",

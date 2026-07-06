@@ -170,6 +170,7 @@ def mint_instrument(
     ledger and lives inside the instrument until redemption.
     """
     from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
 
     face_value = DENOMINATION_VALUES[denomination]
     fee = int(face_value * MINT_FEE_PCT)
@@ -196,6 +197,60 @@ def mint_instrument(
             denomination=denomination,
             face_value=face_value,
         )
+        # Coin is physical money (#1909): born as a real object in the
+        # minter's inventory so it can be dropped/given/stowed/stolen.
+        materialize_item_game_object(instance, holder_sheet)
+    return instance
+
+
+def _loose_cache_template():
+    """Lazy ItemTemplate for loose-coin caches (same precedent as _instrument_template)."""
+    from world.items.models import ItemTemplate  # noqa: PLC0415
+
+    template, _ = ItemTemplate.objects.get_or_create(
+        name="Loose coins",
+        defaults={"description": "PLACEHOLDER A handful of mixed coins."},
+    )
+    return template
+
+
+def mint_loose_cache(
+    *,
+    amount: int,
+    holder_sheet: CharacterSheet,
+    from_purse: CharacterPurse | None = None,
+    from_treasury: OrganizationTreasury | None = None,
+) -> ItemInstance:
+    """Convert ledger money into a loose-coin cache item (#1909).
+
+    Unlike ``mint_instrument`` the face value is arbitrary and there is NO
+    mint fee — this is everyday cash, not a grand instrument. Value is
+    conserved: it leaves the ledger and lives in the item until redemption
+    (``redeem_instrument`` handles deposit unchanged — it is face_value-driven).
+    """
+    from world.currency.constants import Denomination  # noqa: PLC0415
+    from world.items.models import ItemInstance  # noqa: PLC0415
+    from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
+
+    with transaction.atomic():
+        transfer(
+            amount=amount,
+            reason="withdraw loose coins",
+            from_purse=from_purse,
+            from_treasury=from_treasury,
+        )
+        instance = ItemInstance.objects.create(
+            template=_loose_cache_template(),
+            holder_character_sheet=holder_sheet,
+        )
+        CurrencyInstrumentDetails.objects.create(
+            item_instance=instance,
+            denomination=Denomination.LOOSE,
+            face_value=amount,
+        )
+        # Coin is physical money (#1909): born as a real object in the
+        # minter's inventory so it can be dropped/given/stowed/stolen.
+        materialize_item_game_object(instance, holder_sheet)
     return instance
 
 
@@ -207,7 +262,12 @@ def redeem_instrument(
 ) -> CurrencyTransfer:
     """Convert a physical coin back into ledger money (fee-free).
 
-    Consumes the instrument (the coin is melted back into the books).
+    Consumes the instrument (the coin is melted back into the books) —
+    including its physical ObjectDB, when one exists, via the established
+    consumption pattern (``usage.hard_delete_item_instance`` precedent:
+    delete the game_object, CASCADE removes the ItemInstance row; ownership
+    events survive via SET_NULL). Without this a redeemed coin would linger
+    as a ghost object in the depositor's inventory (#1909).
     """
     details = CurrencyInstrumentDetails.objects.get(item_instance=instance)
     with transaction.atomic():
@@ -217,7 +277,14 @@ def redeem_instrument(
             to_purse=to_purse,
             to_treasury=to_treasury,
         )
-        instance.delete()
+        game_object = instance.game_object
+        holder = game_object.location if game_object is not None else None
+        if game_object is not None:
+            game_object.delete()  # CASCADE removes the ItemInstance row
+        else:
+            instance.delete()
+        if holder is not None and hasattr(holder, "carried_items"):
+            holder.carried_items.invalidate()
     return row
 
 

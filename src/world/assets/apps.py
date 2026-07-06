@@ -14,7 +14,10 @@ class AssetsConfig(AppConfig):
         """
         from world.assets.effects import (  # noqa: PLC0415
             promote_as_contact,
+            promote_as_fan,
+            promote_as_guard,
             promote_as_informant,
+            promote_as_minor_ally,
             promote_as_personal_favor,
         )
         from world.npc_services.constants import OfferKind  # noqa: PLC0415
@@ -25,3 +28,6 @@ class AssetsConfig(AppConfig):
         register_offer_effect_handler(
             str(OfferKind.PERSONAL_FAVOR.value), promote_as_personal_favor
         )
+        register_offer_effect_handler(str(OfferKind.GUARD.value), promote_as_guard)
+        register_offer_effect_handler(str(OfferKind.FAN.value), promote_as_fan)
+        register_offer_effect_handler(str(OfferKind.MINOR_ALLY.value), promote_as_minor_ally)

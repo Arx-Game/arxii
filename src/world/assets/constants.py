@@ -5,14 +5,28 @@ from __future__ import annotations
 from django.db import models
 
 
+class AssetAcquisitionSource(models.TextChoices):
+    """How an NPCAsset was acquired.
+
+    PROMOTION is the runtime path (a class-1 Functionary cultivated through
+    interaction + a capability check, #1872). DISTINCTION_GRANT is the
+    character-creation path (a starting asset granted by a Distinction, #1906).
+    """
+
+    PROMOTION = "promotion", "Promotion"
+    DISTINCTION_GRANT = "distinction_grant", "Distinction Grant"
+
+
 class AssetRoleContext(models.TextChoices):
     """What kind of relationship a promoted NPCAsset serves."""
 
     INFORMANT = "informant", "Informant"
     CONTACT = "contact", "Contact"
     PERSONAL_FAVOR = "personal_favor", "Personal Favor"
-    # Future kinds (deferred — guard/fan/minor-ally variants, #1872 follow-up):
-    # GUARD, FAN, MINOR_ALLY.
+    # #1907 — guard/fan/minor-ally asset role_context variants.
+    GUARD = "guard", "Guard"
+    FAN = "fan", "Fan"
+    MINOR_ALLY = "minor_ally", "Minor Ally"
 
 
 class AssetStatus(models.TextChoices):

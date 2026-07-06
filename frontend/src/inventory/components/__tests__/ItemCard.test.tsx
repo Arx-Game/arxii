@@ -10,6 +10,10 @@ import type { ItemInstance } from '../../types';
 function makeItem(overrides: Partial<ItemInstance> = {}): ItemInstance {
   return {
     id: 1,
+    game_object_id: 101,
+    access_policy: 'open',
+    is_currency_instrument: false,
+    can_steal: false,
     template: {
       id: 10,
       name: 'Linen Tunic',

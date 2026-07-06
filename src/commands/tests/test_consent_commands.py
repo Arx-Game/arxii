@@ -267,3 +267,50 @@ class AllSocialCommandsRegisteredTests(TestCase):
         from commands.ritual import CmdRitual
 
         self.assertNotIn("perform", getattr(CmdRitual, "aliases", []))  # noqa: GETATTR_LITERAL
+
+
+class PullParsingOnConsentCommandsTests(TestCase):
+    """``ConsentRequestCommand`` parses ``pull=`` tokens via ``PullParsingMixin`` (#1919).
+
+    Verifies that pull keywords are stripped from the raw args before
+    target-name resolution, and that ``beseech=`` is discarded (combat-only).
+    """
+
+    def test_extract_pull_keywords_strips_tokens(self) -> None:
+        from commands.pull_parsing import PullParsingMixin
+
+        remainder, pull_val, resonance_val, tier, beseech = PullParsingMixin._extract_pull_keywords(
+            "Bob pull=My Thread resonance=Fire tier=2"
+        )
+        self.assertEqual(remainder, "Bob")
+        self.assertEqual(pull_val, "My Thread")
+        self.assertEqual(resonance_val, "Fire")
+        self.assertEqual(tier, 2)
+        self.assertEqual(beseech, 0)
+
+    def test_extract_pull_keywords_discards_beseech(self) -> None:
+        from commands.pull_parsing import PullParsingMixin
+
+        remainder, pull_val, _resonance, _tier, beseech = PullParsingMixin._extract_pull_keywords(
+            "Bob pull=Thread resonance=Fire beseech=5"
+        )
+        self.assertEqual(remainder, "Bob")
+        self.assertEqual(pull_val, "Thread")
+        # beseech is extracted (so it doesn't contaminate the target name) but
+        # will be discarded by ConsentRequestCommand (always passes beseech_bonus=0).
+        self.assertEqual(beseech, 5)
+
+    def test_extract_pull_keywords_no_pull_tokens(self) -> None:
+        from commands.pull_parsing import PullParsingMixin
+
+        remainder, pull_val, _resonance, _tier, _beseech = PullParsingMixin._extract_pull_keywords(
+            "Bob"
+        )
+        self.assertEqual(remainder, "Bob")
+        self.assertIsNone(pull_val)
+
+    def test_consent_command_inherits_pull_parsing_mixin(self) -> None:
+        from commands.consent import ConsentRequestCommand
+        from commands.pull_parsing import PullParsingMixin
+
+        self.assertTrue(issubclass(ConsentRequestCommand, PullParsingMixin))

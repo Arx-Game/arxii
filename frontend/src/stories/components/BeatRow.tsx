@@ -5,10 +5,14 @@
  * resolution text for completed beats.  For AGGREGATE_THRESHOLD beats
  * with a known characterSheetId, also renders the "Contribute" action.
  * For GM_MARKED beats renders the "Mark" action only when beat.can_mark
- * is true (server signals the requesting user has permission).
+ * is true (server signals the requesting user has permission). When a
+ * player-safe query flags one of the viewer's own treasured subjects as
+ * staked-without-signoff on this beat, renders a targeted
+ * TreasuredSignoffPrompt (#1853).
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
+import { TreasuredSignoffPrompt } from '@/boundaries/components/TreasuredSignoffPrompt';
 import { BeatOutcomeBadge } from './BeatOutcomeBadge';
 import { AggregateProgressBar } from './AggregateProgressBar';
 import { ContributeBeatDialog } from './ContributeBeatDialog';
@@ -25,9 +29,22 @@ interface BeatRowProps {
    * For CHARACTER-scope stories this is story.character_sheet.
    */
   characterSheetId?: number | null;
+  /** Roster tenure ID for the viewer's character on this story (#1853). */
+  tenureId?: number | null;
+  /**
+   * Treasured subject ids a player-safe query flagged as staked-without-
+   * signoff on this beat (#1853). Undefined/empty means nothing pending.
+   */
+  pendingSignoffSubjectIds?: number[];
 }
 
-export function BeatRow({ beat, aggregateTotal = 0, characterSheetId }: BeatRowProps) {
+export function BeatRow({
+  beat,
+  aggregateTotal = 0,
+  characterSheetId,
+  tenureId,
+  pendingSignoffSubjectIds,
+}: BeatRowProps) {
   const isAggregate = beat.predicate_type === 'aggregate_threshold';
   const isGmMarked = beat.predicate_type === 'gm_marked';
   const hasDeadline = beat.deadline != null;
@@ -71,6 +88,14 @@ export function BeatRow({ beat, aggregateTotal = 0, characterSheetId }: BeatRowP
 
       {outcome === 'success' && beat.player_resolution_text && (
         <p className="text-sm text-foreground/80">{beat.player_resolution_text}</p>
+      )}
+
+      {tenureId != null && pendingSignoffSubjectIds && pendingSignoffSubjectIds.length > 0 && (
+        <TreasuredSignoffPrompt
+          beatId={beat.id}
+          tenureId={tenureId}
+          pendingSubjectIds={pendingSignoffSubjectIds}
+        />
       )}
     </li>
   );

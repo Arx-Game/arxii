@@ -551,7 +551,15 @@
 **Foreign Keys:**
   - promoter_persona -> scenes.Persona [FK]
   - asset_persona -> scenes.Persona [OneToOne]
-  - source_functionary -> npc_services.Functionary [FK]
+  - source_functionary -> npc_services.Functionary [FK] (nullable)
+  - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
+**Pointed to by:**
+  - granted_assets <- assets.DistinctionAssetGrant
+
+### DistinctionAssetGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - npc_role -> npc_services.NPCRole [FK]
 
 
 ## world.battles
@@ -1812,12 +1820,14 @@
 ### Service Functions
 - `add_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentBlacklist' — Bar *blocked_tenure* from targeting *owner_tenure* in *category* (#1698).`
 - `add_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'SocialConsentWhitelist'`
+- `consent_blocks_targeting(*, owner_tenure: 'RosterTenure', category: 'SocialConsentCategory | None', actor_tenure: 'RosterTenure | None') -> 'bool' — True if *owner_tenure*'s consent excludes *actor_tenure* for *category* (#1909).`
 - `get_social_consent_summary(tenure: 'RosterTenure') -> 'dict'`
 - `remove_social_consent_blacklist(owner_tenure: 'RosterTenure', blocked_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory') -> 'bool'`
 - `remove_social_consent_whitelist(owner_tenure: 'RosterTenure', allowed_tenure: 'RosterTenure', category: 'SocialConsentCategory') -> 'bool'`
 - `set_social_consent_category_rule(preference: 'SocialConsentPreference', category: 'SocialConsentCategory', mode: 'str') -> 'SocialConsentCategoryRule'`
 - `set_social_consent_preference(tenure: 'RosterTenure', allow_social_actions: 'bool') -> 'SocialConsentPreference'`
+- `theft_category() -> 'SocialConsentCategory' — Lazy seeded row for the theft/antagonism gate (#1909) — default-deny.`
 
 
 ## world.covenants
@@ -1975,6 +1985,128 @@
 - `stand_down_battle_covenant(*, covenant: 'Covenant') -> 'None' — Stand a STANDING battle covenant down to dormant; clear engagement.`
 - `swear_court_pact(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet', granted_pull_cap: 'int') -> 'CourtPact' — Create an active CourtPact binding servant_sheet to covenant.`
 - `transfer_top(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', new_top_membership: 'CharacterCovenantRole') -> 'None' — Transfer the top rank (tier=1) from the actor to ``new_top_membership``.`
+
+
+## world.currency
+
+### CharacterPurse
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - transfers_out <- currency.CurrencyTransfer
+  - transfers_in <- currency.CurrencyTransfer
+
+### OrganizationTreasury
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+**Pointed to by:**
+  - transfers_out <- currency.CurrencyTransfer
+  - transfers_in <- currency.CurrencyTransfer
+
+### CurrencyTransfer
+**Foreign Keys:**
+  - from_purse -> currency.CharacterPurse [FK] (nullable)
+  - from_treasury -> currency.OrganizationTreasury [FK] (nullable)
+  - to_purse -> currency.CharacterPurse [FK] (nullable)
+  - to_treasury -> currency.OrganizationTreasury [FK] (nullable)
+**Pointed to by:**
+  - contribution_records <- currency.ContributionRecord
+
+### CurrencyInstrumentDetails
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [OneToOne]
+
+### OrgEconomicsProfile
+**Foreign Keys:**
+  - organization -> societies.Organization [OneToOne]
+
+### OrgIncomeStream
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - area -> areas.Area [FK] (nullable)
+**Pointed to by:**
+  - declarations <- currency.IncomeDeclaration
+  - garnishing_contracts <- currency.Contract
+
+### IncomeDeclaration
+**Foreign Keys:**
+  - stream -> currency.OrgIncomeStream [FK]
+
+### OrgObligation
+**Foreign Keys:**
+  - from_organization -> societies.Organization [FK]
+  - to_organization -> societies.Organization [FK]
+
+### ContributionRecord
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - organization -> societies.Organization [FK]
+  - transfer -> currency.CurrencyTransfer [FK] (nullable)
+
+### DebtInstrument
+**Foreign Keys:**
+  - debtor_organization -> societies.Organization [FK]
+  - creditor_organization -> societies.Organization [FK]
+
+### Contract
+**Foreign Keys:**
+  - proposer_persona -> scenes.Persona [FK] (nullable)
+  - proposer_organization -> societies.Organization [FK] (nullable)
+  - counterparty_persona -> scenes.Persona [FK] (nullable)
+  - counterparty_organization -> societies.Organization [FK] (nullable)
+  - notary_organization -> societies.Organization [FK] (nullable)
+  - garnish_stream -> currency.OrgIncomeStream [FK] (nullable)
+**Pointed to by:**
+  - payment_terms <- currency.ContractTerm
+
+### ContractTerm
+**Foreign Keys:**
+  - contract -> currency.Contract [FK]
+
+### Profession
+**Foreign Keys:**
+  - chore_check_type -> checks.CheckType [FK] (nullable)
+**Pointed to by:**
+  - employees <- currency.CharacterEmployment
+
+### CharacterEmployment
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - profession -> currency.Profession [FK]
+
+### Business
+**Foreign Keys:**
+  - owner_persona -> scenes.Persona [FK]
+
+### Service Functions
+- `accrue_income_stream(stream: 'OrgIncomeStream') -> 'int' — One weekly cycle: the gross amasses in the uncollected pool (#930).`
+- `accrue_monthly_interest(organization: 'Organization') -> 'int' — One month's interest lands in arrears (#927). Returns total accrued.`
+- `can_spend_treasury(treasury: 'OrganizationTreasury', persona: 'Persona') -> 'bool' — Spend authority: an active membership at tier <= spend_rank_max.`
+- `collect_org_income(*, organization: 'Organization', character) -> 'CollectionResult' — One active collection dispatch across every pooled stream of ``organization`` (#930).`
+- `deliver_mission_money(*, recipient_sheet: 'CharacterSheet', amount: 'int', ref: 'str', reason_label: 'str' = 'mission reward') -> 'None' — Reward money lands in the purse (#932 — replaces the Phase 5b stub).`
+- `extend_loan(*, creditor: 'Organization', debtor: 'Organization', principal: 'int', interest_bps_monthly: 'int' = 50, fiat: 'bool' = False) -> 'DebtInstrument' — Create a loan: principal moves creditor→debtor, instrument records it (#927).`
+- `format_coppers(amount: int) -> str — Canonical mixed display: ``1234`` → ``"12g 3s 4c"``.`
+- `fund_fame_display(persona: 'Persona', *, amount: 'int') -> 'int' — Spend money maintaining fame against decay (#932 fame churn).`
+- `get_or_create_economics(organization: 'Organization') -> 'OrgEconomicsProfile'`
+- `get_or_create_purse(character_sheet: 'CharacterSheet') -> 'CharacterPurse'`
+- `get_or_create_treasury(organization: 'Organization') -> 'OrganizationTreasury'`
+- `improve_org_domain(*, organization: 'Organization', character) -> 'ImprovementResult' — One domain-investment attempt (#930): Scholarship/Economics against the ledgers.`
+- `invest_in_business(business: 'Business', *, amount: 'int') -> 'Business' — Sink owner money into a venture (#929); investment raises the level.`
+- `mint_instrument(*, denomination: 'str', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a physical coin (face value + mint fee).`
+- `mint_loose_cache(*, amount: 'int', holder_sheet: 'CharacterSheet', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None) -> 'ItemInstance' — Convert ledger money into a loose-coin cache item (#1909).`
+- `process_income_stream(stream: 'OrgIncomeStream', amount: 'int', *, declared_amount: 'int | None' = None) -> 'IncomeDeclaration' — Land ``amount`` collected coppers from one stream (#926, reshaped by #930).`
+- `record_contribution(*, persona: 'Persona', organization: 'Organization', amount: 'int', reason: 'str' = '') -> 'ContributionRecord' — A member pays into the org treasury, on the books (#926).`
+- `redeem_instrument(*, instance: 'ItemInstance', to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Convert a physical coin back into ledger money (fee-free).`
+- `repay_principal(debt: 'DebtInstrument', amount: 'int') -> 'CurrencyTransfer' — Pay down (or off) a debt's principal, treasury→treasury (#927).`
+- `run_business_week(business: 'Business', *, fortune: 'int') -> 'int' — One week's business result (#929). ``fortune`` is -100..100.`
+- `run_weekly_economy() -> 'dict[str, int]' — The Sunday-rollover economy pass (#932, reshaped by #930). Per-phase counts.`
+- `run_weekly_employment(employment: 'CharacterEmployment', *, was_active: 'bool') -> 'int' — One week's automated wages for a held job (#929).`
+- `settle_contract_cycle(contract: 'Contract') -> 'list[CurrencyTransfer]' — Run one settlement cycle for an ACTIVE notarized contract (#928).`
+- `settle_obligations(organization: 'Organization') -> 'list[CurrencyTransfer]' — Settle all active obligations against unsettled declared income (#926).`
+- `sign_contract(contract: 'Contract') -> 'Contract' — The consent moment (#928): counterparty accepts the fixed terms.`
+- `transfer(*, amount: 'int', reason: 'str', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None, to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' — Move ``amount`` coppers; null source = mint (faucet), null dest = sink.`
+- `treat_servants(organization: 'Organization', *, payment: 'int', graft_reduction: 'int') -> 'OrgEconomicsProfile' — Spend treasury money treating servants to buy graft down (#926).`
+- `work_chore(employment: 'CharacterEmployment', *, ap_spent: 'int') -> 'int' — Active on-grid chore work (#929): spend AP now, roll, earn up to 2×.`
 
 
 ## world.forms
@@ -3107,6 +3239,7 @@
   - participant -> magic.RitualSessionParticipant [FK] (nullable)
   - ref_covenant -> covenants.Covenant [FK] (nullable)
   - ref_covenant_role -> covenants.CovenantRole [FK] (nullable)
+  - ref_organization -> societies.Organization [FK] (nullable)
 
 ### SignatureMotifBonus
 **Foreign Keys:**
@@ -5054,6 +5187,7 @@
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
+  - ritualsessionreference_set <- magic.RitualSessionReference
   - ranks <- societies.OrganizationRank
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership

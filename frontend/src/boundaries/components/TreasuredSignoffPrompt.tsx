@@ -7,6 +7,12 @@
  * are explicit opt-in (never assumed); an existing grant can be withdrawn,
  * which re-opens the gate (mirrors `world.stories.services.boundaries`'
  * grant/withdraw semantics).
+ *
+ * `pendingSubjectIds` (#1853): when provided, narrows the panel to only
+ * those subject ids (the ones a player-safe backend query flagged as
+ * actually staked-without-signoff on this beat) — used when auto-wired onto
+ * a Beat row. When omitted, keeps the original "browse and preemptively
+ * sign off any treasured subject" behavior (the standalone BoundariesPage).
  */
 
 import { ShieldCheck } from 'lucide-react';
@@ -23,16 +29,21 @@ import {
 interface Props {
   beatId: number;
   tenureId: number;
+  pendingSubjectIds?: number[];
 }
 
-export function TreasuredSignoffPrompt({ beatId, tenureId }: Props) {
+export function TreasuredSignoffPrompt({ beatId, tenureId, pendingSubjectIds }: Props) {
   const { data: subjectsData } = useTreasuredSubjects(tenureId);
   const { data: signoffsData } = useTreasuredSignoffs({ beat: beatId });
 
   const grant = useGrantTreasuredSignoff();
   const withdraw = useWithdrawTreasuredSignoff();
 
-  const subjects = subjectsData?.results ?? [];
+  const allSubjects = subjectsData?.results ?? [];
+  const subjects =
+    pendingSubjectIds === undefined
+      ? allSubjects
+      : allSubjects.filter((s) => pendingSubjectIds.includes(s.id));
   if (subjects.length === 0) {
     return null;
   }

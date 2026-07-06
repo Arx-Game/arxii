@@ -306,3 +306,60 @@ class VisibleItemDetailViewSetTests(_VisibleWornSetupMixin, TestCase):
             f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_a.pk}"
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_includes_game_object_id(self) -> None:
+        """game_object_id is the ObjectDB pk, distinct from the ItemInstance id (#1909)."""
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_b.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["game_object_id"], self.coat.game_object_id)
+        self.assertNotEqual(response.data["game_object_id"], response.data["id"])
+
+    def test_detail_can_steal_false_by_default(self) -> None:
+        """Theft is a default-deny consent category: no rule means can_steal=False (#1909)."""
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_b.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["can_steal"])
+
+    def test_detail_can_steal_true_once_owner_whitelists_actor(self) -> None:
+        """Once character A opts character B into theft consent, can_steal flips True (#1909)."""
+        from world.consent.constants import ConsentMode
+        from world.consent.services import (
+            add_social_consent_whitelist,
+            set_social_consent_category_rule,
+            set_social_consent_preference,
+            theft_category,
+        )
+
+        preference = set_social_consent_preference(self.tenure_a, allow_social_actions=True)
+        set_social_consent_category_rule(preference, theft_category(), ConsentMode.ALLOWLIST)
+        add_social_consent_whitelist(self.tenure_a, self.tenure_b, theft_category())
+
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_b.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["can_steal"])
+
+    def test_detail_self_look_never_flags_can_steal(self) -> None:
+        """Self-look on your own worn item never renders the steal affordance."""
+        self.client.force_authenticate(user=self.account_a)
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.shirt.pk}/?observer={self.character_a.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["can_steal"])
+
+    def test_detail_staff_never_flags_can_steal(self) -> None:
+        """Staff bypass has no observer concept — can_steal defaults to False."""
+        staff = AccountFactory(username="vwv_detail_staff_steal", is_staff=True)
+        self.client.force_authenticate(user=staff)
+        response = self.client.get(f"/api/items/visible-item-detail/{self.coat.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["can_steal"])

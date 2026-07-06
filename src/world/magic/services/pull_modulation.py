@@ -1,11 +1,12 @@
 """Per-target-kind pull-effect modulation seam (#1831).
 
-Single dispatch on ``thread.target_kind``. Today only COVENANT_ROLE has a rule
-(Court leader's signed NpcRegard for the live target). This is the extension
-point for future rules — e.g. RELATIONSHIP_TRACK: scale a relationship-thread
-pull by the target's relationship to the threaded persona (deferred, #1831 note).
-Returns ``base_scaled`` unchanged when there is no target, no rule, or the rule
-declines to modulate — so all existing pulls are byte-identical.
+Dispatches on ``thread.target_kind``. COVENANT_ROLE empowers by the Court
+leader's signed NpcRegard for the live target (#1831); RELATIONSHIP_TRACK
+empowers by the owner's own bond strength to the thread's threaded person,
+when the live target IS that person or is hostile toward them (#1849).
+Returns ``base_scaled`` unchanged when there is no target, no rule, or the
+rule declines to modulate — so all existing (untargeted or unrelated-kind)
+pulls are byte-identical.
 """
 
 from __future__ import annotations
@@ -41,4 +42,10 @@ def apply_target_modulation(
         )
 
         return court_regard_modulation(thread, target, effect_row, base_scaled)
+    if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
+        from world.magic.services.pull_modulation_relationship import (  # noqa: PLC0415
+            relationship_bond_modulation,
+        )
+
+        return relationship_bond_modulation(thread, target, effect_row, base_scaled)
     return base_scaled

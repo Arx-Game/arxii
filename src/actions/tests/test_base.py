@@ -176,6 +176,11 @@ class ActionRegistryTests(TestCase):
             "project_story",
             "put_in",
             "take_out",
+            "steal",
+            "set_container_policy",
+            "withdraw_coins",
+            "deposit_coins",
+            "give_coins",
             "apply_outfit",
             "undress",
             "present_outfit",
@@ -329,6 +334,7 @@ class ActionRegistryTests(TestCase):
             "bind_companion",
             "companion_fight",
             "deploy_companion",
+            "release_companion",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

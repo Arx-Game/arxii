@@ -16,6 +16,7 @@ from world.stories.views import (
     GMQueueView,
     GroupStoryProgressViewSet,
     MyActiveStoriesView,
+    PlayerPendingTreasuredSignoffsView,
     PlayerTrustViewSet,
     RiskCalibrationViewSet,
     SessionRequestViewSet,
@@ -81,6 +82,11 @@ urlpatterns = [
     # These MUST be registered before the router include so they take precedence
     # over the router's story-detail route (api/stories/{pk}/).
     path("api/stories/my-active/", MyActiveStoriesView.as_view(), name="stories-my-active"),
+    path(
+        "api/stories/my-pending-signoffs/",
+        PlayerPendingTreasuredSignoffsView.as_view(),
+        name="stories-my-pending-signoffs",
+    ),
     path("api/stories/gm-queue/", GMQueueView.as_view(), name="stories-gm-queue"),
     path(
         "api/stories/staff-workload/",

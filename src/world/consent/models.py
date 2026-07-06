@@ -170,6 +170,16 @@ class SocialConsentCategory(NaturalKeyMixin, SharedMemoryModel):
     display_order = models.PositiveIntegerField(
         default=0, help_text="Sort order in the consent UI."
     )
+    default_mode = models.CharField(
+        max_length=20,
+        choices=ConsentMode.choices,
+        default=ConsentMode.EVERYONE,
+        help_text=(
+            "Targeting mode when a player has set no rule for this category. "
+            "EVERYONE preserves legacy behavior; ALLOWLIST makes the category "
+            "opt-in (used by theft, #1909)."
+        ),
+    )
 
     class Meta:
         ordering = ["display_order", "name"]

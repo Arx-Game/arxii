@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from world.covenants.models import Covenant, CovenantRole
+from world.societies.models import Organization
 
 
 @dataclass(frozen=True)
@@ -19,3 +20,4 @@ class RitualSessionReferenceSpec:
     kind: str  # ReferenceKind value
     ref_covenant: Covenant | None = None
     ref_covenant_role: CovenantRole | None = None
+    ref_organization: Organization | None = None

@@ -165,21 +165,25 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (`world/mechanics/services.py`) folded into a standalone pull by
     `_fold_distinction_pull_bonus` (`world/magic/services/resonance.py`); a cast already
     reads the same modifier via `_derive_power`'s FLAT stage.
-  - **Target-aware pull modulation (#1831):** `resolve_pull_effects`'s `target` param
+  - **Target-aware pull modulation (#1831, #1849):** `resolve_pull_effects`'s `target` param
     (the live cast/combat target; `PullActionContext.target` in `world/magic/types/pull.py`,
     populated by `commit_combat_pull` and `use_technique`'s `pull_target` kwarg) is fed
     through `apply_target_modulation(thread, target, effect_row, base_scaled)`
     (`world/magic/services/pull_modulation.py`) — the per-`target_kind` modulation seam
-    (no-op unless a rule is registered for `thread.target_kind`; the extension point for a
-    future RELATIONSHIP_TRACK rule, deferred). Today's only rule:
+    (no-op unless a rule is registered for `thread.target_kind`). Two rules registered:
     `court_regard_modulation(...)` (`world/magic/services/pull_modulation_court.py`) empowers
     a COVENANT_ROLE pull by the Court leader's signed `NpcRegard` (#1717) for the target,
     sign-directed by `ThreadPullEffect.regard_polarity` (`RegardPolarity`: OFFENSIVE /
     PROTECTIVE / NEUTRAL, `world/magic/constants.py`). Tuning constant
-    `COURT_REGARD_PULL_K` (placeholder, `1.0`). The combat-UI picker
+    `COURT_REGARD_PULL_K` (placeholder, `1.0`). `relationship_bond_modulation(...)`
+    (`world/magic/services/pull_modulation_relationship.py`, #1849) empowers a
+    RELATIONSHIP_TRACK pull by the owner's own `CharacterRelationship.developed_absolute_value`
+    bond to the thread's threaded person, when the live target IS that person or is
+    hostile toward them — no polarity gate, saturating-curve magnitude via
+    `RelationshipBondPullTuning` (staff-tunable singleton). The combat-UI picker
     (`compute_thread_applicability`, `world/magic/services/pull_applicability.py`) surfaces
-    `InapplicabilityReason.COURT_LEADER_NO_STAKE` when no candidate effect on a COVENANT_ROLE
-    thread would ever be empowered against the given `target_persona_id`.
+    `InapplicabilityReason.COURT_LEADER_NO_STAKE` / `RELATIONSHIP_NO_STAKE` respectively when
+    no candidate effect would ever be empowered against the given `target_persona_id`.
   - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
     `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
     `threads_blocked_by_cap(character_sheet)`
@@ -917,15 +921,19 @@ content sharing and social action targeting (#1141). Consent mutations are share
 so web and telnet converge on the same write path.
 
 - **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin` (abstract),
-  `SocialConsentCategory` (NaturalKey on `key`), `SocialConsentPreference` (OneToOne on tenure),
+  `SocialConsentCategory` (NaturalKey on `key`; `default_mode` ConsentMode field, #1909 —
+  the targeting mode used when a tenure has set no per-category rule; default `EVERYONE`
+  preserves legacy behavior), `SocialConsentPreference` (OneToOne on tenure),
   `SocialConsentCategoryRule` (preference + category + ConsentMode), `SocialConsentWhitelist`
   (owner_tenure / allowed_tenure / category), `SocialConsentBlacklist` (#1698 —
   owner_tenure / blocked_tenure / category; consulted under `ALL_BUT_BLACKLIST`)
 - **ConsentMode (#1698):** `EVERYONE` / `ALL_BUT_BLACKLIST` / `FRIENDS_WHITELIST` (OOC friends via
   `scenes.Friendship`) / `ALLOWLIST`
-- **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()`,
-  `_decide_consent_block()`, `_social_consent_exclusions()` (`actions/player_interface.py`).
-  PvP opt-out is the duel-start gate only (#1698): `ChallengeAction` refuses opted-out
+- **Key Methods:** `VisibilityMixin.is_visible_to()`, `_tenure_blocks_actor()` (thin delegator
+  to `consent_blocks_targeting`, #1909), `decide_consent_block()`, `_social_consent_exclusions()`
+  (`actions/player_interface.py`) — the batched picker sweep does NOT honor `default_mode`
+  (legacy allow-only); a default-deny category must gate through `consent_blocks_targeting`
+  directly. PvP opt-out is the duel-start gate only (#1698): `ChallengeAction` refuses opted-out
   (`_consent_blocked`) + blocked (`block_services.sheet_blocked_for_viewer`) challengers
 - **Key Functions:** `seed_social_consent_categories()` (`world/seeds/consent.py`),
   `make_default_categories()` (`world/consent/factories.py`)
@@ -933,7 +941,11 @@ so web and telnet converge on the same write path.
   `set_social_consent_category_rule()`, `remove_social_consent_category_rule()`,
   `add_social_consent_whitelist()`, `remove_social_consent_whitelist()`,
   `add_social_consent_blacklist()`, `remove_social_consent_blacklist()` (#1698),
-  `get_social_consent_summary()` (`world/consent/services.py`)
+  `get_social_consent_summary()`, `consent_blocks_targeting(*, owner_tenure, category,
+  actor_tenure)` (#1909 — the public single-tenure gate decision; absent preference row
+  and absent per-category rule both fall through to `category.default_mode`),
+  `theft_category()` (#1909 — lazy seeded "theft" category, `default_mode=ALLOWLIST`,
+  default-deny) (`world/consent/services.py`)
 - **Action Keys:** `set_social_consent_preference`, `set_social_consent_category_rule`,
   `add_social_consent_whitelist`, `remove_social_consent_whitelist`,
   `add_social_consent_blacklist`, `remove_social_consent_blacklist` (#1698)
@@ -944,7 +956,9 @@ so web and telnet converge on the same write path.
   on the consent-response commands (`commands/consent.py`)
 - **API:** `/api/consent/` — categories (read-only), preferences, category-rules, whitelist,
   blacklist (#1698); writes dispatch through the consent Actions via `dispatch_player_action()`
-- **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row = allow-all
+- **Pattern:** RosterTenure-based (player's tenure, not character); absent preference row and
+  absent per-category rule fall through to the category's `default_mode` (#1909) — `EVERYONE`
+  preserves the legacy allow-all default; a category like theft opts into default-deny
 - **Integrates with:** actions (`ActionTemplate.consent_category` FK), roster (RosterTenure),
   codex (visibility), seed loader (`arx seed dev`)
 - **Source:** `src/world/consent/`
@@ -1501,6 +1515,29 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   self-scoped `{balance}` coppers (vitals-view gating: staff or active tenure, else 404);
   lazy-creates the purse at zero. Feeds the web Status tab (`formatCoppers`) and
   `sheet/status` telnet section (#1446)
+- **Physical currency (#1909):** ledger money can leave the books as a real, holdable
+  `ItemInstance` — a coin cache or grand instrument, born physical (a materialized
+  `game_object` in the minter's inventory) so it can be dropped/given/stowed/**stolen**
+  like any other item. `Denomination.LOOSE` is the everyday-cash face (arbitrary
+  `face_value`, no mint fee) alongside the six fixed grand-coin denominations (which do
+  carry `MINT_FEE_PCT`, a deliberate sink, #923).
+  - **Key functions:** `mint_loose_cache(*, amount, holder_sheet, from_purse=None,
+    from_treasury=None) -> ItemInstance` (fee-free, arbitrary face value);
+    `mint_instrument(*, denomination, holder_sheet, ...)` (fixed denomination + fee);
+    both call `world.items.services.materialize.materialize_item_game_object` to birth
+    the physical object. `redeem_instrument(*, instance, to_purse=None, to_treasury=None)`
+    — fee-free deposit/redemption for *any* instrument (loose or grand); consumes the
+    physical object (`game_object.delete()` CASCADEs the `ItemInstance` row;
+    `OwnershipEvent` rows survive via `SET_NULL`, #1025 provenance) so a redeemed coin
+    never lingers as a ghost item.
+  - `parse_coppers(text) -> int | None` (`world.currency.constants`) — parses
+    `"1g 2s 3c"`-style free text into coppers; `None` when the text isn't money. Used by
+    telnet `CmdGive` to branch into `give_coins` and by the withdraw-coins grammar.
+  - **Action keys:** `withdraw_coins` (mints a loose cache), `deposit_coins` (redeems any
+    instrument), `give_coins` (coppers straight to a co-located recipient's purse) —
+    `actions/definitions/currency.py`. Telnet: `withdraw coins <amount>` (via the existing
+    `CmdWithdraw`), `deposit <item>` (`CmdDeposit`), `give <amount>` (via `CmdGive`,
+    auto-detected through `parse_coppers`).
 - **Source:** `src/world/currency/`
 
 ### Predicates (shared rule engine)
@@ -1818,15 +1855,25 @@ companion. Full detail: [companions.md](companions.md).
 ### Assets (#1872)
 
 Promotes a class-1 `Functionary` into a permanently-owned, named NPC
-(informant/contact/personal-favor) once rapport crosses a threshold and a
-capability trait gate is met. Modeled as a plain `NPCServiceOffer` on the
-existing offer/effect-dispatch framework — see ADR-0091.
+(informant/contact/personal-favor/guard/fan/minor-ally) once rapport crosses a
+threshold and a capability trait gate is met. Modeled as a plain
+`NPCServiceOffer` on the existing offer/effect-dispatch framework — see
+ADR-0091.
 
 - **Models:** `NPCAsset` (`promoter_persona`, `asset_persona` — both FK
-  `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`;
+  `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`
+  (nullable — NULL for CG-granted assets); `acquisition_source` enum
+  (`PROMOTION` runtime, `DISTINCTION_GRANT` CG); `source_distinction_grant` FK
+  `DistinctionAssetGrant` (nullable — idempotency key for CG grants);
   `status`; `created_at`). No `standing` field — ongoing affection reads
   through the existing `NPCStanding` row for the same persona pair.
+- **`DistinctionAssetGrant`** sidecar (`world.assets.models`): staff-authored
+  mapping of a `Distinction` → `NPCRole` + `role_context` + `starting_affection`
+  + `asset_display_name`. Reconciled at CG finalization via
+  `reconcile_distinction_asset_grants` (#1906), mirroring the
+  `DistinctionResonanceGrant` pattern. Lives in `world.assets` per ADR-0010.
 - **`OfferKind`** additions: `INFORMANT`, `CONTACT`, `PERSONAL_FAVOR`
+  (#1872); `GUARD`, `FAN`, `MINOR_ALLY` (#1907)
   (`world.npc_services.constants`).
 - **Effect handlers** (`world.assets.effects`): resolve the Functionary from
   the PC's current location + the offer's role, roll `offer.check_type`
@@ -1836,16 +1883,18 @@ existing offer/effect-dispatch framework — see ADR-0091.
   the `NPCAsset` row, and deactivate the source Functionary. Registered via
   `AssetsConfig.ready()`.
 - **Seed content** (`world.assets.content`): reuses the existing
-  Stealth/Leadership/Persuasion check content
+  Stealth/Leadership/Persuasion/Scholarship check content
   (`world.seeds.stealth_checks`/`governance_checks`/`social_checks`) rather
-  than inventing new Trait rows — framework-proving only.
+  than inventing new Trait rows — framework-proving only. The #1907 variants
+  gate on Persuasion (GUARD, FAN) and Scholarship (MINOR_ALLY), rolling
+  Intimidation/Gossip/Domain Investment checks respectively.
 - **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
   at `/api/assets/`, scoped to the requesting user's own promoted assets.
 - **Source:** `src/world/assets/`
 
 Deferred follow-ups: distinction-granted starting assets (`needs-design`),
 asset gameplay loops (tasking/intel/income), compromise/loss lifecycle,
-voluntary asset sharing, guard/fan/minor-ally variants.
+voluntary asset sharing.
 
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
@@ -2125,7 +2174,33 @@ crafting framework and check-driven facet/style attachment.
   accessory), `OwnershipEventType` (created/given/stolen/transferred/activated/consumed),
   `GearArchetype`; `PROVENANCE_EVENT_TYPES` frozenset (GIVEN/STOLEN/TRANSFERRED — transfer
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
-  STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL)
+  STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
+  `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
+  bypasses it with consequences)
+- **New field on `ItemInstance` (#1909):** `access_policy` (`ContainerAccessPolicy`, default
+  `OPEN`) — container-only; non-containers ignore it. Set via
+  `flows.service_functions.inventory.set_container_policy` (owner-only).
+- **Ownership + container-access gate (#1909):** a plain `pick_up`/`take_out` on a
+  someone-else's-owned room item, or on an item in a container whose `access_policy` bars
+  the taker, raises `OwnedByAnother` / `ContainerAccessDenied`. The single test —
+  `flows.service_functions.inventory.take_requires_steal(taker_sheet, item_instance) -> bool`
+  — decides room-item ownership directly and container-item access via the container's
+  policy (a container item owned by the container's owner still passes on an `OPEN`
+  policy — sanctioned borrowing). Sheet-less actors (GM/staff/companion tooling) always
+  return `False` (legacy free-take — theft consequences are sheet-anchored). `steal`
+  (below) is the deliberate bypass.
+- **Steal (#1909):** `flows.service_functions.inventory.steal(character, item)` — takes an
+  item that plain take refuses, transferring ownership (`OwnershipEvent(STOLEN)`, never
+  destroyed) and birthing a crime-tagged, concealed `LegendEntry` deed
+  (`world.societies.services.create_solo_deed`, `concealed=True` rolls Stealth to shed
+  witnesses, #1824; `scene=None` when no active scene — the theft spreads cold).
+  `steal_permitted(taker_sheet, item_instance) -> bool` is the target-side-only
+  availability predicate (visibility = eligibility): requires `take_requires_steal` first,
+  then NPC-owned holdings (owner sheet has no active `RosterTenure`) are always
+  antagonism-allowed; player-owned holdings gate on `world.consent.services
+  .consent_blocks_targeting(category=theft_category())` (default-deny — opt-in required).
+  Lazy rows: `_theft_crime_kind()` (`justice.CrimeKind`, slug `"theft"`),
+  `_theft_source_type()` (`societies.LegendSourceType`, name `"Crime"`).
 - **Handlers:**
   - `character.equipped_items` (`CharacterEquipmentHandler`) — `iter()`,
     `iter_item_facets()`, `item_facets_for(facet)`, `invalidate()`
@@ -2190,6 +2265,11 @@ crafting framework and check-driven facet/style attachment.
 - **Serializer field `is_usable`:** `ItemInstanceReadSerializer` exposes `is_usable` (bool,
   `SerializerMethodField`) — `True` iff `template.on_use_pool_id is not None`. Clients gate the
   Use button on this field.
+- **Serializer fields (#1909):** `ItemInstanceReadSerializer` additionally exposes
+  `game_object_id`, `access_policy`, `is_currency_instrument` (has a
+  `CurrencyInstrumentDetails` row — drives the Deposit affordance), and `can_steal`
+  (`SerializerMethodField` wrapping `steal_permitted` for the requesting viewer — drives
+  the Steal affordance). Frontend wiring: Drop/Give/Put-in/Deposit/Secure/Steal/Withdraw.
 - **`UseItemAction`** (`key="use_item"`, `src/actions/definitions/items.py`) — action-layer entry
   point routing both telnet and web through prerequisites + `use_item`. kwargs: `item` (held
   instance), optional `target` (validated by `OnUseTargetPrerequisite` against
@@ -2201,8 +2281,17 @@ crafting framework and check-driven facet/style attachment.
   Telnet: `CmdUse` (`use <item>` / `use <item> on <target>`, alias `apply`).
 - **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `StyleAlreadyAttached`,
   `StyleCapacityExceeded`, `SlotConflict`, `SlotIncompatible`, `ItemNotUsable`,
-  `NoChargesRemaining`, `CraftingNotConfigured`, `CraftingCostUnaffordable` — all in
-  `world.items.exceptions`
+  `NoChargesRemaining`, `CraftingNotConfigured`, `CraftingCostUnaffordable`,
+  `OwnedByAnother` (#1909 — plain take refused a someone-else's-owned room item),
+  `ContainerAccessDenied` (#1909 — container's `access_policy` bars this taker),
+  `TheftNotPermitted` (#1909 — `steal` refused: no ownership gate to bypass, or consent
+  denies it) — all in `world.items.exceptions`
+- **Steal + policy Actions (#1909, `actions/definitions/currency.py`):** `StealAction`
+  (key `"steal"`) — gated by `CanStealPrerequisite`, which delegates to `steal_permitted`
+  (the same predicate `steal` re-checks at execution time); `SetContainerPolicyAction`
+  (`"set_container_policy"`) — owner-only, wraps `set_container_policy`. Telnet:
+  `CmdSteal` (`steal <item>` / `steal <item> from <container>`, `commands/currency.py`),
+  `CmdSecure` (`secure <container>=<open|friends|owner_only>`).
 - **API Endpoints:**
   - `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/`
     (read-only catalog)

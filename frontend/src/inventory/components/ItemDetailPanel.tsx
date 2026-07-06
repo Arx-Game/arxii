@@ -7,7 +7,8 @@
  *   - markdown description (react-markdown + remark-gfm) in a manual prose wrapper
  *   - stats grid (weight / size / value)
  *   - facet chips (live data from useItemFacets; facetLabels prop accepted but unused)
- *   - actions row (Wear/Remove, Drop, Give, Put in, Attach Facet)
+ *   - actions row (Wear/Remove, Drop, Give, Put in, Deposit, Attach Facet)
+ *   - Secure control (container access policy) for containers, #1909
  *
  * Open/close is parent-controlled via `open` + `onOpenChange` (standard
  * shadcn Sheet pattern). Action callbacks are optional — the parent decides
@@ -15,12 +16,19 @@
  */
 
 import { useState } from 'react';
-import { Hand, Package, Sparkles, Trash2, Users, X, Zap } from 'lucide-react';
+import { Coins, Hand, Lock, Package, Sparkles, Trash2, Users, X, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Sheet,
   SheetContent,
@@ -31,10 +39,16 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useFacets } from '@/character-creation/queries';
-import type { ItemInstance, UseItemResult } from '../types';
+import type { ContainerAccessPolicy, ItemInstance, UseItemResult } from '../types';
 import { useItemFacets, useQualityTiers, useRemoveItemFacet } from '../hooks/useItemFacets';
 import { useUseItem } from '../hooks/useUseItem';
 import { AttachFacetDialog } from './AttachFacetDialog';
+
+const ACCESS_POLICY_LABELS: Record<ContainerAccessPolicy, string> = {
+  open: 'Open — anyone may take contents',
+  friends: 'Friends — only your friends may take contents',
+  owner_only: 'Owner only — only you may take contents',
+};
 
 interface ItemDetailPanelProps {
   /** Item to display. When null the panel renders nothing of substance. */
@@ -56,6 +70,12 @@ interface ItemDetailPanelProps {
   onDrop?: (itemId: number) => void;
   onGive?: (itemId: number) => void;
   onPutIn?: (itemId: number) => void;
+  /** Redeem a coin instrument back into the purse (#1909). Renders only when
+   * `item.is_currency_instrument`. */
+  onDeposit?: (itemId: number) => void;
+  /** Owner-only container access-policy control (#1909). Renders only when
+   * `item.template?.is_container`. */
+  onSetContainerPolicy?: (itemId: number, policy: ContainerAccessPolicy) => void;
 }
 
 export function ItemDetailPanel({
@@ -71,6 +91,8 @@ export function ItemDetailPanel({
   onDrop,
   onGive,
   onPutIn,
+  onDeposit,
+  onSetContainerPolicy,
 }: ItemDetailPanelProps) {
   // Hooks must be called unconditionally — pass item?.id (undefined when null)
   // which is already enabled-guarded inside useItemFacets.
@@ -101,6 +123,8 @@ export function ItemDetailPanel({
               onDrop={onDrop}
               onGive={onGive}
               onPutIn={onPutIn}
+              onDeposit={onDeposit}
+              onSetContainerPolicy={onSetContainerPolicy}
               onAttachFacet={() => setAttachOpen(true)}
             />
             <AttachFacetDialog
@@ -153,6 +177,8 @@ interface ItemContentProps {
   onDrop?: (itemId: number) => void;
   onGive?: (itemId: number) => void;
   onPutIn?: (itemId: number) => void;
+  onDeposit?: (itemId: number) => void;
+  onSetContainerPolicy?: (itemId: number, policy: ContainerAccessPolicy) => void;
   onAttachFacet: () => void;
 }
 
@@ -168,6 +194,8 @@ function ItemContent({
   onDrop,
   onGive,
   onPutIn,
+  onDeposit,
+  onSetContainerPolicy,
   onAttachFacet,
 }: ItemContentProps) {
   const tier = item.quality_tier;
@@ -358,11 +386,43 @@ function ItemContent({
             <Package className="mr-1.5 h-3.5 w-3.5" />
             Put in
           </Button>
+          {item.is_currency_instrument && (
+            <Button size="sm" variant="outline" onClick={() => onDeposit?.(item.id)}>
+              <Coins className="mr-1.5 h-3.5 w-3.5" />
+              Deposit
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={onAttachFacet}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
             Attach Facet
           </Button>
         </div>
+
+        {item.template?.is_container && onSetContainerPolicy && (
+          <div className="mt-3 flex items-center gap-2">
+            <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <label htmlFor="container-access-policy" className="shrink-0 text-xs font-medium">
+              Secure
+            </label>
+            <Select
+              value={item.access_policy}
+              onValueChange={(value) =>
+                onSetContainerPolicy(item.id, value as ContainerAccessPolicy)
+              }
+            >
+              <SelectTrigger id="container-access-policy" className="h-8 flex-1 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(ACCESS_POLICY_LABELS) as ContainerAccessPolicy[]).map((policy) => (
+                  <SelectItem key={policy} value={policy}>
+                    {ACCESS_POLICY_LABELS[policy]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     </>
   );

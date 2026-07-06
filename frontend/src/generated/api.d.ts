@@ -3419,7 +3419,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own active companions. */
+    /**
+     * @description Read + action endpoints for the player's companion surface.
+     *
+     *     `list`/`retrieve` return the caller's own active companions (read-only).
+     *     POST actions delegate to the four Actions in
+     *     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+     *     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
+     */
     get: operations['companions_companions_list'];
     put?: never;
     post?: never;
@@ -3436,10 +3443,105 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read endpoints for the player's own active companions. */
+    /**
+     * @description Read + action endpoints for the player's companion surface.
+     *
+     *     `list`/`retrieve` return the caller's own active companions (read-only).
+     *     POST actions delegate to the four Actions in
+     *     ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+     *     the response bodies so the contract matches ``SanctumViewSet`` (#1918).
+     */
     get: operations['companions_companions_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/deploy/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Deploy a companion into a battle — ``POST /api/companions/companions/{id}/deploy/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
+     */
+    post: operations['companions_companions_deploy_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/fight/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Commit a companion into combat — ``POST /api/companions/companions/{id}/fight/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.CompanionFightAction`.
+     */
+    post: operations['companions_companions_fight_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/{id}/release/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Release a bonded companion — ``POST /api/companions/companions/{id}/release/``.
+     *
+     *     Wraps :class:`actions.definitions.companions.ReleaseCompanionAction`.
+     *     The companion id comes from the URL; ``get_queryset`` scopes it to the
+     *     caller's active companions (foreign → 404). The Action re-validates
+     *     ownership via ``_resolve_owned_companion`` (defense in depth).
+     */
+    post: operations['companions_companions_release_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/companions/companions/bind/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Bind a new companion — ``POST /api/companions/companions/bind/``.
+     *
+     *     Body: ``{archetype_id, gift_id, name}``.
+     *     Wraps :class:`actions.definitions.companions.BindCompanionAction`.
+     */
+    post: operations['companions_companions_bind_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -14871,6 +14973,32 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/my-pending-signoffs/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/stories/my-pending-signoffs/?beats=1&beats=2 (#1853).
+     *
+     *     Player-safe (never GM-facing): for the requesting player's own account,
+     *     which of the given beats have one of THEIR OWN treasured subjects staked
+     *     without an active sign-off. Batched across beats — the caller passes the
+     *     beat ids it already has on screen (mirrors BeatStakeAvailabilityView's
+     *     multi-value query-param style, but scoped to the caller instead of a
+     *     GM-supplied party).
+     */
+    get: operations['stories_my_pending_signoffs_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/staff-workload/': {
     parameters: {
       query?: never;
@@ -20466,9 +20594,15 @@ export interface components {
       item_instance: number;
       facet: number;
     };
-    /** @description Read serializer for ItemInstance — used by the inventory listing. */
+    /**
+     * @description Read serializer for ItemInstance — used by the inventory listing.
+     *
+     *     Also backs ``VisibleItemDetailViewSet`` (looking at another character's
+     *     worn item) — the ``can_steal`` field is only meaningful there.
+     */
     ItemInstanceRead: {
       readonly id: number;
+      readonly game_object_id: number | null;
       readonly template: components['schemas']['ItemTemplateList'];
       readonly quality_tier: components['schemas']['QualityTier'];
       readonly display_name: string;
@@ -20487,6 +20621,28 @@ export interface components {
       readonly charges: number;
       /** @description Whether this item is currently open. */
       readonly is_open: boolean;
+      readonly access_policy: string;
+      /**
+       * @description True iff ``obj`` is a minted coin (loose cache or grand coin, #1909).
+       *
+       *     Gates the Deposit affordance client-side. A boolean, not the nested
+       *     ``CurrencyInstrumentDetails`` — the client only needs to know whether
+       *     to render the button, not the denomination/face-value breakdown.
+       */
+      readonly is_currency_instrument: boolean;
+      /**
+       * @description True iff the viewer could steal ``obj`` right now (#1909).
+       *
+       *     Visibility = eligibility: delegates to the same ``steal_permitted``
+       *     predicate the ``steal`` service re-checks at execution time. No
+       *     viewer in context → False (IC reads scope to the active character) —
+       *     this is the case for the plain inventory list/retrieve endpoints,
+       *     where the viewer is always looking at their own items anyway.
+       *     ``VisibleItemDetailViewSet`` passes the observer's ``CharacterSheet``
+       *     as ``viewer_sheet`` so looking at someone else's worn item can
+       *     surface the affordance.
+       */
+      readonly can_steal: boolean;
     };
     /** @description Read serializer for ItemStyle (GET list/detail). */
     ItemStyleRead: {
@@ -21604,6 +21760,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       readonly role_context: components['schemas']['RoleContextEnum'];
       readonly status: components['schemas']['NPCAssetStatusEnum'];
@@ -21659,6 +21818,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -21697,6 +21859,9 @@ export interface components {
      *     * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
+     *     * `guard` - Guard
+     *     * `fan` - Fan
+     *     * `minor_ally` - Minor Ally
      * @enum {string}
      */
     NPCServiceOfferKindEnum:
@@ -21708,7 +21873,10 @@ export interface components {
       | 'court_grant'
       | 'informant'
       | 'contact'
-      | 'personal_favor';
+      | 'personal_favor'
+      | 'guard'
+      | 'fan'
+      | 'minor_ally';
     NPCServiceOfferRequest: {
       role: number;
       /**
@@ -21723,6 +21891,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25029,6 +25200,9 @@ export interface components {
        *     * `informant` - Informant
        *     * `contact` - Contact
        *     * `personal_favor` - Personal Favor
+       *     * `guard` - Guard
+       *     * `fan` - Fan
+       *     * `minor_ally` - Minor Ally
        */
       kind?: components['schemas']['NPCServiceOfferKindEnum'];
       /** @description UI display text for the menu option. */
@@ -25893,6 +26067,17 @@ export interface components {
        * @description Prompt expires after this time. Stale rows are deleted on next access.
        */
       readonly expires_at: string;
+    };
+    /**
+     * @description Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
+     *
+     *     Exposes only the requesting player's own beat_id + treasured_subject_ids —
+     *     the view-level query already guarantees no other player's data can appear
+     *     here (ADR-0033); this serializer adds no fields beyond that.
+     */
+    PendingTreasuredSignoffs: {
+      readonly beat_id: number;
+      readonly treasured_subject_ids: number[];
     };
     PermitOfferDetails: {
       readonly id: number;
@@ -27159,9 +27344,12 @@ export interface components {
      * @description * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
+     *     * `guard` - Guard
+     *     * `fan` - Fan
+     *     * `minor_ally` - Minor Ally
      * @enum {string}
      */
-    RoleContextEnum: 'informant' | 'contact' | 'personal_favor';
+    RoleContextEnum: 'informant' | 'contact' | 'personal_favor' | 'guard' | 'fan' | 'minor_ally';
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;
@@ -27405,6 +27593,7 @@ export interface components {
       target_condition_instance_id?: number | null;
       target_pending_alteration_id?: number | null;
       bond_thread_id?: number | null;
+      pull?: components['schemas']['CastPullRequestRequest'] | null;
     };
     /** @description Flat read payload for a pending additional-target consent row (#1177). */
     SceneActionTarget: {
@@ -28752,6 +28941,17 @@ export interface components {
       readonly trust_requirements: string;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
+      /**
+       * @description The current tenure of this CHARACTER-scope story's character (whoever is
+       *     currently playing them) — coincides with the viewer's own tenure only for
+       *     that player; other viewers get an inert value since
+       *     `TreasuredSignoffPrompt`'s own player-scoped queries return nothing for a
+       *     `tenure_id` that isn't theirs.
+       *
+       *     Null for GROUP/GLOBAL-scope stories (no character_sheet) and for a
+       *     CHARACTER-scope story whose character has no current tenure.
+       */
+      readonly tenure_id: number | null;
       readonly primary_table: number;
       readonly chapters_count: number;
       /** Format: date-time */
@@ -29400,6 +29600,9 @@ export interface components {
       tier: number;
       thread_ids: number[];
       action_context?: components['schemas']['PullActionContextRequest'];
+      scene_id?: number | null;
+      /** @default false */
+      exclude_gift: boolean;
     };
     /** @description Response serializer for POST /api/magic/thread-pull-preview/. */
     ThreadPullPreviewResponse: {
@@ -34757,6 +34960,91 @@ export interface operations {
         /** @description A unique integer value identifying this Companion. */
         id: number;
       };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_deploy_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_fight_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_release_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Companion. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Companion'];
+        };
+      };
+    };
+  };
+  companions_companions_bind_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
@@ -51643,6 +51931,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  stories_my_pending_signoffs_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingTreasuredSignoffs'][];
+        };
       };
     };
   };
