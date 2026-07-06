@@ -550,7 +550,15 @@
 **Foreign Keys:**
   - promoter_persona -> scenes.Persona [FK]
   - asset_persona -> scenes.Persona [OneToOne]
-  - source_functionary -> npc_services.Functionary [FK]
+  - source_functionary -> npc_services.Functionary [FK] (nullable)
+  - source_distinction_grant -> assets.DistinctionAssetGrant [FK] (nullable)
+**Pointed to by:**
+  - granted_assets <- assets.DistinctionAssetGrant
+
+### DistinctionAssetGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - npc_role -> npc_services.NPCRole [FK]
 
 
 ## world.battles

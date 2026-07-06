@@ -77,6 +77,12 @@ Only proceed to Step 1b if you have no native worktree tool available.
 **Only use this if Step 1a does not apply** — you have no native worktree tool
 available. Create a worktree manually using git.
 
+> **If `start-work.sh` (issue-to-merged-pr skill) already created the worktree,**
+> Step 0 will detect you're already isolated and skip to Step 2 — that's the
+> expected path. `start-work.sh` reuses this Step 1b pattern (it runs
+> `git worktree add "$path" "$BRANCH"` after `pickup-issue.sh` creates the
+> branch unchecked-out); you won't reach 1b when entering via `start-work.sh`.
+
 #### Branch already checked out? Move it into a worktree.
 
 `pickup-issue.sh` creates the feature branch with `git branch` (it does **not**
