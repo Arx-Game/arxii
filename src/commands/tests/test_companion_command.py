@@ -111,7 +111,8 @@ class CompanionCommandKwargsTests(TestCase):
             patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
         ):
             arch_obj.filter.return_value.first.return_value = mock_archetype
-            cg_obj.filter.return_value.first.return_value = mock_char_gift
+            # gift resolution: _resolve_by_name_or_pk chains .filter().filter().first()
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
 
             kwargs = cmd.resolve_action_args()
 
@@ -137,7 +138,7 @@ class CompanionCommandKwargsTests(TestCase):
             patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
         ):
             arch_obj.filter.return_value.first.return_value = mock_archetype
-            cg_obj.filter.return_value.first.return_value = mock_char_gift
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
 
             kwargs = cmd.resolve_action_args()
 
@@ -159,7 +160,7 @@ class CompanionCommandKwargsTests(TestCase):
             patch("world.magic.models.gifts.CharacterGift.objects") as cg_obj,
         ):
             arch_obj.filter.return_value.first.return_value = mock_archetype
-            cg_obj.filter.return_value.first.return_value = mock_char_gift
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
 
             with self.assertRaises(CommandError):
                 cmd.resolve_action_args()
@@ -315,7 +316,7 @@ class CompanionCommandDispatchTests(TestCase):
             patch(_DISPATCH, return_value=result) as dispatch,
         ):
             arch_obj.filter.return_value.first.return_value = mock_archetype
-            cg_obj.filter.return_value.first.return_value = mock_char_gift
+            cg_obj.filter.return_value.filter.return_value.first.return_value = mock_char_gift
 
             cmd.func()
 
