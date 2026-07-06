@@ -14,6 +14,7 @@ Two characters are needed because the owner cannot use ``slot=helper``
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -34,12 +35,14 @@ from world.magic.models import (
     SanctumPendingPayout,
     Thread,
 )
+from world.magic.models.sanctum import SanctumHomecomingGainAward, SanctumPurgingRetentionAward
 from world.magic.seeds_checks import ensure_magic_check_content
 from world.magic.seeds_sanctum import ensure_sanctum_rituals
 from world.magic.seeds_touchstone_content import ensure_touchstone_content
 from world.magic.services.sanctum_lvm import sum_homecoming_value
 from world.room_features.models import RoomFeatureInstance
 from world.room_features.seeds import ensure_sanctum_kind
+from world.traits.factories import CheckOutcomeFactory
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -61,8 +64,14 @@ def _build_cmd(cmd_cls: type, caller: object, args: str = "") -> object:
 
 
 def _mock_check_success() -> object:
-    """Return a fake CheckResult whose outcome tier maps to SUCCESS (success_level=1)."""
-    outcome = type("Outcome", (), {"success_level": 1})()
+    """Return a fake CheckResult wrapping a real SUCCESS-tier CheckOutcome row.
+
+    The outcome must be a real DB row (not a duck-typed stand-in) because
+    ``perform_homecoming_ritual``/``perform_purging_ritual`` resolve their
+    tier-scalar via ``SanctumHomecomingGainAward``/``SanctumPurgingRetentionAward
+    .objects.get(outcome_tier=roll.check_result.outcome)`` — a real FK lookup.
+    """
+    outcome = CheckOutcomeFactory(name="JourneyE2E_Success", success_level=1)
     return type("CheckResult", (), {"outcome": outcome})()
 
 
@@ -92,6 +101,12 @@ class SanctumTelnetJourneyTests(TestCase):
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
         mock_check.return_value = _mock_check_success()
+        SanctumHomecomingGainAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, gain_multiplier=Decimal("1.00")
+        )
+        SanctumPurgingRetentionAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("0.000")
+        )
 
         # Two resonances: R1 (installed / homecoming / purging source),
         # R2 (purging target / absorb grant type after purging).

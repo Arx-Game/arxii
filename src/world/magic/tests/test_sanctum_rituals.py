@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 from django.test import TestCase
 
@@ -24,6 +25,7 @@ from world.magic.models import (
     SanctumDetails,
     SanctumOwnerMode,
 )
+from world.magic.models.sanctum import SanctumHomecomingGainAward, SanctumPurgingRetentionAward
 from world.magic.seeds_sanctum import (
     HOMECOMING_RITUAL_NAME,
     PURGING_RITUAL_NAME,
@@ -63,12 +65,25 @@ from world.room_features.factories import (
     RoomFeatureKindFactory,
 )
 from world.scenes.factories import PersonaFactory
+from world.traits.factories import CheckOutcomeFactory
 
 
-def _mock_check_result(success_level: int):
-    """Lightweight fake CheckResult compatible with RitualCheckRoll construction."""
-    outcome = type("O", (), {"success_level": success_level})()
-    return type("CR", (), {"outcome": outcome})()
+def _mock_check_result(success_level: int) -> MagicMock:
+    """Build a mock CheckResult wrapping a real CheckOutcome row.
+
+    The outcome must be a real DB row (not a duck-typed stand-in) because
+    ``perform_homecoming_ritual``/``perform_purging_ritual`` now resolve their
+    tier-scalar via ``SanctumHomecomingGainAward``/``SanctumPurgingRetentionAward
+    .objects.get(outcome_tier=roll.check_result.outcome)`` — a real FK lookup.
+    """
+    outcome = CheckOutcomeFactory(
+        name=f"Outcome_sl_{success_level}_{id(object())}",
+        success_level=success_level,
+    )
+    result = MagicMock()
+    result.outcome = outcome
+    result.success_level = success_level
+    return result
 
 
 def _personal_sanctum(*, resonance=None, level: int = 1) -> tuple[SanctumDetails, object]:
@@ -156,6 +171,9 @@ class HomecomingRitualTests(TestCase):
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
         mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS × 1.0
+        SanctumHomecomingGainAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, gain_multiplier=Decimal("1.00")
+        )
 
     def tearDown(self):
         self._check_patcher.stop()
@@ -223,6 +241,9 @@ class PurgingRitualTests(TestCase):
         self._check_patcher = patch("world.checks.services.perform_check")
         mock_check = self._check_patcher.start()
         mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS: modifier = 0.0
+        SanctumPurgingRetentionAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("0.000")
+        )
 
     def tearDown(self):
         self._check_patcher.stop()
@@ -507,43 +528,43 @@ def _setup_graded_purging(*, balance: int = 1000):
 
 
 class HomecomingGradedCheckTests(TestCase):
-    """Homecoming applies HOMECOMING_GAIN_MULTIPLIERS to the base gain."""
+    """Homecoming applies the SanctumHomecomingGainAward multiplier to the base gain."""
 
     def test_crit_multiplies_gain_by_1_25(self) -> None:
         from unittest.mock import patch
 
-        from world.magic.services.ritual_checks import OutcomeTier
-        from world.magic.services.sanctum_rituals import (
-            HOMECOMING_GAIN_MULTIPLIERS,
-            HomecomingResult,
-        )
+        from world.magic.services.sanctum_rituals import HomecomingResult
 
         sanctum, owner, _resonance = _setup_graded_homecoming(balance=1000)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
+            award = SanctumHomecomingGainAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, gain_multiplier=Decimal("1.25")
+            )
             result = perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=500)
 
         self.assertIsInstance(result, HomecomingResult)
         # base = 500 // 100 = 5; crit × 1.25 = 6
-        expected_gain = int(Decimal(5) * HOMECOMING_GAIN_MULTIPLIERS[OutcomeTier.CRIT])
+        expected_gain = int(Decimal(5) * award.gain_multiplier)
         self.assertEqual(result.base_resonance_added, expected_gain)
         self.assertEqual(result.success_level, 3)
+        self.assertEqual(result.tier, mock_check.return_value.outcome.name)
 
     def test_botch_multiplies_gain_by_0_25(self) -> None:
         from unittest.mock import patch
-
-        from world.magic.services.ritual_checks import OutcomeTier
-        from world.magic.services.sanctum_rituals import HOMECOMING_GAIN_MULTIPLIERS
 
         sanctum, owner, resonance = _setup_graded_homecoming(balance=1000)
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            award = SanctumHomecomingGainAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, gain_multiplier=Decimal("0.25")
+            )
             result = perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=500)
 
         # base = 5; botch × 0.25 = 1
-        expected_gain = int(Decimal(5) * HOMECOMING_GAIN_MULTIPLIERS[OutcomeTier.BOTCH])
+        expected_gain = int(Decimal(5) * award.gain_multiplier)
         self.assertEqual(result.base_resonance_added, expected_gain)
         # Botch: resonance is still spent in full (drama — the sacrifice is wasted)
         cr = CharacterResonance.objects.get(
@@ -558,6 +579,9 @@ class HomecomingGradedCheckTests(TestCase):
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS
+            SanctumHomecomingGainAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, gain_multiplier=Decimal("1.00")
+            )
             result = perform_homecoming_ritual(sanctum, owner, resonance_sacrificed=500)
 
         # base = 5; success × 1.0 = 5
@@ -580,7 +604,7 @@ class HomecomingGradedCheckTests(TestCase):
 
 
 class PurgingGradedCheckTests(TestCase):
-    """Purging applies PURGING_RETENTION_MODIFIERS to the effective retention."""
+    """Purging applies the SanctumPurgingRetentionAward modifier to the effective retention."""
 
     def test_botch_reduces_retention_to_0_20(self) -> None:
         """Default 0.5 retention − 0.30 botch modifier = 0.20 effective retention."""
@@ -590,6 +614,9 @@ class PurgingGradedCheckTests(TestCase):
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            SanctumPurgingRetentionAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("-0.300")
+            )
             result = perform_purging_ritual(
                 sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
             )
@@ -597,6 +624,7 @@ class PurgingGradedCheckTests(TestCase):
         # 100 × 0.20 = 20 retained
         self.assertEqual(result.sum_after_drain, 20)
         self.assertEqual(result.success_level, -3)
+        self.assertEqual(result.tier, mock_check.return_value.outcome.name)
 
     def test_crit_increases_retention_to_0_75(self) -> None:
         """Default 0.5 + 0.25 crit modifier = 0.75 effective retention."""
@@ -606,6 +634,9 @@ class PurgingGradedCheckTests(TestCase):
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
+            SanctumPurgingRetentionAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("0.250")
+            )
             result = perform_purging_ritual(
                 sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
             )
@@ -621,6 +652,9 @@ class PurgingGradedCheckTests(TestCase):
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=1)  # SUCCESS
+            SanctumPurgingRetentionAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("0.000")
+            )
             result = perform_purging_ritual(
                 sanctum, owner, new_resonance=new_resonance, resonance_sacrificed=100
             )
@@ -641,6 +675,9 @@ class PurgingGradedCheckTests(TestCase):
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=-3)  # BOTCH
+            SanctumPurgingRetentionAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("-0.300")
+            )
             result = perform_purging_ritual(
                 sanctum,
                 owner,
@@ -661,6 +698,9 @@ class PurgingGradedCheckTests(TestCase):
 
         with patch("world.checks.services.perform_check") as mock_check:
             mock_check.return_value = _mock_check_result(success_level=3)  # CRIT
+            SanctumPurgingRetentionAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, retention_modifier=Decimal("0.250")
+            )
             result = perform_purging_ritual(
                 sanctum,
                 owner,
