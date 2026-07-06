@@ -131,6 +131,12 @@ def _seed_civic_hubs() -> None:
     ensure_town_crier_kind()
 
 
+def _seed_building_condition() -> None:
+    from world.buildings.seeds import ensure_preparation_contribution_method  # noqa: PLC0415
+
+    ensure_preparation_contribution_method()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -186,6 +192,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Civic hubs: the Notice Board / Town Crier RoomFeatureKinds + the crier
     # NPCRole (#1450). Instances (which room carries one) are world data.
     "civic_hubs": _seed_civic_hubs,
+    # Building condition: the Grand Preparation AP-check contribution method
+    # (#1930). After "governance" (rides its Household Command CheckType).
+    "building_condition": _seed_building_condition,
 }
 
 

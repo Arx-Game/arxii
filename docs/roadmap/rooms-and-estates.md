@@ -64,10 +64,14 @@
   **capped arrears first**, then slides tiers after a grace window; it never
   mutates polish/feature rows. The #676 decay curve + never-wired
   restoration half are deleted.
-- Above-normal shine is a temporary spend: `prepare_building` (Grand
-  Preparation, gala fiction) pushes Excellent → Extravagantly Polished →
-  Immaculate; dwell-decays back in ~a week unless the ultra-upkeep premium
-  holds Immaculate. Recovery: `settle_upkeep_arrears` + `refurbish_building`
+- Above-normal shine is a temporary spend, and the Grand Preparation is a
+  **funded cleanup project** (`BUILDING_PREPARATION`): its cost is a
+  proportion of the house's prestige (25%/50% PLACEHOLDER, floored),
+  bankrolled via `project/donate` and sped along with AP Household Command
+  checks ("Direct the Household" ContributionMethod). Completion climbs
+  Excellent → Extravagantly Polished → Immaculate; dwell-decays back in ~a
+  week unless the ultra-upkeep premium holds Immaculate; an underfunded
+  lapse fizzles. Recovery: `settle_upkeep_arrears` + `refurbish_building`
   (priced restore to Excellent). Owner action family (telnet + web):
   `settle_building_arrears` / `refurbish_building` / `prepare_building` /
   `toggle_ultra_upkeep`.

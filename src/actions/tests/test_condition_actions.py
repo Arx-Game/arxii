@@ -88,12 +88,19 @@ class ConditionActionFamilyTests(TestCase):
         self.building.refresh_from_db()
         assert self.building.upkeep_arrears == 0
 
-    def test_prepare_confirm_climbs_above_excellent(self) -> None:
+    def test_prepare_confirm_commissions_the_cleanup_project(self) -> None:
+        from world.buildings.condition_services import prepare_cost
+        from world.buildings.models import BuildingPreparationDetails
+
         result = get_action("prepare_building").run(self.actor, confirm=True)
         assert result.success
-        assert "Extravagantly Polished" in result.message
+        assert "project #" in result.message
+        details = BuildingPreparationDetails.objects.get(building=self.building)
+        assert details.target_tier == ConditionTier.EXTRAVAGANT
+        assert details.project.threshold_target == max(1, prepare_cost(self.building) // 100)
+        # The tier itself climbs only when the project completes.
         self.building.refresh_from_db()
-        assert self.building.condition_tier == ConditionTier.EXTRAVAGANT
+        assert self.building.condition_tier == ConditionTier.EXCELLENT
 
     def test_prepare_with_arrears_reports_refusal(self) -> None:
         self.building.upkeep_arrears = 50

@@ -107,11 +107,19 @@ Builder #670, polish/renown-from-dwellings). Root terms live in
   by `target_size`). _Avoid:_ renovate/renovation (strictly the
   `BUILDING_RENOVATION` catalog-kind swap), restoration (the deleted #676
   polish-refill machinery).
-- **Grand Preparation** — `prepare_building` (#1930): the cleaning /
-  party-preparation luxury spend that pushes a building one tier ABOVE
-  Excellent (→ Extravagantly Polished → Immaculate) for a temporary prestige
-  kick; dwell-decays back within about a week. _Avoid:_ polish (that's the
-  per-category `BuildingPolish` value system).
+- **Grand Preparation** — the `BUILDING_PREPARATION` project kind (#1930):
+  the cleaning / party-preparation loop that pushes a building one tier
+  ABOVE Excellent (→ Extravagantly Polished → Immaculate) for a temporary
+  prestige kick; dwell-decays back within about a week.
+  `start_building_preparation` commissions it (owner-gated, arrears
+  settled); the threshold is a **proportion of the house's base prestige**
+  (25%/50% PLACEHOLDER, floored) — you pay for the shine on what the house
+  already is. Funded via `project/donate`, sped with AP **Household
+  Command** checks (`ContributionMethod` "Direct the Household");
+  `complete_building_preparation` climbs the tier once, only if the
+  threshold was met (underfunded lapse fizzles). _Avoid:_ polish (that's
+  the per-category `BuildingPolish` value system), cleanup project
+  (informal — use Grand Preparation).
 - **Ultra upkeep** — `Building.ultra_upkeep` (#1930): owner-toggled premium
   (`ULTRA_UPKEEP_MULTIPLIER ×` weekly cost, on top of normal upkeep) that
   holds Immaculate past its dwell — a real recurring tradeoff, not a default.

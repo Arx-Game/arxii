@@ -968,13 +968,15 @@ class RefurbishBuildingAction(_RoomBuilderAction):
 
 @dataclass
 class PrepareBuildingAction(_RoomBuilderAction):
-    """Grand preparation: polish the building above its normal state (#1930).
+    """Grand preparation: commission the cleanup project pushing above normal (#1930).
 
-    The party-preparation fiction — each application pushes one tier
-    above Excellent (then Immaculate) for a temporary prestige kick that
-    decays back within about a week. Bare invocation quotes the cost;
-    pass ``confirm`` to pay. Kwargs: optional ``room_id``, optional
-    ``confirm``.
+    The party-preparation loop — each project pushes one tier above
+    Excellent (then Immaculate) for a temporary prestige kick that decays
+    back within about a week. The cost is a proportion of the house's
+    prestige; the commissioned project is funded with coppers
+    (``project/donate``) and sped along with AP Household Command checks
+    (``project/check``). Bare invocation quotes the cost; pass ``confirm``
+    to commission. Kwargs: optional ``room_id``, optional ``confirm``.
     """
 
     key: str = "prepare_building"
@@ -987,16 +989,13 @@ class PrepareBuildingAction(_RoomBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from django.core.exceptions import ValidationError  # noqa: PLC0415
-
         from world.buildings.condition_services import (  # noqa: PLC0415
             ConditionServiceError,
-            prepare_building,
             prepare_cost,
+            start_building_preparation,
         )
-        from world.buildings.constants import ConditionTier  # noqa: PLC0415
 
-        building, purse, error = _resolve_building_and_purse(actor, kwargs)
+        building, _purse, error = _resolve_building_and_purse(actor, kwargs)
         if error is not None:
             return error
         if not kwargs.get("confirm"):
@@ -1007,18 +1006,18 @@ class PrepareBuildingAction(_RoomBuilderAction):
                 return ActionResult(success=False, message=f"{status} {exc.user_message}")
             return ActionResult(
                 success=False,
-                message=f"{status} A grand preparation costs {cost} coppers. Confirm to proceed.",
+                message=f"{status} A grand preparation will take {cost} coppers of funding. "
+                "Confirm to commission the project.",
             )
         try:
-            new_tier = prepare_building(building=building, payer_purse=purse)
+            project = start_building_preparation(building=building, persona=_persona_for(actor))
         except ConditionServiceError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        except ValidationError as exc:
-            return ActionResult(success=False, message=exc.messages[0])
         return ActionResult(
             success=True,
-            message="The household turns out in force — the building gleams: "
-            f"{ConditionTier(new_tier).label}.",
+            message=f"The household begins the grand preparation (project #{project.pk}). "
+            f"Fund it with 'project/donate {project.pk}=<coppers>' or lend a hand with "
+            f"'project/check {project.pk}=Direct the Household'.",
         )
 
 

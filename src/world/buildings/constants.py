@@ -78,10 +78,23 @@ REGAIN_WEEKS_PER_TIER: int = 2
 # past its dwell — an outrageous recurring spend, not a default. PLACEHOLDER.
 ULTRA_UPKEEP_MULTIPLIER: int = 4
 
-# Priced recovery/preparation (coppers, scaled by Building.target_size).
-# Refurbish restores to EXCELLENT; preparation pushes one tier above it.
-# ("Renovation" is the existing kind-swap project — different verb on purpose.)
-# PLACEHOLDER pending the economy pass.
+# Priced recovery (coppers, scaled by Building.target_size). Refurbish
+# restores to EXCELLENT. ("Renovation" is the existing kind-swap project —
+# different verb on purpose.) PLACEHOLDER pending the economy pass.
 REFURBISH_COPPER_PER_TIER: int = 500
-PREPARE_COPPER_COST_EXTRAVAGANT: int = 2000
-PREPARE_COPPER_COST_IMMACULATE: int = 5000
+
+# Grand Preparation (#1930, Apostate 2026-07-06): pushing above EXCELLENT is
+# a small funded project, not an instant purchase. Its cost is a proportion
+# of the house's base prestige (you're buying extra shine on what the house
+# already is), with a floor for low-polish houses; the project threshold is
+# funded in coppers (1 progress per 100c, the standard pipe) and can be sped
+# along with AP Household Command checks. PLACEHOLDER.
+PREPARE_COST_PERCENT_OF_PRESTIGE: dict[int, int] = {
+    ConditionTier.EXTRAVAGANT: 25,
+    ConditionTier.IMMACULATE: 50,
+}
+PREPARE_COST_FLOOR_COPPERS: dict[int, int] = {
+    ConditionTier.EXTRAVAGANT: 2000,
+    ConditionTier.IMMACULATE: 5000,
+}
+PREPARATION_PROJECT_DAYS: int = 30

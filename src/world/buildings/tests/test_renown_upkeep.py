@@ -13,11 +13,13 @@ from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from world.areas.factories import AreaFactory
 from world.buildings.condition_services import (
     ConditionServiceError,
-    prepare_building,
+    complete_building_preparation,
+    prepare_cost,
     refurbish_building,
     refurbish_cost,
     set_ultra_upkeep,
     settle_upkeep_arrears,
+    start_building_preparation,
 )
 from world.buildings.constants import (
     ARREARS_CAP_WEEKS,
@@ -346,23 +348,88 @@ class ConditionServiceTests(TestCase):
         with self.assertRaises(ConditionServiceError):
             refurbish_building(building=building, payer_purse=_purse(owner))
 
-    def test_prepare_climbs_excellent_to_immaculate_then_refuses(self) -> None:
-        owner = _make_persona_with_wallet(gold=1_000_000)
+    def _fund_and_complete(self, project) -> None:
+        from world.projects.constants import ProjectStatus
+
+        project.current_progress = project.threshold_target
+        project.save(update_fields=["current_progress"])
+        complete_building_preparation(project)
+        # resolve_project marks the status in the real cron flow; mirror it so
+        # the duplicate-commission guard sees this project as closed.
+        project.status = ProjectStatus.COMPLETED
+        project.save(update_fields=["status"])
+
+    def test_preparation_project_cost_is_prestige_proportional(self) -> None:
+        owner = _make_persona_with_wallet()
+        building, _cat = _building_with_upkeep(owner, polish=100_000)
+        # 25% of 100_000 polish = 25_000c > the floor (2000 × size 5).
+        self.assertEqual(prepare_cost(building), 25_000)
+
+        set_condition_tier(building, ConditionTier.EXTRAVAGANT)
+        # Next step (IMMACULATE) is steeper: 50%.
+        self.assertEqual(prepare_cost(building), 50_000)
+
+    def test_preparation_cost_floors_for_low_polish_houses(self) -> None:
+        owner = _make_persona_with_wallet()
+        building = _make_building(owner)
+        # No polish, no style: the floor (2000c × target_size 5) applies.
+        self.assertEqual(prepare_cost(building), 2000 * building.target_size)
+
+    def test_preparation_project_climbs_excellent_to_immaculate_then_refuses(self) -> None:
+        owner = _make_persona_with_wallet()
         building, _cat = _building_with_upkeep(owner)
 
-        tier = prepare_building(building=building, payer_purse=_purse(owner))
-        self.assertEqual(tier, ConditionTier.EXTRAVAGANT)
-        tier = prepare_building(building=building, payer_purse=_purse(owner))
-        self.assertEqual(tier, ConditionTier.IMMACULATE)
-        with self.assertRaises(ConditionServiceError):
-            prepare_building(building=building, payer_purse=_purse(owner))
+        project = start_building_preparation(building=building, persona=owner)
+        self.assertEqual(project.threshold_target, max(1, prepare_cost(building) // 100))
+        self._fund_and_complete(project)
+        building.refresh_from_db()
+        self.assertEqual(building.condition_tier, ConditionTier.EXTRAVAGANT)
 
-    def test_prepare_refused_below_excellent(self) -> None:
-        owner = _make_persona_with_wallet(gold=1_000_000)
+        project = start_building_preparation(building=building, persona=owner)
+        self._fund_and_complete(project)
+        building.refresh_from_db()
+        self.assertEqual(building.condition_tier, ConditionTier.IMMACULATE)
+
+        with self.assertRaises(ConditionServiceError):
+            start_building_preparation(building=building, persona=owner)
+
+    def test_second_preparation_refused_while_one_is_open(self) -> None:
+        owner = _make_persona_with_wallet()
+        building, _cat = _building_with_upkeep(owner)
+        start_building_preparation(building=building, persona=owner)
+        with self.assertRaises(ConditionServiceError):
+            start_building_preparation(building=building, persona=owner)
+
+    def test_underfunded_preparation_fizzles(self) -> None:
+        owner = _make_persona_with_wallet()
+        building, _cat = _building_with_upkeep(owner)
+        project = start_building_preparation(building=building, persona=owner)
+        # Time-limit lapse under threshold: the handler applies nothing.
+        complete_building_preparation(project)
+        building.refresh_from_db()
+        self.assertEqual(building.condition_tier, ConditionTier.EXCELLENT)
+
+    def test_completion_handler_is_idempotent(self) -> None:
+        owner = _make_persona_with_wallet()
+        building, _cat = _building_with_upkeep(owner)
+        project = start_building_preparation(building=building, persona=owner)
+        self._fund_and_complete(project)
+        complete_building_preparation(project)  # second call no-ops
+        building.refresh_from_db()
+        self.assertEqual(building.condition_tier, ConditionTier.EXTRAVAGANT)
+
+    def test_prepare_refused_below_excellent_or_with_arrears(self) -> None:
+        owner = _make_persona_with_wallet()
         building, _cat = _building_with_upkeep(owner)
         set_condition_tier(building, ConditionTier.GOOD)
         with self.assertRaises(ConditionServiceError):
-            prepare_building(building=building, payer_purse=_purse(owner))
+            start_building_preparation(building=building, persona=owner)
+
+        set_condition_tier(building, ConditionTier.EXCELLENT)
+        building.upkeep_arrears = 50
+        building.save(update_fields=["upkeep_arrears"])
+        with self.assertRaises(ConditionServiceError):
+            start_building_preparation(building=building, persona=owner)
 
 
 class PrestigeModulationTests(TestCase):
@@ -480,6 +547,26 @@ class MothballTests(TestCase):
         self.assertIsNone(building.mothballed_at)
 
 
+class PreparationSeedTests(TestCase):
+    def test_ensure_preparation_contribution_method(self) -> None:
+        from world.buildings.seeds import (
+            PREPARATION_METHOD_NAME,
+            ensure_preparation_contribution_method,
+        )
+        from world.projects.constants import ProjectKind
+        from world.projects.models import ContributionMethod
+
+        ensure_preparation_contribution_method()
+        ensure_preparation_contribution_method()  # idempotent
+
+        method = ContributionMethod.objects.get(
+            kind=ProjectKind.BUILDING_PREPARATION, name=PREPARATION_METHOD_NAME
+        )
+        self.assertEqual(method.check_type.name, "Household Command")
+        self.assertTrue(method.is_active)
+        self.assertGreater(method.progress_on_success, 0)
+
+
 class ConditionJourneyTests(TestCase):
     """The primary journey arc from the #1930 spec's test seams."""
 
@@ -519,8 +606,15 @@ class ConditionJourneyTests(TestCase):
         building.refresh_from_db()
         self.assertEqual(building.condition_tier, ConditionTier.EXCELLENT)
 
-        prepare_building(building=building, payer_purse=_purse(owner))
-        prepare_building(building=building, payer_purse=_purse(owner))
+        from world.projects.constants import ProjectStatus
+
+        for _ in range(2):
+            project = start_building_preparation(building=building, persona=owner)
+            project.current_progress = project.threshold_target
+            project.save(update_fields=["current_progress"])
+            complete_building_preparation(project)
+            project.status = ProjectStatus.COMPLETED
+            project.save(update_fields=["status"])
         building.refresh_from_db()
         self.assertEqual(building.condition_tier, ConditionTier.IMMACULATE)
         owner.refresh_from_db()

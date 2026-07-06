@@ -64,10 +64,12 @@ They do not use the command system, dispatchers, or handlers.
   `StartExtensionAction` (`"start_building_extension"`), and the #1930 condition family
   `SettleBuildingArrearsAction` (`"settle_building_arrears"`), `RefurbishBuildingAction`
   (`"refurbish_building"` — the priced condition restore; distinct from the
-  `start_building_renovation` kind-swap), `PrepareBuildingAction` (`"prepare_building"`),
+  `start_building_renovation` kind-swap), `PrepareBuildingAction` (`"prepare_building"` —
+  `confirm` commissions the BUILDING_PREPARATION cleanup project, funded via
+  `project/donate` + sped by `project/check` Household Command),
   `ToggleUltraUpkeepAction` (`"toggle_ultra_upkeep"`) — bare invocation returns the
-  owner-only condition/arrears status + cost quote, `confirm=True` pays (thin over
-  `world.buildings.condition_services`). Structural verbs reuse
+  owner-only condition/arrears status + cost quote, `confirm=True` pays/commissions
+  (thin over `world.buildings.condition_services`). Structural verbs reuse
   `IsRoomOwnerPrerequisite`; success messages carry `Space: used/total`. Web-addressable
   anchors (#670 PR2): structural actions resolve an explicit `room_id` kwarg first
   (`_resolve_room`; `to_room_id` on link, `exit_id` on unlink/rename scoped to the anchor

@@ -354,8 +354,9 @@ actions, backends, and service functions.
   read-only ASCII floor map (`world.buildings.map_render`); the #1930 condition family
   `room/settle [confirm]` / `room/refurbish [confirm]` / `room/prepare [confirm]` →
   `SettleBuildingArrearsAction`/`RefurbishBuildingAction`/`PrepareBuildingAction` (bare =
-  owner-only status + cost quote, `confirm` pays) and `room/ultraupkeep` →
-  `ToggleUltraUpkeepAction`. Permissions by relationship
+  owner-only status + cost quote; `confirm` pays — for prepare it commissions the
+  BUILDING_PREPARATION cleanup project, then `project/donate` / `project/check` carry it)
+  and `room/ultraupkeep` → `ToggleUltraUpkeepAction`. Permissions by relationship
   (owner structural / tenant redescribe+home), gated in actions + services. No business
   logic in the command.
 - **`projects.py`**: `CmdProject` (`project`, alias `+project`, #1574) — project status +

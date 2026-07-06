@@ -7,30 +7,37 @@ The player-facing loops around the condition-tier ladder:
   weekly paid upkeep is the slow one). Requires arrears settled first.
   ("Refurbish", not "renovate" — a *renovation* is the existing
   BUILDING_RENOVATION kind-swap project; see AGENT_GLOSSARY.md.)
-* ``prepare_building`` — the cleaning/party-preparation fiction: pushes
-  one tier ABOVE normal (EXCELLENT → EXTRAVAGANT → IMMACULATE) for a
-  gala window; above-normal tiers dwell-decay back (see
-  ``upkeep_services``). A deliberate luxury spend.
+* ``start_building_preparation`` — the cleaning/party-preparation loop
+  (#1930, Apostate 2026-07-06): pushing one tier ABOVE normal (EXCELLENT
+  → EXTRAVAGANT → IMMACULATE) is a small funded *project*, not an
+  instant purchase. Its threshold is a proportion of the house's base
+  prestige (floored), funded via ``project/donate`` (1 progress per
+  100c) and sped along with AP Household Command checks
+  (``ContributionMethod``). ``complete_building_preparation`` is the
+  kind handler; the shine dwell-decays back (see ``upkeep_services``).
 * ``set_ultra_upkeep`` — owner toggle for the premium that holds
   IMMACULATE past its dwell.
 
 All charges are pure sinks through the audited currency ledger (#923).
-Costs are PLACEHOLDER, scaled by ``Building.target_size``. Insufficient
-funds surface as ``django.core.exceptions.ValidationError`` (raised
-before any state write), matching the station-repair precedent; refusals
-raise ``ConditionServiceError`` with a player-safe ``user_message``.
+Costs are PLACEHOLDER. Insufficient funds surface as
+``django.core.exceptions.ValidationError`` (raised before any state
+write), matching the station-repair precedent; refusals raise
+``ConditionServiceError`` with a player-safe ``user_message``.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.buildings.constants import (
-    PREPARE_COPPER_COST_EXTRAVAGANT,
-    PREPARE_COPPER_COST_IMMACULATE,
+    PREPARATION_PROJECT_DAYS,
+    PREPARE_COST_FLOOR_COPPERS,
+    PREPARE_COST_PERCENT_OF_PRESTIGE,
     REFURBISH_COPPER_PER_TIER,
     ConditionTier,
 )
@@ -39,13 +46,14 @@ from world.buildings.upkeep_services import set_condition_tier
 if TYPE_CHECKING:
     from world.buildings.models import Building
     from world.currency.models import CharacterPurse
+    from world.projects.models import Project
+    from world.scenes.models import Persona
 
 logger = logging.getLogger(__name__)
 
-_PREPARE_COST_BY_TARGET_TIER: dict[int, int] = {
-    ConditionTier.EXTRAVAGANT: PREPARE_COPPER_COST_EXTRAVAGANT,
-    ConditionTier.IMMACULATE: PREPARE_COPPER_COST_IMMACULATE,
-}
+# Money converts to project progress at this rate (see projects.services
+# add_contribution) — thresholds are stored in progress units.
+_COPPERS_PER_PROGRESS_POINT = 100
 
 
 class ConditionServiceError(Exception):
@@ -78,12 +86,24 @@ def refurbish_cost(building: Building) -> int:
 
 
 def prepare_cost(building: Building) -> int:
-    """Coppers for the next preparation step above the current tier.
+    """Coppers to fund the next preparation step above the current tier.
 
-    Raises ``ConditionServiceError`` when the building isn't eligible
-    (below EXCELLENT, or already IMMACULATE).
+    A proportion of the house's base prestige — the extra shine is priced
+    against what the house already is — floored (× ``target_size``) so
+    low-polish houses still pay something real. Raises
+    ``ConditionServiceError`` when the building isn't eligible (below
+    EXCELLENT, or already IMMACULATE).
     """
-    target = building.condition_tier + 1
+    from world.buildings.polish_services import building_prestige_base  # noqa: PLC0415
+
+    target = _prepare_target_tier(building)
+    proportional = PREPARE_COST_PERCENT_OF_PRESTIGE[target] * building_prestige_base(building)
+    floor = PREPARE_COST_FLOOR_COPPERS[target] * building.target_size
+    return max(proportional // 100, floor)
+
+
+def _prepare_target_tier(building: Building) -> int:
+    """The tier the next preparation would reach, validating eligibility."""
     if building.condition_tier < ConditionTier.EXCELLENT:
         msg = f"building {building.pk} below EXCELLENT; preparation refused"
         raise ConditionServiceError(
@@ -91,13 +111,14 @@ def prepare_cost(building: Building) -> int:
             user_message="The building must be in excellent condition before it can be "
             "specially prepared — refurbish it first.",
         )
+    target = building.condition_tier + 1
     if target > ConditionTier.IMMACULATE:
         msg = f"building {building.pk} already at IMMACULATE"
         raise ConditionServiceError(
             msg,
             user_message="The building is already immaculately prepared.",
         )
-    return _PREPARE_COST_BY_TARGET_TIER[target] * building.target_size
+    return target
 
 
 @transaction.atomic
@@ -140,21 +161,111 @@ def refurbish_building(*, building: Building, payer_purse: CharacterPurse) -> in
     return cost
 
 
-@transaction.atomic
-def prepare_building(*, building: Building, payer_purse: CharacterPurse) -> int:
-    """Push ``building`` one tier above normal (gala preparation). Returns the new tier.
+def _open_preparation_project(building: Building) -> Project | None:
+    """The building's not-yet-resolved preparation Project, if one exists."""
+    from world.buildings.models import BuildingPreparationDetails  # noqa: PLC0415
+    from world.projects.constants import ProjectStatus  # noqa: PLC0415
 
-    EXCELLENT → EXTRAVAGANT → IMMACULATE, one step per (increasingly
-    steep) application. Requires arrears settled. The shine is temporary:
-    above-normal tiers dwell-decay back unless IMMACULATE is held via
-    ultra upkeep.
+    details = (
+        BuildingPreparationDetails.objects.filter(
+            building=building,
+            project__status__in=(
+                ProjectStatus.PLANNING,
+                ProjectStatus.ACTIVE,
+                ProjectStatus.RESOLVING,
+            ),
+        )
+        .select_related("project")
+        .first()
+    )
+    return details.project if details is not None else None
+
+
+@transaction.atomic
+def start_building_preparation(*, building: Building, persona: Persona) -> Project:
+    """Commission the cleanup project pushing ``building`` one tier above normal.
+
+    EXCELLENT → EXTRAVAGANT → IMMACULATE, one project per (increasingly
+    steep) step. Requires arrears settled; refuses while another
+    preparation is already underway. The project is created ACTIVE
+    (ransom precedent) so funding can start immediately: coppers via
+    ``project/donate``, speed via AP Household Command checks
+    (``project/check``). The shine is temporary: above-normal tiers
+    dwell-decay back unless IMMACULATE is held via ultra upkeep.
     """
+    from world.buildings.models import BuildingPreparationDetails  # noqa: PLC0415
+    from world.projects.constants import (  # noqa: PLC0415
+        CompletionMode,
+        ProjectKind,
+        ProjectStatus,
+    )
+    from world.projects.models import Project  # noqa: PLC0415
+
     _require_settled(building, "preparation")
-    cost = prepare_cost(building)
-    target = building.condition_tier + 1
-    _sink(payer_purse, cost, f"grand preparation: building {building.pk}")
-    set_condition_tier(building, target)
-    return target
+    existing = _open_preparation_project(building)
+    if existing is not None:
+        msg = f"building {building.pk} already has preparation project #{existing.pk}"
+        raise ConditionServiceError(
+            msg,
+            user_message=f"A grand preparation is already underway (project #{existing.pk}).",
+        )
+    target = _prepare_target_tier(building)
+    threshold = max(1, prepare_cost(building) // _COPPERS_PER_PROGRESS_POINT)
+
+    now = timezone.now()
+    project = Project.objects.create(
+        kind=ProjectKind.BUILDING_PREPARATION,
+        completion_mode=CompletionMode.SINGLE_THRESHOLD,
+        status=ProjectStatus.ACTIVE,
+        owner_persona=persona,
+        started_at=now,
+        time_limit=now + timedelta(days=PREPARATION_PROJECT_DAYS),
+        threshold_target=threshold,
+        description=f"Grand preparation of building {building.pk} to {ConditionTier(target).label}",
+    )
+    BuildingPreparationDetails.objects.create(
+        project=project,
+        building=building,
+        target_tier=target,
+    )
+    return project
+
+
+def complete_building_preparation(project, outcome_tier: object | None = None) -> None:  # noqa: ARG001
+    """Kind handler: climb the building's condition tier, exactly once.
+
+    Registered with ``register_kind_handler`` at app-ready time; signature
+    matches the framework's ``KindHandler``. Idempotent via the
+    ``applied_at`` claim-filter (mirrors ``complete_building_renovation``).
+    A lapsed, underfunded preparation fizzles — the tier is applied only
+    when the threshold was actually met.
+    """
+    from world.buildings.models import BuildingPreparationDetails  # noqa: PLC0415
+
+    if project.threshold_target is not None and project.current_progress < project.threshold_target:
+        logger.info(
+            "building preparation %s fizzled: progress %s < threshold %s.",
+            project.pk,
+            project.current_progress,
+            project.threshold_target,
+        )
+        return
+
+    with transaction.atomic():
+        claimed = BuildingPreparationDetails.objects.filter(
+            project=project, applied_at__isnull=True
+        ).update(applied_at=timezone.now())
+        if not claimed:
+            return
+        details = BuildingPreparationDetails.objects.get(project=project)
+        set_condition_tier(details.building, details.target_tier)
+
+    logger.info(
+        "building preparation %s applied: building %s now tier %s.",
+        project.pk,
+        details.building_id,
+        details.target_tier,
+    )
 
 
 def set_ultra_upkeep(*, building: Building, enabled: bool) -> None:

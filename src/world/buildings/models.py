@@ -662,6 +662,47 @@ class BuildingRenovationDetails(SharedMemoryModel):
         return f"Renovation -> kind {self.target_kind_id} for building {self.building_id}"
 
 
+class BuildingPreparationDetails(SharedMemoryModel):
+    """Per-(BUILDING_PREPARATION Project) details payload (#1930).
+
+    The cleanup/party-preparation loop: pushing a building one condition
+    tier ABOVE Excellent is a small funded project — its threshold is a
+    proportion of the house's base prestige (the shine you're buying),
+    funded with coppers through the standard contribution pipe and sped
+    along with AP Household Command checks (``ContributionMethod``). The
+    handler climbs ``Building.condition_tier`` to ``target_tier`` exactly
+    once via the ``applied_at`` idempotency marker, and only when the
+    threshold was actually met (a lapsed, underfunded preparation fizzles).
+    """
+
+    project = models.OneToOneField(
+        _PROJECT_FK,
+        on_delete=models.CASCADE,
+        related_name="building_preparation_details",
+        primary_key=True,
+    )
+    building = models.ForeignKey(
+        "buildings.Building",
+        on_delete=models.CASCADE,
+        related_name="preparation_details",
+    )
+    target_tier = models.PositiveSmallIntegerField(
+        choices=ConditionTier.choices,
+        help_text="Condition tier applied on completion (current tier + 1 at commission).",
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the tier was applied; NULL until the handler runs. Idempotency marker.",
+    )
+
+    class Meta:
+        verbose_name_plural = "Building preparation details"
+
+    def __str__(self) -> str:
+        return f"Preparation -> tier {self.target_tier} for building {self.building_id}"
+
+
 class BuildingUpgradeDetails(SharedMemoryModel):
     """Per-(BUILDING_UPGRADE Project) details payload (#1888).
 
