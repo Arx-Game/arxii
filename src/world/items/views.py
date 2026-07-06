@@ -28,15 +28,8 @@ from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.exceptions import (
-    CraftingCostUnaffordable,
     CraftingNotConfigured,
-    CraftingStationBroken,
-    CraftingStationRequired,
-    FacetAlreadyAttached,
-    FacetCapacityExceeded,
     ItemError,
-    StyleAlreadyAttached,
-    StyleCapacityExceeded,
 )
 from world.items.filters import (
     FashionPresentationFilter,
@@ -84,8 +77,6 @@ from world.items.serializers import (
     VisibleWornItemSerializer,
 )
 from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
-from world.items.services.crafting import craft_attach_facet, craft_attach_style
-from world.items.services.facets import remove_facet_from_item
 from world.items.services.usage import use_item
 from world.magic.services.auth import _resolve_actor_sheet
 from world.roster.models import RosterEntry
@@ -350,28 +341,20 @@ class ItemFacetViewSet(viewsets.ViewSet):
 
     @extend_schema(request=ItemFacetWriteSerializer, responses=FacetCraftResultSerializer)
     def create(self, request: Request) -> Response:
-        """Roll the crafting check and (on success) attach the facet."""
+        """Roll the crafting check and (on success) attach the facet, via the Action."""
+        from actions.definitions.crafting import AttachFacetAction  # noqa: PLC0415
+
         serializer = ItemFacetWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
         facet = serializer.validated_data["facet"]
-        crafter_character = item_instance.holder_character_sheet.character
-        try:
-            result = craft_attach_facet(
-                crafter_account=cast(AccountDB, request.user),
-                crafter_character=crafter_character,
-                item_instance=item_instance,
-                facet=facet,
-            )
-        except (
-            FacetAlreadyAttached,
-            FacetCapacityExceeded,
-            CraftingNotConfigured,
-            CraftingCostUnaffordable,
-            CraftingStationRequired,
-            CraftingStationBroken,
-        ) as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        actor = item_instance.holder_character_sheet.character
+        action_result = AttachFacetAction().run(
+            actor=actor, item_instance=item_instance, facet=facet
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        result = action_result.data["result"]
         status_code = 201 if result.attached else 200
         return Response(FacetCraftResultSerializer(result).data, status=status_code)
 
@@ -445,7 +428,12 @@ class ItemFacetViewSet(viewsets.ViewSet):
             raise NotFound from exc
         # Run object-level permission so non-owners are rejected with 403.
         self.check_object_permissions(request, row)
-        remove_facet_from_item(item_facet=row)
+        from actions.definitions.crafting import DetachFacetAction  # noqa: PLC0415
+
+        actor = row.item_instance.holder_character_sheet.character
+        action_result = DetachFacetAction().run(actor=actor, item_facet=row)
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
         return Response(status=204)
 
 
@@ -1338,8 +1326,8 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
     """ViewSet for style crafting: POST rolls the check and attaches a Style to an item.
 
     Mirrors ``ItemFacetViewSet.create`` — validates ``item_instance`` + ``style``
-    ownership, calls ``craft_attach_style``, and returns 201 on attach or 200 on
-    a failed roll.
+    ownership, dispatches through ``AttachStyleAction``, and returns 201 on
+    attach or 200 on a failed roll.
     """
 
     http_method_names = ["get", "post", "head", "options"]
@@ -1348,28 +1336,20 @@ class ItemStyleCraftViewSet(viewsets.ViewSet):
 
     @extend_schema(request=ItemStyleWriteSerializer, responses=StyleCraftResultSerializer)
     def create(self, request: Request) -> Response:
-        """Roll the crafting check and (on success) attach the style."""
+        """Roll the crafting check and (on success) attach the style, via the Action."""
+        from actions.definitions.crafting import AttachStyleAction  # noqa: PLC0415
+
         serializer = ItemStyleWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         item_instance = serializer.validated_data["item_instance"]
         style = serializer.validated_data["style"]
-        crafter_character = item_instance.holder_character_sheet.character
-        try:
-            result = craft_attach_style(
-                crafter_account=cast(AccountDB, request.user),
-                crafter_character=crafter_character,
-                item_instance=item_instance,
-                style=style,
-            )
-        except (
-            StyleAlreadyAttached,
-            StyleCapacityExceeded,
-            CraftingNotConfigured,
-            CraftingCostUnaffordable,
-            CraftingStationRequired,
-            CraftingStationBroken,
-        ) as exc:
-            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        actor = item_instance.holder_character_sheet.character
+        action_result = AttachStyleAction().run(
+            actor=actor, item_instance=item_instance, style=style
+        )
+        if not action_result.success:
+            raise serializers.ValidationError({"non_field_errors": [action_result.message]})
+        result = action_result.data["result"]
         status_code = 201 if result.attached else 200
         return Response(StyleCraftResultSerializer(result).data, status=status_code)
 
