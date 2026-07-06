@@ -548,12 +548,10 @@ point on `thread.target_kind` for numeric-payload pull effects, called from insi
 `resolve_pull_effects` for every row with a numeric payload. It is a no-op (returns
 `base_scaled` unchanged) when there is no numeric payload, no target, or the
 thread's `target_kind` has no registered rule — so every existing (untargeted or
-non-COVENANT_ROLE) pull stays byte-identical. This is the **documented extension
-point** for future per-`target_kind` rules — e.g. a deferred RELATIONSHIP_TRACK
-rule that would scale a relationship-thread pull by the target's relationship to
-the threaded persona (not built; noted in the module docstring).
+unrelated-kind) pull stays byte-identical. Two rules are registered today: Court
+(COVENANT_ROLE, below) and Relationship Bond (RELATIONSHIP_TRACK, below).
 
-**Court rule (only rule wired today)** — `court_regard_modulation(thread, target,
+**Court rule (COVENANT_ROLE)** — `court_regard_modulation(thread, target,
 effect_row, base_scaled)` (`world/magic/services/pull_modulation_court.py`) fires
 for `TargetKind.COVENANT_ROLE` threads. It resolves the Court leader's primary
 persona for the servant's engaged Court membership anchored on the thread's
@@ -579,6 +577,38 @@ thread when a `target_persona_id` is supplied in context and no candidate
 regard's sign) — so the player isn't offered a pull that won't actually do
 anything extra. No-op (thread stays applicable) when no Court leader is
 resolvable at all — the base pull is simply unmodulated in that case.
+
+### Relationship Bond Pull Modulation (#1849 — ADR-0092)
+
+The `RELATIONSHIP_TRACK` sibling rule, `relationship_bond_modulation(thread,
+target, effect_row, base_scaled)` (`world/magic/services/pull_modulation_relationship.py`).
+Fires when the live target IS the thread's threaded person
+(`thread.target_relationship_track.relationship.target`), or holds an active,
+mutually-consented (`is_active=True, is_pending=False`), net-negative
+`CharacterRelationship.affection` toward them (hostile — "threatening"). The
+shared `_relationship_pull_would_trigger(x_sheet, y_sheet)` helper decides this
+for both the resolution path and the picker, mirroring
+`_regard_polarity_matches`'s role for Court modulation.
+
+Unlike Court modulation, there is **no polarity gate** — `ThreadPullEffect.regard_polarity`
+is not consulted at all. This is a deliberate divergence (ADR-0092): Court modulates
+an NPC master's preference (narrative consistency demands sign-matching), while
+this rule rewards any PC-to-PC relationship investment unconditionally (rival or
+lover alike).
+
+Magnitude: `bonus = round(cap × S / (S + half_saturation))` where `S = coefficient
+× CharacterRelationship(source=owner, target=threaded_person).developed_absolute_value`
+— a saturating curve (reusing `_soft_cap` from `world/magic/services/threads.py`,
+the same formula shape `ThreadSurvivabilityTuning` uses) rather than Court's fixed
+ratio, since `CharacterRelationship` values grow unbounded (unlike `NpcRegard`'s
+`0..REGARD_MAX`). Tuning lives in the `RelationshipBondPullTuning` singleton
+(pk=1, staff-tunable in admin).
+
+The picker surfaces `InapplicabilityReason.RELATIONSHIP_NO_STAKE` via
+`_relationship_pull_would_have_effect`, gated by the same `can_perceive` privacy
+check `_court_pull_would_have_effect` uses (a hostile third party's relationship
+to the threaded person must not leak to the owner via an observable tell when the
+owner can't perceive that third party).
 
 ### Mage Scars (renamed from Magical Scars — §7.2)
 
