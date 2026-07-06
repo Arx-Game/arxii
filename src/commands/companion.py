@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend
-from commands.command import DispatchCommand
+from commands.command import DispatchCommand, parse_greedy_kwargs
 from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ _SUBVERBS: dict[str, str] = {
 # Bare ``companion status`` / ``companion list`` are aliases for the hub.
 _HUB_SUBVERBS = frozenset({"status", "list"})
 
-# Telnet kwarg token keys used by _parse_kwargs / resolve_action_args.
+# Telnet kwarg token keys used by resolve_action_args.
 _ARCHETYPE_KWARG = "archetype"
 _GIFT_KWARG = "gift"
 _NAME_KWARG = "name"
@@ -43,31 +43,6 @@ _BIND_SUBVERB = "bind"
 
 # Subverbs that take a single bare companion identifier (positional, not key=value).
 _POSITIONAL_SUBVERBS = frozenset({"release", "fight", "deploy"})
-
-
-def _parse_kwargs(args: str) -> dict[str, str]:
-    """Parse ``key=value`` tokens, left to right.
-
-    ``name`` greedily consumes the rest of the line so companion names may
-    contain spaces (and must be the final token). All other values are single
-    whitespace-delimited tokens. Tokens that contain no ``=`` are silently
-    skipped (positional leftovers).
-    """
-    out: dict[str, str] = {}
-    tokens = args.split()
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if "=" not in token:
-            index += 1
-            continue
-        key, _, value = token.partition("=")
-        if key == _NAME_KWARG:
-            out[_NAME_KWARG] = " ".join([value, *tokens[index + 1 :]]).strip()
-            break
-        out[key] = value
-        index += 1
-    return out
 
 
 class CmdCompanion(DispatchCommand):
@@ -117,7 +92,7 @@ class CmdCompanion(DispatchCommand):
     def resolve_action_args(self) -> dict[str, Any]:
         """Resolve the subverb's arguments into dispatch kwargs."""
         if self._subverb == _BIND_SUBVERB:
-            return self._args_bind(_parse_kwargs(self._rest))
+            return self._args_bind(parse_greedy_kwargs(self._rest, greedy_key=_NAME_KWARG))
         if self._subverb in _POSITIONAL_SUBVERBS:
             return {"companion_id": self._resolve_companion_id(self._rest)}
         return {}  # all subverbs gated in func(); this path is unreachable
