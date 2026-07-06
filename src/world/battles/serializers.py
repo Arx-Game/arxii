@@ -148,8 +148,6 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
             character_sheet = obj.character_sheet
         except ObjectDoesNotExist:
             return None
-        if character_sheet is None:
-            return None
         for persona in character_sheet.cached_payload_personas:
             if persona.persona_type == PersonaType.PRIMARY:
                 return persona

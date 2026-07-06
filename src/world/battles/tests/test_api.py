@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
@@ -255,6 +257,67 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         ids = [row["id"] for row in response.data["results"]]
         self.assertNotIn(self.battle.pk, ids)
+
+    def _build_battle_with_participants(self, num_participants: int):
+        """A standalone battle (own scene/side) enlisting `num_participants` PCs.
+
+        Kept separate from `self.battle`/setUpTestData deliberately: idmapper
+        caches model instances by pk process-wide, and Django's `to_attr`
+        prefetch skips re-fetching a lookup that's already set on an instance
+        (``is_to_attr_fetched`` in django/db/models/query.py) -- refetching the
+        *same* Battle pk within one test would let the second request's
+        prefetch silently no-op against the first request's cached attribute.
+        Two distinct Battle rows sidestep that entirely.
+        """
+        battle = BattleFactory()
+        side = BattleSideFactory(battle=battle)
+        for _ in range(num_participants):
+            enlist_participant(battle=battle, character_sheet=CharacterSheetFactory(), side=side)
+        return battle
+
+    def test_participant_persona_query_count_does_not_scale_with_participant_count(
+        self,
+    ) -> None:
+        """Regression guard for the N+1 the review on #2009 caught: the detail
+        view's participants Prefetch must nest a ``character_sheet__personas``
+        Prefetch (to_attr ``cached_payload_personas``) so
+        ``BattleParticipantSerializer._primary_persona`` never issues a
+        per-participant query. Query count must stay flat as participants grow.
+        """
+        client = APIClient()
+        client.force_authenticate(user=self.staff_account)
+
+        battle_one = self._build_battle_with_participants(1)
+        battle_many = self._build_battle_with_participants(3)
+
+        # Warm up on a third, throwaway battle first: the very first request
+        # in a test pays one-time costs (permission/content-type caching)
+        # that a naive first-vs-second comparison would misread as N+1 growth.
+        warmup_battle = self._build_battle_with_participants(1)
+        client.get(f"/api/battles/{warmup_battle.pk}/")
+
+        with CaptureQueriesContext(connection) as ctx_one:
+            response_one = client.get(f"/api/battles/{battle_one.pk}/")
+        self.assertEqual(response_one.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(len(response_one.data["participants"]), 1)
+        queries_one = len(ctx_one)
+
+        with CaptureQueriesContext(connection) as ctx_many:
+            response_many = client.get(f"/api/battles/{battle_many.pk}/")
+        self.assertEqual(response_many.status_code, http_status.HTTP_200_OK)
+        participants = response_many.data["participants"]
+        self.assertEqual(len(participants), 3)
+        for participant_data in participants:
+            self.assertIsNotNone(participant_data["persona"])
+        queries_many = len(ctx_many)
+
+        self.assertEqual(
+            queries_one,
+            queries_many,
+            f"Query count grew from {queries_one} (1 participant) to "
+            f"{queries_many} (3 participants) -- the participants Prefetch is "
+            "issuing a per-row persona query (N+1 regression).",
+        )
 
     def test_scene_filter_returns_exactly_this_battle_for_participant(self) -> None:
         client = APIClient()

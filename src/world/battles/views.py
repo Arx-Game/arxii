@@ -17,7 +17,8 @@ from world.battles.models import (
     Fortification,
 )
 from world.battles.serializers import BattleDetailSerializer, BattleListSerializer
-from world.scenes.models import Scene
+from world.scenes.constants import PersonaType
+from world.scenes.models import Persona, Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -73,13 +74,32 @@ class BattleViewSet(ReadOnlyModelViewSet):
             Prefetch("units", queryset=BattleUnit.objects.all(), to_attr="cached_units"),
             Prefetch(
                 "participants",
-                queryset=BattleParticipant.objects.select_related("character_sheet"),
+                queryset=BattleParticipant.objects.select_related(
+                    "character_sheet"
+                ).prefetch_related(
+                    # Pre-fill CharacterSheet.cached_payload_personas (a
+                    # @cached_property doubling as this to_attr target) so
+                    # BattleParticipantSerializer resolves the PRIMARY persona
+                    # with zero per-row queries. Queryset shape mirrors
+                    # world/combat/views.py's identical Prefetch (#630) and the
+                    # property's own documented fallback (must match exactly, or
+                    # prefetched vs. non-prefetched rows diverge).
+                    Prefetch(
+                        "character_sheet__personas",
+                        queryset=Persona.objects.filter(
+                            persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
+                        )
+                        .order_by("-persona_type", "created_at", "id")
+                        .select_related("thumbnail"),
+                        to_attr="cached_payload_personas",
+                    ),
+                ),
                 to_attr="cached_participants",
             ),
         ]
 
     def _base_queryset(self) -> QuerySet[Battle]:
-        qs = Battle.objects.select_related("scene").order_by("-created_at")
+        qs = Battle.objects.order_by("-created_at")
         if self.action == "retrieve":
             qs = qs.prefetch_related(*self._detail_prefetches())
         return qs
