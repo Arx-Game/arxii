@@ -27,6 +27,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.checks.models import OutcomeTierAward
 from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
     DeedKnowledgeSource,
@@ -1762,26 +1763,20 @@ class GangTurfTierThreshold(SharedMemoryModel):
         return f"{self.outcome_tier} @ {self.min_progress}"
 
 
-class GangTurfReputationAward(SharedMemoryModel):
+class GangTurfReputationAward(OutcomeTierAward):
     """Reputation delta granted to the owning gang org for a CheckOutcome tier.
 
-    One row per ``CheckOutcome`` (globally). Read by
-    ``gang_turf._tier_to_reputation_delta``; a missing row yields 0 (a content
-    gap, not a crash). Staff-tunable — no hardcoded deltas in service code (repo
-    rule: gameplay rules live in the DB).
+    Read by ``gang_turf._tier_to_reputation_delta``; a missing row yields 0 (a
+    content gap, not a crash). Staff-tunable — no hardcoded deltas in service
+    code (repo rule: gameplay rules live in the DB). This was the original,
+    already-correct instance of the pattern generalized into
+    ``OutcomeTierAward`` (#1207) — re-parented here for consistency, no
+    behavior change.
     """
 
-    outcome_tier = models.OneToOneField(
-        "traits.CheckOutcome",
-        on_delete=models.PROTECT,
-        related_name="gang_turf_award",
-    )
     reputation_delta = models.PositiveIntegerField(
         help_text="Reputation gained by the owning org's standing for this tier.",
     )
-
-    class Meta:
-        ordering = ["outcome_tier__success_level"]
 
     def __str__(self) -> str:
         return f"{self.outcome_tier}: +{self.reputation_delta}"
