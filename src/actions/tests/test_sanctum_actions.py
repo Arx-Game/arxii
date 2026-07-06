@@ -107,7 +107,7 @@ class SanctumInstallActionTests(TestCase):
                 owner_mode="PERSONAL",
             )
 
-        fizzle_detail.assert_called_once_with("fail")
+        fizzle_detail.assert_called_once_with(-1)
         self.assertTrue(result.success)
         self.assertTrue(result.data["fizzled"])
         self.assertEqual(result.data["success_level"], -1)

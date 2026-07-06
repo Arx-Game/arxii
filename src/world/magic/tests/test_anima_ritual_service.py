@@ -34,6 +34,7 @@ from world.magic.factories import (
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
+from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import perform_anima_ritual
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.factories import SceneFactory
@@ -102,10 +103,6 @@ class CritNoSoulfrayTests(TestCase):
         )
         self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=1,
         )
         self.scene = SceneFactory(is_active=True)
@@ -116,6 +113,9 @@ class CritNoSoulfrayTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=2)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=10
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -146,10 +146,6 @@ class CritWithSoulfrayTests(TestCase):
             severity=2,
         )
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=2,  # 2 budget per severity point
         )
         self.scene = SceneFactory(is_active=True)
@@ -160,6 +156,9 @@ class CritWithSoulfrayTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=2)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=10
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -191,10 +190,6 @@ class SuccessWithSoulfrayTests(TestCase):
             severity=5,  # 5 severity points
         )
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=2,  # 2 budget per severity point
         )
         self.scene = SceneFactory(is_active=True)
@@ -205,6 +200,9 @@ class SuccessWithSoulfrayTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=1)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=6
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -241,10 +239,6 @@ class PartialWithHighSoulfrayTests(TestCase):
             severity=10,
         )
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=2,
         )
         self.scene = SceneFactory(is_active=True)
@@ -255,6 +249,9 @@ class PartialWithHighSoulfrayTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=0)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=3
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -284,10 +281,6 @@ class FailureNoSoulfrayTests(TestCase):
         )
         self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=1,
         )
         self.scene = SceneFactory(is_active=True)
@@ -298,6 +291,9 @@ class FailureNoSoulfrayTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=-1)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=1
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -321,10 +317,6 @@ class GateTests(TestCase):
         )
         self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=1,
         )
         self.scene = SceneFactory(is_active=True)
@@ -348,6 +340,9 @@ class GateTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=1)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=6
+        )
         # First call succeeds
         perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
         # Second call raises
@@ -376,10 +371,6 @@ class PerformanceRowTests(TestCase):
         )
         self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         self.config = SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=1,
         )
         self.scene = SceneFactory(is_active=True)
@@ -390,6 +381,9 @@ class PerformanceRowTests(TestCase):
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=1)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=6
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -435,13 +429,12 @@ class AnimaRitualBudgetGuardTests(TestCase):
             severity=10,
         )
         SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=3,
-            ritual_budget_partial=1,
-            ritual_budget_failure=0,
             ritual_severity_cost_per_point=1,
         )
         mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=3
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -471,13 +464,12 @@ class AnimaRitualBudgetGuardTests(TestCase):
             severity=10,
         )
         SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=3,
-            ritual_budget_partial=1,
-            ritual_budget_failure=0,
             ritual_severity_cost_per_point=2,
         )
         mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=3
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
@@ -499,13 +491,12 @@ class AnimaRitualBudgetGuardTests(TestCase):
         CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
         # No ConditionInstance created for this character
         SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=3,
-            ritual_budget_partial=1,
-            ritual_budget_failure=0,
             ritual_severity_cost_per_point=2,
         )
         mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=3
+        )
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 

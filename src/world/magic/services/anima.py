@@ -48,14 +48,6 @@ def deduct_anima(character: ObjectDB, effective_cost: int, *, lethal: bool = Tru
     return deficit
 
 
-# ---------------------------------------------------------------------------
-# Outcome-level constants (mirror Phase 6 conditions.services convention)
-# ---------------------------------------------------------------------------
-_CRIT_SUCCESS_LEVEL = 2
-_SUCCESS_LEVEL = 1
-_PARTIAL_LEVEL = 0
-
-
 def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
     """The character's authored SCENE_ACTION ritual (with check_config), or None."""
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
@@ -163,7 +155,7 @@ def apply_anima_ritual_outcome(
     character = character_sheet.character
 
     config = SoulfrayConfig.objects.cached_singleton()
-    budget = _budget_for_outcome(outcome, config)
+    budget = _budget_for_outcome(outcome)
 
     anima = CharacterAnima.objects.select_for_update().get(character=character)
 
@@ -191,7 +183,8 @@ def apply_anima_ritual_outcome(
     anima_before = anima.current
     anima.current = min(anima.current + max(0, budget), anima.maximum)
 
-    if int(outcome.success_level) >= _CRIT_SUCCESS_LEVEL:  # type: ignore[union-attr]
+    success_level = int(outcome.success_level)  # type: ignore[union-attr]
+    if success_level >= 2:  # noqa: PLR2004 - chart success degrees
         anima.current = anima.maximum
 
     anima.save(update_fields=["current"])
@@ -200,7 +193,7 @@ def apply_anima_ritual_outcome(
     performance = AnimaRitualPerformance.objects.create(
         ritual=ritual,
         scene=scene,
-        was_successful=int(outcome.success_level) >= _SUCCESS_LEVEL,  # type: ignore[union-attr]
+        was_successful=success_level >= 1,
         anima_recovered=anima_recovered,
         outcome=outcome,
         severity_reduced=severity_reduced,
@@ -331,16 +324,17 @@ def has_performed_anima_ritual_in_scene(
     return AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists()
 
 
-def _budget_for_outcome(outcome: object, config: object) -> int:
-    """Return the anima/severity budget for an outcome row."""
-    level = int(outcome.success_level)  # type: ignore[union-attr]
-    if level >= _CRIT_SUCCESS_LEVEL:
-        return int(config.ritual_budget_critical_success)  # type: ignore[union-attr]
-    if level >= _SUCCESS_LEVEL:
-        return int(config.ritual_budget_success)  # type: ignore[union-attr]
-    if level == _PARTIAL_LEVEL:
-        return int(config.ritual_budget_partial)  # type: ignore[union-attr]
-    return int(config.ritual_budget_failure)  # type: ignore[union-attr]
+def _budget_for_outcome(outcome: object) -> int:
+    """Return the anima/severity budget for an outcome row.
+
+    Raises AnimaRitualBudgetAward.DoesNotExist if the tier has no authored row —
+    every one of the 5 canonical CheckOutcome tiers must be seeded (unlike
+    GangTurfReputationAward's "missing row = 0" convention; a missing anima
+    budget must not silently grant 0 recovery on a legitimate ritual attempt).
+    """
+    from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
+
+    return AnimaRitualBudgetAward.objects.get(outcome_tier=outcome).budget
 
 
 def _scene_participant(scene: Scene, character: ObjectDB) -> bool:

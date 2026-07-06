@@ -6,6 +6,7 @@ from world.magic.audere import AudereThreshold
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
+    AnimaRitualBudgetAward,
     AnimaRitualPerformance,
     Cantrip,
     CharacterAnima,
@@ -40,6 +41,9 @@ from world.magic.models import (
     Ritual,
     RitualCheckConfig,
     RitualComponentRequirement,
+    SanctumDissolutionRecoveryAward,
+    SanctumHomecomingGainAward,
+    SanctumPurgingRetentionAward,
     SceneEntryEndorsement,
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
@@ -432,6 +436,42 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "resilience_check_type",
         "base_check_difficulty",
     ]
+
+
+@admin.register(AnimaRitualBudgetAward)
+class AnimaRitualBudgetAwardAdmin(admin.ModelAdmin):
+    """#1207 — anima/severity budget per outcome tier (staff-tunable)."""
+
+    list_display = ("outcome_tier", "budget")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
+
+
+@admin.register(SanctumHomecomingGainAward)
+class SanctumHomecomingGainAwardAdmin(admin.ModelAdmin):
+    """#1207 — Homecoming ritual gain multiplier per outcome tier (staff-tunable)."""
+
+    list_display = ("outcome_tier", "gain_multiplier")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
+
+
+@admin.register(SanctumPurgingRetentionAward)
+class SanctumPurgingRetentionAwardAdmin(admin.ModelAdmin):
+    """#1207 — Purging ritual retention adjustment per outcome tier (staff-tunable)."""
+
+    list_display = ("outcome_tier", "retention_modifier")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
+
+
+@admin.register(SanctumDissolutionRecoveryAward)
+class SanctumDissolutionRecoveryAwardAdmin(admin.ModelAdmin):
+    """#1207 — Dissolution ritual recovery fraction per outcome tier (staff-tunable)."""
+
+    list_display = ("outcome_tier", "recovery_fraction")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
 
 
 @admin.register(LevelPowerConfig)

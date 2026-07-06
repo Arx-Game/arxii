@@ -43,6 +43,7 @@ from world.magic.factories import (
     SoulfrayContentFactory,
     wire_soulfray_aftermath,
 )
+from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import anima_regen_tick, perform_anima_ritual
 from world.scenes.factories import SceneFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -161,6 +162,9 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
         # to maximum regardless of leftover budget.
         with patch(_PERFORM_CHECK_PATH) as mock_check:
             mock_check.return_value = _make_check_result(success_level=2)
+            AnimaRitualBudgetAward.objects.create(
+                outcome_tier=mock_check.return_value.outcome, budget=10
+            )
             ritual_outcome = perform_anima_ritual(character_sheet=target_sheet, scene=scene)
         soulfray_inst.refresh_from_db()
         target_anima.refresh_from_db()

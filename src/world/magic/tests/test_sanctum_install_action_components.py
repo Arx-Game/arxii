@@ -38,16 +38,19 @@ from world.magic.seeds_checks import ensure_magic_check_content
 from world.magic.seeds_sanctum import ensure_sanctification_personal_ritual, ensure_sanctum_rituals
 from world.magic.seeds_touchstone_content import ensure_touchstone_content
 from world.room_features.seeds import ensure_sanctum_kind
+from world.traits.factories import CheckOutcomeFactory
 
 
 def _mock_check_success() -> object:
-    """Return a fake CheckResult whose outcome tier maps to SUCCESS (success_level=1).
+    """Return a fake CheckResult wrapping a real SUCCESS-tier CheckOutcome row.
 
     Mirrors ``test_sanctum_journey_e2e.py``'s helper — the Sanctification ritual
     check is patched to a deterministic SUCCESS so these tests exercise the
-    component-validation seam, not the check-roll RNG.
+    component-validation seam, not the check-roll RNG. Since #1207, the outcome
+    must be a real DB row (not a duck-typed stand-in) because
+    ``perform_sanctification`` reads ``roll.check_result.outcome.name``.
     """
-    outcome = type("Outcome", (), {"success_level": 1})()
+    outcome = CheckOutcomeFactory(name="InstallComponentsE2E_Success", success_level=1)
     return type("CheckResult", (), {"outcome": outcome})()
 
 

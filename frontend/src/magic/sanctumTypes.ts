@@ -13,12 +13,15 @@ import type { components } from '@/generated/api';
 export type SanctumDetails = components['schemas']['SanctumDetails'];
 
 /**
- * Graded ritual outcome tier, mirrored from `OutcomeTier` in
- * `world/magic/services/ritual_checks.py`. Surfaced on every Sanctum ritual
- * result so the UI can distinguish a crit / success / fail / botch without
- * re-deriving the server's private success_level boundaries.
+ * Graded ritual outcome tier — the real CheckOutcome.name for this roll, one
+ * of the 5 canonical tiers seeded in world/seeds/checks.py (#1207).
  */
-export type SanctumOutcomeTier = 'crit' | 'success' | 'fail' | 'botch';
+export type SanctumOutcomeTier =
+  | 'Critical Failure'
+  | 'Failure'
+  | 'Partial Success'
+  | 'Success'
+  | 'Critical Success';
 
 export interface HomecomingRequest {
   resonance_sacrificed: number;

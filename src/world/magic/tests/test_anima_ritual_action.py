@@ -25,6 +25,7 @@ from world.magic.factories import (
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
+from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_resolvers import _RESOLVER_REGISTRY
 from world.scenes.action_services import respond_to_action_request
@@ -111,16 +112,18 @@ class AnimaRitualResolverTests(TestCase):
         )
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         SoulfrayConfigFactory(
-            ritual_budget_critical_success=10,
-            ritual_budget_success=6,
-            ritual_budget_partial=3,
-            ritual_budget_failure=1,
             ritual_severity_cost_per_point=1,
         )
         scene = SceneFactory(is_active=True)
         outcome = CheckOutcomeFactory(
             name=f"TestOutcome_sl{success_level}_{id(object())}",
             success_level=success_level,
+        )
+        # Budget keyed to the same outcome tier this helper mints, mirroring the
+        # old ritual_budget_critical_success/_success/_partial/_failure values.
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=outcome,
+            budget={2: 10, 1: 6, 0: 3}.get(success_level, 1),
         )
         action_template = ActionTemplateFactory()
 

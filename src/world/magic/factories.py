@@ -890,11 +890,6 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     deficit_scale = 5
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     base_check_difficulty = 15
-    # Ritual budget defaults per spec §8.7 (mirrors migration 0021 defaults)
-    ritual_budget_critical_success = 10
-    ritual_budget_success = 6
-    ritual_budget_partial = 3
-    ritual_budget_failure = 1
     ritual_severity_cost_per_point = 1
 
 

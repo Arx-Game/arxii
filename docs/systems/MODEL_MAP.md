@@ -3179,6 +3179,18 @@
   - sanctum -> magic.SanctumDetails [FK]
   - weaver_character_sheet -> character_sheets.CharacterSheet [FK]
 
+### SanctumHomecomingGainAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### SanctumPurgingRetentionAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### SanctumDissolutionRecoveryAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### TechniqueVariant
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK] (nullable)
@@ -3297,6 +3309,10 @@
 ### MishapPoolTier
 **Foreign Keys:**
   - consequence_pool -> actions.ConsequencePool [FK]
+
+### AnimaRitualBudgetAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
 
 ### TechniqueBudgetConfig
 
@@ -5707,9 +5723,13 @@
   - resultchartoutcome_set <- traits.ResultChartOutcome
   - technique_warp_modifier <- magic.TechniqueOutcomeModifier
   - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - magic_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
+  - magic_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
+  - magic_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
+  - magic_animaritualbudgetaward <- magic.AnimaRitualBudgetAward
   - beat_completions <- stories.BeatCompletion
   - gang_turf_thresholds <- societies.GangTurfTierThreshold
-  - gang_turf_award <- societies.GangTurfReputationAward
+  - societies_gangturfreputationaward <- societies.GangTurfReputationAward
   - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence

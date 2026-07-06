@@ -19,7 +19,7 @@ Submodules (see Scope 6 §4.4):
   (gift-technique specialization variants, #1578)
 - cantrips: Cantrip
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
-- soulfray: SoulfrayConfig, MishapPoolTier
+- soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
 - threads: Thread, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
   ThreadPullEffect
@@ -30,6 +30,9 @@ Submodules (see Scope 6 §4.4):
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 - progression_milestone: MagicProgressionMilestone
+- sanctum: SanctumDetails, SanctumOwnerMode, SanctumPendingPayout,
+  SanctumHomecomingGainAward, SanctumPurgingRetentionAward,
+  SanctumDissolutionRecoveryAward (#1207)
 
 Additionally: ``AudereThreshold`` lives in ``world.magic.audere`` but is
 re-exported here so Django's model registry sees it via the ``magic.models``
@@ -134,8 +137,11 @@ from world.magic.models.rituals import (
 )
 from world.magic.models.sanctum import (
     SanctumDetails,
+    SanctumDissolutionRecoveryAward,
+    SanctumHomecomingGainAward,
     SanctumOwnerMode,
     SanctumPendingPayout,
+    SanctumPurgingRetentionAward,
 )
 from world.magic.models.sessions import (
     RitualSession,
@@ -155,7 +161,7 @@ from world.magic.models.soul_tether import (
     SoulTetherRescue,
 )
 from world.magic.models.soul_tether_config import SoulTetherConfig
-from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
+from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
     TechniqueTierBudget,
@@ -215,6 +221,8 @@ __all__ = [
     "AffinityManager",
     # anima
     "AnimaConfig",
+    # soulfray (#1207)
+    "AnimaRitualBudgetAward",
     "AnimaRitualPerformance",
     # audere majora (re-exported from world.magic.audere_majora)
     "AudereMajoraCrossing",
@@ -325,8 +333,11 @@ __all__ = [
     "RitualSessionReference",
     # sanctum (Plan 4 Subsystem F)
     "SanctumDetails",
+    "SanctumDissolutionRecoveryAward",
+    "SanctumHomecomingGainAward",
     "SanctumOwnerMode",
     "SanctumPendingPayout",
+    "SanctumPurgingRetentionAward",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
     # signature motif bonuses (#1582)

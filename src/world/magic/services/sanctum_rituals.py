@@ -26,7 +26,7 @@ from world.magic.constants import GainSource  # noqa: F401
 from world.magic.exceptions import ResonanceInsufficient
 from world.magic.models import CharacterResonance, SanctumOwnerMode
 from world.magic.seeds_sanctum import HOMECOMING_RITUAL_NAME, PURGING_RITUAL_NAME
-from world.magic.services.ritual_checks import OutcomeTier, perform_ritual_check
+from world.magic.services.ritual_checks import perform_ritual_check
 from world.magic.services.sanctum_lvm import (
     apply_homecoming_gain,
     compute_homecoming_cap,
@@ -50,22 +50,6 @@ DEFAULT_PURGING_RETENTION = Decimal("0.5")
 DEFAULT_PURGING_COST_MULTIPLIER = Decimal("1.0")
 """Sacrifice cost multiplier for Purging: at least this fraction of the
 current Homecoming-grown sum must be paid from the leader's pool."""
-
-HOMECOMING_GAIN_MULTIPLIERS: dict[OutcomeTier, Decimal] = {
-    OutcomeTier.CRIT: Decimal("1.25"),
-    OutcomeTier.SUCCESS: Decimal("1.00"),
-    OutcomeTier.FAIL: Decimal("0.50"),
-    OutcomeTier.BOTCH: Decimal("0.25"),
-}
-"""Outcome-tier multiplier on Homecoming imbue efficiency. TUNING PLACEHOLDERS."""
-
-PURGING_RETENTION_MODIFIERS: dict[OutcomeTier, Decimal] = {
-    OutcomeTier.CRIT: Decimal("0.25"),
-    OutcomeTier.SUCCESS: Decimal("0.00"),
-    OutcomeTier.FAIL: Decimal("-0.15"),
-    OutcomeTier.BOTCH: Decimal("-0.30"),
-}
-"""Outcome-tier adjustment to the Purging retention fraction. TUNING PLACEHOLDERS."""
 
 
 class HomecomingValidationError(ValueError):
@@ -92,8 +76,8 @@ class PurgingResonanceTypeUnchangedError(PurgingValidationError):
 class HomecomingResult:
     """Frozen return shape for Homecoming runs.
 
-    ``tier`` is the graded OutcomeTier value string (``crit``/``success``/
-    ``fail``/``botch``) so the API seam can distinguish outcomes without
+    ``tier`` is the real ``CheckOutcome.name`` for this roll (one of the 5
+    canonical tiers) so the API seam can distinguish outcomes without
     re-deriving the private tier boundaries.
     """
 
@@ -109,8 +93,8 @@ class HomecomingResult:
 class PurgingResult:
     """Frozen return shape for Purging runs.
 
-    ``tier`` is the graded OutcomeTier value string (``crit``/``success``/
-    ``fail``/``botch``) so the API seam can distinguish outcomes without
+    ``tier`` is the real ``CheckOutcome.name`` for this roll (one of the 5
+    canonical tiers) so the API seam can distinguish outcomes without
     re-deriving the private tier boundaries.
     """
 
@@ -222,7 +206,11 @@ def perform_homecoming_ritual(
         leader_persona.character_sheet.character,
     )
     base_gain = resonance_sacrificed // HOMECOMING_EFFICIENCY
-    gain = int(Decimal(base_gain) * HOMECOMING_GAIN_MULTIPLIERS[roll.tier])
+
+    from world.magic.models.sanctum import SanctumHomecomingGainAward  # noqa: PLC0415
+
+    award = SanctumHomecomingGainAward.objects.get(outcome_tier=roll.check_result.outcome)
+    gain = int(Decimal(base_gain) * award.gain_multiplier)
     cap = compute_homecoming_cap(sanctum)
     applied, overflow = apply_homecoming_gain(sanctum, gain, cap)
 
@@ -239,7 +227,7 @@ def perform_homecoming_ritual(
         new_homecoming_sum=sum_homecoming_value(sanctum),
         new_cap=cap,
         success_level=roll.success_level,
-        tier=roll.tier.value,
+        tier=roll.check_result.outcome.name,
     )
 
 
@@ -285,9 +273,13 @@ def perform_purging_ritual(  # noqa: PLR0913
         PURGING_RITUAL_NAME,
         leader_persona.character_sheet.character,
     )
+
+    from world.magic.models.sanctum import SanctumPurgingRetentionAward  # noqa: PLC0415
+
+    award = SanctumPurgingRetentionAward.objects.get(outcome_tier=roll.check_result.outcome)
     effective_retention = min(
         Decimal("1.0"),
-        max(Decimal("0.0"), retention + PURGING_RETENTION_MODIFIERS[roll.tier]),
+        max(Decimal("0.0"), retention + award.retention_modifier),
     )
 
     # Order matters: retag first (rows still match the old source tag, just
@@ -304,5 +296,5 @@ def perform_purging_ritual(  # noqa: PLR0913
         sum_after_drain=sum_homecoming_value(sanctum),
         sacrifice_paid=resonance_sacrificed,
         success_level=roll.success_level,
-        tier=roll.tier.value,
+        tier=roll.check_result.outcome.name,
     )

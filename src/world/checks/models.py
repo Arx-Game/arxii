@@ -12,6 +12,29 @@ from world.checks.constants import EffectTarget, EffectType, PositionDestination
 from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeModifier  # noqa: F401
 
 
+class OutcomeTierAward(SharedMemoryModel):
+    """Shared base: one authored scalar per graded CheckOutcome tier.
+
+    Generalizes the pattern `world.societies.models.GangTurfReputationAward`
+    already used correctly — a staff-tunable DB row per canonical outcome tier,
+    instead of a bespoke Python threshold re-derivation. Concrete subclasses add
+    their own single value field (name/type/unit differs per consumer); this
+    base only standardizes the tier FK. A missing row is a content gap for the
+    consumer to handle explicitly (see each subclass's docstring), not a crash
+    baked into this base.
+    """
+
+    outcome_tier = models.OneToOneField(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="%(app_label)s_%(class)s",
+    )
+
+    class Meta:
+        abstract = True
+        ordering = ["outcome_tier__success_level"]
+
+
 class CheckCategory(NaturalKeyMixin, SharedMemoryModel):
     """Grouping for check types (Social, Combat, Exploration, Magic)."""
 

@@ -7,11 +7,11 @@ imprecision mishaps.
 """
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from world.checks.models import OutcomeTierAward
 
 
 class SoulfrayConfig(SharedMemoryModel):
@@ -43,14 +43,6 @@ class SoulfrayConfig(SharedMemoryModel):
     )
     base_check_difficulty = models.PositiveIntegerField(
         help_text="Base difficulty for the resilience check before stage modifiers.",
-    )
-    ritual_budget_critical_success = models.PositiveIntegerField(default=10)
-    ritual_budget_success = models.PositiveIntegerField(default=6)
-    ritual_budget_partial = models.PositiveIntegerField(default=3)
-    ritual_budget_failure = models.PositiveIntegerField(
-        default=1,
-        validators=[MinValueValidator(1)],
-        help_text="Must be > 0; failure always returns some anima.",
     )
     ritual_severity_cost_per_point = models.PositiveIntegerField(default=1)
 
@@ -111,3 +103,21 @@ class MishapPoolTier(SharedMemoryModel):
         if overlapping.exists():
             msg = "Deficit range overlaps with an existing MishapPoolTier."
             raise ValidationError(msg)
+
+
+class AnimaRitualBudgetAward(OutcomeTierAward):
+    """Anima/severity budget granted by the personal anima-recovery ritual, per tier.
+
+    Replaces the old SoulfrayConfig.ritual_budget_critical_success/_success/_partial/
+    _failure fields and anima.py's private _CRIT_SUCCESS_LEVEL/_SUCCESS_LEVEL/
+    _PARTIAL_LEVEL constants (#1207) — those re-derived the canonical CheckOutcome
+    spine instead of matching it directly, and disagreed with ritual_checks.OutcomeTier
+    about what success_level == 0 meant. Every one of the 5 canonical tiers must have
+    an authored row (unlike GangTurfReputationAward's "missing = 0" convention) —
+    _budget_for_outcome (anima.py) raises clearly rather than silently granting 0
+    anima on an un-seeded tier.
+    """
+
+    budget = models.PositiveIntegerField(
+        help_text="Anima/severity budget granted for this outcome tier.",
+    )

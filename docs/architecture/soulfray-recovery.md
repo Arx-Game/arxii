@@ -269,6 +269,14 @@ class TreatmentAttempt(SharedMemoryModel):
 
 Existing fields remain unchanged in Scope 6. New fields:
 
+> **Superseded (#1207):** `ritual_budget_critical_success`/`_success`/`_partial`/`_failure`
+> were removed from `SoulfrayConfig` and replaced by
+> `world.magic.models.soulfray.AnimaRitualBudgetAward` — one authored row per
+> canonical `CheckOutcome` tier, looked up via `AnimaRitualBudgetAward.objects.get(
+> outcome_tier=outcome).budget` (generalizes the shared `world.checks.models
+> .OutcomeTierAward` pattern). `ritual_severity_cost_per_point` is unaffected and
+> remains a `SoulfrayConfig` field.
+
 ```python
 ritual_budget_critical_success = models.PositiveIntegerField()
 ritual_budget_success = models.PositiveIntegerField()
@@ -414,7 +422,9 @@ Lives in `magic/services/anima.py`.
 
 **Execute:**
 1. Resolve check via `perform_check(character_sheet.character, check_type=ritual.check_type, target_difficulty=ritual.target_difficulty)`. (`CharacterAnimaRitual.target_difficulty` is the new field added in Section 4.3.) The check returns a `CheckResult` with `.outcome: CheckOutcome`.
-2. Look up budget from outcome:
+2. Look up budget from outcome (**superseded #1207** — see 4.3: now
+   `AnimaRitualBudgetAward.objects.get(outcome_tier=outcome).budget`, one row per
+   canonical `CheckOutcome` tier, rather than a `SoulfrayConfig` field per tier):
    - `CheckOutcome.CRITICAL_SUCCESS` → `SoulfrayConfig.ritual_budget_critical_success`
    - `CheckOutcome.SUCCESS` → `...budget_success`
    - `CheckOutcome.PARTIAL` (or the nearest equivalent outcome — exact mapping settled during implementation against `world.traits` outcome names) → `...budget_partial`
@@ -760,6 +770,11 @@ TreatmentTemplate(
 The existing `AudereThreshold` row's `minimum_warp_stage` retargets to the Ripping (stage 3) `ConditionStage`. No code change in `audere.py`; factory/seed update only. **Existing audere tests** currently assert against stage-2 gating (see `world/magic/tests/test_audere.py`) — those test fixtures must update to the new stage mapping or override the fixture per-test. Called out in Section 10.
 
 ### 8.7 `SoulfrayConfig` ritual budgets
+
+> **Superseded (#1207):** these 4 tunables now live as `AnimaRitualBudgetAward.budget`
+> rows (one per canonical `CheckOutcome` tier) rather than `SoulfrayConfig` fields —
+> see 4.3. The tuning targets below describe the original intent per tier and still
+> apply to the award rows' seed values.
 
 Tuning target:
 - `ritual_budget_critical_success`: enough severity reduction to clear a stage-1 Soulfray fully; anima also force-refills to max via the crit override (Section 5.1 step 5) regardless of budget leftover.
