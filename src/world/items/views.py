@@ -803,7 +803,7 @@ class OutfitViewSet(viewsets.ViewSet):
         description = serializer.validated_data.get("description", "")
         action_result = SaveOutfitAction().run(
             actor=sheet.character,
-            wardrobe=wardrobe.game_object,
+            wardrobe=wardrobe,
             name=name,
             description=description,
         )
@@ -989,7 +989,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         action_result = AddOutfitSlotAction().run(
             actor=actor,
             outfit=outfit,
-            item=item_instance.game_object,
+            item_instance=item_instance,
             body_region=body_region,
             equipment_layer=equipment_layer,
         )

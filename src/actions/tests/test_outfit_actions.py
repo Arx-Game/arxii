@@ -270,9 +270,7 @@ class SaveOutfitActionTests(TestCase):
             holder_character_sheet=actor.sheet_data,
         )
 
-        result = SaveOutfitAction().run(
-            actor=actor, wardrobe=wardrobe.game_object, name="Formal Wear"
-        )
+        result = SaveOutfitAction().run(actor=actor, wardrobe=wardrobe, name="Formal Wear")
         assert result.success
         outfit = result.data["outfit"]
         assert outfit.name == "Formal Wear"

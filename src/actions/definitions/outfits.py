@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
-from actions.definitions.item_helpers import resolve_item_instance
 from actions.prerequisites import OwnsOutfitPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.constants import EventName
@@ -123,14 +122,11 @@ class SaveOutfitAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        wardrobe_obj = kwargs.get("wardrobe")
+        wardrobe = kwargs.get("wardrobe")
         name = kwargs.get("name")
         description = kwargs.get("description", "")
-        if wardrobe_obj is None or not name:
+        if wardrobe is None or not name:
             return ActionResult(success=False, message="Save with which wardrobe, and what name?")
-        wardrobe = resolve_item_instance(wardrobe_obj)
-        if wardrobe is None:
-            return ActionResult(success=False, message="That isn't an item.")
         try:
             sheet = actor.sheet_data
         except AttributeError:
@@ -217,14 +213,11 @@ class AddOutfitSlotAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         outfit = kwargs.get("outfit")
-        item_obj = kwargs.get("item")
+        item_instance = kwargs.get("item_instance")
         body_region = kwargs.get("body_region")
         equipment_layer = kwargs.get("equipment_layer")
-        if outfit is None or item_obj is None or not body_region or not equipment_layer:
+        if outfit is None or item_instance is None or not body_region or not equipment_layer:
             return ActionResult(success=False, message="Add what item, to which slot?")
-        item_instance = resolve_item_instance(item_obj)
-        if item_instance is None:
-            return ActionResult(success=False, message="That isn't an item.")
         try:
             slot = add_outfit_slot_service(
                 outfit=outfit,

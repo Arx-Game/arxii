@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from actions.definitions.fashion import PresentOutfitAction
+from actions.definitions.item_helpers import resolve_item_instance
 from actions.definitions.outfits import (
     AddOutfitSlotAction,
     ApplyOutfitAction,
@@ -137,7 +138,11 @@ class CmdOutfit(ArxCommand):
         if not wardrobe_obj:
             msg = "You aren't holding that wardrobe."
             raise CommandError(msg)
-        result = SaveOutfitAction().run(actor=self.caller, wardrobe=wardrobe_obj, name=name)
+        wardrobe_instance = resolve_item_instance(wardrobe_obj)
+        if wardrobe_instance is None:
+            msg = "That isn't an item."
+            raise CommandError(msg)
+        result = SaveOutfitAction().run(actor=self.caller, wardrobe=wardrobe_instance, name=name)
         if result.message:
             self.msg(result.message)
         elif result.success:
@@ -178,10 +183,14 @@ class CmdOutfit(ArxCommand):
         if not item_obj:
             msg = "You aren't holding that item."
             raise CommandError(msg)
+        item_instance = resolve_item_instance(item_obj)
+        if item_instance is None:
+            msg = "That isn't an item."
+            raise CommandError(msg)
         result = AddOutfitSlotAction().run(
             actor=self.caller,
             outfit=outfit,
-            item=item_obj,
+            item_instance=item_instance,
             body_region=region,
             equipment_layer=layer,
         )
