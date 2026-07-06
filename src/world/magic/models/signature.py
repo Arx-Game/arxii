@@ -6,8 +6,9 @@ child rows (capability grants, damage profiles, applied conditions) as Technique
 TechniqueVariant, reusing the Abstract* bases from techniques.py.
 
 Design boundary: SignatureMotifBonus is NOT a TechniqueVariant. It must NOT inherit
-AbstractSpecializedVariant and must NOT participate in the discovery ceremony
-(fire_variant_discoveries). It is an additive flourish, not a discovered variant.
+AbstractSpecializedVariant and must NOT participate in the crossing ceremony
+(`execute_crossing_ceremonies`, formerly `fire_variant_discoveries`). It is an
+additive flourish, not a discovered variant.
 """
 
 from django.core.exceptions import ValidationError

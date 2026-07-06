@@ -309,8 +309,8 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 A character may *sign* one of their TECHNIQUE-kind Threads by attaching a
 `SignatureMotifBonus` (`models/signature.py`) — a staff-authored, Motif-gated ADDITIVE
 bonus. It is NOT a `TechniqueVariant`, does NOT inherit `AbstractSpecializedVariant`, and
-does NOT participate in `fire_variant_discoveries`. Invariant: this boundary must be
-preserved.
+does NOT participate in `execute_crossing_ceremonies` (the crossing ceremony). Invariant: this
+boundary must be preserved.
 
 - **Catalog model:** `SignatureMotifBonus` — `name`, `narrative_snippet`,
   `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable),
@@ -614,14 +614,16 @@ single `cached_<payload>` list (on `Technique`/`TechniqueVariant`) rather than i
 `.exists()` + `.all()` pair. `resolve_effective_role` is now a one-line shim over this
 resolver; no parallel specialization systems (ADR-0016).
 
-**Discovery ceremony — `fire_variant_discoveries(*, thread, starting_level, new_level)`**
-(`world/covenants/discovery.py`): generalizes the covenant sub-role discovery beat to
-dispatch on `thread.target_kind` — `COVENANT_ROLE` → single parent role; `GIFT` → iterate
-`gift.cached_techniques`. For each variant whose `unlock_thread_level` falls in
-`(starting_level, new_level]` at the thread's resonance: grants `discovery_achievement`
-(gamewide-first `Discovery` on first crossing), unlocks `codex_entry`, sends
-`discovery_narrative`. Called from `spend_resonance_for_imbuing` on every thread advance;
-also standalone-callable for ceremony-direct testing.
+**Crossing ceremony — `execute_crossing_ceremonies(*, thread, starting_level, new_level)`**
+(`world/magic/crossing/ceremony.py`, ADR-0094): dispatches on `thread.target_kind` via a handler
+registry so every `TargetKind` gets a ceremony at PathStage crossings (3, 6, 11, 16, 21).
+GIFT/COVENANT_ROLE handlers wrap the existing variant-discovery logic
+(`AbstractSpecializedVariant.newly_crossed_variants` → achievement + codex + narrative). The
+other seven kinds have stub handlers (debug no-op, replaced in #1988–#1993). A shared
+`execute_ceremony_beat` helper lets non-variant kinds fire the same beat without an
+`AbstractSpecializedVariant`. Called from `spend_resonance_for_imbuing` on every thread advance;
+also standalone-callable. (`world/covenants/discovery.py` re-exports it as
+`fire_variant_discoveries` for backwards compatibility.)
 
 **GIFT thread substrate:**
 - `TargetKind.GIFT` + `Thread.target_gift` FK (PROTECT) — a thread anchored to a Gift. One
