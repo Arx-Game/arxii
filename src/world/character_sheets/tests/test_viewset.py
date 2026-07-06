@@ -47,6 +47,7 @@ from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterGiftFactory,
+    CharacterResonanceFactory,
     CharacterTechniqueFactory,
     FacetFactory,
     GiftFactory,
@@ -1097,6 +1098,14 @@ class TestMagicSectionFull(TestCase):
             glimpse_story="A vision of iron chains.",
         )
 
+        # --- Claimed resonance balance (#2032) ---
+        cls.character_resonance = CharacterResonanceFactory(
+            character_sheet=cls.sheet,
+            resonance=cls.resonance_resolve,
+            balance=15,
+            lifetime_earned=40,
+        )
+
     def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(user=self.player.account)
@@ -1114,9 +1123,9 @@ class TestMagicSectionFull(TestCase):
         assert magic is not None
 
     def test_magic_has_all_expected_keys(self) -> None:
-        """Magic section contains gifts, motif, anima_ritual, and aura."""
+        """Magic section contains gifts, motif, anima_ritual, aura, and resonances (#2032)."""
         magic = self._get_magic()
-        expected_keys = {"gifts", "motif", "anima_ritual", "aura"}
+        expected_keys = {"gifts", "motif", "anima_ritual", "aura", "resonances"}
         assert set(magic.keys()) == expected_keys
 
     # --- Gift tests ---
@@ -1216,6 +1225,21 @@ class TestMagicSectionFull(TestCase):
         """Aura entry contains the glimpse story."""
         magic = self._get_magic()
         assert magic["aura"]["glimpse_story"] == "A vision of iron chains."
+
+    # --- Resonance balance tests (#2032) ---
+
+    def test_resonances_list_length(self) -> None:
+        """Resonances list contains one entry per claimed CharacterResonance row."""
+        magic = self._get_magic()
+        assert len(magic["resonances"]) == 1
+
+    def test_resonance_balance_and_lifetime_earned(self) -> None:
+        """Resonance entry contains name, balance, and lifetime earned."""
+        magic = self._get_magic()
+        entry = magic["resonances"][0]
+        assert entry["name"] == "Resolve"
+        assert entry["balance"] == 15
+        assert entry["lifetime_earned"] == 40
 
 
 class TestMagicNull(TestCase):
@@ -1956,9 +1980,13 @@ class TestCharacterSheetQueryCount(TestCase):
                query — the band is derived from inches, not stored on the sheet)
         24-26. Session management (savepoint, update, release)
         27.    block gate — one indexed exists() check (#1278, get_object)
+        28.    character resonances (CharacterResonanceHandler._by_resonance —
+               _build_magic_resonances reads character.resonances for the sheet's
+               new resonance-balance sub-section, #2032; the handler's one cached
+               query, not a fresh SELECT per resonance)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(27):
+        with self.assertNumQueries(28):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2165,14 +2193,20 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_magic_zero_queries(self) -> None:
         sheet = self._get_sheet()
-        # 1 query: a Trait FK access in _build_magic is not covered by
-        # _MAGIC_SELECT_RELATED / _MAGIC_PREFETCH_RELATED. Previously this
-        # test asserted 0 queries because earlier tests in the class warmed
-        # the SharedMemoryModel identity map with the Trait row; the project
-        # test runner now flushes the identity map between tests for
-        # production parity (see core.testing), exposing the real count.
-        # Tracked as a prefetch-coverage gap for a follow-up PR.
-        with self.assertNumQueries(1):
+        # 2 queries:
+        #   1. a Trait FK access in _build_magic is not covered by
+        #      _MAGIC_SELECT_RELATED / _MAGIC_PREFETCH_RELATED. Previously this
+        #      test asserted 0 queries because earlier tests in the class warmed
+        #      the SharedMemoryModel identity map with the Trait row; the project
+        #      test runner now flushes the identity map between tests for
+        #      production parity (see core.testing), exposing the real count.
+        #      Tracked as a prefetch-coverage gap for a follow-up PR.
+        #   2. character.resonances (CharacterResonanceHandler._by_resonance, #2032) —
+        #      _build_magic_resonances reads the character's claimed CharacterResonance
+        #      rows via the handler; not part of _MAGIC_PREFETCH_RELATED (a per-Character
+        #      handler, not a CharacterSheet-rooted prefetch), so it costs its one cached
+        #      query here — not an N+1, since the handler is called once.
+        with self.assertNumQueries(2):
             _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:

@@ -775,3 +775,62 @@ class ProtagonismLockResonanceGainTests(TestCase):
 
         # The settlement result should reflect 1 settled endorsement
         self.assertEqual(result.endorsements_settled, 1)
+
+
+class ResonanceGrantHistoryForSheetTests(TestCase):
+    """Tests for resonance_grant_history_for_sheet (#2032 telnet resonance history)."""
+
+    def test_newest_first_and_limit(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import resonance_grant_history_for_sheet
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        grants = [
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=resonance,
+                amount=amount,
+                source=GainSource.STAFF_GRANT,
+            )
+            for amount in range(1, 13)
+        ]
+
+        history = resonance_grant_history_for_sheet(sheet, limit=10)
+
+        self.assertEqual(len(history), 10)
+        # Newest-first: highest pk (last created) leads.
+        self.assertEqual(history[0].pk, grants[-1].pk)
+        self.assertEqual(history[-1].pk, grants[-10].pk)
+
+    def test_narrowed_to_one_resonance(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import resonance_grant_history_for_sheet
+
+        sheet = CharacterSheetFactory()
+        ember = ResonanceFactory(name="Ember")
+        frost = ResonanceFactory(name="Frost")
+        ResonanceGrant.objects.create(
+            character_sheet=sheet, resonance=ember, amount=5, source=GainSource.STAFF_GRANT
+        )
+        ResonanceGrant.objects.create(
+            character_sheet=sheet, resonance=frost, amount=9, source=GainSource.STAFF_GRANT
+        )
+
+        history = resonance_grant_history_for_sheet(sheet, resonance=frost)
+
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].resonance, frost)
+
+    def test_empty_for_sheet_with_no_grants(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import resonance_grant_history_for_sheet
+
+        sheet = CharacterSheetFactory()
+        self.assertEqual(resonance_grant_history_for_sheet(sheet), [])
