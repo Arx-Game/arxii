@@ -283,8 +283,13 @@ mirrors the gate `game_setup_views.py` and the seed views already use (ADR-0022)
 
 ## Tests
 
-- `src/web/admin/tests/test_tuning_views.py`, `test_tuning_simulation_view.py` —
-  checks/consequences/conditions panels + the simulation form/cache flow.
+- `src/web/admin/tests/test_tuning_views.py` — the dashboard skeleton (routing,
+  superuser gate, panel scaffolding).
+- `src/web/admin/tests/test_checks_analytics.py`,
+  `test_consequence_analytics.py`, `test_condition_analytics.py` —
+  the checks/consequences/conditions panels.
+- `src/web/admin/tests/test_tuning_simulation_view.py` — the simulation
+  form/cache flow.
 - `src/web/admin/tests/test_ops_views.py`, `test_ops_metrics.py` — Ops panels and
   `metrics.py`'s query helpers.
 - `src/web/admin/tests/test_content_load_views.py` — content-load confirm/run flow.

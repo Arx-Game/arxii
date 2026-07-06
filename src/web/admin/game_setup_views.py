@@ -23,9 +23,13 @@ def game_setup(request: HttpRequest) -> HttpResponse:
       1. Load sane defaults (the Big Button) — populates a baseline playable game.
       2. Author content — species, paths, magic, combat, traits, etc. via the
          World apps on the admin index.
-      3. Tune mechanics — the Game Tuning dashboard (#1221): difficulty
+      3. Load private content repo — builds + upserts the maintainers' external
+         content repo when `CONTENT_REPO_PATH` is configured (#1220).
+      4. Tune mechanics — the Game Tuning dashboard (#1221): difficulty
          analytics + simulation.
-      4. Export / Import — save the configuration as a portable JSON fixture.
+      5. Monitor the live game — the Game Ops dashboard (#1221): progression,
+         economy, story/GM, reports-queue, and technical-health analytics.
+      6. Export / Import — save the configuration as a portable JSON fixture.
 
     The inventory shows, per seeded cluster, the representative content rows and
     their current counts — empty rows are content gaps to fill.

@@ -231,7 +231,7 @@ def story_snapshot() -> dict[str, int]:
     }
 
 
-# (kind label, model, open/total status field, staff page path)
+# (kind label, model, staff page path)
 _REPORT_KINDS: tuple[tuple[str, type, str], ...] = (
     ("Player Feedback", PlayerFeedback, "/staff/feedback"),
     ("Bug Reports", BugReport, "/staff/bug-reports"),
