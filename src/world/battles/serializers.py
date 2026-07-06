@@ -5,8 +5,8 @@ battle-map page consumes: sides, places (with fortifications + any embedded
 vehicle), units, and participants, all nested under one Battle. Persona
 resolution follows ``world/combat/serializers.py``'s ``_primary_persona``
 pattern — reads ``CharacterSheet.cached_payload_personas`` and exposes only
-id/name/thumbnail_url (never account/username — see the leak rule that
-motivated #1932).
+id/name/thumbnail_url/thumbnail_media_url (never account/username — see the
+leak rule that motivated #1932).
 """
 
 from __future__ import annotations
@@ -154,14 +154,23 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         return None
 
     def get_persona(self, obj: BattleParticipant) -> dict | None:
-        """Public persona identity only — id/name/thumbnail_url, never account/username."""
+        """Public persona identity only — id/name/thumbnail(s), never account/username.
+
+        ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
+        ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+        already ``select_related``'d by the view's Prefetch (world/battles/views.py),
+        so this never issues a query. ``thumbnail_url`` is the legacy URLField,
+        kept alongside for callers still on it.
+        """
         persona = self._primary_persona(obj)
         if persona is None:
             return None
+        thumbnail_media_url = persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
         return {
             "id": persona.id,
             "name": persona.name,
             "thumbnail_url": persona.thumbnail_url or None,
+            "thumbnail_media_url": thumbnail_media_url,
         }
 
 

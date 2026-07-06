@@ -496,6 +496,11 @@ def notify_battle_state_changed(battle: Battle) -> None:
             round_number=current.round_number if current else None,
         )
     )
+    # A fresh, bounded query rather than BattleStateCache (participants_on_side/
+    # participants_on_place): the cache indexes rows by side/place, not "every
+    # participant", and neither cached row carries the character_sheet__character
+    # join this ping needs -- reading through it would still cost a
+    # per-participant query. One bounded query here, not a refetch of cached state.
     for participant in battle.participants.select_related("character_sheet__character"):
         character = participant.character_sheet.character
         if character is None or not character.has_account:

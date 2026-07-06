@@ -16381,7 +16381,15 @@ export interface components {
       status?: components['schemas']['BattleParticipantStatusEnum'];
       readonly side_id: number;
       readonly place_id: number | null;
-      /** @description Public persona identity only — id/name/thumbnail_url, never account/username. */
+      /**
+       * @description Public persona identity only — id/name/thumbnail(s), never account/username.
+       *
+       *     ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
+       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+       *     already ``select_related``'d by the view's Prefetch (world/battles/views.py),
+       *     so this never issues a query. ``thumbnail_url`` is the legacy URLField,
+       *     kept alongside for callers still on it.
+       */
       readonly persona: {
         [key: string]: unknown;
       } | null;

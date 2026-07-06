@@ -44,4 +44,5 @@ export interface BattlePersonaSummary {
   id: number;
   name: string;
   thumbnail_url: string | null;
+  thumbnail_media_url: string | null;
 }

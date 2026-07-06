@@ -20,10 +20,10 @@ import {
   useNodesState,
 } from '@xyflow/react';
 
-import { computeBounds, planeToCanvas, radiusToPixels } from '../mapMath';
+import { centeredNodePosition, computeBounds, planeToCanvas, radiusToPixels } from '../mapMath';
 import type { BattleDetail } from '../types';
 import type { PlaceControlRole, PlaceNodeData } from './PlaceNode';
-import { PlaceNode } from './PlaceNode';
+import { MIN_SIZE_PX, PlaceNode } from './PlaceNode';
 
 import '@xyflow/react/dist/style.css';
 
@@ -58,13 +58,20 @@ function BattleMapCanvasInner({ detail, selectedPlaceId, onSelectPlace }: Battle
         place.controlled_by_id != null ? (roleBySideId.get(place.controlled_by_id) ?? null) : null;
       const role: PlaceControlRole =
         rawRole === 'attacker' || rawRole === 'defender' ? rawRole : null;
+      // Final rendered diameter, clamped so tiny footprints stay clickable —
+      // computed once here so both the node's size and its centered position
+      // (below) agree on the same value.
+      const sizePx = Math.max(
+        MIN_SIZE_PX,
+        Math.round(radiusToPixels(place.footprint_radius, bounds) * 2)
+      );
 
       const data: PlaceNodeData = {
         place,
         role,
         unitCount,
         pcCount,
-        sizePx: radiusToPixels(place.footprint_radius, bounds),
+        sizePx,
         selected: place.id === selectedPlaceId,
         onSelect: onSelectPlace,
       };
@@ -72,7 +79,9 @@ function BattleMapCanvasInner({ detail, selectedPlaceId, onSelectPlace }: Battle
       return {
         id: String(place.id),
         type: 'place',
-        position: planeToCanvas(place, bounds),
+        // React Flow positions nodes by top-left corner — offset by half the
+        // node's size so it's centered on the place's plane coordinate (#2009 review).
+        position: centeredNodePosition(planeToCanvas(place, bounds), sizePx),
         data,
         draggable: false,
       } satisfies Node;

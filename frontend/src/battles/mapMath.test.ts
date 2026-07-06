@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CANVAS_SIZE,
+  centeredNodePosition,
   computeBounds,
   PADDING,
   planeToCanvas,
@@ -73,5 +74,15 @@ describe('radiusToPixels', () => {
   it('falls back to a 1:1 scale for a zero-span bounds', () => {
     const bounds: PlaneBounds = { minX: 5, maxX: 5, minY: 5, maxY: 5 };
     expect(radiusToPixels(3, bounds)).toBe(3);
+  });
+});
+
+describe('centeredNodePosition', () => {
+  it('offsets a canvas point by half the node size on both axes', () => {
+    expect(centeredNodePosition({ x: 100, y: 200 }, 40)).toEqual({ x: 80, y: 180 });
+  });
+
+  it('is a no-op offset for a zero-size node', () => {
+    expect(centeredNodePosition({ x: 100, y: 200 }, 0)).toEqual({ x: 100, y: 200 });
   });
 });

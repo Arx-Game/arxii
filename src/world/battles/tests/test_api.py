@@ -19,6 +19,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.battles.constants import (
+    BattleOutcome,
     BattlePosture,
     BattleSideRole,
     BattleUnitStatus,
@@ -36,11 +37,13 @@ from world.battles.factories import (
     BattleVehicleFactory,
     FortificationFactory,
 )
-from world.battles.services import begin_battle_round, enlist_participant
+from world.battles.resolution import resolve_battle_round
+from world.battles.services import begin_battle_round, conclude_battle, enlist_participant
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory
 from world.covenants.factories import CovenantFactory
-from world.scenes.constants import ScenePrivacyMode
+from world.roster.factories import PlayerMediaFactory
+from world.scenes.constants import RoundStatus, ScenePrivacyMode
 from world.scenes.factories import SceneParticipationFactory
 
 
@@ -227,6 +230,7 @@ class BattleApiJourneyTest(TestCase):
         self.assertEqual(participant_data["persona"]["id"], self.pc_sheet.primary_persona.pk)
         self.assertEqual(participant_data["persona"]["name"], self.pc_sheet.primary_persona.name)
         self.assertIsNone(participant_data["persona"]["thumbnail_url"])
+        self.assertIsNone(participant_data["persona"]["thumbnail_media_url"])
         self.assertNotIn("account", participant_data["persona"])
         self.assertNotIn("username", participant_data["persona"])
 
@@ -320,6 +324,21 @@ class BattleApiJourneyTest(TestCase):
             "issuing a per-row persona query (N+1 regression).",
         )
 
+    def test_participant_persona_thumbnail_media_url_resolves_uploaded_portrait(self) -> None:
+        """Mirrors combat's ``get_thumbnail_media_url`` parity (#2009 review):
+        the uploaded ``PlayerMedia`` portrait FK, not just the legacy URLField."""
+        media = PlayerMediaFactory()
+        persona = self.pc_sheet.primary_persona
+        persona.thumbnail = media
+        persona.save(update_fields=["thumbnail"])
+
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        participant_data = response.data["participants"][0]
+        self.assertEqual(participant_data["persona"]["thumbnail_media_url"], media.cloudinary_url)
+
     def test_scene_filter_returns_exactly_this_battle_for_participant(self) -> None:
         client = APIClient()
         client.force_authenticate(user=self.pc_account)
@@ -380,3 +399,50 @@ class BattleStatePingTest(TestCase):
                 begin_battle_round(battle=self.battle)
 
         mock_msg.assert_not_called()
+
+    def test_resolve_battle_round_pings_connected_participant(self) -> None:
+        sheet = CharacterSheetFactory()
+        enlist_participant(battle=self.battle, character_sheet=sheet, side=self.side)
+        character = sheet.character
+        # Object.has_account reads session count, not db_account -- fake a
+        # connected session so the ping's guard lets this participant through.
+        character.sessions.count = lambda: 1
+        battle_round = BattleRoundFactory(
+            battle=self.battle, round_number=1, status=RoundStatus.DECLARING
+        )
+
+        with mock.patch.object(character, "msg") as mock_msg:
+            # Deferred via transaction.on_commit (same seam as begin_battle_round)
+            # -- capture without executing first to prove it hasn't fired mid-transaction.
+            with self.captureOnCommitCallbacks() as callbacks:
+                resolve_battle_round(battle_round=battle_round)
+            mock_msg.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+
+            for callback in callbacks:
+                callback()
+
+        # The round completes as part of resolution, so current_round is None
+        # by the time the deferred ping reads it.
+        mock_msg.assert_called_once_with(
+            battle_state=((), {"battle_id": self.battle.pk, "round_number": None})
+        )
+
+    def test_conclude_battle_pings_connected_participant(self) -> None:
+        sheet = CharacterSheetFactory()
+        enlist_participant(battle=self.battle, character_sheet=sheet, side=self.side)
+        character = sheet.character
+        character.sessions.count = lambda: 1
+
+        with mock.patch.object(character, "msg") as mock_msg:
+            with self.captureOnCommitCallbacks() as callbacks:
+                conclude_battle(battle=self.battle, outcome=BattleOutcome.ATTACKER_DECISIVE)
+            mock_msg.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+
+            for callback in callbacks:
+                callback()
+
+        mock_msg.assert_called_once_with(
+            battle_state=((), {"battle_id": self.battle.pk, "round_number": None})
+        )

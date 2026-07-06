@@ -26,7 +26,12 @@ export interface PlaceNodeData extends Record<string, unknown> {
   role: PlaceControlRole;
   unitCount: number;
   pcCount: number;
-  /** Canvas diameter budget from radiusToPixels(place.footprint_radius, bounds). */
+  /**
+   * Final rendered diameter in canvas px — already
+   * ``Math.max(MIN_SIZE_PX, Math.round(radiusToPixels(...) * 2))`` (computed
+   * by BattleMapCanvas, which also uses it to center the node's position via
+   * ``centeredNodePosition``, see ../mapMath.ts).
+   */
   sizePx: number;
   selected: boolean;
   onSelect: (placeId: number) => void;
@@ -48,11 +53,11 @@ const VEHICLE_ICON: Record<string, LucideIcon> = {
   companion: PawPrint,
 };
 
-const MIN_SIZE_PX = 96;
+export const MIN_SIZE_PX = 96;
 
 function PlaceNodeComponent({ data }: NodeProps<PlaceNodeType>) {
   const { place, role, unitCount, pcCount, selected, sizePx } = data;
-  const size = Math.max(MIN_SIZE_PX, Math.round(sizePx * 2));
+  const size = sizePx;
   const roleKey = role ?? 'uncontrolled';
   const vehicle = place.vehicle as BattleVehicleSummary | null;
   const VehicleIcon = vehicle ? VEHICLE_ICON[vehicle.vehicle_kind] : null;

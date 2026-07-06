@@ -1017,8 +1017,8 @@ Battles are location-less (`Battle.scene.location` is `None`), so the existing
 room/scene broadcast paths never reach participants — `BATTLE_STATE` is the
 dedicated seam. The payload (`web.webclient.message_types.BattleStatePayload`)
 carries only `{battle_id, round_number}` — no battle data itself; it is a slim
-"go refetch" ping, not a state push. Sent to every participant with an
-account, regardless of participant status
+"go refetch" ping, not a state push. Sent to every **connected** participant
+(`has_account` = live session), regardless of participant status
 (`character.msg(battle_state=((), payload))`) from three call sites —
 `begin_battle_round`, `resolve_battle_round`, `conclude_battle` — each wrapping
 the send in `transaction.on_commit(lambda: notify_battle_state_changed(battle))`

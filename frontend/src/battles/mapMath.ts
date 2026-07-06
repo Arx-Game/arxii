@@ -68,3 +68,18 @@ export function planeToCanvas(p: PlanePoint, bounds: PlaneBounds): { x: number; 
 export function radiusToPixels(r: number, bounds: PlaneBounds): number {
   return r * scaleFor(bounds);
 }
+
+/**
+ * Offset a canvas point (e.g. planeToCanvas's output) into a node's top-left
+ * position so the node is centered on that point rather than anchored there
+ * by its corner. React Flow positions nodes by top-left corner, but node
+ * sizes vary (PlaceNode clamps its rendered diameter at a minimum), so
+ * without this offset larger/smaller nodes visually drift off their place's
+ * true plane coordinate.
+ */
+export function centeredNodePosition(
+  point: { x: number; y: number },
+  sizePx: number
+): { x: number; y: number } {
+  return { x: point.x - sizePx / 2, y: point.y - sizePx / 2 };
+}
