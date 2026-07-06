@@ -199,9 +199,10 @@ casting never hard-fails with "no template." The resolution chain:
   resolves this check type for use by the cast pipeline. `resolve_cast_check_type(character,
   template)` (`services/anima.py`) is the single resolver every cast path calls: it
   returns the personal check when the caster is provisioned, else falls back to
-  `template.check_type` (ADR-0095) — standalone casts, combat round casts, and clash
-  contributions all go through it, so none of them can silently roll the shared
-  template check for a provisioned caster.
+  `template.check_type` (ADR-0095) — standalone casts, combat round casts, clash
+  contributions, and battle technique resolution (`world/battles/resolution.py`)
+  all go through it, so none of them can silently roll the shared template check
+  for a provisioned caster.
 - **Anima ritual alignment** — `provision_player_anima_ritual` (`services/anima.py`)
   points the anima ritual's `RitualCheckConfig.check_type` at the same per-character
   check type, so the anima ritual and technique casts always roll the same personal check.
@@ -217,8 +218,11 @@ casting never hard-fails with "no template." The resolution chain:
   catalog entry has its own `ActionTemplate` (same `check_type`/`pipeline`/
   `target_type` as the shared template — only `consequence_pool` differs) so
   the flavor pick cannot affect the rolled check: **every** cast path (standalone,
-  combat, clash) resolves the check via `resolve_cast_check_type` (personal check
-  first, template fallback — ADR-0095), and none of them read
+  combat, clash, battle technique resolution in `world/battles/resolution.py`)
+  resolves the check via `resolve_cast_check_type` (personal check first, template
+  fallback — ADR-0095) — as does the combat availability descriptor
+  (`actions/player_interface.py`), so the action-picker UI shows the same check
+  the resolver rolls — and none of them read
   `technique.action_template.check_type` directly anymore. Resolution:
   `technique_builder.resolve_cast_action_template()`.
 

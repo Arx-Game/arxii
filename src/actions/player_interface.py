@@ -482,6 +482,7 @@ def _combat_actions(
     # character; fury tiers are a small authored catalog; anchors are the
     # caster's consented relationships with a non-zero bond.
     from world.magic.models import FuryTier  # noqa: PLC0415
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
@@ -524,7 +525,9 @@ def _combat_actions(
         if not technique_performable(character, technique):
             continue
         template = technique.action_template  # guaranteed non-None: queryset filters isnull=False
-        check_type = template.check_type
+        # #2014: the caster's own provisioned magic check wins over the template's
+        # fallback (ADR-0095) — mirrors what the resolver actually rolls at dispatch.
+        check_type = resolve_cast_check_type(character, template)
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,
