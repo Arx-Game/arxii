@@ -514,3 +514,46 @@ class CmdStoryPlayerSignoffTests(TestCase):
         messages = self._run(f"signoff {self.beat.pk} Signet Ring withdraw")
         joined = " ".join(messages)
         self.assertIn("no active sign-off", joined.lower())
+
+    def test_signoff_withdraw_cannot_touch_another_players_signoff(self) -> None:
+        from world.boundaries.factories import TreasuredSubjectFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.stories.constants import StakeSubjectKind
+        from world.stories.factories import StakeFactory
+        from world.stories.models import TreasuredSignoff
+        from world.stories.services.boundaries import grant_treasured_signoff
+
+        # A second, unrelated player who treasures a DIFFERENT subject, staked on the
+        # same beat, with an active sign-off of their own.
+        other_sheet = CharacterSheetFactory()
+        other_entry = RosterEntryFactory(character_sheet=other_sheet)
+        other_player_data = PlayerDataFactory()
+        other_tenure = RosterTenureFactory(roster_entry=other_entry, player_data=other_player_data)
+        other_treasured = TreasuredSubjectFactory(
+            owner=other_tenure,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Other Player's Locket",
+        )
+        StakeFactory(
+            beat=self.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.CUSTOM,
+            subject_label="Other Player's Locket",
+        )
+        other_signoff = grant_treasured_signoff(self.beat, other_player_data, other_treasured)
+
+        # The FIRST caller (self.player_data / self.account) tries to withdraw the OTHER
+        # player's subject by its real label — must not find or touch it.
+        messages = self._run(f"signoff {self.beat.pk} Other Player's Locket withdraw")
+
+        joined = " ".join(messages)
+        self.assertIn("no active sign-off", joined.lower())
+        other_signoff.refresh_from_db()
+        self.assertTrue(other_signoff.active)
+        self.assertIsNone(other_signoff.withdrawn_at)
+        # And the caller's own unrelated signoff-count is untouched.
+        self.assertEqual(TreasuredSignoff.objects.filter(player_data=other_player_data).count(), 1)
