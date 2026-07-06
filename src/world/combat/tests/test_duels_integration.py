@@ -118,8 +118,9 @@ def _build_combat_technique(*, action_category: str = ActionCategory.PHYSICAL, r
     instead of calling TechniqueDamageProfileFactory separately, which would
     violate the unique_untyped_damage_profile_per_technique constraint.
 
-    action_template is required by _resolve_pc_action (it reads
-    template.check_type for the offense check type).
+    action_template is required by _resolve_pc_action (resolve_cast_check_type
+    falls back to template.check_type for the offense check type when the
+    caster is unprovisioned, ADR-0095).
     """
     check_type = CheckTypeFactory()
     kwargs = {

@@ -196,7 +196,12 @@ casting never hard-fails with "no template." The resolution chain:
   (`seeds_checks.py`) synthesizes a `CheckType` named after the character (pattern
   `character_magic_check_type_name(character_sheet)`) that weights the character's
   personal stat + skill. `get_character_cast_check(character)` (`services/anima.py`)
-  resolves this check type for use by the cast pipeline.
+  resolves this check type for use by the cast pipeline. `resolve_cast_check_type(character,
+  template)` (`services/anima.py`) is the single resolver every cast path calls: it
+  returns the personal check when the caster is provisioned, else falls back to
+  `template.check_type` (ADR-0095) — standalone casts, combat round casts, and clash
+  contributions all go through it, so none of them can silently roll the shared
+  template check for a provisioned caster.
 - **Anima ritual alignment** — `provision_player_anima_ritual` (`services/anima.py`)
   points the anima ritual's `RitualCheckConfig.check_type` at the same per-character
   check type, so the anima ritual and technique casts always roll the same personal check.
@@ -211,8 +216,11 @@ casting never hard-fails with "no template." The resolution chain:
   of the base pool seeded by `seeds_cast.ensure_technique_catalog_content()`. Each
   catalog entry has its own `ActionTemplate` (same `check_type`/`pipeline`/
   `target_type` as the shared template — only `consequence_pool` differs) so
-  combat's direct read of `technique.action_template.check_type` is unaffected by
-  which flavor was picked. Resolution: `technique_builder.resolve_cast_action_template()`.
+  the flavor pick cannot affect the rolled check: **every** cast path (standalone,
+  combat, clash) resolves the check via `resolve_cast_check_type` (personal check
+  first, template fallback — ADR-0095), and none of them read
+  `technique.action_template.check_type` directly anymore. Resolution:
+  `technique_builder.resolve_cast_action_template()`.
 
 Follow-ups deferred to later issues: the optional resonance→aspect mapping. (The
 targeting model — targeting validity + AoE + per-technique target constraints +

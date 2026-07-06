@@ -5556,8 +5556,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_fn: Optional ``perform_check`` override for PC defense.
         defense_check_type: The CheckType used for defensive rolls.
         offense_check_fn: Optional ``perform_check`` override for PC offense.
-            The offense_check_type is now sourced from the declared technique's
-            action_template.check_type — it is no longer passed externally.
+            The offense_check_type is now sourced from ``resolve_cast_check_type``
+            (the caster's personal check, falling back to the declared technique's
+            action_template.check_type only when unprovisioned, ADR-0095) — it is
+            no longer passed externally.
 
     Returns:
         ``RoundResolutionResult`` with outcomes and phase transitions.
