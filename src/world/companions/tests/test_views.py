@@ -238,6 +238,17 @@ class FightEndpointTests(CompanionWriteEndpointTestBase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data["detail"], "You are not in active combat.")
 
+    def test_cannot_fight_other_players_companion(self) -> None:
+        """A foreign companion is not in the caller's queryset → 404."""
+        from rest_framework.exceptions import NotFound
+
+        other_sheet = CharacterSheetFactory()
+        foreign = CompanionFactory(owner=other_sheet)
+        with patch.object(CompanionViewSet, "get_object", side_effect=NotFound):
+            resp = self._detail_post("fight", _actor_user(self.character), foreign.pk)
+
+        self.assertEqual(resp.status_code, 404)
+
 
 class DeployEndpointTests(CompanionWriteEndpointTestBase):
     def test_deploy_success_returns_200_with_vehicle_id(self) -> None:
@@ -263,3 +274,14 @@ class DeployEndpointTests(CompanionWriteEndpointTestBase):
 
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.data["detail"], "You are not in a battle.")
+
+    def test_cannot_deploy_other_players_companion(self) -> None:
+        """A foreign companion is not in the caller's queryset → 404."""
+        from rest_framework.exceptions import NotFound
+
+        other_sheet = CharacterSheetFactory()
+        foreign = CompanionFactory(owner=other_sheet)
+        with patch.object(CompanionViewSet, "get_object", side_effect=NotFound):
+            resp = self._detail_post("deploy", _actor_user(self.character), foreign.pk)
+
+        self.assertEqual(resp.status_code, 404)

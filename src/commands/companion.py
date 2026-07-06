@@ -36,6 +36,8 @@ _ARCHETYPE_KWARG = "archetype"
 _GIFT_KWARG = "gift"
 _NAME_KWARG = "name"
 
+_MAX_NAME_LENGTH = 100
+
 # Subverbs whose only kwarg is bind's parsed kwargs.
 _BIND_SUBVERB = "bind"
 
@@ -195,6 +197,9 @@ class CmdCompanion(DispatchCommand):
         name = parsed.get(_NAME_KWARG, "").strip()
         if not name:
             msg = "Specify a name: name=<text> (must be the final token)."
+            raise CommandError(msg)
+        if len(name) > _MAX_NAME_LENGTH:
+            msg = "Companion names must be 100 characters or fewer."
             raise CommandError(msg)
         return {
             "archetype_id": archetype.pk,
