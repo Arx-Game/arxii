@@ -1172,6 +1172,10 @@ action consent flow, and a three-mode non-combat round framework.
   GM/owner/staff-gated (`viewer_can_gm && is_active`) dialog for setting round mode and knobs;
   consumes `active_round` from the scene detail and dispatches `useSetRoundMode` →
   `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
+- **Places (#1866):** `Place`/`PlacePresence` (`place_models.py`) — a named sub-location
+  within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
+  are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,
+  `commands/places.py`) dispatch through.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
@@ -2220,6 +2224,13 @@ crafting framework and check-driven facet/style attachment.
   - `GET /api/items/inventory/` — read-only inventory list (`.in_play()` filtered)
   - `POST /api/items/inventory/<pk>/use/` — use item; owner-or-staff gated; returns
     `UseItemResult` (`charges_remaining`, `consumed`, `result_text`); `ItemError` → HTTP 400
+- **Telnet (#1866):** `CmdCraft` (`craft`, `commands/crafting.py`) drives facet/style
+  attach-detach through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
+  (`actions/definitions/crafting.py`); `CmdOutfit` (`outfit`, `commands/outfit.py`)
+  drives outfit CRUD through `SaveOutfitAction`/`RenameOutfitAction`/
+  `DeleteOutfitAction`/`AddOutfitSlotAction`/`RemoveOutfitSlotAction`
+  (`actions/definitions/outfits.py`) — the same Actions the `ItemFacetViewSet`/
+  `ItemStyleCraftViewSet`/`OutfitViewSet`/`OutfitSlotViewSet` now dispatch through.
 - **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses
   region + layer grid (unique constraint per character). Facets attach up to `facet_capacity`
   per item via the crafting framework; worn facets feed the mechanics modifier walk (see

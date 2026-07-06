@@ -72,8 +72,11 @@ The enchant-and-attach flow for facets and styles is fully playable end-to-end.
 
 **Deferred to follow-up issues:**
 - Item-creation pipeline (crafted items with stats, facets, fashion properties) — still future
-- Telnet crafting action (attach-facet/attach-style — distinct from the #1234 `station`
-  install/upgrade/repair command, which manages the station, not the craft itself)
+- Telnet crafting action — **DONE (#1866).** `CmdCraft`
+  (`src/commands/crafting.py`) drives facet attach/detach + style attach
+  through `AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
+  (distinct from the #1234 `station` command, which manages the station,
+  not the craft itself).
 
 ### Crafting-station durability and repair economy (#1234) — DONE
 

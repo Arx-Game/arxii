@@ -51,7 +51,37 @@ actions, backends, and service functions.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`
 - **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
 - **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
-- **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
+- **`crafting.py`**: `CmdCraft` (`craft`, #1866) — the telnet face of facet/style
+  crafting. One `ArxCommand` parses `craft facet <name> item=<id>`,
+  `craft removefacet <item_facet id>`, `craft style <name> item=<id>`,
+  `craft quote facet=<name>|style=<name> item=<id>` and calls `AttachFacetAction`/
+  `DetachFacetAction`/`AttachStyleAction` directly (`actions/definitions/crafting.py`)
+  — the same seam `ItemFacetViewSet`/`ItemStyleCraftViewSet` now dispatch through.
+  No business logic in the command.
+- **`investigation.py`**: `CmdSearch` (`search`, alias `investigate`, #1866) — a bare
+  telnet delegate to the pre-existing `SearchAction` (`actions/definitions/
+  investigation.py`), which had zero telnet command before. Mirrors `CmdRest`'s
+  (`fatigue.py`) thin-shell shape.
+- **`outfit.py`**: `CmdOutfit` (`outfit`, #1866) — the outfit CRUD + wear/present
+  namespace. One `ArxCommand` routes a leading subverb (`save`/`rename`/`delete`/
+  `addslot`/`removeslot`/`wear`/`undress`/`present`) to `SaveOutfitAction`/
+  `RenameOutfitAction`/`DeleteOutfitAction`/`AddOutfitSlotAction`/
+  `RemoveOutfitSlotAction` (`actions/definitions/outfits.py`) plus the pre-existing
+  `ApplyOutfitAction`/`UndressAction`/`PresentOutfitAction` — the same Actions
+  `OutfitViewSet`/`OutfitSlotViewSet` now dispatch through. Bare `outfit`/
+  `outfit list` shows a status hub.
+- **`places.py`**: `CmdPlaces` (`places`, #1866) — join/leave a Place (named
+  sub-location) in the caller's current room. Bare `places` lists active Places
+  there; `places join <name>` resolves a Place by name scoped to the caller's room
+  (telnet has no pk to reference); `places leave` leaves whichever Place the
+  caller's active persona currently occupies. Calls `JoinPlaceAction`/
+  `LeavePlaceAction` (`actions/definitions/places.py`) directly.
+- **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
+  implementation (replacing the former stubs) dispatching to `LockAction`/
+  `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
+  Actions' prerequisite, not in the command; no key-item system — lock state is a
+  plain `db.locked` Evennia attribute on the Exit, checked by
+  `ExitState.can_traverse`.
 - **`offer_registry.py`**: `OfferHandler` protocol, `_REGISTRY`, `register_offer_handler`,
   `get_all_pending`, `find_handler` — pure-Python in-process registry; no DB model.
 - **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also

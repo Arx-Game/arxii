@@ -88,6 +88,16 @@ shirt, jacket, cloak all on the torso) and multi-region items (full plate create
 EquippedItem rows for torso, both arms, etc.). The unique constraint
 `(character, body_region, equipment_layer)` enforces one item per slot.
 
+### Outfits + Telnet/Action layer (#1866)
+`Outfit`/`OutfitSlot` are a named saved arrangement of items in body slots
+(`items/models.py`) — a wardrobe-stored look a character can define once and
+reapply, distinct from the live `EquippedItem` grid above. `SaveOutfitAction`/
+`RenameOutfitAction`/`DeleteOutfitAction`/`AddOutfitSlotAction`/
+`RemoveOutfitSlotAction` (`actions/definitions/outfits.py`) are the seam both
+`OutfitViewSet`/`OutfitSlotViewSet` and telnet `CmdOutfit`
+(`outfit save/rename/delete/addslot/removeslot`, `src/commands/outfit.py`)
+dispatch through.
+
 ### Ownership Ledger
 `OwnershipEvent` is append-only during normal play — ownership transitions are
 recorded, not overwritten. However, the soft-delete cleanup path (see "Destruction &
@@ -460,6 +470,15 @@ domain-specific result dataclasses.
 
 `compute_quality_score(check_result, *, step, min_success_level) -> int` is co-located
 here (imported by `crafting/quality.py`).
+
+### Telnet + Action layer (#1866)
+
+`AttachFacetAction`/`DetachFacetAction`/`AttachStyleAction`
+(`actions/definitions/crafting.py`) wrap `craft_attach_facet`/
+`remove_facet_from_item`/`craft_attach_style`; `ItemFacetViewSet`/
+`ItemStyleCraftViewSet` dispatch through them (closing the ADR-0001
+web-bypasses-actions gap), and telnet `CmdCraft` (`craft
+facet/removefacet/style/quote`) reaches the same seam.
 
 ### Quote Endpoint (`crafting/services.py` + `views.py`)
 

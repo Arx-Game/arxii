@@ -259,7 +259,10 @@ Build to the ADR; these are not open questions. See
 
 ## Doors, traps & misc
 
-- **Door lock/unlock** — `CmdLock`/`CmdUnlock` are stubs; `LockAction`/`UnlockAction` don't exist. `intent`.
+- **Door lock/unlock** — **DONE (#1866).** Room-owner/tenant gated (no
+  key-item system); `LockAction`/`UnlockAction` set a `db.locked` attribute
+  on the Exit, checked by `ExitState.can_traverse`. `CmdLock`/`CmdUnlock`
+  (`src/commands/door.py`) are the telnet face.
 - **Trap arming/placement** — only disarm exists; the GM side of the trap loop is unbuilt. `intent`.
 - **Persona minting** (create/edit/delete an identity) — reserved for future IC flows. `intent`.
 - **Tidings posting/reacting/commenting** — feed is read-only; no authoring model. `intent` — #1450.
