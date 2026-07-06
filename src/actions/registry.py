@@ -169,6 +169,7 @@ from actions.definitions.outfits import (
 )
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
+from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
 from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from actions.definitions.progression_rewards import (
@@ -287,6 +288,9 @@ _ALL_ACTIONS: list[Action] = [
     CheckContributeAction(),
     StoryContributeAction(),
     SetActivePersonaAction(),
+    # #1866 — Places join/leave telnet coverage.
+    JoinPlaceAction(),
+    LeavePlaceAction(),
     ShiftFormAction(),
     RevertFormAction(),
     SetSocialConsentPreferenceAction(),

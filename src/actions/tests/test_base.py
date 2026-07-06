@@ -247,6 +247,8 @@ class ActionRegistryTests(TestCase):
             "remove_encounter_participant",
             "resolve_encounter_round",
             "set_active_persona",
+            "join_place",
+            "leave_place",
             "shift_form",
             "revert_form",
             "set_social_consent_preference",
