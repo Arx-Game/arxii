@@ -262,4 +262,5 @@ def _create_reference_from_spec(
         kind=spec.kind,
         ref_covenant=spec.ref_covenant,
         ref_covenant_role=spec.ref_covenant_role,
+        ref_organization=spec.ref_organization,
     )
