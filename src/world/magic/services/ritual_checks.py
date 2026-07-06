@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import enum
 from typing import TYPE_CHECKING
 
 from world.magic.exceptions import RitualCheckConfigMissing
@@ -14,38 +13,12 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
 
 
-class OutcomeTier(enum.Enum):
-    """Graded tier derived from CheckOutcome.success_level (canonical scale)."""
-
-    CRIT = "crit"
-    SUCCESS = "success"
-    FAIL = "fail"
-    BOTCH = "botch"
-
-
-_CRIT_LEVEL = 2
-_SUCCESS_LEVEL = 1
-_BOTCH_LEVEL = -2
-
-
-def outcome_tier(success_level: int) -> OutcomeTier:
-    """Map a success_level (full −10..+10 scale) to a graded tier."""
-    if success_level >= _CRIT_LEVEL:
-        return OutcomeTier.CRIT
-    if success_level >= _SUCCESS_LEVEL:
-        return OutcomeTier.SUCCESS
-    if success_level > _BOTCH_LEVEL:
-        return OutcomeTier.FAIL
-    return OutcomeTier.BOTCH
-
-
 @dataclasses.dataclass(frozen=True)
 class RitualCheckRoll:
-    """Result of perform_ritual_check: the raw CheckResult plus derived tier."""
+    """Result of perform_ritual_check: the raw CheckResult plus its success_level."""
 
     check_result: CheckResult
     success_level: int
-    tier: OutcomeTier
 
 
 def perform_ritual_check(
@@ -96,5 +69,4 @@ def perform_ritual_check(
         target_difficulty=difficulty,
     )
     success_level = int(check_result.outcome.success_level)
-    tier = outcome_tier(success_level)
-    return RitualCheckRoll(check_result=check_result, success_level=success_level, tier=tier)
+    return RitualCheckRoll(check_result=check_result, success_level=success_level)

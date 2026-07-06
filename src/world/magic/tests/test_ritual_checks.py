@@ -6,36 +6,9 @@ from django.test import TestCase
 
 from world.magic.exceptions import RitualCheckConfigMissing
 from world.magic.services.ritual_checks import (
-    OutcomeTier,
     RitualCheckRoll,
-    outcome_tier,
     perform_ritual_check,
 )
-
-
-class OutcomeTierBoundaryTests(TestCase):
-    """outcome_tier boundary cases over the canonical −10..+10 scale."""
-
-    def test_10_is_crit(self):
-        self.assertIs(outcome_tier(10), OutcomeTier.CRIT)
-
-    def test_2_is_crit(self):
-        self.assertIs(outcome_tier(2), OutcomeTier.CRIT)
-
-    def test_1_is_success(self):
-        self.assertIs(outcome_tier(1), OutcomeTier.SUCCESS)
-
-    def test_0_is_fail(self):
-        self.assertIs(outcome_tier(0), OutcomeTier.FAIL)
-
-    def test_neg1_is_fail(self):
-        self.assertIs(outcome_tier(-1), OutcomeTier.FAIL)
-
-    def test_neg2_is_botch(self):
-        self.assertIs(outcome_tier(-2), OutcomeTier.BOTCH)
-
-    def test_neg10_is_botch(self):
-        self.assertIs(outcome_tier(-10), OutcomeTier.BOTCH)
 
 
 class PerformRitualCheckMissingConfigTests(TestCase):
@@ -65,13 +38,13 @@ class PerformRitualCheckMissingConfigTests(TestCase):
 
 
 class PerformRitualCheckReturnShapeTests(TestCase):
-    """perform_ritual_check returns RitualCheckRoll with consistent tier/success_level."""
+    """perform_ritual_check returns RitualCheckRoll with the expected success_level."""
 
     def _mock_check_result(self, success_level: int):
         outcome = type("O", (), {"success_level": success_level})()
         return type("CR", (), {"outcome": outcome})()
 
-    def test_returns_ritual_check_roll_with_consistent_tier(self):
+    def test_returns_ritual_check_roll_with_success_level(self):
         from unittest.mock import patch
 
         from world.magic.seeds_checks import ensure_magic_check_content
@@ -92,7 +65,6 @@ class PerformRitualCheckReturnShapeTests(TestCase):
 
         self.assertIsInstance(roll, RitualCheckRoll)
         self.assertEqual(roll.success_level, 3)
-        self.assertIs(roll.tier, OutcomeTier.CRIT)
 
     def test_non_founder_falls_back_to_target_difficulty_when_no_non_founder_config(self):
         """founder_standing=False falls back to target_difficulty when non_founder is None."""
