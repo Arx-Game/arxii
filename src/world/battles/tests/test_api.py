@@ -353,7 +353,16 @@ class BattleStatePingTest(TestCase):
         character.sessions.count = lambda: 1
 
         with mock.patch.object(character, "msg") as mock_msg:
-            begin_battle_round(battle=self.battle)
+            # The ping is deferred via transaction.on_commit (#2009 review) so a
+            # refetching client always sees committed state -- capture without
+            # executing first to prove it hasn't fired mid-transaction.
+            with self.captureOnCommitCallbacks() as callbacks:
+                begin_battle_round(battle=self.battle)
+            mock_msg.assert_not_called()
+            self.assertEqual(len(callbacks), 1)
+
+            for callback in callbacks:
+                callback()
 
         mock_msg.assert_called_once_with(
             battle_state=((), {"battle_id": self.battle.pk, "round_number": 1})
@@ -367,6 +376,7 @@ class BattleStatePingTest(TestCase):
         # No session attached: has_account is False, so the guard must skip
         # this participant silently rather than erroring.
         with mock.patch.object(character, "msg") as mock_msg:
-            begin_battle_round(battle=self.battle)
+            with self.captureOnCommitCallbacks(execute=True):
+                begin_battle_round(battle=self.battle)
 
         mock_msg.assert_not_called()

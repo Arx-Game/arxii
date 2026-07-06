@@ -485,7 +485,9 @@ def notify_battle_state_changed(battle: Battle) -> None:
     Battles are location-less (their backing scene has no ``location``), so the
     existing scene/room broadcast paths never reach participants -- this is the
     dedicated seam. Called after round transitions (begin_battle_round,
-    resolve_battle_round) and on conclusion (conclude_battle).
+    resolve_battle_round) and on conclusion (conclude_battle) -- always deferred
+    via ``transaction.on_commit`` at each call site, so it runs post-commit and a
+    client that refetches on receipt always sees committed state.
     """
     current = battle.current_round
     payload = asdict(
@@ -494,7 +496,7 @@ def notify_battle_state_changed(battle: Battle) -> None:
             round_number=current.round_number if current else None,
         )
     )
-    for participant in battle.participants.select_related("character_sheet"):
+    for participant in battle.participants.select_related("character_sheet__character"):
         character = participant.character_sheet.character
         if character is None or not character.has_account:
             continue
@@ -537,7 +539,7 @@ def begin_battle_round(*, battle: Battle) -> BattleRound:
         status=RoundStatus.DECLARING,
         round_started_at=timezone.now(),
     )
-    notify_battle_state_changed(battle)
+    transaction.on_commit(lambda: notify_battle_state_changed(battle))
     return new_round
 
 
@@ -827,7 +829,8 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
     does not re-fire). After beat resolution, runs every hook registered via
     register_battle_conclusion_hook (#1832) — e.g. ships' apply_ship_battle_outcome.
     Pings connected participants via notify_battle_state_changed (#2009) last,
-    after every other side effect.
+    after every other side effect, deferred via transaction.on_commit so it
+    fires only once this transaction has actually committed.
 
     Args:
         battle: The ``Battle`` to conclude.
@@ -851,7 +854,7 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
 
     resolve_battle_beats(battle)
     run_battle_conclusion_hooks(battle)
-    notify_battle_state_changed(battle)
+    transaction.on_commit(lambda: notify_battle_state_changed(battle))
 
     return battle
 

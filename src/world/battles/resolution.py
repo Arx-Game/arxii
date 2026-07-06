@@ -1207,7 +1207,8 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     ``_advance_surrounded_participants`` (#1733) — gated by declaration
     this round or ``battle.afk_peril_override``. Sets
     ``battle_round.status = COMPLETED`` at the end, then pings connected
-    participants via ``notify_battle_state_changed`` (#2009).
+    participants via ``notify_battle_state_changed`` (#2009), deferred via
+    ``transaction.on_commit`` so it fires only once this transaction commits.
 
     Args:
         battle_round: The ``BattleRound`` in DECLARING or RESOLVING status.
@@ -1294,6 +1295,6 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
 
     from world.battles.services import notify_battle_state_changed  # noqa: PLC0415
 
-    notify_battle_state_changed(battle)
+    transaction.on_commit(lambda: notify_battle_state_changed(battle))
 
     return result
