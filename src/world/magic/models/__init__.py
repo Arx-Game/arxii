@@ -19,7 +19,7 @@ Submodules (see Scope 6 §4.4):
   (gift-technique specialization variants, #1578)
 - cantrips: Cantrip
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
-- soulfray: SoulfrayConfig, MishapPoolTier
+- soulfray: SoulfrayConfig, MishapPoolTier, AnimaRitualBudgetAward
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
 - threads: Thread, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
   ThreadPullEffect
@@ -154,7 +154,7 @@ from world.magic.models.soul_tether import (
     SoulTetherRescue,
 )
 from world.magic.models.soul_tether_config import SoulTetherConfig
-from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
+from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
 from world.magic.models.technique_builder import (
     TechniqueBudgetConfig,
     TechniqueTierBudget,
@@ -214,6 +214,8 @@ __all__ = [
     "AffinityManager",
     # anima
     "AnimaConfig",
+    # soulfray (#1207)
+    "AnimaRitualBudgetAward",
     "AnimaRitualPerformance",
     # audere majora (re-exported from world.magic.audere_majora)
     "AudereMajoraCrossing",
