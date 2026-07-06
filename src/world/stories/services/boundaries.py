@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 
 from django.utils import timezone
 
-from world.stories.types import StakeAvailability, StakeBoundaryReport
+from world.stories.types import PendingTreasuredSignoffs, StakeAvailability, StakeBoundaryReport
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -341,3 +341,107 @@ def stake_availability(
         else:
             available += 1
     return StakeAvailability(available=available, blocked=blocked, needs_signoff=needs_signoff)
+
+
+def player_pending_treasured_signoffs(
+    player_data: PlayerData,
+    beats: Sequence[Beat],
+) -> list[PendingTreasuredSignoffs]:
+    """For each of ``beats``, which of ``player_data``'s own TreasuredSubjects are
+    staked on it without an active TreasuredSignoff (#1853).
+
+    Player-safe (ADR-0033): only ever reads this player's own TreasuredSubject/
+    TreasuredSignoff rows plus the given beats' Stake rows — never another
+    player's sheets, other stakes, hard-line info, or the GM's broader stake
+    plan. Batched: one query for the player's own TreasuredSubjects (scoped to
+    tenures where the player is the CURRENT player — ``end_date__isnull=True``,
+    mirroring ``_resolve_sheet_identity``'s "current tenure only" semantics),
+    one for Stake rows across all given beats, one for the player's active
+    TreasuredSignoff rows across all given beats. Reuses ``_subject_identity``
+    for matching — the same identity function ``_treasured_requires_signoff``
+    uses, so this never drifts from the enforcement seam's definition of
+    "match." Needs no CharacterSheet list at all (unlike the GM-side
+    function) since TreasuredSubject.owner is a RosterTenure directly.
+    """
+    from world.boundaries.models import TreasuredSubject  # noqa: PLC0415
+    from world.stories.models import Stake, TreasuredSignoff  # noqa: PLC0415
+
+    beats = list(beats)
+    if not beats:
+        return []
+
+    tenure_ids = list(
+        player_data.tenures.filter(end_date__isnull=True).values_list("pk", flat=True)
+    )
+    if not tenure_ids:
+        return []
+
+    subjects = list(TreasuredSubject.objects.filter(owner_id__in=tenure_ids))
+    if not subjects:
+        return []
+
+    subject_by_identity: dict[SubjectIdentity, int] = {
+        _subject_identity(
+            s.subject_kind,
+            s.subject_sheet_id,
+            s.subject_item_id,
+            s.subject_society_id,
+            s.subject_organization_id,
+            s.subject_label,
+        ): s.pk
+        for s in subjects
+    }
+
+    beat_ids = [b.pk for b in beats]
+    stake_rows = Stake.objects.filter(beat_id__in=beat_ids).values_list(
+        "beat_id",
+        "subject_kind",
+        "subject_sheet_id",
+        "subject_item_id",
+        "subject_society_id",
+        "subject_organization_id",
+        "subject_label",
+    )
+
+    matched_by_beat: dict[int, set[int]] = defaultdict(set)
+    for (
+        beat_id,
+        subject_kind,
+        subject_sheet_id,
+        subject_item_id,
+        subject_society_id,
+        subject_organization_id,
+        subject_label,
+    ) in stake_rows:
+        identity = _subject_identity(
+            subject_kind,
+            subject_sheet_id,
+            subject_item_id,
+            subject_society_id,
+            subject_organization_id,
+            subject_label,
+        )
+        treasured_id = subject_by_identity.get(identity)
+        if treasured_id is not None:
+            matched_by_beat[beat_id].add(treasured_id)
+
+    if not matched_by_beat:
+        return []
+
+    active_signoffs = set(
+        TreasuredSignoff.objects.filter(
+            beat_id__in=matched_by_beat.keys(),
+            player_data=player_data,
+            withdrawn_at__isnull=True,
+        ).values_list("beat_id", "treasured_subject_id")
+    )
+
+    result: list[PendingTreasuredSignoffs] = []
+    for beat_id, treasured_ids in matched_by_beat.items():
+        pending = sorted(tid for tid in treasured_ids if (beat_id, tid) not in active_signoffs)
+        if pending:
+            result.append(
+                PendingTreasuredSignoffs(beat_id=beat_id, treasured_subject_ids=tuple(pending))
+            )
+    result.sort(key=lambda e: e.beat_id)
+    return result

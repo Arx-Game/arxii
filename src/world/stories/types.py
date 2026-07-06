@@ -312,6 +312,21 @@ class StakeAvailability:
 
 
 @dataclass(frozen=True)
+class PendingTreasuredSignoffs:
+    """Player-safe pending-signoff tally for one beat (#1853).
+
+    Produced by ``world.stories.services.boundaries.player_pending_treasured_signoffs``.
+    Player-safe (ADR-0033): ``treasured_subject_ids`` names only the REQUESTING
+    player's own TreasuredSubjects that are staked on this beat without an
+    active sign-off — never another player's, never the GM's broader stake
+    plan, never a reason.
+    """
+
+    beat_id: int
+    treasured_subject_ids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
 class StakesReadinessReport:
     """Result of validate_stakes_readiness (world.stories.services.stakes).
 
