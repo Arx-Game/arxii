@@ -80,6 +80,7 @@ from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
 from commands.imbue import CmdImbue
+from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
 from commands.locations import CmdRoom
 from commands.missions import CmdMission
@@ -245,6 +246,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdHide,
             # #1491 — telnet face of RestAction; spend AP to become Well-Rested.
             CmdRest,
+            # #1866 — telnet face of SearchAction; search for clues in a room.
+            CmdSearch,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
             # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
