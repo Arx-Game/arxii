@@ -1,0 +1,267 @@
+"""Journey test for the read-only battle aggregate API (#2009).
+
+Mirrors world/combat/tests/test_views.py's account/scene setup: an account
+is granted read access to a Battle's backing scene via SceneParticipation
+(Scene.objects.viewable_by is the single source of truth for scene
+visibility, world/scenes/managers.py), staff bypass it entirely.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from django.test import TestCase
+from rest_framework import status as http_status
+from rest_framework.test import APIClient
+
+from evennia_extensions.factories import AccountFactory
+from world.battles.constants import (
+    BattlePosture,
+    BattleSideRole,
+    BattleUnitStatus,
+    FortificationKind,
+    TerrainType,
+    UnitQuality,
+    VehicleKind,
+)
+from world.battles.factories import (
+    BattleFactory,
+    BattlePlaceFactory,
+    BattleRoundFactory,
+    BattleSideFactory,
+    BattleUnitFactory,
+    BattleVehicleFactory,
+    FortificationFactory,
+)
+from world.battles.services import enlist_participant
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.factories import CombatEncounterFactory
+from world.covenants.factories import CovenantFactory
+from world.scenes.constants import ScenePrivacyMode
+from world.scenes.factories import SceneParticipationFactory
+
+
+class BattleApiJourneyTest(TestCase):
+    """Covers list/detail shape, scene visibility, and the ?scene= filter."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.covenant = CovenantFactory(name="The Iron Vanguard")
+        cls.battle = BattleFactory(name="Siege of the Gate")
+        # Battle.save() auto-creates a PUBLIC scene; force PRIVATE so scene
+        # visibility actually gates the API (mirrors combat's precedent).
+        cls.battle.scene.privacy_mode = ScenePrivacyMode.PRIVATE
+        cls.battle.scene.save(update_fields=["privacy_mode"])
+
+        cls.attacker_side = BattleSideFactory(
+            battle=cls.battle,
+            role=BattleSideRole.ATTACKER,
+            covenant=cls.covenant,
+            victory_points=4,
+            victory_threshold=10,
+            posture=BattlePosture.BALANCED,
+        )
+        cls.defender_side = BattleSideFactory(
+            battle=cls.battle,
+            role=BattleSideRole.DEFENDER,
+        )
+
+        cls.place_ford = BattlePlaceFactory(
+            battle=cls.battle,
+            name="The Ford",
+            terrain_type=TerrainType.FLOODED,
+            movement_cost=2,
+            controlled_by=cls.attacker_side,
+            x=Decimal("10.5"),
+            y=Decimal("-3.0"),
+            footprint_radius=Decimal("2.0"),
+        )
+        cls.fortification = FortificationFactory(
+            place=cls.place_ford,
+            defending_side=cls.defender_side,
+            kind=FortificationKind.WALL,
+            integrity=5,
+            max_integrity=8,
+            breached=False,
+        )
+        cls.vehicle = BattleVehicleFactory(
+            unit__battle=cls.battle,
+            unit__side=cls.attacker_side,
+            place=cls.place_ford,
+            vehicle_kind=VehicleKind.SHIP,
+            is_structural=True,
+        )
+
+        cls.encounter = CombatEncounterFactory()
+        cls.place_yard = BattlePlaceFactory(
+            battle=cls.battle,
+            name="Statue Yard",
+            combat_encounter=cls.encounter,
+        )
+
+        cls.ground_unit = BattleUnitFactory(
+            battle=cls.battle,
+            side=cls.attacker_side,
+            place=cls.place_ford,
+            name="Vanguard Pikes",
+            descriptor="pike-and-shot",
+            quality=UnitQuality.VETERAN,
+            status=BattleUnitStatus.ACTIVE,
+            strength=80,
+            morale=60,
+            individual_count=1,
+        )
+        cls.defender_unit = BattleUnitFactory(
+            battle=cls.battle,
+            side=cls.defender_side,
+            place=cls.place_yard,
+            name="Garrison Levy",
+            descriptor="militia",
+            quality=UnitQuality.MILITIA,
+            status=BattleUnitStatus.ACTIVE,
+            strength=50,
+            morale=40,
+        )
+
+        cls.round = BattleRoundFactory(battle=cls.battle, round_number=3, status="declaring")
+
+        cls.pc_sheet = CharacterSheetFactory()
+        cls.pc_account = AccountFactory(username="battle_pc")
+        SceneParticipationFactory(scene=cls.battle.scene, account=cls.pc_account)
+        cls.participant = enlist_participant(
+            battle=cls.battle,
+            character_sheet=cls.pc_sheet,
+            side=cls.attacker_side,
+            place=cls.place_ford,
+        )
+
+        cls.staff_account = AccountFactory(username="battle_staff", is_staff=True)
+        cls.other_account = AccountFactory(username="battle_outsider")
+
+    def _assert_detail_shape(self, data: dict) -> None:
+        self.assertEqual(data["id"], self.battle.pk)
+        self.assertEqual(data["name"], "Siege of the Gate")
+        self.assertEqual(data["outcome"], self.battle.outcome)
+        self.assertEqual(data["risk_level"], self.battle.risk_level)
+        self.assertIs(data["is_paused"], False)
+        self.assertEqual(data["round"], {"number": 3, "status": "declaring"})
+
+        self._assert_sides_shape(data["sides"])
+        self._assert_places_shape(data["places"])
+        self._assert_units_shape(data["units"])
+        self._assert_participants_shape(data["participants"])
+
+    def _assert_sides_shape(self, sides: list[dict]) -> None:
+        sides_by_role = {side["role"]: side for side in sides}
+        attacker = sides_by_role["attacker"]
+        self.assertEqual(attacker["id"], self.attacker_side.pk)
+        self.assertEqual(attacker["victory_points"], 4)
+        self.assertEqual(attacker["victory_threshold"], 10)
+        self.assertEqual(attacker["posture"], "balanced")
+        self.assertEqual(attacker["covenant_id"], self.covenant.pk)
+        self.assertEqual(attacker["covenant_name"], "The Iron Vanguard")
+        defender = sides_by_role["defender"]
+        self.assertIsNone(defender["covenant_id"])
+        self.assertIsNone(defender["covenant_name"])
+
+    def _assert_places_shape(self, places: list[dict]) -> None:
+        places_by_name = {place["name"]: place for place in places}
+        ford = places_by_name["The Ford"]
+        self.assertEqual(ford["id"], self.place_ford.pk)
+        self.assertEqual(ford["terrain_type"], "flooded")
+        self.assertEqual(ford["movement_cost"], 2)
+        self.assertIsInstance(ford["x"], float)
+        self.assertIsInstance(ford["y"], float)
+        self.assertIsInstance(ford["footprint_radius"], float)
+        self.assertEqual(ford["x"], 10.5)
+        self.assertEqual(ford["y"], -3.0)
+        self.assertEqual(ford["footprint_radius"], 2.0)
+        self.assertEqual(ford["controlled_by_id"], self.attacker_side.pk)
+        self.assertIsNone(ford["encounter_scene_id"])
+        self.assertIsNotNone(ford["vehicle"])
+        self.assertEqual(ford["vehicle"]["unit_id"], self.vehicle.unit_id)
+        self.assertEqual(ford["vehicle"]["vehicle_kind"], "ship")
+        self.assertIs(ford["vehicle"]["is_structural"], True)
+        self.assertEqual(len(ford["fortifications"]), 1)
+        fort = ford["fortifications"][0]
+        self.assertEqual(fort["id"], self.fortification.pk)
+        self.assertEqual(fort["kind"], "wall")
+        self.assertEqual(fort["integrity"], 5)
+        self.assertEqual(fort["max_integrity"], 8)
+        self.assertIs(fort["breached"], False)
+        self.assertEqual(fort["defending_side_id"], self.defender_side.pk)
+
+        yard = places_by_name["Statue Yard"]
+        self.assertEqual(yard["encounter_scene_id"], self.encounter.scene_id)
+        self.assertIsNone(yard["vehicle"])
+        self.assertEqual(yard["fortifications"], [])
+
+    def _assert_units_shape(self, units: list[dict]) -> None:
+        units_by_name = {unit["name"]: unit for unit in units}
+        vanguard = units_by_name["Vanguard Pikes"]
+        self.assertEqual(vanguard["descriptor"], "pike-and-shot")
+        self.assertEqual(vanguard["quality"], "veteran")
+        self.assertEqual(vanguard["status"], "active")
+        self.assertEqual(vanguard["strength"], 80)
+        self.assertEqual(vanguard["morale"], 60)
+        self.assertEqual(vanguard["individual_count"], 1)
+        self.assertEqual(vanguard["side_id"], self.attacker_side.pk)
+        self.assertEqual(vanguard["place_id"], self.place_ford.pk)
+        garrison = units_by_name["Garrison Levy"]
+        self.assertEqual(garrison["side_id"], self.defender_side.pk)
+        self.assertEqual(garrison["place_id"], self.place_yard.pk)
+        # The vehicle's own unit is present too, with no place (#1714 invariant).
+        vehicle_unit = next(u for u in units if u["id"] == self.vehicle.unit_id)
+        self.assertIsNone(vehicle_unit["place_id"])
+
+    def _assert_participants_shape(self, participants: list[dict]) -> None:
+        self.assertEqual(len(participants), 1)
+        participant_data = participants[0]
+        self.assertEqual(participant_data["id"], self.participant.pk)
+        self.assertEqual(participant_data["status"], "active")
+        self.assertEqual(participant_data["side_id"], self.attacker_side.pk)
+        self.assertEqual(participant_data["place_id"], self.place_ford.pk)
+        self.assertEqual(participant_data["persona"]["id"], self.pc_sheet.primary_persona.pk)
+        self.assertEqual(participant_data["persona"]["name"], self.pc_sheet.primary_persona.name)
+        self.assertIsNone(participant_data["persona"]["thumbnail_url"])
+        self.assertNotIn("account", participant_data["persona"])
+        self.assertNotIn("username", participant_data["persona"])
+
+    def test_participant_can_retrieve_full_detail_shape(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self._assert_detail_shape(response.data)
+
+    def test_staff_can_retrieve_detail(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.staff_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], self.battle.pk)
+
+    def test_non_participant_detail_is_404_not_403(self) -> None:
+        """No existence oracle — a private battle 404s for a non-viewer, not 403."""
+        client = APIClient()
+        client.force_authenticate(user=self.other_account)
+        response = client.get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_404_NOT_FOUND)
+
+    def test_list_excludes_battle_for_non_participant(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.other_account)
+        response = client.get("/api/battles/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertNotIn(self.battle.pk, ids)
+
+    def test_scene_filter_returns_exactly_this_battle_for_participant(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.pc_account)
+        response = client.get(f"/api/battles/?scene={self.battle.scene_id}")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        results = response.data["results"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], self.battle.pk)
+        self.assertEqual(results[0]["scene_id"], self.battle.scene_id)
