@@ -55,7 +55,13 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   dragon/kraken remain data variants (`VehicleKind`) pending their own end-to-end
   pass — no dedicated content, telnet reposition subcommand, reposition-movement
   resolution, or persistent-ship equivalent yet.
-  Deferred: battle writeup page (#1735).
+  Live strategic battle map shipped (#2009): read-only REST aggregate
+  (`GET /api/battles/`, `GET /api/battles/<pk>/`, scene-visibility-gated) + a
+  slim `BATTLE_STATE` WS ping (`{battle_id, round_number}`, sent post-commit
+  on round transitions/conclusion) driving a React Flow map page at
+  `/scenes/:id/battle` — see [battles.md](../systems/battles.md#web-surface-2009).
+  Deferred: a post-conclusion battle writeup page (#1735), which should reuse
+  `BattleDetailSerializer`'s aggregate shape rather than authoring a second one.
 - Mounts / charging / flying (P2, no-improv-flagged); ranged / archery enforcement.
 
 ## Reserved term: "clash"
