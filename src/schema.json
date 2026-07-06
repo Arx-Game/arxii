@@ -5021,7 +5021,13 @@ paths:
   /api/companions/companions/:
     get:
       operationId: companions_companions_list
-      description: Read endpoints for the player's own active companions.
+      description: |-
+        Read + action endpoints for the player's companion surface.
+
+        `list`/`retrieve` return the caller's own active companions (read-only).
+        POST actions delegate to the four Actions in
+        ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+        the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
       - in: query
         name: archetype__domain
@@ -5059,7 +5065,13 @@ paths:
   /api/companions/companions/{id}/:
     get:
       operationId: companions_companions_retrieve
-      description: Read endpoints for the player's own active companions.
+      description: |-
+        Read + action endpoints for the player's companion surface.
+
+        `list`/`retrieve` return the caller's own active companions (read-only).
+        POST actions delegate to the four Actions in
+        ``actions/definitions/companions.py``; ``ActionResult`` fields map 1:1 to
+        the response bodies so the contract matches ``SanctumViewSet`` (#1918).
       parameters:
       - in: path
         name: id
@@ -5067,6 +5079,103 @@ paths:
           type: integer
         description: A unique integer value identifying this Companion.
         required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/deploy/:
+    post:
+      operationId: companions_companions_deploy_create
+      description: |-
+        Deploy a companion into a battle — ``POST /api/companions/companions/{id}/deploy/``.
+
+        Wraps :class:`actions.definitions.companions.DeployCompanionAction`.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/fight/:
+    post:
+      operationId: companions_companions_fight_create
+      description: |-
+        Commit a companion into combat — ``POST /api/companions/companions/{id}/fight/``.
+
+        Wraps :class:`actions.definitions.companions.CompanionFightAction`.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/{id}/release/:
+    post:
+      operationId: companions_companions_release_create
+      description: |-
+        Release a bonded companion — ``POST /api/companions/companions/{id}/release/``.
+
+        Wraps :class:`actions.definitions.companions.ReleaseCompanionAction`.
+        The companion id comes from the URL; ``get_queryset`` scopes it to the
+        caller's active companions (foreign → 404). The Action re-validates
+        ownership via ``_resolve_owned_companion`` (defense in depth).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Companion.
+        required: true
+      tags:
+      - companions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Companion'
+          description: ''
+  /api/companions/companions/bind/:
+    post:
+      operationId: companions_companions_bind_create
+      description: |-
+        Bind a new companion — ``POST /api/companions/companions/bind/``.
+
+        Body: ``{archetype_id, gift_id, name}``.
+        Wraps :class:`actions.definitions.companions.BindCompanionAction`.
       tags:
       - companions
       security:
