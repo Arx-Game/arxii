@@ -1,0 +1,172 @@
+{% load i18n %}
+<style>
+  #panel-checks .tuning-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  #panel-checks .tuning-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 12rem;
+  }
+  #panel-checks .tuning-field label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+  }
+  #panel-checks table.tuning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+  #panel-checks table.tuning-table th,
+  #panel-checks table.tuning-table td {
+    border-bottom: 1px solid var(--hairline-color);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  #panel-checks .stacked-bar {
+    display: flex;
+    width: 100%;
+    min-width: 8rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--hairline-color);
+  }
+  #panel-checks .bar-segment {
+    display: block;
+    height: 100%;
+  }
+  #panel-checks .bar-success {
+    background: #2e7d32;
+  }
+  #panel-checks .bar-failure {
+    background: var(--error-fg);
+  }
+  #panel-checks .bar-neutral {
+    background: var(--border-color);
+  }
+  #panel-checks .band-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+    color: var(--body-quiet-color);
+  }
+  #panel-checks .band-detail .swatch {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 1px;
+    margin-right: 0.25rem;
+    vertical-align: middle;
+  }
+</style>
+
+<h2>{% translate "Check Success by Tier" %}</h2>
+<p>
+  {% translate "Probability of each outcome band for every seeded result chart, mirroring perform_check's roll math exactly." %}
+</p>
+
+<form class="tuning-form" hx-get="{% url 'admin_tuning_checks' %}" hx-target="#panel-checks"
+      hx-trigger="input changed delay:300ms">
+  <div class="tuning-field">
+    <label for="checks-roll-modifier">
+      {% translate "Roll modifier" %}: <span>{{ roll_modifier }}</span>
+    </label>
+    <input type="range" id="checks-roll-modifier" name="roll_modifier"
+           min="-50" max="50" step="1" value="{{ roll_modifier }}">
+  </div>
+  <div class="tuning-field">
+    <label for="checks-roller-points">
+      {% translate "Matchup: roller points" %}: <span>{{ roller_points }}</span>
+    </label>
+    <input type="range" id="checks-roller-points" name="roller_points"
+           min="0" max="200" step="1" value="{{ roller_points }}">
+  </div>
+  <div class="tuning-field">
+    <label for="checks-target-difficulty">
+      {% translate "Matchup: target difficulty" %}: <span>{{ target_difficulty }}</span>
+    </label>
+    <input type="range" id="checks-target-difficulty" name="target_difficulty"
+           min="0" max="200" step="1" value="{{ target_difficulty }}">
+  </div>
+</form>
+
+<table class="tuning-table">
+  <thead>
+    <tr>
+      <th>{% translate "Chart" %}</th>
+      <th>{% translate "Success %" %}</th>
+      <th>{% translate "Expected SL" %}</th>
+      <th>{% translate "Distribution" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dist in distributions %}
+    <tr>
+      <td>{{ dist.chart_name }} ({{ dist.rank_difference }})</td>
+      <td>{{ dist.success_probability|floatformat:1 }}%</td>
+      <td>{{ dist.expected_success_level|floatformat:2 }}</td>
+      <td>
+        <div class="stacked-bar" role="img"
+             aria-label="{{ dist.chart_name }} outcome distribution">
+          {% for band in dist.bands %}
+          <span class="bar-segment {% if band.success_level > 0 %}bar-success
+                       {% elif band.success_level < 0 %}bar-failure
+                       {% else %}bar-neutral{% endif %}"
+                style="width: {% widthratio band.probability 1 100 %}%"
+                title="{{ band.name }}: {% widthratio band.probability 1 100 %}%"></span>
+          {% endfor %}
+        </div>
+        <div class="band-detail">
+          {% for band in dist.bands %}
+          <span>
+            <span class="swatch {% if band.success_level > 0 %}bar-success
+                         {% elif band.success_level < 0 %}bar-failure
+                         {% else %}bar-neutral{% endif %}"></span>
+            {{ band.name }} {% widthratio band.probability 1 100 %}%
+          </span>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">{% translate "No result charts are seeded yet." %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>{% translate "Matchup" %}</h3>
+{% if matchup %}
+<p>
+  {{ matchup.chart_name }} (rank difference {{ matchup.rank_difference }}) &mdash;
+  {% translate "success" %} {{ matchup.success_probability|floatformat:1 }}%,
+  {% translate "expected SL" %} {{ matchup.expected_success_level|floatformat:2 }}
+</p>
+<div class="stacked-bar" role="img" aria-label="{{ matchup.chart_name }} matchup distribution">
+  {% for band in matchup.bands %}
+  <span class="bar-segment {% if band.success_level > 0 %}bar-success
+               {% elif band.success_level < 0 %}bar-failure
+               {% else %}bar-neutral{% endif %}"
+        style="width: {% widthratio band.probability 1 100 %}%"
+        title="{{ band.name }}: {% widthratio band.probability 1 100 %}%"></span>
+  {% endfor %}
+</div>
+<div class="band-detail">
+  {% for band in matchup.bands %}
+  <span>
+    <span class="swatch {% if band.success_level > 0 %}bar-success
+                 {% elif band.success_level < 0 %}bar-failure
+                 {% else %}bar-neutral{% endif %}"></span>
+    {{ band.name }} {% widthratio band.probability 1 100 %}%
+  </span>
+  {% endfor %}
+</div>
+{% else %}
+<p>{% translate "No result chart found for this matchup." %}</p>
+{% endif %}
