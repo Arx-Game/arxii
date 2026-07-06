@@ -118,8 +118,56 @@ def ensure_melee_attack_check_type(skill, specs) -> object:
     return check_type
 
 
+_MELEE_DEFENSE_CHECK_TYPE_NAME = "Melee Defense"
+
+
+def ensure_melee_defense_check_type(skill, specs) -> object:
+    """Seed the Melee Defense CheckType: agility + Melee Combat (+ weapon specs).
+
+    Mirrors ``ensure_melee_attack_check_type`` but with ``agility`` as the stat
+    (evasion) instead of ``strength`` (attack). Reuses the same ``Melee Combat``
+    skill + weapon specializations from #1706 — one skill investment covers
+    offense and defense.
+
+    Authoritative rewrite (delete + recreate CheckTypeTrait /
+    CheckTypeSpecialization) so a re-seed converges, matching the offense seed.
+    """
+    from world.checks.models import (  # noqa: PLC0415
+        CheckType,
+        CheckTypeSpecialization,
+        CheckTypeTrait,
+    )
+    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
+    check_type, _ = CheckType.objects.get_or_create(
+        name=_MELEE_DEFENSE_CHECK_TYPE_NAME,
+        category=_ensure_combat_category(),
+        defaults={"description": "A melee defense roll: agility + Melee Combat."},
+    )
+    CheckTypeTrait.objects.filter(check_type=check_type).delete()
+    CheckTypeSpecialization.objects.filter(check_type=check_type).delete()
+
+    CheckTypeTrait.objects.create(
+        check_type=check_type,
+        trait=StatTraitFactory(name="agility", category=TraitCategory.PHYSICAL),
+        weight=Decimal("1.00"),
+    )
+    CheckTypeTrait.objects.create(
+        check_type=check_type,
+        trait=skill.trait,
+        weight=Decimal("1.00"),
+    )
+    for spec in specs.values():
+        CheckTypeSpecialization.objects.create(
+            check_type=check_type, specialization=spec, weight=Decimal("1.00")
+        )
+    return check_type
+
+
 def seed_combat_check_content() -> None:
-    """Cluster entry — seed the Melee Combat skill catalog + Melee Attack check (#1706)."""
+    """Cluster entry — seed Melee Combat skill catalog + Attack/Defense checks."""
     skill = ensure_melee_combat_skill()
     specs = ensure_weapon_specializations(skill)
     ensure_melee_attack_check_type(skill, specs)
+    ensure_melee_defense_check_type(skill, specs)
