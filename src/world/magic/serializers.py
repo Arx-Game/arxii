@@ -3114,7 +3114,10 @@ class TechniqueDesignSerializer(serializers.Serializer):
             raise serializers.ValidationError({"gift_id": exc.user_message}) from exc
 
         try:
-            resolve_cast_action_template(attrs["_design"].consequence_pool_id)
+            resolve_cast_action_template(
+                attrs["_design"].consequence_pool_id,
+                action_category=attrs["_design"].action_category,
+            )
         except InvalidConsequencePoolChoice as exc:
             raise serializers.ValidationError({"consequence_pool_id": exc.user_message}) from exc
 

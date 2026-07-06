@@ -36,7 +36,10 @@ class WireFleeCheckTypeTraitTests(TestCase):
 
         idmapper_models.flush_cache()
 
-    def test_authors_agility_and_wits_weights(self) -> None:
+    def test_authors_agility_wits_and_skill_weights(self) -> None:
+        from world.seeds.combat_checks import ensure_melee_combat_skill
+
+        ensure_melee_combat_skill()  # the skill-leg dependency
         check_type = wire_flee_check_type()
         weights = {
             ctt.trait.name: ctt.weight
@@ -44,23 +47,31 @@ class WireFleeCheckTypeTraitTests(TestCase):
         }
         self.assertEqual(weights["agility"], Decimal("1.00"))
         self.assertEqual(weights["wits"], Decimal("0.50"))
+        self.assertEqual(weights["Melee Combat"], Decimal("0.50"))
 
     def test_check_type_category_is_combat(self) -> None:
         check_type = wire_flee_check_type()
         self.assertEqual(check_type.category.name, "Combat")
 
-    def test_idempotent_and_preserves_staff_edits(self) -> None:
+    def test_authoritative_rewrite_resets_staff_edits(self) -> None:
+        """#1706 — penetration/flee use an authoritative delete+rewrite (mirrors
+        social_checks.py) to correct the prior stat+stat composition. A re-seed
+        resets staff weight edits and converges on the authored three-trait set."""
+        from world.seeds.combat_checks import ensure_melee_combat_skill
+
+        ensure_melee_combat_skill()
         check_type = wire_flee_check_type()
-        # Staff retunes a weight; re-running the seed must not clobber it.
+        # Staff retunes a weight; re-running the seed resets it (authoritative
+        # delete+rewrite — the row is replaced, so re-query by trait name).
         row = CheckTypeTrait.objects.get(check_type=check_type, trait__name="agility")
         row.weight = Decimal("2.00")
         row.save()
 
         wire_flee_check_type()
 
-        self.assertEqual(CheckTypeTrait.objects.filter(check_type=check_type).count(), 2)
-        row.refresh_from_db()
-        self.assertEqual(row.weight, Decimal("2.00"))
+        self.assertEqual(CheckTypeTrait.objects.filter(check_type=check_type).count(), 3)
+        refreshed = CheckTypeTrait.objects.get(check_type=check_type, trait__name="agility")
+        self.assertEqual(refreshed.weight, Decimal("1.00"))
 
 
 class WireFleeModifierTargetTests(TestCase):

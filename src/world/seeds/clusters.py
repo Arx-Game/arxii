@@ -43,6 +43,12 @@ def _seed_checks() -> None:
     seed_check_resolution_tables()
 
 
+def _seed_combat_checks() -> None:
+    from world.seeds.combat_checks import seed_combat_check_content  # noqa: PLC0415
+
+    seed_combat_check_content()
+
+
 def _seed_social() -> None:
     from world.seeds.social_checks import seed_social_check_content  # noqa: PLC0415
 
@@ -130,6 +136,11 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # so the canonical rows exist before the other clusters run. (Idempotency
     # holds regardless of order — magic also ensures the spine itself.)
     "checks": _seed_checks,
+    # Combat checks: the Melee Combat skill catalog + weapon-class specializations
+    # + the Melee Attack CheckType (stat + skill + spec). After "checks" for the
+    # resolution spine; before "social" and "combat" (the penetration/flee retrofits
+    # in "combat" depend on the Melee Combat skill existing) (#1706).
+    "combat_checks": _seed_combat_checks,
     # Social checks: retrofit the social CheckTypes to stat + skill (+ spec) and seed the
     # Persuasion/Performance skills + their specializations (#1688). After "checks" so the
     # resolution spine exists; authoritative, so it corrects the placeholder stat+stat seed.
@@ -227,6 +238,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
 
     return {
         "checks": [CheckType, ResultChart],
+        # Combat checks: the Melee Combat skill + weapon-class specializations + the
+        # Melee Attack CheckType (stat + skill + spec) (#1706). Shared spine/skill rows
+        # counted under "checks"; appears as a seeded cluster.
+        "combat_checks": [],
         # Social: seeds Persuasion/Performance skills + their specializations + the
         # stat+skill(+spec) social CheckType compositions (#1688).
         "social": [Specialization],

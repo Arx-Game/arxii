@@ -862,7 +862,9 @@ def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: Character
     from world.magic.exceptions import InvalidConsequencePoolChoice  # noqa: PLC0415
 
     try:
-        action_template = resolve_cast_action_template(chosen_pool_id)
+        action_template = resolve_cast_action_template(
+            chosen_pool_id, action_category=derived_category
+        )
     except InvalidConsequencePoolChoice:
         logger.warning(
             "CG finalize: invalid selected_consequence_pool_id %s for draft %s; "
@@ -870,7 +872,7 @@ def _finalize_cantrip_gift_and_technique(draft: CharacterDraft, sheet: Character
             chosen_pool_id,
             draft.pk,
         )
-        action_template = resolve_cast_action_template(None)
+        action_template = resolve_cast_action_template(None, action_category=derived_category)
 
     technique = create_technique(
         creator=sheet,

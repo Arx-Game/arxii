@@ -235,11 +235,19 @@ def _ensure_survival_category() -> CheckCategory:
 
 
 def _ensure_endurance_check_type() -> CheckType:
-    """Get or create the Endurance CheckType, creating it if absent.
+    """Get or create the Endurance CheckType, seeding its stamina trait (#1706).
 
-    Used for both knockout and permanent wound resistance checks. Seeded on
-    first use — trait-weightings are authored content and not seeded here.
+    Used for both knockout and permanent wound resistance checks. The single
+    stamina stat leg is the tenet-permitted resist composition; staff may add
+    further trait rows via admin. Idempotent — ``get_or_create`` preserves any
+    existing staff weight edit on the (check_type, trait) pair.
     """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckTypeTrait  # noqa: PLC0415
+    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
     check, _ = CheckType.objects.get_or_create(
         name=ENDURANCE_CHECK_NAME,
         defaults={
@@ -247,21 +255,38 @@ def _ensure_endurance_check_type() -> CheckType:
             "description": "Resist knockout and permanent wounds.",
         },
     )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check,
+        trait=StatTraitFactory(name="stamina", category=TraitCategory.PHYSICAL),
+        defaults={"weight": Decimal("1.00")},
+    )
     return check
 
 
 def _ensure_death_check_type() -> CheckType:
-    """Get or create the Mortal Resolve CheckType, creating it if absent.
+    """Get or create the Mortal Resolve CheckType, seeding its willpower trait (#1706).
 
     Used for death resistance when a character is brought below zero health.
-    Seeded on first use — trait-weightings are authored content and not seeded here.
+    The single willpower stat leg is the tenet-permitted resist composition.
+    Idempotent — ``get_or_create`` preserves any existing staff weight edit.
     """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckTypeTrait  # noqa: PLC0415
+    from world.traits.factories import StatTraitFactory  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
     check, _ = CheckType.objects.get_or_create(
         name=DEATH_CHECK_NAME,
         defaults={
             "category": _ensure_survival_category(),
             "description": "Resist death when brought below zero health.",
         },
+    )
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check,
+        trait=StatTraitFactory(name="willpower", category=TraitCategory.META),
+        defaults={"weight": Decimal("1.00")},
     )
     return check
 

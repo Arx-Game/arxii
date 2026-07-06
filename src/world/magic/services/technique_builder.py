@@ -69,19 +69,30 @@ def get_technique_cast_catalog():
     return ConsequencePool.objects.filter(parent=get_standalone_cast_pool()).order_by("name")
 
 
-def resolve_cast_action_template(consequence_pool_id: int | None):
+def resolve_cast_action_template(
+    consequence_pool_id: int | None, *, action_category: str | None = None
+):
     """Resolve the ActionTemplate a technique's action_template should point at.
 
     None (no flavor chosen) resolves to the shared base template — today's
-    unchanged default. A catalog pool id resolves to its matching seeded
-    ActionTemplate. Raises InvalidConsequencePoolChoice for any id that isn't
-    a catalog member (including a valid-but-unrelated ConsequencePool).
+    unchanged default for non-physical categories. A PHYSICAL technique with
+    no chosen pool resolves to the combat 'Melee Attack' ActionTemplate (#1706)
+    so physical attacks roll a combat check (strength + Melee Combat) instead
+    of the magic fallback. A catalog pool id resolves to its matching seeded
+    ActionTemplate regardless of category. Raises InvalidConsequencePoolChoice
+    for any id that isn't a catalog member (including a valid-but-unrelated
+    ConsequencePool).
     """
+    from actions.constants import ActionCategory  # noqa: PLC0415
     from actions.models import ActionTemplate  # noqa: PLC0415
     from world.magic.exceptions import InvalidConsequencePoolChoice  # noqa: PLC0415
     from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
 
     if consequence_pool_id is None:
+        if action_category == ActionCategory.PHYSICAL:
+            from world.combat.factories import wire_melee_attack_action_template  # noqa: PLC0415
+
+            return wire_melee_attack_action_template()
         return get_standalone_cast_template()
     if not get_technique_cast_catalog().filter(pk=consequence_pool_id).exists():
         raise InvalidConsequencePoolChoice
@@ -284,7 +295,9 @@ def build_technique(design: TechniqueDesignInput, *, creator) -> Technique:
         level=design.level,
         action_category=design.action_category,
         description=design.description,
-        action_template=resolve_cast_action_template(design.consequence_pool_id),
+        action_template=resolve_cast_action_template(
+            design.consequence_pool_id, action_category=design.action_category
+        ),
     )
     if design.restriction_ids:
         tech.restrictions.add(*Restriction.objects.filter(id__in=design.restriction_ids))
