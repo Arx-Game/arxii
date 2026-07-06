@@ -38905,6 +38905,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         status:
           allOf:
           - $ref: '#/components/schemas/NPCAssetStatusEnum'
@@ -39020,6 +39023,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         label:
           type: string
           description: UI display text for the menu option.
@@ -39091,6 +39097,9 @@ components:
       - informant
       - contact
       - personal_favor
+      - guard
+      - fan
+      - minor_ally
       type: string
       description: |-
         * `permit` - Permit
@@ -39102,6 +39111,9 @@ components:
         * `informant` - Informant
         * `contact` - Contact
         * `personal_favor` - Personal Favor
+        * `guard` - Guard
+        * `fan` - Fan
+        * `minor_ally` - Minor Ally
     NPCServiceOfferRequest:
       type: object
       properties:
@@ -39122,6 +39134,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         label:
           type: string
           minLength: 1
@@ -44659,6 +44674,9 @@ components:
             * `informant` - Informant
             * `contact` - Contact
             * `personal_favor` - Personal Favor
+            * `guard` - Guard
+            * `fan` - Fan
+            * `minor_ally` - Minor Ally
         label:
           type: string
           minLength: 1
@@ -48786,11 +48804,17 @@ components:
       - informant
       - contact
       - personal_favor
+      - guard
+      - fan
+      - minor_ally
       type: string
       description: |-
         * `informant` - Informant
         * `contact` - Contact
         * `personal_favor` - Personal Favor
+        * `guard` - Guard
+        * `fan` - Fan
+        * `minor_ally` - Minor Ally
     RoomComfortBreakdown:
       type: object
       description: The owner build-HUD payload for one room (#1514).

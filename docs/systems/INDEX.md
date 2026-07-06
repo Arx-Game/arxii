@@ -1818,9 +1818,10 @@ companion. Full detail: [companions.md](companions.md).
 ### Assets (#1872)
 
 Promotes a class-1 `Functionary` into a permanently-owned, named NPC
-(informant/contact/personal-favor) once rapport crosses a threshold and a
-capability trait gate is met. Modeled as a plain `NPCServiceOffer` on the
-existing offer/effect-dispatch framework — see ADR-0091.
+(informant/contact/personal-favor/guard/fan/minor-ally) once rapport crosses a
+threshold and a capability trait gate is met. Modeled as a plain
+`NPCServiceOffer` on the existing offer/effect-dispatch framework — see
+ADR-0091.
 
 - **Models:** `NPCAsset` (`promoter_persona`, `asset_persona` — both FK
   `scenes.Persona`; `role_context`; `source_functionary` FK `Functionary`
@@ -1835,6 +1836,7 @@ existing offer/effect-dispatch framework — see ADR-0091.
   `reconcile_distinction_asset_grants` (#1906), mirroring the
   `DistinctionResonanceGrant` pattern. Lives in `world.assets` per ADR-0010.
 - **`OfferKind`** additions: `INFORMANT`, `CONTACT`, `PERSONAL_FAVOR`
+  (#1872); `GUARD`, `FAN`, `MINOR_ALLY` (#1907)
   (`world.npc_services.constants`).
 - **Effect handlers** (`world.assets.effects`): resolve the Functionary from
   the PC's current location + the offer's role, roll `offer.check_type`
@@ -1844,16 +1846,18 @@ existing offer/effect-dispatch framework — see ADR-0091.
   the `NPCAsset` row, and deactivate the source Functionary. Registered via
   `AssetsConfig.ready()`.
 - **Seed content** (`world.assets.content`): reuses the existing
-  Stealth/Leadership/Persuasion check content
+  Stealth/Leadership/Persuasion/Scholarship check content
   (`world.seeds.stealth_checks`/`governance_checks`/`social_checks`) rather
-  than inventing new Trait rows — framework-proving only.
+  than inventing new Trait rows — framework-proving only. The #1907 variants
+  gate on Persuasion (GUARD, FAN) and Scholarship (MINOR_ALLY), rolling
+  Intimidation/Gossip/Domain Investment checks respectively.
 - **REST API:** `world.assets.views.NPCAssetViewSet` — read-only, mounted
   at `/api/assets/`, scoped to the requesting user's own promoted assets.
 - **Source:** `src/world/assets/`
 
-Deferred follow-ups: asset gameplay loops (tasking/intel/income),
-compromise/loss lifecycle, voluntary asset sharing, guard/fan/minor-ally
-variants.
+Deferred follow-ups: distinction-granted starting assets (`needs-design`),
+asset gameplay loops (tasking/intel/income), compromise/loss lifecycle,
+voluntary asset sharing.
 
 ### Room Features (Plan 4 framework — Subsystem E)
 Plan 4 (#669, shipped via #703). Generic per-room enhancement framework — a
