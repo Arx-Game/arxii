@@ -164,3 +164,27 @@ All models registered with appropriate admin interfaces:
 - **Progression app**: Uses `CharacterPathHistory` for current path lookup
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions): Compute `extra_modifiers` before calling `perform_check()`
+
+---
+
+## Seeded Compositions
+
+Check compositions are authored as seed data (the design tenet: **stat + skill (+ specialization)**, rarely stat+stat). The seed clusters live in `world/seeds/`:
+
+| Cluster | Checks | Composition |
+|---------|--------|-------------|
+| `combat_checks` (#1706) | `Melee Attack` | strength + Melee Combat (+ Small/Medium/Heavy Weapons spec) |
+| `combat` | `penetration` | willpower + intellect + Melee Combat |
+| `combat` | `flee` | agility + wits + Melee Combat |
+| `combat` | `Escalation Pace` | wits (single-stat resist) |
+| `vitals` | `Endurance` | stamina (single-stat resist — KO/wound) |
+| `vitals` | `Mortal Resolve` | willpower (single-stat resist — death) |
+| `positioning` | `Reflexes` | wits (single-stat resist — plummet-catch/interpose) |
+| `social` (#1689) | Intimidation/Persuasion/etc. | stat + skill (+ spec) |
+| `magic` | cast/ritual checks | willpower + ritualism/occult/theology |
+| `investigation` (#1705) | `Search` | perception + Investigation |
+| `governance` (#930) | Tax/Investment checks | stat + Scholarship/Economics |
+
+**Resist checks** (Reflexes, Escalation Pace, Endurance, Mortal Resolve) are the tenet-permitted single-stat exception — they seed exactly one `CheckTypeTrait`. The `Melee Combat` skill catalog (with weapon-class specializations aligned to `progression.services.scene_integration`'s `weapon_map`) is seeded by the `combat_checks` cluster; the penetration/flee retrofits depend on it.
+
+**Technique routing (#1706):** `resolve_cast_action_template` reads `Technique.action_category` — a `PHYSICAL` technique with no chosen consequence-pool flavor resolves to the combat `Melee Attack` `ActionTemplate` (so physical attacks roll a combat check, not the magic fallback); non-physical techniques resolve to the magic standalone cast template.
