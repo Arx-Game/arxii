@@ -2922,9 +2922,11 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   for `SET_ENVIRONMENT` casts, #1715; military-grade
   `summon_ally(payload.military=True)` now reading `payload.properties`/
   `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
-  `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from the
-  cast technique's `action_template.check_type`, via `use_technique`; `select_consequence`
-  for the Surrounded entry roll and resist checks, #1733), combat
+  `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from
+  `resolve_cast_check_type` — the caster's provisioned personal magic check, falling back to
+  the cast technique's `action_template.check_type` only when unprovisioned, ADR-0095 — via
+  `use_technique`; `select_consequence` for the Surrounded entry roll and resist checks,
+  #1733), combat
   (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710, and
   siege-engine skirmishes, #1713; shared `RoundStatus` / `AbstractRound`), covenants
   (`BattleSide.covenant`; `CovenantRole.command_tier`/`.is_champion_role`, #1710), stories

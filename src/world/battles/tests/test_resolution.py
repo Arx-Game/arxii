@@ -134,6 +134,73 @@ class BattleTechniqueResolverTests(TestCase):
 
         self.assertIs(check_result, fake_result)
 
+    def test_resolve_battle_technique_rolls_personal_check_when_provisioned(self) -> None:
+        """#2014: a provisioned caster's battle technique cast rolls THEIR check,
+        not the technique's action_template check_type — mirrors
+        world.combat.tests.test_clash_commit.CommitToClashTests
+        .test_commit_rolls_personal_check_when_provisioned.
+
+        Patches ``world.battles.resolution.perform_check`` (not
+        ``world.checks.services.perform_check``) because ``resolution.py`` imports
+        ``perform_check`` at module scope (``from world.checks.services import
+        perform_check``) rather than re-importing it inside the function on every
+        call the way ``world.combat.clash`` does — patching the services module
+        would not intercept the module-level-bound name in ``resolution``.
+        """
+        from evennia.accounts.models import AccountDB
+
+        from world.battles.resolution import resolve_battle_technique
+        from world.battles.services import (
+            add_side,
+            begin_battle_round,
+            create_battle,
+            declare_battle_action,
+            enlist_participant,
+        )
+        from world.checks.test_helpers import force_check_outcome
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.models.rituals import Ritual
+        from world.traits.factories import CheckOutcomeFactory
+
+        account = AccountDB.objects.create(username=f"battle_resolution_cc_{id(self)}")
+        ritual = Ritual.objects.create(
+            name=f"battle_resolution_cc_ritual_{id(self)}",
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        config = RitualCheckConfigFactory(ritual=ritual)
+        self.sheet.character.db_account = account
+        self.sheet.character.save(update_fields=["db_account"])
+
+        battle = create_battle(name="Resolver Personal Check Battle")
+        side = add_side(battle=battle, role=BattleSideRole.ATTACKER)
+        participant = enlist_participant(battle=battle, character_sheet=self.sheet, side=side)
+        begin_battle_round(battle=battle)
+        declaration = declare_battle_action(
+            participant=participant,
+            action_kind=BattleActionKind.SUPPORT,
+            technique=self.technique,
+        )
+
+        success_outcome = CheckOutcomeFactory(name="battle_resolution_cc_success", success_level=1)
+
+        captured = []
+        from world.checks.services import perform_check as real_perform_check
+
+        def recording_perform_check(objectdb, check_type, **kwargs):
+            captured.append(check_type)
+            return real_perform_check(objectdb, check_type, **kwargs)
+
+        with (
+            force_check_outcome(success_outcome),
+            patch("world.battles.resolution.perform_check", recording_perform_check),
+        ):
+            resolve_battle_technique(declaration=declaration)
+
+        self.assertEqual(captured, [config.check_type])
+        self.assertNotEqual(config.check_type, self.technique.action_template.check_type)
+
 
 class DeclareBattleActionTests(TestCase):
     def setUp(self) -> None:
