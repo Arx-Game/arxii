@@ -104,9 +104,11 @@ flowchart TD
     RES -- "scene" --> RSCENE["start_action_resolution — check"]
     RES -- "combat" --> RCOMBAT["CombatTechniqueResolver<br/>COMBAT_PULL → PENETRATION → damage + conditions"]
     RES -- "clash" --> RCLASH["perform_check → outcome_to_delta<br/>→ clash progress (no damage)"]
+    RES -- "battle" --> RBATTLE["resolve_battle_technique<br/>perform_check → battle effect deltas"]
     RSCENE --> CONS
     RCOMBAT --> CONS
     RCLASH --> CONS
+    RBATTLE --> CONS
     CONS["10 · consequences (read INTENSITY):<br/>Soulfray · control mishap · fatigue ·<br/>Audere / Audere Majora offers ·<br/>resonance attribution · corruption ·<br/>environment backfire / defile"]
     CONS --> EV["11 · emit TECHNIQUE_CAST + TECHNIQUE_AFFECTED (frozen)"]
     EV --> NARR["12 · narration — render_*_outcome_narration<br/>+ power_outcome_clause (ward / environment)"]
