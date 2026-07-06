@@ -20200,10 +20200,6 @@ paths:
           type: string
         description: Account Username
       - in: query
-        name: gm_trust_level
-        schema:
-          type: integer
-      - in: query
         name: has_negative_feedback
         schema:
           type: boolean
@@ -20247,11 +20243,6 @@ paths:
         Manages player trust levels for content and GM activities.
       tags:
       - player-trust
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlayerTrustRequest'
       security:
       - cookieAuth: []
       responses:
@@ -20299,11 +20290,6 @@ paths:
         required: true
       tags:
       - player-trust
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlayerTrustRequest'
       security:
       - cookieAuth: []
       responses:
@@ -20327,11 +20313,6 @@ paths:
         required: true
       tags:
       - player-trust
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedPlayerTrustRequest'
       security:
       - cookieAuth: []
       responses:
@@ -35528,20 +35509,6 @@ components:
           type: boolean
       required:
       - story
-    GmTrustLevelEnum:
-      enum:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      type: integer
-      description: |-
-        * `0` - Untrusted
-        * `1` - Basic
-        * `2` - Intermediate
-        * `3` - Advanced
-        * `4` - Expert
     GoalDomain:
       type: object
       description: Serializer for goal domains (ModifierTarget with category='goal').
@@ -45109,23 +45076,6 @@ components:
           description: Room the reporter was in when submitting.
         status:
           $ref: '#/components/schemas/StatusD66Enum'
-    PatchedPlayerTrustRequest:
-      type: object
-      description: Serializer for player trust profiles
-      properties:
-        gm_trust_level:
-          allOf:
-          - $ref: '#/components/schemas/GmTrustLevelEnum'
-          description: |-
-            General GM trust level, not category-specific
-
-            * `0` - Untrusted
-            * `1` - Basic
-            * `2` - Intermediate
-            * `3` - Advanced
-            * `4` - Expert
-          minimum: -2147483648
-          maximum: 2147483647
     PatchedRiskCalibrationRequest:
       type: object
       description: |-
@@ -47249,19 +47199,6 @@ components:
         account:
           type: string
           readOnly: true
-        gm_trust_level:
-          allOf:
-          - $ref: '#/components/schemas/GmTrustLevelEnum'
-          description: |-
-            General GM trust level, not category-specific
-
-            * `0` - Untrusted
-            * `1` - Basic
-            * `2` - Intermediate
-            * `3` - Advanced
-            * `4` - Expert
-          minimum: -2147483648
-          maximum: 2147483647
         total_positive_feedback:
           type: integer
           description: Aggregate positive feedback count from all trust levels
@@ -47285,23 +47222,6 @@ components:
       - total_negative_feedback
       - total_positive_feedback
       - updated_at
-    PlayerTrustRequest:
-      type: object
-      description: Serializer for player trust profiles
-      properties:
-        gm_trust_level:
-          allOf:
-          - $ref: '#/components/schemas/GmTrustLevelEnum'
-          description: |-
-            General GM trust level, not category-specific
-
-            * `0` - Untrusted
-            * `1` - Basic
-            * `2` - Intermediate
-            * `3` - Advanced
-            * `4` - Expert
-          minimum: -2147483648
-          maximum: 2147483647
     PolishIncrement:
       type: object
       description: Per-category polish a decoration template grants on completion.

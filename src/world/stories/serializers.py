@@ -532,7 +532,6 @@ class PlayerTrustSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "account",
-            "gm_trust_level",
             "total_positive_feedback",
             "total_negative_feedback",
             "created_at",

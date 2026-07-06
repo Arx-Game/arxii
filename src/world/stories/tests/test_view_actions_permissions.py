@@ -15,7 +15,7 @@ from world.stories.factories import (
     StoryParticipationFactory,
 )
 from world.stories.models import StoryParticipation
-from world.stories.types import ParticipationLevel, StoryPrivacy, TrustLevel
+from world.stories.types import ParticipationLevel, StoryPrivacy
 
 
 class StoryViewActionsTestCase(APITestCase):
@@ -481,7 +481,7 @@ class PlayerTrustViewPermissionsTestCase(APITestCase):
         """Test user cannot update their own trust profile (permissions restrictive)"""
         self.client.force_authenticate(user=self.account)
         url = reverse("playertrust-detail", kwargs={"pk": self.trust_profile.pk})
-        data = {"gm_trust_level": TrustLevel.ADVANCED}
+        data = {}
         response = self.client.patch(
             url,
             json.dumps(data),
@@ -495,7 +495,7 @@ class PlayerTrustViewPermissionsTestCase(APITestCase):
         """Test other users cannot update trust profiles"""
         self.client.force_authenticate(user=self.other_account)
         url = reverse("playertrust-detail", kwargs={"pk": self.trust_profile.pk})
-        data = {"gm_trust_level": TrustLevel.ADVANCED}
+        data = {}
         response = self.client.patch(
             url,
             json.dumps(data),

@@ -20002,15 +20002,6 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
-    /**
-     * @description * `0` - Untrusted
-     *     * `1` - Basic
-     *     * `2` - Intermediate
-     *     * `3` - Advanced
-     *     * `4` - Expert
-     * @enum {integer}
-     */
-    GmTrustLevelEnum: 0 | 1 | 2 | 3 | 4;
     /** @description Serializer for goal domains (ModifierTarget with category='goal'). */
     GoalDomain: {
       readonly id: number;
@@ -25377,19 +25368,6 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description Serializer for player trust profiles */
-    PatchedPlayerTrustRequest: {
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
-    };
     /**
      * @description Full serializer for RiskCalibration (#1770 pillar 5).
      *
@@ -26535,16 +26513,6 @@ export interface components {
     PlayerTrust: {
       readonly id: number;
       readonly account: string;
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
       /** @description Aggregate positive feedback count from all trust levels */
       readonly total_positive_feedback: number;
       /** @description Aggregate negative feedback count from all trust levels */
@@ -26553,19 +26521,6 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
-    };
-    /** @description Serializer for player trust profiles */
-    PlayerTrustRequest: {
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
     /** @description Per-category polish a decoration template grants on completion. */
     PolishIncrement: {
@@ -47796,7 +47751,6 @@ export interface operations {
       query?: {
         /** @description Account Username */
         account?: string;
-        gm_trust_level?: number;
         has_negative_feedback?: boolean;
         has_positive_feedback?: boolean;
         /** @description Which field to use when ordering the results. */
@@ -47829,11 +47783,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       201: {
         headers: {
@@ -47877,11 +47827,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {
@@ -47924,11 +47870,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedPlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

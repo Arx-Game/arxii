@@ -671,7 +671,7 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `TrustCategory` | Dynamic trust categories | `name`, `display_name`, `description`, `is_active` |
-| `PlayerTrust` | Aggregate trust profile | `account` (OneToOne AccountDB), `gm_trust_level` |
+| `PlayerTrust` | Aggregate trust profile | `account` (OneToOne AccountDB); GM trust lives on `GMProfile.level` (gm app) |
 | `PlayerTrustLevel` | Per-category trust level | `player_trust`, `trust_category`, `trust_level`, feedback counts |
 | `StoryTrustRequirement` | Trust gate for story join | `story`, `trust_category`, `minimum_trust_level` |
 

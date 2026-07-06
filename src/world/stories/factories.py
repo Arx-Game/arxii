@@ -242,19 +242,14 @@ class PlayerTrustFactory(factory_django.DjangoModelFactory):
         model = PlayerTrust
 
     # Note: account must be set manually due to cross-app dependencies
-    gm_trust_level = TrustLevel.UNTRUSTED
 
 
 class TrustedPlayerTrustFactory(PlayerTrustFactory):
     """Factory for players with higher trust levels"""
 
-    gm_trust_level = TrustLevel.BASIC
-
 
 class ExperiencedGMTrustFactory(PlayerTrustFactory):
     """Factory for experienced GM trust profiles"""
-
-    gm_trust_level = TrustLevel.ADVANCED
 
 
 class PlayerTrustLevelFactory(factory_django.DjangoModelFactory):
