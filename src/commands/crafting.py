@@ -79,6 +79,7 @@ class CmdCraft(ArxCommand):
             handler(rest)
         except CommandError as err:
             self.msg(str(err))
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _resolve_item_instance(self, item_id_raw: str) -> Any:
         from actions.definitions.item_helpers import resolve_item_instance  # noqa: PLC0415

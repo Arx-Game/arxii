@@ -45,6 +45,7 @@ class CmdPlaces(ArxCommand):
             handler()
         except CommandError as err:
             self.msg(str(err))
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _list_places(self) -> None:
         from world.scenes.constants import PlaceStatus  # noqa: PLC0415

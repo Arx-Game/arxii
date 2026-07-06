@@ -93,6 +93,7 @@ class CmdOutfit(ArxCommand):
             handler(rest)
         except CommandError as err:
             self.msg(str(err))
+            self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _show_hub(self) -> None:
         from world.items.models import Outfit  # noqa: PLC0415
