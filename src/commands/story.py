@@ -1030,10 +1030,8 @@ class CmdStory(ArxNamespaceCommand):
                 msg = "No episode with that ID exists."
                 raise CommandError(msg) from exc
 
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            create_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import create_crossover_invite  # noqa: PLC0415
 
         try:
             invite = create_crossover_invite(
@@ -1044,7 +1042,7 @@ class CmdStory(ArxNamespaceCommand):
                 message=message,
             )
         except CrossoverError as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(exc.user_message) from exc
         self.msg(
             f"Crossover invite #{invite.pk} sent: {story.title} invited to event"
             f' "{event.name}" (status: pending).'
@@ -1080,10 +1078,8 @@ class CmdStory(ArxNamespaceCommand):
                 msg = "No episode with that ID exists."
                 raise CommandError(msg) from exc
 
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            accept_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import accept_crossover_invite  # noqa: PLC0415
 
         try:
             updated = accept_crossover_invite(
@@ -1093,7 +1089,7 @@ class CmdStory(ArxNamespaceCommand):
                 response_note=note,
             )
         except CrossoverError as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(exc.user_message) from exc
         self.msg(
             f"Crossover invite #{updated.pk} accepted: {updated.to_story.title}"
             " linked to the shared event."
@@ -1115,10 +1111,8 @@ class CmdStory(ArxNamespaceCommand):
         )
         note = kwargs.get("note", "").strip()
 
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            decline_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import decline_crossover_invite  # noqa: PLC0415
 
         try:
             updated = decline_crossover_invite(
@@ -1127,7 +1121,7 @@ class CmdStory(ArxNamespaceCommand):
                 response_note=note,
             )
         except CrossoverError as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(exc.user_message) from exc
         self.msg(f"Crossover invite #{updated.pk} declined.")
 
     def _handle_crossover_withdraw(self, tail: str) -> None:
@@ -1136,10 +1130,8 @@ class CmdStory(ArxNamespaceCommand):
             raise CommandError(_CROSSOVER_USAGE)
         invite = self._get_crossover_or_error(int(tail.strip()))
 
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            withdraw_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import withdraw_crossover_invite  # noqa: PLC0415
 
         try:
             updated = withdraw_crossover_invite(
@@ -1147,7 +1139,7 @@ class CmdStory(ArxNamespaceCommand):
                 withdrawing_account=self.caller.account,
             )
         except CrossoverError as exc:
-            raise CommandError(str(exc)) from exc
+            raise CommandError(exc.user_message) from exc
         self.msg(f"Crossover invite #{updated.pk} withdrawn.")
 
     def _handle_crossover_list(self, tail: str) -> None:

@@ -633,7 +633,7 @@ class CmdStoryCrossoverTests(TestCase):
         )
         outsider = AccountFactory()
         messages = self._run_as(outsider, f"crossover accept {invite.pk}")
-        self.assertTrue(any("Lead GM" in m for m in messages), messages)
+        self.assertTrue(any("not authorized" in m.lower() for m in messages), messages)
 
     def test_withdraw_by_sender(self) -> None:
         from world.stories.constants import CrossoverInviteStatus
@@ -654,7 +654,7 @@ class CmdStoryCrossoverTests(TestCase):
             from_gm=self.sender_gm, event=self.event, to_story=self.story
         )
         messages = self._run_as(self.recipient_account, f"crossover withdraw {invite.pk}")
-        self.assertTrue(any("inviting GM" in m for m in messages), messages)
+        self.assertTrue(any("not authorized" in m.lower() for m in messages), messages)
 
     def test_list_shows_invites(self) -> None:
         from world.stories.services.crossover import create_crossover_invite

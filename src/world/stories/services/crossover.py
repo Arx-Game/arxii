@@ -18,6 +18,10 @@ from typing import TYPE_CHECKING
 from django.utils import timezone
 
 from world.stories.constants import CrossoverInviteStatus
+from world.stories.exceptions import (
+    CrossoverAuthorityError,
+    CrossoverStateError,
+)
 from world.stories.models import CrossoverInvite, EpisodeScene
 
 if TYPE_CHECKING:
@@ -27,10 +31,6 @@ if TYPE_CHECKING:
     from world.gm.models import GMProfile
     from world.scenes.models import Scene
     from world.stories.models import Episode, Story
-
-
-class CrossoverError(Exception):
-    """A crossover-invite lifecycle violation."""
 
 
 def _story_owned_by(story: Story, account: AccountDB) -> bool:
@@ -65,7 +65,7 @@ def create_crossover_invite(
     """
     if proposed_episode is not None and proposed_episode.chapter.story_id != to_story.pk:
         msg = "proposed_episode does not belong to to_story."
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     existing = CrossoverInvite.objects.filter(
         event=event, to_story=to_story, status=CrossoverInviteStatus.PENDING
     ).first()
@@ -74,7 +74,7 @@ def create_crossover_invite(
             f"A pending crossover invite already exists for event #{event.pk},"
             f" story #{to_story.pk}."
         )
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     return CrossoverInvite.objects.create(
         event=event,
         from_gm=from_gm,
@@ -113,17 +113,17 @@ def accept_crossover_invite(
     """
     if not _story_owned_by(invite.to_story, accepting_account):
         msg = "Only the invited story's Lead GM may accept a crossover invite."
-        raise CrossoverError(msg)
+        raise CrossoverAuthorityError(msg)
     if invite.status != CrossoverInviteStatus.PENDING:
         msg = f"CrossoverInvite {invite.pk} is not PENDING (status={invite.status!r})."
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     episode = accepted_episode or invite.proposed_episode
     if episode is None:
         msg = "No episode to link: supply accepted_episode or set proposed_episode on the invite."
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     if episode.chapter.story_id != invite.to_story_id:
         msg = "accepted_episode does not belong to the invited story."
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     invite.status = CrossoverInviteStatus.ACCEPTED
     invite.accepted_episode = episode
     invite.response_note = response_note
@@ -162,10 +162,10 @@ def decline_crossover_invite(
     """
     if not _story_owned_by(invite.to_story, responding_account):
         msg = "Only the invited story's Lead GM may decline a crossover invite."
-        raise CrossoverError(msg)
+        raise CrossoverAuthorityError(msg)
     if invite.status != CrossoverInviteStatus.PENDING:
         msg = f"CrossoverInvite {invite.pk} is not PENDING (status={invite.status!r})."
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     invite.status = CrossoverInviteStatus.DECLINED
     invite.response_note = response_note
     invite.responded_at = timezone.now()
@@ -192,10 +192,10 @@ def withdraw_crossover_invite(
     """
     if invite.from_gm.account_id != withdrawing_account.id:
         msg = "Only the inviting GM may withdraw a crossover invite."
-        raise CrossoverError(msg)
+        raise CrossoverAuthorityError(msg)
     if invite.status != CrossoverInviteStatus.PENDING:
         msg = f"CrossoverInvite {invite.pk} is not PENDING (status={invite.status!r})."
-        raise CrossoverError(msg)
+        raise CrossoverStateError(msg)
     invite.status = CrossoverInviteStatus.WITHDRAWN
     invite.responded_at = timezone.now()
     invite.save(update_fields=["status", "responded_at", "updated_at"])

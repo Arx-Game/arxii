@@ -12,10 +12,10 @@ from django.test import TestCase
 from world.events.factories import EventFactory
 from world.gm.factories import GMProfileFactory
 from world.stories.constants import CrossoverInviteStatus
+from world.stories.exceptions import CrossoverError
 from world.stories.factories import EpisodeFactory, StoryFactory
 from world.stories.models import EpisodeScene
 from world.stories.services.crossover import (
-    CrossoverError,
     accept_crossover_invite,
     create_crossover_invite,
     decline_crossover_invite,

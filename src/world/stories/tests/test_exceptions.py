@@ -44,3 +44,24 @@ class StoryExceptionTests(TestCase):
         exc = BeatNotResolvableError("DB error: column 'foo' not found")
         self.assertNotIn("foo", exc.user_message)
         self.assertNotIn("DB", exc.user_message)
+
+    def test_crossover_errors_have_safe_messages(self) -> None:
+        """Crossover errors must not leak PKs or status values (#2002)."""
+        from world.stories.exceptions import (
+            CrossoverAuthorityError,
+            CrossoverError,
+            CrossoverStateError,
+        )
+
+        self.assertTrue(issubclass(CrossoverError, StoryError))
+        self.assertTrue(issubclass(CrossoverAuthorityError, CrossoverError))
+        self.assertTrue(issubclass(CrossoverStateError, CrossoverError))
+        # State error with internal details must not leak them.
+        exc = CrossoverStateError("CrossoverInvite 42 is not PENDING (status='accepted')")
+        self.assertNotIn("42", exc.user_message)
+        self.assertNotIn("PENDING", exc.user_message)
+        self.assertNotIn("accepted", exc.user_message)
+        # Authority error must not leak account/story details.
+        exc = CrossoverAuthorityError("from_gm.account_id=5 != withdrawing_account.id=7")
+        self.assertNotIn("5", exc.user_message)
+        self.assertNotIn("7", exc.user_message)

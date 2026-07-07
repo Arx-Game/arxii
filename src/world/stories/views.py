@@ -1736,10 +1736,8 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         The inviting GM is resolved from request.user.gm_profile.
         """
         from world.gm.models import GMProfile  # noqa: PLC0415
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            create_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import create_crossover_invite  # noqa: PLC0415
 
         ser = CrossoverInviteCreateSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
@@ -1759,7 +1757,7 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                 message=ser.validated_data.get("message", ""),
             )
         except CrossoverError as exc:
-            raise serializers.ValidationError({"non_field_errors": [str(exc)]}) from exc
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(CrossoverInviteSerializer(invite).data, status=status.HTTP_201_CREATED)
 
     @action(
@@ -1776,10 +1774,8 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
         Creates the EpisodeScene link (immediately if the event has an active
         scene, or deferred to scene-spawn). Enrolls the Lead GM as a scene GM.
         """
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            accept_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import accept_crossover_invite  # noqa: PLC0415
 
         invite = self.get_object()
         ser = CrossoverInviteAcceptSerializer(data=request.data, context={"invite": invite})
@@ -1792,7 +1788,7 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                 response_note=ser.validated_data.get("response_note", ""),
             )
         except CrossoverError as exc:
-            raise serializers.ValidationError({"non_field_errors": [str(exc)]}) from exc
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(CrossoverInviteSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
@@ -1806,10 +1802,8 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
 
         Body: { response_note?: string }
         """
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            decline_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import decline_crossover_invite  # noqa: PLC0415
 
         invite = self.get_object()
         ser = CrossoverInviteDeclineSerializer(data=request.data, context={"invite": invite})
@@ -1821,7 +1815,7 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                 response_note=ser.validated_data.get("response_note", ""),
             )
         except CrossoverError as exc:
-            raise serializers.ValidationError({"non_field_errors": [str(exc)]}) from exc
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(CrossoverInviteSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
@@ -1832,10 +1826,8 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
     )
     def withdraw(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/crossover-invites/{id}/withdraw/ — inviting GM rescinds."""
-        from world.stories.services.crossover import (  # noqa: PLC0415
-            CrossoverError,
-            withdraw_crossover_invite,
-        )
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import withdraw_crossover_invite  # noqa: PLC0415
 
         invite = self.get_object()
         ser = CrossoverInviteWithdrawSerializer(data=request.data, context={"invite": invite})
@@ -1846,7 +1838,7 @@ class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelView
                 withdrawing_account=cast(AccountDB, request.user),
             )
         except CrossoverError as exc:
-            raise serializers.ValidationError({"non_field_errors": [str(exc)]}) from exc
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(CrossoverInviteSerializer(updated).data, status=status.HTTP_200_OK)
 
 
