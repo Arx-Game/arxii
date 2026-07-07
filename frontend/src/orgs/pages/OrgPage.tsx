@@ -61,6 +61,32 @@ function HouseSection({ orgId, house }: { orgId: number; house: HouseDetail }) {
           <CardTitle className="text-lg">House of {house.family_name}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {house.aspects.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {house.aspects.map((aspect) => (
+                <Badge
+                  key={`${aspect.definition}-${aspect.option}`}
+                  variant="secondary"
+                  title={aspect.description}
+                >
+                  {aspect.definition}: {aspect.option}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {house.features.length > 0 && (
+            <div>
+              <h3 className="mb-1 font-semibold">Ways of the House</h3>
+              <ul className="space-y-1">
+                {house.features.map((feature) => (
+                  <li key={feature.slug}>
+                    <span className="font-medium">{feature.name}</span>{' '}
+                    <span className="text-muted-foreground">— {feature.description}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {house.liege_name && (
             <p>
               <span className="text-muted-foreground">Sworn to</span> {house.liege_name}
@@ -155,6 +181,17 @@ export function OrgPageInner({ orgId }: { orgId: number }) {
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">{org.society_name}</p>
+          {org.words && <p className="text-sm italic">&ldquo;{org.words}&rdquo;</p>}
+          {org.colors && (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Colors:</span> {org.colors}
+            </p>
+          )}
+          {org.sigil_description && (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Sigil:</span> {org.sigil_description}
+            </p>
+          )}
           {org.description && <p className="text-sm">{org.description}</p>}
           {org.ranks.length > 0 && (
             <div className="flex flex-wrap gap-2 pt-2">

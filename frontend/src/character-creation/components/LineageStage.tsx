@@ -275,9 +275,30 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [houseName, setHouseName] = useState('');
   const [backstory, setBackstory] = useState('');
+  const [words, setWords] = useState('');
+  const [colors, setColors] = useState('');
+  const [sigil, setSigil] = useState('');
+  const [lands, setLands] = useState('');
+  const [aspectPicks, setAspectPicks] = useState<Record<number, number[]>>({});
   const [principles, setPrinciples] = useState<Record<string, number>>(
     Object.fromEntries(PRINCIPLE_AXES.map((axis) => [axis, 0]))
   );
+
+  const toggleAspectOption = (definitionId: number, optionId: number, maxPicks: number) => {
+    setAspectPicks((prev) => {
+      const current = prev[definitionId] ?? [];
+      if (current.includes(optionId)) {
+        return { ...prev, [definitionId]: current.filter((id) => id !== optionId) };
+      }
+      if (maxPicks === 1) {
+        return { ...prev, [definitionId]: [optionId] };
+      }
+      if (current.length >= maxPicks) {
+        return prev;
+      }
+      return { ...prev, [definitionId]: [...current, optionId] };
+    });
+  };
 
   const submit = useMutation({
     mutationFn: (payload: HouseClaimPayload) => submitHouseClaim(draft.id, payload),
@@ -359,6 +380,18 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
       </div>
       {selectedTemplate && (
         <>
+          {selectedTemplate.features.length > 0 && (
+            <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+              <Label className="text-xs font-medium text-muted-foreground">
+                A house of this charter
+              </Label>
+              {selectedTemplate.features.map((feature) => (
+                <p key={feature.id} className="text-xs">
+                  <span className="font-medium">{feature.name}</span> — {feature.description}
+                </p>
+              ))}
+            </div>
+          )}
           <Input
             placeholder="House name (family surname)"
             value={houseName}
@@ -369,6 +402,66 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
             value={backstory}
             onChange={(event) => setBackstory(event.target.value)}
           />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Input
+              placeholder='House words ("The Debt Is Kept")'
+              value={words}
+              onChange={(event) => setWords(event.target.value)}
+            />
+            <Input
+              placeholder="House colors (oxblood and slate)"
+              value={colors}
+              onChange={(event) => setColors(event.target.value)}
+            />
+          </div>
+          <Textarea
+            placeholder="The sigil, described."
+            value={sigil}
+            onChange={(event) => setSigil(event.target.value)}
+          />
+          {selectedTitle?.seat_domain_name ? (
+            <Textarea
+              placeholder={`The lands of ${selectedTitle.seat_domain_name}, described.`}
+              value={lands}
+              onChange={(event) => setLands(event.target.value)}
+            />
+          ) : null}
+          {selectedTemplate.aspect_definitions.map((definition) => {
+            const picked = aspectPicks[definition.id] ?? [];
+            const maxPicks = definition.max_picks ?? 1;
+            return (
+              <div key={definition.id} className="space-y-1">
+                <Label className="text-sm font-medium">
+                  {definition.name}
+                  {maxPicks > 1 && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({picked.length}/{maxPicks})
+                    </span>
+                  )}
+                </Label>
+                <p className="text-xs text-muted-foreground">{definition.prompt}</p>
+                <div className="grid gap-1 sm:grid-cols-2">
+                  {definition.options.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => toggleAspectOption(definition.id, option.id, maxPicks)}
+                      className={`rounded-md border p-2 text-left text-xs transition-colors ${
+                        picked.includes(option.id)
+                          ? 'border-primary bg-primary/10'
+                          : 'hover:bg-muted/50'
+                      }`}
+                    >
+                      <span className="font-medium">{option.name}</span>
+                      {option.description && (
+                        <span className="block text-muted-foreground">{option.description}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
           <div className="grid grid-cols-3 gap-2">
             {PRINCIPLE_AXES.map((axis) => (
               <div key={axis}>
@@ -387,13 +480,33 @@ function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
           </div>
           <Button
             size="sm"
-            disabled={!houseName || !backstory || submit.isPending}
+            disabled={
+              !houseName ||
+              !backstory ||
+              !words ||
+              !colors ||
+              !sigil ||
+              (!!selectedTitle?.seat_domain_name && !lands) ||
+              !selectedTemplate.aspect_definitions.every((definition) => {
+                const count = (aspectPicks[definition.id] ?? []).length;
+                return count >= (definition.min_picks ?? 1) && count <= (definition.max_picks ?? 1);
+              }) ||
+              submit.isPending
+            }
             onClick={() =>
               submit.mutate({
                 title: titleId!,
                 template: templateId!,
                 house_name: houseName,
                 backstory,
+                words,
+                colors,
+                sigil_description: sigil,
+                lands_writeup: lands,
+                aspects: selectedTemplate.aspect_definitions.map((definition) => ({
+                  definition: definition.id,
+                  options: aspectPicks[definition.id] ?? [],
+                })),
                 mercy: principles.mercy,
                 method: principles.method,
                 status: principles.status,

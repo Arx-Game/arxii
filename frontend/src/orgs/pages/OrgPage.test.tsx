@@ -70,4 +70,48 @@ describe('OrgPageInner', () => {
 
     expect(screen.getByText(/not yet public/i)).toBeInTheDocument();
   });
+
+  it('renders stylings, aspects, and features for a house org (#2079)', () => {
+    const housedOrg: Organization = {
+      ...ORG,
+      name: 'House Maldrave',
+      words: 'The Debt Is Kept',
+      colors: 'oxblood and slate',
+      sigil_description: 'A black key crossed with a sword.',
+      house: {
+        family_name: 'Maldrave',
+        liege_name: 'The Crown',
+        vassal_names: [],
+        titles: [],
+        domains: [],
+        aspects: [
+          {
+            definition: 'Patron Deity',
+            option: 'The Chained Judge',
+            description: 'Keeper of debts.',
+          },
+        ],
+        features: [
+          {
+            name: 'Black Ledger',
+            slug: 'black-ledger',
+            description: 'The sealed record of schemes, enemies, and prey.',
+          },
+        ],
+      },
+    };
+    mockedUseOrganizationQuery.mockReturnValue({
+      data: housedOrg,
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useOrganizationQuery>);
+
+    render(<OrgPageInner orgId={7} />);
+
+    expect(screen.getByText(/The Debt Is Kept/)).toBeInTheDocument();
+    expect(screen.getByText(/oxblood and slate/)).toBeInTheDocument();
+    expect(screen.getByText(/Patron Deity: The Chained Judge/)).toBeInTheDocument();
+    expect(screen.getByText('Black Ledger')).toBeInTheDocument();
+    expect(screen.getByText(/Ways of the House/)).toBeInTheDocument();
+  });
 });

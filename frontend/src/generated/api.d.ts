@@ -21106,7 +21106,30 @@ export interface components {
     HighlightReelFeatured: {
       interaction_id: number;
     };
-    /** @description The draft's house claim, as CG shows it (#1884 Phase D). */
+    /** @description A required catalog choice on a template, with its active options (#2079). */
+    HouseAspectDefinition: {
+      readonly id: number;
+      name: string;
+      /** @description Player-facing question the founder answers by picking options. */
+      prompt: string;
+      min_picks?: number;
+      max_picks?: number;
+      readonly options: components['schemas']['HouseAspectOption'][];
+    };
+    /** @description One picked identity facet on the house block (#2079). */
+    HouseAspectFacet: {
+      definition: string;
+      option: string;
+      description: string;
+    };
+    /** @description One authored answer in an aspect catalog (#2079). */
+    HouseAspectOption: {
+      readonly id: number;
+      name: string;
+      /** @description Player-facing blurb shown on the option card. */
+      description?: string;
+    };
+    /** @description The draft's house claim, as CG shows it (#1884 Phase D, #2079). */
     HouseClaimStatus: {
       readonly id: number;
       /** @description The family name (org renders "House <name>" for nobles). */
@@ -21114,6 +21137,17 @@ export interface components {
       readonly title_name: string;
       status?: components['schemas']['HouseClaimStatusStatusEnum'];
       review_note?: string;
+      /** @description House words / motto (#2079). */
+      words?: string;
+      /** @description House colors, prose (#2079). */
+      colors?: string;
+      /** @description The sigil, described (#2079). */
+      sigil_description?: string;
+      /** @description The seat domain's lands, described (required for landed titles, #2079). */
+      lands_writeup?: string;
+      readonly aspects: {
+        [key: string]: unknown;
+      }[];
     };
     /**
      * @description * `pending` - Pending Review
@@ -21129,6 +21163,8 @@ export interface components {
       vassal_names: string[];
       titles: components['schemas']['HouseTitle'][];
       domains: components['schemas']['HouseDomain'][];
+      aspects: components['schemas']['HouseAspectFacet'][];
+      features: components['schemas']['HouseFeatureFacet'][];
     };
     HouseDomain: {
       name: string;
@@ -21138,6 +21174,21 @@ export interface components {
       /** @description 0-100 PLACEHOLDER. */
       unrest?: number;
       readonly holding_names: string[];
+    };
+    /** @description A cultural fact houses of a template carry (#2079). */
+    HouseFeature: {
+      readonly id: number;
+      name: string;
+      /** @description Stable code anchor. */
+      slug: string;
+      /** @description Player-facing: how this shapes play. */
+      description: string;
+    };
+    /** @description One cultural feature on the house block (#2079). */
+    HouseFeatureFacet: {
+      name: string;
+      slug: string;
+      description: string;
     };
     /** @description A realm template a CG house claim may build from. */
     HouseTemplateOption: {
@@ -21160,6 +21211,8 @@ export interface components {
       allegiance_max?: number;
       power_min?: number;
       power_max?: number;
+      readonly aspect_definitions: components['schemas']['HouseAspectDefinition'][];
+      readonly features: components['schemas']['HouseFeature'][];
     };
     HouseTitle: {
       readonly id: number;
@@ -23209,6 +23262,12 @@ export interface components {
       name: string;
       /** @description A description of the organization's purpose and history */
       description?: string;
+      /** @description Words / motto — house words, gang credo, guild maxim (#2079). */
+      words?: string;
+      /** @description The organization's colors, in prose (#2079). */
+      colors?: string;
+      /** @description Sigil / emblem, described (#2079). */
+      sigil_description?: string;
       readonly society_name: string;
       readonly org_type_name: string;
       readonly ranks: components['schemas']['OrganizationRank'][];
