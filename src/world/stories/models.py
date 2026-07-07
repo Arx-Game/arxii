@@ -14,6 +14,7 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
+    CrossoverInviteStatus,
     CustodyClearanceStatus,
     CustodyScope,
     EraStatus,
@@ -1363,6 +1364,18 @@ class BeatCompletion(SharedMemoryModel):
         related_name="beat_completions",
         help_text=("For GROUP-scope stories: the GMTable whose progress recorded this completion."),
     )
+    ran_by_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ran_beat_completions",
+        help_text=(
+            "Audit: which table's session actually resolved this beat. May "
+            "differ from the story's primary_table in a crossover (#2002). "
+            "Read-only; no behavior change."
+        ),
+    )
     roster_entry = models.ForeignKey(
         "roster.RosterEntry",
         null=True,
@@ -1931,6 +1944,92 @@ class StoryGMOffer(SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"StoryGMOffer(story=#{self.story_id}, gm=#{self.offered_to_id}, status={self.status})"
+        )
+
+
+class CrossoverInvite(SharedMemoryModel):
+    """A GM's invitation to link another GM's story to a shared event (#2002).
+
+    Lets tables merge — co-run events and climaxes where several stories' beats
+    resolve in one scene, with credit flowing back to every participating story.
+
+    Lifecycle:
+        PENDING -> ACCEPTED   (invited story's Lead GM consents; EpisodeScene
+                                link created when the scene spawns, or
+                                immediately if the event already has an active
+                                scene; the invited Lead GM is enrolled as a
+                                scene GM via SceneParticipation.is_gm=True)
+                -> DECLINED   (invited Lead GM refuses)
+                -> WITHDRAWN  (inviter rescinds before acceptance)
+
+    Only one PENDING invite per (event, to_story) at a time (partial unique).
+    Only a story's Lead GM (an owner) may link that story's episodes to a
+    shared event — enforced in the service layer.
+    """
+
+    event = models.ForeignKey(
+        "events.Event",
+        on_delete=models.CASCADE,
+        related_name="crossover_invites",
+    )
+    from_gm = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.CASCADE,
+        related_name="crossover_invites_sent",
+        help_text="The GM inviting another story into this shared event.",
+    )
+    to_story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="crossover_invites_received",
+        help_text="The story being invited into this shared event.",
+    )
+    proposed_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="crossover_invites",
+        help_text="Optional specific episode to link; null lets the Lead GM pick on accept.",
+    )
+    message = models.TextField(blank=True, help_text="Optional note from the inviting GM.")
+    response_note = models.TextField(blank=True, help_text="Optional Lead GM response.")
+    status = models.CharField(
+        max_length=20,
+        choices=CrossoverInviteStatus.choices,
+        default=CrossoverInviteStatus.PENDING,
+        db_index=True,
+    )
+    accepted_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="crossover_invites_accepted",
+        help_text="The episode actually linked on accept (proposed_episode or Lead GM's choice).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "to_story"],
+                condition=models.Q(status=CrossoverInviteStatus.PENDING),
+                name="unique_pending_crossover_invite_per_event_per_story",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["to_story", "status"]),
+            models.Index(fields=["from_gm", "status"]),
+            models.Index(fields=["event", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"CrossoverInvite(event=#{self.event_id}, story=#{self.to_story_id},"
+            f" status={self.status})"
         )
 
 

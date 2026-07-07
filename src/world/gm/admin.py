@@ -18,6 +18,7 @@ class GMProfileAdmin(admin.ModelAdmin):
     list_display = ["account", "level", "approved_at"]
     list_filter = ["level"]
     raw_id_fields = ["account", "approved_by"]
+    search_fields = ["account__username"]
 
 
 @admin.register(GMApplication)
