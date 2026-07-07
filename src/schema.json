@@ -2253,6 +2253,136 @@ paths:
               schema:
                 $ref: '#/components/schemas/RoomSizeTier'
           description: ''
+  /api/canon-reviews/:
+    get:
+      operationId: canon_reviews_list
+      description: |-
+        ViewSet for the staff canon-review queue (#2003).
+
+        Read-only list/retrieve (staff-only) plus two lifecycle detail actions:
+        ``clear`` (approve — staked beats may now pay) and ``changes`` (send the
+        review back to the Lead GM with notes). Both delegate to
+        ``world.stories.services.canon_review``; no create/update/destroy — a
+        review is created via the ``story impact`` / ``request_canon_review`` seam.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - changes_requested
+          - cleared
+          - pending
+        description: |-
+          * `pending` - Pending
+          * `cleared` - Cleared
+          * `changes_requested` - Changes requested
+      - in: query
+        name: tier
+        schema:
+          type: string
+          enum:
+          - regional
+          - table
+          - world
+        description: |-
+          * `table` - Table
+          * `regional` - Regional
+          * `world` - World
+      tags:
+      - canon-reviews
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CanonReview'
+          description: ''
+  /api/canon-reviews/{id}/:
+    get:
+      operationId: canon_reviews_retrieve
+      description: |-
+        ViewSet for the staff canon-review queue (#2003).
+
+        Read-only list/retrieve (staff-only) plus two lifecycle detail actions:
+        ``clear`` (approve — staked beats may now pay) and ``changes`` (send the
+        review back to the Lead GM with notes). Both delegate to
+        ``world.stories.services.canon_review``; no create/update/destroy — a
+        review is created via the ``story impact`` / ``request_canon_review`` seam.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this canon review.
+        required: true
+      tags:
+      - canon-reviews
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanonReview'
+          description: ''
+  /api/canon-reviews/{id}/changes/:
+    post:
+      operationId: canon_reviews_changes_create
+      description: POST /api/canon-reviews/{id}/changes/ — staff requests changes
+        with notes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this canon review.
+        required: true
+      tags:
+      - canon-reviews
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanonReview'
+          description: ''
+  /api/canon-reviews/{id}/clear/:
+    post:
+      operationId: canon_reviews_clear_create
+      description: POST /api/canon-reviews/{id}/clear/ — staff approves a PENDING
+        review.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this canon review.
+        required: true
+      tags:
+      - canon-reviews
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanonReview'
+          description: ''
   /api/chapters/:
     get:
       operationId: chapters_list
@@ -29700,6 +29830,64 @@ components:
           description: Whether this budget is currently active
       required:
       - id
+    CanonReview:
+      type: object
+      description: |-
+        Read/response serializer for CanonReview (#2003).
+
+        Every field is read-only here — writes go through the per-action input
+        serializers (clear/changes) and the ``world.stories.services.canon_review``
+        service. ``reviewer`` is the staff account that decided the review.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        story:
+          type: integer
+          readOnly: true
+        tier:
+          allOf:
+          - $ref: '#/components/schemas/TierAbfEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CanonReviewStatusEnum'
+          readOnly: true
+        reviewer:
+          type: integer
+          readOnly: true
+        notes:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When status left PENDING for CLEARED / CHANGES_REQUESTED.
+      required:
+      - created_at
+      - id
+      - notes
+      - resolved_at
+      - reviewer
+      - status
+      - story
+      - tier
+    CanonReviewStatusEnum:
+      enum:
+      - pending
+      - cleared
+      - changes_requested
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `cleared` - Cleared
+        * `changes_requested` - Changes requested
     Cantrip:
       type: object
       description: |-
@@ -37787,6 +37975,16 @@ components:
       - minimum_tier
       - track
       - track_name
+    ImpactTierEnum:
+      enum:
+      - table
+      - regional
+      - world
+      type: string
+      description: |-
+        * `table` - Table
+        * `regional` - Regional
+        * `world` - World
     IncomeStreamRow:
       type: object
       properties:
@@ -47428,6 +47626,15 @@ components:
             * `character` - Personal
             * `group` - Group
             * `global` - Global
+        impact_tier:
+          allOf:
+          - $ref: '#/components/schemas/ImpactTierEnum'
+          description: |-
+            Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+
+            * `table` - Table
+            * `regional` - Regional
+            * `world` - World
         covenant:
           type: integer
           nullable: true
@@ -54334,6 +54541,15 @@ components:
             * `character` - Personal
             * `group` - Group
             * `global` - Global
+        impact_tier:
+          allOf:
+          - $ref: '#/components/schemas/ImpactTierEnum'
+          description: |-
+            Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+
+            * `table` - Table
+            * `regional` - Regional
+            * `world` - World
         owners:
           type: array
           items:
@@ -54435,6 +54651,15 @@ components:
             * `character` - Personal
             * `group` - Group
             * `global` - Global
+        impact_tier:
+          allOf:
+          - $ref: '#/components/schemas/ImpactTierEnum'
+          description: |-
+            Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+
+            * `table` - Table
+            * `regional` - Regional
+            * `world` - World
         covenant:
           type: integer
           nullable: true
@@ -54624,6 +54849,15 @@ components:
             * `character` - Personal
             * `group` - Group
             * `global` - Global
+        impact_tier:
+          allOf:
+          - $ref: '#/components/schemas/ImpactTierEnum'
+          description: |-
+            Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+
+            * `table` - Table
+            * `regional` - Regional
+            * `world` - World
         owners_count:
           type: integer
           readOnly: true
@@ -56068,6 +56302,16 @@ components:
         * `elite` - Elite
         * `boss` - Boss
         * `hero_killer` - Hero Killer
+    TierAbfEnum:
+      enum:
+      - table
+      - regional
+      - world
+      type: string
+      description: |-
+        * `table` - Table
+        * `regional` - Regional
+        * `world` - World
     TimePhaseEnum:
       enum:
       - dawn

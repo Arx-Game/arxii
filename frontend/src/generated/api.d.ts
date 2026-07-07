@@ -1431,6 +1431,90 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/canon-reviews/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for the staff canon-review queue (#2003).
+     *
+     *     Read-only list/retrieve (staff-only) plus two lifecycle detail actions:
+     *     ``clear`` (approve — staked beats may now pay) and ``changes`` (send the
+     *     review back to the Lead GM with notes). Both delegate to
+     *     ``world.stories.services.canon_review``; no create/update/destroy — a
+     *     review is created via the ``story impact`` / ``request_canon_review`` seam.
+     */
+    get: operations['canon_reviews_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/canon-reviews/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for the staff canon-review queue (#2003).
+     *
+     *     Read-only list/retrieve (staff-only) plus two lifecycle detail actions:
+     *     ``clear`` (approve — staked beats may now pay) and ``changes`` (send the
+     *     review back to the Lead GM with notes). Both delegate to
+     *     ``world.stories.services.canon_review``; no create/update/destroy — a
+     *     review is created via the ``story impact`` / ``request_canon_review`` seam.
+     */
+    get: operations['canon_reviews_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/canon-reviews/{id}/changes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/canon-reviews/{id}/changes/ — staff requests changes with notes. */
+    post: operations['canon_reviews_changes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/canon-reviews/{id}/clear/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/canon-reviews/{id}/clear/ — staff approves a PENDING review. */
+    post: operations['canon_reviews_clear_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/chapters/': {
     parameters: {
       query?: never;
@@ -17494,6 +17578,35 @@ export interface components {
       is_active?: boolean;
     };
     /**
+     * @description Read/response serializer for CanonReview (#2003).
+     *
+     *     Every field is read-only here — writes go through the per-action input
+     *     serializers (clear/changes) and the ``world.stories.services.canon_review``
+     *     service. ``reviewer`` is the staff account that decided the review.
+     */
+    CanonReview: {
+      readonly id: number;
+      readonly story: number;
+      readonly tier: components['schemas']['TierAbfEnum'];
+      readonly status: components['schemas']['CanonReviewStatusEnum'];
+      readonly reviewer: number;
+      readonly notes: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When status left PENDING for CLEARED / CHANGES_REQUESTED.
+       */
+      readonly resolved_at: string | null;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `cleared` - Cleared
+     *     * `changes_requested` - Changes requested
+     * @enum {string}
+     */
+    CanonReviewStatusEnum: 'pending' | 'cleared' | 'changes_requested';
+    /**
      * @description Serializer for Cantrip lookup records with allowed facets.
      *
      *     Mechanical fields (intensity, control, anima cost) are intentionally
@@ -21188,6 +21301,13 @@ export interface components {
       /** @description The minimum tier number that must be reached on this track */
       readonly minimum_tier: number;
     };
+    /**
+     * @description * `table` - Table
+     *     * `regional` - Regional
+     *     * `world` - World
+     * @enum {string}
+     */
+    ImpactTierEnum: 'table' | 'regional' | 'world';
     IncomeStreamRow: {
       id: number;
       name: string;
@@ -26685,6 +26805,14 @@ export interface components {
        *     * `global` - Global
        */
       scope?: components['schemas']['ScopeA20Enum'];
+      /**
+       * @description Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+       *
+       *     * `table` - Table
+       *     * `regional` - Regional
+       *     * `world` - World
+       */
+      impact_tier?: components['schemas']['ImpactTierEnum'];
       /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
       covenant?: number | null;
     };
@@ -30119,6 +30247,14 @@ export interface components {
        *     * `global` - Global
        */
       scope?: components['schemas']['ScopeA20Enum'];
+      /**
+       * @description Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+       *
+       *     * `table` - Table
+       *     * `regional` - Regional
+       *     * `world` - World
+       */
+      impact_tier?: components['schemas']['ImpactTierEnum'];
       readonly owners: string[];
       readonly active_gms: components['schemas']['GMProfile'][];
       readonly trust_requirements: string;
@@ -30164,6 +30300,14 @@ export interface components {
        *     * `global` - Global
        */
       scope?: components['schemas']['ScopeA20Enum'];
+      /**
+       * @description Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+       *
+       *     * `table` - Table
+       *     * `regional` - Regional
+       *     * `world` - World
+       */
+      impact_tier?: components['schemas']['ImpactTierEnum'];
       /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
       covenant?: number | null;
     };
@@ -30240,6 +30384,14 @@ export interface components {
        *     * `global` - Global
        */
       scope?: components['schemas']['ScopeA20Enum'];
+      /**
+       * @description Story-side canon-impact tier (#2003). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off before staked beats pay (auto-downgrade, never hard-block).
+       *
+       *     * `table` - Table
+       *     * `regional` - Regional
+       *     * `world` - World
+       */
+      impact_tier?: components['schemas']['ImpactTierEnum'];
       readonly owners_count: number;
       readonly active_gms_count: number;
       readonly participants_count: number;
@@ -30984,6 +31136,13 @@ export interface components {
      * @enum {string}
      */
     Tier756Enum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
+    /**
+     * @description * `table` - Table
+     *     * `regional` - Regional
+     *     * `world` - World
+     * @enum {string}
+     */
+    TierAbfEnum: 'table' | 'regional' | 'world';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -33698,6 +33857,106 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RoomSizeTier'];
+        };
+      };
+    };
+  };
+  canon_reviews_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /**
+         * @description * `pending` - Pending
+         *     * `cleared` - Cleared
+         *     * `changes_requested` - Changes requested
+         */
+        status?: 'changes_requested' | 'cleared' | 'pending';
+        /**
+         * @description * `table` - Table
+         *     * `regional` - Regional
+         *     * `world` - World
+         */
+        tier?: 'regional' | 'table' | 'world';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CanonReview'][];
+        };
+      };
+    };
+  };
+  canon_reviews_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this canon review. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CanonReview'];
+        };
+      };
+    };
+  };
+  canon_reviews_changes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this canon review. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CanonReview'];
+        };
+      };
+    };
+  };
+  canon_reviews_clear_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this canon review. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CanonReview'];
         };
       };
     };
