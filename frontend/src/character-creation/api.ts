@@ -21,7 +21,7 @@ import type {
   Facet,
   FacetTreeNode,
   Family,
-  FamilyMember,
+  FamilySlots,
   FamilyTree,
   FormTraitWithOptions,
   GenderOption,
@@ -247,6 +247,14 @@ export async function getFamilyTree(familyId: number): Promise<FamilyTree> {
   return res.json();
 }
 
+export async function getFamilySlots(familyId: number): Promise<FamilySlots> {
+  const res = await apiFetch(`${ROSTER_URL}/families/${familyId}/slots/`);
+  if (!res.ok) {
+    throw new Error('Failed to load family positions');
+  }
+  return res.json();
+}
+
 export async function createFamily(data: {
   name: string;
   family_type: 'commoner' | 'noble';
@@ -260,26 +268,6 @@ export async function createFamily(data: {
   });
   if (!res.ok) {
     throw new Error('Failed to create family');
-  }
-  return res.json();
-}
-
-export async function createFamilyMember(data: {
-  family_id: number;
-  member_type: 'placeholder' | 'npc';
-  name: string;
-  description?: string;
-  age?: number;
-  mother_id?: number | null;
-  father_id?: number | null;
-}): Promise<FamilyMember> {
-  const res = await apiFetch(`${ROSTER_URL}/family-members/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to create family member');
   }
   return res.json();
 }

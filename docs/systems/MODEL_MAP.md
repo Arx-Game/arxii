@@ -711,6 +711,7 @@
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 - `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
+- `notify_battle_state_changed(battle: 'Battle') -> 'None' — Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
@@ -1012,7 +1013,8 @@
   - selected_species -> species.Species [FK] (nullable)
   - selected_gender -> character_sheets.Gender [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
-  - family_member -> roster.FamilyMember [FK] (nullable)
+  - claimed_kin_slot -> roster.Kinsperson [FK] (nullable)
+  - claimed_kin_pool -> roster.KinSlotPool [FK] (nullable)
   - selected_path -> classes.Path [FK] (nullable)
   - selected_tradition -> magic.Tradition [FK] (nullable)
   - height_band -> forms.HeightBand [FK] (nullable)
@@ -1084,6 +1086,8 @@
   - active_persona -> scenes.Persona [FK] (nullable)
   - created_by -> accounts.AccountDB [FK] (nullable)
 **Pointed to by:**
+  - kinsperson <- roster.Kinsperson
+  - deferred_kin <- roster.Kinsperson
   - roster_entry <- roster.RosterEntry
   - class_level_advancements <- progression.ClassLevelAdvancement
   - officiated_advancements <- progression.ClassLevelAdvancement
@@ -1201,6 +1205,7 @@
 
 ### Gender
 **Pointed to by:**
+  - kinspeople <- roster.Kinsperson
   - character_sheets <- character_sheets.CharacterSheet
   - drafts <- character_creation.CharacterDraft
 
@@ -1260,6 +1265,7 @@
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
+  - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
   - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
@@ -3572,11 +3578,12 @@
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
-- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
+- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
 - `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' — Validate and atomically consume ``ritual``'s components from ``components``.`
+- `resolve_cast_check_type(character, template) — The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0) -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
@@ -4099,6 +4106,7 @@
   - role -> npc_services.NPCRole [FK]
   - room -> evennia_extensions.RoomProfile [FK]
 **Pointed to by:**
+  - kinspeople <- roster.Kinsperson
   - promotions <- assets.NPCAsset
 
 ### NPCServiceOffer
@@ -4487,6 +4495,7 @@
 ### Realm
 **Pointed to by:**
   - families <- roster.Family
+  - union_kinds <- roster.UnionKind
   - profiles <- character_sheets.Profile
   - starting_areas <- character_creation.StartingArea
   - societies <- societies.Society
@@ -4649,20 +4658,72 @@
   - created_by -> accounts.AccountDB [FK] (nullable)
   - origin_realm -> realms.Realm [FK] (nullable)
 **Pointed to by:**
-  - tree_members <- roster.FamilyMember
+  - members <- roster.Kinsperson
+  - memberships <- roster.FamilyMembership
+  - kin_slot_pools <- roster.KinSlotPool
   - profiles <- character_sheets.Profile
   - character_drafts <- character_creation.CharacterDraft
 
-### FamilyMember
+### Kinsperson
+**Foreign Keys:**
+  - gender -> character_sheets.Gender [FK] (nullable)
+  - sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+  - functionary -> npc_services.Functionary [FK] (nullable)
+  - family -> roster.Family [FK] (nullable)
+  - deferred_definer -> character_sheets.CharacterSheet [FK] (nullable)
+  - created_by -> accounts.AccountDB [FK] (nullable)
+  - allowed_genders -> character_sheets.Gender [M2M]
+**Pointed to by:**
+  - family_memberships <- roster.FamilyMembership
+  - unions <- roster.Union
+  - parentage_up <- roster.ParentageEdge
+  - parentage_down <- roster.ParentageEdge
+  - incarnations <- roster.SoulIncarnation
+  - kin_slot_pools <- roster.KinSlotPool
+  - drafts <- character_creation.CharacterDraft
+
+### FamilyMembership
+**Foreign Keys:**
+  - kinsperson -> roster.Kinsperson [FK]
+  - family -> roster.Family [FK]
+
+### UnionKind
+**Foreign Keys:**
+  - realm -> realms.Realm [FK] (nullable)
+**Pointed to by:**
+  - unions <- roster.Union
+
+### Union
+**Foreign Keys:**
+  - kind -> roster.UnionKind [FK]
+  - secret -> secrets.Secret [FK] (nullable)
+  - members -> roster.Kinsperson [M2M]
+**Pointed to by:**
+  - births <- roster.ParentageEdge
+
+### ParentageEdge
+**Foreign Keys:**
+  - child -> roster.Kinsperson [FK]
+  - parent -> roster.Kinsperson [FK]
+  - born_within_union -> roster.Union [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
+
+### Soul
+**Pointed to by:**
+  - incarnations <- roster.SoulIncarnation
+
+### SoulIncarnation
+**Foreign Keys:**
+  - soul -> roster.Soul [FK]
+  - kinsperson -> roster.Kinsperson [FK]
+  - secret -> secrets.Secret [FK] (nullable)
+
+### KinSlotPool
 **Foreign Keys:**
   - family -> roster.Family [FK]
-  - character -> objects.ObjectDB [OneToOne] (nullable)
-  - mother -> roster.FamilyMember [FK] (nullable)
-  - father -> roster.FamilyMember [FK] (nullable)
-  - created_by -> accounts.AccountDB [FK] (nullable)
+  - parents -> roster.Kinsperson [M2M]
+  - allowed_genders -> character_sheets.Gender [M2M]
 **Pointed to by:**
-  - children_as_mother <- roster.FamilyMember
-  - children_as_father <- roster.FamilyMember
   - drafts <- character_creation.CharacterDraft
 
 ### PlayerMail

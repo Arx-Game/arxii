@@ -550,14 +550,29 @@ class CharacterDraft(SharedMemoryModel):
         related_name="character_drafts",
         help_text="Selected family (null for orphan or special heritage).",
     )
-    # Family member position (NEW: for family tree system)
-    family_member = models.ForeignKey(
-        "roster.FamilyMember",
+    # Kinship slot claim (#2062): the appable node or pool this OC fills.
+    claimed_kin_slot = models.ForeignKey(
+        "roster.Kinsperson",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Family member position this character is filling",
+        help_text="Appable kinship node this character claims at finalization.",
+    )
+    claimed_kin_pool = models.ForeignKey(
+        "roster.KinSlotPool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="Slot pool a node is minted from at finalization.",
+    )
+    defer_parents = models.BooleanField(
+        default=False,
+        help_text=(
+            "CG deferral (#2062): leave parents deliberately undefined, to be "
+            "filled later through review."
+        ),
     )
     # Note: orphan intent can be represented in draft_data to avoid extra boolean field.
 

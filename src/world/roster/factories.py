@@ -35,6 +35,72 @@ class FamilyFactory(factory_django.DjangoModelFactory):
     is_playable = True
 
 
+class KinspersonFactory(factory_django.DjangoModelFactory):
+    """Factory for kinship graph nodes (#2062)."""
+
+    class Meta:
+        model = "roster.Kinsperson"
+
+    name = factory.Sequence(lambda n: f"Kin {n}")
+
+
+class ParentageEdgeFactory(factory_django.DjangoModelFactory):
+    """Factory for typed parentage edges (#2062)."""
+
+    class Meta:
+        model = "roster.ParentageEdge"
+
+    child = factory.SubFactory(KinspersonFactory)
+    parent = factory.SubFactory(KinspersonFactory)
+
+
+class UnionKindFactory(factory_django.DjangoModelFactory):
+    """Factory for authorable union vocabulary rows (#2062)."""
+
+    class Meta:
+        model = "roster.UnionKind"
+        django_get_or_create = ("name",)
+
+    name = "Marriage"
+    confers_wedlock = True
+
+
+class UnionFactory(factory_django.DjangoModelFactory):
+    """Factory for unions (#2062). Pass members=[...] post-generation."""
+
+    class Meta:
+        model = "roster.Union"
+
+    kind = factory.SubFactory(UnionKindFactory)
+
+    @factory.post_generation
+    def members(self, create, extracted, **kwargs):
+        if create and extracted:
+            self.members.set(extracted)
+
+
+class SoulFactory(factory_django.DjangoModelFactory):
+    """Factory for souls (#2062)."""
+
+    class Meta:
+        model = "roster.Soul"
+
+
+class KinSlotPoolFactory(factory_django.DjangoModelFactory):
+    """Factory for kin slot pools (#2062). Pass parents=[...] post-generation."""
+
+    class Meta:
+        model = "roster.KinSlotPool"
+
+    family = factory.SubFactory(FamilyFactory)
+    count_remaining = 3
+
+    @factory.post_generation
+    def parents(self, create, extracted, **kwargs):
+        if create and extracted:
+            self.parents.set(extracted)
+
+
 class PlayerDataFactory(factory_django.DjangoModelFactory):
     """Factory for PlayerData instances."""
 

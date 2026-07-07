@@ -24,9 +24,10 @@ from world.roster.serializers.characters import (
     CharacterSerializer,
 )
 from world.roster.serializers.families import (
-    FamilyMemberSerializer,
     FamilySerializer,
     FamilyTreeSerializer,
+    KinSlotPoolSerializer,
+    KinSlotSerializer,
 )
 from world.roster.serializers.mail import PlayerMailSerializer
 from world.roster.serializers.media import (
@@ -53,9 +54,10 @@ __all__ = [
     "CharacterGallerySerializer",
     "CharacterSerializer",
     # Family serializers
-    "FamilyMemberSerializer",
     "FamilySerializer",
     "FamilyTreeSerializer",
+    "KinSlotPoolSerializer",
+    "KinSlotSerializer",
     "MyRosterEntrySerializer",
     # Mail serializers
     "PlayerMailSerializer",

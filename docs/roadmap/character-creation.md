@@ -1,5 +1,25 @@
 # Character Creation & Identity
 
+## Built (2026-07-07, #2062 — kinship graph; ADR-0097)
+
+- Person-node genealogy replaces the FamilyMember stub: `Kinsperson` at five
+  definition tiers (NPC-ladder aligned), typed parentage edges (biological /
+  tree-of-souls / vampiric / adoptive / foster / acknowledged — N parents,
+  any composition), `Union` edges (in-laws + step-parents DERIVED, never
+  ambiguous again), `FamilyMembership` claims, and `Soul`/`SoulIncarnation`
+  chains with per-life knowledge.
+- Truth vs public record on every fact; hidden truths anchor Secrets
+  (subject-unaware supported — the Misbegotten discovery loop rides
+  investigation/clues natively).
+- The app-in slot mountain: appable nodes with constraints + `KinSlotPool`
+  fuzzy capacity; CG lineage stage claims a position (`KinSlotPicker`) and
+  finalization binds the sheet, inheriting a living tree. Deferred
+  definitions (leave parents blank, define later, review-gated).
+- Surfaces: viewer-aware tree + slots REST, telnet `sheet/family`, staff
+  admin, PLACEHOLDER ducal demo seed (cluster `kinship`).
+- Consumed next by #1884 (recognition, succession law, fealty).
+
+
 **Status:** skeleton
 **Depends on:** Magic, Traits, Skills, Distinctions, Species, Paths
 

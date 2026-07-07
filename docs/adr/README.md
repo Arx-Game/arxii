@@ -66,6 +66,7 @@ treat those names as hints to confirm, not gospel.
 - [0017 — New subsystems are submodules of existing apps](0017-new-subsystems-are-submodules.md)
 - [0018 — Range-partition the Interaction table](0018-range-partition-the-interaction-table.md)
 - [0062 — The Secret↔act anchor puts the FK on the Secret, reversing the back-reference pattern](0062-secret-act-anchor-reverses-the-back-reference-fk.md)
+- [0097 — Kinship is a person-node graph with typed edges and a truth-vs-public-record split; reincarnation is a Soul entity](0097-kinship-is-a-person-node-graph-with-truth-vs-public-record.md)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)

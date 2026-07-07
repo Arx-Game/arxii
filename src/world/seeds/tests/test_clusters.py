@@ -31,6 +31,7 @@ class TestClusterRegistry(TestCase):
                 "building_condition",
                 "kudos",
                 "gm",
+                "kinship",
             },
         )
 

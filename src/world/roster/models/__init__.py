@@ -8,6 +8,7 @@ This module is organized into logical groups:
 - applications: RosterApplication model
 - settings: TenureDisplaySettings and TenureMedia models
 - mail: PlayerMail model
+- families: Family + the kinship graph (#2062)
 """
 
 # Import all models for backward compatibility
@@ -21,7 +22,17 @@ from world.roster.models.choices import (
     ValidationErrorCodes,
     ValidationMessages,
 )
-from world.roster.models.families import Family
+from world.roster.models.families import (
+    Family,
+    FamilyMembership,
+    KinSlotPool,
+    Kinsperson,
+    ParentageEdge,
+    Soul,
+    SoulIncarnation,
+    Union,
+    UnionKind,
+)
 from world.roster.models.mail import PlayerMail
 from world.roster.models.roster_core import Roster, RosterEntry
 from world.roster.models.settings import (
@@ -36,6 +47,10 @@ __all__ = [
     "ApplicationStatus",
     "ApprovalScope",
     "Family",
+    "FamilyMembership",
+    "KinSlotPool",
+    "Kinsperson",
+    "ParentageEdge",
     "PlayerMail",
     "PlotInvolvement",
     "Roster",
@@ -43,9 +58,13 @@ __all__ = [
     "RosterEntry",
     "RosterTenure",
     "RosterType",
+    "Soul",
+    "SoulIncarnation",
     "TenureDisplaySettings",
     "TenureGallery",
     "TenureMedia",
+    "Union",
+    "UnionKind",
     "ValidationErrorCodes",
     "ValidationMessages",
 ]

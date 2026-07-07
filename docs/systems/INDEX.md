@@ -1044,6 +1044,24 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
 
+### Kinship (#2062)
+Person-node genealogy: typed parentage/union edges, truth-vs-public-record via
+Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
+
+- **Models:** `Family`, `Kinsperson` (5 definition tiers), `FamilyMembership`,
+  `UnionKind`/`Union`, `ParentageEdge` (6 kinds; step/in-law DERIVED),
+  `Soul`/`SoulIncarnation`, `KinSlotPool`; `Secret.subject_aware` delta
+- **Services:** `world.roster.services.kinship` — viewer-aware walks
+  (`derive_relationship`, `family_tree_for`, `parents_of`...), writers
+  (`record_parentage`/`record_union`/`record_incarnation`, memberships,
+  `mint_from_pool`/`claim_appable_node`/`define_deferred`); `OMNISCIENT` sentinel
+- **Surfaces:** `families/:id/tree/` + `families/:id/slots/` REST; CG slot claim
+  (draft `claimed_kin_slot/_pool`, `_bind_kinship_node` at finalize; FE
+  `KinSlotPicker`); telnet `sheet/family`; staff admin. Seeds: cluster `kinship`
+- **Consumed by:** #1884 recognition/succession law; #1985 estates (future)
+- **Source:** `src/world/roster/models/families.py`, `services/kinship.py`
+- **Details:** [kinship.md](kinship.md) · ADR-0097
+
 ### GM
 Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a
 GM at a given level may author (#2000, ADR-0095).

@@ -137,6 +137,12 @@ def _seed_building_condition() -> None:
     ensure_preparation_contribution_method()
 
 
+def _seed_kinship() -> None:
+    from world.seeds.kinship import seed_kinship_demo  # noqa: PLC0415
+
+    seed_kinship_demo()
+
+
 def _seed_kudos() -> None:
     from world.progression.seeds import seed_kudos_content  # noqa: PLC0415
 
@@ -212,6 +218,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
     # any other cluster.
     "kudos": _seed_kudos,
+    # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
+    "kinship": _seed_kinship,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -265,6 +273,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
+    from world.roster.models import Kinsperson  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
@@ -320,4 +329,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "kudos": [KudosSourceCategory],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
         "gm": [GMLevelCap],
+        # Kinship: the PLACEHOLDER ducal demo tree (#2062).
+        "kinship": [Kinsperson],
     }

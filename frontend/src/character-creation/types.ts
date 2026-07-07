@@ -55,39 +55,72 @@ export interface CGPointsBreakdown {
 export interface Family {
   id: number;
   name: string;
-  family_type: 'commoner' | 'noble';
+  family_type: 'commoner' | 'noble' | 'crime';
   description: string;
   origin_realm?: number;
 }
 
-export interface FamilyMember {
+// Kinship graph payload (#2062): person-nodes + typed edges, viewer-filtered.
+export interface KinNode {
   id: number;
-  family: Family;
-  family_id: number;
-  member_type: 'character' | 'placeholder' | 'npc';
-  character: number | null;
-  character_name: string | null;
-  display_name: string;
   name: string;
-  description: string;
+  tier: string;
+  family_id: number | null;
+  is_deceased: boolean;
+  is_appable: boolean;
+  gender: string;
   age: number | null;
-  mother: number | null;
-  mother_id?: number | null;
-  father: number | null;
-  father_id?: number | null;
-  relationship_to_root: string | null;
-  created_by: number;
-  created_at: string;
+  description: string;
+}
+
+export interface KinParentageEdge {
+  child_id: number;
+  parent_id: number;
+  kind: string;
+  is_true: boolean;
+  via_secret: boolean;
+}
+
+export interface KinUnionEdge {
+  id: number;
+  kind: string;
+  member_ids: number[];
+  ended: boolean;
 }
 
 export interface FamilyTree {
+  family: Family;
+  nodes: KinNode[];
+  parentage: KinParentageEdge[];
+  unions: KinUnionEdge[];
+}
+
+// Open app-in positions for a family (#2062 slot mountain).
+export interface KinSlot {
   id: number;
   name: string;
-  family_type: 'commoner' | 'noble';
+  name_locked: boolean;
   description: string;
-  origin_realm: number | null;
-  members: FamilyMember[];
-  open_positions_count: number;
+  age_min: number | null;
+  age_max: number | null;
+  allowed_genders: string[];
+  family: number;
+}
+
+export interface KinSlotPool {
+  id: number;
+  family: number;
+  description: string;
+  count_remaining: number;
+  age_min: number | null;
+  age_max: number | null;
+  allowed_genders: string[];
+  parent_names: string[];
+}
+
+export interface FamilySlots {
+  slots: KinSlot[];
+  pools: KinSlotPool[];
 }
 
 // =============================================================================
@@ -292,6 +325,9 @@ export interface CharacterDraft {
   selected_gender: { id: number; key: string; display_name: string } | null;
   age: number | null;
   family: Family | null;
+  claimed_kin_slot: number | null;
+  claimed_kin_pool: number | null;
+  defer_parents: boolean;
   height_band: HeightBand | null;
   height_inches: number | null;
   build: Build | null;
@@ -654,6 +690,9 @@ export interface DraftData {
 }
 
 export interface CharacterDraftUpdate {
+  claimed_kin_slot_id?: number | null;
+  claimed_kin_pool_id?: number | null;
+  defer_parents?: boolean;
   current_stage?: Stage;
   selected_area_id?: number | null;
   selected_beginnings_id?: number | null;
