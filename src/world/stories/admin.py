@@ -6,6 +6,7 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     BeatCompletion,
+    CanonReview,
     Chapter,
     CrossoverInvite,
     CustodyClearance,
@@ -73,18 +74,19 @@ class StoryAdmin(admin.ModelAdmin):
         "status",
         "privacy",
         "scope",
+        "impact_tier",
         "active_gms_count",
         "participants_count",
         "created_at",
     ]
-    list_filter = ["status", "privacy", "scope", "created_at"]
+    list_filter = ["status", "privacy", "scope", "impact_tier", "created_at"]
     search_fields = ["title", "description"]
     filter_horizontal = ["owners", "active_gms"]
     readonly_fields = ["created_at", "updated_at"]
     inlines = [StoryProtectedSubjectInline]
 
     fieldsets = (
-        (None, {"fields": ("title", "description", "status", "privacy", "scope")}),
+        (None, {"fields": ("title", "description", "status", "privacy", "scope", "impact_tier")}),
         ("Ownership & Management", {"fields": ("owners", "active_gms")}),
         (
             "Character / Group Link",
@@ -665,3 +667,21 @@ class CustodyClearanceAdmin(admin.ModelAdmin):
         "granted_by",
         "staff_resolver",
     )
+
+
+@admin.register(CanonReview)
+class CanonReviewAdmin(admin.ModelAdmin):
+    """Admin for staff canon-review of world-touching stories (#2003)."""
+
+    list_display = (
+        "story",
+        "tier",
+        "status",
+        "reviewer",
+        "created_at",
+        "resolved_at",
+    )
+    list_filter = ("status", "tier")
+    search_fields = ("story__title",)
+    readonly_fields = ("created_at", "resolved_at")
+    raw_id_fields = ("story", "reviewer")
