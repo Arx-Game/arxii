@@ -241,6 +241,14 @@ class AddOpponentAction(Action):
         except CommandError as err:
             return ActionResult(success=False, message=str(err))
 
+        # #2001 Task 5: threads the GM's account so add_opponent's custody
+        # APPEAR gate can refuse an outsider GM spawning a story-protected
+        # NPC (via existing_objectdb/persona — this action doesn't accept
+        # either kwarg yet, so today's ephemeral-only spawns are never
+        # gated, but the account is threaded here so any future kwarg
+        # addition inherits the gate for free).
+        account = resolve_account_or_none(actor)
+
         try:
             opponent = add_opponent(
                 encounter,
@@ -248,6 +256,7 @@ class AddOpponentAction(Action):
                 tier=tier,
                 threat_pool=pool,
                 description=description,
+                acting_account=account,
             )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))

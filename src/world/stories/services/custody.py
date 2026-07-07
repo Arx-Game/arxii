@@ -22,7 +22,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.stories.constants import BeatOutcome, CustodyScope, StakeResolutionColumn
+from world.stories.constants import (
+    BeatOutcome,
+    CustodyScope,
+    StakeResolutionColumn,
+    StakeSubjectKind,
+)
 from world.stories.models import StoryParticipation, StoryProtectedSubject
 from world.stories.services.boundaries import SubjectIdentity, _subject_identity
 from world.stories.services.custody_clearance import active_clearance_exists
@@ -114,6 +119,19 @@ def _active_clearance_allows(
     ``actor_account``.
     """
     return active_clearance_exists(protected_subject=protection, account=actor_account, scope=scope)
+
+
+def subject_identity_for_sheet(sheet: CharacterSheet) -> SubjectIdentity:
+    """The NPC_FATE-shaped ``SubjectIdentity`` for ``sheet`` (#2001 Task 5).
+
+    Public helper so non-Stake enforcement points (combat opponent spawning)
+    can build the same identity tuple ``check_subject_custody`` needs without
+    duplicating the typed-FK-or-label shape inline. Mirrors
+    ``StakeSerializer._candidate_subject_identity``'s NPC_FATE branch: only
+    ``subject_sheet`` is populated, every other typed pointer is ``None``, and
+    ``subject_label`` is empty (NPC_FATE always carries a typed pointer).
+    """
+    return _subject_identity(StakeSubjectKind.NPC_FATE, sheet.pk, None, None, None, "")
 
 
 def check_subject_custody(
