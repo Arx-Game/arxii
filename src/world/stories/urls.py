@@ -6,6 +6,7 @@ from world.stories.views import (
     AssistantGMClaimViewSet,
     BeatStakeAvailabilityView,
     BeatViewSet,
+    CanonReviewViewSet,
     ChapterViewSet,
     CrossoverInviteViewSet,
     CustodyClearanceViewSet,
@@ -84,6 +85,8 @@ router.register(r"protected-subjects", StoryProtectedSubjectViewSet)
 router.register(r"custody-clearances", CustodyClearanceViewSet, basename="custodyclearance")
 # #2002: crossover invite lifecycle
 router.register(r"crossover-invites", CrossoverInviteViewSet, basename="crossoverinvite")
+# #2003: canon-impact review queue (staff)
+router.register(r"canon-reviews", CanonReviewViewSet, basename="canonreview")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).

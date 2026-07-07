@@ -2,6 +2,7 @@
 
 from django.db import IntegrityError
 from django.test import TestCase
+from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.constants import GMLevel
@@ -351,3 +352,67 @@ class GlobalActivationGateTests(TestCase):
         story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.TABLE)
         progress = create_global_progress(story=story)
         self.assertEqual(progress.story, story)
+
+
+class CanonReviewViewSetTests(APITestCase):
+    """Web verbs for the canon-review queue (#2003): list, clear, changes.
+
+    Staff-only; non-staff gets 403. Both lifecycle actions delegate to the
+    canon_review service.
+    """
+
+    CANON_LIST_URL = "/api/canon-reviews/"
+
+    def _detail_url(self, pk: int) -> str:
+        return f"/api/canon-reviews/{pk}/"
+
+    def _clear_url(self, pk: int) -> str:
+        return f"/api/canon-reviews/{pk}/clear/"
+
+    def _changes_url(self, pk: int) -> str:
+        return f"/api/canon-reviews/{pk}/changes/"
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(is_staff=True)
+        cls.non_staff = AccountFactory()
+        cls.story = StoryFactory(impact_tier=ImpactTier.WORLD)
+        cls.review = request_canon_review(cls.story)
+
+    def test_non_staff_cannot_list(self) -> None:
+        self.client.force_authenticate(user=self.non_staff)
+        resp = self.client.get(self.CANON_LIST_URL)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_staff_can_list_pending(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.get(self.CANON_LIST_URL)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(any(r["id"] == self.review.pk for r in resp.data))
+
+    def test_staff_can_clear_pending_review(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(self._clear_url(self.review.pk), {"notes": "ok"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.status, CanonReviewStatus.CLEARED)
+        self.assertEqual(self.review.reviewer, self.staff)
+
+    def test_staff_can_request_changes(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(
+            self._changes_url(self.review.pk), {"notes": "narrow scope"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.status, CanonReviewStatus.CHANGES_REQUESTED)
+
+    def test_non_staff_cannot_clear(self) -> None:
+        self.client.force_authenticate(user=self.non_staff)
+        resp = self.client.post(self._clear_url(self.review.pk), {}, format="json")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_changes_requires_notes(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.post(self._changes_url(self.review.pk), {}, format="json")
+        self.assertEqual(resp.status_code, 400)
