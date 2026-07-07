@@ -282,9 +282,13 @@ class EscalateClearanceServiceTests(TestCase):
             requested_by=self.requester,
             scope=CustodyScope.HARM,
             status=CustodyClearanceStatus.DENIED,
+            resolved_at=timezone.now(),
         )
         updated = escalate_clearance(clearance)
         assert updated.status == CustodyClearanceStatus.ESCALATED
+        # Escalation is non-terminal (docstring) — the prior DENIED resolution's
+        # resolved_at must not survive onto the re-opened ESCALATED clearance.
+        assert updated.resolved_at is None
 
     def test_escalate_stale_pending_clearance(self):
         clearance = CustodyClearanceFactory(
@@ -533,6 +537,28 @@ class ActiveClearanceExistsServiceTests(TestCase):
             protected_subject=self.subject, account=self.account, scope=CustodyScope.HARM
         )
 
+    def test_false_when_denied(self):
+        CustodyClearanceFactory(
+            protected_subject=self.subject,
+            requested_by=self.requester,
+            scope=CustodyScope.HARM,
+            status=CustodyClearanceStatus.DENIED,
+        )
+        assert not active_clearance_exists(
+            protected_subject=self.subject, account=self.account, scope=CustodyScope.HARM
+        )
+
+    def test_false_when_escalated(self):
+        CustodyClearanceFactory(
+            protected_subject=self.subject,
+            requested_by=self.requester,
+            scope=CustodyScope.HARM,
+            status=CustodyClearanceStatus.ESCALATED,
+        )
+        assert not active_clearance_exists(
+            protected_subject=self.subject, account=self.account, scope=CustodyScope.HARM
+        )
+
     def test_false_when_revoked(self):
         CustodyClearanceFactory(
             protected_subject=self.subject,
@@ -638,3 +664,87 @@ class CheckSubjectCustodyClearanceWiringTests(TestCase):
             scope=CustodyScope.HARM,
         )
         assert not blocked_again.allowed
+
+
+class DisclosureNoLeakTests(TestCase):
+    """#2001 Task 3 Fix 2: notification bodies must never leak the protecting
+    story's title or the protected subject's (GM-private) notes — only the
+    subject's display label, scope, and counterpart username may appear
+    (see custody_clearance.py's disclosure-rule module docstring)."""
+
+    DISTINCTIVE_TITLE = "SEKRIT ARC TITLE"
+    PROTECTION_NOTES = "TOP SECRET GM NOTES ABOUT THE PLOT TWIST"
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.story = StoryFactory(status=StoryStatus.ACTIVE, title=cls.DISTINCTIVE_TITLE)
+        cls.custodian_gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.custodian_gm)
+        cls.story.primary_table = cls.table
+        cls.story.save(update_fields=["primary_table"])
+        cls.subject = StoryProtectedSubjectFactory(story=cls.story, notes=cls.PROTECTION_NOTES)
+        cls.requester = GMProfileFactory()
+        cls.staff_account = AccountFactory(is_staff=True)
+
+    def test_no_message_leaks_story_title_or_subject_notes(self):
+        _gm_with_notification_sheet(self.custodian_gm)
+        _gm_with_notification_sheet(self.requester)
+        last_before = NarrativeMessage.objects.order_by("-pk").first()
+        start_pk = last_before.pk if last_before is not None else 0
+
+        # request -> grant -> revoke
+        granted = request_clearance(
+            protected_subject=self.subject, requested_by=self.requester, scope=CustodyScope.HARM
+        )
+        grant_clearance(granted, granted_by=self.custodian_gm)
+        revoke_clearance(granted, revoked_by=self.custodian_gm.account)
+
+        # request -> deny -> escalate -> staff-resolve (grant)
+        denied = request_clearance(
+            protected_subject=self.subject, requested_by=self.requester, scope=CustodyScope.APPEAR
+        )
+        deny_clearance(denied, denied_by=self.custodian_gm)
+        escalate_clearance(denied)
+        resolve_escalation(denied, staff_account=self.staff_account, grant=True)
+
+        messages = list(NarrativeMessage.objects.filter(pk__gt=start_pk))
+        assert len(messages) == 7
+        for msg in messages:
+            assert self.DISTINCTIVE_TITLE not in msg.body
+            assert self.PROTECTION_NOTES not in msg.body
+
+
+class RelatedStoryRecipientScopingTests(TestCase):
+    """#2001 Task 3 Fix 3: each notified GM's NarrativeMessage.related_story is
+    scoped to a story THEY have standing in — the custodian sees their own
+    protecting story tagged, the requester sees their own requesting_story
+    tagged — never the counterpart's story (see custody_clearance.py's
+    disclosure-rule docstring on ``related_story`` scoping)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.protecting_story = StoryFactory(status=StoryStatus.ACTIVE)
+        cls.custodian_gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.custodian_gm)
+        cls.protecting_story.primary_table = cls.table
+        cls.protecting_story.save(update_fields=["primary_table"])
+        cls.subject = StoryProtectedSubjectFactory(story=cls.protecting_story)
+        cls.requester = GMProfileFactory()
+        cls.requesting_story = StoryFactory(status=StoryStatus.ACTIVE)
+
+    def test_custodian_and_requester_each_see_only_their_own_story_tagged(self):
+        _gm_with_notification_sheet(self.custodian_gm)
+        _gm_with_notification_sheet(self.requester)
+
+        clearance = request_clearance(
+            protected_subject=self.subject,
+            requested_by=self.requester,
+            scope=CustodyScope.HARM,
+            requesting_story=self.requesting_story,
+        )
+        request_msg = NarrativeMessage.objects.latest("pk")
+        assert request_msg.related_story_id == self.protecting_story.pk
+
+        deny_clearance(clearance, denied_by=self.custodian_gm)
+        deny_msg = NarrativeMessage.objects.latest("pk")
+        assert deny_msg.related_story_id == self.requesting_story.pk

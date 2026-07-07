@@ -291,7 +291,8 @@ def escalate_clearance(clearance: CustodyClearance) -> CustodyClearance:
         raise CustodyClearanceStateError(msg)
 
     clearance.status = CustodyClearanceStatus.ESCALATED
-    clearance.save(update_fields=["status"])
+    clearance.resolved_at = None
+    clearance.save(update_fields=["status", "resolved_at"])
     subject_label = _subject_display_label(clearance.protected_subject)
     _notify_custodian(
         clearance,

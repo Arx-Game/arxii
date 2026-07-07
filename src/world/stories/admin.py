@@ -619,6 +619,7 @@ class StakeContractActivationAdmin(admin.ModelAdmin):
     list_filter = ("effective_risk", "is_ready")
     search_fields = ("beat__internal_description",)
     readonly_fields = tuple(f.name for f in StakeContractActivation._meta.fields)  # noqa: SLF001
+    raw_id_fields = ("beat",)
 
 
 @admin.register(CustodyClearance)
