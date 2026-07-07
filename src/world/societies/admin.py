@@ -605,7 +605,14 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # Houses (#1884 Phase D) — the staff review queue for CG house claims
 # ---------------------------------------------------------------------------
 
-from world.societies.houses.models import HouseClaim, HouseTemplate  # noqa: E402
+from world.societies.houses.models import (  # noqa: E402
+    HouseAspectDefinition,
+    HouseAspectOption,
+    HouseClaim,
+    HouseClaimAspect,
+    HouseFeature,
+    HouseTemplate,
+)
 
 
 @admin.register(HouseTemplate)
@@ -616,7 +623,44 @@ class HouseTemplateAdmin(admin.ModelAdmin):
     list_select_related = ("realm", "liege")
     list_filter = ("realm", "family_type")
     search_fields = ("name",)
-    filter_horizontal = ("holdings",)
+    filter_horizontal = ("holdings", "aspect_definitions", "features")
+
+
+class HouseAspectOptionInline(admin.TabularInline):
+    """#2079 — the catalog rows behind a definition."""
+
+    model = HouseAspectOption
+    extra = 0
+
+
+@admin.register(HouseAspectDefinition)
+class HouseAspectDefinitionAdmin(admin.ModelAdmin):
+    """#2079 — authored, catalog-only required choices (ADR-0101)."""
+
+    list_display = ("name", "min_picks", "max_picks", "display_order")
+    search_fields = ("name", "prompt")
+    inlines = (HouseAspectOptionInline,)
+
+
+@admin.register(HouseFeature)
+class HouseFeatureAdmin(admin.ModelAdmin):
+    """#2079 — cultural facts stamped on houses; slug is the code anchor."""
+
+    list_display = ("name", "slug", "display_order")
+    search_fields = ("name", "slug", "description")
+    prepopulated_fields = {"slug": ("name",)}
+
+
+class HouseClaimAspectInline(admin.TabularInline):
+    """#2079 — the founder's picks, read-only for the review queue."""
+
+    model = HouseClaimAspect
+    extra = 0
+    readonly_fields = ("definition", "option")
+    can_delete = False
+
+    def has_add_permission(self, request: object, obj: object = None) -> bool:  # noqa: ARG002
+        return False
 
 
 @admin.register(HouseClaim)
@@ -633,6 +677,7 @@ class HouseClaimAdmin(admin.ModelAdmin):
     search_fields = ("house_name", "backstory")
     readonly_fields = ("draft", "reviewed_by", "reviewed_at")
     actions = ("approve_claims", "reject_claims")
+    inlines = (HouseClaimAspectInline,)
 
     @admin.action(description="Approve selected claims")
     def approve_claims(self, request, queryset):

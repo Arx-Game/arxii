@@ -594,6 +594,21 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             axis: int(request.data.get(axis, 0))
             for axis in ("mercy", "method", "status", "change", "allegiance", "power")
         }
+        raw_aspects = request.data.get("aspects", [])
+        aspect_picks: dict[int, list[int]] = {}
+        if isinstance(raw_aspects, list):
+            for entry in raw_aspects:
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    definition_id = int(entry.get("definition"))
+                    option_ids = [int(option) for option in entry.get("options", [])]
+                except (TypeError, ValueError):
+                    return Response(
+                        {"detail": "Malformed aspects payload."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                aspect_picks[definition_id] = option_ids
         try:
             claim = submit_house_claim(
                 draft=draft,
@@ -602,6 +617,11 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 house_name=str(request.data.get("house_name", "")),
                 backstory=str(request.data.get("backstory", "")),
                 principles=principles,
+                words=str(request.data.get("words", "")),
+                colors=str(request.data.get("colors", "")),
+                sigil_description=str(request.data.get("sigil_description", "")),
+                lands_writeup=str(request.data.get("lands_writeup", "")),
+                aspect_picks=aspect_picks,
             )
         except HousesServiceError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)

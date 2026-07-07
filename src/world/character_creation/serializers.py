@@ -30,7 +30,14 @@ from world.magic.models import Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer
-from world.societies.houses.models import HouseClaim, HouseTemplate, Title
+from world.societies.houses.models import (
+    HouseAspectDefinition,
+    HouseAspectOption,
+    HouseClaim,
+    HouseFeature,
+    HouseTemplate,
+    Title,
+)
 from world.species.models import Language, Species
 
 
@@ -805,8 +812,42 @@ class CGExplanationsSerializer:
 # ---------------------------------------------------------------------------
 
 
+class HouseAspectOptionSerializer(serializers.ModelSerializer):
+    """One authored answer in an aspect catalog (#2079)."""
+
+    class Meta:
+        model = HouseAspectOption
+        fields = ["id", "name", "description"]
+
+
+class HouseAspectDefinitionSerializer(serializers.ModelSerializer):
+    """A required catalog choice on a template, with its active options (#2079)."""
+
+    options = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HouseAspectDefinition
+        fields = ["id", "name", "prompt", "min_picks", "max_picks", "options"]
+
+    @extend_schema_field(HouseAspectOptionSerializer(many=True))
+    def get_options(self, obj):
+        active = [option for option in obj.options.all() if option.is_active]
+        return HouseAspectOptionSerializer(active, many=True).data
+
+
+class HouseFeatureSerializer(serializers.ModelSerializer):
+    """A cultural fact houses of a template carry (#2079)."""
+
+    class Meta:
+        model = HouseFeature
+        fields = ["id", "name", "slug", "description"]
+
+
 class HouseTemplateOptionSerializer(serializers.ModelSerializer):
     """A realm template a CG house claim may build from."""
+
+    aspect_definitions = HouseAspectDefinitionSerializer(many=True, read_only=True)
+    features = HouseFeatureSerializer(many=True, read_only=True)
 
     class Meta:
         model = HouseTemplate
@@ -828,6 +869,8 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "allegiance_max",
             "power_min",
             "power_max",
+            "aspect_definitions",
+            "features",
         ]
 
 
@@ -850,10 +893,29 @@ class ClaimableTitleSerializer(serializers.ModelSerializer):
 
 
 class HouseClaimStatusSerializer(serializers.ModelSerializer):
-    """The draft's house claim, as CG shows it (#1884 Phase D)."""
+    """The draft's house claim, as CG shows it (#1884 Phase D, #2079)."""
 
     title_name = serializers.CharField(source="title.name", read_only=True)
+    aspects = serializers.SerializerMethodField()
 
     class Meta:
         model = HouseClaim
-        fields = ["id", "house_name", "title_name", "status", "review_note"]
+        fields = [
+            "id",
+            "house_name",
+            "title_name",
+            "status",
+            "review_note",
+            "words",
+            "colors",
+            "sigil_description",
+            "lands_writeup",
+            "aspects",
+        ]
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_aspects(self, obj):
+        return [
+            {"definition": picked.definition.name, "option": picked.option.name}
+            for picked in obj.aspects.select_related("definition", "option")
+        ]

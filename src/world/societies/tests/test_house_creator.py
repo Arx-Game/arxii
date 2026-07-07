@@ -67,6 +67,10 @@ class HouseCreatorTestData(TestCase):
             "template": self.template,
             "house_name": "Thornwood",
             "backstory": "An old marcher line, quietly holding the fens for the crown.",
+            "words": "The Fens Endure",
+            "colors": "russet and bog-iron grey",
+            "sigil_description": "A heron statant on a black chief.",
+            "lands_writeup": "Fen villages and eel weirs along the marches.",
         }
         kwargs.update(overrides)
         return submit_house_claim(**kwargs)
@@ -149,6 +153,9 @@ class ReviewTests(HouseCreatorTestData):
             template=self.template,
             house_name="Fenwick",
             backstory="A lesser line.",
+            words="Quiet Waters",
+            colors="slate and reed-green",
+            sigil_description="An eel naiant.",
         )
         reject_house_claim(claim2, reviewer=reviewer, note="Too thin.")
         self.assertEqual(claim2.status, HouseClaimStatus.REJECTED)
@@ -221,3 +228,7 @@ class MaterializationTests(HouseCreatorTestData):
         template = HouseTemplate.objects.get(name=TEMPLATE_NAME)
         self.assertEqual(template.realm, title.realm)
         self.assertTrue(template.holdings.exists())
+        definition = template.aspect_definitions.first()
+        self.assertIsNotNone(definition)
+        self.assertGreaterEqual(definition.options.filter(is_active=True).count(), 2)
+        self.assertTrue(template.features.exists())

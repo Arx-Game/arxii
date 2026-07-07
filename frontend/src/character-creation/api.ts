@@ -709,11 +709,21 @@ export type ClaimableTitle = components['schemas']['ClaimableTitle'];
 export type HouseTemplateOption = components['schemas']['HouseTemplateOption'];
 export type HouseClaimStatus = components['schemas']['HouseClaimStatus'];
 
+export interface HouseAspectPick {
+  definition: number;
+  options: number[];
+}
+
 export interface HouseClaimPayload {
   title: number;
   template: number;
   house_name: string;
   backstory: string;
+  words: string;
+  colors: string;
+  sigil_description: string;
+  lands_writeup: string;
+  aspects: HouseAspectPick[];
   mercy: number;
   method: number;
   status: number;

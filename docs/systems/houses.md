@@ -98,3 +98,41 @@ play (ennoblement, new lands) is a separate future loop.
   the CG Lineage stage shows the "Define a House" panel to familyless
   drafts. Seeds: a set-aside claimable barony + charter template ride the
   `houses` cluster.
+
+## Regional flavor: aspects + features (#2079)
+
+Two deliberately distinct concepts give each realm's (and each noble-type's)
+houses a unique creation experience (ADR-0101):
+
+- **Aspect** — a required, normalized CHOICE. `HouseAspectDefinition` (name,
+  player-facing prompt, `min_picks`/`max_picks`) attaches to templates via
+  `HouseTemplate.aspect_definitions` (M2M — both Inferna templates can share
+  "House Vice" while only the Cinderi template carries a diaspora choice);
+  `HouseAspectOption` rows are its admin-editable catalog. **Catalog-only by
+  design** — no free-text answer path (ADR-0101). `HouseClaimAspect` records
+  the founder's picks; `_validate_aspect_picks` refuses submission unless
+  every attached definition is answered within [min, max] with active options
+  of that definition.
+- **Feature** — a structural cultural FACT, no player input.
+  `HouseFeature` (name, unique `slug` as the stable code anchor, player-facing
+  description) attaches via `HouseTemplate.features`; at CG it orients the
+  founder ("a house of this charter keeps a Black Ledger"), in play it is the
+  anchor future systems key off (`org.features` has slug `black-ledger` — data
+  row + slug, never a bespoke code path).
+- **Shared stylings** — `Organization.words/colors/sigil_description`
+  (org-level: gangs and guilds get them free), collected as required claim
+  inputs alongside `lands_writeup`, which materializes onto the seat
+  `Domain.description`.
+- **Materialization** — claim picks become `OrganizationAspect` rows and
+  template features stamp `OrganizationFeature` rows (both also directly
+  authorable for staff-seeded houses); stylings copy onto the org.
+- **Surfaces:** template payloads carry the definitions-with-options tree +
+  features (CG panel renders option cards + a features orientation panel and
+  gates submit on completeness); the org payload carries stylings + house-block
+  `aspects`/`features`; `sheet/house` lists words, colors, facets, features;
+  admin registers definitions (options inline), features, and a read-only
+  picks inline on the claim review queue.
+- **Content:** per-region catalogs (deities, vices, virtues, totems, geasa,
+  traditions) arrive from later per-region brainstorms — targets: 2 aspects
+  per region (3 only if genuinely fun), ≥1 advantageous RP-usable feature.
+  Seeds ship one PLACEHOLDER exemplar of each on the Arx demo template.

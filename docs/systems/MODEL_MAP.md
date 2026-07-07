@@ -5478,6 +5478,8 @@
   - pacts_as_senior <- societies.MarriagePact
   - pacts_as_junior <- societies.MarriagePact
   - house_templates <- societies.HouseTemplate
+  - aspects <- societies.OrganizationAspect
+  - features <- societies.OrganizationFeature
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
@@ -5744,6 +5746,8 @@
   - liege -> societies.Organization [FK]
   - default_succession_law -> societies.SuccessionLaw [FK]
   - holdings -> societies.HoldingKind [M2M]
+  - aspect_definitions -> societies.HouseAspectDefinition [M2M]
+  - features -> societies.HouseFeature [M2M]
 **Pointed to by:**
   - claims <- societies.HouseClaim
 
@@ -5753,6 +5757,39 @@
   - title -> societies.Title [FK]
   - template -> societies.HouseTemplate [FK]
   - reviewed_by -> accounts.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - aspects <- societies.HouseClaimAspect
+
+### HouseAspectDefinition
+**Pointed to by:**
+  - templates <- societies.HouseTemplate
+  - options <- societies.HouseAspectOption
+
+### HouseAspectOption
+**Foreign Keys:**
+  - definition -> societies.HouseAspectDefinition [FK]
+
+### HouseFeature
+**Pointed to by:**
+  - templates <- societies.HouseTemplate
+  - organization_features <- societies.OrganizationFeature
+
+### HouseClaimAspect
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
+  - definition -> societies.HouseAspectDefinition [FK]
+  - option -> societies.HouseAspectOption [FK]
+
+### OrganizationAspect
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - definition -> societies.HouseAspectDefinition [FK]
+  - option -> societies.HouseAspectOption [FK]
+
+### OrganizationFeature
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - feature -> societies.HouseFeature [FK]
 
 ### OrganizationCapabilityProjectDetails
 **Foreign Keys:**

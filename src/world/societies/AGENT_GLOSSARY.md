@@ -103,3 +103,11 @@ _Avoid_: org informs, house inbox, notifications (it is not push).
 **House Claim**:
 The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop.
 _Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).
+
+**Aspect (house)**:
+A required, normalized catalog choice on a house template (#2079, ADR-0101) — `HouseAspectDefinition` (prompt, min/max picks) + its `HouseAspectOption` catalog, answered at CG by picks alone (never free text; the authored list IS the thematic fence). Picks become permanent `OrganizationAspect` identity facets at materialization.
+_Avoid_: trait, flaw, house perk, custom aspect (there is no free-text path).
+
+**Feature (house)**:
+A structural cultural fact about houses of a template (#2079) — `HouseFeature` (unique slug = stable code anchor) stamped as `OrganizationFeature` at materialization. No player input; orients the founder at CG and anchors future systems (a ledger UI checks slug `black-ledger`).
+_Avoid_: perk, ability, house power (features may be flavor-only), aspect (that's the choice concept).

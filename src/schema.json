@@ -37743,9 +37743,71 @@ components:
           type: integer
       required:
       - interaction_id
+    HouseAspectDefinition:
+      type: object
+      description: A required catalog choice on a template, with its active options
+        (#2079).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        prompt:
+          type: string
+          description: Player-facing question the founder answers by picking options.
+        min_picks:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        max_picks:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseAspectOption'
+          readOnly: true
+      required:
+      - id
+      - name
+      - options
+      - prompt
+    HouseAspectFacet:
+      type: object
+      description: One picked identity facet on the house block (#2079).
+      properties:
+        definition:
+          type: string
+        option:
+          type: string
+        description:
+          type: string
+      required:
+      - definition
+      - description
+      - option
+    HouseAspectOption:
+      type: object
+      description: One authored answer in an aspect catalog (#2079).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+          description: Player-facing blurb shown on the option card.
+      required:
+      - id
+      - name
     HouseClaimStatus:
       type: object
-      description: The draft's house claim, as CG shows it (#1884 Phase D).
+      description: 'The draft''s house claim, as CG shows it (#1884 Phase D, #2079).'
       properties:
         id:
           type: integer
@@ -37761,7 +37823,29 @@ components:
           $ref: '#/components/schemas/HouseClaimStatusStatusEnum'
         review_note:
           type: string
+        words:
+          type: string
+          description: House words / motto (#2079).
+          maxLength: 200
+        colors:
+          type: string
+          description: House colors, prose (#2079).
+          maxLength: 200
+        sigil_description:
+          type: string
+          description: The sigil, described (#2079).
+        lands_writeup:
+          type: string
+          description: 'The seat domain''s lands, described (required for landed titles,
+            #2079).'
+        aspects:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
       required:
+      - aspects
       - house_name
       - id
       - title_name
@@ -37796,9 +37880,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HouseDomain'
+        aspects:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseAspectFacet'
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseFeatureFacet'
       required:
+      - aspects
       - domains
       - family_name
+      - features
       - liege_name
       - titles
       - vassal_names
@@ -37830,6 +37924,43 @@ components:
       required:
       - holding_names
       - name
+    HouseFeature:
+      type: object
+      description: A cultural fact houses of a template carry (#2079).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        slug:
+          type: string
+          description: Stable code anchor.
+          maxLength: 60
+          pattern: ^[-a-zA-Z0-9_]+$
+        description:
+          type: string
+          description: 'Player-facing: how this shapes play.'
+      required:
+      - description
+      - id
+      - name
+      - slug
+    HouseFeatureFacet:
+      type: object
+      description: One cultural feature on the house block (#2079).
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+      required:
+      - description
+      - name
+      - slug
     HouseTemplateOption:
       type: object
       description: A realm template a CG house claim may build from.
@@ -37899,8 +38030,20 @@ components:
           type: integer
           maximum: 32767
           minimum: -32768
+        aspect_definitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseAspectDefinition'
+          readOnly: true
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseFeature'
+          readOnly: true
       required:
+      - aspect_definitions
       - family_type
+      - features
       - id
       - name
     HouseTitle:
@@ -41975,6 +42118,17 @@ components:
         description:
           type: string
           description: A description of the organization's purpose and history
+        words:
+          type: string
+          description: Words / motto — house words, gang credo, guild maxim (#2079).
+          maxLength: 200
+        colors:
+          type: string
+          description: The organization's colors, in prose (#2079).
+          maxLength: 200
+        sigil_description:
+          type: string
+          description: Sigil / emblem, described (#2079).
         society_name:
           type: string
           readOnly: true

@@ -145,6 +145,9 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
     from world.societies.houses.models import (  # noqa: PLC0415
         Domain,
         HoldingKind,
+        HouseAspectDefinition,
+        HouseAspectOption,
+        HouseFeature,
         HouseTemplate,
         Title,
     )
@@ -169,6 +172,34 @@ def _seed_house_creator(*, realm, society, crown, law) -> None:
         },
     )
     template.holdings.add(farmland)
+
+    # #2079 — one exemplar aspect definition + feature proving the loop;
+    # real regional catalogs arrive from the per-region content brainstorms.
+    virtue, _ = HouseAspectDefinition.objects.get_or_create(
+        name="House Virtue PLACEHOLDER",
+        defaults={"prompt": "PLACEHOLDER: which virtue did your house cling to?"},
+    )
+    for order, (option_name, blurb) in enumerate(
+        [
+            ("Fortitude PLACEHOLDER", "PLACEHOLDER: endurance without breaking."),
+            ("Candor PLACEHOLDER", "PLACEHOLDER: truth spoken plainly."),
+            ("Charity PLACEHOLDER", "PLACEHOLDER: the open hand."),
+        ]
+    ):
+        HouseAspectOption.objects.get_or_create(
+            definition=virtue,
+            name=option_name,
+            defaults={"description": blurb, "display_order": order},
+        )
+    hearth, _ = HouseFeature.objects.get_or_create(
+        slug="hearth-right-placeholder",
+        defaults={
+            "name": "Hearth Right PLACEHOLDER",
+            "description": "PLACEHOLDER: guests under the house's roof are sacrosanct.",
+        },
+    )
+    template.aspect_definitions.add(virtue)
+    template.features.add(hearth)
 
     seat_area, _ = Area.objects.get_or_create(
         name=CLAIMABLE_DOMAIN_NAME, defaults={"level": AreaLevel.REGION}
