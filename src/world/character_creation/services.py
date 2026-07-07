@@ -175,6 +175,11 @@ def finalize_character(
 
     # Family is already set on CharacterSheet above
 
+    # Kinship graph binding (#2062): claim the chosen slot / mint from the
+    # chosen pool, or self-serve a node for the new PC. Runs before draft
+    # deletion (the claim FKs live on the draft).
+    _bind_kinship_node(draft, sheet)
+
     # Finalize magic data before deleting draft
     finalize_magic_data(draft, sheet)
 
@@ -196,6 +201,39 @@ def finalize_character(
     draft.delete()
 
     return character
+
+
+def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Bind the new PC into the kinship graph (#2062).
+
+    Priority: an explicitly claimed appable node → a mint from a claimed
+    pool → a self-serve node in the draft's family (or familyless). CG
+    deferral (``defer_parents``) simply records no parent edges — the
+    deferred positions get created when defined later. Best-effort: a
+    kinship refusal (e.g. a slot claimed moments earlier by someone else)
+    must not strand finalization, so it logs and falls back to self-serve.
+    """
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        KinshipServiceError,
+        claim_appable_node,
+        ensure_node_for_sheet,
+        mint_from_pool,
+    )
+
+    try:
+        if draft.claimed_kin_slot is not None:
+            claim_appable_node(node=draft.claimed_kin_slot, sheet=sheet)
+            return
+        if draft.claimed_kin_pool is not None:
+            node = mint_from_pool(draft.claimed_kin_pool, created_by=draft.account)
+            claim_appable_node(node=node, sheet=sheet)
+            return
+    except KinshipServiceError:
+        logger.exception(
+            "Kinship slot claim failed for draft %s; falling back to self-serve node.",
+            draft.pk,
+        )
+    ensure_node_for_sheet(sheet, family=draft.family)
 
 
 def _build_character_full_name(draft: CharacterDraft) -> str:

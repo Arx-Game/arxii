@@ -2066,12 +2066,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['character_creation_families_list'];
     put?: never;
     post?: never;
@@ -2088,13 +2083,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['character_creation_families_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/families/{id}/slots/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Open appable positions + pools for this family (CG slot browser). */
+    get: operations['character_creation_families_slots_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2110,13 +2117,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Get complete family tree with members.
-     *
-     *     Returns:
-     *         Family data with members included. Relationships are derived
-     *         from mother/father FKs on FamilyMember.
-     */
+    /** @description The family's kinship graph, filtered to what the viewer may see. */
     get: operations['character_creation_families_tree_retrieve'];
     put?: never;
     post?: never;
@@ -12998,12 +12999,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['roster_families_list'];
     put?: never;
     post?: never;
@@ -13020,13 +13016,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['roster_families_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/families/{id}/slots/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Open appable positions + pools for this family (CG slot browser). */
+    get: operations['roster_families_slots_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -13042,13 +13050,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Get complete family tree with members.
-     *
-     *     Returns:
-     *         Family data with members included. Relationships are derived
-     *         from mother/father FKs on FamilyMember.
-     */
+    /** @description The family's kinship graph, filtered to what the viewer may see. */
     get: operations['roster_families_tree_retrieve'];
     put?: never;
     post?: never;
@@ -13056,74 +13058,6 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
-    trace?: never;
-  };
-  '/api/roster/family-members/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    get: operations['roster_family_members_list'];
-    put?: never;
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    post: operations['roster_family_members_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/roster/family-members/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    get: operations['roster_family_members_retrieve'];
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    put: operations['roster_family_members_update'];
-    post?: never;
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    delete: operations['roster_family_members_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    patch: operations['roster_family_members_partial_update'];
     trace?: never;
   };
   '/api/roster/galleries/': {
@@ -17422,6 +17356,9 @@ export interface components {
       /** @description Character age in years (18-65) */
       age?: number | null;
       readonly family: components['schemas']['Family'];
+      readonly claimed_kin_slot: number;
+      readonly claimed_kin_pool: number;
+      defer_parents?: boolean;
       readonly height_band: components['schemas']['HeightBand'];
       height_inches?: number | null;
       readonly build: components['schemas']['Build'];
@@ -17491,6 +17428,9 @@ export interface components {
       /** @description Character age in years (18-65) */
       age?: number | null;
       family_id?: number | null;
+      claimed_kin_slot_id?: number | null;
+      claimed_kin_pool_id?: number | null;
+      defer_parents?: boolean;
       height_band_id?: number | null;
       height_inches?: number | null;
       build_id?: number | null;
@@ -19587,103 +19527,46 @@ export interface components {
       /** @description Family/house name */
       name: string;
       /**
-       * @description Whether this is a noble house or commoner family
+       * @description Whether this is a noble house, commoner family, or crime family
        *
        *     * `commoner` - Commoner
        *     * `noble` - Noble
+       *     * `crime` - Crime
        */
       family_type?: components['schemas']['FamilyTypeEnum'];
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
       is_playable?: boolean;
-      /** @description Canonical realm this family is associated with; used to filter in character creation */
+      /** @description Canonical realm this family is associated with; used to filter in character creation and (#1884) to resolve the nobiliary particle */
       origin_realm?: number | null;
-    };
-    /** @description Serializer for family tree members. */
-    FamilyMember: {
-      readonly id: number;
-      readonly family: components['schemas']['Family'];
-      /**
-       * @description Type of family member
-       *
-       *     * `character` - Character
-       *     * `placeholder` - Placeholder
-       *     * `npc` - NPC
-       */
-      member_type: components['schemas']['MemberTypeEnum'];
-      /** @description Character object if member_type is CHARACTER */
-      character?: number | null;
-      /** @description Get the character name if this is a character member. */
-      readonly character_name: string | null;
-      /** @description Get the display name for this family member. */
-      readonly display_name: string;
-      /** @description Name for placeholder or NPC members */
-      name?: string;
-      /** @description Description for placeholder positions or NPC background */
-      description?: string;
-      /** @description Age of member (optional) */
-      age?: number | null;
-      /** @description Mother of this family member */
-      readonly mother: number | null;
-      /** @description Father of this family member */
-      readonly father: number | null;
-      /** @description Get relationship to the root member (first CHARACTER in tree). */
-      readonly relationship_to_root: string | null;
-      /** @description Account that created this family member */
-      readonly created_by: number | null;
-      /**
-       * Format: date-time
-       * @description When this family member was created
-       */
-      readonly created_at: string;
-    };
-    /** @description Serializer for family tree members. */
-    FamilyMemberRequest: {
-      family_id: number;
-      /**
-       * @description Type of family member
-       *
-       *     * `character` - Character
-       *     * `placeholder` - Placeholder
-       *     * `npc` - NPC
-       */
-      member_type: components['schemas']['MemberTypeEnum'];
-      /** @description Character object if member_type is CHARACTER */
-      character?: number | null;
-      /** @description Name for placeholder or NPC members */
-      name?: string;
-      /** @description Description for placeholder positions or NPC background */
-      description?: string;
-      /** @description Age of member (optional) */
-      age?: number | null;
-      mother_id?: number | null;
-      father_id?: number | null;
     };
     /** @description Serializer for family selection and display. */
     FamilyRequest: {
       /** @description Family/house name */
       name: string;
       /**
-       * @description Whether this is a noble house or commoner family
+       * @description Whether this is a noble house, commoner family, or crime family
        *
        *     * `commoner` - Commoner
        *     * `noble` - Noble
+       *     * `crime` - Crime
        */
       family_type?: components['schemas']['FamilyTypeEnum'];
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
       is_playable?: boolean;
-      /** @description Canonical realm this family is associated with; used to filter in character creation */
+      /** @description Canonical realm this family is associated with; used to filter in character creation and (#1884) to resolve the nobiliary particle */
       origin_realm?: number | null;
     };
     /**
      * @description * `commoner` - Commoner
      *     * `noble` - Noble
+     *     * `crime` - Crime
      * @enum {string}
      */
-    FamilyTypeEnum: 'commoner' | 'noble';
+    FamilyTypeEnum: 'commoner' | 'noble' | 'crime';
     /**
      * @description Serializer for judging a fashion presentation (#514).
      *
@@ -21206,13 +21089,6 @@ export interface components {
      * @enum {string}
      */
     MediaTypeEnum: 'photo' | 'portrait' | 'gallery';
-    /**
-     * @description * `character` - Character
-     *     * `placeholder` - Placeholder
-     *     * `npc` - NPC
-     * @enum {string}
-     */
-    MemberTypeEnum: 'character' | 'placeholder' | 'npc';
     /** @description Minimal read-only representation of a mentor persona. */
     MentorPersona: {
       readonly id: number;
@@ -25050,6 +24926,9 @@ export interface components {
       /** @description Character age in years (18-65) */
       age?: number | null;
       family_id?: number | null;
+      claimed_kin_slot_id?: number | null;
+      claimed_kin_pool_id?: number | null;
+      defer_parents?: boolean;
       height_band_id?: number | null;
       height_inches?: number | null;
       build_id?: number | null;
@@ -25186,28 +25065,6 @@ export interface components {
        *     * `night` - Night
        */
       time_phase?: components['schemas']['TimePhaseEnum'];
-    };
-    /** @description Serializer for family tree members. */
-    PatchedFamilyMemberRequest: {
-      family_id?: number;
-      /**
-       * @description Type of family member
-       *
-       *     * `character` - Character
-       *     * `placeholder` - Placeholder
-       *     * `npc` - NPC
-       */
-      member_type?: components['schemas']['MemberTypeEnum'];
-      /** @description Character object if member_type is CHARACTER */
-      character?: number | null;
-      /** @description Name for placeholder or NPC members */
-      name?: string;
-      /** @description Description for placeholder positions or NPC background */
-      description?: string;
-      /** @description Age of member (optional) */
-      age?: number | null;
-      mother_id?: number | null;
-      father_id?: number | null;
     };
     /** @description For staff reviewing GM applications. */
     PatchedGMApplicationDetailRequest: {
@@ -33735,6 +33592,28 @@ export interface operations {
     };
   };
   character_creation_families_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Family. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Family'];
+        };
+      };
+    };
+  };
+  character_creation_families_slots_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -49425,7 +49304,7 @@ export interface operations {
       };
     };
   };
-  roster_families_tree_retrieve: {
+  roster_families_slots_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -49447,64 +49326,12 @@ export interface operations {
       };
     };
   };
-  roster_family_members_list: {
-    parameters: {
-      query?: {
-        family?: number;
-        /**
-         * @description Type of family member
-         *
-         *     * `character` - Character
-         *     * `placeholder` - Placeholder
-         *     * `npc` - NPC
-         */
-        member_type?: 'character' | 'npc' | 'placeholder';
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'][];
-        };
-      };
-    };
-  };
-  roster_family_members_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['FamilyMemberRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'];
-        };
-      };
-    };
-  };
-  roster_family_members_retrieve: {
+  roster_families_tree_retrieve: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Family Member. */
+        /** @description A unique integer value identifying this Family. */
         id: number;
       };
       cookie?: never;
@@ -49516,80 +49343,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['FamilyMember'];
-        };
-      };
-    };
-  };
-  roster_family_members_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Family Member. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['FamilyMemberRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'];
-        };
-      };
-    };
-  };
-  roster_family_members_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Family Member. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  roster_family_members_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Family Member. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedFamilyMemberRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'];
+          'application/json': components['schemas']['Family'];
         };
       };
     };

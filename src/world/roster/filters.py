@@ -1,8 +1,7 @@
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 import django_filters
 
 from world.roster.models import Family, RosterEntry, RosterTenure, TenureGallery
-from world.roster.models.families import FamilyMember
 
 
 class RosterEntryFilterSet(django_filters.FilterSet):
@@ -49,7 +48,8 @@ class FamilyFilterSet(django_filters.FilterSet):
     ) -> QuerySet[Family]:
         if value:
             return queryset.filter(
-                tree_members__member_type=FamilyMember.MemberType.PLACEHOLDER
+                Q(members__is_appable=True, members__sheet__isnull=True)
+                | Q(kin_slot_pools__count_remaining__gt=0)
             ).distinct()
         return queryset
 

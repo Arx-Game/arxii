@@ -371,12 +371,31 @@ def secrets_owned_by(sheet: CharacterSheet, *, sort: str = "level") -> QuerySet[
     Single-owner: ``subject_sheet`` is the sole owner, and the owner knows their own secrets in
     full (no Unknown layers). ``sort`` is one of ``_OWN_SORTS`` (defaults to most-dangerous-first).
     """
+    from django.db.models import Q  # noqa: PLC0415
+
     order = _OWN_SORTS.get(sort, _OWN_SORTS["level"])
+    # subject_aware=False rows (#2062 subject-unaware truths, e.g. hidden parentage)
+    # stay off the owner's shelf until a SecretKnowledge row grants the fact.
+    aware = Q(subject_aware=True)
+    entry = _current_roster_entry_for(sheet)
+    if entry is not None:
+        aware |= Q(known_by__roster_entry=entry)
     return (
-        Secret.objects.filter(subject_sheet=sheet)
+        Secret.objects.filter(Q(subject_sheet=sheet) & aware)
+        .distinct()
         .select_related("category", "author_persona", "legend_deed", "mission_deed", "scene")
         .order_by(*order)
     )
+
+
+def _current_roster_entry_for(sheet: CharacterSheet) -> RosterEntry | None:
+    """The sheet's RosterEntry, or None (test/NPC sheets outside the roster flow)."""
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        return sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        return None
 
 
 def known_secrets_for(

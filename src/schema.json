@@ -3239,11 +3239,7 @@ paths:
   /api/character-creation/families/:
     get:
       operationId: character_creation_families_list
-      description: |-
-        ViewSet for listing families.
-
-        Filter by area_id to get families available for a starting area's realm.
-        Filter by has_open_positions=true to show families with placeholder members.
+      description: Families list/detail + the viewer-aware tree and CG slot browser.
       parameters:
       - in: query
         name: has_open_positions
@@ -3265,11 +3261,29 @@ paths:
   /api/character-creation/families/{id}/:
     get:
       operationId: character_creation_families_retrieve
-      description: |-
-        ViewSet for listing families.
-
-        Filter by area_id to get families available for a starting area's realm.
-        Filter by has_open_positions=true to show families with placeholder members.
+      description: Families list/detail + the viewer-aware tree and CG slot browser.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Family.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Family'
+          description: ''
+  /api/character-creation/families/{id}/slots/:
+    get:
+      operationId: character_creation_families_slots_retrieve
+      description: Open appable positions + pools for this family (CG slot browser).
       parameters:
       - in: path
         name: id
@@ -3291,12 +3305,7 @@ paths:
   /api/character-creation/families/{id}/tree/:
     get:
       operationId: character_creation_families_tree_retrieve
-      description: |-
-        Get complete family tree with members.
-
-        Returns:
-            Family data with members included. Relationships are derived
-            from mother/father FKs on FamilyMember.
+      description: The family's kinship graph, filtered to what the viewer may see.
       parameters:
       - in: path
         name: id
@@ -21482,11 +21491,7 @@ paths:
   /api/roster/families/:
     get:
       operationId: roster_families_list
-      description: |-
-        ViewSet for listing families.
-
-        Filter by area_id to get families available for a starting area's realm.
-        Filter by has_open_positions=true to show families with placeholder members.
+      description: Families list/detail + the viewer-aware tree and CG slot browser.
       parameters:
       - in: query
         name: has_open_positions
@@ -21508,11 +21513,29 @@ paths:
   /api/roster/families/{id}/:
     get:
       operationId: roster_families_retrieve
-      description: |-
-        ViewSet for listing families.
-
-        Filter by area_id to get families available for a starting area's realm.
-        Filter by has_open_positions=true to show families with placeholder members.
+      description: Families list/detail + the viewer-aware tree and CG slot browser.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Family.
+        required: true
+      tags:
+      - roster
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Family'
+          description: ''
+  /api/roster/families/{id}/slots/:
+    get:
+      operationId: roster_families_slots_retrieve
+      description: Open appable positions + pools for this family (CG slot browser).
       parameters:
       - in: path
         name: id
@@ -21534,12 +21557,7 @@ paths:
   /api/roster/families/{id}/tree/:
     get:
       operationId: roster_families_tree_retrieve
-      description: |-
-        Get complete family tree with members.
-
-        Returns:
-            Family data with members included. Relationships are derived
-            from mother/father FKs on FamilyMember.
+      description: The family's kinship graph, filtered to what the viewer may see.
       parameters:
       - in: path
         name: id
@@ -21558,178 +21576,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Family'
           description: ''
-  /api/roster/family-members/:
-    get:
-      operationId: roster_family_members_list
-      description: |-
-        ViewSet for managing family members.
-
-        Allows creating placeholders, NPCs, and linking characters to family positions.
-        Relationships are derived from mother/father FKs, not stored separately.
-      parameters:
-      - in: query
-        name: family
-        schema:
-          type: integer
-      - in: query
-        name: member_type
-        schema:
-          type: string
-          enum:
-          - character
-          - npc
-          - placeholder
-        description: |-
-          Type of family member
-
-          * `character` - Character
-          * `placeholder` - Placeholder
-          * `npc` - NPC
-      tags:
-      - roster
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/FamilyMember'
-          description: ''
-    post:
-      operationId: roster_family_members_create
-      description: |-
-        ViewSet for managing family members.
-
-        Allows creating placeholders, NPCs, and linking characters to family positions.
-        Relationships are derived from mother/father FKs, not stored separately.
-      tags:
-      - roster
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FamilyMemberRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyMember'
-          description: ''
-  /api/roster/family-members/{id}/:
-    get:
-      operationId: roster_family_members_retrieve
-      description: |-
-        ViewSet for managing family members.
-
-        Allows creating placeholders, NPCs, and linking characters to family positions.
-        Relationships are derived from mother/father FKs, not stored separately.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this Family Member.
-        required: true
-      tags:
-      - roster
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyMember'
-          description: ''
-    put:
-      operationId: roster_family_members_update
-      description: |-
-        ViewSet for managing family members.
-
-        Allows creating placeholders, NPCs, and linking characters to family positions.
-        Relationships are derived from mother/father FKs, not stored separately.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this Family Member.
-        required: true
-      tags:
-      - roster
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FamilyMemberRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyMember'
-          description: ''
-    patch:
-      operationId: roster_family_members_partial_update
-      description: |-
-        ViewSet for managing family members.
-
-        Allows creating placeholders, NPCs, and linking characters to family positions.
-        Relationships are derived from mother/father FKs, not stored separately.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this Family Member.
-        required: true
-      tags:
-      - roster
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedFamilyMemberRequest'
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyMember'
-          description: ''
-    delete:
-      operationId: roster_family_members_destroy
-      description: |-
-        ViewSet for managing family members.
-
-        Allows creating placeholders, NPCs, and linking characters to family positions.
-        Relationships are derived from mother/father FKs, not stored separately.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this Family Member.
-        required: true
-      tags:
-      - roster
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/roster/galleries/:
     get:
       operationId: roster_galleries_list
@@ -29928,6 +29774,14 @@ components:
           allOf:
           - $ref: '#/components/schemas/Family'
           readOnly: true
+        claimed_kin_slot:
+          type: integer
+          readOnly: true
+        claimed_kin_pool:
+          type: integer
+          readOnly: true
+        defer_parents:
+          type: boolean
         height_band:
           allOf:
           - $ref: '#/components/schemas/HeightBand'
@@ -30002,6 +29856,8 @@ components:
       - build
       - cg_points_remaining
       - cg_points_spent
+      - claimed_kin_pool
+      - claimed_kin_slot
       - family
       - has_existing_characters
       - height_band
@@ -30075,6 +29931,16 @@ components:
           type: integer
           writeOnly: true
           nullable: true
+        claimed_kin_slot_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        claimed_kin_pool_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        defer_parents:
+          type: boolean
         height_band_id:
           type: integer
           writeOnly: true
@@ -34653,10 +34519,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/FamilyTypeEnum'
           description: |-
-            Whether this is a noble house or commoner family
+            Whether this is a noble house, commoner family, or crime family
 
             * `commoner` - Commoner
             * `noble` - Noble
+            * `crime` - Crime
         description:
           type: string
           description: Brief description of the family
@@ -34667,136 +34534,10 @@ components:
           type: integer
           nullable: true
           description: Canonical realm this family is associated with; used to filter
-            in character creation
+            in character creation and (#1884) to resolve the nobiliary particle
       required:
       - id
       - name
-    FamilyMember:
-      type: object
-      description: Serializer for family tree members.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        family:
-          allOf:
-          - $ref: '#/components/schemas/Family'
-          readOnly: true
-        member_type:
-          allOf:
-          - $ref: '#/components/schemas/MemberTypeEnum'
-          description: |-
-            Type of family member
-
-            * `character` - Character
-            * `placeholder` - Placeholder
-            * `npc` - NPC
-        character:
-          type: integer
-          nullable: true
-          description: Character object if member_type is CHARACTER
-        character_name:
-          type: string
-          nullable: true
-          description: Get the character name if this is a character member.
-          readOnly: true
-        display_name:
-          type: string
-          description: Get the display name for this family member.
-          readOnly: true
-        name:
-          type: string
-          description: Name for placeholder or NPC members
-          maxLength: 100
-        description:
-          type: string
-          description: Description for placeholder positions or NPC background
-        age:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          nullable: true
-          description: Age of member (optional)
-        mother:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: Mother of this family member
-        father:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: Father of this family member
-        relationship_to_root:
-          type: string
-          nullable: true
-          description: Get relationship to the root member (first CHARACTER in tree).
-          readOnly: true
-        created_by:
-          type: integer
-          readOnly: true
-          nullable: true
-          description: Account that created this family member
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: When this family member was created
-      required:
-      - character_name
-      - created_at
-      - created_by
-      - display_name
-      - family
-      - father
-      - id
-      - member_type
-      - mother
-      - relationship_to_root
-    FamilyMemberRequest:
-      type: object
-      description: Serializer for family tree members.
-      properties:
-        family_id:
-          type: integer
-          writeOnly: true
-        member_type:
-          allOf:
-          - $ref: '#/components/schemas/MemberTypeEnum'
-          description: |-
-            Type of family member
-
-            * `character` - Character
-            * `placeholder` - Placeholder
-            * `npc` - NPC
-        character:
-          type: integer
-          nullable: true
-          description: Character object if member_type is CHARACTER
-        name:
-          type: string
-          description: Name for placeholder or NPC members
-          maxLength: 100
-        description:
-          type: string
-          description: Description for placeholder positions or NPC background
-        age:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          nullable: true
-          description: Age of member (optional)
-        mother_id:
-          type: integer
-          writeOnly: true
-          nullable: true
-        father_id:
-          type: integer
-          writeOnly: true
-          nullable: true
-      required:
-      - family_id
-      - member_type
     FamilyRequest:
       type: object
       description: Serializer for family selection and display.
@@ -34810,10 +34551,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/FamilyTypeEnum'
           description: |-
-            Whether this is a noble house or commoner family
+            Whether this is a noble house, commoner family, or crime family
 
             * `commoner` - Commoner
             * `noble` - Noble
+            * `crime` - Crime
         description:
           type: string
           description: Brief description of the family
@@ -34824,17 +34566,19 @@ components:
           type: integer
           nullable: true
           description: Canonical realm this family is associated with; used to filter
-            in character creation
+            in character creation and (#1884) to resolve the nobiliary particle
       required:
       - name
     FamilyTypeEnum:
       enum:
       - commoner
       - noble
+      - crime
       type: string
       description: |-
         * `commoner` - Commoner
         * `noble` - Noble
+        * `crime` - Crime
     FashionJudgement:
       type: object
       description: |-
@@ -38088,16 +37832,6 @@ components:
         * `photo` - Photo
         * `portrait` - Character Portrait
         * `gallery` - Gallery Image
-    MemberTypeEnum:
-      enum:
-      - character
-      - placeholder
-      - npc
-      type: string
-      description: |-
-        * `character` - Character
-        * `placeholder` - Placeholder
-        * `npc` - NPC
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.
@@ -44639,6 +44373,16 @@ components:
           type: integer
           writeOnly: true
           nullable: true
+        claimed_kin_slot_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        claimed_kin_pool_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        defer_parents:
+          type: boolean
         height_band_id:
           type: integer
           writeOnly: true
@@ -44874,47 +44618,6 @@ components:
             * `day` - Day
             * `dusk` - Dusk
             * `night` - Night
-    PatchedFamilyMemberRequest:
-      type: object
-      description: Serializer for family tree members.
-      properties:
-        family_id:
-          type: integer
-          writeOnly: true
-        member_type:
-          allOf:
-          - $ref: '#/components/schemas/MemberTypeEnum'
-          description: |-
-            Type of family member
-
-            * `character` - Character
-            * `placeholder` - Placeholder
-            * `npc` - NPC
-        character:
-          type: integer
-          nullable: true
-          description: Character object if member_type is CHARACTER
-        name:
-          type: string
-          description: Name for placeholder or NPC members
-          maxLength: 100
-        description:
-          type: string
-          description: Description for placeholder positions or NPC background
-        age:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          nullable: true
-          description: Age of member (optional)
-        mother_id:
-          type: integer
-          writeOnly: true
-          nullable: true
-        father_id:
-          type: integer
-          writeOnly: true
-          nullable: true
     PatchedGMApplicationDetailRequest:
       type: object
       description: For staff reviewing GM applications.

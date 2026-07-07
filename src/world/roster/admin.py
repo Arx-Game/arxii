@@ -6,6 +6,10 @@ from django.contrib import admin
 
 from world.roster.models import (
     Family,
+    FamilyMembership,
+    KinSlotPool,
+    Kinsperson,
+    ParentageEdge,
     PlayerMail,
     Roster,
     RosterApplication,
@@ -23,6 +27,54 @@ class FamilyAdmin(admin.ModelAdmin):
     list_filter = ["family_type", "is_playable", "created_by_cg"]
     search_fields = ["name", "description"]
     ordering = ["family_type", "name"]
+
+
+class ParentageUpInline(admin.TabularInline):
+    model = ParentageEdge
+    fk_name = "child"
+    extra = 0
+    raw_id_fields = ["parent", "born_within_union", "secret"]
+    verbose_name = "Parent"
+    verbose_name_plural = "Parents"
+
+
+class FamilyMembershipInline(admin.TabularInline):
+    model = FamilyMembership
+    extra = 0
+
+
+@admin.register(Kinsperson)
+class KinspersonAdmin(admin.ModelAdmin):
+    """Staff authoring surface for the kinship graph (#2062)."""
+
+    list_display = [
+        "display_name",
+        "definition_tier",
+        "family",
+        "is_deceased",
+        "is_appable",
+        "deferred_definer",
+    ]
+    list_filter = ["definition_tier", "is_deceased", "is_appable", "family__family_type"]
+    search_fields = ["name", "description", "family__name"]
+    raw_id_fields = ["sheet", "functionary", "deferred_definer"]
+    inlines = [ParentageUpInline, FamilyMembershipInline]
+
+
+@admin.register(ParentageEdge)
+class ParentageEdgeAdmin(admin.ModelAdmin):
+    list_display = ["child", "kind", "parent", "is_public_record", "is_true"]
+    list_filter = ["kind", "is_public_record", "is_true"]
+    search_fields = ["child__name", "parent__name"]
+    raw_id_fields = ["child", "parent", "born_within_union", "secret"]
+
+
+@admin.register(KinSlotPool)
+class KinSlotPoolAdmin(admin.ModelAdmin):
+    list_display = ["family", "description", "count_remaining"]
+    list_filter = ["family__family_type"]
+    search_fields = ["family__name", "description"]
+    filter_horizontal = ["parents", "allowed_genders"]
 
 
 @admin.register(Roster)

@@ -11,7 +11,6 @@ import {
   getCGExplanations,
   getConsequencePoolCatalog,
   createFamily,
-  createFamilyMember,
   createGift,
   createTechnique,
   deleteDraft,
@@ -29,6 +28,7 @@ import {
   getFacetTree,
   getFamilies,
   getFamiliesWithOpenPositions,
+  getFamilySlots,
   getFamilyTree,
   getFormOptions,
   getGenders,
@@ -260,6 +260,14 @@ export function useFamiliesWithOpenPositions(areaId?: number) {
   });
 }
 
+export function useFamilySlots(familyId: number | undefined) {
+  return useQuery({
+    queryKey: ['family-slots', familyId],
+    queryFn: () => getFamilySlots(familyId!),
+    enabled: familyId !== undefined,
+  });
+}
+
 export function useFamilyTree(familyId: number | undefined) {
   return useQuery({
     queryKey: characterCreationKeys.familyTree(familyId!),
@@ -272,16 +280,6 @@ export function useCreateFamily() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createFamily,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
-    },
-  });
-}
-
-export function useCreateFamilyMember() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: createFamilyMember,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
     },

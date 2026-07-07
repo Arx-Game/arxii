@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from evennia import Command
 
     from world.character_sheets.models import CharacterSheet
+    from world.roster.models import ParentageEdge as ParentageEdgeType
     from world.secrets.models import Secret, SecretKnowledge
 
 _UNKNOWN = "Unknown"
@@ -449,6 +450,74 @@ def _render_status_section(command: Command) -> list[str]:
     return lines
 
 
+def _parent_line(edge: ParentageEdgeType) -> str:
+    from world.roster.constants import ParentageKind  # noqa: PLC0415
+
+    label = "Foster parent" if edge.kind == ParentageKind.FOSTER else "Parent"
+    plain = (ParentageKind.BIOLOGICAL, ParentageKind.FOSTER)
+    qualifier = "" if edge.kind in plain else f" ({edge.kind})"
+    return f"  {label}: {edge.parent.display_name}{qualifier}"
+
+
+def _render_family_section(command: object) -> list[str]:
+    """``sheet/family`` (#2062) — the viewer's own visible kin, walked live.
+
+    Shows what THIS character knows: the public record plus hidden truths
+    they've learned. Blood, marriage, foster, and step relations are labeled
+    distinctly (the Arx 1 in-law ambiguity is gone by construction).
+    """
+    character = command.caller
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — puppet may be sheetless
+    if sheet is None:
+        return ["No character sheet."]
+    from world.roster.models import Kinsperson, RosterEntry  # noqa: PLC0415
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        children_of,
+        incarnation_chain_of,
+        parents_of,
+        siblings_of,
+        spouses_of,
+        step_parents_of,
+    )
+
+    node = Kinsperson.objects.filter(sheet=sheet).first()
+    if node is None:
+        return ["  No recorded kin."]
+    try:
+        viewer = sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        viewer = None
+
+    lines: list[str] = ["|wFamily|n"]
+    if node.family is not None:
+        lines.append(f"  House: {node.family.name}")
+    parent_edges = parents_of(node, viewer, include_foster=True)
+    if parent_edges:
+        lines.extend(_parent_line(edge) for edge in parent_edges)
+    else:
+        lines.append("  Parents: unknown")
+    sibling_labels = siblings_of(node, viewer)
+    if sibling_labels:
+        people = {p.pk: p for p in Kinsperson.objects.filter(pk__in=sibling_labels)}
+        for pk, label in sibling_labels.items():
+            lines.append(f"  {label.replace('-', ' ').title()}: {people[pk].display_name}")
+    from world.roster.constants import ParentageKind  # noqa: PLC0415
+
+    lines.extend(f"  Spouse: {s.display_name}" for s in spouses_of(node, viewer))
+    lines.extend(f"  Step-parent: {s.display_name}" for s in step_parents_of(node, viewer))
+    foster_kind = ParentageKind.FOSTER
+    lines.extend(
+        f"  {'Foster child' if e.kind == foster_kind else 'Child'}: {e.child.display_name}"
+        for e in children_of(node, viewer, include_foster=True)
+    )
+    lines.extend(
+        f"  Past life: {i.kinsperson.display_name}" for i in incarnation_chain_of(node, viewer)
+    )
+    if len(lines) == 1:
+        lines.append("  No recorded kin.")
+    return lines
+
+
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
@@ -467,6 +536,8 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "distinction": _render_distinction_section,
     "distinctions": _render_distinction_section,
     "magic": _render_magic_section,
+    "family": _render_family_section,
+    "kin": _render_family_section,
     "status": _render_status_section,
 }
 
@@ -481,5 +552,6 @@ SECTION_NAMES: tuple[str, ...] = (
     "crime",
     "distinction",
     "magic",
+    "family",
     "status",
 )
