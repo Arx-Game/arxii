@@ -257,6 +257,7 @@ from world.stories.types import (
     EligibleTransitionEntry,
     EpisodeReadyEntry,
     FrontierStoryEntry,
+    PendingCanonReviewEntry,
     PendingClaimEntry,
     PerGMQueueDepthEntry,
     StaleStoryEntry,
@@ -2827,6 +2828,21 @@ class StaffWorkloadView(APIView):
         counts_by_scope_qs = Story.objects.values("scope").annotate(count=Count("pk"))
         counts_by_scope: dict[str, int] = {row["scope"]: row["count"] for row in counts_by_scope_qs}
 
+        # --- pending canon reviews (#2003) ---
+        from world.stories.services.canon_review import pending_canon_reviews  # noqa: PLC0415
+
+        pending_canon_reviews_payload: list[PendingCanonReviewEntry] = [
+            PendingCanonReviewEntry(
+                review_id=review.pk,
+                story_id=review.story_id,
+                story_title=review.story.title,
+                tier=review.tier,
+                created_at=review.created_at,
+                days_aging=(now - review.created_at).days,
+            )
+            for review in pending_canon_reviews()
+        ]
+
         return Response(
             {
                 "per_gm_queue_depth": per_gm_queue,
@@ -2836,6 +2852,7 @@ class StaffWorkloadView(APIView):
                 "pending_agm_claims_count": pending_agm_count,
                 "open_session_requests_count": open_session_req_count,
                 "counts_by_scope": counts_by_scope,
+                "pending_canon_reviews": pending_canon_reviews_payload,
             }
         )
 

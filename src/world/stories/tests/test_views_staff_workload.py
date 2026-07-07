@@ -49,7 +49,9 @@ STAFF_WORKLOAD_URL = reverse("stories-staff-workload")
 # linearly (29 queries at N=3, 38 at N=6 — exactly 3 queries per GM); the
 # bounded one issues a flat constant: verified identical (26) at N=6 and
 # N=12 with episode-bearing rows that exercise the eligibility batch path.
-BOUNDED_QUERY_COUNT = 26
+# +1 for the pending_canon_reviews section (#2003) — a single select_related
+# scan independent of N.
+BOUNDED_QUERY_COUNT = 27
 
 
 class StaffWorkloadAuthTest(APITestCase):
@@ -96,6 +98,7 @@ class StaffWorkloadResponseShapeTest(APITestCase):
             "pending_agm_claims_count",
             "open_session_requests_count",
             "counts_by_scope",
+            "pending_canon_reviews",
         ]:
             assert key in response.data, f"Missing key: {key}"
 
@@ -522,3 +525,48 @@ class StaffWorkloadQueryBoundTest(APITestCase):
         assert len(data["stale_stories"]) == 6
         assert len(data["stories_waiting_for_gm"]) == 6
         assert len(data["stories_at_frontier"]) == 6
+
+
+class StaffWorkloadCanonReviewSectionTest(APITestCase):
+    """The pending_canon_reviews section surfaces PENDING canon reviews (#2003)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+    def test_empty_when_no_reviews(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["pending_canon_reviews"], [])
+
+    def test_pending_review_surfaces_with_aging(self):
+        from world.stories.constants import ImpactTier
+        from world.stories.services.canon_review import request_canon_review
+
+        story = StoryFactory(impact_tier=ImpactTier.WORLD)
+        request_canon_review(story)
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        reviews = response.data["pending_canon_reviews"]
+        self.assertEqual(len(reviews), 1)
+        row = reviews[0]
+        self.assertEqual(row["story_title"], story.title)
+        self.assertEqual(row["tier"], ImpactTier.WORLD)
+        self.assertEqual(row["story_id"], story.pk)
+        self.assertIn("days_aging", row)
+        self.assertIn("created_at", row)
+
+    def test_cleared_review_not_in_pending(self):
+        from world.stories.constants import ImpactTier
+        from world.stories.services.canon_review import (
+            clear_canon_review,
+            request_canon_review,
+        )
+
+        story = StoryFactory(impact_tier=ImpactTier.WORLD)
+        review = request_canon_review(story)
+        clear_canon_review(review, AccountFactory())
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        self.assertEqual(response.data["pending_canon_reviews"], [])
