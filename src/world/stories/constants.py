@@ -17,6 +17,28 @@ class StoryScope(models.TextChoices):
     GLOBAL = "global", "Global"
 
 
+class ImpactTier(models.TextChoices):
+    """Story-side canon-impact tier — how far this story touches the shared world (#2003).
+
+    Orthogonal to combat.StakesLevel (GM access scope) and Beat.risk (declared
+    magnitude): this is the story-level review axis. TABLE is never reviewed;
+    REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff sign-off
+    before staked beats pay (auto-downgrade, never hard-block).
+    """
+
+    TABLE = "table", "Table"
+    REGIONAL = "regional", "Regional"
+    WORLD = "world", "World"
+
+
+class CanonReviewStatus(models.TextChoices):
+    """Lifecycle of a CanonReview request (#2003)."""
+
+    PENDING = "pending", "Pending"
+    CLEARED = "cleared", "Cleared"
+    CHANGES_REQUESTED = "changes_requested", "Changes requested"
+
+
 class StoryMaturity(models.TextChoices):
     """Authoring-completeness of a Story / Chapter / Episode node.
 

@@ -18,6 +18,7 @@ from world.stories.constants import (
     CustodyClearanceStatus,
     CustodyScope,
     EraStatus,
+    ImpactTier,
     ProgressStatus,
     SessionRequestStatus,
     StakeOutcomeMethod,
@@ -151,6 +152,16 @@ class Story(SharedMemoryModel):
         help_text=(
             "Whether this story belongs to one character (CHARACTER), "
             "a covenant/group (GROUP), or the whole metaplot (GLOBAL)."
+        ),
+    )
+    impact_tier = models.CharField(
+        max_length=20,
+        choices=ImpactTier.choices,
+        default=ImpactTier.TABLE,
+        help_text=(
+            "Story-side canon-impact tier (#2003). TABLE is never reviewed; "
+            "REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff "
+            "sign-off before staked beats pay (auto-downgrade, never hard-block)."
         ),
     )
     maturity = models.CharField(
