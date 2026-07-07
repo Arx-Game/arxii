@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.missions.views import (
+    MissionBoardViewSet,
     MissionCategoryViewSet,
     MissionGiverViewSet,
     MissionInstanceViewSet,
@@ -50,6 +51,8 @@ router.register(r"categories", MissionCategoryViewSet, basename="missioncategory
 router.register(r"predicate-leaves", PredicateLeafCatalogViewSet, basename="mission-predicate-leaf")
 # #885 player journal/beat surface — the one PLAYER-scoped missions API.
 router.register(r"journal", MissionJournalViewSet, basename="mission-journal")
+# #2044 player-scoped board surface — postings preview + take.
+router.register(r"boards", MissionBoardViewSet, basename="mission-board")
 
 urlpatterns = [
     path("", include(router.urls)),

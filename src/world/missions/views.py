@@ -58,6 +58,8 @@ from world.missions.models import (
 from world.missions.serializers import (
     BeatResolveRequestSerializer,
     BeatViewSerializer,
+    BoardPostingSerializer,
+    BoardTakeRequestSerializer,
     GroupBeatResultSerializer,
     GroupPickRequestSerializer,
     GroupVoteRequestSerializer,
@@ -77,6 +79,7 @@ from world.missions.serializers import (
     MissionReportResultSerializer,
     MissionTemplateDetailSerializer,
     MissionTemplateSerializer,
+    OpportunitiesSerializer,
     ResolvedBeatSerializer,
 )
 from world.predicates.catalog import leaf_params
@@ -768,4 +771,108 @@ class MissionJournalViewSet(viewsets.ViewSet):
                     "instance_id": invite.instance_id,
                 }
             ).data
+        )
+
+    @extend_schema(
+        responses={200: OpportunitiesSerializer},
+    )
+    @action(detail=False, methods=("GET",), url_path="opportunities")
+    def opportunities(self, request: Request) -> Response:
+        """#2044 — the three-group discovery view (here/nearby/your-orgs)."""
+        from world.missions.services.opportunities import (  # noqa: PLC0415
+            opportunities_for_character,
+        )
+
+        character = _puppet_character(request)
+        result = opportunities_for_character(character)
+        serializer = OpportunitiesSerializer(result)
+        return Response(serializer.data)
+
+
+class MissionBoardViewSet(viewsets.ViewSet):
+    """Player-scoped board surface (#2044).
+
+    postings: the viewer's eligible postings on a board (preview-only).
+    take: accept a posting — re-runs eligibility server-side before granting.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    _MSG_NO_BOARD = "No board here."
+
+    def _giver_for(self, object_pk: str | None) -> MissionGiver | None:
+        from world.missions.constants import GiverKind  # noqa: PLC0415
+
+        if object_pk is None:
+            return None
+        return (
+            MissionGiver.objects.filter(
+                target_id=object_pk, giver_kind=GiverKind.BOARD, is_active=True
+            )
+            .prefetch_related("templates")  # noqa: PREFETCH_STRING
+            .first()
+        )
+
+    @extend_schema(
+        responses={
+            200: inline_serializer(
+                name="PaginatedBoardPostingList",
+                fields={
+                    "count": serializers.IntegerField(),
+                    "results": BoardPostingSerializer(many=True),
+                },
+            ),
+            404: OpenApiResponse(description="No board at this location."),
+        },
+    )
+    @action(detail=True, methods=("GET",))
+    def postings(self, request: Request, pk: str | None = None) -> Response:
+        from rest_framework.exceptions import NotFound  # noqa: PLC0415
+
+        from world.missions.services.boards import postings_for_giver  # noqa: PLC0415
+
+        character = _puppet_character(request)
+        giver = self._giver_for(pk)
+        if giver is None:
+            raise NotFound(self._MSG_NO_BOARD)
+        postings = postings_for_giver(giver, character)
+        serializer = BoardPostingSerializer(postings, many=True)
+        return Response({"count": len(postings), "results": serializer.data})
+
+    @extend_schema(
+        request=BoardTakeRequestSerializer,
+        responses={
+            201: inline_serializer(
+                name="BoardTakeResult",
+                fields={
+                    "instance_id": serializers.IntegerField(),
+                    "template_id": serializers.IntegerField(),
+                },
+            ),
+            400: OpenApiResponse(description="Not eligible / not on this board."),
+            404: OpenApiResponse(description="No board here."),
+        },
+    )
+    @action(detail=True, methods=("POST",))
+    def take(self, request: Request, pk: str | None = None) -> Response:
+        from rest_framework.exceptions import NotFound, ValidationError  # noqa: PLC0415
+
+        from world.missions.services.boards import (  # noqa: PLC0415
+            BoardTakeError,
+            take_from_board,
+        )
+
+        body = BoardTakeRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        character = _puppet_character(request)
+        giver = self._giver_for(pk)
+        if giver is None:
+            raise NotFound(self._MSG_NO_BOARD)
+        try:
+            instance = take_from_board(giver, character, body.validated_data["template_id"])
+        except BoardTakeError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response(
+            {"instance_id": instance.pk, "template_id": body.validated_data["template_id"]},
+            status=status.HTTP_201_CREATED,
         )
