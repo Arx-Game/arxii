@@ -2256,6 +2256,19 @@ crafting framework and check-driven facet/style attachment.
     `attachment_quality_tier`; unique per (item_instance, facet)
   - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
     `attachment_quality_tier`; unique per (item_instance, style)
+  - `Style.audacity` (#2029) — `StyleAudacity` tier (UNDERSTATED/EXPRESSIVE/BOLD/
+    OUTRAGEOUS; default EXPRESSIVE) scaling how much a Style is mechanically rewarded.
+    `AudacityTuning` (singleton, pk=1, mirrors `magic.RelationshipBondPullTuning`) is the
+    staff-tunable per-tier multiplier (defaults 0.75/1.00/1.35/1.75); accessed via
+    `get_audacity_tuning()` / `audacity_multiplier_for(style)`
+    (`world.items.services.styles`). Two consumers: the passive motif-coherence bonus
+    (`_compute_motif_coherence_bonus`, `world/mechanics/services.py`) multiplies each
+    matched binding's quality contribution by its style's audacity multiplier; the peer
+    style-presentation endorsement grant (`create_style_presentation_endorsement`,
+    `world/magic/services/gain.py`) scales the base grant by the *highest*-audacity match
+    when the endorsee wears multiple items whose styles bind to the endorsed resonance.
+    Seeded vocabulary: `seed_style_vocabulary()` (`world/seeds/game_content/items.py`) —
+    16 names, four per tier.
   - **Crafting sub-models** (`world.items.crafting`, registered under the `items` app):
     `CraftingRecipe` (one per `CraftingRecipeKind`; carries check config + AP/anima cost +
     default consumption policy), `CraftingMaterialRequirement` (ingredient rows —
@@ -2281,7 +2294,8 @@ crafting framework and check-driven facet/style attachment.
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
   STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
   `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
-  bypasses it with consequences)
+  bypasses it with consequences); `StyleAudacity` (#2029 — UNDERSTATED/EXPRESSIVE/BOLD/
+  OUTRAGEOUS ordinal tier on `Style`)
 - **New field on `ItemInstance` (#1909):** `access_policy` (`ContainerAccessPolicy`, default
   `OPEN`) — container-only; non-containers ignore it. Set via
   `flows.service_functions.inventory.set_container_policy` (owner-only).

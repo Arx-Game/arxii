@@ -77,6 +77,23 @@ class ContainerAccessPolicy(models.TextChoices):
     OWNER_ONLY = "owner_only", "Owner Only"
 
 
+class StyleAudacity(models.IntegerChoices):
+    """How daring a ``Style`` vocabulary word reads (#2029).
+
+    Ordinal tier — not a display-only label. ``AudacityTuning.multiplier_for``
+    (``world/items/services/styles.py``) reads the ordinal to look up a
+    staff-tunable reward multiplier consumed by both the passive motif-coherence
+    bonus (``_compute_motif_coherence_bonus``) and peer style-presentation
+    endorsements (``create_style_presentation_endorsement``) — daring styles are
+    mechanically, not just narratively, rewarded.
+    """
+
+    UNDERSTATED = 1, "Understated"
+    EXPRESSIVE = 2, "Expressive"
+    BOLD = 3, "Bold"
+    OUTRAGEOUS = 4, "Outrageous"
+
+
 class GearArchetype(models.TextChoices):
     """Gear categorization for covenant role compatibility.
 

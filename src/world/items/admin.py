@@ -3,6 +3,7 @@
 from django.contrib import admin
 
 from world.items.models import (
+    AudacityTuning,
     CurrencyBalance,
     EquippedItem,
     FashionStyle,
@@ -181,5 +182,25 @@ class FashionStyleAdmin(admin.ModelAdmin):
 
 @admin.register(Style)
 class StyleAdmin(admin.ModelAdmin):
-    list_display = ("name",)
+    list_display = ("name", "audacity")
+    list_filter = ("audacity",)
     search_fields = ["name"]
+
+
+@admin.register(AudacityTuning)
+class AudacityTuningAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the per-audacity-tier reward multiplier (#2029)."""
+
+    list_display = (
+        "pk",
+        "understated_mult",
+        "expressive_mult",
+        "bold_mult",
+        "outrageous_mult",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not AudacityTuning.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False

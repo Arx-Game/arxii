@@ -3,6 +3,8 @@
 Exports:
 - ``seed_item_template_starter_catalog()`` — reference ItemTemplates per gear_archetype
 - ``seed_gear_archetype_compatibility()`` — canonical role × archetype compatibility matrix
+- ``seed_style_vocabulary()`` — seeded ``Style`` aesthetic vocabulary spread across the
+  audacity tiers (#2029)
 - ``seed_items_dev()`` — master orchestrator for the items cluster
 """
 
@@ -13,7 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.covenants.models import CovenantRole, GearArchetypeCompatibility
-    from world.items.models import ItemTemplate
+    from world.items.models import ItemTemplate, Style
 
 
 @dataclass
@@ -39,6 +41,7 @@ class ItemsDevSeedResult:
 
     template_catalog: ItemTemplateStarterCatalogResult
     compatibility: GearArchetypeCompatibilityResult
+    styles: dict[str, Style]  # Style name -> row, keyed by the seeded vocabulary
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +251,63 @@ def seed_gear_archetype_compatibility() -> GearArchetypeCompatibilityResult:
 
 
 # ---------------------------------------------------------------------------
+# Style vocabulary (#2029): seeded across the four StyleAudacity tiers so the
+# audacity axis has real vocabulary to play with out of the box.
+# ---------------------------------------------------------------------------
+
+# name -> (audacity tier, description). Authoritative on reseed (update_or_create)
+# so a tuning/wording tweak lands without row churn, mirroring seed_scandal_archetypes.
+_STYLE_VOCABULARY: dict[str, tuple[int, str]] = {
+    # UNDERSTATED — restrained, unassuming, easy to overlook.
+    "Demure": (1, "Modest and reserved — eyes lowered, colors muted, nothing to draw a glance."),
+    "Austere": (1, "Plain and unadorned by design — severity as a statement of restraint."),
+    "Somber": (1, "Muted and grave — dark tones, no ornament, a mood worn as cloth."),
+    "Prim": (1, "Fastidiously neat and correct — not a hair, hem, or seam out of place."),
+    # EXPRESSIVE — a clear identity, worn with confidence but not spectacle.
+    "Regal": (2, "Carries itself like it belongs to a throne room — dignity, not display."),
+    "Rustic": (2, "Homespun and unpretentious — the honest craft of hearth and field."),
+    "Scholarly": (2, "Ink-stained and bookish — the wardrobe of someone who reads for a living."),
+    "Devout": (2, "Worn like a vow — the plain sincerity of faith rather than its pageantry."),
+    # BOLD — deliberately eye-catching; a statement that invites attention.
+    "Menacing": (3, "Cut to unsettle — sharp lines and dark intent worn as a warning."),
+    "Flamboyant": (3, "Loud colors, bigger silhouettes — dressed to be seen across the room."),
+    "Rakish": (3, "A calculated disarray — the confidence of someone who breaks the rules well."),
+    "Opulent": (3, "Wealth worn without apology — the finest materials, unmissably so."),
+    # OUTRAGEOUS — maximal daring; scandalizes as often as it dazzles.
+    "Seductive": (4, "Cut and worn to court desire openly — nothing subtle about the intent."),
+    "Scandalous": (4, "Courts gossip on sight — the outfit itself is the provocation."),
+    "Predatory": (4, "Sharp, hungry, and unapologetic — dressed like the room's apex."),
+    "Resplendent": (
+        4,
+        "Blinding, overwhelming, magnificent — too much by design, and proud of it.",
+    ),
+}
+
+
+def seed_style_vocabulary() -> dict[str, Style]:
+    """Seed the ~16-row ``Style`` aesthetic vocabulary across the four audacity
+    tiers (#2029): UNDERSTATED/EXPRESSIVE/BOLD/OUTRAGEOUS, four names each.
+
+    Idempotent + authoritative on ``audacity``/``description`` (update_or_create),
+    mirroring ``seed_scandal_archetypes`` — tuning/wording tweaks land on reseed
+    without row churn.
+
+    Returns:
+        Mapping of Style name -> row.
+    """
+    from world.items.models import Style  # noqa: PLC0415
+
+    styles: dict[str, Style] = {}
+    for name, (audacity, description) in _STYLE_VOCABULARY.items():
+        style, _ = Style.objects.update_or_create(
+            name=name,
+            defaults={"audacity": audacity, "description": description},
+        )
+        styles[name] = style
+    return styles
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -260,16 +320,22 @@ def seed_items_dev() -> ItemsDevSeedResult:
        major gear_archetype with TemplateSlot rows.
     2. ``seed_gear_archetype_compatibility()`` — canonical covenant role rows +
        role × archetype compatibility matrix.
+    3. ``seed_style_vocabulary()`` — the seeded aesthetic Style vocabulary
+       spread across the four audacity tiers (#2029).
 
-    All writes are idempotent (get_or_create throughout). Re-running on a
-    populated database is a no-op; staff edits to existing rows are preserved.
+    All writes are idempotent (get_or_create/update_or_create throughout).
+    Re-running on a populated database is a no-op; staff edits to existing
+    template/compatibility rows are preserved (style vocabulary vectors are
+    authoritative on reseed, matching seed_scandal_archetypes).
 
     Returns:
         ItemsDevSeedResult composing all sub-results.
     """
     template_catalog = seed_item_template_starter_catalog()
     compatibility = seed_gear_archetype_compatibility()
+    styles = seed_style_vocabulary()
     return ItemsDevSeedResult(
         template_catalog=template_catalog,
         compatibility=compatibility,
+        styles=styles,
     )
