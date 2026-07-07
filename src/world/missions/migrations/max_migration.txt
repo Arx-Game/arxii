@@ -1,1 +1,1 @@
-0025_missioninstance_is_paused
+0026_add_board_giver_kind
