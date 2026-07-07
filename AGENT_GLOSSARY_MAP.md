@@ -28,6 +28,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [boundaries](src/world/boundaries/AGENT_GLOSSARY.md)
 - [companions](src/world/companions/AGENT_GLOSSARY.md)
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
+- [roster / kinship](src/world/roster/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [npc_services](src/world/npc_services/AGENT_GLOSSARY.md)
 - [tarot](src/world/tarot/AGENT_GLOSSARY.md)

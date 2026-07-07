@@ -1,39 +1,45 @@
-"""
-Family tree API views.
+"""Kinship API views (#2062).
 
-ViewSets for managing family trees and members.
+Read surfaces only: families, the viewer-aware tree, and the CG slot
+browser. Graph WRITES go through the kinship services from CG finalization
+and staff admin — never generic REST mutation (the truth/record layer and
+canon gating make open CRUD wrong here).
 """
 
 from http import HTTPMethod
-from typing import Any
+from typing import cast
 
-from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
+from evennia.accounts.models import AccountDB
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.serializers import BaseSerializer
 
 from world.roster.filters import FamilyFilterSet
 from world.roster.models import Family
-from world.roster.models.families import FamilyMember
 from world.roster.serializers import (
-    FamilyMemberSerializer,
     FamilySerializer,
     FamilyTreeSerializer,
+    KinSlotPoolSerializer,
+    KinSlotSerializer,
 )
+from world.roster.services.kinship import OMNISCIENT, family_tree_for, open_slots_for
+
+
+def _viewer_entry(request: Request) -> object:
+    """Resolve the visibility context: staff → OMNISCIENT; character →
+    their RosterEntry; no character yet (mid-CG) → None (public record only)."""
+    if request.user.is_staff:
+        return OMNISCIENT
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    return RosterEntry.objects.for_account(cast(AccountDB, request.user)).first()
 
 
 class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for listing families.
-
-    Filter by area_id to get families available for a starting area's realm.
-    Filter by has_open_positions=true to show families with placeholder members.
-    """
+    """Families list/detail + the viewer-aware tree and CG slot browser."""
 
     queryset = Family.objects.filter(is_playable=True).order_by("family_type", "name")
     serializer_class = FamilySerializer
@@ -43,56 +49,28 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def tree(self, request: Request, pk: int | None = None) -> Response:
-        """
-        Get complete family tree with members.
-
-        Returns:
-            Family data with members included. Relationships are derived
-            from mother/father FKs on FamilyMember.
-        """
+        """The family's kinship graph, filtered to what the viewer may see."""
         family = self.get_object()
-        serializer = FamilyTreeSerializer(family, context={"request": request})
+        payload = family_tree_for(family, _viewer_entry(request))
+        serializer = FamilyTreeSerializer(
+            {
+                "family": payload.family,
+                "nodes": payload.nodes,
+                "parentage": payload.parentage,
+                "unions": payload.unions,
+            },
+            context={"request": request},
+        )
         return Response(serializer.data)
 
-
-class FamilyMemberViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing family members.
-
-    Allows creating placeholders, NPCs, and linking characters to family positions.
-    Relationships are derived from mother/father FKs, not stored separately.
-    """
-
-    queryset = FamilyMember.objects.all()
-    serializer_class = FamilyMemberSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["family", "member_type"]
-
-    def get_queryset(self) -> QuerySet[FamilyMember]:
-        """Return family members with related data."""
-        return (
-            super()
-            .get_queryset()
-            .select_related("family", "character", "mother", "father", "created_by")
-            .order_by("family__name", "name")
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def slots(self, request: Request, pk: int | None = None) -> Response:
+        """Open appable positions + pools for this family (CG slot browser)."""
+        family = self.get_object()
+        nodes, pools = open_slots_for(family)
+        return Response(
+            {
+                "slots": KinSlotSerializer(nodes, many=True).data,
+                "pools": KinSlotPoolSerializer(pools, many=True).data,
+            }
         )
-
-    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
-        """Set created_by to current user."""
-        serializer.save(created_by=self.request.user)
-
-    def perform_update(self, serializer: BaseSerializer[Any]) -> None:
-        """Only allow updates by staff or creator."""
-        instance = self.get_object()
-        if not (self.request.user.is_staff or self.request.user == instance.created_by):
-            msg = "You can only edit family members you created."
-            raise PermissionDenied(msg)
-        serializer.save()
-
-    def perform_destroy(self, instance: FamilyMember) -> None:
-        """Only allow deletion by staff or creator."""
-        if not (self.request.user.is_staff or self.request.user == instance.created_by):
-            msg = "You can only delete family members you created."
-            raise PermissionDenied(msg)
-        instance.delete()

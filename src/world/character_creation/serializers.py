@@ -27,7 +27,7 @@ from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.magic.models import Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME
-from world.roster.models import Family
+from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species
 
@@ -285,6 +285,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Kinship slot claim (#2062)
+    claimed_kin_slot_id = serializers.PrimaryKeyRelatedField(
+        queryset=Kinsperson.objects.filter(is_appable=True, sheet__isnull=True),
+        source="claimed_kin_slot",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    claimed_kin_pool_id = serializers.PrimaryKeyRelatedField(
+        queryset=KinSlotPool.objects.filter(count_remaining__gt=0),
+        source="claimed_kin_pool",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    defer_parents = serializers.BooleanField(required=False)
+    claimed_kin_slot = serializers.PrimaryKeyRelatedField(read_only=True)
+    claimed_kin_pool = serializers.PrimaryKeyRelatedField(read_only=True)
     # Appearance fields
     height_band = HeightBandSerializer(read_only=True)
     height_band_id = serializers.PrimaryKeyRelatedField(
@@ -352,6 +370,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "age",
             "family",
             "family_id",
+            "claimed_kin_slot",
+            "claimed_kin_slot_id",
+            "claimed_kin_pool",
+            "claimed_kin_pool_id",
+            "defer_parents",
             "height_band",
             "height_band_id",
             "height_inches",

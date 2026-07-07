@@ -21,7 +21,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 - SUCCOR shelters a named ally from a round-ticked environmental hazard, in both combat and
   non-combat scene rounds (#1744, ADR-0069) — the environmental-DoT sibling of INTERPOSE.
 - Escalation → Audere offer → accept → real power change.
+- Dramatic surge (ally mortal peril / hated foe / high stakes) → provable intensity spike →
+  stronger next cast; visible in the web combat panel and telnet room log (#2013).
 - Multi-PC group combos (effect-type × resonance).
+- **Tactical placement, end-to-end (#2005).** Voluntary `take_position` (entry onto the
+  position graph), GM `gm_place_in_position` (unchecked staging teleport), and positioned
+  opponent spawn (`add_opponent(..., position=...)`) close the last placement gaps —
+  ADJACENT-reach technique gating now binds against a real, populated position graph rather
+  than defaulting everyone to the same spot (journey test in `world/combat/tests/
+  test_declare_reach_gate.py`). Full telnet parity: `position` / `position <name>`
+  (`CmdPosition`) lists/takes/moves the same way the web position panel does.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

@@ -8,6 +8,10 @@ _Avoid_: tag, theme, symbol
 A staff-curated aesthetic vocabulary word (Seductive, Menacing, Regal) that an item can carry. Distinct from a Facet: a Style is an aesthetic adjective each character binds to a resonance of their choosing for a coherence bonus, where a Facet is fixed symbolic imagery — the same Style can mean different magic for different characters.
 _Avoid_: aesthetic, look, vibe
 
+**Audacity**:
+A Style's ordinal daring tier (Understated/Expressive/Bold/Outrageous, `StyleAudacity`) that scales how much that Style is mechanically rewarded — both the passive motif-coherence bonus and peer style-presentation endorsements read the worn/matched Style's audacity through the staff-tunable `AudacityTuning` singleton (default multipliers 0.75/1.00/1.35/1.75). Daring styles are rewarded mechanically, not just narratively.
+_Avoid_: boldness, daring level, flashiness
+
 **QualityTier**:
 A discrete, color-coded quality level (Common=white, Fine=green, Masterwork=purple) spanning an internal numeric range and carrying a stat multiplier, reused across systems to give consistent visual language for quality and difficulty.
 _Avoid_: grade, rarity, quality level

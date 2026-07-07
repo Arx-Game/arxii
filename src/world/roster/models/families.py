@@ -1,33 +1,53 @@
-"""
-Family model for character lineage.
+"""Kinship graph (#2062): Family container + person-nodes with typed edges.
 
-Simple model to track which characters belong to which family.
-Staff can change a character's family at any time (e.g., for secret heritage reveals).
+The person-centric inversion of Arx 1's parentage-line derivation. Facts are
+explicit and typed; every relationship readout (sibling, cousin, step-parent,
+in-law) is DERIVED by walking edges — nothing like "cousin" is ever stored.
 
-TODO: Add relationship tracking between family members
-TODO: Add domain/wargame mechanics for noble houses
+Truth vs public record: edges/unions/incarnations carry ``is_public_record``
+and ``is_true``. A public-but-false edge is what the world believes; the
+hidden-true edge behind it anchors a ``secrets.Secret`` (consumer→primitive,
+ADR-0010) so who-knows/discovery/clues ride the existing secrets machinery.
+A hidden fact with NO secret is staff-only. Viewer-aware reads live in
+``world.roster.services.kinship``.
+
+Node definition tiers align with the real NPC ladder (name-only →
+functionary → standing → sheeted → PC); nodes are promoted up-tier when a
+story makes them load-bearing. Reincarnation is modeled as souls with
+ordered incarnations, so chains (PC ← Monique ← Covet) are transitively
+consistent by construction and knowledge is per-life.
 """
 
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.roster.constants import RelationshipType
+from world.roster.constants import (
+    DefinitionTier,
+    MembershipBasis,
+    MembershipEndReason,
+    ParentageKind,
+)
+
+_SHEET_FK = "character_sheets.CharacterSheet"
+_SECRET_FK = "secrets.Secret"  # noqa: S105 — model path, not a credential
+_GENDER_FK = "character_sheets.Gender"
 
 
 class Family(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A family/house that characters can belong to.
+    """A family/house surname container that Kinsperson nodes claim membership in.
 
-    Uses SharedMemoryModel for performance since families are accessed
-    frequently but changed rarely.
+    Kept from the pre-#2062 model (CG drafts and ``Profile.family`` point
+    here). Nodes are NOT owned by a family — membership is a claim
+    (``FamilyMembership``); ``Kinsperson.family`` denormalizes the current
+    primary surname. #1884 attaches house Organizations from the org side.
     """
 
     class FamilyType(models.TextChoices):
         COMMONER = "commoner", "Commoner"
         NOBLE = "noble", "Noble"
+        CRIME = "crime", "Crime"
 
     name = models.CharField(
         max_length=100,
@@ -38,7 +58,7 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         max_length=20,
         choices=FamilyType.choices,
         default=FamilyType.COMMONER,
-        help_text="Whether this is a noble house or commoner family",
+        help_text="Whether this is a noble house, commoner family, or crime family",
     )
     description = models.TextField(
         blank=True,
@@ -48,13 +68,10 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether players can select this family in character creation",
     )
-    # True if created during character generation (commoner only)
     created_by_cg = models.BooleanField(
         default=False,
         help_text="True if created during character generation (commoner only)",
     )
-
-    # Record the account who created this family (helpful for provenance/contact)
     created_by = models.ForeignKey(
         AccountDB,
         on_delete=models.SET_NULL,
@@ -63,8 +80,6 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         related_name="created_families",
         help_text="Account that created this family (staff or player-created commoner)",
     )
-
-    # Canonical origin realm (realms.Realm) rather than pointing at character_creation
     origin_realm = models.ForeignKey(
         "realms.Realm",
         on_delete=models.SET_NULL,
@@ -72,12 +87,10 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         related_name="families",
         help_text=(
-            "Canonical realm this family is associated with; used to filter in character creation"
+            "Canonical realm this family is associated with; used to filter in character "
+            "creation and (#1884) to resolve the nobiliary particle"
         ),
     )
-
-    # TODO: domain = models.ForeignKey('domains.Domain', ...) - for noble house mechanics
-    # TODO: prestige = models.IntegerField(default=0) - for wargame mechanics
 
     objects = NaturalKeyManager()
 
@@ -87,194 +100,441 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
     class Meta:
         verbose_name = "Family"
         verbose_name_plural = "Families"
+        ordering = ["name"]
 
     def __str__(self) -> str:
         return self.name
 
 
-class FamilyMember(SharedMemoryModel):
-    """
-    Individual member of a family tree.
+class Kinsperson(SharedMemoryModel):
+    """A person-node in the kinship graph (#2062).
 
-    Members can be:
-    - CHARACTER: Finalized player character
-    - PLACEHOLDER: Open position for another player to app into
-    - NPC: Non-playable family member (background only)
-
-    Family trees are created during character creation and can be expanded
-    post-approval by players or staff.
+    Exists at one of five definition tiers (see ``DefinitionTier``): from a
+    bare name that will never be referenced again, up to a PC's sheet.
+    Anchors are tier-appropriate and optional; ``name`` is the display
+    fallback whenever no sheet is bound. Nodes are never family-owned —
+    ``family`` is the denormalized current primary surname, maintained by
+    the membership services.
     """
 
-    class MemberType(models.TextChoices):
-        CHARACTER = "character", "Character"
-        PLACEHOLDER = "placeholder", "Placeholder"
-        NPC = "npc", "NPC"
-
-    family = models.ForeignKey(
-        Family,
-        on_delete=models.CASCADE,
-        related_name="tree_members",
-        help_text="Family this member belongs to",
-    )
-    member_type = models.CharField(
+    definition_tier = models.CharField(
         max_length=20,
-        choices=MemberType.choices,
-        help_text="Type of family member",
+        choices=DefinitionTier.choices,
+        default=DefinitionTier.NAME_ONLY,
+        help_text="How defined this person is; services promote up-tier only.",
     )
-    character = models.OneToOneField(
-        ObjectDB,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="family_member",
-        help_text="Character object if member_type is CHARACTER",
-    )
-
-    # Placeholder/NPC data
     name = models.CharField(
         max_length=100,
         blank=True,
-        help_text="Name for placeholder or NPC members",
+        help_text="Display name for unbound nodes (sheet-bound nodes read the sheet).",
     )
     description = models.TextField(
         blank=True,
-        help_text="Description for placeholder positions or NPC background",
+        help_text="Blurb for described/NPC tiers.",
     )
     age = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Age of member (optional)",
+        help_text="Approximate age, when it matters for slot constraints or flavor.",
     )
-
-    # Parent references for deriving relationships
-    mother = models.ForeignKey(
-        "self",
+    gender = models.ForeignKey(
+        _GENDER_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="children_as_mother",
-        help_text="Mother of this family member",
+        related_name="kinspeople",
+        help_text="Gender for unbound nodes (sheet-bound nodes read the sheet).",
     )
-    father = models.ForeignKey(
-        "self",
+    sheet = models.OneToOneField(
+        _SHEET_FK,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="children_as_father",
-        help_text="Father of this family member",
+        related_name="kinsperson",
+        help_text="Bound CharacterSheet (SHEETED / PC tiers).",
+    )
+    functionary = models.ForeignKey(
+        "npc_services.Functionary",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="kinspeople",
+        help_text="Functionary anchor (FUNCTIONARY tier): a named, room-referenced NPC.",
+    )
+    family = models.ForeignKey(
+        Family,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="members",
+        help_text=(
+            "Current primary surname family — a denorm maintained by the membership "
+            "services; FamilyMembership rows carry the history and basis."
+        ),
+    )
+    is_deceased = models.BooleanField(default=False)
+
+    # --- Appable-slot fields (#2062 slot mountain) ---------------------------
+    is_appable = models.BooleanField(
+        default=False,
+        help_text="Whether an OC in CG may claim this node (binds their new sheet).",
+    )
+    name_locked = models.BooleanField(
+        default=False,
+        help_text="Whether a claimant must keep the pre-authored name.",
+    )
+    age_min = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Slot constraint: minimum age for a claimant.",
+    )
+    age_max = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Slot constraint: maximum age for a claimant.",
+    )
+    allowed_genders = models.ManyToManyField(
+        _GENDER_FK,
+        blank=True,
+        related_name="+",
+        help_text="Slot constraint: allowed claimant genders. Empty = unconstrained.",
+    )
+    deferred_definer = models.ForeignKey(
+        _SHEET_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deferred_kin",
+        help_text=(
+            "The sheet allowed to define this deliberately-blank position later "
+            "(CG deferral). Post-CG definition is review-gated."
+        ),
     )
 
-    # Provenance
+    # --- Provenance -----------------------------------------------------------
     created_by = models.ForeignKey(
         AccountDB,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="created_family_members",
-        help_text="Account that created this family member",
+        related_name="created_kinspeople",
     )
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this family member was created",
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Kinsperson"
+        verbose_name_plural = "Kinspeople"
+        ordering = ["pk"]
+        indexes = [
+            models.Index(fields=["family", "is_appable"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.display_name} ({self.definition_tier})"
+
+    @property
+    def display_name(self) -> str:
+        if self.sheet is not None:
+            return str(self.sheet)
+        return self.name or "Unnamed"
+
+
+class FamilyMembership(SharedMemoryModel):
+    """A Kinsperson's claim of belonging to a Family, with basis and dates (#2062).
+
+    The history + law input succession queries read (#1884). The node's
+    ``family`` denorm mirrors the single active membership marked primary.
+    """
+
+    kinsperson = models.ForeignKey(
+        Kinsperson,
+        on_delete=models.CASCADE,
+        related_name="family_memberships",
+    )
+    family = models.ForeignKey(
+        Family,
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    basis = models.CharField(
+        max_length=20,
+        choices=MembershipBasis.choices,
+        help_text="How this person came to belong (born/married-in/adopted/...).",
+    )
+    is_primary = models.BooleanField(
+        default=True,
+        help_text="Whether this is the surname-carrying membership.",
+    )
+    started_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    end_reason = models.CharField(
+        max_length=20,
+        choices=MembershipEndReason.choices,
+        blank=True,
+        help_text="Why it ended (disowned/married-out/...). Blank while active.",
     )
 
     class Meta:
-        verbose_name = "Family Member"
-        verbose_name_plural = "Family Members"
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["family", "ended_at"]),
+        ]
 
     def __str__(self) -> str:
-        if self.character:
-            return f"{self.character.key} ({self.family.name})"
-        return f"{self.name or 'Unnamed'} ({self.family.name})"
+        return f"{self.kinsperson_id} in {self.family_id} ({self.basis})"
 
-    def get_display_name(self) -> str:
-        """Get the display name for this family member."""
-        if self.character:
-            return self.character.key
-        return self.name or "Unnamed"
 
-    @property
-    def parents(self) -> list["FamilyMember"]:
-        """Return list of parents (mother and/or father)."""
-        return [p for p in [self.mother, self.father] if p is not None]
+class UnionKind(NaturalKeyMixin, SharedMemoryModel):
+    """Authorable union vocabulary (marriage, consortium, concubinage...) (#2062).
 
-    @property
-    def children(self) -> list["FamilyMember"]:
-        """Return list of children."""
-        return list(self.children_as_mother.all()) + list(self.children_as_father.all())
+    Rows, not an enum — realms name their unions differently and the law
+    reads ``confers_wedlock`` for legitimacy questions.
+    """
 
-    @property
-    def siblings(self) -> list["FamilyMember"]:
-        """Return list of siblings (share at least one parent)."""
-        sibling_set: set[FamilyMember] = set()
-        for parent in self.parents:
-            for child in parent.children:
-                if child.pk != self.pk:
-                    sibling_set.add(child)
-        return list(sibling_set)
+    name = models.CharField(max_length=80, unique=True)
+    realm = models.ForeignKey(
+        "realms.Realm",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="union_kinds",
+        help_text="Realm whose law names this union kind. Null = universal.",
+    )
+    confers_wedlock = models.BooleanField(
+        default=True,
+        help_text="Whether births within this union count as in-wedlock for law.",
+    )
 
-    def get_ancestors(self, max_depth: int = 10) -> list["FamilyMember"]:
-        """Return all ancestors up to max_depth generations."""
-        ancestors: list[FamilyMember] = []
-        to_visit = list(self.parents)
-        depth = 0
-        while to_visit and depth < max_depth:
-            current = to_visit.pop(0)
-            if current not in ancestors:
-                ancestors.append(current)
-                to_visit.extend(current.parents)
-            depth += 1
-        return ancestors
+    objects = NaturalKeyManager()
 
-    def get_relationship_to(  # noqa: C901, PLR0911, PLR0912
-        self, other: "FamilyMember"
-    ) -> str | None:
-        """
-        Derive the relationship from self to another family member.
+    class NaturalKeyConfig:
+        fields = ["name"]
 
-        Returns a relationship string like "parent", "child", "sibling",
-        "grandparent", "aunt/uncle", "cousin", etc. or None if unrelated.
-        """
-        if self.pk == other.pk:
-            return RelationshipType.SELF
+    class Meta:
+        ordering = ["name"]
 
-        # Direct parent
-        if other in self.parents:
-            return RelationshipType.PARENT
+    def __str__(self) -> str:
+        return self.name
 
-        # Direct child
-        if other in self.children:
-            return RelationshipType.CHILD
 
-        # Sibling
-        if other in self.siblings:
-            return RelationshipType.SIBLING
+class Union(SharedMemoryModel):
+    """A union (marriage/partnership) between two or more Kinspeople (#2062).
 
-        # Grandparent (parent's parent)
-        for parent in self.parents:
-            if other in parent.parents:
-                return RelationshipType.GRANDPARENT
+    Makes in-laws and step-parents derivable and stamps in-wedlock onto
+    births. Secret unions exist: same truth/record trio as edges.
+    """
 
-        # Grandchild (child's child)
-        for child in self.children:
-            if other in child.children:
-                return RelationshipType.GRANDCHILD
+    kind = models.ForeignKey(
+        UnionKind,
+        on_delete=models.PROTECT,
+        related_name="unions",
+    )
+    members = models.ManyToManyField(
+        Kinsperson,
+        related_name="unions",
+        help_text="Two or more members, any composition.",
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    is_public_record = models.BooleanField(
+        default=True,
+        help_text="Whether the world knows this union exists.",
+    )
+    is_true = models.BooleanField(
+        default=True,
+        help_text="False = a believed-but-sham union (the record lies).",
+    )
+    secret = models.ForeignKey(
+        _SECRET_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Secret gating a hidden union. Hidden with no secret = staff-only.",
+    )
 
-        # Aunt/Uncle (parent's sibling)
-        for parent in self.parents:
-            if other in parent.siblings:
-                return RelationshipType.AUNT_UNCLE
+    class Meta:
+        ordering = ["pk"]
 
-        # Niece/Nephew (sibling's child)
-        for sibling in self.siblings:
-            if other in sibling.children:
-                return RelationshipType.NIECE_NEPHEW
+    def __str__(self) -> str:
+        return f"Union<{self.kind.name}>(#{self.pk})"
 
-        # Cousin (parent's sibling's child)
-        for parent in self.parents:
-            for aunt_uncle in parent.siblings:
-                if other in aunt_uncle.children:
-                    return RelationshipType.COUSIN
 
-        # Could extend for more distant relationships using common ancestor
-        return None
+class ParentageEdge(SharedMemoryModel):
+    """A typed parent→child link (#2062). N parents per child, any composition.
+
+    ``born_within_union`` stamps wedlock at birth-recording for the law
+    layer (#1884). Public-false + hidden-true pairs model "what everyone
+    believes is wrong"; the hidden edge's ``secret`` is who-knows.
+    """
+
+    child = models.ForeignKey(
+        Kinsperson,
+        on_delete=models.CASCADE,
+        related_name="parentage_up",
+        help_text="The child end of the edge.",
+    )
+    parent = models.ForeignKey(
+        Kinsperson,
+        on_delete=models.CASCADE,
+        related_name="parentage_down",
+        help_text="The parent end of the edge.",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=ParentageKind.choices,
+        default=ParentageKind.BIOLOGICAL,
+    )
+    is_public_record = models.BooleanField(
+        default=True,
+        help_text="Whether the world believes this edge.",
+    )
+    is_true = models.BooleanField(
+        default=True,
+        help_text="False = the official story, contradicted by a hidden-true edge.",
+    )
+    born_within_union = models.ForeignKey(
+        Union,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="births",
+        help_text="The union this birth occurred within, if any (legitimacy input).",
+    )
+    secret = models.ForeignKey(
+        _SECRET_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Secret gating a hidden edge. Hidden with no secret = staff-only.",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["child", "parent", "kind"],
+                name="roster_parentage_unique_per_kind",
+            ),
+            models.CheckConstraint(
+                check=~models.Q(child=models.F("parent")),
+                name="roster_parentage_no_self_loop",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["child", "is_public_record"]),
+            models.Index(fields=["parent", "is_public_record"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.parent_id} -{self.kind}-> {self.child_id}"
+
+
+class Soul(SharedMemoryModel):
+    """A soul with an ordered chain of incarnations (#2062).
+
+    First-class so reincarnation chains are transitively consistent by
+    construction, and so the Tree of Souls / future soul-magic have a real
+    anchor. Usually unnamed — staff notes only.
+    """
+
+    notes = models.TextField(
+        blank=True,
+        help_text="Staff notes (never player-facing).",
+    )
+
+    class Meta:
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"Soul(#{self.pk})"
+
+
+class SoulIncarnation(SharedMemoryModel):
+    """One life of a soul (#2062). Knowledge is per-membership.
+
+    Learning your own membership makes you the famous ancestor's
+    reincarnation the moment THEIR membership is public — while an
+    intermediate life stays its own undiscovered fact. ``is_true=False``
+    models falsely-believed reincarnations.
+    """
+
+    soul = models.ForeignKey(
+        Soul,
+        on_delete=models.CASCADE,
+        related_name="incarnations",
+    )
+    kinsperson = models.ForeignKey(
+        Kinsperson,
+        on_delete=models.CASCADE,
+        related_name="incarnations",
+    )
+    sequence = models.PositiveIntegerField(
+        help_text="Order within the soul's chain (1 = earliest known life).",
+    )
+    is_public_record = models.BooleanField(default=False)
+    is_true = models.BooleanField(default=True)
+    secret = models.ForeignKey(
+        _SECRET_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Secret gating a hidden membership. Hidden with no secret = staff-only.",
+    )
+
+    class Meta:
+        ordering = ["soul", "sequence"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["soul", "kinsperson"],
+                name="roster_soul_incarnation_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Soul {self.soul_id} life {self.sequence}: {self.kinsperson_id}"
+
+
+class KinSlotPool(SharedMemoryModel):
+    """Fuzzy appable capacity: "N children available among these parents" (#2062).
+
+    Claiming from the pool mints a Kinsperson with pre-authored parentage
+    edges to the pool's parents, then binds the claimant's sheet at CG
+    finalization. Explicit appable nodes cover defined positions; pools
+    cover the loose remainder staff don't want to pre-place.
+    """
+
+    family = models.ForeignKey(
+        Family,
+        on_delete=models.CASCADE,
+        related_name="kin_slot_pools",
+    )
+    description = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text='Player-facing pool blurb, e.g. "children of the current nobles".',
+    )
+    parents = models.ManyToManyField(
+        Kinsperson,
+        related_name="kin_slot_pools",
+        help_text="The parent-set minted children link to.",
+    )
+    count_remaining = models.PositiveIntegerField(
+        help_text="Slots left in this pool; claiming decrements.",
+    )
+    allowed_genders = models.ManyToManyField(
+        _GENDER_FK,
+        blank=True,
+        related_name="+",
+        help_text="Constraint on minted claimants. Empty = unconstrained.",
+    )
+    age_min = models.PositiveIntegerField(null=True, blank=True)
+    age_max = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["family", "pk"]
+
+    def __str__(self) -> str:
+        return f"{self.family.name} pool: {self.description or 'kin'} ({self.count_remaining})"

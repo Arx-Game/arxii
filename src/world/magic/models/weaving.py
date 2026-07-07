@@ -147,10 +147,16 @@ class ThreadWeavingUnlock(SharedMemoryModel):
 
     # Discriminator -> required field name. CAPSTONE is intentionally absent
     # (capstones inherit from RELATIONSHIP_TRACK unlocks per spec line 426).
-    _KIND_TO_FIELD: dict[str, str] = {
+    _KIND_TO_FIELD: dict[str, str | None] = {
         TargetKind.TRAIT: _F_TRAIT,
         TargetKind.TECHNIQUE: _F_GIFT,
         TargetKind.RELATIONSHIP_TRACK: _F_TRACK,
+        # Kind-level unlocks: no per-instance FK required (all typed FKs null).
+        # Mirrors the FACET precedent — any FACET-kind unlock suffices for all
+        # facets. SANCTUM and ORGANIZATION follow the same pattern.
+        TargetKind.FACET: None,
+        TargetKind.SANCTUM: None,
+        TargetKind.ORGANIZATION: None,
     }
     _ALL_TARGET_FIELDS: tuple[str, ...] = (
         _F_TRAIT,
@@ -170,7 +176,12 @@ class ThreadWeavingUnlock(SharedMemoryModel):
             return f"ThreadWeaving: Gift of {self.unlock_gift.name}"
         if self.target_kind == TargetKind.RELATIONSHIP_TRACK:
             return f"ThreadWeaving: {self.unlock_track.name} bonds"
-        return "ThreadWeaving: <unknown>"  # defensive; unreachable while choices apply
+        kind_labels = {
+            TargetKind.FACET: "ThreadWeaving: Facets",
+            TargetKind.SANCTUM: "ThreadWeaving: Sanctums",
+            TargetKind.ORGANIZATION: "ThreadWeaving: Organizations",
+        }
+        return kind_labels.get(self.target_kind, "ThreadWeaving: <unknown>")
 
     def __str__(self) -> str:
         return self.display_name
@@ -183,10 +194,24 @@ class ThreadWeavingUnlock(SharedMemoryModel):
         calling full_clean()).
         """
         expected_field = self._KIND_TO_FIELD.get(self.target_kind)
-        if expected_field is None:
+        if expected_field is None and self.target_kind not in self._KIND_TO_FIELD:
             raise ValidationError(
                 {"target_kind": f"Unknown target_kind: {self.target_kind!r}."},
             )
+
+        # Kind-level unlocks (FACET, SANCTUM, ORGANIZATION): no typed FK
+        # required, but all typed FKs must be null.
+        if expected_field is None:
+            for field_name in self._ALL_TARGET_FIELDS:
+                if self._get_target_value(field_name) is not None:
+                    raise ValidationError(
+                        {
+                            field_name: (
+                                f"target_kind={self.target_kind} requires {field_name} to be null."
+                            ),
+                        },
+                    )
+            return
 
         if self._get_target_value(expected_field) is None:
             raise ValidationError(

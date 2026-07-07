@@ -87,6 +87,15 @@ class Secret(SharedMemoryModel):
         choices=SecretProvenance.choices,
         help_text="Where the secret came from (drives the anchor rule + OOC attribution).",
     )
+    subject_aware = models.BooleanField(
+        default=True,
+        help_text=(
+            "Whether the subject starts knowing this secret about themselves. False for "
+            "subject-unaware truths (#2062 — e.g. hidden parentage a Misbegotten hasn't "
+            "discovered): excluded from the subject's own-secrets shelf until a "
+            "SecretKnowledge row grants it."
+        ),
+    )
     author_persona = models.ForeignKey(
         "scenes.Persona",
         null=True,

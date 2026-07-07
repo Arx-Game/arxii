@@ -29,13 +29,16 @@ from world.scenes.factories import SceneFactory, SceneParticipationFactory
 # ---------------------------------------------------------------------------
 
 
-def _make_worn_style_setup(endorsee_sheet, resonance):
+def _make_worn_style_setup(endorsee_sheet, resonance, *, audacity=None):
     """Return a Style that is:
     1. Bound to ``resonance`` via the endorsee's MotifResonanceStyle.
     2. Attached to an EquippedItem on the endorsee's character.
 
     Requires a Character (ObjectDB) on the endorsee_sheet — CharacterSheetFactory
     creates a Character by default, so this should always be satisfied in tests.
+
+    ``audacity`` (#2029): optional ``StyleAudacity`` override; defaults to the
+    model's own default (EXPRESSIVE) when omitted.
     """
     from world.items.constants import BodyRegion, EquipmentLayer
     from world.items.factories import (
@@ -48,7 +51,8 @@ def _make_worn_style_setup(endorsee_sheet, resonance):
         TemplateSlotFactory,
     )
 
-    style = StyleFactory()
+    style_kwargs = {} if audacity is None else {"audacity": audacity}
+    style = StyleFactory(**style_kwargs)
     motif = MotifFactory(character=endorsee_sheet)
     mr = MotifResonanceFactory(motif=motif, resonance=resonance)
     MotifResonanceStyleFactory(motif_resonance=mr, style=style)
@@ -194,6 +198,7 @@ class CreateStylePresentationEndorsementTests(TestCase):
         scene_privacy=ScenePrivacyMode.PUBLIC,
         endorser_participates=True,
         same_account=False,
+        audacity=None,
     ):
         """Build a scene + endorser + endorsee with worn style + claimed resonance.
 
@@ -220,7 +225,7 @@ class CreateStylePresentationEndorsementTests(TestCase):
 
         # Endorsee: claim resonance + wear a bound style.
         CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
-        _make_worn_style_setup(endorsee_sheet, resonance)
+        _make_worn_style_setup(endorsee_sheet, resonance, audacity=audacity)
 
         return endorser_sheet, endorsee_sheet, scene, resonance
 
@@ -299,7 +304,7 @@ class CreateStylePresentationEndorsementTests(TestCase):
         endorsee_sheet = CharacterSheetFactory()
 
         CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
-        # No MotifResonanceStyle binding → _endorsee_wears_bound_style returns False.
+        # No MotifResonanceStyle binding → _endorsee_worn_bound_styles returns [].
 
         with self.assertRaises(EndorsementValidationError):
             create_style_presentation_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
@@ -331,3 +336,171 @@ class CreateStylePresentationEndorsementTests(TestCase):
             ).count(),
             1,
         )
+
+
+# ---------------------------------------------------------------------------
+# Audacity-scaled grants (#2029)
+# ---------------------------------------------------------------------------
+
+
+class StylePresentationAudacityScalingTests(TestCase):
+    """The base grant is scaled by the matched worn style's audacity tier (#2029)."""
+
+    def _build_scenario(self, *, audacity):
+        """Public-scene scenario (no participation gating needed) with one worn
+        style bound to a fresh resonance at ``audacity``. Returns (endorser_sheet,
+        endorsee_sheet, scene, resonance).
+        """
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        resonance = ResonanceFactory()
+        endorser_tenure = RosterTenureFactory()
+        endorser_sheet = endorser_tenure.roster_entry.character_sheet
+        endorsee_sheet = CharacterSheetFactory()
+        CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
+        _make_worn_style_setup(endorsee_sheet, resonance, audacity=audacity)
+        return endorser_sheet, endorsee_sheet, scene, resonance
+
+    def test_grant_matches_understated_tuning_multiplier(self):
+        from world.items.constants import StyleAudacity
+        from world.items.services.styles import get_audacity_tuning
+        from world.magic.models import CharacterResonance
+        from world.magic.services.gain import get_resonance_gain_config
+
+        endorser, endorsee, scene, resonance = self._build_scenario(
+            audacity=StyleAudacity.UNDERSTATED,
+        )
+        create_style_presentation_endorsement(endorser, endorsee, scene, resonance)
+        cfg = get_resonance_gain_config()
+        tuning = get_audacity_tuning()
+        expected = max(
+            1, int(cfg.style_presentation_grant * tuning.multiplier_for(StyleAudacity.UNDERSTATED))
+        )
+        cr = CharacterResonance.objects.get(character_sheet=endorsee, resonance=resonance)
+        self.assertEqual(cr.balance, expected)
+        self.assertLess(expected, cfg.style_presentation_grant)
+
+    def test_grant_matches_bold_tuning_multiplier(self):
+        from world.items.constants import StyleAudacity
+        from world.items.services.styles import get_audacity_tuning
+        from world.magic.models import CharacterResonance
+        from world.magic.services.gain import get_resonance_gain_config
+
+        endorser, endorsee, scene, resonance = self._build_scenario(
+            audacity=StyleAudacity.BOLD,
+        )
+        create_style_presentation_endorsement(endorser, endorsee, scene, resonance)
+        cfg = get_resonance_gain_config()
+        tuning = get_audacity_tuning()
+        expected = max(
+            1, int(cfg.style_presentation_grant * tuning.multiplier_for(StyleAudacity.BOLD))
+        )
+        cr = CharacterResonance.objects.get(character_sheet=endorsee, resonance=resonance)
+        self.assertEqual(cr.balance, expected)
+        self.assertGreater(expected, cfg.style_presentation_grant)
+
+    def test_bold_grant_exceeds_understated_grant(self):
+        from world.items.constants import StyleAudacity
+        from world.magic.models import CharacterResonance
+
+        bold_endorser, bold_endorsee, bold_scene, bold_resonance = self._build_scenario(
+            audacity=StyleAudacity.BOLD,
+        )
+        create_style_presentation_endorsement(
+            bold_endorser, bold_endorsee, bold_scene, bold_resonance
+        )
+        bold_balance = CharacterResonance.objects.get(
+            character_sheet=bold_endorsee, resonance=bold_resonance
+        ).balance
+
+        (
+            understated_endorser,
+            understated_endorsee,
+            understated_scene,
+            understated_resonance,
+        ) = self._build_scenario(audacity=StyleAudacity.UNDERSTATED)
+        create_style_presentation_endorsement(
+            understated_endorser, understated_endorsee, understated_scene, understated_resonance
+        )
+        understated_balance = CharacterResonance.objects.get(
+            character_sheet=understated_endorsee, resonance=understated_resonance
+        ).balance
+
+        self.assertGreater(bold_balance, understated_balance)
+
+    def test_multiple_matched_styles_uses_highest_audacity(self):
+        """When two worn items both bind styles to the same resonance, the grant
+        must scale by the HIGHEST-audacity match, not the first/only one (#2029).
+        """
+        from world.items.constants import BodyRegion, EquipmentLayer, StyleAudacity
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemStyleFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+            StyleFactory,
+            TemplateSlotFactory,
+        )
+        from world.items.services.styles import get_audacity_tuning
+        from world.magic.models import CharacterResonance
+        from world.magic.services.gain import get_resonance_gain_config
+
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
+        resonance = ResonanceFactory()
+        endorser_tenure = RosterTenureFactory()
+        endorser_sheet = endorser_tenure.roster_entry.character_sheet
+        endorsee_sheet = CharacterSheetFactory()
+        CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
+
+        motif = MotifFactory(character=endorsee_sheet)
+        mr = MotifResonanceFactory(motif=motif, resonance=resonance)
+
+        # Two bound styles at different audacity tiers, both worn.
+        low_style = StyleFactory(name="MultiMatchLow", audacity=StyleAudacity.UNDERSTATED)
+        high_style = StyleFactory(name="MultiMatchHigh", audacity=StyleAudacity.OUTRAGEOUS)
+        MotifResonanceStyleFactory(motif_resonance=mr, style=low_style)
+        MotifResonanceStyleFactory(motif_resonance=mr, style=high_style)
+
+        quality = QualityTierFactory(name="MultiMatchCommon", stat_multiplier="1.00")
+        char = endorsee_sheet.character
+
+        template_low = ItemTemplateFactory(name="MultiMatchItemLow")
+        TemplateSlotFactory(
+            template=template_low,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        item_low = ItemInstanceFactory(template=template_low, quality_tier=quality)
+        ItemStyleFactory(item_instance=item_low, style=low_style, attachment_quality_tier=quality)
+        EquippedItemFactory(
+            character=char,
+            item_instance=item_low,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        template_high = ItemTemplateFactory(name="MultiMatchItemHigh")
+        TemplateSlotFactory(
+            template=template_high,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+        item_high = ItemInstanceFactory(template=template_high, quality_tier=quality)
+        ItemStyleFactory(item_instance=item_high, style=high_style, attachment_quality_tier=quality)
+        EquippedItemFactory(
+            character=char,
+            item_instance=item_high,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+        char.equipped_items.invalidate()
+
+        create_style_presentation_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
+
+        cfg = get_resonance_gain_config()
+        tuning = get_audacity_tuning()
+        expected = max(
+            1, int(cfg.style_presentation_grant * tuning.multiplier_for(StyleAudacity.OUTRAGEOUS))
+        )
+        cr = CharacterResonance.objects.get(character_sheet=endorsee_sheet, resonance=resonance)
+        self.assertEqual(cr.balance, expected)

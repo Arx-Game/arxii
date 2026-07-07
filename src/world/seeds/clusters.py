@@ -19,6 +19,7 @@ def _seed_items() -> None:
 
 def _seed_combat() -> None:
     from world.seeds.game_content.combat import (  # noqa: PLC0415
+        seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
         seed_flee_check,
         seed_penetration_contest,
@@ -27,6 +28,7 @@ def _seed_combat() -> None:
     seed_penetration_contest()
     seed_flee_check()
     seed_encounter_beat_wiring()
+    seed_dramatic_surge_content()
 
 
 def _seed_battles() -> None:
@@ -143,6 +145,12 @@ def _seed_market() -> None:
     seed_market_demo()
 
 
+def _seed_kinship() -> None:
+    from world.seeds.kinship import seed_kinship_demo  # noqa: PLC0415
+
+    seed_kinship_demo()
+
+
 def _seed_kudos() -> None:
     from world.progression.seeds import seed_kudos_content  # noqa: PLC0415
 
@@ -220,6 +228,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "kudos": _seed_kudos,
     # Market: the PLACEHOLDER capital square + NPC stock stall (#2066).
     "market": _seed_market,
+    # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
+    "kinship": _seed_kinship,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -232,7 +242,7 @@ def seeded_models() -> list[type[Model]]:
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
@@ -242,6 +252,7 @@ def seeded_models() -> list[type[Model]]:
         Affinity,
         Resonance,
         ItemTemplate,
+        Style,
         CheckType,
         ResultChart,
         SocialConsentCategory,
@@ -267,13 +278,14 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap  # noqa: PLC0415
     from world.items.market.models import MarketSquare  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
     from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
+    from world.roster.models import Kinsperson  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
@@ -296,7 +308,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
         "magic": [Affinity, Resonance],
-        "items": [ItemTemplate],
+        # Style also carries the seeded aesthetic vocabulary spread across the four
+        # audacity tiers (#2029).
+        "items": [ItemTemplate, Style],
         # Combat seeds check-types used by the resolution spine, not standalone
         # content rows; it still appears in the inventory as a seeded cluster.
         "combat": [],
@@ -331,4 +345,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
         "gm": [GMLevelCap],
+        # Kinship: the PLACEHOLDER ducal demo tree (#2062).
+        "kinship": [Kinsperson],
     }

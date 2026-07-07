@@ -88,6 +88,14 @@ actions, backends, and service functions.
   (telnet has no pk to reference); `places leave` leaves whichever Place the
   caller's active persona currently occupies. Calls `JoinPlaceAction`/
   `LeavePlaceAction` (`actions/definitions/places.py`) directly.
+- **`positions.py`**: `CmdPosition` (`position`, #2005) — the telnet face of the tactical
+  position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
+  room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or
+  `"This room has no positions staged."`); `position <name>` resolves a `Position` by name
+  scoped to the caller's room (case-insensitive exact, then unique-prefix) and dispatches
+  `TakePositionAction` when the caller is unplaced, else `MoveToPositionAction`
+  (`actions/definitions/positioning.py`) — the same seam the web position panel uses.
+  Ineligible/gated/non-adjacent failures surface the action's own error text verbatim.
 - **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
   implementation (replacing the former stubs) dispatching to `LockAction`/
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
@@ -156,10 +164,22 @@ actions, backends, and service functions.
     any site. `parse_draft`: no-op (officiant supplies nothing extra at draft time).
   Unregistered rituals use the base `RitualDraftAdapter` (no-op empty parses — the behavior
   before adapters were introduced). `get_adapter(ritual)` is the public entry point.
-- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
-  parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
-  reference grammar; other anchor kinds are extended by the thread-weaving journey
-  issue). Proves the direct-viewset→Action telnet pattern (#1337)
+- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`; parses
+  `weave resonance=<name> <anchor>=<value> [name=<...>]`, one anchor kwarg per call (#2033
+  extends the original TRAIT-only reference grammar to mirror `ThreadSerializer
+  ._resolve_target`'s `TargetKind` coverage): `trait=<name or id>`,
+  `track=<partner>/<track name>` (the caller's OWN developed `RelationshipTrackProgress`
+  toward the named partner — partner name resolves via `search_or_raise`, the same
+  found/not-found/numbered-disambiguation convention every other command uses),
+  `capstone=<id or title>` (one of the caller's OWN recorded `RelationshipCapstone` rows),
+  `facet=<name or id>`, `technique=<name or id>` (signature thread; caller must know it),
+  `role=<name or id>` (covenant role), `mantle=<name or id>`. SANCTUM (own slot grammar,
+  `commands/sanctum.py`) and GIFT (CG/latent-provision only) are not reachable from this
+  generic grammar. `weave_thread` (`world/magic/services/threads.py`) asserts ownership on
+  the RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchors (`relationship.source ==
+  character_sheet`, raising `RelationshipBondNotOwned`) — protects the web path too, since
+  both routes converge on the same service call. Proves the direct-viewset→Action telnet
+  pattern (#1337)
 - **`alterations.py`**: `CmdMageScar` (`magescar`) — telnet face of `ResolveAlterationAction` (#1490); lists and resolves pending Mage Scars by library template or scratch-authored fields. Uses namespaced `magescar list` / `magescar resolve <id> ...` subcommands.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
@@ -512,6 +532,34 @@ actions, backends, and service functions.
   (`player_pending_treasured_signoffs`); `story signoff <beat-id> <subject> [withdraw]`
   grants/withdraws via `grant_treasured_signoff`/`withdraw_treasured_signoff` — the same service
   functions `TreasuredSignoffViewSet` calls. No business logic in the command.
+  `story protect`/`story clearance` (#2001 Task 7) are the telnet face of GM-authorable
+  custody protection — thin ORM + service calls over `world.stories.services.custody_clearance`
+  (there is no dedicated Action here; Task 6 built plain permission functions, not a
+  permission-class-gated Action, so authorization is replicated inline to match the API's
+  permission classes exactly, never looser): `story protect <story-id> add <kind>=<subject-ref>
+  [beat=<id>] [notes=<text>]` (`kind` one of `npc_fate`/`personal_jeopardy` — character by name,
+  global search — `item` — id — `faction` — Organization name, falling back to Society name (a
+  name matching both raises a disambiguation error asking for `org=<name>` or `society=<name>`,
+  the two accepted alias kind-keys — mirrors `gemit.py`'s explicit-switch spirit) —
+  `location`/`custom` — freeform label) creates a `StoryProtectedSubject`; `story protect
+  <story-id> remove <protected-id>` soft-deactivates (`is_active=False`, never a hard delete —
+  its `CustodyClearance` decision trail CASCADEs from it); `story protect <story-id> list` shows
+  every protection (active and inactive) for the story. All three are gated on the story's Lead
+  GM or staff (`world.stories.permissions.user_owns_or_leads_story`, mirroring
+  `IsProtectedSubjectStoryOwnerOrStaff`). `story clearance request <kind>=<subject-ref>
+  scope=<appear|harm|remove> [story=<id>] [message=<text>]` is the identity-based path (fans out
+  to every active protection sharing that identity across stories, Task 6 review Fix 4 —
+  `matching_active_protected_subjects`, skipping any already-live request and reporting it back);
+  `story clearance request protected=<id> scope=... [story=<id>] [message=<text>]` is the raw-pk
+  variant for a custodian-relayed id (a duplicate there is a hard error, not a skip). `story
+  clearance grant|deny <id> [note=<text>]` — custodian Lead GM only, no staff bypass (staff act
+  only through escalate→resolve); `story clearance escalate <id>` — requester-only; `story
+  clearance resolve <id> grant|deny [note=<text>]` — staff-only; `story clearance revoke <id>` —
+  custodian or staff; `story clearance list [pending]` — the caller's own requests plus requests
+  against stories they own/lead, staff sees all (mirrors `CustodyClearanceViewSet.get_queryset`).
+  Disclosure in every line of output follows the same rule as the API (custodian GM username,
+  subject label via the shared `subject_display_label` helper, and scope only — never another
+  story's title/notes).
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`

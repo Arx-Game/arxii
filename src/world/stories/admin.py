@@ -7,6 +7,7 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     Chapter,
+    CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
     EpisodeResolution,
@@ -24,9 +25,9 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
-    StoryNPCDependency,
     StoryParticipation,
     StoryProgress,
+    StoryProtectedSubject,
     StoryTrustRequirement,
     TableBulletinPost,
     TableBulletinReply,
@@ -37,14 +38,31 @@ from world.stories.models import (
 )
 
 
-class StoryNPCDependencyInline(admin.TabularInline):
-    """Inline for declaring story-critical NPCs on a story (#1874)."""
+class StoryProtectedSubjectInline(admin.TabularInline):
+    """Inline for declaring story-critical protected subjects on a story (#2001)."""
 
-    model = StoryNPCDependency
+    model = StoryProtectedSubject
     extra = 1
-    fields = ("npc_sheet", "beat", "is_active", "notes", "created_at")
+    fields = (
+        "subject_kind",
+        "subject_sheet",
+        "subject_item",
+        "subject_society",
+        "subject_organization",
+        "subject_label",
+        "beat",
+        "is_active",
+        "notes",
+        "created_at",
+    )
     readonly_fields = ("created_at",)
-    raw_id_fields = ("npc_sheet", "beat")
+    raw_id_fields = (
+        "subject_sheet",
+        "subject_item",
+        "subject_society",
+        "subject_organization",
+        "beat",
+    )
 
 
 @admin.register(Story)
@@ -62,7 +80,7 @@ class StoryAdmin(admin.ModelAdmin):
     search_fields = ["title", "description"]
     filter_horizontal = ["owners", "active_gms"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [StoryNPCDependencyInline]
+    inlines = [StoryProtectedSubjectInline]
 
     fieldsets = (
         (None, {"fields": ("title", "description", "status", "privacy", "scope")}),
@@ -602,3 +620,33 @@ class StakeContractActivationAdmin(admin.ModelAdmin):
     search_fields = ("beat__internal_description",)
     readonly_fields = tuple(f.name for f in StakeContractActivation._meta.fields)  # noqa: SLF001
     raw_id_fields = ("beat",)
+
+
+@admin.register(CustodyClearance)
+class CustodyClearanceAdmin(admin.ModelAdmin):
+    """Admin for GM custody-clearance requests (#2001)."""
+
+    list_display = (
+        "protected_subject",
+        "requested_by",
+        "scope",
+        "status",
+        "granted_by",
+        "revoked_at",
+        "created_at",
+    )
+    list_filter = ("scope", "status")
+    search_fields = (
+        "requested_by__account__username",
+        "granted_by__account__username",
+        "protected_subject__subject_label",
+    )
+    readonly_fields = ("created_at", "resolved_at")
+    raw_id_fields = (
+        "protected_subject",
+        "requested_by",
+        "requesting_story",
+        "requesting_beat",
+        "granted_by",
+        "staff_resolver",
+    )

@@ -182,7 +182,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
     def test_craft_attach_facet_query_count(self) -> None:
         """craft_attach_facet must not scale queries with consequence/cap/material row count.
 
-        Pinned at 72 queries (measured on Postgres CI; SQLite runs 73 — one extra
+        Pinned at 73 queries (measured on Postgres CI; SQLite runs 74 — one extra
         SELECT from a SharedMemoryModel identity-map miss). The 1-query difference
         is test-ordering-dependent: a preceding test may warm the identity map for
         a lookup model (ActionPointConfig, QualityTier), eliminating one SELECT.
@@ -196,20 +196,24 @@ class CraftAttachFacetQueryCountTests(TestCase):
         save wrapped in a SAVEPOINT/UPDATE/RELEASE, 3 queries) → #1771 (+1
         TreasuredSubject.subject_item SET_NULL cascade — one constant UPDATE when a
         material ItemInstance is consumed, same shape as the #1770 Stake.subject_item
-        bump; does NOT scale with treasured-row count).
+        bump; does NOT scale with treasured-row count) → #2001 (+1
+        StoryProtectedSubject.subject_item SET_NULL cascade — one constant UPDATE
+        in the Django cascade-collect when a material ItemInstance is consumed,
+        same shape as the #1770/#1771 bumps; does NOT scale with protected-subject
+        row count).
 
         consequence_rows: single SELECT — NOT one per row.
         material_requirements: single SELECT — NOT one per requirement.
         CraftingSkillCap.for_skill: single SELECT — NOT one per cap row.
         """
         with force_check_outcome(self.success_outcome):
-            # Postgres runs 72: a preceding test in the shard warms the
+            # Postgres runs 73: a preceding test in the shard warms the
             # SharedMemoryModel identity map for a lookup model (e.g.
-            # ActionPointConfig), eliminating one SELECT. SQLite runs 73
+            # ActionPointConfig), eliminating one SELECT. SQLite runs 74
             # (no cache hit — different test isolation). The 1-query gap is
             # ordering-dependent, not a regression — a per-row N+1 over 3
             # consequence rows would push either count up by ≥3.
-            expected = 72 if connection.vendor == "postgresql" else 73
+            expected = 73 if connection.vendor == "postgresql" else 74
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

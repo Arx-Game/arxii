@@ -1,4 +1,4 @@
-# 0095 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`
+# 0097 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`
 
 **Status:** Accepted
 

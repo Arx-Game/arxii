@@ -200,7 +200,8 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 | Function | Summary |
 |----------|---------|
-| `place_in_position(objectdb, position)` | Idempotent unconditional placement (staff / setup) |
+| `place_in_position(objectdb, position)` | Idempotent unconditional placement (staff / setup); the UNCHECKED primitive — bypasses entry-kind + mobility (#2005) |
+| `take_position(objectdb, position)` | Voluntary entry onto the position graph for an UNPLACED actor — restricted to PRIMARY/FEATURE entry kinds + MOVEMENT capability (#2005) |
 | `move_to_position(objectdb, target)` | Voluntary move — validates same room, current placement, adjacency, passability, gating challenge, MOVEMENT capability |
 | `force_move_to_position(objectdb, target)` | Bypass capability + edge checks (staff/consequence) |
 
@@ -211,9 +212,28 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 | Action | Registry Key | Prerequisite | Notes |
 |--------|-------------|--------------|-------|
 | `MoveToPositionAction` | `move_to_position` | none | Dispatched with `ActionRef(registry_key="move_to_position", position_id=<pk>)`; surfaced via `get_player_actions` |
+| `TakePositionAction` | `take_position` | none | Voluntary entry for an UNPLACED actor; dispatched with `ActionRef(registry_key="take_position", position_id=<pk>)`; surfaced via `get_player_actions` for PRIMARY/FEATURE positions only (#2005) |
+| `GMPlaceInPositionAction` | `gm_place_in_position` | none (gate is in-body, not a `Prerequisite`) | Staff OR active-scene GM (mirrors `_actor_may_gm_battle`; no active scene means staff-only) — wraps the unchecked `place_in_position`. `ActionRef(registry_key="gm_place_in_position", position_id=<pk>, target_object_id=<ObjectDB pk co-located with actor>)` (#2005) |
 | `SetTheStageAction` | `set_the_stage` | `StaffOnlyPrerequisite` | Dispatched with `ActionRef(registry_key="set_the_stage", blueprint_id=<pk>, replace=False)`; surfaced via `get_player_actions` when the room's `RoomProfile.default_blueprint` is set. `ActionRef` carries a `blueprint_id` field for this. |
 
 The `_set_the_stage_actions(character)` helper in `src/actions/player_interface.py` surfaces one quick-action using the room's `default_blueprint` for staff.
+
+### Telnet [BUILT & WIRED]
+
+**`src/commands/positions.py`** — `CmdPosition` (`position`, #2005), the telnet face of the
+position graph, mirroring `CmdPlaces`' shape:
+
+- Bare `position` — lists the caller's current room's staged positions with their kind,
+  occupants, and ADJACENT-reach adjacency (via `room_position_adjacency`), or reports
+  `"This room has no positions staged."` when the room has none.
+- `position <name>` — resolves a `Position` by name scoped to the caller's room
+  (case-insensitive exact match, falling back to a unique prefix match) and calls
+  `TakePositionAction().run(caller, position_id=...)` when the caller is unplaced
+  (`position_of(caller) is None`), else `MoveToPositionAction().run(caller, position_id=...)`.
+  Ineligible-kind, non-adjacent, and gated/immobile failures surface the action's own
+  `ActionResult.message` verbatim (no separate telnet error copy).
+
+Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
 
 ### Shared Serializers [BUILT & WIRED]
 
@@ -357,7 +377,7 @@ you":
 - `resolve_scene_round` exempts plummeting participants (`_plummeting_character_ids`) from the
   #1480 AFK own-peril skip, so the descent advances on every END tick regardless of who drove
   the round;
-- `world.vitals.peril_resolution._acute_peril_condition_names()` (the HOLD/ABANDONMENT
+- `world.vitals.peril_resolution.acute_peril_condition_names()` (the HOLD/ABANDONMENT
   classification) is **BLEED_OUT only** — a plummeting victim is never a "held downed victim,"
   is never `abandoned_since_round`-marked, and is never resolved through an abandonment
   consequence pool (`resolve_abandonment` / `resolve_solo_abandoned_victims` skip it). This is

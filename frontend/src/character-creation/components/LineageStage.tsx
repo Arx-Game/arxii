@@ -28,8 +28,9 @@ import {
   useNamingRitualConfig,
   useTarotCards,
   useUpdateDraft,
+  useFamilySlots,
 } from '../queries';
-import type { CharacterDraft, Family, TarotCard } from '../types';
+import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '../types';
 import { Stage } from '../types';
 
 interface LineageStageProps {
@@ -242,9 +243,129 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               )}
             </div>
           )}
+
+          {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
         </section>
       )}
     </motion.div>
+  );
+}
+
+// =============================================================================
+// KinSlotPicker — open app-in positions for the chosen family (#2062)
+// =============================================================================
+
+interface KinSlotPickerProps {
+  draft: CharacterDraft;
+  familyId: number;
+}
+
+function KinSlotPicker({ draft, familyId }: KinSlotPickerProps) {
+  const updateDraft = useUpdateDraft();
+  const { data: openings, isLoading } = useFamilySlots(familyId);
+
+  if (isLoading) {
+    return <div className="h-10 animate-pulse rounded bg-muted" />;
+  }
+  const slots = openings?.slots ?? [];
+  const pools = openings?.pools ?? [];
+  if (slots.length === 0 && pools.length === 0) {
+    return null;
+  }
+
+  const selectedSlotId = draft.claimed_kin_slot ?? null;
+  const selectedPoolId = draft.claimed_kin_pool ?? null;
+
+  const pick = (slot: KinSlot | null, pool: KinSlotPool | null) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        claimed_kin_slot_id: slot ? slot.id : null,
+        claimed_kin_pool_id: pool ? pool.id : null,
+      },
+    });
+  };
+
+  const constraintLine = (item: {
+    age_min: number | null;
+    age_max: number | null;
+    allowed_genders: string[];
+  }) => {
+    const parts: string[] = [];
+    if (item.age_min !== null || item.age_max !== null) {
+      parts.push(`age ${item.age_min ?? '?'}–${item.age_max ?? '?'}`);
+    }
+    if (item.allowed_genders.length > 0) {
+      parts.push(item.allowed_genders.join('/'));
+    }
+    return parts.join(' · ');
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-muted-foreground">
+        Open Positions in This House
+      </Label>
+      <p className="text-xs text-muted-foreground">
+        Claim a pre-authored position to inherit a living family tree, or take none and stand apart.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Card
+          className={cn(
+            'cursor-pointer transition-all',
+            !selectedSlotId && !selectedPoolId && 'ring-2 ring-primary'
+          )}
+          onClick={() => pick(null, null)}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">No specific position</CardTitle>
+          </CardHeader>
+        </Card>
+        {slots.map((slot) => (
+          <Card
+            key={`slot-${slot.id}`}
+            className={cn(
+              'cursor-pointer transition-all',
+              selectedSlotId === slot.id && 'ring-2 ring-primary'
+            )}
+            onClick={() => pick(slot, null)}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                {slot.name || 'Unnamed position'}
+                {slot.name_locked ? ' (name set)' : ''}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs text-muted-foreground">
+              {slot.description || 'A pre-authored place in the family tree.'}
+              {constraintLine(slot) && <div className="mt-1">{constraintLine(slot)}</div>}
+            </CardContent>
+          </Card>
+        ))}
+        {pools.map((pool) => (
+          <Card
+            key={`pool-${pool.id}`}
+            className={cn(
+              'cursor-pointer transition-all',
+              selectedPoolId === pool.id && 'ring-2 ring-primary'
+            )}
+            onClick={() => pick(null, pool)}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                {pool.description || 'Family opening'} ({pool.count_remaining} left)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-xs text-muted-foreground">
+              {pool.parent_names.length > 0 && (
+                <span>Child of {pool.parent_names.join(' & ')}</span>
+              )}
+              {constraintLine(pool) && <div className="mt-1">{constraintLine(pool)}</div>}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }
 

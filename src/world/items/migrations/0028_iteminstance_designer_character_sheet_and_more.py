@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("areas", "0013_blueprintpositionshelter_positionshelter"),
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("evennia_extensions", "0008_remove_roomprofile_tenant_persona"),
-        ("items", "0026_iteminstance_access_policy"),
+        ("items", "0027_audacitytuning_style_audacity"),
         ("realms", "0001_initial"),
         ("scenes", "0047_sceneactionpulldeclaration"),
         ("societies", "0022_alter_gangturfreputationaward_outcome_tier"),

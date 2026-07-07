@@ -12,6 +12,8 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
+    CustodyClearanceStatus,
+    CustodyScope,
     EraStatus,
     SessionRequestStatus,
     StakeOutcomeMethod,
@@ -29,6 +31,7 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     Chapter,
+    CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
     EpisodeResolution,
@@ -51,6 +54,7 @@ from world.stories.models import (
     StoryNote,
     StoryParticipation,
     StoryProgress,
+    StoryProtectedSubject,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -649,6 +653,40 @@ class TreasuredSignoffFactory(factory_django.DjangoModelFactory):
     player_data = factory.SubFactory(PlayerDataFactory)
     treasured_subject = factory.SubFactory(TreasuredSubjectFactory)
     withdrawn_at = None
+
+
+class StoryProtectedSubjectFactory(factory_django.DjangoModelFactory):
+    """Defaults to the NPC-fate case (#2001) — mirrors the old StoryNPCDependency shape."""
+
+    class Meta:
+        model = StoryProtectedSubject
+
+    story = factory.SubFactory(StoryFactory)
+    subject_kind = StakeSubjectKind.NPC_FATE
+    subject_sheet = factory.SubFactory(CharacterSheetFactory)
+    beat = None
+    is_active = True
+    notes = ""
+
+
+class CustodyClearanceFactory(factory_django.DjangoModelFactory):
+    """Defaults to a fresh PENDING request (#2001)."""
+
+    class Meta:
+        model = CustodyClearance
+
+    protected_subject = factory.SubFactory(StoryProtectedSubjectFactory)
+    requested_by = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    requesting_story = None
+    requesting_beat = None
+    scope = CustodyScope.APPEAR
+    status = CustodyClearanceStatus.PENDING
+    granted_by = None
+    staff_resolver = None
+    message = ""
+    response_note = ""
+    revoked_at = None
+    resolved_at = None
 
 
 # Convenience functions for common test scenarios

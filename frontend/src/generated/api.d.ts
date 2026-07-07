@@ -2066,12 +2066,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['character_creation_families_list'];
     put?: never;
     post?: never;
@@ -2088,13 +2083,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['character_creation_families_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/families/{id}/slots/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Open appable positions + pools for this family (CG slot browser). */
+    get: operations['character_creation_families_slots_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2110,13 +2117,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Get complete family tree with members.
-     *
-     *     Returns:
-     *         Family data with members included. Relationships are derived
-     *         from mother/father FKs on FamilyMember.
-     */
+    /** @description The family's kinship graph, filtered to what the viewer may see. */
     get: operations['character_creation_families_tree_retrieve'];
     put?: never;
     post?: never;
@@ -4845,6 +4846,190 @@ export interface paths {
     get: operations['currency_purse_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CustodyClearance lifecycle (#2001 Task 6).
+     *
+     *     No update/destroy — every state transition is a dedicated lifecycle
+     *     action (grant/deny/escalate/resolve/revoke), each mapping 1:1 to
+     *     ``world.stories.services.custody_clearance`` and gated by its own
+     *     permission class per the Task 3 review's binding authority split: staff
+     *     never grants/denies a PENDING request directly, only through
+     *     escalate -> resolve.
+     */
+    get: operations['custody_clearances_list'];
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/ — request_clearance, one row per matched protection.
+     *
+     *     Deliberately cross-story: any authenticated GM may request clearance
+     *     for any active protected subject (see
+     *     ``CustodyClearanceRequestSerializer``'s docstring for why the
+     *     ``protected_subject`` queryset is not scoped to the requester's own
+     *     stories). The serializer validates the requester's own GMProfile
+     *     exists and resolves the request to its protection row(s) — either the
+     *     single ``protected_subject`` pk, or (Task 6 review Fix 4) every active
+     *     protection matching an identity group
+     *     (``subject_kind`` + typed pointer/label), for a requester who only
+     *     knows the custodian's username, never the pk.
+     *
+     *     A single ``protected_subject`` submission with a live duplicate is a
+     *     hard 400 (unchanged). An identity-path submission matching several
+     *     protections skips any that already have a live request from this
+     *     requester at this scope (the DB partial-unique constraint would
+     *     otherwise raise) and reports those pre-existing rows back alongside
+     *     any newly-created ones — one atomic transaction, one notification per
+     *     newly-created row (``request_clearance`` notifies each row's own
+     *     custodian).
+     */
+    post: operations['custody_clearances_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CustodyClearance lifecycle (#2001 Task 6).
+     *
+     *     No update/destroy — every state transition is a dedicated lifecycle
+     *     action (grant/deny/escalate/resolve/revoke), each mapping 1:1 to
+     *     ``world.stories.services.custody_clearance`` and gated by its own
+     *     permission class per the Task 3 review's binding authority split: staff
+     *     never grants/denies a PENDING request directly, only through
+     *     escalate -> resolve.
+     */
+    get: operations['custody_clearances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/deny/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/custody-clearances/{id}/deny/ — custodian GM denies a PENDING request. */
+    post: operations['custody_clearances_deny_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/escalate/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/escalate/ — requester escalates to staff.
+     *
+     *     Only the requesting GM may escalate (``IsClearanceRequesterGM``); the
+     *     service itself takes no actor parameter by design (Task 3 brief).
+     */
+    post: operations['custody_clearances_escalate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/grant/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/grant/ — custodian GM grants a PENDING request.
+     *
+     *     ``IsClearanceCustodianGM`` enforces the exact custodian match with no
+     *     staff bypass — Task 3 review decision: staff act only through
+     *     escalate/resolve, never by posing as the custodian.
+     */
+    post: operations['custody_clearances_grant_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/resolve/ — staff tiebreak on an ESCALATED request.
+     *
+     *     Body: ``{grant: bool, response_note}``. Staff-only
+     *     (``IsStaffForCustodyResolution``) — staff never grant/deny a PENDING
+     *     request directly; this is the only door in.
+     */
+    post: operations['custody_clearances_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/revoke/ — soft-revoke a GRANTED clearance.
+     *
+     *     Custodian GM's account, or staff (``IsClearanceCustodianOrStaff`` —
+     *     the one lifecycle action where staff stands in for the custodian
+     *     directly, mirroring ``revoke_clearance``'s own
+     *     ``_is_custodian_account`` check).
+     */
+    post: operations['custody_clearances_revoke_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -12587,6 +12772,129 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/protected-subjects/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
+     */
+    get: operations['protected_subjects_list'];
+    put?: never;
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
+     */
+    post: operations['protected_subjects_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/protected-subjects/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
+     */
+    get: operations['protected_subjects_retrieve'];
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
+     */
+    put: operations['protected_subjects_update'];
+    post?: never;
+    /**
+     * @description Soft-deactivate (``is_active=False``), never a hard delete.
+     *
+     *     A ``StoryProtectedSubject`` is story-significant data: its
+     *     ``CustodyClearance`` decision trail CASCADEs from it, so a hard
+     *     ``DELETE`` would destroy the record of every grant/deny/escalate/
+     *     resolve/revoke ever made against it (the never-hard-delete-story-
+     *     significant-data rule). Mirrors telnet's `story protect ... remove`
+     *     (``commands/story.py``) exactly — same field, same "204 either way"
+     *     response.
+     */
+    delete: operations['protected_subjects_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
+     */
+    patch: operations['protected_subjects_partial_update'];
+    trace?: never;
+  };
   '/api/reaction-windows/{id}/react/': {
     parameters: {
       query?: never;
@@ -13066,12 +13374,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['roster_families_list'];
     put?: never;
     post?: never;
@@ -13088,13 +13391,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for listing families.
-     *
-     *     Filter by area_id to get families available for a starting area's realm.
-     *     Filter by has_open_positions=true to show families with placeholder members.
-     */
+    /** @description Families list/detail + the viewer-aware tree and CG slot browser. */
     get: operations['roster_families_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/roster/families/{id}/slots/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Open appable positions + pools for this family (CG slot browser). */
+    get: operations['roster_families_slots_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -13110,13 +13425,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Get complete family tree with members.
-     *
-     *     Returns:
-     *         Family data with members included. Relationships are derived
-     *         from mother/father FKs on FamilyMember.
-     */
+    /** @description The family's kinship graph, filtered to what the viewer may see. */
     get: operations['roster_families_tree_retrieve'];
     put?: never;
     post?: never;
@@ -13124,74 +13433,6 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
-    trace?: never;
-  };
-  '/api/roster/family-members/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    get: operations['roster_family_members_list'];
-    put?: never;
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    post: operations['roster_family_members_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/roster/family-members/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    get: operations['roster_family_members_retrieve'];
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    put: operations['roster_family_members_update'];
-    post?: never;
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    delete: operations['roster_family_members_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for managing family members.
-     *
-     *     Allows creating placeholders, NPCs, and linking characters to family positions.
-     *     Relationships are derived from mother/father FKs, not stored separately.
-     */
-    patch: operations['roster_family_members_partial_update'];
     trace?: never;
   };
   '/api/roster/galleries/': {
@@ -16225,6 +16466,32 @@ export interface components {
     ActivePersonaResult: {
       readonly active_persona_id: number;
     };
+    /**
+     * @description Write serializer for adding an opponent to an encounter.
+     *
+     *     ``tier`` is required.  ``max_health`` is optional — when omitted the scaling
+     *     formula fills every stat field automatically (Task 5 auto-fill mode).
+     *     All other stat fields are optional overrides.
+     *
+     *     ``position_id`` (#2005) is optional; when supplied it must name a Position
+     *     in the encounter's own room — validated against the encounter's room here
+     *     so a mismatched position never reaches the service layer.
+     *
+     *     Expects ``encounter`` and ``request`` in serializer context (provided by the
+     *     view) so that ``validate()`` can run the stakes gate.
+     */
+    AddOpponentRequest: {
+      name: string;
+      tier: components['schemas']['Tier756Enum'];
+      max_health?: number | null;
+      threat_pool_id: number;
+      /** @default  */
+      description: string;
+      /** @default 0 */
+      soak_value: number;
+      probing_threshold?: number | null;
+      position_id?: number | null;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -17464,6 +17731,9 @@ export interface components {
       /** @description Character age in years (18-65) */
       age?: number | null;
       readonly family: components['schemas']['Family'];
+      readonly claimed_kin_slot: number;
+      readonly claimed_kin_pool: number;
+      defer_parents?: boolean;
       readonly height_band: components['schemas']['HeightBand'];
       height_inches?: number | null;
       readonly build: components['schemas']['Build'];
@@ -17533,6 +17803,9 @@ export interface components {
       /** @description Character age in years (18-65) */
       age?: number | null;
       family_id?: number | null;
+      claimed_kin_slot_id?: number | null;
+      claimed_kin_pool_id?: number | null;
+      defer_parents?: boolean;
       height_band_id?: number | null;
       height_inches?: number | null;
       build_id?: number | null;
@@ -18491,6 +18764,129 @@ export interface components {
      * @enum {integer}
      */
     CurrentStageEnum: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+    /**
+     * @description Read/response serializer for CustodyClearance (#2001 Task 6).
+     *
+     *     Every field is read-only here — writes go through
+     *     ``CustodyClearanceRequestSerializer`` (create) and the per-action input
+     *     serializers (grant/deny/escalate/resolve/revoke), all of which route
+     *     through ``world.stories.services.custody_clearance``. No nested
+     *     notification/message data is exposed here, so the recipient-scoped
+     *     ``related_story`` disclosure rule that module documents does not apply
+     *     to this serializer.
+     */
+    CustodyClearance: {
+      readonly id: number;
+      readonly protected_subject: number;
+      /** @description The GM requesting permission to act on the protected subject. */
+      readonly requested_by: number;
+      /** @description The requester's own story this clearance is needed for, if any. */
+      readonly requesting_story: number | null;
+      /** @description The requester's own beat this clearance is needed for, if any. */
+      readonly requesting_beat: number | null;
+      readonly scope: components['schemas']['Scope77bEnum'];
+      /** @default pending */
+      readonly status: components['schemas']['CustodyClearanceStatusEnum'];
+      /** @description The custodian GM who directly decided this clearance (GRANTED or DENIED). Null while PENDING/ESCALATED, and null for a staff-resolved escalation (see staff_resolver). */
+      readonly granted_by: number | null;
+      /** @description The staff account that resolved this clearance's ESCALATED tiebreak. */
+      readonly staff_resolver: number | null;
+      /** @description Requester's note explaining the request. */
+      readonly message: string;
+      /** @description Custodian's or staff's response note. */
+      readonly response_note: string;
+      /**
+       * Format: date-time
+       * @description Soft-revoke timestamp for a GRANTED clearance. Never hard-deleted.
+       */
+      readonly revoked_at: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When status left PENDING/ESCALATED for GRANTED/DENIED.
+       */
+      readonly resolved_at: string | null;
+    };
+    /** @description Input for grant/deny — validates the clearance is PENDING before the service call. */
+    CustodyClearanceDecisionInputRequest: {
+      /** @default  */
+      response_note: string;
+    };
+    /**
+     * @description Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
+     *
+     *     Accepts EITHER of two mutually-exclusive paths to name the protected
+     *     subject (Task 6 review Fix 4; ADR-0099 records the identity path as the
+     *     ratified design, not just a workaround):
+     *
+     *     - **pk path** — ``protected_subject`` directly. Deliberately uses an
+     *       UNSCOPED-by-story queryset — a clearance request is inherently
+     *       cross-story (the point is asking *another* story's custodian for
+     *       permission), so scoping it to the requester's own stories would both
+     *       defeat the feature and create a differential-error oracle. Scoping to
+     *       ``is_active=True`` only still avoids oracling "exists but not
+     *       requestable" vs. "does not exist": DRF's built-in PrimaryKeyRelatedField
+     *       error is identical prose either way ("object does not exist"), so an
+     *       inactive protection and a nonexistent pk are indistinguishable to the
+     *       caller — no extra generic-message logic needed to enforce that.
+     *     - **identity path** — ``subject_kind`` + exactly one of
+     *       ``subject_sheet``/``subject_item``/``subject_society``/
+     *       ``subject_organization``/``subject_label``, mirroring
+     *       ``StoryProtectedSubjectSerializer``'s exactly-one-subject rule. For a
+     *       blocked outsider GM who only ever learns the custodian's username (never
+     *       the ``protected_subject`` pk — see ``CustodyVerdict``), this is the only
+     *       self-serviceable path: it derives the same ``_subject_identity`` tuple
+     *       ``world.stories.services.custody`` matches ``Stake`` rows against
+     *       (``world.stories.services.custody_clearance.matching_active_protected_subjects``)
+     *       and resolves to every active ``StoryProtectedSubject`` row sharing that
+     *       identity — a subject can be independently protected by more than one
+     *       story. No match raises the identical ``does_not_exist``-shaped error the
+     *       pk path raises for an inactive/missing pk — same no-oracle guarantee,
+     *       just reached from the identity side.
+     *
+     *     On success, ``validated_data["_protections_to_request"]`` holds the
+     *     protection rows the view should call ``request_clearance`` on, and
+     *     ``validated_data["_already_pending_clearances"]`` holds pre-existing
+     *     live (PENDING/ESCALATED) clearances for rows the identity path matched but
+     *     the requester already has a live request against — skipped rather than
+     *     re-requested (the partial-unique constraint would otherwise raise) and
+     *     reported back as-is. The single-pk path never populates the latter list;
+     *     a duplicate there is still a hard validation error, matching prior
+     *     behavior exactly.
+     */
+    CustodyClearanceRequestRequest: {
+      protected_subject?: number | null;
+      subject_kind?:
+        | (components['schemas']['SubjectKindEnum'] | components['schemas']['NullEnum'])
+        | null;
+      /** @description The character this sheet belongs to */
+      subject_sheet?: number | null;
+      subject_item?: number | null;
+      subject_society?: number | null;
+      subject_organization?: number | null;
+      /** @default  */
+      subject_label: string;
+      scope: components['schemas']['Scope77bEnum'];
+      requesting_story?: number | null;
+      requesting_beat?: number | null;
+      /** @default  */
+      message: string;
+    };
+    /** @description Input for staff resolve — {grant: bool, response_note} — ESCALATED-only. */
+    CustodyClearanceResolveInputRequest: {
+      grant: boolean;
+      /** @default  */
+      response_note: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `granted` - Granted
+     *     * `denied` - Denied
+     *     * `escalated` - Escalated
+     * @enum {string}
+     */
+    CustodyClearanceStatusEnum: 'pending' | 'granted' | 'denied' | 'escalated';
     /** @description Serializer for damage types. */
     DamageType: {
       readonly id: number;
@@ -19034,6 +19430,17 @@ export interface components {
        *     GMs and staff see all.
        */
       readonly current_round_actions: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * @description Return this round's dramatic-surge beats (#2013).
+       *
+       *     Every viewer sees the generic ``narration`` line (never names the
+       *     bond/track/subject — the leak rule). ``trigger_kind``/``amount`` are
+       *     added only for the surging participant's own owner, GMs, and staff —
+       *     mirrors ``get_current_round_actions``'s covenant-scoped pattern.
+       */
+      readonly surge_beats: {
         [key: string]: unknown;
       }[];
       /** @description Check whether the requesting user has a character in this encounter. */
@@ -19629,103 +20036,46 @@ export interface components {
       /** @description Family/house name */
       name: string;
       /**
-       * @description Whether this is a noble house or commoner family
+       * @description Whether this is a noble house, commoner family, or crime family
        *
        *     * `commoner` - Commoner
        *     * `noble` - Noble
+       *     * `crime` - Crime
        */
       family_type?: components['schemas']['FamilyTypeEnum'];
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
       is_playable?: boolean;
-      /** @description Canonical realm this family is associated with; used to filter in character creation */
+      /** @description Canonical realm this family is associated with; used to filter in character creation and (#1884) to resolve the nobiliary particle */
       origin_realm?: number | null;
-    };
-    /** @description Serializer for family tree members. */
-    FamilyMember: {
-      readonly id: number;
-      readonly family: components['schemas']['Family'];
-      /**
-       * @description Type of family member
-       *
-       *     * `character` - Character
-       *     * `placeholder` - Placeholder
-       *     * `npc` - NPC
-       */
-      member_type: components['schemas']['MemberTypeEnum'];
-      /** @description Character object if member_type is CHARACTER */
-      character?: number | null;
-      /** @description Get the character name if this is a character member. */
-      readonly character_name: string | null;
-      /** @description Get the display name for this family member. */
-      readonly display_name: string;
-      /** @description Name for placeholder or NPC members */
-      name?: string;
-      /** @description Description for placeholder positions or NPC background */
-      description?: string;
-      /** @description Age of member (optional) */
-      age?: number | null;
-      /** @description Mother of this family member */
-      readonly mother: number | null;
-      /** @description Father of this family member */
-      readonly father: number | null;
-      /** @description Get relationship to the root member (first CHARACTER in tree). */
-      readonly relationship_to_root: string | null;
-      /** @description Account that created this family member */
-      readonly created_by: number | null;
-      /**
-       * Format: date-time
-       * @description When this family member was created
-       */
-      readonly created_at: string;
-    };
-    /** @description Serializer for family tree members. */
-    FamilyMemberRequest: {
-      family_id: number;
-      /**
-       * @description Type of family member
-       *
-       *     * `character` - Character
-       *     * `placeholder` - Placeholder
-       *     * `npc` - NPC
-       */
-      member_type: components['schemas']['MemberTypeEnum'];
-      /** @description Character object if member_type is CHARACTER */
-      character?: number | null;
-      /** @description Name for placeholder or NPC members */
-      name?: string;
-      /** @description Description for placeholder positions or NPC background */
-      description?: string;
-      /** @description Age of member (optional) */
-      age?: number | null;
-      mother_id?: number | null;
-      father_id?: number | null;
     };
     /** @description Serializer for family selection and display. */
     FamilyRequest: {
       /** @description Family/house name */
       name: string;
       /**
-       * @description Whether this is a noble house or commoner family
+       * @description Whether this is a noble house, commoner family, or crime family
        *
        *     * `commoner` - Commoner
        *     * `noble` - Noble
+       *     * `crime` - Crime
        */
       family_type?: components['schemas']['FamilyTypeEnum'];
       /** @description Brief description of the family */
       description?: string;
       /** @description Whether players can select this family in character creation */
       is_playable?: boolean;
-      /** @description Canonical realm this family is associated with; used to filter in character creation */
+      /** @description Canonical realm this family is associated with; used to filter in character creation and (#1884) to resolve the nobiliary particle */
       origin_realm?: number | null;
     };
     /**
      * @description * `commoner` - Commoner
      *     * `noble` - Noble
+     *     * `crime` - Crime
      * @enum {string}
      */
-    FamilyTypeEnum: 'commoner' | 'noble';
+    FamilyTypeEnum: 'commoner' | 'noble' | 'crime';
     /**
      * @description Serializer for judging a fashion presentation (#514).
      *
@@ -21265,13 +21615,6 @@ export interface components {
      * @enum {string}
      */
     MediaTypeEnum: 'photo' | 'portrait' | 'gallery';
-    /**
-     * @description * `character` - Character
-     *     * `placeholder` - Placeholder
-     *     * `npc` - NPC
-     * @enum {string}
-     */
-    MemberTypeEnum: 'character' | 'placeholder' | 'npc';
     /** @description Minimal read-only representation of a mentor persona. */
     MentorPersona: {
       readonly id: number;
@@ -22430,7 +22773,7 @@ export interface components {
       readonly objectdb_id: number | null;
       name: string;
       description?: string;
-      tier: components['schemas']['OpponentTierEnum'];
+      tier: components['schemas']['Tier756Enum'];
       health: number;
       max_health: number;
       /** @description Soak value — GM/staff only. */
@@ -22500,7 +22843,7 @@ export interface components {
     OpponentRequest: {
       name: string;
       description?: string;
-      tier: components['schemas']['OpponentTierEnum'];
+      tier: components['schemas']['Tier756Enum'];
       health: number;
       max_health: number;
       probing_current?: number;
@@ -22514,15 +22857,6 @@ export interface components {
      * @enum {string}
      */
     OpponentStatusEnum: 'active' | 'defeated' | 'fled';
-    /**
-     * @description * `swarm` - Swarm
-     *     * `mook` - Mook
-     *     * `elite` - Elite
-     *     * `boss` - Boss
-     *     * `hero_killer` - Hero Killer
-     * @enum {string}
-     */
-    OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /**
      * @description * `branch` - Branch
      *     * `check` - Check
@@ -23088,6 +23422,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
+    };
+    PaginatedCustodyClearanceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CustodyClearance'][];
     };
     PaginatedDecorationTemplateList: {
       /** @example 123 */
@@ -24665,6 +25014,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StoryParticipation'][];
     };
+    PaginatedStoryProtectedSubjectList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StoryProtectedSubject'][];
+    };
     PaginatedSystemErrorReportDetailList: {
       /** @example 123 */
       count: number;
@@ -25118,6 +25482,9 @@ export interface components {
       /** @description Character age in years (18-65) */
       age?: number | null;
       family_id?: number | null;
+      claimed_kin_slot_id?: number | null;
+      claimed_kin_pool_id?: number | null;
+      defer_parents?: boolean;
       height_band_id?: number | null;
       height_inches?: number | null;
       build_id?: number | null;
@@ -25254,28 +25621,6 @@ export interface components {
        *     * `night` - Night
        */
       time_phase?: components['schemas']['TimePhaseEnum'];
-    };
-    /** @description Serializer for family tree members. */
-    PatchedFamilyMemberRequest: {
-      family_id?: number;
-      /**
-       * @description Type of family member
-       *
-       *     * `character` - Character
-       *     * `placeholder` - Placeholder
-       *     * `npc` - NPC
-       */
-      member_type?: components['schemas']['MemberTypeEnum'];
-      /** @description Character object if member_type is CHARACTER */
-      character?: number | null;
-      /** @description Name for placeholder or NPC members */
-      name?: string;
-      /** @description Description for placeholder positions or NPC background */
-      description?: string;
-      /** @description Age of member (optional) */
-      age?: number | null;
-      mother_id?: number | null;
-      father_id?: number | null;
     };
     /** @description For staff reviewing GM applications. */
     PatchedGMApplicationDetailRequest: {
@@ -25983,7 +26328,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
       covenant?: number | null;
     };
@@ -25999,6 +26344,34 @@ export interface components {
       /** @description Story owner has explicitly trusted this player for this story */
       trusted_by_owner?: boolean;
       is_active?: boolean;
+    };
+    /**
+     * @description Full serializer for StoryProtectedSubject (#2001 Task 6).
+     *
+     *     Enforces the model's exactly-one-subject invariant here (DRF serializers
+     *     never call ``Model.clean()``) and the story-ownership gate on create/update
+     *     — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+     *     cannot cover create, since DRF never calls object-level permissions for a
+     *     row that does not exist yet.
+     */
+    PatchedStoryProtectedSubjectRequest: {
+      story?: number;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      subject_label?: string;
+      /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
+      beat?: number | null;
+      is_active?: boolean;
+      /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
+      notes?: string;
     };
     /**
      * @description Staff read + status-update view of an auto-captured error (#1164).
@@ -26080,6 +26453,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
@@ -28217,13 +28591,20 @@ export interface components {
       action: components['schemas']['SceneSummaryRevisionActionEnum'];
     };
     /**
+     * @description * `appear` - Guaranteed appearance
+     *     * `harm` - Protected from harm
+     *     * `remove` - Protected from removal
+     * @enum {string}
+     */
+    Scope77bEnum: 'appear' | 'harm' | 'remove';
+    /**
      * @description * `unassigned` - Unassigned
      *     * `character` - Personal
      *     * `group` - Group
      *     * `global` - Global
      * @enum {string}
      */
-    ScopeEnum: 'unassigned' | 'character' | 'group' | 'global';
+    ScopeA20Enum: 'unassigned' | 'character' | 'group' | 'global';
     /**
      * @description * `spring` - Spring
      *     * `summer` - Summer
@@ -29330,7 +29711,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
     };
     /** @description Serializer for creating stories */
     StoryCreateRequest: {
@@ -29347,7 +29728,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
     };
     /** @description Full serializer for story detail views */
     StoryDetail: {
@@ -29367,7 +29748,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       readonly owners: string[];
       readonly active_gms: components['schemas']['GMProfile'][];
       readonly trust_requirements: string;
@@ -29412,7 +29793,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
       covenant?: number | null;
     };
@@ -29496,7 +29877,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       readonly owners_count: number;
       readonly active_gms_count: number;
       readonly participants_count: number;
@@ -29547,6 +29928,65 @@ export interface components {
       /** @description Story owner has explicitly trusted this player for this story */
       trusted_by_owner?: boolean;
       is_active?: boolean;
+    };
+    /**
+     * @description Full serializer for StoryProtectedSubject (#2001 Task 6).
+     *
+     *     Enforces the model's exactly-one-subject invariant here (DRF serializers
+     *     never call ``Model.clean()``) and the story-ownership gate on create/update
+     *     — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+     *     cannot cover create, since DRF never calls object-level permissions for a
+     *     row that does not exist yet.
+     */
+    StoryProtectedSubject: {
+      readonly id: number;
+      story: number;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      subject_label?: string;
+      /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
+      beat?: number | null;
+      is_active?: boolean;
+      /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
+      notes?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Full serializer for StoryProtectedSubject (#2001 Task 6).
+     *
+     *     Enforces the model's exactly-one-subject invariant here (DRF serializers
+     *     never call ``Model.clean()``) and the story-ownership gate on create/update
+     *     — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+     *     cannot cover create, since DRF never calls object-level permissions for a
+     *     row that does not exist yet.
+     */
+    StoryProtectedSubjectRequest: {
+      story: number;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      subject_label?: string;
+      /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
+      beat?: number | null;
+      is_active?: boolean;
+      /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
+      notes?: string;
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
     StrainAvailability: {
@@ -29990,6 +30430,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       /** @default  */
@@ -30094,6 +30535,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
@@ -30113,6 +30555,7 @@ export interface components {
      *     * `MANTLE` - Mantle
      *     * `SANCTUM` - Sanctum
      *     * `GIFT` - Gift
+     *     * `ORGANIZATION` - Organization
      * @enum {string}
      */
     ThreadTargetKindEnum:
@@ -30124,7 +30567,8 @@ export interface components {
       | 'COVENANT_ROLE'
       | 'MANTLE'
       | 'SANCTUM'
-      | 'GIFT';
+      | 'GIFT'
+      | 'ORGANIZATION';
     /** @description Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5). */
     ThreadWeavingTeachingOffer: {
       readonly id: number;
@@ -30161,6 +30605,15 @@ export interface components {
      * @enum {integer}
      */
     Tier3f5Enum: 1 | 2 | 3 | 4 | 5;
+    /**
+     * @description * `swarm` - Swarm
+     *     * `mook` - Mook
+     *     * `elite` - Elite
+     *     * `boss` - Boss
+     *     * `hero_killer` - Hero Killer
+     * @enum {string}
+     */
+    Tier756Enum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -33820,6 +34273,28 @@ export interface operations {
       };
     };
   };
+  character_creation_families_slots_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Family. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Family'];
+        };
+      };
+    };
+  };
   character_creation_families_tree_retrieve: {
     parameters: {
       query?: never;
@@ -34878,7 +35353,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['EncounterDetailRequest'];
+        'application/json': components['schemas']['AddOpponentRequest'];
       };
     };
     responses: {
@@ -37215,6 +37690,208 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterPurse'];
+        };
+      };
+    };
+  };
+  custody_clearances_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        protected_subject?: number;
+        scope?: string;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCustodyClearanceList'];
+        };
+      };
+    };
+  };
+  custody_clearances_create: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        protected_subject?: number;
+        scope?: string;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'][];
+        };
+      };
+    };
+  };
+  custody_clearances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_deny_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceDecisionInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_escalate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_grant_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceDecisionInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceResolveInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
         };
       };
     };
@@ -48853,6 +49530,153 @@ export interface operations {
       };
     };
   };
+  protected_subjects_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+        subject_kind?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStoryProtectedSubjectList'];
+        };
+      };
+    };
+  };
+  protected_subjects_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryProtectedSubjectRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  protected_subjects_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  protected_subjects_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryProtectedSubjectRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  protected_subjects_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  protected_subjects_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStoryProtectedSubjectRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
   reaction_windows_react_create: {
     parameters: {
       query?: never;
@@ -49575,7 +50399,7 @@ export interface operations {
       };
     };
   };
-  roster_families_tree_retrieve: {
+  roster_families_slots_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -49597,64 +50421,12 @@ export interface operations {
       };
     };
   };
-  roster_family_members_list: {
-    parameters: {
-      query?: {
-        family?: number;
-        /**
-         * @description Type of family member
-         *
-         *     * `character` - Character
-         *     * `placeholder` - Placeholder
-         *     * `npc` - NPC
-         */
-        member_type?: 'character' | 'npc' | 'placeholder';
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'][];
-        };
-      };
-    };
-  };
-  roster_family_members_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['FamilyMemberRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'];
-        };
-      };
-    };
-  };
-  roster_family_members_retrieve: {
+  roster_families_tree_retrieve: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Family Member. */
+        /** @description A unique integer value identifying this Family. */
         id: number;
       };
       cookie?: never;
@@ -49666,80 +50438,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['FamilyMember'];
-        };
-      };
-    };
-  };
-  roster_family_members_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Family Member. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['FamilyMemberRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'];
-        };
-      };
-    };
-  };
-  roster_family_members_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Family Member. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  roster_family_members_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Family Member. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedFamilyMemberRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FamilyMember'];
+          'application/json': components['schemas']['Family'];
         };
       };
     };

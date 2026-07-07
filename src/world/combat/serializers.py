@@ -29,6 +29,7 @@ from world.combat.models import (
     CombatOpponent,
     CombatParticipant,
     CombatRoundAction,
+    DramaticSurgeRecord,
     DuelChallenge,
     EscalationCurve,
 )
@@ -752,6 +753,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         source="opponents_cached",
     )
     current_round_actions = serializers.SerializerMethodField()
+    surge_beats = serializers.SerializerMethodField()
     is_participant = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
@@ -803,6 +805,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "participants",
             "opponents",
             "current_round_actions",
+            "surge_beats",
             "is_participant",
             "is_gm",
             "clashes",
@@ -933,6 +936,52 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             participant__character_sheet__character_id__in=character_ids,
         )
         return RoundActionSerializer(own_actions, many=True).data  # type: ignore[return-value]
+
+    def get_surge_beats(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Return this round's dramatic-surge beats (#2013).
+
+        Every viewer sees the generic ``narration`` line (never names the
+        bond/track/subject — the leak rule). ``trigger_kind``/``amount`` are
+        added only for the surging participant's own owner, GMs, and staff —
+        mirrors ``get_current_round_actions``'s covenant-scoped pattern.
+        """
+        request = self.context.get("request")
+        records = DramaticSurgeRecord.objects.filter(
+            encounter=obj,
+            round_number=obj.round_number,
+        ).select_related("participant__character_sheet__character", "encounter__escalation_curve")
+
+        is_gm_or_staff = self.context.get("is_gm", False) or (
+            request is not None and request.user.is_staff
+        )
+        viewer_character_ids = self.context.get("viewer_character_ids", set())
+
+        beats: list[dict[str, Any]] = []
+        for record in records:
+            beat: dict[str, Any] = {"narration": self._render_surge_beat_narration(record)}
+            character_id = record.participant.character_sheet.character_id
+            if is_gm_or_staff or character_id in viewer_character_ids:
+                beat["trigger_kind"] = record.trigger_kind
+                beat["amount"] = record.amount
+                beat["participant"] = record.participant_id
+            beats.append(beat)
+        return beats
+
+    @staticmethod
+    def _render_surge_beat_narration(record: DramaticSurgeRecord) -> str:
+        """Re-render the generic narration line from the curve template.
+
+        The record itself stores only trigger_kind/amount/subject (audit
+        data) — narration is derived at read time from the encounter's
+        current curve, same as the live broadcast at write time.
+        """
+        from world.combat.escalation import _render_surge_narration  # noqa: PLC0415
+
+        curve = record.encounter.escalation_curve
+        character_name = record.participant.character_sheet.character.db_key
+        if curve is None:
+            return ""
+        return _render_surge_narration(curve, character_name)
 
     def get_clashes(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return active Clash records for this encounter.
@@ -1095,6 +1144,10 @@ class AddOpponentSerializer(serializers.Serializer):
     formula fills every stat field automatically (Task 5 auto-fill mode).
     All other stat fields are optional overrides.
 
+    ``position_id`` (#2005) is optional; when supplied it must name a Position
+    in the encounter's own room — validated against the encounter's room here
+    so a mismatched position never reaches the service layer.
+
     Expects ``encounter`` and ``request`` in serializer context (provided by the
     view) so that ``validate()`` can run the stakes gate.
     """
@@ -1109,9 +1162,11 @@ class AddOpponentSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+    position_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
-        """Run stakes requirement gate for the encounter + requesting user."""
+        """Run stakes requirement gate + validate position_id against the encounter's room."""
+        from world.areas.positioning.models import Position  # noqa: PLC0415
         from world.combat.scaling import (  # noqa: PLC0415
             StakesRequirementError,
             validate_stakes_requirement,
@@ -1124,6 +1179,13 @@ class AddOpponentSerializer(serializers.Serializer):
                 validate_stakes_requirement(encounter, cast(AccountDB, request.user))
             except StakesRequirementError as exc:
                 raise serializers.ValidationError({"non_field_errors": exc.user_message}) from exc
+
+        position_id = attrs.get("position_id")
+        if position_id is not None and encounter is not None:
+            if not Position.objects.filter(pk=position_id, room=encounter.room).exists():
+                raise serializers.ValidationError(
+                    {"position_id": "That position is not in this encounter's room."}
+                )
         return attrs
 
 

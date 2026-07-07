@@ -148,6 +148,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     position_adjacency: [],
     is_lethal: false,
     duel_winner: null,
+    surge_beats: [],
     ...overrides,
   };
   mockedUseCombatEncounter.mockReturnValue({

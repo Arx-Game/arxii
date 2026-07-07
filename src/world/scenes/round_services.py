@@ -547,7 +547,7 @@ def resolve_solo_abandoned_victims(
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.vitals.peril_resolution import (  # noqa: PLC0415
-        _acute_peril_condition_names,
+        acute_peril_condition_names,
         potential_rescuer_present,
     )
     from world.vitals.services import can_act, resolve_abandonment  # noqa: PLC0415
@@ -559,7 +559,7 @@ def resolve_solo_abandoned_victims(
     peril_ids = set(
         ConditionInstance.objects.filter(
             target_id__in=char_ids,
-            condition__name__in=_acute_peril_condition_names(),
+            condition__name__in=acute_peril_condition_names(),
         ).values_list("target_id", flat=True)
     )
     if not peril_ids:
@@ -678,7 +678,7 @@ def resolve_scene_round(scene_round: SceneRound) -> SceneRound:
     # #1479 (plummet): a falling character's descent is ENVIRONMENTAL and
     # self-completing — it must advance every round regardless of who drove the
     # round, so it is exempt from the #1480 AFK own-peril skip below (and, via
-    # _acute_peril_condition_names excluding PLUMMETING, from the downed-victim
+    # acute_peril_condition_names excluding PLUMMETING, from the downed-victim
     # hold/abandonment). Gravity does not pause for an idle round.
     plummeting_ids = _plummeting_character_ids(rnd)
 

@@ -195,6 +195,51 @@ class ResolveEncounterRoundAction(Action):
         return ActionResult(success=True, message="The round resolves.")
 
 
+def _resolve_add_opponent_inputs(
+    kwargs: dict[str, Any],
+) -> tuple[str, str, object, str, object] | ActionResult:
+    """Resolve + validate ``AddOpponentAction`` kwargs.
+
+    Returns ``(name, tier, threat_pool, description, position)`` on success,
+    or the failure ``ActionResult`` to return immediately. Extracted from
+    ``execute()`` to keep its own return-statement count low (PLR0911).
+    """
+    from world.areas.positioning.models import Position  # noqa: PLC0415
+    from world.combat.models import ThreatPool  # noqa: PLC0415
+
+    name = kwargs.get("name")
+    tier = kwargs.get("tier")
+    threat_pool_id = kwargs.get("threat_pool_id")
+    description = kwargs.get("description", "")
+    position_id = kwargs.get("position_id")
+
+    if not name or not tier or threat_pool_id is None:
+        return ActionResult(
+            success=False,
+            message="Name, tier, and threat pool are required.",
+        )
+    if tier not in OpponentTier.values:
+        return ActionResult(success=False, message="Invalid opponent tier.")
+
+    try:
+        pool = resolve_model_by_pk_or_name(
+            ThreatPool,
+            str(threat_pool_id),
+            not_found_msg=f"No threat pool named {threat_pool_id!r} found.",
+        )
+    except CommandError as err:
+        return ActionResult(success=False, message=str(err))
+
+    position = None
+    if position_id is not None:
+        try:
+            position = Position.objects.get(pk=position_id)
+        except Position.DoesNotExist:
+            return ActionResult(success=False, message="That position does not exist.")
+
+    return name, tier, pool, description, position
+
+
 @dataclass
 class AddOpponentAction(Action):
     """Add an NPC opponent to the active encounter."""
@@ -212,34 +257,25 @@ class AddOpponentAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.combat.models import ThreatPool  # noqa: PLC0415
+        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
         from world.combat.services import add_opponent  # noqa: PLC0415
 
         encounter, error = _active_encounter_for_gm(actor)
         if error:
             return error
 
-        name = kwargs.get("name")
-        tier = kwargs.get("tier")
-        threat_pool_id = kwargs.get("threat_pool_id")
-        description = kwargs.get("description", "")
+        resolved = _resolve_add_opponent_inputs(kwargs)
+        if isinstance(resolved, ActionResult):
+            return resolved
+        name, tier, pool, description, position = resolved
 
-        if not name or not tier or threat_pool_id is None:
-            return ActionResult(
-                success=False,
-                message="Name, tier, and threat pool are required.",
-            )
-        if tier not in OpponentTier.values:
-            return ActionResult(success=False, message="Invalid opponent tier.")
-
-        try:
-            pool = resolve_model_by_pk_or_name(
-                ThreatPool,
-                str(threat_pool_id),
-                not_found_msg=f"No threat pool named {threat_pool_id!r} found.",
-            )
-        except CommandError as err:
-            return ActionResult(success=False, message=str(err))
+        # #2001 Task 5: threads the GM's account so add_opponent's custody
+        # APPEAR gate can refuse an outsider GM spawning a story-protected
+        # NPC (via existing_objectdb/persona — this action doesn't accept
+        # either kwarg yet, so today's ephemeral-only spawns are never
+        # gated, but the account is threaded here so any future kwarg
+        # addition inherits the gate for free).
+        account = resolve_account_or_none(actor)
 
         try:
             opponent = add_opponent(
@@ -248,9 +284,14 @@ class AddOpponentAction(Action):
                 tier=tier,
                 threat_pool=pool,
                 description=description,
+                acting_account=account,
+                position=position,
             )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
+        except PositionError as exc:
+            # A position in a different room than the encounter's spawn room.
+            return ActionResult(success=False, message=exc.user_message)
 
         return ActionResult(
             success=True,

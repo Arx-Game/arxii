@@ -71,6 +71,24 @@ class MaturityPromotionError(StoryError):
     )
 
 
+class CustodyClearanceError(StoryError):
+    """Base class for CustodyClearance lifecycle errors (#2001)."""
+
+    _SAFE_MESSAGE = "This custody clearance request cannot be processed."
+
+
+class CustodyClearanceStateError(CustodyClearanceError):
+    """Raised when a lifecycle transition is attempted from an ineligible status."""
+
+    _SAFE_MESSAGE = "This clearance is not in a state that allows that action."
+
+
+class CustodyClearanceAuthorityError(CustodyClearanceError):
+    """Raised when the acting account/GM lacks custodian or staff authority."""
+
+    _SAFE_MESSAGE = "You are not authorized to act on this custody clearance."
+
+
 class EraAdvanceError(StoryError):
     """Raised when an era lifecycle transition is not permitted."""
 

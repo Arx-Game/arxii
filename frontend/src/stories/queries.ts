@@ -12,11 +12,13 @@ import type {
   ListChaptersParams,
   ListClaimsParams,
   ListContributionsParams,
+  ListCustodyClearancesParams,
   ListErasParams,
   ListEpisodesParams,
   ListGMProfilesParams,
   ListGroupProgressParams,
   ListProgressionRequirementsParams,
+  ListProtectedSubjectsParams,
   ListSessionRequestsParams,
   ListStoryGMOffersParams,
   ListStoriesParams,
@@ -31,6 +33,8 @@ import type {
   Beat,
   BeatOutcome,
   ChapterCreateBody,
+  ClearanceDecisionBody,
+  ClearanceResolveBody,
   ContributeBeatBody,
   CreateEventBody,
   Era,
@@ -39,9 +43,12 @@ import type {
   EpisodeProgressionRequirement,
   MarkBeatBody,
   OfferStoryToGMBody,
+  ProtectedSubjectCreateBody,
+  ProtectedSubjectUpdateBody,
   PromoteEpisodeBody,
   RejectClaimBody,
   RequestClaimBody,
+  RequestClearanceBody,
   RespondToOfferBody,
   ResolveEpisodeBody,
   StoryCreateBody,
@@ -130,6 +137,14 @@ export const storiesKeys = {
   // Eras (Wave 6)
   eraList: (params?: ListErasParams) => [...storiesKeys.all, 'eras', params] as const,
   era: (id: number) => [...storiesKeys.all, 'era', id] as const,
+
+  // StoryProtectedSubject (#2001 Task 8)
+  protectedSubjects: (params?: ListProtectedSubjectsParams) =>
+    [...storiesKeys.all, 'protected-subjects', params] as const,
+
+  // CustodyClearance (#2001 Task 8)
+  custodyClearances: (params?: ListCustodyClearancesParams) =>
+    [...storiesKeys.all, 'custody-clearances', params] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -1004,6 +1019,122 @@ export function useArchiveEra() {
       qc.invalidateQueries({ queryKey: storiesKeys.eraList() }).catch(() => {});
       qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) }).catch(() => {});
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// StoryProtectedSubject hooks (#2001 Task 8)
+// ---------------------------------------------------------------------------
+
+export function useProtectedSubjects(params?: ListProtectedSubjectsParams) {
+  return useQuery({
+    queryKey: storiesKeys.protectedSubjects(params),
+    queryFn: () => api.listProtectedSubjects(params),
+    throwOnError: true,
+  });
+}
+
+export function useCreateProtectedSubject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProtectedSubjectCreateBody) => api.createProtectedSubject(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...storiesKeys.all, 'protected-subjects'] }).catch(
+        () => {}
+      );
+    },
+  });
+}
+
+export function useUpdateProtectedSubject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: ProtectedSubjectUpdateBody }) =>
+      api.updateProtectedSubject(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...storiesKeys.all, 'protected-subjects'] }).catch(
+        () => {}
+      );
+    },
+  });
+}
+
+export function useDeactivateProtectedSubject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deactivateProtectedSubject(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...storiesKeys.all, 'protected-subjects'] }).catch(
+        () => {}
+      );
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// CustodyClearance hooks (#2001 Task 8)
+// ---------------------------------------------------------------------------
+
+export function useCustodyClearances(params?: ListCustodyClearancesParams) {
+  return useQuery({
+    queryKey: storiesKeys.custodyClearances(params),
+    queryFn: () => api.listCustodyClearances(params),
+    throwOnError: true,
+  });
+}
+
+function invalidateClearances(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: [...storiesKeys.all, 'custody-clearances'] }).catch(() => {});
+}
+
+export function useRequestClearance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RequestClearanceBody) => api.requestClearance(body),
+    onSuccess: () => invalidateClearances(qc),
+  });
+}
+
+export function useGrantClearance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: ClearanceDecisionBody }) =>
+      api.grantClearance(id, body),
+    onSuccess: () => invalidateClearances(qc),
+  });
+}
+
+export function useDenyClearance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: ClearanceDecisionBody }) =>
+      api.denyClearance(id, body),
+    onSuccess: () => invalidateClearances(qc),
+  });
+}
+
+export function useEscalateClearance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.escalateClearance(id),
+    onSuccess: () => invalidateClearances(qc),
+  });
+}
+
+export function useResolveClearance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: ClearanceResolveBody }) =>
+      api.resolveClearance(id, body),
+    onSuccess: () => invalidateClearances(qc),
+  });
+}
+
+export function useRevokeClearance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.revokeClearance(id),
+    onSuccess: () => invalidateClearances(qc),
   });
 }
 

@@ -1,7 +1,8 @@
 """Positional reach predicate for combat technique targeting (Task 3 / #533).
 
 Wraps position_reachable with leniency for unpositioned rooms and combatants.
-A LATER task wires this into declare-time validation — do NOT call from services yet.
+Wired into declare-time validation via ``_validate_technique_reach``
+(``world/combat/services.py``), which is called from ``declare_action``.
 """
 
 from __future__ import annotations

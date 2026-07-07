@@ -319,11 +319,12 @@ Confirmation dialog for retiring a thread. Calls `useRetireThread`.
 
 ### `components/threads/WeaveThreadWizard.tsx`
 
-Multi-step wizard for weaving a new thread. Step 1: select `TargetKind` (FACET and
-COVENANT_ROLE fully enabled; TRAIT/TECHNIQUE/Relationship stubbed "coming soon"). The
-bare ROOM anchor was removed (#879/#1199) — room-anchored threads now use the dedicated
-SANCTUM slot-based weaving flow, not this generic wizard. Step 2: select anchor.
-Step 3: name + description + confirm. Calls `useWeaveThread`.
+Multi-step wizard for weaving a new thread. Step 1: select `TargetKind` (TRAIT, TECHNIQUE,
+FACET, SANCTUM, COVENANT_ROLE, and RELATIONSHIP_TRACK are all live; RELATIONSHIP_CAPSTONE
+is the one kind still stubbed "coming soon", #2033). The bare ROOM anchor was removed
+(#879/#1199) — room-anchored threads now use the dedicated SANCTUM slot-based weaving flow,
+not this generic wizard. Step 2: select anchor. Step 3: name + description + confirm.
+Calls `useWeaveThread`.
 
 ### `components/threads/TeachingOfferCard.tsx`
 
