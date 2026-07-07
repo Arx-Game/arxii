@@ -111,7 +111,8 @@ class RelationshipTrack(SharedMemoryModel):
         default=False,
         help_text=(
             "Whether bonds on this track qualify for combat escalation intensity "
-            "spikes when the bonded character falls (#872)."
+            "spikes — when the bonded character falls, enters mortal peril, or "
+            "(for negative-sign tracks) is fought as a hated foe (#872, #2013)."
         ),
     )
 

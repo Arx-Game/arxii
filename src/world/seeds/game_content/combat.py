@@ -101,3 +101,97 @@ def seed_encounter_beat_wiring() -> None:
     from world.combat.beat_wiring import wire_encounter_beat_triggers  # noqa: PLC0415
 
     wire_encounter_beat_triggers()
+
+
+def seed_dramatic_surge_content() -> None:
+    """Seed the dramatic surge engine's default content (#2013).
+
+    Idempotent (get_or_create at every layer). Creates:
+    - the FIRST production RelationshipTrack rows this codebase ships:
+      "Bond" (POSITIVE), "Rivalry" / "Enemies" (NEGATIVE) — all
+      fuels_escalation_spikes=True. Without the negative tracks the
+      hated-foe leg is content-dead.
+    - a default "Standard Dramatic Escalation" EscalationCurve.
+    - StakesEscalationModifier rows for all five StakesLevel values;
+      REGIONAL and above carry the default curve + increasing bonuses
+      (staff-tunable from here via admin).
+    - the escalation spike TriggerDefinitions (wire_escalation_content).
+    """
+    from world.combat.constants import StakesLevel  # noqa: PLC0415
+    from world.combat.factories import (  # noqa: PLC0415
+        ensure_escalation_pace_check_type,
+        wire_escalation_content,
+    )
+    from world.combat.models import EscalationCurve, StakesEscalationModifier  # noqa: PLC0415
+    from world.relationships.constants import TrackSign  # noqa: PLC0415
+    from world.relationships.models import RelationshipTrack  # noqa: PLC0415
+
+    wire_escalation_content()
+
+    RelationshipTrack.objects.get_or_create(
+        name="Bond",
+        defaults={
+            "slug": "bond",
+            "description": "A deep, protective attachment between characters.",
+            "sign": TrackSign.POSITIVE,
+            "display_order": 10,
+            "fuels_escalation_spikes": True,
+        },
+    )
+    RelationshipTrack.objects.get_or_create(
+        name="Rivalry",
+        defaults={
+            "slug": "rivalry",
+            "description": "Competitive antagonism — a foe you measure yourself against.",
+            "sign": TrackSign.NEGATIVE,
+            "display_order": 20,
+            "fuels_escalation_spikes": True,
+        },
+    )
+    RelationshipTrack.objects.get_or_create(
+        name="Enemies",
+        defaults={
+            "slug": "enemies",
+            "description": "Open, active hostility.",
+            "sign": TrackSign.NEGATIVE,
+            "display_order": 21,
+            "fuels_escalation_spikes": True,
+        },
+    )
+
+    pace_check_type = ensure_escalation_pace_check_type()
+    curve, _ = EscalationCurve.objects.get_or_create(
+        name="Standard Dramatic Escalation",
+        defaults={
+            "description": "Default escalating ramp for stakes-driven encounters.",
+            "start_round": 2,
+            "intensity_step": 1,
+            "pace_check_type": pace_check_type,
+            "spike_intensity_amount": 3,
+            "spike_minimum_track_points": 5,
+            "peril_spike_intensity_amount": 4,
+            "hated_foe_spike_intensity_amount": 4,
+            "surge_narration": "{character}'s power surges with sudden, dramatic force.",
+        },
+    )
+
+    StakesEscalationModifier.objects.get_or_create(
+        stakes_level=StakesLevel.LOCAL,
+        defaults={"intensity_step_bonus": 0, "initial_surge": 0, "default_curve": None},
+    )
+    StakesEscalationModifier.objects.get_or_create(
+        stakes_level=StakesLevel.REGIONAL,
+        defaults={"intensity_step_bonus": 1, "initial_surge": 2, "default_curve": curve},
+    )
+    StakesEscalationModifier.objects.get_or_create(
+        stakes_level=StakesLevel.NATIONAL,
+        defaults={"intensity_step_bonus": 2, "initial_surge": 3, "default_curve": curve},
+    )
+    StakesEscalationModifier.objects.get_or_create(
+        stakes_level=StakesLevel.CONTINENTAL,
+        defaults={"intensity_step_bonus": 3, "initial_surge": 4, "default_curve": curve},
+    )
+    StakesEscalationModifier.objects.get_or_create(
+        stakes_level=StakesLevel.WORLD,
+        defaults={"intensity_step_bonus": 4, "initial_surge": 5, "default_curve": curve},
+    )

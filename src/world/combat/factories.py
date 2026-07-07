@@ -972,6 +972,30 @@ class LethalDuelFactory:
         return create_lethal_duel(pc_sheet, opponent_kwargs, room, tier=tier)
 
 
+def ensure_escalation_pace_check_type() -> object:
+    """Get-or-create the 'Escalation Pace' CheckType (#872, extracted for #2013 reuse)."""
+    from decimal import Decimal
+
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+    from world.traits.factories import StatTraitFactory
+    from world.traits.models import TraitCategory
+
+    category, _ = CheckCategory.objects.get_or_create(name="Combat")
+    check, _ = CheckType.objects.get_or_create(
+        name="Escalation Pace",
+        category=category,
+        defaults={"description": "Keep control in pace with rising intensity."},
+    )
+    # #1706 — seed the Escalation Pace check's wits stat leg (split-second
+    # reading of rising combat intensity). Idempotent get_or_create.
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check,
+        trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
+        defaults={"weight": Decimal("1.00")},
+    )
+    return check
+
+
 class EscalationCurveFactory(factory_django.DjangoModelFactory):
     """Factory for EscalationCurve. Doubles as seed content for staff authoring."""
 
@@ -988,33 +1012,12 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
     control_step_on_botch = -1
     spike_intensity_amount = 2
     spike_minimum_track_points = 1
+    peril_spike_intensity_amount = 3
+    hated_foe_spike_intensity_amount = 3
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:
-        from decimal import Decimal
-
-        from world.checks.models import (
-            CheckCategory,
-            CheckType,
-            CheckTypeTrait,
-        )
-        from world.traits.factories import StatTraitFactory
-        from world.traits.models import TraitCategory
-
-        category, _ = CheckCategory.objects.get_or_create(name="Combat")
-        check, _ = CheckType.objects.get_or_create(
-            name="Escalation Pace",
-            category=category,
-            defaults={"description": "Keep control in pace with rising intensity."},
-        )
-        # #1706 — seed the Escalation Pace check's wits stat leg (split-second
-        # reading of rising combat intensity). Idempotent get_or_create.
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check,
-            trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
-            defaults={"weight": Decimal("1.00")},
-        )
-        return check
+        return ensure_escalation_pace_check_type()
 
 
 def wire_flee_config():
@@ -1175,6 +1178,42 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
     base_filter_condition = None  # all filtering happens in the service function
 
 
+def _build_peril_spike_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the peril handler (#2013)."""
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_peril_spike")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.combat.escalation.peril_spike_handler",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the CONDITION_APPLIED mortal-peril spike (#2013).
+
+    Installed on encounter rooms by ``install_escalation_room_triggers``
+    alongside the two existing spike triggers; all filtering happens in
+    ``peril_spike_handler``.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_mortal_peril"
+    event_name = "condition_applied"
+    flow_definition = factory.LazyFunction(_build_peril_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
 def _build_encounter_beat_flow() -> object:
     """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
 
@@ -1264,9 +1303,12 @@ def wire_escalation_content() -> None:
       step -> world.combat.escalation.relationship_spike_handler)
     - "escalation_spike_on_incapacitated" TriggerDefinition
     - "escalation_spike_on_killed" TriggerDefinition
+    - "escalation_peril_spike" FlowDefinition + "escalation_spike_on_mortal_peril"
+      TriggerDefinition (#2013)
 
     Doubles as integration-test setup and staff seed content. Safe to call
     multiple times — does not create duplicates.
     """
     EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
     EscalationSpikeOnKilledTriggerDefinitionFactory()
+    EscalationSpikeOnMortalPerilTriggerDefinitionFactory()

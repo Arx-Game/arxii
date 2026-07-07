@@ -129,6 +129,10 @@ class SanctumTelnetJourneyTests(TestCase):
         self.owner_sheet = CharacterSheetFactory(character=self.owner_char)
         self.owner_char.db_location = self.room_profile.objectdb
         self.owner_char.save(update_fields=["db_location"])
+        # Grant the SANCTUM weaving unlock (#1913).
+        from world.magic.tests.test_sanctum_rituals import _grant_sanctum_unlock
+
+        _grant_sanctum_unlock(self.owner_sheet)
 
         # Room ownership: the owner's PRIMARY persona holds the deed.
         LocationOwnershipFactory(
@@ -145,6 +149,7 @@ class SanctumTelnetJourneyTests(TestCase):
         self.helper_sheet = CharacterSheetFactory(character=self.helper_char)
         self.helper_char.db_location = self.room_profile.objectdb
         self.helper_char.save(update_fields=["db_location"])
+        _grant_sanctum_unlock(self.helper_sheet)
 
         # Seed R1 balance for the owner: 200 units covers homecoming (100)
         # and purging (1 required after homecoming yields 1 point).

@@ -168,6 +168,93 @@ class DeclareActionReachGateLenientTests(TestCase):
         self.assertEqual(action.focused_opponent_target, self.opponent)
 
 
+class DeclareActionReachGateSpawnedOpponentJourneyTests(TestCase):
+    """Journey payoff (#2005): reach gating binds for real combatants placed at
+    spawn time via ``add_opponent(position=...)`` — not just objects placed
+    after the fact via ``place_in_position``.
+    """
+
+    def setUp(self) -> None:
+        from evennia import create_object
+
+        self.room = create_object("typeclasses.rooms.Room", key="JourneyRoom", nohome=True)
+        self.pos_a = create_position(self.room, "journey_pos_a")
+        self.pos_b = create_position(self.room, "journey_pos_b")
+        self.pos_c = create_position(self.room, "journey_pos_c")
+        connect_positions(self.pos_a, self.pos_b, is_passable=True)
+        # pos_c is deliberately left unconnected to pos_a (non-adjacent).
+
+        self.effect_type = EffectTypeFactory(name="JourneyAtk", base_power=20)
+        self.gift = GiftFactory()
+
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=self.room
+        )
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        _wire_vitals(self.participant)
+
+        # PC placed at position A.
+        self.attacker_objectdb = self.participant.character_sheet.character
+        self.attacker_objectdb.move_to(self.room, quiet=True)
+        place_in_position(self.attacker_objectdb, self.pos_a)
+
+        self.technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_type,
+            action_category=ActionCategory.PHYSICAL,
+            reach=TechniqueReach.ADJACENT,
+        )
+
+    def test_opponent_spawned_non_adjacent_is_out_of_reach(self) -> None:
+        """Opponent spawned at C (non-adjacent to A) is out of reach for ADJACENT."""
+        from world.combat.factories import ThreatPoolFactory
+        from world.combat.services import add_opponent
+
+        pool = ThreatPoolFactory()
+        opponent = add_opponent(
+            self.encounter,
+            name="Journey Foe (far)",
+            tier="mook",
+            max_health=20,
+            threat_pool=pool,
+            position=self.pos_c,
+        )
+
+        with self.assertRaises(ActionDispatchError) as cm:
+            declare_action(
+                self.participant,
+                focused_action=self.technique,
+                focused_category=ActionCategory.PHYSICAL,
+                effort_level=EffortLevel.MEDIUM,
+                focused_opponent_target=opponent,
+            )
+        self.assertEqual(cm.exception.code, ActionDispatchError.TARGET_OUT_OF_REACH)
+
+    def test_opponent_spawned_adjacent_is_accepted(self) -> None:
+        """Opponent spawned at B (adjacent to A) is accepted for ADJACENT reach."""
+        from world.combat.factories import ThreatPoolFactory
+        from world.combat.services import add_opponent
+
+        pool = ThreatPoolFactory()
+        opponent = add_opponent(
+            self.encounter,
+            name="Journey Foe (near)",
+            tier="mook",
+            max_health=20,
+            threat_pool=pool,
+            position=self.pos_b,
+        )
+
+        action = declare_action(
+            self.participant,
+            focused_action=self.technique,
+            focused_category=ActionCategory.PHYSICAL,
+            effort_level=EffortLevel.MEDIUM,
+            focused_opponent_target=opponent,
+        )
+        self.assertEqual(action.focused_opponent_target, opponent)
+
+
 class DispatchOutOfReachReturns400Tests(TestCase):
     """DispatchActionView returns HTTP 400 when technique reach is violated.
 

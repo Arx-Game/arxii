@@ -350,6 +350,32 @@ class StakesReadinessReport:
 
 
 @dataclass(frozen=True)
+class CustodyVerdict:
+    """Result of check_subject_custody (world.stories.services.custody, #2001).
+
+    allowed: the actor may act on the subject at the requested scope — no
+        active StoryProtectedSubject matches, OR the actor is staff, OR the
+        actor clears EVERY matching protection (own-story / participant /
+        clearance — see check_subject_custody's docstring).
+    requires_scope: the CustodyScope the actor lacks (mirrors the requested
+        scope — an active protection has no per-scope grain of its own until
+        a CustodyClearance narrows it). None when allowed.
+    custodian_gm_username: the FIRST blocking protection's story's
+        primary_table GM, for the disclosure message ("request clearance
+        from GM <name>"). None when allowed, or when that story is orphaned
+        (no primary_table).
+    protecting_subject_id: the FIRST blocking StoryProtectedSubject's pk —
+        internal/audit only, never player-serialized (mirrors the ADR-0033
+        privacy posture: never the story, beat, or reason).
+    """
+
+    allowed: bool
+    requires_scope: str | None = None
+    custodian_gm_username: str | None = None
+    protecting_subject_id: int | None = None
+
+
+@dataclass(frozen=True)
 class StakePayloadProblem:
     """One invalid StakeResolution writer-payload combination (#1770 pillar 12).
 

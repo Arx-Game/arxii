@@ -86,6 +86,23 @@ def _mock_check_result(success_level: int) -> MagicMock:
     return result
 
 
+def _grant_sanctum_unlock(character_sheet) -> None:
+    """Grant the SANCTUM weaving unlock to a character (test helper, #1913)."""
+    from world.magic.constants import TargetKind
+    from world.magic.models import CharacterThreadWeavingUnlock, ThreadWeavingUnlock
+
+    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+        target_kind=TargetKind.SANCTUM,
+        defaults={"xp_cost": 0},
+    )
+    CharacterThreadWeavingUnlock.objects.get_or_create(
+        character=character_sheet,
+        unlock=unlock,
+        defaults={"xp_spent": 0},
+    )
+    character_sheet.character.weaving_unlocks.invalidate()
+
+
 def _personal_sanctum(*, resonance=None, level: int = 1) -> tuple[SanctumDetails, object]:
     """Build a PERSONAL Sanctum + its room/owner. Returns (sanctum, owner_persona)."""
     resonance = resonance or ResonanceFactory()
@@ -112,6 +129,9 @@ def _personal_sanctum(*, resonance=None, level: int = 1) -> tuple[SanctumDetails
         resonance_type=resonance,
         owner_mode=SanctumOwnerMode.PERSONAL,
     )
+    # Grant the SANCTUM weaving unlock to the owner (#1913).
+    if owner_persona.character_sheet is not None:
+        _grant_sanctum_unlock(owner_persona.character_sheet)
     return sanctum, owner_persona
 
 
@@ -313,6 +333,7 @@ class WeavingTests(TestCase):
     def test_helper_by_non_owner_succeeds(self) -> None:
         sanctum, _ = _personal_sanctum(level=3)
         helper = CharacterSheetFactory()
+        _grant_sanctum_unlock(helper)
         thread = weave_sanctum_thread(sanctum, helper, SanctumSlotKind.HELPER)
         self.assertEqual(thread.slot_kind, SanctumSlotKind.HELPER)
 
@@ -321,6 +342,7 @@ class WeavingTests(TestCase):
         sanctum, owner = _personal_sanctum(level=1)
         weave_sanctum_thread(sanctum, owner.character_sheet, SanctumSlotKind.PERSONAL_OWN)
         helper = CharacterSheetFactory()
+        _grant_sanctum_unlock(helper)
         with self.assertRaises(SanctumWeavingLevelCapError):
             weave_sanctum_thread(sanctum, helper, SanctumSlotKind.HELPER)
 
@@ -419,6 +441,7 @@ class CronTickTests(TestCase):
         owner_thread.level = 1
         owner_thread.save(update_fields=["level"])
         helper_sheet = CharacterSheetFactory()
+        _grant_sanctum_unlock(helper_sheet)
         helper_thread = weave_sanctum_thread(sanctum, helper_sheet, SanctumSlotKind.HELPER)
         helper_thread.level = 1
         helper_thread.save(update_fields=["level"])

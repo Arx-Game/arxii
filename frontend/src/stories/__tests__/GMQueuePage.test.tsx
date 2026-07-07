@@ -23,6 +23,15 @@ vi.mock('../api', () => ({
   getGMQueue: vi.fn(),
 }));
 
+// ClearanceInbox is mounted as a sibling of GMQueueInner (#2001 Task 8) but
+// has its own dedicated test file (ClearanceInbox.test.tsx) covering its
+// incoming/outgoing/staff logic — stub it here so this file stays focused on
+// the GM-queue-specific sections and doesn't need a Redux <Provider> (which
+// ClearanceInbox's useAccount() call requires).
+vi.mock('../components/ClearanceInbox', () => ({
+  ClearanceInbox: () => <div data-testid="clearance-inbox-stub" />,
+}));
+
 import * as api from '../api';
 
 // ---------------------------------------------------------------------------

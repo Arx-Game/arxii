@@ -9,6 +9,10 @@ they tell you what to do. The ADRs are the **record of why** that directive exis
 weighed against it. The two must stay in tandem: when a decision changes, update both the directive
 and add (or supersede) the ADR in the same PR.
 
+**Minting a number:** take the next free number from **origin/main at PR-open time**, skipping
+numbers claimed by other OPEN PRs when you know of them, and re-check at merge. When two branches
+race anyway, the later-merged ADR renumbers (twice bitten: 0095 x2 -> #2065, 0097 x2 -> this fix).
+
 ## When to offer an ADR
 
 Offer an ADR only when a decision clears all three bars:
@@ -62,7 +66,7 @@ treat those names as hints to confirm, not gospel.
 - [0014 — No persisted derived data; derive-on-read](0014-no-persisted-derived-data-derive-on-read.md)
 - [0015 — No polymorphic / GenericFK / ContentType models](0015-no-polymorphic-genericfk-models.md)
 - [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
-- [0093 — Service functions read through cached handlers, not bare ORM queries](0093-service-functions-use-cached-handlers-not-queries.md)
+- [0100 — Service functions read through cached handlers, not bare ORM queries](0100-service-functions-use-cached-handlers-not-queries.md)
 - [0017 — New subsystems are submodules of existing apps](0017-new-subsystems-are-submodules.md)
 - [0018 — Range-partition the Interaction table](0018-range-partition-the-interaction-table.md)
 - [0062 — The Secret↔act anchor puts the FK on the Secret, reversing the back-reference pattern](0062-secret-act-anchor-reverses-the-back-reference-fk.md)
@@ -163,4 +167,6 @@ treat those names as hints to confirm, not gospel.
 - [0082 — Scandal is a derived per-society judgment; reach forks at act birth](0082-scandal-reach-derived-at-act-birth.md)
 - [0085 — The offer→staked-beat link lives on MissionOfferDetails, not NPCServiceOffer](0085-offer-to-beat-link-on-missionofferdetails.md)
 - [0087 — Building renovation swaps the catalog BuildingKind row, not per-building flags](0087-building-renovation-catalog-kind-reassignment.md)
-- [0095 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`](0095-gm-trust-is-gmprofile-level.md)
+- [0097 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`](0097-gm-trust-is-gmprofile-level.md)
+- [0098 — Custody is story-declared narrative-structure protection, distinct from player boundaries](0098-custody-is-story-structure-distinct-from-boundaries.md)
+- [0099 — Custody clearance requests are identity-based, not protected_subject-pk-based](0099-custody-clearance-requests-are-identity-based.md) (supersedes the pk-only Task 6 first pass)

@@ -44,6 +44,8 @@ class WeaveThreadAction(Action):
         from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
         from world.magic.exceptions import (  # noqa: PLC0415
             MantleNotClearedError,
+            RelationshipBondNotOwned,
+            TechniqueNotOwned,
             UnsupportedGiftResonanceError,
             WeavingUnlockMissing,
         )
@@ -64,6 +66,8 @@ class WeaveThreadAction(Action):
             CovenantRoleNeverHeldError,
             MantleNotClearedError,
             UnsupportedGiftResonanceError,
+            RelationshipBondNotOwned,
+            TechniqueNotOwned,
         ) as exc:
             return ActionResult(success=False, message=exc.user_message)
 

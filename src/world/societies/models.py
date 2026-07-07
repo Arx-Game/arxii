@@ -23,6 +23,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import connection, models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
@@ -456,6 +457,15 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
 
             ensure_default_rank_ladder(self)
 
+    @cached_property
+    def gift_grants_handler(self):
+        """Cached handler for this org's acquired gift grants (ADR-0093)."""
+        from world.societies.handlers import (  # noqa: PLC0415
+            OrganizationGiftGrantHandler,
+        )
+
+        return OrganizationGiftGrantHandler(self)
+
 
 class OrganizationRank(SharedMemoryModel):
     """A single rung on an organization's five-tier rank ladder.
@@ -516,6 +526,50 @@ class OrganizationRank(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} (Tier {self.tier})"
+
+
+class OrganizationGiftGrant(SharedMemoryModel):
+    """Org→gift bridge: records that an org has acquired a Gift via a project.
+
+    Created by the ORGANIZATION_CAPABILITY project resolver on completion.
+    Members weave ORGANIZATION-anchored threads to channel the gift's techniques
+    through their resonance.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="gift_grants",
+        help_text="The organization that acquired this capability.",
+    )
+    gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        related_name="organization_grants",
+        help_text="The Gift this org has acquired.",
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="organization_gift_grants",
+        help_text="The project that granted this capability (provenance).",
+    )
+    anchor_cap = models.PositiveSmallIntegerField(
+        help_text="Per-capability ceiling on thread level, set by the project template.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "gift"],
+                name="unique_org_gift_grant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization.name} → {self.gift.name}"
 
 
 class OrganizationMembershipOffer(SharedMemoryModel):

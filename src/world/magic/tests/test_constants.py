@@ -23,6 +23,7 @@ class TargetKindTests(SimpleTestCase):
                 "GIFT",
                 "MANTLE",
                 "SANCTUM",
+                "ORGANIZATION",
             },
         )
 

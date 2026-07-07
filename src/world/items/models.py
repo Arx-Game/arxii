@@ -17,6 +17,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import TargetKind
+from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.items.constants import (
     PROVENANCE_EVENT_TYPES,
@@ -25,6 +26,7 @@ from world.items.constants import (
     EquipmentLayer,
     GearArchetype,
     OwnershipEventType,
+    StyleAudacity,
 )
 from world.locations.constants import StatKey
 
@@ -1310,6 +1312,12 @@ class Style(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    audacity = models.IntegerField(
+        choices=StyleAudacity.choices,
+        default=StyleAudacity.EXPRESSIVE,
+        help_text="How daring this style reads — scales its mechanical reward via "
+        "AudacityTuning (#2029).",
+    )
 
     objects = NaturalKeyManager()
 
@@ -1357,6 +1365,63 @@ class FashionStyleBonus(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.fashion_style.name} → {self.target.name} (x{self.weight})"
+
+
+class AudacityTuning(SharedMemoryModel):
+    """Singleton tuning surface (pk=1) for the per-``StyleAudacity``-tier reward
+    multiplier (#2029).
+
+    Staff-tunable knob scaling how much more (or less) daring ``Style`` rows are
+    mechanically rewarded, consumed by both the passive motif-coherence bonus
+    (``_compute_motif_coherence_bonus`` in ``world/mechanics/services.py``) and peer
+    style-presentation endorsements (``create_style_presentation_endorsement`` in
+    ``world/magic/services/gain.py``). Access via ``get_audacity_tuning()``
+    (``world/items/services/styles.py``) — singleton-by-convention, no DB-level
+    uniqueness constraint (mirrors ``RelationshipBondPullTuning``).
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    understated_mult = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("0.75"),
+        help_text="Reward multiplier for UNDERSTATED-audacity styles.",
+    )
+    expressive_mult = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        help_text="Reward multiplier for EXPRESSIVE-audacity styles.",
+    )
+    bold_mult = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.35"),
+        help_text="Reward multiplier for BOLD-audacity styles.",
+    )
+    outrageous_mult = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.75"),
+        help_text="Reward multiplier for OUTRAGEOUS-audacity styles.",
+    )
+
+    def __str__(self) -> str:
+        return f"AudacityTuning(pk={self.pk})"
+
+    def multiplier_for(self, audacity: int) -> Decimal:
+        """Return the tuned multiplier for a ``StyleAudacity`` ordinal.
+
+        Falls back to ``expressive_mult`` for an unrecognized value rather than
+        raising, so a stray/legacy int never crashes a reward computation.
+        """
+        return {
+            StyleAudacity.UNDERSTATED: self.understated_mult,
+            StyleAudacity.EXPRESSIVE: self.expressive_mult,
+            StyleAudacity.BOLD: self.bold_mult,
+            StyleAudacity.OUTRAGEOUS: self.outrageous_mult,
+        }.get(audacity, self.expressive_mult)
 
 
 class Mantle(SharedMemoryModel):

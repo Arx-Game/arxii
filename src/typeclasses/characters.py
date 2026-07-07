@@ -197,6 +197,13 @@ class Character(ObjectParent, DefaultCharacter):
         return CharacterCovenantRoleHandler(self)
 
     @cached_property
+    def weaving_unlocks(self):
+        """Cached handler for this character's ThreadWeavingUnlock purchases."""
+        from world.magic.handlers import CharacterWeavingUnlockHandler
+
+        return CharacterWeavingUnlockHandler(self)
+
+    @cached_property
     def mantle_clearances(self):
         """Cached handler for this character's recorded mantle-level clearances (Spec D, #512)."""
         from world.items.handlers import CharacterMantleClearanceHandler

@@ -23,6 +23,7 @@ import { storiesKeys } from '../queries';
 import { EpisodeReadyCard } from '../components/EpisodeReadyCard';
 import { PendingClaimRow } from '../components/PendingClaimRow';
 import { AssignedSessionRequestRow } from '../components/AssignedSessionRequestRow';
+import { ClearanceInbox } from '../components/ClearanceInbox';
 import type { GMQueueEpisodeEntry, StoryScope } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -230,6 +231,16 @@ export function GMQueuePage() {
       <ErrorBoundary>
         <GMQueueInner />
       </ErrorBoundary>
+
+      {/* Mounted as a sibling, not nested in GMQueueInner: the custody
+          clearance inbox must render even when the aggregate gm-queue
+          endpoint 403s a staff account with no GMProfile (staff still need
+          to resolve escalations) — see ClearanceInbox's own docstring. */}
+      <div className="mt-10">
+        <ErrorBoundary>
+          <ClearanceInbox />
+        </ErrorBoundary>
+      </div>
     </div>
   );
 }

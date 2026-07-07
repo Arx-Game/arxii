@@ -130,6 +130,9 @@ def create_pvp_duel(
         risk_level=risk_level,
         status=RoundStatus.DECLARING,
     )
+    from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+
+    assign_default_escalation_curve(enc)
 
     participant_a = add_participant(enc, challenger_sheet)
     participant_b = add_participant(enc, challenged_sheet)
@@ -201,6 +204,9 @@ def create_lethal_duel(
         risk_level=RiskLevel.LETHAL,
         status=RoundStatus.DECLARING,
     )
+    from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+
+    assign_default_escalation_curve(enc)
 
     add_participant(enc, pc_sheet)
 

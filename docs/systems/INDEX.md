@@ -332,6 +332,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   cardinality field `Technique.target_type`)
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
   `InvalidImbueAmount`, `ResonanceInsufficient`, `WeavingUnlockMissing`,
+  `RelationshipBondNotOwned` (weaving a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE
+  thread on a track/capstone row whose `relationship.source` isn't the weaver, #2033),
   `XPInsufficient`, `RitualComponentError`,
   `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
   `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
@@ -659,8 +661,14 @@ effects for graph mutation and flight).
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
   and scenes layers)
-- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`) + staff-only
-  `SetTheStageAction` (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
+  (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
+  #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
+  unchecked placement, #2005) + staff-only `SetTheStageAction`
+  (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Telnet:** `CmdPosition` (`position` / `position <name>`, #2005) — list/take/move face over
+  `TakePositionAction`/`MoveToPositionAction`, room-scoped name resolution; see
+  [areas.md](areas.md) "Telnet" section
 - **Scene API:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`,
   `persona_positions`
 - **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
@@ -673,10 +681,12 @@ effects for graph mutation and flight).
 - **Gated blueprint edges (built — #1216):** `BlueprintEdge.gating_challenge_template` →
   `instantiate_blueprint` mints a live `ChallengeInstance` via `instantiate_challenge`
   (`world.mechanics.challenge_resolution`) on staging.
-- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
+- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`;
+  `add_opponent(..., position=...)` spawns an opponent already placed, #2005),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),
-  actions (`MoveToPositionAction` / `SetTheStageAction`)
+  actions (`MoveToPositionAction` / `TakePositionAction` / `GMPlaceInPositionAction` /
+  `SetTheStageAction`), commands (`CmdPosition`, #2005)
 - **Source:** `src/world/areas/positioning/`
 - **Details:** [areas.md](areas.md)
 ### Instances
@@ -1079,7 +1089,7 @@ Secrets, souls with per-life-knowledge reincarnation chains, app-in slots/pools.
 
 ### GM
 Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a
-GM at a given level may author (#2000, ADR-0095).
+GM at a given level may author (#2000, ADR-0097).
 
 - **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
   `last_active_at` stub), `GMApplication` (freeform text, staff response, one PENDING
@@ -1133,7 +1143,7 @@ GM at a given level may author (#2000, ADR-0095).
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
-  [../adr/0095-gm-trust-is-gmprofile-level.md](../adr/0095-gm-trust-is-gmprofile-level.md)
+  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md)
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
@@ -1397,6 +1407,37 @@ and paying authored win-reward lines through an anti-farming activation gate
   scenes / missions / actions (PR4 opt-in surfaces)
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
+
+### Custody & Cross-GM Clearance (#2001)
+GM-authorable protection guarding a story's load-bearing assets (NPCs, items, factions,
+locations, custom subjects — `StoryProtectedSubject`, replaces the NPC-only
+`StoryNPCDependency`) from being appeared-with/harmed/removed by actors at *other*
+tables, absent an active `CustodyClearance` at sufficient scope (APPEAR < HARM <
+REMOVE). One seam (`check_subject_custody`) gates every enforcement point: the NPC
+death guard, stake authoring, `StakeResolution` writer fire-time recheck, and
+`add_opponent` spawning. Clearance requests may name the protection by pk or (the only
+self-serviceable path when the requester doesn't know the pk — see ADR-0099) by
+`subject_kind` + typed identity ref, fanning out across every story independently
+protecting that identity. Grant/deny is the protecting story's Lead GM only (no staff
+bypass); a denied or stale request escalates to staff. Story-declared narrative
+structure — distinct from `world.boundaries` (player-declared emotional safety, see
+below); ADR-0098.
+- **Key Models:** `StoryProtectedSubject`, `CustodyClearance`
+- **Key Services (`world.stories.services.custody` / `custody_clearance`):**
+  `check_subject_custody`, `is_death_prevented_by_story`, `request_clearance`,
+  `grant_clearance`/`deny_clearance`, `escalate_clearance`, `resolve_escalation`,
+  `revoke_clearance`, `matching_active_protected_subjects`
+- **API:** `/api/protected-subjects/` (owner/lead-GM CRUD, soft-deactivate `DELETE`),
+  `/api/custody-clearances/` (list/create + `grant`/`deny`/`escalate`/`resolve`/`revoke`
+  actions)
+- **Telnet:** `story protect`, `story clearance` (`src/commands/story.py`)
+- **Frontend:** `ProtectedSubjectsPanel` (StoryAuthorPage tab), `ClearanceInbox`
+  (GMQueuePage section) — `frontend/src/stories/components/`
+- **Integrates with:** stakes (custody gates on `StakeSerializer`/`StakeResolution`
+  writers), boundaries (shared `_subject_identity` matching, separate axis), combat
+  (`add_opponent` APPEAR gate), GM (`GMProfile`/`GMTable.gm` custodian identity)
+- **Source:** `src/world/stories/` (search `#2001`)
+- **Details:** [custody.md](custody.md)
 
 ### Boundaries
 Player-private content-boundary registry backing `check_stake_boundaries` (#1771):
@@ -2289,6 +2330,19 @@ crafting framework and check-driven facet/style attachment.
     `attachment_quality_tier`; unique per (item_instance, facet)
   - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
     `attachment_quality_tier`; unique per (item_instance, style)
+  - `Style.audacity` (#2029) — `StyleAudacity` tier (UNDERSTATED/EXPRESSIVE/BOLD/
+    OUTRAGEOUS; default EXPRESSIVE) scaling how much a Style is mechanically rewarded.
+    `AudacityTuning` (singleton, pk=1, mirrors `magic.RelationshipBondPullTuning`) is the
+    staff-tunable per-tier multiplier (defaults 0.75/1.00/1.35/1.75); accessed via
+    `get_audacity_tuning()` / `audacity_multiplier_for(style)`
+    (`world.items.services.styles`). Two consumers: the passive motif-coherence bonus
+    (`_compute_motif_coherence_bonus`, `world/mechanics/services.py`) multiplies each
+    matched binding's quality contribution by its style's audacity multiplier; the peer
+    style-presentation endorsement grant (`create_style_presentation_endorsement`,
+    `world/magic/services/gain.py`) scales the base grant by the *highest*-audacity match
+    when the endorsee wears multiple items whose styles bind to the endorsed resonance.
+    Seeded vocabulary: `seed_style_vocabulary()` (`world/seeds/game_content/items.py`) —
+    16 names, four per tier.
   - **Crafting sub-models** (`world.items.crafting`, registered under the `items` app):
     `CraftingRecipe` (one per `CraftingRecipeKind`; carries check config + AP/anima cost +
     default consumption policy), `CraftingMaterialRequirement` (ingredient rows —
@@ -2314,7 +2368,8 @@ crafting framework and check-driven facet/style attachment.
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
   STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
   `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
-  bypasses it with consequences)
+  bypasses it with consequences); `StyleAudacity` (#2029 — UNDERSTATED/EXPRESSIVE/BOLD/
+  OUTRAGEOUS ordinal tier on `Style`)
 - **New field on `ItemInstance` (#1909):** `access_policy` (`ContainerAccessPolicy`, default
   `OPEN`) — container-only; non-containers ignore it. Set via
   `flows.service_functions.inventory.set_container_policy` (owner-only).
@@ -2715,6 +2770,21 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
+  trigger_kind, subject_sheet=None)` (`world/combat/escalation.py`) — the one write path for
+  every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row; `SurgeTriggerKind`:
+  ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES). Three new trigger legs alongside the
+  existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
+  `CONDITION_APPLIED`, filtered via `world.vitals.peril_resolution
+  .acute_peril_condition_names()`), hated-foe (checked on encounter join and NPC opponent add,
+  reading `CombatOpponent.persona.character_sheet` against the PC's own negative-sign
+  `CharacterRelationship`), and stakes (`StakesEscalationModifier`, one row per `StakesLevel`:
+  per-tick `intensity_step_bonus` + one-shot `initial_surge` + `default_curve`
+  auto-assigned at encounter creation). `EscalationCurve` gained
+  `peril_spike_intensity_amount` / `hated_foe_spike_intensity_amount` / `surge_narration`
+  (generic `{character}`-only template). Surfaced to the web combat panel via
+  `EncounterDetailSerializer.surge_beats` (owner/GM-scoped provenance) and broadcast to the
+  room via `room.msg_contents(...)` (telnet).
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the

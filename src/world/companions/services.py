@@ -128,11 +128,18 @@ def materialize_companion_as_combat_opponent(
 
     Returns:
         The created CombatOpponent (ALLY, sourced from archetype stats).
+
+    Position defaults to the owner's current position (#2005): a companion
+    fights at its owner's side unless placed otherwise. ``owner`` is a
+    CharacterSheet; ``owner.character`` is the ObjectDB OneToOne. Unplaced
+    owners (or unpositioned rooms) leave the companion unplaced too.
     """
+    from world.areas.positioning.services import position_of  # noqa: PLC0415
     from world.combat.constants import CombatAllegiance  # noqa: PLC0415
     from world.combat.services import add_opponent  # noqa: PLC0415
 
     archetype = companion.archetype
+    owner_position = position_of(companion.owner.character)
 
     opponent = add_opponent(
         encounter,
@@ -142,6 +149,7 @@ def materialize_companion_as_combat_opponent(
         max_health=archetype.max_health,
         soak_value=archetype.soak_value,
         existing_objectdb=companion.objectdb,
+        position=owner_position,
     )
 
     opponent.allegiance = CombatAllegiance.ALLY

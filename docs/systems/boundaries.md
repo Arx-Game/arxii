@@ -14,6 +14,12 @@ models — see [Dependency direction](#dependency-direction-boundaries-never-imp
 `/api/beats/{id}/stake-availability/` on the stories router).
 **[BUILT & WIRED]** — every surface below is verified against the committed code.
 
+**Not to be confused with custody (#2001, [custody.md](custody.md)):** a
+`TreasuredSubject` is *player*-declared OOC emotional safety (may not even know who an
+NPC really is); a `StoryProtectedSubject` is *GM/story*-declared narrative-structure
+protection. Same typed-subject-FK shape and `_subject_identity` matching helper,
+deliberately separate systems (ADR-0098).
+
 ---
 
 ## Two matching mechanisms
