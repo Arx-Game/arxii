@@ -37262,6 +37262,8 @@ components:
       properties:
         character_id:
           type: integer
+        character_name:
+          type: string
         picked_option_id:
           type: integer
           nullable: true
@@ -37270,6 +37272,7 @@ components:
           nullable: true
       required:
       - character_id
+      - character_name
       - picked_option_id
       - voted_option_id
     GroupBeatResult:
@@ -38918,6 +38921,13 @@ components:
             type: string
         compass_anywhere:
           type: boolean
+        pending_invites:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingMissionInvite'
+          readOnly: true
+        participant_count:
+          type: integer
       required:
       - compass_anywhere
       - compass_rooms
@@ -38927,6 +38937,8 @@ components:
       - epilogue
       - instance_id
       - is_contract_holder
+      - participant_count
+      - pending_invites
       - status
       - summary
       - template_name
@@ -48245,6 +48257,20 @@ components:
       - created_at
       - id
       - scene_id
+    PendingMissionInvite:
+      type: object
+      description: A pending mission invite addressed to the viewer's persona (#2049).
+      properties:
+        invite_id:
+          type: integer
+        instance_id:
+          type: integer
+        template_name:
+          type: string
+      required:
+      - instance_id
+      - invite_id
+      - template_name
     PendingStageAdvanceOffer:
       type: object
       description: |-

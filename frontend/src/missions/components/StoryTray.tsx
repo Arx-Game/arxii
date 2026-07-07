@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 import { BeatCard } from './BeatCard';
+import { GroupBeatCard } from './GroupBeatCard';
 import { useBeat, useJournal } from '../queries';
 import type { JournalEntry } from '../types';
 
@@ -91,7 +92,17 @@ function StoryRow({
         ) : null}
       </Button>
       {!open ? <CompassLine entry={entry} /> : null}
-      {open ? <BeatCard instanceId={entry.instance_id} roomKey={roomKey} /> : null}
+      {open ? (
+        entry.participant_count > 1 ? (
+          <GroupBeatCard
+            instanceId={entry.instance_id}
+            roomKey={roomKey}
+            isContractHolder={entry.is_contract_holder}
+          />
+        ) : (
+          <BeatCard instanceId={entry.instance_id} roomKey={roomKey} />
+        )
+      ) : null}
     </div>
   );
 }

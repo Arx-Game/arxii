@@ -26,6 +26,8 @@ const ACTIVE_ENTRY: JournalEntry = {
   current_node_flavor: 'PLACEHOLDER find him.',
   compass_rooms: ['Lantern Row Inn', 'Merchants Guildhall'],
   compass_anywhere: false,
+  pending_invites: [],
+  participant_count: 1,
 };
 
 const DONE_ENTRY: JournalEntry = {

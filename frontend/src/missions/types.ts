@@ -34,6 +34,13 @@ export type BeatOption = components['schemas']['BeatOption'];
 export type ResolvedBeat = components['schemas']['ResolvedBeat'];
 export type ArcScope = components['schemas']['ArcScopeEnum'];
 
+// #1036/#2049 group beat + invite surface.
+export type GroupBeatResult = components['schemas']['GroupBeatResult'];
+export type GroupBeatView = components['schemas']['GroupBeatView'];
+export type GroupBallotState = components['schemas']['GroupBallotState'];
+export type MissionInviteResult = components['schemas']['MissionInviteResult'];
+export type PendingMissionInvite = components['schemas']['PendingMissionInvite'];
+
 /** Filter knobs for the browser page. Subset of D1's MissionTemplateFilterSet. */
 export interface MissionTemplateFilters {
   name?: string;

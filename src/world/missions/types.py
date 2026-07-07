@@ -90,6 +90,22 @@ class JournalDeed:
 
 
 @dataclass(frozen=True)
+class JournalInvite:
+    """A pending mission invite addressed to the viewer's persona (#2049).
+
+    Surfaced on the journal so the web can show incoming invites with
+    accept/decline without a separate endpoint. Persona-scoped (not
+    per-instance) — mirrors the telnet ``_append_pending_invites`` query
+    (commands/missions.py). ``template_name`` is the invited-to mission's
+    template name for display.
+    """
+
+    invite_id: int
+    instance_id: int
+    template_name: str
+
+
+@dataclass(frozen=True)
 class JournalEntry:
     """One mission run as seen by one character.
 
@@ -117,6 +133,8 @@ class JournalEntry:
     current_node_flavor: str = ""
     compass_rooms: tuple[str, ...] = ()
     compass_anywhere: bool = False
+    pending_invites: tuple[JournalInvite, ...] = ()
+    participant_count: int = 1
 
 
 @dataclass(frozen=True)
@@ -175,6 +193,7 @@ class GroupBallotState:
     """One participant's pick/vote in the group-vote window (#1036)."""
 
     character_id: int
+    character_name: str
     picked_option_id: int | None
     voted_option_id: int | None
 

@@ -20977,6 +20977,7 @@ export interface components {
     /** @description Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036). */
     GroupBallotState: {
       character_id: number;
+      character_name: string;
       picked_option_id: number | null;
       voted_option_id: number | null;
     };
@@ -21750,6 +21751,8 @@ export interface components {
       current_node_flavor: string;
       compass_rooms: string[];
       compass_anywhere: boolean;
+      readonly pending_invites: components['schemas']['PendingMissionInvite'][];
+      participant_count: number;
     };
     /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
     KnownSecret: {
@@ -27148,6 +27151,12 @@ export interface components {
       readonly scene_id: number | null;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /** @description A pending mission invite addressed to the viewer's persona (#2049). */
+    PendingMissionInvite: {
+      invite_id: number;
+      instance_id: number;
+      template_name: string;
     };
     /**
      * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
