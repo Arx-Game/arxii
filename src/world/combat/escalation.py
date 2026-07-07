@@ -23,7 +23,12 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.combat.models import CombatEncounter, CombatParticipant, EscalationCurve
+    from world.combat.models import (
+        CombatEncounter,
+        CombatOpponent,
+        CombatParticipant,
+        EscalationCurve,
+    )
     from world.combat.types import PerformCheckFn
 
 logger = logging.getLogger(__name__)
@@ -427,3 +432,94 @@ def peril_spike_handler(*, payload: Any) -> None:
     if room is None:
         return
     apply_peril_escalation_spike(victim_character=payload.target, room=room)
+
+
+def _maybe_surge_hated_foe(
+    *,
+    encounter: CombatEncounter,
+    participant: CombatParticipant,
+    subject_sheet: CharacterSheet,
+    curve: EscalationCurve,
+) -> None:
+    """Shared qualification + write for one (PC, hated-NPC) pair (#2013).
+
+    Deliberately has NO spike_minimum_track_points floor (unlike the
+    grief/peril legs) — decisions 4-6 gate hated-foe only on sign + the
+    fuels_escalation_spikes flag.
+    """
+    from world.relationships.constants import TrackSign  # noqa: PLC0415
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+    qualifies = CharacterRelationship.objects.filter(
+        source=participant.character_sheet,
+        target=subject_sheet,
+        is_active=True,
+        is_pending=False,
+        track_progress__track__fuels_escalation_spikes=True,
+        track_progress__track__sign=TrackSign.NEGATIVE,
+    ).exists()
+    if not qualifies:
+        return
+    apply_dramatic_surge(
+        encounter=encounter,
+        participant=participant,
+        amount=curve.hated_foe_spike_intensity_amount,
+        trigger_kind=SurgeTriggerKind.HATED_FOE,
+        subject_sheet=subject_sheet,
+    )
+
+
+def check_hated_foe_surges_for_new_opponent(opponent: CombatOpponent) -> None:
+    """Check every ACTIVE PC against a newly-added NPC opponent (#2013).
+
+    Called from ``add_opponent``. No-op when the encounter has no curve, the
+    opponent isn't ENEMY-allegiance, or it has no persona (every PC duel
+    mirror and persona-less mook — the common case — has persona=None, so
+    this guard alone enforces decision 6: no surge off a hostile PC).
+    """
+    from world.combat.constants import CombatAllegiance  # noqa: PLC0415
+    from world.combat.models import CombatParticipant  # noqa: PLC0415
+
+    encounter = opponent.encounter
+    curve = encounter.escalation_curve
+    if curve is None:
+        return
+    if opponent.allegiance != CombatAllegiance.ENEMY or opponent.persona_id is None:
+        return
+    subject_sheet = opponent.persona.character_sheet
+    participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for participant in participants:
+        _maybe_surge_hated_foe(
+            encounter=encounter, participant=participant, subject_sheet=subject_sheet, curve=curve
+        )
+
+
+def check_hated_foe_surges_for_new_participant(participant: CombatParticipant) -> None:
+    """Check a newly-joined PC against every already-present ENEMY opponent (#2013).
+
+    Called from ``_create_participant`` (shared by ``add_participant`` and
+    ``join_encounter``). No-op when the encounter has no curve.
+    """
+    from world.combat.constants import CombatAllegiance, OpponentStatus  # noqa: PLC0415
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+    encounter = participant.encounter
+    curve = encounter.escalation_curve
+    if curve is None:
+        return
+    opponents = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+        allegiance=CombatAllegiance.ENEMY,
+        persona__isnull=False,
+    ).select_related("persona__character_sheet")
+    for opponent in opponents:
+        _maybe_surge_hated_foe(
+            encounter=encounter,
+            participant=participant,
+            subject_sheet=opponent.persona.character_sheet,
+            curve=curve,
+        )
