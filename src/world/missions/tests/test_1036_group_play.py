@@ -201,6 +201,23 @@ class GroupVoteApiTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIsNotNone(r.data["resolved"])
 
+    def test_group_beat_ballot_has_character_name(self):
+        """GroupBallotState exposes character_name alongside character_id (#2049)."""
+        # Submit picks first — ballots are created on pick, not on beat access.
+        with self._as(self.holder):
+            self.client.post(self._url("group-pick"), {"option_id": self.opt_a.pk}, format="json")
+        with self._as(self.p2):
+            self.client.post(self._url("group-pick"), {"option_id": self.opt_a.pk}, format="json")
+        with self._as(self.holder):
+            r = self.client.get(self._url("group-beat"))
+        self.assertEqual(r.status_code, 200)
+        ballots = r.data["group_beat"]["ballots"]
+        self.assertEqual(len(ballots), 2)
+        names = {self.holder.key, self.p2.key}
+        for ballot in ballots:
+            self.assertIn(ballot["character_name"], names)
+            self.assertTrue(ballot["character_name"])
+
     def test_group_beat_non_participant_404(self):
         with self._as(_pc()):
             r = self.client.get(self._url("group-beat"))

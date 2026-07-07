@@ -175,6 +175,7 @@ class GroupBallotState:
     """One participant's pick/vote in the group-vote window (#1036)."""
 
     character_id: int
+    character_name: str
     picked_option_id: int | None
     voted_option_id: int | None
 

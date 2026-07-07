@@ -390,6 +390,7 @@ def _group_beat_view(
     ballot_states = tuple(
         GroupBallotState(
             character_id=ballot.participant.character_id,
+            character_name=ballot.participant.character.db_key,
             picked_option_id=ballot.picked_option_id,
             voted_option_id=ballot.voted_option_id,
         )

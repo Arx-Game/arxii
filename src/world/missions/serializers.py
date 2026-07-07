@@ -608,6 +608,7 @@ class GroupBallotStateSerializer(serializers.Serializer):
     """Read-only mirror of :class:`world.missions.types.GroupBallotState` (#1036)."""
 
     character_id = serializers.IntegerField()
+    character_name = serializers.CharField()
     picked_option_id = serializers.IntegerField(allow_null=True)
     voted_option_id = serializers.IntegerField(allow_null=True)
 
