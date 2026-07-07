@@ -59,7 +59,7 @@ class RoomCharacterSearchAPIView(APIView):
                 continue
             name = obj_state.get_display_name(looker=caller_state)
             if not term or term in name.lower():
-                results.append({"value": name, "label": name})
+                results.append({"id": obj_state.obj.pk, "name": name})
         return Response(results)
 
 
