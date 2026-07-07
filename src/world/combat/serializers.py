@@ -1014,14 +1014,22 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         Exposes foil pairings (who is dueling whom) to the frontend combat UI.
         Returns only ACTIVE locks so resolved ones don't appear after breaking.
-        """
-        from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
-        from world.combat.models import EngagementLock  # noqa: PLC0415
 
-        locks = EngagementLock.objects.filter(
-            encounter=obj,
-            status=EngagementLockStatus.ACTIVE,
-        )
+        Uses the ``engagement_locks_cached`` prefetch-to-attr set on the
+        viewset's ``_base_queryset`` so no extra query fires during detail
+        serialization. Falls back to a direct filter for callers that don't
+        use the viewset (e.g. unit tests that call the serializer directly).
+        """
+        locks = getattr(obj, "engagement_locks_cached", None)  # noqa: GETATTR_LITERAL
+        if locks is None:
+            from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
+            from world.combat.models import EngagementLock  # noqa: PLC0415
+
+            locks = EngagementLock.objects.filter(
+                encounter=obj,
+                status=EngagementLockStatus.ACTIVE,
+            )
+
         return [
             {
                 "id": lock.pk,
