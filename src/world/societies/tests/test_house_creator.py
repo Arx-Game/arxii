@@ -228,3 +228,7 @@ class MaterializationTests(HouseCreatorTestData):
         template = HouseTemplate.objects.get(name=TEMPLATE_NAME)
         self.assertEqual(template.realm, title.realm)
         self.assertTrue(template.holdings.exists())
+        definition = template.aspect_definitions.first()
+        self.assertIsNotNone(definition)
+        self.assertGreaterEqual(definition.options.filter(is_active=True).count(), 2)
+        self.assertTrue(template.features.exists())
