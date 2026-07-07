@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+from django.utils import timezone
+
 from world.missions.services.visibility import template_visible_to
 from world.scenes.services import MissingPrimaryPersonaError, persona_for_character
 
@@ -24,7 +26,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from typeclasses.characters import Character
-    from world.missions.models import MissionGiver, MissionTemplate
+    from world.missions.models import MissionGiver, MissionInstance, MissionTemplate
 
 #: Cap on how many postings a board preview renders (constant; #2044).
 MAX_BOARD_POSTINGS = 10
@@ -77,8 +79,85 @@ def postings_for_giver(giver: MissionGiver, character: ObjectDB) -> list[BoardPo
     ]
 
 
+class BoardTakeError(Exception):
+    """Typed error for a failed board take (ineligible / not on board / inactive).
+
+    Follows the project's typed-exception convention so views and commands
+    surface a safe message rather than raw ``str(exc)``.
+    """
+
+    # Class-level constants — avoid inline string literals in raise
+    # statements (TRY003/EM101).
+    _MSG_UNAVAILABLE = "That board is not available."
+    _MSG_NOT_ON_BOARD = "That posting is not on this board."
+    _MSG_INELIGIBLE = "You are not eligible for that posting."
+
+    UNAVAILABLE: str = _MSG_UNAVAILABLE
+    NOT_ON_BOARD: str = _MSG_NOT_ON_BOARD
+    INELIGIBLE: str = _MSG_INELIGIBLE
+
+    def __init__(self, user_message: str) -> None:
+        self.user_message = user_message
+        super().__init__(user_message)
+
+
+# Default re-offer cooldown when a taken template carries no cooldown of its own.
+# Mirrors trigger_dispatch._DEFAULT_COOLDOWN so the two paths stay in sync.
+_DEFAULT_COOLDOWN = timezone.timedelta(hours=12)
+
+
+def take_from_board(giver: MissionGiver, character: ObjectDB, template_id: int) -> MissionInstance:
+    """Re-run eligibility for ``template_id`` on ``giver``, then grant.
+
+    The preview list from :func:`postings_for_giver` is stale the instant
+    it's rendered (cooldowns, level changes, …). This function re-checks:
+
+    1. The giver is active and kind BOARD.
+    2. The template is in the giver's pool (not a random pk) and active.
+    3. ``template_visible_to`` still passes for this character.
+
+    On success, grants via ``staff_assign_mission`` (the same primitive
+    trigger dispatch uses) and writes a ``MissionGiverCooldown``.
+
+    Args:
+        giver: The BOARD-kind giver to take from.
+        character: The character accepting the posting.
+        template_id: The pk of the template to accept.
+
+    Returns:
+        The started ``MissionInstance``.
+
+    Raises:
+        BoardTakeError: Template not on this board, not eligible, giver
+            inactive, or not a BOARD-kind giver.
+    """
+    from world.missions.constants import GiverKind  # noqa: PLC0415
+    from world.missions.models import MissionGiverCooldown  # noqa: PLC0415
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+
+    if not giver.is_active or giver.giver_kind != GiverKind.BOARD:
+        raise BoardTakeError(BoardTakeError.UNAVAILABLE)
+    template = giver.templates.filter(pk=template_id, is_active=True).first()
+    if template is None:
+        raise BoardTakeError(BoardTakeError.NOT_ON_BOARD)
+    try:
+        persona = persona_for_character(cast("Character", character))
+    except MissingPrimaryPersonaError:
+        persona = None
+    if not template_visible_to(template, character, persona=persona):
+        raise BoardTakeError(BoardTakeError.INELIGIBLE)
+    instance = staff_assign_mission(template, character)
+    available_at = timezone.now() + (template.cooldown or _DEFAULT_COOLDOWN)
+    MissionGiverCooldown.objects.update_or_create(
+        giver=giver, character=character, defaults={"available_at": available_at}
+    )
+    return instance
+
+
 __all__ = (
     "MAX_BOARD_POSTINGS",
     "BoardPosting",
+    "BoardTakeError",
     "postings_for_giver",
+    "take_from_board",
 )

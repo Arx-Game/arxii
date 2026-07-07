@@ -21,7 +21,9 @@ from world.missions.models import MissionGiverCooldown, MissionInstance
 from world.missions.services.boards import (
     MAX_BOARD_POSTINGS,
     BoardPosting,
+    BoardTakeError,
     postings_for_giver,
+    take_from_board,
 )
 
 
@@ -91,3 +93,59 @@ class PostingsForGiverTests(TestCase):
         giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
         postings = postings_for_giver(giver, self.character)
         self.assertEqual(postings, [])
+
+
+class TakeFromBoardTests(TestCase):
+    """``take_from_board`` re-runs eligibility, then grants."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.board_obj = ObjectDBFactory()  # plain Object typeclass
+        cls.template_open = _template_with_entry("board-take-open")
+
+    def test_grants_eligible_template(self) -> None:
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+        instance = take_from_board(giver, self.character, self.template_open.pk)
+        self.assertIsNotNone(instance)
+        self.assertEqual(instance.template, self.template_open)
+
+    def test_rejects_restricted_template(self) -> None:
+        restricted = _template_with_entry("board-take-restricted")
+        restricted.visibility = MissionVisibility.RESTRICTED
+        restricted.save(update_fields=["visibility"])
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(restricted)
+        with self.assertRaises(BoardTakeError):
+            take_from_board(giver, self.character, restricted.pk)
+
+    def test_rejects_template_not_on_board(self) -> None:
+        other_template = _template_with_entry("board-take-other")
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+        with self.assertRaises(BoardTakeError):
+            take_from_board(giver, self.character, other_template.pk)
+
+    def test_writes_cooldown(self) -> None:
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+        take_from_board(giver, self.character, self.template_open.pk)
+        self.assertTrue(
+            MissionGiverCooldown.objects.filter(giver=giver, character=self.character).exists()
+        )
+
+    def test_rejects_inactive_giver(self) -> None:
+        giver = MissionGiverFactory(
+            giver_kind=GiverKind.BOARD, target=self.board_obj, is_active=False
+        )
+        giver.templates.add(self.template_open)
+        with self.assertRaises(BoardTakeError):
+            take_from_board(giver, self.character, self.template_open.pk)
+
+    def test_rejects_non_board_giver_kind(self) -> None:
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        giver = MissionGiverFactory(giver_kind=GiverKind.ROOM_TRIGGER, target=room)
+        giver.templates.add(self.template_open)
+        with self.assertRaises(BoardTakeError):
+            take_from_board(giver, self.character, self.template_open.pk)
