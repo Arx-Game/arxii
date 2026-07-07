@@ -251,6 +251,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
+    from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
@@ -299,6 +300,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).
         "civic_hubs": [RoomFeatureKind],
+        # Building condition: the Grand Preparation "Direct the Household"
+        # ContributionMethod (#1930).
+        "building_condition": [ContributionMethod],
         # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
