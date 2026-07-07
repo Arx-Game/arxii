@@ -14,6 +14,10 @@ named here to prevent future conflation:
   reward.
 - `StakesLevel` (`world/combat/constants.py`) gates GM *access scope* (who may run a
   LOCAL vs. WORLD-scale scene) — nothing to do with risk/reward by outcome.
+- `Story.impact_tier` (`world/stories/constants.py`, #2003) is the story-side
+  *canon review* axis (TABLE/REGIONAL/WORLD) — whether a story's world-touching
+  content has been staff-reviewed before it pays. It is an auto-downgrade-not-block
+  review gate, not a danger/reward or access-scope axis; see ADR-0101.
 
 We considered a new dedicated "stakes wager" model instead of reusing `Beat.risk`,
 but `Beat` is already the universal junction point every scene/encounter/mission

@@ -2316,6 +2316,7 @@
   - assistant_claims_approved <- stories.AssistantGMClaim
   - assigned_session_requests <- stories.SessionRequest
   - story_offers_received <- stories.StoryGMOffer
+  - crossover_invites_sent <- stories.CrossoverInvite
   - stake_outcomes <- stories.StakeOutcome
   - custody_requests <- stories.CustodyClearance
   - tables <- gm.GMTable
@@ -2335,6 +2336,7 @@
   - draft_characters <- character_creation.CharacterDraft
   - primary_stories <- stories.Story
   - beat_completions <- stories.BeatCompletion
+  - ran_beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.GroupStoryProgress
   - bulletin_posts <- stories.TableBulletinPost
@@ -5805,8 +5807,10 @@
   - progress_records <- stories.StoryProgress
   - notes <- stories.StoryNote
   - gm_offers <- stories.StoryGMOffer
+  - crossover_invites_received <- stories.CrossoverInvite
   - bulletin_posts <- stories.TableBulletinPost
   - protected_subjects <- stories.StoryProtectedSubject
+  - canon_reviews <- stories.CanonReview
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
@@ -5846,6 +5850,8 @@
   - active_global_progress_records <- stories.GlobalStoryProgress
   - active_progress_records <- stories.StoryProgress
   - session_requests <- stories.SessionRequest
+  - crossover_invites <- stories.CrossoverInvite
+  - crossover_invites_accepted <- stories.CrossoverInvite
 
 ### EpisodeScene
 **Foreign Keys:**
@@ -5944,6 +5950,7 @@
   - beat -> stories.Beat [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_table -> gm.GMTable [FK] (nullable)
+  - ran_by_table -> gm.GMTable [FK] (nullable)
   - roster_entry -> roster.RosterEntry [FK] (nullable)
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - era -> stories.Era [FK] (nullable)
@@ -6004,6 +6011,14 @@
   - story -> stories.Story [FK]
   - offered_to -> gm.GMProfile [FK]
   - offered_by_account -> accounts.AccountDB [FK]
+
+### CrossoverInvite
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - from_gm -> gm.GMProfile [FK]
+  - to_story -> stories.Story [FK]
+  - proposed_episode -> stories.Episode [FK] (nullable)
+  - accepted_episode -> stories.Episode [FK] (nullable)
 
 ### TableBulletinPost
 **Foreign Keys:**
@@ -6089,6 +6104,11 @@
   - requesting_beat -> stories.Beat [FK] (nullable)
   - granted_by -> gm.GMProfile [FK] (nullable)
   - staff_resolver -> accounts.AccountDB [FK] (nullable)
+
+### CanonReview
+**Foreign Keys:**
+  - story -> stories.Story [FK]
+  - reviewer -> accounts.AccountDB [FK] (nullable)
 
 
 ## world.traits
