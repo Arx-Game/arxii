@@ -31,6 +31,7 @@ from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
     MantleNotClearedError,
+    RelationshipBondNotOwned,
     WeavingUnlockMissing,
     XPInsufficient,
 )
@@ -479,7 +480,7 @@ def _has_weaving_unlock(
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913
+def weave_thread(  # noqa: PLR0913, C901
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -509,6 +510,9 @@ def weave_thread(  # noqa: PLR0913
         WeavingUnlockMissing: If the character lacks the required weaving unlock.
         CovenantRoleNeverHeldError: If target_kind is COVENANT_ROLE and the
                 character has never held the role.
+        RelationshipBondNotOwned: If target_kind is RELATIONSHIP_TRACK or
+                RELATIONSHIP_CAPSTONE and the target's relationship is not the
+                weaving character's own (relationship.source != character_sheet).
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
@@ -533,6 +537,21 @@ def weave_thread(  # noqa: PLR0913
     elif not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
+
+    if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
+        # Both RelationshipTrackProgress and RelationshipCapstone expose
+        # ``.relationship``; only the relationship's own source may weave a
+        # thread on it. Checked AFTER the unlock gate above (#2033 adversarial
+        # review): this is defense-in-depth for direct service callers only —
+        # the API (ThreadSerializer._resolve_target) now scopes its lookup to
+        # the requester's own rows, and the telnet resolvers
+        # (_resolve_track_anchor/_resolve_capstone_anchor in commands/weave.py)
+        # are already scoped, so neither can reach this branch with a foreign
+        # row. Ordering it after the unlock check means an unlocked-but-
+        # unauthorized caller sees WeavingUnlockMissing first, never learning
+        # whether the foreign row even exists.
+        if target.relationship.source_id != character_sheet.pk:  # type: ignore[union-attr]
+            raise RelationshipBondNotOwned
 
     # A signature (TECHNIQUE) thread requires that the character actually knows
     # the technique being signed (#1582).
