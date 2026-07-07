@@ -757,6 +757,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     is_participant = serializers.SerializerMethodField()
     is_gm = serializers.SerializerMethodField()
     clashes = serializers.SerializerMethodField()
+    engagement_locks = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
     escalation_curve = serializers.PrimaryKeyRelatedField(
@@ -809,6 +810,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_participant",
             "is_gm",
             "clashes",
+            "engagement_locks",
             "resolution_order",
             "escalation_curve",
             "escalation_curve_name",
@@ -1006,6 +1008,31 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 .all()
             )
         return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
+
+    def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, object]]:
+        """Return active EngagementLock records for this encounter (#2020).
+
+        Exposes foil pairings (who is dueling whom) to the frontend combat UI.
+        Returns only ACTIVE locks so resolved ones don't appear after breaking.
+        """
+        from world.combat.constants import EngagementLockStatus  # noqa: PLC0415
+        from world.combat.models import EngagementLock  # noqa: PLC0415
+
+        locks = EngagementLock.objects.filter(
+            encounter=obj,
+            status=EngagementLockStatus.ACTIVE,
+        )
+        return [
+            {
+                "id": lock.pk,
+                "opponent_id": lock.opponent_id,
+                "participant_id": lock.participant_id,
+                "status": lock.status,
+                "initiated_by": lock.initiated_by,
+                "started_round": lock.started_round,
+            }
+            for lock in locks
+        ]
 
     @extend_schema_field(PositionAdjacencyItemSerializer(many=True))
     def get_position_adjacency(self, obj: CombatEncounter) -> list[dict[str, object]]:
