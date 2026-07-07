@@ -27,8 +27,11 @@ import type {
   Chapter,
   ChapterCreateBody,
   ChapterList,
+  ClearanceDecisionBody,
+  ClearanceResolveBody,
   ContributeBeatBody,
   CreateEventBody,
+  CustodyClearance,
   Era,
   EraCreateBody,
   Episode,
@@ -43,10 +46,16 @@ import type {
   MarkBeatBody,
   MyActiveStoriesResponse,
   OfferStoryToGMBody,
+  PaginatedCustodyClearanceList,
+  PaginatedProtectedSubjectList,
   PaginatedResponse,
+  ProtectedSubject,
+  ProtectedSubjectCreateBody,
+  ProtectedSubjectUpdateBody,
   PromoteEpisodeBody,
   RejectClaimBody,
   RequestClaimBody,
+  RequestClearanceBody,
   RespondToOfferBody,
   ResolveEpisodeBody,
   SessionRequest,
@@ -1194,4 +1203,198 @@ export async function createStoryNote(body: StoryNoteRequest): Promise<StoryNote
   });
   if (!res.ok) throw new Error('Failed to create story note');
   return res.json() as Promise<StoryNote>;
+}
+
+// ---------------------------------------------------------------------------
+// StoryProtectedSubject — GM-authored custody protection (#2001 Task 6/8)
+// ---------------------------------------------------------------------------
+
+export interface ListProtectedSubjectsParams {
+  story?: number;
+  subject_kind?: string;
+  is_active?: boolean;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/protected-subjects/ — owner/lead-GM scoped; staff sees all. */
+export async function listProtectedSubjects(
+  params?: ListProtectedSubjectsParams
+): Promise<PaginatedProtectedSubjectList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/protected-subjects/${qs}`);
+  if (!res.ok) throw new Error('Failed to load protected subjects');
+  return res.json() as Promise<PaginatedProtectedSubjectList>;
+}
+
+export async function createProtectedSubject(
+  body: ProtectedSubjectCreateBody
+): Promise<ProtectedSubject> {
+  const res = await apiFetch('/api/protected-subjects/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    // Preserve the response so the form dialog can surface DRF field errors
+    // (non_field_errors carries the exactly-one-subject validation message).
+    const err = new Error('Failed to create protected subject') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<ProtectedSubject>;
+}
+
+/** PATCH /api/protected-subjects/{id}/ — e.g. `{ is_active: true }` to reactivate. */
+export async function updateProtectedSubject(
+  id: number,
+  body: ProtectedSubjectUpdateBody
+): Promise<ProtectedSubject> {
+  const res = await apiFetch(`/api/protected-subjects/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to update protected subject');
+  return res.json() as Promise<ProtectedSubject>;
+}
+
+/**
+ * DELETE /api/protected-subjects/{id}/ — soft-deactivate (`is_active=False`),
+ * never a hard delete server-side. Returns 204.
+ */
+export async function deactivateProtectedSubject(id: number): Promise<void> {
+  const res = await apiFetch(`/api/protected-subjects/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to deactivate protected subject');
+}
+
+// ---------------------------------------------------------------------------
+// CustodyClearance — cross-story clearance lifecycle (#2001 Task 6/8)
+// ---------------------------------------------------------------------------
+
+export interface ListCustodyClearancesParams {
+  protected_subject?: number;
+  scope?: string;
+  status?: string;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/** GET /api/custody-clearances/ — requester's own + stories they own/lead; staff sees all. */
+export async function listCustodyClearances(
+  params?: ListCustodyClearancesParams
+): Promise<PaginatedCustodyClearanceList> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/custody-clearances/${qs}`);
+  if (!res.ok) throw new Error('Failed to load custody clearances');
+  return res.json() as Promise<PaginatedCustodyClearanceList>;
+}
+
+/**
+ * POST /api/custody-clearances/ — request_clearance, one row per matched
+ * protection. Returns a bare array (never paginated) — see
+ * CustodyClearanceViewSet.create's docstring for the pk-vs-identity paths.
+ */
+export async function requestClearance(body: RequestClearanceBody): Promise<CustodyClearance[]> {
+  const res = await apiFetch('/api/custody-clearances/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to request clearance') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CustodyClearance[]>;
+}
+
+/** POST /api/custody-clearances/{id}/grant/ — custodian GM grants a PENDING request. */
+export async function grantClearance(
+  id: number,
+  body: ClearanceDecisionBody
+): Promise<CustodyClearance> {
+  const res = await apiFetch(`/api/custody-clearances/${id}/grant/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to grant clearance') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CustodyClearance>;
+}
+
+/** POST /api/custody-clearances/{id}/deny/ — custodian GM denies a PENDING request. */
+export async function denyClearance(
+  id: number,
+  body: ClearanceDecisionBody
+): Promise<CustodyClearance> {
+  const res = await apiFetch(`/api/custody-clearances/${id}/deny/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to deny clearance') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CustodyClearance>;
+}
+
+/** POST /api/custody-clearances/{id}/escalate/ — requester escalates to staff. */
+export async function escalateClearance(id: number): Promise<CustodyClearance> {
+  const res = await apiFetch(`/api/custody-clearances/${id}/escalate/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to escalate clearance') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CustodyClearance>;
+}
+
+/** POST /api/custody-clearances/{id}/resolve/ — staff tiebreak on an ESCALATED request. */
+export async function resolveClearance(
+  id: number,
+  body: ClearanceResolveBody
+): Promise<CustodyClearance> {
+  const res = await apiFetch(`/api/custody-clearances/${id}/resolve/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to resolve clearance') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CustodyClearance>;
+}
+
+/** POST /api/custody-clearances/{id}/revoke/ — soft-revoke a GRANTED clearance. */
+export async function revokeClearance(id: number): Promise<CustodyClearance> {
+  const res = await apiFetch(`/api/custody-clearances/${id}/revoke/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to revoke clearance') as Error & { response?: Response };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<CustodyClearance>;
 }

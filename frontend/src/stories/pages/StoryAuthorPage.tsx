@@ -37,6 +37,7 @@ import { ScopeBadge } from '../components/ScopeBadge';
 import { ScopeAssignDialog } from '../components/ScopeAssignDialog';
 import { StoryFormDialog } from '../components/StoryFormDialog';
 import { GMNotesPanel } from '../components/GMNotesPanel';
+import { ProtectedSubjectsPanel } from '../components/ProtectedSubjectsPanel';
 import { ProgressStateBanner } from '../components/ProgressStateBanner';
 import { StoryAuthorTree } from '../components/StoryAuthorTree';
 import { EpisodeDAG } from '../components/EpisodeDAG';
@@ -234,6 +235,9 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
           <TabsTrigger value="gm-notes" data-testid="tab-gm-notes">
             GM Notes
           </TabsTrigger>
+          <TabsTrigger value="protected-subjects" data-testid="tab-protected-subjects">
+            Protected Subjects
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tree">
@@ -262,6 +266,10 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
 
         <TabsContent value="gm-notes">
           <GMNotesPanel storyId={story.id} />
+        </TabsContent>
+
+        <TabsContent value="protected-subjects">
+          <ProtectedSubjectsPanel storyId={story.id} />
         </TabsContent>
       </Tabs>
 
