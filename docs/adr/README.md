@@ -159,3 +159,5 @@ treat those names as hints to confirm, not gospel.
 - [0082 — Scandal is a derived per-society judgment; reach forks at act birth](0082-scandal-reach-derived-at-act-birth.md)
 - [0085 — The offer→staked-beat link lives on MissionOfferDetails, not NPCServiceOffer](0085-offer-to-beat-link-on-missionofferdetails.md)
 - [0087 — Building renovation swaps the catalog BuildingKind row, not per-building flags](0087-building-renovation-catalog-kind-reassignment.md)
+- [0098 — Custody is story-declared narrative-structure protection, distinct from player boundaries](0098-custody-is-story-structure-distinct-from-boundaries.md)
+- [0099 — Custody clearance requests are identity-based, not protected_subject-pk-based](0099-custody-clearance-requests-are-identity-based.md) (supersedes the pk-only Task 6 first pass)

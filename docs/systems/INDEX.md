@@ -1306,6 +1306,37 @@ and paying authored win-reward lines through an anti-farming activation gate
 - **Source:** `src/world/stories/` (models/services/serializers/views — search `#1770`)
 - **Details:** [stakes.md](stakes.md)
 
+### Custody & Cross-GM Clearance (#2001)
+GM-authorable protection guarding a story's load-bearing assets (NPCs, items, factions,
+locations, custom subjects — `StoryProtectedSubject`, replaces the NPC-only
+`StoryNPCDependency`) from being appeared-with/harmed/removed by actors at *other*
+tables, absent an active `CustodyClearance` at sufficient scope (APPEAR < HARM <
+REMOVE). One seam (`check_subject_custody`) gates every enforcement point: the NPC
+death guard, stake authoring, `StakeResolution` writer fire-time recheck, and
+`add_opponent` spawning. Clearance requests may name the protection by pk or (the only
+self-serviceable path when the requester doesn't know the pk — see ADR-0099) by
+`subject_kind` + typed identity ref, fanning out across every story independently
+protecting that identity. Grant/deny is the protecting story's Lead GM only (no staff
+bypass); a denied or stale request escalates to staff. Story-declared narrative
+structure — distinct from `world.boundaries` (player-declared emotional safety, see
+below); ADR-0098.
+- **Key Models:** `StoryProtectedSubject`, `CustodyClearance`
+- **Key Services (`world.stories.services.custody` / `custody_clearance`):**
+  `check_subject_custody`, `is_death_prevented_by_story`, `request_clearance`,
+  `grant_clearance`/`deny_clearance`, `escalate_clearance`, `resolve_escalation`,
+  `revoke_clearance`, `matching_active_protected_subjects`
+- **API:** `/api/protected-subjects/` (owner/lead-GM CRUD, soft-deactivate `DELETE`),
+  `/api/custody-clearances/` (list/create + `grant`/`deny`/`escalate`/`resolve`/`revoke`
+  actions)
+- **Telnet:** `story protect`, `story clearance` (`src/commands/story.py`)
+- **Frontend:** `ProtectedSubjectsPanel` (StoryAuthorPage tab), `ClearanceInbox`
+  (GMQueuePage section) — `frontend/src/stories/components/`
+- **Integrates with:** stakes (custody gates on `StakeSerializer`/`StakeResolution`
+  writers), boundaries (shared `_subject_identity` matching, separate axis), combat
+  (`add_opponent` APPEAR gate), GM (`GMProfile`/`GMTable.gm` custodian identity)
+- **Source:** `src/world/stories/` (search `#2001`)
+- **Details:** [custody.md](custody.md)
+
 ### Boundaries
 Player-private content-boundary registry backing `check_stake_boundaries` (#1771):
 hard lines (auto-blocked `ContentTheme` matches, always private) and treasured

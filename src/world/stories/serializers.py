@@ -3391,7 +3391,8 @@ class CustodyClearanceRequestSerializer(serializers.Serializer):
     """Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
 
     Accepts EITHER of two mutually-exclusive paths to name the protected
-    subject (Task 6 review Fix 4):
+    subject (Task 6 review Fix 4; ADR-0099 records the identity path as the
+    ratified design, not just a workaround):
 
     - **pk path** — ``protected_subject`` directly. Deliberately uses an
       UNSCOPED-by-story queryset — a clearance request is inherently

@@ -74,7 +74,9 @@ _PROTECT_USAGE = (
     "Usage:\n"
     "  story protect <story-id> add <kind>=<subject-ref> [beat=<id>] [notes=<text>]\n"
     "                                     — kind: npc_fate|personal_jeopardy|item|"
-    "faction|location|custom\n"
+    "faction|org|society|location|custom\n"
+    "                                     — org/society disambiguate faction when a name"
+    " matches both\n"
     "  story protect <story-id> remove <protected-id>\n"
     "  story protect <story-id> list"
 )
@@ -82,6 +84,8 @@ _CLEARANCE_USAGE = (
     "Usage:\n"
     "  story clearance request <kind>=<subject-ref> scope=<appear|harm|remove>"
     " [story=<id>] [message=<text>]\n"
+    "                                     — kind: npc_fate|personal_jeopardy|item|"
+    "faction|org|society|location|custom\n"
     "  story clearance request protected=<id> scope=<appear|harm|remove>"
     " [story=<id>] [message=<text>]\n"
     "  story clearance grant <id> [note=<text>]\n"
@@ -964,7 +968,8 @@ class CmdStory(ArxNamespaceCommand):
         if len(kind_keys_present) != 1:
             msg = (
                 "Provide exactly one subject kind (npc_fate/personal_jeopardy/item/"
-                "faction/location/custom)=<subject-ref>."
+                "faction/org/society/location/custom)=<subject-ref>. "
+                "(org/society disambiguate faction when a name matches both.)"
             )
             raise CommandError(msg)
         return kind_keys_present[0]

@@ -7,9 +7,9 @@ story that declared them ``StoryProtectedSubject``. Every enforcement point
 ``check_subject_custody`` so the participation/staff/clearance rule can never
 drift between call sites.
 
-Axis note (ADR pending, see issue #2001): this is GM/story-declared
-*narrative structure* protection — distinct from ``world.boundaries``
-(player-declared OOC emotional safety). Neither replaces the other.
+Axis note (ADR-0098): this is GM/story-declared *narrative structure*
+protection — distinct from ``world.boundaries`` (player-declared OOC
+emotional safety). Neither replaces the other.
 
 Subject identity matching reuses ``_subject_identity`` from
 ``world.stories.services.boundaries`` (single definition, shared with the
