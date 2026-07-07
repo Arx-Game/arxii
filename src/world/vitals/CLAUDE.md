@@ -65,7 +65,7 @@ Core survivability pipeline:
 ### `peril_resolution.py`
 Involved-party classification and death-permission helpers used by both `services.py` and
 `world.scenes.round_services`:
-- `_acute_peril_condition_names() -> list[str]` — returns `[BLEED_OUT_CONDITION_NAME]`. PLUMMETING
+- `acute_peril_condition_names() -> list[str]` — returns `[BLEED_OUT_CONDITION_NAME]`. PLUMMETING
   is EXCLUDED: falls are environmental and self-completing; the hold/abandonment logic does not apply.
 - `acute_peril_instances(sheet) -> QuerySet` — active Bleeding-Out `ConditionInstance`s on a victim.
 - `is_pc_source(source_character) -> bool` — True iff the source has a `db_account` (player-
@@ -116,5 +116,5 @@ Involved-party classification and death-permission helpers used by both `service
   attacker, not just in the encounter layer but at the death-selection layer.
 - **Abandonment is action-driven** (ADR-0004): the grace window counts `round_number` beats, not
   wall-clock time.
-- **Plummet is exempt** from the hold/abandonment model: `_acute_peril_condition_names()` returns
+- **Plummet is exempt** from the hold/abandonment model: `acute_peril_condition_names()` returns
   BLEED_OUT only; plummet descent always advances regardless of who drove the round.

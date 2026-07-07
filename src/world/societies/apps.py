@@ -34,9 +34,14 @@ class SocietiesConfig(AppConfig):
             register_tiered_resolver,
         )
         from world.societies.gang_turf import complete_gang_turf, resolve_gang_turf  # noqa: PLC0415
+        from world.societies.org_capability import resolve_organization_capability  # noqa: PLC0415
 
         register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
         register_tiered_resolver(ProjectKind.GANG_TURF, resolve_gang_turf)
+        register_kind_handler(
+            ProjectKind.ORGANIZATION_CAPABILITY,
+            resolve_organization_capability,
+        )
 
         # #1884 — register the DOMAIN_IMPROVEMENT kind handler.
         from world.societies.houses.services import complete_domain_improvement  # noqa: PLC0415

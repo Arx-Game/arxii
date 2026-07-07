@@ -542,3 +542,55 @@ class CharacterTechniqueHandler:
     def invalidate(self) -> None:
         """Clear the cached technique list. Called by mutation services."""
         self.__dict__.pop("_state", None)
+
+
+class CharacterWeavingUnlockHandler:
+    """Cached handler for a character's weaving unlocks (ADR-0093).
+
+    Loads all CharacterThreadWeavingUnlock rows once with select_related on
+    the unlock. All lookups are list comprehensions against the cached list —
+    never .filter()/.exists() in service functions.
+    """
+
+    def __init__(self, character: Character) -> None:
+        self.character = character
+
+    @cached_property
+    def _rows(self) -> list:
+        from world.magic.models import CharacterThreadWeavingUnlock  # noqa: PLC0415
+
+        return list(
+            CharacterThreadWeavingUnlock.objects.filter(
+                character_id=self.character.pk
+            ).select_related("unlock")
+        )
+
+    def has_unlock_for_kind(self, kind: str) -> bool:
+        """Return True if the character has any unlock with the given target_kind."""
+        return any(r.unlock.target_kind == kind for r in self._rows)
+
+    def has_unlock_for_trait(self, trait) -> bool:
+        """Return True if the character has a TRAIT-kind unlock for the given trait."""
+        return any(
+            r.unlock.target_kind == TargetKind.TRAIT and r.unlock.unlock_trait_id == trait.pk
+            for r in self._rows
+        )
+
+    def has_unlock_for_gift(self, gift) -> bool:
+        """Return True if the character has a TECHNIQUE-kind unlock for the given gift."""
+        return any(
+            r.unlock.target_kind == TargetKind.TECHNIQUE and r.unlock.unlock_gift_id == gift.pk
+            for r in self._rows
+        )
+
+    def has_unlock_for_track(self, track) -> bool:
+        """Return True if the character has a RELATIONSHIP_TRACK-kind unlock for the given track."""
+        return any(
+            r.unlock.target_kind == TargetKind.RELATIONSHIP_TRACK
+            and r.unlock.unlock_track_id == track.pk
+            for r in self._rows
+        )
+
+    def invalidate(self) -> None:
+        """Clear the cached unlock list. Called by mutator services."""
+        self.__dict__.pop("_rows", None)

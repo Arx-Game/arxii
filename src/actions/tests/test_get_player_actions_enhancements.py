@@ -137,11 +137,14 @@ class GetPlayerActionsQueryCountTests(TestCase):
         # active Thread list to find the matching GIFT thread — one fixed-cost Thread SELECT (via
         # CharacterThreadHandler._all). The CharacterSheet fetch is shared between the variant
         # resolver and the identity-stream calculation via a _sheet pass-through (no duplicate
-        # round-trip). Both additions are fixed-cost over the #520 baseline of 12. Raise only with
-        # a documented justification — the goal remains a single-digit-ish cost.
+        # round-trip). Both additions are fixed-cost over the #520 baseline of 12.
+        # #2005 (take_position picker): the character here is unplaced, so _positioning_actions
+        # now issues one Position query for PRIMARY/FEATURE entry positions in the room (instead
+        # of returning [] with zero extra queries) — +1 over the prior baseline of 14. Raise only
+        # with a documented justification — the goal remains a single-digit-ish cost.
         self.assertLessEqual(
             len(ctx.captured_queries),
-            14,
+            15,
             f"get_player_actions issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

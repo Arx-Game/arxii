@@ -21,7 +21,7 @@ A GM (`GMProfile`) who has claimed a single `agm_eligible` beat session to run, 
 _Avoid_: co-GM, helper GM, sub-GM.
 
 **GM Level**:
-A GM's trust tier (`GMProfile.level`, the `GMLevel` enum: STARTING/JUNIOR/GM/EXPERIENCED/SENIOR), canonical since #2000 (ADR-0095) — the single source of GM trust; supersedes the dead `PlayerTrust.gm_trust_level` field, which was removed. Ordered via `GM_LEVEL_ORDER`/`gm_level_index`; consumed by `stories.BeatSerializer`'s risk gate, `stories.StakeSerializer`'s custom-stakes gate, and `combat.StakesLevelRequirement.minimum_gm_level`.
+A GM's trust tier (`GMProfile.level`, the `GMLevel` enum: STARTING/JUNIOR/GM/EXPERIENCED/SENIOR), canonical since #2000 (ADR-0097) — the single source of GM trust; supersedes the dead `PlayerTrust.gm_trust_level` field, which was removed. Ordered via `GM_LEVEL_ORDER`/`gm_level_index`; consumed by `stories.BeatSerializer`'s risk gate, `stories.StakeSerializer`'s custom-stakes gate, and `combat.StakesLevelRequirement.minimum_gm_level`.
 _Avoid_: GM trust level (on PlayerTrust — that field is gone), trust score.
 
 **Level Cap**:

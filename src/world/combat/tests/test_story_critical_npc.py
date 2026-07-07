@@ -8,8 +8,11 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import OpponentStatus
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.services import apply_damage_to_opponent
-from world.stories.factories import StoryFactory, StoryParticipationFactory
-from world.stories.models import StoryNPCDependency
+from world.stories.factories import (
+    StoryFactory,
+    StoryParticipationFactory,
+    StoryProtectedSubjectFactory,
+)
 from world.stories.types import StoryStatus
 
 
@@ -38,7 +41,7 @@ class StoryCriticalNPCCombatTests(TestCase):
         self.story = StoryFactory(status=StoryStatus.ACTIVE)
 
     def test_non_participant_cannot_defeat_story_critical_npc(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         result = apply_damage_to_opponent(self.opponent, 100, source_sheet=self.attacker_sheet)
         self.opponent.refresh_from_db()
         self.assertFalse(result.defeated)
@@ -46,7 +49,7 @@ class StoryCriticalNPCCombatTests(TestCase):
         self.assertGreater(self.opponent.health, 0)
 
     def test_participant_can_defeat_story_critical_npc(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         StoryParticipationFactory(story=self.story, character=self.attacker_obj)
         result = apply_damage_to_opponent(self.opponent, 100, source_sheet=self.attacker_sheet)
         self.opponent.refresh_from_db()
@@ -60,7 +63,7 @@ class StoryCriticalNPCCombatTests(TestCase):
         self.assertEqual(self.opponent.status, OpponentStatus.DEFEATED)
 
     def test_no_source_sheet_still_prevented(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         result = apply_damage_to_opponent(self.opponent, 100)
         self.opponent.refresh_from_db()
         self.assertFalse(result.defeated)

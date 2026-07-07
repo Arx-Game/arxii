@@ -592,6 +592,22 @@ contract surfaces exclusively as a generic "stakes could not be presented"
 failure (ADR-0033 privacy, extended by ADR-0086). Full model/service/API
 detail: `docs/systems/boundaries.md`.
 
+### Custody seam (`world.stories.services.custody`, #2001)
+
+A **separate** screen from the boundary seam above (ADR-0098: custody is GM/story-declared
+narrative-structure protection, distinct from player-declared boundaries) — a story can
+declare a subject (`StoryProtectedSubject`, same typed-subject-FK shape as `Stake`)
+load-bearing, blocking every *other* story's actors from appearing-with/harming/removing it
+absent an active `CustodyClearance` at sufficient scope (APPEAR < HARM < REMOVE).
+`check_subject_custody(subject_identity, scope, actor_account, acting_story) -> CustodyVerdict`
+is the single seam every enforcement point funnels through (death guard, `StakeSerializer`
+staking validation, `StakeResolution` writer fire-time recheck, `add_opponent` spawning) —
+reuses the same `_subject_identity` comparison the boundary seam uses, so the two never drift
+on subject-matching logic even though they answer different questions. A blocked verdict
+discloses only `custodian_gm_username` (to route a clearance request) — never the protecting
+story, beat, or reason (mirrors `blocked_reason_private`'s privacy posture above). Full
+model/service/API/clearance-lifecycle detail: `docs/systems/custody.md`.
+
 ### Activation wiring map (who calls `activate_stakes_contract`)
 
 | Commit moment | Wire point | Party |
@@ -697,7 +713,7 @@ isn't enough on POST):
 - `StakeSerializer` additionally validates the beat's declared risk falls within
   `[template.min_risk, template.max_risk]` (by `risk_index`), and gates the
   template-null (custom) path to staff or a non-staff GM whose
-  `GMLevelCap.allow_custom_stakes` permits it (#2000, ADR-0095), mirroring
+  `GMLevelCap.allow_custom_stakes` permits it (#2000, ADR-0097), mirroring
   `BeatSerializer.validate`'s risk gate (also `GMLevelCap`-driven, via
   `_gm_max_risk`/`_gm_allows_custom_stakes` in `world/stories/serializers.py`);
 - `StakeRewardLineSerializer` additionally refuses non-WIN-column resolutions
@@ -780,6 +796,11 @@ issues:
 - **Items / Societies (subject FKs)** — `Stake.subject_item` →
   `items.ItemInstance`; `Stake.subject_society` / `subject_organization` →
   `societies.Society` / `societies.Organization`
+- **Custody (#2001)** — `StakeSerializer.validate` and `StakeResolution` writer
+  fire-time recheck both funnel through `check_subject_custody`
+  (`world.stories.services.custody`) before staking/resolving a subject another
+  story protects — see [Custody seam](#custody-seam-worldstoriesservicescustody-2001)
+  above and [custody.md](custody.md)
 - **Currency** (PR3) — `deliver_mission_money` is the MONEY sink (audited mint
   faucet; `ref="stake:<pk>"`)
 - **Magic** (PR3) — `grant_resonance(..., source=GainSource.STAKE_REWARD)` is

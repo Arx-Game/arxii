@@ -44,7 +44,7 @@ What changes:
   runnable). Scope is **not** trust-gated. GROUP anchors to the GM table's
   people and/or an optional covenant seam.
 - **Risk** is a plain `Beat.risk` integer (no RiskTier model). The trust→risk ladder
-  has since arrived (#2000, ADR-0095): non-staff GMs are capped at their
+  has since arrived (#2000, ADR-0097): non-staff GMs are capped at their
   `GMLevelCap.max_beat_risk`/`allow_custom_stakes` (staff still bypass); see
   `docs/roadmap/gm-system.md`'s "Trust and Feedback" section.
 - **Per-story OOC notes ledger** (author + timestamp), separate from
@@ -55,7 +55,7 @@ via placeholder GM-mark. Sequenced follow-ups (each its own brainstorm):
 (1) Mission/Challenge engine via existing `resolve_challenge`,
 (2) Situation/Encounter resolution + Sessions,
 (3) consequence + reward computation (where risk numbers gain meaning),
-(4) ✅ GM leveling / the trust→risk gating hook (#2000 — see ADR-0095;
+(4) ✅ GM leveling / the trust→risk gating hook (#2000 — see ADR-0097;
 the automatic *feedback-driven earning curve* is still deliberately deferred,
 promotion is staff-only for now),
 (5) covenant entity.
@@ -339,6 +339,29 @@ All 14 waves shipped across two sessions.
 - App.tsx: Phase 5 routes registered (`/tables`, `/tables/:id`, `/stories/eras`, `/stories/browse`, `/stories/my-offers`, `/narrative/mute-settings`)
 - MODEL_MAP regenerated; CLAUDE.md files updated for tables, narrative, stories
 - 761+ backend tests; 938+ frontend Vitest tests; Playwright smoke tests across all new routes
+
+### #2001 — Story-asset custody + cross-GM clearance (complete)
+
+GM-authorable protection for a story's load-bearing assets (NPCs, items, factions,
+locations, custom subjects), plus a real GM-to-GM permission path to borrow another
+story's protected asset for a crossover.
+
+- `StoryProtectedSubject` (replaces the NPC-only `StoryNPCDependency`) generalizes to
+  the full `StakeSubjectKind` vocabulary; `CustodyClearance` is the request/grant/deny/
+  escalate/resolve/revoke lifecycle (`CustodyScope`: appear < harm < remove)
+- `check_subject_custody` (`world.stories.services.custody`) is the single seam every
+  enforcement point calls: the NPC death guard, `StakeSerializer` staking validation,
+  `StakeResolution` writer fire-time recheck, and `add_opponent` opponent-spawning
+- API: `/api/protected-subjects/` (owner/lead-GM CRUD, soft-deactivate), `/api/custody-clearances/`
+  (list/create + grant/deny/escalate/resolve/revoke actions); identity-based clearance
+  requests (`subject_kind` + typed ref) close a pk-discoverability gap for a requester
+  who only knows the custodian's username (ADR-0099)
+- Telnet: `story protect`, `story clearance` (`src/commands/story.py`)
+- Frontend: `ProtectedSubjectsPanel` (StoryAuthorPage tab), `ClearanceInbox`
+  (GMQueuePage section), `RequestClearanceDialog` + the grant/deny/escalate/resolve/
+  revoke action components
+- ADR-0098 (custody vs. player boundaries axis), ADR-0099 (identity-based clearance
+  requests); full detail in `docs/systems/custody.md`
 
 ## What's Needed for MVP
 

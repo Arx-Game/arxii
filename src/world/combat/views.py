@@ -17,13 +17,14 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.serializers import Serializer
+from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef, ActionResult, DispatchResult
+from world.areas.positioning.models import Position
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     ClashStatus,
@@ -126,6 +127,12 @@ class CombatEncounterViewSet(ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CombatEncounterFilter
     pagination_class = StandardResultsSetPagination
+
+    def perform_create(self, serializer: BaseSerializer[CombatEncounter]) -> None:
+        from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+
+        encounter = serializer.save()
+        assign_default_escalation_curve(encounter)
 
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
@@ -363,9 +370,12 @@ class CombatEncounterViewSet(ModelViewSet):
         ]
         return self._serialize_encounter(request, encounter)
 
+    @extend_schema(request=AddOpponentSerializer)
     @action(detail=True, methods=[HTTPMethod.POST])
     def add_opponent(self, request: Request, pk: int | None = None) -> Response:
         """Add an NPC opponent to the encounter (GM action)."""
+        from world.combat.scaling import NPCUnderCustodyError  # noqa: PLC0415
+
         encounter = self.get_object()
         serializer = AddOpponentSerializer(
             data=request.data,
@@ -374,16 +384,34 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         pool = get_object_or_404(ThreatPool, pk=data["threat_pool_id"])
-        new_opponent = add_opponent(
-            encounter,
-            name=data["name"],
-            tier=data["tier"],
-            max_health=data.get("max_health"),
-            threat_pool=pool,
-            description=data.get("description", ""),
-            soak_value=data.get("soak_value", 0),
-            probing_threshold=data.get("probing_threshold"),
-        )
+        position = None
+        position_id = data.get("position_id")
+        if position_id is not None:
+            position = get_object_or_404(Position, pk=position_id)
+        # #2001 Task 5: this is a GM-facing web path (not action-dispatch), so
+        # the requesting account is threaded directly rather than resolved
+        # from a puppeted actor. This serializer doesn't accept
+        # existing_objectdb/persona kwargs yet — today's spawns here are
+        # always ephemeral and never gated — but the account is threaded for
+        # the same forward-compat reason as AddOpponentAction.
+        try:
+            new_opponent = add_opponent(
+                encounter,
+                name=data["name"],
+                tier=data["tier"],
+                max_health=data.get("max_health"),
+                threat_pool=pool,
+                description=data.get("description", ""),
+                soak_value=data.get("soak_value", 0),
+                probing_threshold=data.get("probing_threshold"),
+                acting_account=cast(AccountDB, request.user),
+                position=position,
+            )
+        except NPCUnderCustodyError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # Update cached opponent list in-place
         encounter.opponents_cached.append(new_opponent)
         return self._serialize_encounter(request, encounter)

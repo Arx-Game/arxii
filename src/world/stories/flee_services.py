@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from evennia.objects.models import ObjectDB as ObjectDBModel
 
 from world.combat.constants import OpponentStatus
-from world.stories.models import StoryNPCDependency
+from world.stories.models import StoryProtectedSubject
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -87,8 +87,8 @@ def _notify_staff_of_story_flee(npc_sheet: CharacterSheet) -> None:
         npc_sheet: The NPC's CharacterSheet.
     """
     affected = list(
-        StoryNPCDependency.objects.filter(
-            npc_sheet=npc_sheet,
+        StoryProtectedSubject.objects.filter(
+            subject_sheet=npc_sheet,
             is_active=True,
         ).select_related("story")
     )

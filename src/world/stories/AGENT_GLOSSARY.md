@@ -91,3 +91,44 @@ _Avoid_: consent check (that's the ADR-0024 social-consent app; a boundary is a 
 **Opt-in / Commit Step** (stakes):
 The moment a player commits to a staked scene and the contract activates (#1770 pillar 9): entering combat (duel creation, hostile-cast seed/feed — surfaced via `combat_stakes` on the consent prompt), accepting a risky mission (`MissionRiskAcknowledgement` + the `acknowledge_risk` two-phase inside `npc_resolve`), or a GM's room-visible `declare_stakes` action in freeform play. The summary shown at this step is the Stakes Summary above.
 _Avoid_: consent gate (see Boundary Check note), buy-in.
+
+**Protected Subject**:
+A `StoryProtectedSubject` row (#2001) declaring that a story asset — NPC, item,
+faction, or freeform subject — is load-bearing for a story and structurally
+guarded from actors external to that story. Generalizes the old
+`StoryNPCDependency` (NPC-only) to the full `StakeSubjectKind` vocabulary,
+reusing `Stake`'s typed-subject-FK shape (`subject_sheet`/`subject_item`/
+`subject_society`/`subject_organization`/`subject_label`, exactly one
+populated). Story-declared narrative-structure protection — distinct from a
+player-declared `TreasuredSubject` (see ADR-0098 / `docs/systems/custody.md`).
+Every enforcement point (the NPC-fate death guard, `StakeSerializer` staking
+validation, `StakeResolution` writer fire-time recheck, `add_opponent`
+spawning) funnels through the single `check_subject_custody` seam
+(`world.stories.services.custody`) rather than checking independently.
+_Avoid_: NPC dependency, load-bearing NPC (Protected Subject is the general term now).
+
+**Custody Clearance**:
+A `CustodyClearance` row (#2001) — a requesting GM's permission ask to act on
+another story's `Protected Subject` at a given `CustodyScope`
+(APPEAR < HARM < REMOVE, weakest→strongest; an active clearance clears every
+scope at or below the one it was granted for). `CustodyClearanceStatus`
+(PENDING/GRANTED/DENIED/ESCALATED, + a soft `revoked_at` on a GRANTED row) is
+the lifecycle; the protecting story's Lead GM grants/denies a PENDING request
+(no staff bypass — staff act only through escalate→resolve, never posing as
+the custodian), the requester may escalate a DENIED or stale-PENDING request
+to staff, and staff (or the custodian) may revoke a GRANTED clearance.
+Requested via either a `protected_subject` pk (once known) or the
+identity path (`subject_kind` + typed ref, ADR-0099) — the latter is the only
+self-serviceable door for a GM who was only ever told the custodian's
+username, never the internal pk (see `docs/systems/custody.md`).
+_Avoid_: permission request, custody request, access grant.
+
+**Custody Verdict**:
+The result of `check_subject_custody` (`CustodyVerdict`, `world.stories.types`)
+— `allowed` plus, when blocked, `requires_scope` and `custodian_gm_username`
+(routing info for a clearance request). `protecting_subject_id` is
+internal/audit-only and never player-serialized — a blocked actor learns only
+"under another story's custody — request clearance from GM `<name>`," never
+the protecting story, beat, or reason (mirrors the boundaries privacy
+posture, ADR-0033/ADR-0086).
+_Avoid_: custody check result, permission verdict.

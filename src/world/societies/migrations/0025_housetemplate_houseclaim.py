@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
         ("realms", "0001_initial"),
         (
             "societies",
-            "0023_holdingkind_organization_family_domain_domaincrisis_and_more",
+            "0024_holdingkind_organization_family_domain_domaincrisis_and_more",
         ),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

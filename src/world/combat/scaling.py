@@ -224,6 +224,25 @@ class StakesRequirementError(ValueError):
         self.user_message = user_message
 
 
+class NPCUnderCustodyError(ValueError):
+    """Raised when ``add_opponent`` would appear a story-protected NPC to an outsider GM.
+
+    Raised by ``add_opponent`` (#2001 Task 5) when the opponent resolves to an
+    existing ``CharacterSheet`` (via ``existing_objectdb``/``persona``) that a
+    ``StoryProtectedSubject`` guards, and ``check_subject_custody`` refuses the
+    acting GM's account at ``CustodyScope.APPEAR``.
+
+    Attributes:
+        user_message: Disclosure-safe explanation (ADR-0033-style — never the
+            protecting story's identity, only the custodian GM's username or a
+            staff-routed fallback) suitable for surfacing to the GM.
+    """
+
+    def __init__(self, *args: object, user_message: str = "") -> None:
+        super().__init__(*args)
+        self.user_message = user_message
+
+
 def validate_stakes_requirement(encounter: CombatEncounter, gm_account: AccountDB) -> None:
     """Raise StakesRequirementError if *gm_account* cannot run *encounter* at its stakes level.
 

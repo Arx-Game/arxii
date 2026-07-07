@@ -21,6 +21,7 @@ from world.societies.models import (
     LegendSourceType,
     LegendSpread,
     Organization,
+    OrganizationGiftGrant,
     OrganizationMembership,
     OrganizationMembershipOffer,
     OrganizationRank,
@@ -62,6 +63,16 @@ class OrganizationMembershipInline(admin.TabularInline):
     fields = ["persona", "rank", "joined_date", "left_at", "exiled_at"]
     readonly_fields = ["joined_date", "left_at", "exiled_at"]
     raw_id_fields = ["persona"]
+
+
+class OrganizationGiftGrantInline(admin.TabularInline):
+    """Inline for displaying gift grants within an organization."""
+
+    model = OrganizationGiftGrant
+    extra = 0
+    fields = ["gift", "anchor_cap", "project"]
+    readonly_fields = ["project"]
+    raw_id_fields = ["gift", "project"]
 
 
 class LegendSpreadInline(admin.TabularInline):
@@ -211,7 +222,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_filter = ["society__realm", "society", "org_type"]
     search_fields = ["name", "description", "society__name"]
     ordering = ["society", "name"]
-    inlines = [OrganizationRankInline, OrganizationMembershipInline]
+    inlines = [OrganizationRankInline, OrganizationMembershipInline, OrganizationGiftGrantInline]
 
     fieldsets = (
         (None, {"fields": ("name", "society", "org_type", "description")}),

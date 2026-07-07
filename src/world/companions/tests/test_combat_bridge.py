@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from world.areas.positioning.services import create_position, place_in_position, position_of
 from world.battles.constants import VehicleKind
 from world.battles.factories import BattleFactory, BattleSideFactory
 from world.combat.constants import CombatAllegiance
@@ -54,6 +55,36 @@ class MaterializeCompanionAsCombatOpponentTests(TestCase):
         self.assertEqual(opponent.tier, "elite")
         # The companion's objectdb is the opponent's ObjectDB (not ephemeral).
         self.assertEqual(opponent.objectdb, obj)
+
+    def test_defaults_to_owners_current_position(self):
+        """Task 3 (#2005): materialization places the companion at the owner's position."""
+        from evennia.utils.create import create_object
+
+        from typeclasses.companions import CompanionObject
+
+        archetype = CompanionArchetypeFactory(max_health=75, soak_value=12, tier="elite")
+        companion = CompanionFactory(archetype=archetype)
+
+        encounter = CombatEncounterFactory()
+        threat_pool = ThreatPoolFactory()
+
+        # Owner's character and the companion's objectdb both live in the encounter room.
+        owner_character = companion.owner.character
+        owner_character.move_to(encounter.room, quiet=True)
+        owner_position = create_position(encounter.room, "owner_pos")
+        place_in_position(owner_character, owner_position)
+
+        obj = create_object(CompanionObject, key=companion.name, location=encounter.room)
+        companion.objectdb = obj
+        companion.save(update_fields=["objectdb"])
+
+        opponent = materialize_companion_as_combat_opponent(
+            companion,
+            encounter,
+            threat_pool=threat_pool,
+        )
+
+        self.assertEqual(position_of(opponent.objectdb), owner_position)
 
 
 class MaterializeCompanionAsBattleVehicleTests(TestCase):

@@ -3,8 +3,7 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.stories.factories import StoryFactory
-from world.stories.models import StoryNPCDependency
+from world.stories.factories import StoryFactory, StoryProtectedSubjectFactory
 from world.stories.types import StoryStatus
 from world.vitals.peril_resolution import death_is_permitted
 
@@ -19,7 +18,7 @@ class StoryCriticalPerilTests(TestCase):
         cls.story = StoryFactory(status=StoryStatus.ACTIVE)
 
     def test_story_critical_npc_death_not_permitted(self):
-        StoryNPCDependency.objects.create(story=self.story, npc_sheet=self.npc_sheet)
+        StoryProtectedSubjectFactory(story=self.story, subject_sheet=self.npc_sheet)
         result = death_is_permitted(
             victim_sheet=self.npc_sheet,
             source_character=self.npc_attacker,

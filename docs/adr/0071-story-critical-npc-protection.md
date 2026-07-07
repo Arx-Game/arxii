@@ -1,8 +1,10 @@
 # Story-Critical NPC Protection — structural death prevention for load-bearing NPCs
 
 A GM can declare that an NPC is load-bearing for a player's story via a
-`StoryNPCDependency` row (FK to `Story`, optionally to a specific `Beat`).
-When an actor external to that story — someone who is not a
+`StoryProtectedSubject` row (FK to `Story`, optionally to a specific `Beat`;
+renamed and generalized beyond NPCs by #2001, which also replaced the model
+formerly named `StoryNPCDependency` — the NPC-fate behavior described below is
+unchanged). When an actor external to that story — someone who is not a
 `StoryParticipation` member of any dependent story — attempts to kill the NPC
 in combat, the death is structurally prevented: the NPC flees (health floored,
 `OpponentStatus.FLED`, moved out of the room) rather than dying. The attacker

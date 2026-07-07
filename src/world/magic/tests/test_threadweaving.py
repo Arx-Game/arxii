@@ -116,6 +116,70 @@ class ThreadWeavingUnlockCleanTests(TestCase):
             )
 
 
+class KindLevelUnlockCleanTests(TestCase):
+    """Kind-level unlocks (FACET, SANCTUM, ORGANIZATION) need no typed FK.
+
+    All typed FKs must be null. clean() must accept these instead of raising
+    'Unknown target_kind' (the pre-existing FACET gap this fixes).
+    """
+
+    def test_facet_unlock_passes_clean(self) -> None:
+        """FACET kind-level unlock (all FKs null) passes full_clean."""
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.FACET,
+            xp_cost=100,
+        )
+        unlock.full_clean()  # should not raise
+
+    def test_sanctum_unlock_passes_clean(self) -> None:
+        """SANCTUM kind-level unlock (all FKs null) passes full_clean."""
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.SANCTUM,
+            xp_cost=100,
+        )
+        unlock.full_clean()
+
+    def test_organization_unlock_passes_clean(self) -> None:
+        """ORGANIZATION kind-level unlock (all FKs null) passes full_clean."""
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.ORGANIZATION,
+            xp_cost=100,
+        )
+        unlock.full_clean()
+
+    def test_kind_level_unlock_rejects_typed_fk(self) -> None:
+        """A kind-level unlock with a typed FK set raises ValidationError."""
+        trait = TraitFactory()
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.FACET,
+            xp_cost=100,
+            unlock_trait=trait,
+        )
+        with self.assertRaises(ValidationError):
+            unlock.full_clean()
+
+    def test_facet_unlock_display_name(self) -> None:
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.FACET,
+            xp_cost=100,
+        )
+        self.assertEqual(unlock.display_name, "ThreadWeaving: Facets")
+
+    def test_sanctum_unlock_display_name(self) -> None:
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.SANCTUM,
+            xp_cost=100,
+        )
+        self.assertEqual(unlock.display_name, "ThreadWeaving: Sanctums")
+
+    def test_organization_unlock_display_name(self) -> None:
+        unlock = ThreadWeavingUnlock(
+            target_kind=TargetKind.ORGANIZATION,
+            xp_cost=100,
+        )
+        self.assertEqual(unlock.display_name, "ThreadWeaving: Organizations")
+
+
 class CharacterThreadWeavingUnlockTests(TestCase):
     def test_idempotency_one_purchase_per_unlock(self) -> None:
         unlock = ThreadWeavingUnlockFactory()

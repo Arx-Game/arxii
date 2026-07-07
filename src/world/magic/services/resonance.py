@@ -439,6 +439,8 @@ _ALWAYS_IN_ACTION_KINDS = frozenset(
         # A species GIFT thread is intrinsic to the character — always available to
         # pull (no anchor target in the action graph to validate against) (#1580).
         TargetKind.GIFT,
+        # An ORGANIZATION thread is intrinsic — org membership is always in-action.
+        TargetKind.ORGANIZATION,
     }
 )
 

@@ -406,6 +406,17 @@ binding on the character's motif, checks which equipped items carry that style
 `ModifierTarget`. The bonus magnitude and per-resonance cap come from the
 `AestheticAxisConfig` singleton (`world/mechanics`, lazy-created by `get_aesthetic_config()`).
 
+**Audacity axis (#2029):** each matched binding's quality contribution is additionally
+scaled by `world.items.services.styles.audacity_multiplier_for(binding.style)` before being
+aggregated — a daring `Style` (higher `StyleAudacity` tier) contributes more coherence than
+a restrained one wearing identically-tiered items. The multiplier itself comes from the
+staff-tunable `items.AudacityTuning` singleton (defaults 0.75/1.00/1.35/1.75 for
+UNDERSTATED/EXPRESSIVE/BOLD/OUTRAGEOUS). The peer style-presentation endorsement grant
+(`create_style_presentation_endorsement`, `world/magic/services/gain.py`) applies the same
+multiplier to `cfg.style_presentation_grant`, keyed on the *highest*-audacity worn style
+that matches the endorsed resonance binding (an endorsee wearing multiple matching styles
+is rewarded for the boldest one, not the first one found).
+
 The per-resonance computation lives in `motif_coherence_bonus(sheet, resonance_id) -> int`
 (decoupled from `ModifierTarget`); `passive_motif_style_bonuses` is a thin wrapper that
 gates on `target.target_resonance_id` and delegates to it. The same helper is reused by the

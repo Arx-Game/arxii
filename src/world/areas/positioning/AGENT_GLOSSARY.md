@@ -18,3 +18,7 @@ _Avoid_: fall, drop, falling
 
 **Knockback** (combat term, not positioning-owned):
 See `world/combat/AGENT_GLOSSARY.md` — positioning provides the `AWAY_FROM_ACTOR` destination primitive; combat owns the term and authoring surface.
+
+**Take a position** (#2005):
+An unplaced actor's voluntary first entry onto a room's position graph — restricted to PRIMARY/FEATURE positions (the ground entry kinds) and gated on the MOVEMENT capability, via `take_position()`/`TakePositionAction`/telnet `position <name>`. Distinct from moving (`move_to_position`, which requires already being placed and an edge to the destination) and from GM placement (`place_in_position`, the unchecked primitive that bypasses both restrictions).
+_Avoid_: enter a position, join the grid, spawn onto the graph
