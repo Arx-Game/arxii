@@ -11802,6 +11802,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/RoomFeatureProjectStartResult'
           description: ''
+  /api/items/market-squares/:
+    get:
+      operationId: items_market_squares_list
+      description: Browse market squares with their stalls and live listings.
+      parameters:
+      - in: query
+        name: realm
+        schema:
+          type: number
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MarketSquare'
+          description: ''
+  /api/items/market-squares/{id}/:
+    get:
+      operationId: items_market_squares_retrieve
+      description: Browse market squares with their stalls and live listings.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this market square.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketSquare'
+          description: ''
   /api/items/outfit-slots/:
     get:
       operationId: items_outfit_slots_list
@@ -12074,6 +12118,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/QualityTier'
+          description: ''
+  /api/items/service-offers/:
+    get:
+      operationId: items_service_offers_list
+      description: 'The shop directory: standing craft-as-service offers (visit to
+        use).'
+      parameters:
+      - in: query
+        name: recipe_kind
+        schema:
+          type: string
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceOffer'
+          description: ''
+  /api/items/service-offers/{id}/:
+    get:
+      operationId: items_service_offers_retrieve
+      description: 'The shop directory: standing craft-as-service offers (visit to
+        use).'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this crafting service offer.
+        required: true
+      tags:
+      - items
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceOffer'
           description: ''
   /api/items/templates/:
     get:
@@ -38679,6 +38769,59 @@ components:
       - is_primary_home
       - tenant_name
       - tenant_persona_id
+    MarketSquare:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        realm:
+          type: integer
+          readOnly: true
+          nullable: true
+        stalls:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketStall'
+          readOnly: true
+      required:
+      - id
+      - name
+      - realm
+      - stalls
+    MarketStall:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        owner_name:
+          type: string
+          readOnly: true
+        stock_listings:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        ware_listings:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+      required:
+      - id
+      - name
+      - owner_name
+      - stock_listings
+      - ware_listings
     MaturityEnum:
       enum:
       - pitch
@@ -51395,6 +51538,34 @@ components:
         * `summer` - Summer
         * `autumn` - Autumn
         * `winter` - Winter
+    ServiceOffer:
+      type: object
+      description: 'Shop-directory row: who crafts what, where — execution requires
+        visiting.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        crafter_name:
+          type: string
+          readOnly: true
+        recipe_kind:
+          type: string
+          readOnly: true
+          description: CraftingRecipeKind this offer covers (attachment crafting).
+        fee:
+          type: integer
+          readOnly: true
+          description: Coppers per attempt. PLACEHOLDER.
+        shop_room_id:
+          type: integer
+          readOnly: true
+      required:
+      - crafter_name
+      - fee
+      - id
+      - recipe_kind
+      - shop_room_id
     SessionRequest:
       type: object
       description: Read-only serializer for SessionRequest records.

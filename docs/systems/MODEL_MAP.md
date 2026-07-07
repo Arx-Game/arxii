@@ -379,6 +379,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - placed_items <- items.RoomItem
+  - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
   - functionaries <- npc_services.Functionary
   - entry_for_buildings <- buildings.Building
@@ -468,6 +469,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - weather_state <- weather.RegionWeatherState
+  - market_squares <- items.MarketSquare
   - battles <- battles.Battle
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
@@ -1177,6 +1179,7 @@
   - owned_items <- items.ItemInstance
   - crafted_items <- items.ItemInstance
   - attuned_touchstones <- items.ItemInstance
+  - designed_items <- items.ItemInstance
   - items_given_away <- items.OwnershipEvent
   - items_received <- items.OwnershipEvent
   - outfits <- items.Outfit
@@ -2445,6 +2448,7 @@
   - interaction_bindings <- items.TemplateInteraction
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
+  - stock_listings <- items.StockListing
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
 
@@ -2461,6 +2465,8 @@
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_persona_display -> scenes.Persona [FK] (nullable)
+  - designer_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - designer_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
 **Pointed to by:**
@@ -2474,6 +2480,8 @@
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
+  - ware_listing <- items.WareListing
+  - market_sales <- items.MarketSale
   - project_contributions <- projects.Contribution
   - building_permit_details <- buildings.BuildingPermitDetails
 
@@ -2631,6 +2639,51 @@
 ### LabStationDetails
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
+### MarketSquare
+**Foreign Keys:**
+  - area -> areas.Area [FK]
+  - realm -> realms.Realm [FK] (nullable)
+**Pointed to by:**
+  - stalls <- items.MarketStall
+
+### MarketStall
+**Foreign Keys:**
+  - square -> items.MarketSquare [FK]
+  - owner_persona -> scenes.Persona [FK] (nullable)
+  - host_org -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - stock_listings <- items.StockListing
+  - ware_listings <- items.WareListing
+
+### StockListing
+**Foreign Keys:**
+  - stall -> items.MarketStall [FK]
+  - template -> items.ItemTemplate [FK]
+
+### WareListing
+**Foreign Keys:**
+  - stall -> items.MarketStall [FK]
+  - item_instance -> items.ItemInstance [OneToOne]
+  - seller_persona -> scenes.Persona [FK]
+**Pointed to by:**
+  - finishing_pass <- items.FinishingPass
+
+### FinishingPass
+**Foreign Keys:**
+  - listing -> items.WareListing [OneToOne]
+  - buyer_persona -> scenes.Persona [FK]
+
+### CraftingServiceOffer
+**Foreign Keys:**
+  - crafter_persona -> scenes.Persona [FK]
+  - shop_room -> evennia_extensions.RoomProfile [FK]
+
+### MarketSale
+**Foreign Keys:**
+  - buyer_persona -> scenes.Persona [FK]
+  - seller_persona -> scenes.Persona [FK] (nullable)
+  - item_instance -> items.ItemInstance [FK] (nullable)
 
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' — Attach ``facet`` to ``item_instance``.`
@@ -4515,6 +4568,7 @@
   - recognition_rules <- societies.HouseRecognitionRule
   - titles <- societies.Title
   - areas <- areas.Area
+  - market_squares <- items.MarketSquare
 
 
 ## world.relationships
@@ -4952,6 +5006,12 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
+  - market_stalls <- items.MarketStall
+  - ware_listings <- items.WareListing
+  - finishing_passes <- items.FinishingPass
+  - crafting_service_offers <- items.CraftingServiceOffer
+  - market_purchases <- items.MarketSale
+  - market_sales <- items.MarketSale
   - hosted_events <- events.EventHost
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
@@ -5429,6 +5489,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - captives <- captivity.Captivity
+  - hosted_stalls <- items.MarketStall
   - event_invitations <- events.EventInvitation
   - covenant <- covenants.Covenant
   - gemits <- narrative.Gemit

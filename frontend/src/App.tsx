@@ -36,6 +36,7 @@ import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { WardrobePage } from './inventory/pages/WardrobePage';
+import { MarketPage } from './market/MarketPage';
 import { FeedbackPage } from './submissions/pages/FeedbackPage';
 import { BugReportPage } from './submissions/pages/BugReportPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
@@ -365,6 +366,14 @@ function App() {
         />
         <Route path="/game" element={<GamePage />} />
         <Route path="/codex" element={<CodexPage />} />
+        <Route
+          path="/market"
+          element={
+            <ProtectedRoute>
+              <MarketPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/wardrobe"
           element={

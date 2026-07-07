@@ -39,3 +39,19 @@ _Avoid_: container lock, container permissions
 **Steal**:
 The deliberate ownership-gate bypass (`flows.service_functions.inventory.steal`) that takes an item a plain Take refuses — the item is owned by someone else, or barred by a container's Access Policy. Unlike Take, Steal always leaves consequences: an `OwnershipEvent(STOLEN)` (ownership genuinely transfers, the item is never destroyed) and a crime-tagged, concealed Legend deed. Whether Steal is even offered is target-side only: an NPC's holdings are always antagonism-allowed, a player's holdings gate on that player's theft consent (default-deny — opt-in required).
 _Avoid_: take (as a synonym), pickpocket, loot (as a verb for a live owner's item)
+
+- **Market square** — a capital's transactional trade hub (#2066): NPC stock
+  stalls (materials/reagents/necessities — pure sinks) + PC stalls of
+  unfinished wares. One per realm capital. _Avoid:_ shop (that's a crafter's
+  own station-bearing room), bazaar.
+- **Unfinished ware** — a real crafted `ItemInstance` listed generic
+  (`WareListing`): stats and quality are the crafter's, the name and prose
+  are the buyer's via a one-shot **finishing pass**. _Avoid:_ design/template
+  listing (stock is finite, actual instances).
+- **Craft-as-service** — a standing `CraftingServiceOffer`: the buyer runs
+  the attempt at the crafter's shop using the CRAFTER's skill, paying their
+  fee (works with the crafter offline). Arx 1's real loop, made honest.
+  _Avoid:_ commission (reserved for the personal full-prose channel).
+- **Dual provenance** — `crafter_*` + `designer_*` pairs on `ItemInstance`;
+  renders "Crafted by X, Designed by Y", collapsing when equal. The prose
+  author is never erased again. _Avoid:_ maker (ambiguous).

@@ -7532,6 +7532,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/market-squares/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse market squares with their stalls and live listings. */
+    get: operations['items_market_squares_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/market-squares/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse market squares with their stalls and live listings. */
+    get: operations['items_market_squares_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/outfit-slots/': {
     parameters: {
       query?: never;
@@ -7651,6 +7685,40 @@ export interface paths {
     };
     /** @description Read-only ViewSet for quality tier lookup data. */
     get: operations['items_quality_tiers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/service-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The shop directory: standing craft-as-service offers (visit to use). */
+    get: operations['items_service_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/service-offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The shop directory: standing craft-as-service offers (visit to use). */
+    get: operations['items_service_offers_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -21557,6 +21625,23 @@ export interface components {
       /** Format: date-time */
       ends_at: string | null;
     };
+    MarketSquare: {
+      readonly id: number;
+      readonly name: string;
+      readonly realm: number | null;
+      readonly stalls: components['schemas']['MarketStall'][];
+    };
+    MarketStall: {
+      readonly id: number;
+      readonly name: string;
+      readonly owner_name: string;
+      readonly stock_listings: {
+        [key: string]: unknown;
+      }[];
+      readonly ware_listings: {
+        [key: string]: unknown;
+      }[];
+    };
     /**
      * @description * `pitch` - Pitch
      *     * `outline` - Outline
@@ -28594,6 +28679,16 @@ export interface components {
      * @enum {string}
      */
     SeasonEnum: 'spring' | 'summer' | 'autumn' | 'winter';
+    /** @description Shop-directory row: who crafts what, where — execution requires visiting. */
+    ServiceOffer: {
+      readonly id: number;
+      readonly crafter_name: string;
+      /** @description CraftingRecipeKind this offer covers (attachment crafting). */
+      readonly recipe_kind: string;
+      /** @description Coppers per attempt. PLACEHOLDER. */
+      readonly fee: number;
+      readonly shop_room_id: number;
+    };
     /** @description Read-only serializer for SessionRequest records. */
     SessionRequest: {
       readonly id: number;
@@ -41471,6 +41566,49 @@ export interface operations {
       };
     };
   };
+  items_market_squares_list: {
+    parameters: {
+      query?: {
+        realm?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MarketSquare'][];
+        };
+      };
+    };
+  };
+  items_market_squares_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this market square. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MarketSquare'];
+        };
+      };
+    };
+  };
   items_outfit_slots_list: {
     parameters: {
       query: {
@@ -41732,6 +41870,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['QualityTier'];
+        };
+      };
+    };
+  };
+  items_service_offers_list: {
+    parameters: {
+      query?: {
+        recipe_kind?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceOffer'][];
+        };
+      };
+    };
+  };
+  items_service_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this crafting service offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ServiceOffer'];
         };
       };
     };

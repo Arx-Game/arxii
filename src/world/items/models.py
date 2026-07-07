@@ -614,6 +614,30 @@ class ItemInstance(SharedMemoryModel):
             "crafter_character_sheet.primary_persona at render time."
         ),
     )
+    designer_character_sheet = models.ForeignKey(
+        _CHARACTER_SHEET_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="designed_items",
+        help_text=(
+            "The body that named/described this item (#2066 dual provenance — "
+            "Arx 1 erased the prose author). Equal to the crafter on "
+            "self-finished work; the ware finishing pass and service crafting "
+            "stamp the buyer."
+        ),
+    )
+    designer_persona_display = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The persona the designer was presenting as. Renders as "
+            "'Crafted by X, Designed by Y', collapsing when equal."
+        ),
+    )
     contained_in = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -1633,4 +1657,17 @@ from world.items.crafting.models import (  # noqa: E402,F401
     CraftingRecipe,
     CraftingRecipeConsequence,
     CraftingSkillCap,
+)
+
+# ---------------------------------------------------------------------------
+# Market submodule (#2066) — import last so all models above register first
+# ---------------------------------------------------------------------------
+from world.items.market.models import (  # noqa: E402,F401
+    CraftingServiceOffer,
+    FinishingPass,
+    MarketSale,
+    MarketSquare,
+    MarketStall,
+    StockListing,
+    WareListing,
 )
