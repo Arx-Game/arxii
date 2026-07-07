@@ -17,7 +17,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from world.stories.constants import CanonReviewStatus
-from world.stories.models import CanonReview, Story
+from world.stories.models import Beat, CanonReview, Story
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -42,6 +42,44 @@ def pending_canon_reviews() -> QuerySet[CanonReview]:
 def story_is_cleared(story: Story) -> bool:
     """True iff ``story`` has at least one CLEARED review."""
     return story.canon_reviews.filter(status=CanonReviewStatus.CLEARED).exists()
+
+
+def escalation_tier_for_story(story: Story) -> str:
+    """The effective impact tier after the beat-level escalation heuristic (#2003).
+
+    Authored data only (never parsed from prose). On a GROUP/GLOBAL story, any
+    beat staking a society-level FACTION subject, or carrying EXTREME declared
+    risk, escalates the effective tier to at least REGIONAL for review purposes.
+    TABLE/CHARACTER-scope stories never escalate. The result is surfaced as a
+    readiness problem (not a hard block) by callers — the author's
+    ``impact_tier`` is unchanged on the model.
+
+    Returns an ``ImpactTier`` value.
+    """
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+    from world.stories.constants import (  # noqa: PLC0415
+        ImpactTier,
+        StakeSubjectKind,
+        StoryScope,
+    )
+
+    if story.scope not in (StoryScope.GROUP, StoryScope.GLOBAL):
+        return story.impact_tier
+    if story.impact_tier == ImpactTier.WORLD:
+        # Already the highest — no further escalation possible.
+        return ImpactTier.WORLD
+
+    story_beats = Beat.objects.filter(episode__chapter__story=story)
+    escalates = story_beats.filter(
+        stakes__subject_kind=StakeSubjectKind.FACTION,
+        stakes__subject_society__isnull=False,
+    ).exists()
+    if not escalates:
+        escalates = story_beats.filter(risk=RenownRisk.EXTREME).exists()
+
+    if escalates:
+        return ImpactTier.REGIONAL
+    return story.impact_tier
 
 
 def regional_auto_clears(gm_profile: GMProfile) -> bool:

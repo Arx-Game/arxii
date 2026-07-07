@@ -239,3 +239,79 @@ class CanonReviewReadinessIntegrationTests(TestCase):
         # TABLE tier is never reviewed — canon-review is not a blocker.
         self.assertTrue(report.is_ready)
         self.assertFalse(any("canon" in p.lower() for p in report.problems))
+
+
+class EscalationHeuristicTests(TestCase):
+    """Beat-level escalation: a GROUP/GLOBAL story with a society-level
+    FACTION stake or EXTREME declared risk escalates to >=REGIONAL (#2003).
+
+    Authored data only (never parsed from prose); surfaced as a readiness
+    problem, not a hard block. The author's impact_tier is unchanged.
+    """
+
+    def test_character_scope_story_never_escalates(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.services.canon_review import escalation_tier_for_story
+
+        story = StoryFactory(scope=StoryScope.CHARACTER, impact_tier=ImpactTier.TABLE)
+        # Even an EXTREME-risk beat does not escalate a CHARACTER-scope story.
+        BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+        self.assertEqual(escalation_tier_for_story(story), ImpactTier.TABLE)
+
+    def test_group_story_with_extreme_risk_escalates_to_regional(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.services.canon_review import escalation_tier_for_story
+
+        story = StoryFactory(scope=StoryScope.GROUP, impact_tier=ImpactTier.TABLE)
+        BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+        self.assertEqual(escalation_tier_for_story(story), ImpactTier.REGIONAL)
+
+    def test_global_story_with_society_faction_stake_escalates_to_regional(self) -> None:
+        from world.societies.factories import SocietyFactory
+        from world.stories.constants import StakeSubjectKind, StoryScope
+        from world.stories.services.canon_review import escalation_tier_for_story
+
+        story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.TABLE)
+        beat = BeatFactory(episode__chapter__story=story, risk=RenownRisk.HIGH)
+        StakeFactory(
+            beat=beat,
+            subject_kind=StakeSubjectKind.FACTION,
+            subject_society=SocietyFactory(),
+            severity=StakeSeverity.SETBACK,
+        )
+        self.assertEqual(escalation_tier_for_story(story), ImpactTier.REGIONAL)
+
+    def test_world_tier_is_not_escalated_further(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.services.canon_review import escalation_tier_for_story
+
+        story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.WORLD)
+        BeatFactory(episode__chapter__story=story, risk=RenownRisk.EXTREME)
+        # Already WORLD — no further escalation possible.
+        self.assertEqual(escalation_tier_for_story(story), ImpactTier.WORLD)
+
+    def test_group_story_without_triggers_stays_at_authored_tier(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.services.canon_review import escalation_tier_for_story
+
+        story = StoryFactory(scope=StoryScope.GROUP, impact_tier=ImpactTier.TABLE)
+        # A HIGH (non-EXTREME) beat with no FACTION stake does not escalate.
+        BeatFactory(episode__chapter__story=story, risk=RenownRisk.HIGH)
+        self.assertEqual(escalation_tier_for_story(story), ImpactTier.TABLE)
+
+    def test_organization_faction_stake_alone_does_not_escalate(self) -> None:
+        """Only society-level FACTION subjects escalate (per spec); an
+        org-level FACTION stake alone does not."""
+        from world.societies.factories import OrganizationFactory
+        from world.stories.constants import StakeSubjectKind, StoryScope
+        from world.stories.services.canon_review import escalation_tier_for_story
+
+        story = StoryFactory(scope=StoryScope.GROUP, impact_tier=ImpactTier.TABLE)
+        beat = BeatFactory(episode__chapter__story=story, risk=RenownRisk.HIGH)
+        StakeFactory(
+            beat=beat,
+            subject_kind=StakeSubjectKind.FACTION,
+            subject_organization=OrganizationFactory(),
+            severity=StakeSeverity.SETBACK,
+        )
+        self.assertEqual(escalation_tier_for_story(story), ImpactTier.TABLE)
