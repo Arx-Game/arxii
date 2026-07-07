@@ -7,6 +7,7 @@ from world.stories.views import (
     BeatStakeAvailabilityView,
     BeatViewSet,
     ChapterViewSet,
+    CustodyClearanceViewSet,
     EpisodeProgressionRequirementViewSet,
     EpisodeSceneViewSet,
     EpisodeViewSet,
@@ -30,6 +31,7 @@ from world.stories.views import (
     StoryGMOfferViewSet,
     StoryNoteViewSet,
     StoryParticipationViewSet,
+    StoryProtectedSubjectViewSet,
     StoryViewSet,
     TableBulletinPostViewSet,
     TableBulletinReplyViewSet,
@@ -76,6 +78,9 @@ router.register(r"stake-reward-lines", StakeRewardLineViewSet)
 router.register(r"stake-activations", StakeContractActivationViewSet)
 # #1771 task 6: sign-off + boundary-availability surfaces
 router.register(r"treasured-signoffs", TreasuredSignoffViewSet, basename="treasuredsignoff")
+# #2001 Task 6: custody protection + clearance lifecycle
+router.register(r"protected-subjects", StoryProtectedSubjectViewSet)
+router.register(r"custody-clearances", CustodyClearanceViewSet, basename="custodyclearance")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).

@@ -526,3 +526,58 @@ export interface EraCreateBody {
   /** Only UPCOMING is allowed on creation. */
   status?: EraStatus;
 }
+
+// ---------------------------------------------------------------------------
+// Custody protection + clearance (#2001 Task 6/8) — GM-authorable protected
+// subjects + the cross-story clearance lifecycle for acting against them.
+// ---------------------------------------------------------------------------
+
+/** Shared with world.boundaries's TreasuredSubject — same StakeSubjectKind vocabulary. */
+export type SubjectKindEnum = components['schemas']['SubjectKindEnum'];
+
+export type ProtectedSubject = components['schemas']['StoryProtectedSubject'];
+export type PaginatedProtectedSubjectList =
+  components['schemas']['PaginatedStoryProtectedSubjectList'];
+
+export interface ProtectedSubjectCreateBody {
+  story: number;
+  subject_kind: SubjectKindEnum;
+  subject_sheet?: number | null;
+  subject_item?: number | null;
+  subject_society?: number | null;
+  subject_organization?: number | null;
+  subject_label?: string;
+  is_active?: boolean;
+  notes?: string;
+}
+
+export type ProtectedSubjectUpdateBody = Partial<ProtectedSubjectCreateBody>;
+
+/** `Scope77bEnum` in the generated schema — appear/harm/remove custody gates (#2001). */
+export type CustodyScope = components['schemas']['Scope77bEnum'];
+export type CustodyClearanceStatus = components['schemas']['CustodyClearanceStatusEnum'];
+export type CustodyClearance = components['schemas']['CustodyClearance'];
+export type PaginatedCustodyClearanceList = components['schemas']['PaginatedCustodyClearanceList'];
+
+export interface RequestClearanceBody {
+  protected_subject?: number | null;
+  subject_kind?: SubjectKindEnum | null;
+  subject_sheet?: number | null;
+  subject_item?: number | null;
+  subject_society?: number | null;
+  subject_organization?: number | null;
+  subject_label?: string;
+  scope: CustodyScope;
+  requesting_story?: number | null;
+  requesting_beat?: number | null;
+  message?: string;
+}
+
+export interface ClearanceDecisionBody {
+  response_note?: string;
+}
+
+export interface ClearanceResolveBody {
+  grant: boolean;
+  response_note?: string;
+}

@@ -104,6 +104,13 @@ can change between serializer validation and the atomic `advance_era()`/`archive
 Pre-validating in the serializer would duplicate the service's idempotency checks without
 eliminating the window.
 
+**`CustodyClearanceViewSet.grant`/`deny`/`escalate`/`resolve`/`revoke`** — catch
+`CustodyClearanceStateError`/`CustodyClearanceAuthorityError` from
+`world.stories.services.custody_clearance`. Each input serializer pre-validates the clearance's
+current status, but the status can change between that check and the atomic service call (e.g.
+two custodians racing to grant/deny the same request, or a requester double-escalating);
+duplicating the service's state guard in the serializer would not eliminate the race window.
+
 ## Key Files
 
 ### `models/`

@@ -13,10 +13,12 @@ from world.stories.constants import AssistantClaimStatus, StoryScope
 from world.stories.models import (
     AssistantGMClaim,
     Beat,
+    CustodyClearance,
     Episode,
     Story,
     StoryNote,
     StoryParticipation,
+    StoryProtectedSubject,
     TableBulletinPost,
 )
 from world.stories.types import AnyStoryProgress, StoryPrivacy
@@ -1479,3 +1481,144 @@ class IsBeatStoryOwnerOrStaffForAvailability(permissions.BasePermission):
         if request.user.is_staff:
             return True
         return user_owns_beat_story(request.user, cast(Beat, obj))
+
+
+# ---------------------------------------------------------------------------
+# Custody protection + clearance permission classes (#2001 Task 6)
+# ---------------------------------------------------------------------------
+
+
+def user_owns_or_leads_story(user: AbstractBaseUser | AnonymousUser, story: Story) -> bool:
+    """Whether ``user`` owns (``story.owners``) or leads (Lead GM of
+    ``story.primary_table``) ``story``.
+
+    Mirrors ``StoryViewSet.get_queryset``'s ``owned_q | gm_q`` pair — the
+    single source of truth for "story the requester owns/leads" shared by
+    ``IsProtectedSubjectStoryOwnerOrStaff``/``CustodyClearanceViewSet.get_queryset``
+    and the ``StoryProtectedSubjectSerializer`` create-path ownership gate
+    (DRF never calls ``has_object_permission`` on create). One level
+    shallower than ``user_owns_beat_story`` — ``StoryProtectedSubject`` FKs
+    ``story`` directly, no beat/episode/chapter walk needed.
+    """
+    if user is None or not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return False
+    if story.owners.filter(id=user.id).exists():
+        return True
+    gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL — Django o2o-safe
+    return (
+        gm_profile is not None
+        and story.primary_table_id is not None
+        and story.primary_table.gm_id == gm_profile.pk
+    )
+
+
+class IsProtectedSubjectStoryOwnerOrStaff(permissions.BasePermission):
+    """Permission class for StoryProtectedSubject (#2001 Task 6).
+
+    NEVER readable by a non-owner/non-lead-GM — deliberately no public/
+    participant read carve-out (unlike ``IsStoryOwnerOrStaff._can_read_story``),
+    since these rows carry GM-only ``notes`` and reveal a story's
+    load-bearing assets. Always ``story.owners`` or ``primary_table.gm``,
+    staff included, regardless of HTTP method — mirrors
+    ``IsBeatStoryOwnerOrStaffForAvailability``'s GM-only-regardless-of-method
+    shape. ``StoryProtectedSubjectViewSet.get_queryset`` applies the same
+    test for list, so a non-owner's GET/PATCH/DELETE against another story's
+    row 404s rather than 403ing or leaking fields.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        return user_owns_or_leads_story(request.user, cast(StoryProtectedSubject, obj).story)
+
+
+class IsClearanceCustodianGM(permissions.BasePermission):
+    """Only the exact custodian GM may grant/deny a PENDING CustodyClearance.
+
+    Deliberately no staff bypass — mirrors
+    ``world.stories.services.custody_clearance._require_custodian_gm``: staff
+    act only through the dedicated escalate -> resolve path, never by posing
+    as the custodian (Task 3 review decision, carried into Task 6 as a
+    binding design decision — do not widen this to include staff).
+    """
+
+    message = "Only the protecting story's Lead GM may decide this clearance."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        clearance = cast(CustodyClearance, obj)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        table = clearance.protected_subject.story.primary_table
+        return table is not None and table.gm_id == gm_profile.pk
+
+
+class IsClearanceRequesterGM(permissions.BasePermission):
+    """Only the requesting GM may escalate their own CustodyClearance.
+
+    The service (``escalate_clearance``) takes no actor parameter by design
+    (Task 3 brief) — this permission class is the entire authorization
+    boundary for escalation.
+    """
+
+    message = "Only the requesting GM may escalate this clearance."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        clearance = cast(CustodyClearance, obj)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return clearance.requested_by_id == gm_profile.pk
+
+
+class IsStaffForCustodyResolution(permissions.BasePermission):
+    """Only staff may resolve an ESCALATED CustodyClearance's tiebreak.
+
+    Mirrors ``resolve_escalation``'s own staff-only guard — no GM bypass,
+    ever (that is the entire point of an escalation).
+    """
+
+    message = "Only staff may resolve an escalated custody clearance."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+
+
+class IsClearanceCustodianOrStaff(permissions.BasePermission):
+    """The custodian GM's account, or staff, may revoke a GRANTED CustodyClearance.
+
+    Mirrors ``world.stories.services.custody_clearance._is_custodian_account``
+    exactly (the one custody-clearance action where staff DOES stand in for
+    the custodian directly, rather than through escalate/resolve — revoking
+    an already-granted clearance is closer to routine cleanup than to a
+    contested decision).
+    """
+
+    message = "Only the protecting story's Lead GM or staff may revoke this clearance."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        clearance = cast(CustodyClearance, obj)
+        if request.user.is_staff:
+            return True
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        table = clearance.protected_subject.story.primary_table
+        return table is not None and table.gm_id == gm_profile.pk

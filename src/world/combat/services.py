@@ -16,6 +16,7 @@ from django.db.models import Prefetch, Q
 from django.utils import timezone
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from actions.models.consequence_pools import ConsequencePool
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from world.magic.types import TechniqueUseResult
     from world.magic.types.power_ledger import PowerLedger
     from world.scenes.models import Interaction, Persona
+    from world.stories.models import Story
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -1511,6 +1513,80 @@ def _resolve_objectdb_for_opponent(
     return create_object(CombatNPC, key=name, location=encounter.room, nohome=True), True
 
 
+def _acting_story_for_encounter(encounter: CombatEncounter) -> Story | None:
+    """The Story an ``add_opponent`` custody check acts on behalf of (#2001 Task 5).
+
+    ``CombatEncounter.story_beat`` is set when this encounter resolves a
+    specific Beat (#1760) — walking beat->episode->chapter->story mirrors
+    ``custody_verdict_for_stake``'s ``stake.beat.episode.chapter.story``, so a
+    GM running an encounter for the very story that protects the spawned NPC
+    is never treated as "a different story". None when the encounter isn't
+    wired to a beat (legacy/ad-hoc combat) — the custody seam then falls back
+    to the participation/clearance rules alone.
+    """
+    if encounter.story_beat is None:
+        return None
+    return encounter.story_beat.episode.chapter.story
+
+
+def _enforce_opponent_custody_gate(
+    objectdb: object,
+    is_ephemeral: bool,
+    encounter: CombatEncounter,
+    acting_account: AccountDB | None,
+) -> None:
+    """Custody APPEAR gate for ``add_opponent`` (#2001 Task 5).
+
+    Gated ONLY when the opponent resolves to an EXISTING ``CharacterSheet``
+    (``existing_objectdb``/``persona`` path) — a freshly-created ephemeral
+    ``CombatNPC`` (``is_ephemeral`` True) has no ``CharacterSheet`` and is
+    never gated. ``acting_account=None`` is the system-initiated carve-out
+    (duels/cast_seed/magic-summon/companion-materialize callers pass no GM
+    account) — the check is SKIPPED entirely, never called with
+    ``actor_account=None`` (which inside ``check_subject_custody`` would mean
+    "no clearance possible", blocking system spawns it should never touch).
+
+    Raises:
+        NPCUnderCustodyError: When ``check_subject_custody`` refuses the
+            acting GM at ``CustodyScope.APPEAR``. The disclosure-safe message
+            mirrors ``StakeSerializer``'s custody gate (ADR-0033 posture —
+            never the protecting story's identity).
+    """
+    if is_ephemeral or acting_account is None:
+        return
+    sheet = getattr(objectdb, "sheet_data", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+    if sheet is None:
+        return
+
+    from world.combat.scaling import NPCUnderCustodyError  # noqa: PLC0415
+    from world.stories.constants import CustodyScope  # noqa: PLC0415
+    from world.stories.services.custody import (  # noqa: PLC0415
+        check_subject_custody,
+        subject_identity_for_sheet,
+    )
+
+    verdict = check_subject_custody(
+        subject_identity=subject_identity_for_sheet(sheet),
+        actor_account=acting_account,
+        scope=CustodyScope.APPEAR,
+        acting_story=_acting_story_for_encounter(encounter),
+    )
+    if verdict.allowed:
+        return
+
+    if verdict.custodian_gm_username:
+        msg = (
+            "This NPC is under another story's custody — request clearance "
+            f"from GM {verdict.custodian_gm_username}."
+        )
+    else:
+        msg = (
+            "This NPC is under another story's custody — request clearance "
+            "from the story's GM via staff."
+        )
+    raise NPCUnderCustodyError(msg, user_message=msg)
+
+
 def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     encounter: CombatEncounter,
     *,
@@ -1528,6 +1604,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     auto_phases: bool = True,
     persona: Persona | None = None,
     existing_objectdb: ObjectDB | None = None,
+    acting_account: AccountDB | None = None,
     position: Position | None = None,
 ) -> CombatOpponent:
     """Create a CombatOpponent. Three sources for the ObjectDB:
@@ -1544,6 +1621,13 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     values always win over the formula.  Pass ``auto_phases=False`` to skip
     automatic ``BossPhase`` creation for BOSS-tier opponents (manual mode also
     creates no phases, since no block is computed).
+
+    ``acting_account`` (#2001 Task 5): the GM account running this spawn, used
+    ONLY for the custody APPEAR gate on an existing/persona-sourced opponent's
+    CharacterSheet (see ``_enforce_opponent_custody_gate``). Left at the
+    default ``None`` by every system-initiated caller (duels, cast_seed, magic
+    summon effect handlers, companion materialize) — deliberately un-gated.
+    Raises ``NPCUnderCustodyError`` (a ``ValueError``) when refused.
 
     ``position`` (#2005) places the resolved objectdb there via
     ``place_in_position`` — the unchecked staging primitive, not the validated
@@ -1581,6 +1665,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     objectdb, is_ephemeral = _resolve_objectdb_for_opponent(
         encounter, name, persona, existing_objectdb
     )
+    _enforce_opponent_custody_gate(objectdb, is_ephemeral, encounter, acting_account)
 
     if position is not None and position.room_id != objectdb.db_location_id:
         # Validate the room match before persisting the CombatOpponent row below —

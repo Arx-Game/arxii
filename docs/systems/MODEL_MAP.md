@@ -1149,7 +1149,6 @@
   - beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.StoryProgress
-  - story_dependencies <- stories.StoryNPCDependency
   - alternate_selves <- forms.AlternateSelf
   - active_alternate_self <- forms.ActiveAlternateSelf
   - purse <- currency.CharacterPurse
@@ -2310,6 +2309,7 @@
   - assigned_session_requests <- stories.SessionRequest
   - story_offers_received <- stories.StoryGMOffer
   - stake_outcomes <- stories.StakeOutcome
+  - custody_requests <- stories.CustodyClearance
   - tables <- gm.GMTable
   - invites_created <- gm.GMRosterInvite
   - level_changes <- gm.GMLevelChange
@@ -2568,6 +2568,8 @@
   - fashion_style -> items.FashionStyle [FK]
   - target -> mechanics.ModifierTarget [FK]
 
+### AudacityTuning
+
 ### Mantle
 **Foreign Keys:**
   - item_instance -> items.ItemInstance [OneToOne]
@@ -2818,6 +2820,8 @@
   - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
+  - organization_grants <- societies.OrganizationGiftGrant
+  - capability_project_details <- societies.OrganizationCapabilityProjectDetails
   - granted_companions <- companions.Companion
 
 ### CharacterGift
@@ -3516,6 +3520,7 @@
   - target_gift -> magic.Gift [FK] (nullable)
   - target_mantle -> items.Mantle [FK] (nullable)
   - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
+  - target_organization -> societies.Organization [FK] (nullable)
   - signature_bonus -> magic.SignatureMotifBonus [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
@@ -4440,7 +4445,9 @@
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - organization_gift_grants <- societies.OrganizationGiftGrant
   - gang_turf_details <- societies.GangTurfDetails
+  - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
   - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
@@ -5378,11 +5385,14 @@
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
+  - anchored_threads <- magic.Thread
   - ranks <- societies.OrganizationRank
+  - gift_grants <- societies.OrganizationGiftGrant
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
   - gang_turf_projects <- societies.GangTurfDetails
+  - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
@@ -5411,6 +5421,12 @@
   - organization -> societies.Organization [FK]
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
+
+### OrganizationGiftGrant
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - gift -> magic.Gift [FK]
+  - project -> projects.Project [FK] (nullable)
 
 ### OrganizationMembershipOffer
 **Foreign Keys:**
@@ -5556,6 +5572,12 @@
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
 
+### OrganizationCapabilityProjectDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - gift -> magic.Gift [FK]
+  - organization -> societies.Organization [FK]
+
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
 - `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'LegendEntry' — Create a legend deed not tied to a shared event.`
@@ -5604,7 +5626,7 @@
   - notes <- stories.StoryNote
   - gm_offers <- stories.StoryGMOffer
   - bulletin_posts <- stories.TableBulletinPost
-  - npc_dependencies <- stories.StoryNPCDependency
+  - protected_subjects <- stories.StoryProtectedSubject
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - ended_campaigns <- covenants.Covenant
@@ -5716,7 +5738,7 @@
   - stakes <- stories.Stake
   - stake_activations <- stories.StakeContractActivation
   - treasured_signoffs <- stories.TreasuredSignoff
-  - npc_dependencies <- stories.StoryNPCDependency
+  - protected_subjects <- stories.StoryProtectedSubject
   - resolving_encounters <- combat.CombatEncounter
 
 ### EpisodeProgressionRequirement
@@ -5868,11 +5890,25 @@
   - player_data -> evennia_extensions.PlayerData [FK]
   - treasured_subject -> boundaries.TreasuredSubject [FK]
 
-### StoryNPCDependency
+### StoryProtectedSubject
 **Foreign Keys:**
   - story -> stories.Story [FK]
-  - npc_sheet -> character_sheets.CharacterSheet [FK]
+  - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - subject_item -> items.ItemInstance [FK] (nullable)
+  - subject_society -> societies.Society [FK] (nullable)
+  - subject_organization -> societies.Organization [FK] (nullable)
   - beat -> stories.Beat [FK] (nullable)
+**Pointed to by:**
+  - clearances <- stories.CustodyClearance
+
+### CustodyClearance
+**Foreign Keys:**
+  - protected_subject -> stories.StoryProtectedSubject [FK]
+  - requested_by -> gm.GMProfile [FK]
+  - requesting_story -> stories.Story [FK] (nullable)
+  - requesting_beat -> stories.Beat [FK] (nullable)
+  - granted_by -> gm.GMProfile [FK] (nullable)
+  - staff_resolver -> accounts.AccountDB [FK] (nullable)
 
 
 ## world.traits

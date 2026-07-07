@@ -340,6 +340,29 @@ All 14 waves shipped across two sessions.
 - MODEL_MAP regenerated; CLAUDE.md files updated for tables, narrative, stories
 - 761+ backend tests; 938+ frontend Vitest tests; Playwright smoke tests across all new routes
 
+### #2001 — Story-asset custody + cross-GM clearance (complete)
+
+GM-authorable protection for a story's load-bearing assets (NPCs, items, factions,
+locations, custom subjects), plus a real GM-to-GM permission path to borrow another
+story's protected asset for a crossover.
+
+- `StoryProtectedSubject` (replaces the NPC-only `StoryNPCDependency`) generalizes to
+  the full `StakeSubjectKind` vocabulary; `CustodyClearance` is the request/grant/deny/
+  escalate/resolve/revoke lifecycle (`CustodyScope`: appear < harm < remove)
+- `check_subject_custody` (`world.stories.services.custody`) is the single seam every
+  enforcement point calls: the NPC death guard, `StakeSerializer` staking validation,
+  `StakeResolution` writer fire-time recheck, and `add_opponent` opponent-spawning
+- API: `/api/protected-subjects/` (owner/lead-GM CRUD, soft-deactivate), `/api/custody-clearances/`
+  (list/create + grant/deny/escalate/resolve/revoke actions); identity-based clearance
+  requests (`subject_kind` + typed ref) close a pk-discoverability gap for a requester
+  who only knows the custodian's username (ADR-0099)
+- Telnet: `story protect`, `story clearance` (`src/commands/story.py`)
+- Frontend: `ProtectedSubjectsPanel` (StoryAuthorPage tab), `ClearanceInbox`
+  (GMQueuePage section), `RequestClearanceDialog` + the grant/deny/escalate/resolve/
+  revoke action components
+- ADR-0098 (custody vs. player boundaries axis), ADR-0099 (identity-based clearance
+  requests); full detail in `docs/systems/custody.md`
+
 ## What's Needed for MVP
 
 ### Phase 6+
