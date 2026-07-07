@@ -6,19 +6,8 @@
  */
 
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { useEscalateClearance } from '../queries';
+import { ClearanceConfirmButton, makeClearanceToastHandler } from './clearanceShared';
 
 interface Props {
   clearanceId: number;
@@ -30,48 +19,20 @@ export function EscalateClearanceButton({ clearanceId }: Props) {
   function handleConfirm() {
     mutation.mutate(clearanceId, {
       onSuccess: () => toast.success('Escalated to staff'),
-      onError: (err: unknown) => {
-        if (err && typeof err === 'object' && 'response' in err) {
-          const response = (err as { response?: Response }).response;
-          if (response) {
-            void response
-              .json()
-              .then((data: { detail?: string }) =>
-                toast.error(data.detail ?? 'Failed to escalate clearance.')
-              )
-              .catch(() => toast.error('Failed to escalate clearance.'));
-            return;
-          }
-        }
-        toast.error('Failed to escalate clearance.');
-      },
+      onError: makeClearanceToastHandler('Failed to escalate clearance.'),
     });
   }
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={mutation.isPending}
-          data-testid="escalate-clearance-btn"
-        >
-          {mutation.isPending ? 'Escalating…' : 'Escalate to staff'}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Escalate to staff?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Staff will make the final call on this clearance request.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm}>Escalate</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ClearanceConfirmButton
+      title="Escalate to staff?"
+      description="Staff will make the final call on this clearance request."
+      confirmLabel="Escalate"
+      isPending={mutation.isPending}
+      onConfirm={handleConfirm}
+      triggerTestId="escalate-clearance-btn"
+      triggerLabel="Escalate to staff"
+      pendingLabel="Escalating…"
+    />
   );
 }

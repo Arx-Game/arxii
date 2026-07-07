@@ -1,7 +1,7 @@
 /**
  * ResolveClearanceDialog — staff tiebreak on an ESCALATED CustodyClearance
  * (#2001 Task 8). Body is `{grant: boolean, response_note}` — the only door
- * in for staff to decide an escalation (IsStaffForCustodyResolution).
+ * in for staff to decide an escalation (IsStaffForCustancyResolution).
  */
 
 import { useState } from 'react';
@@ -18,11 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useResolveClearance } from '../queries';
-
-interface DRFFieldErrors {
-  detail?: string;
-  non_field_errors?: string[];
-}
+import { handleInlineError } from './clearanceShared';
 
 interface Props {
   clearanceId: number;
@@ -32,7 +28,6 @@ export function ResolveClearanceDialog({ clearanceId }: Props) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
-
   const resolveMutation = useResolveClearance();
 
   function handleOpenChange(next: boolean) {
@@ -52,22 +47,7 @@ export function ResolveClearanceDialog({ clearanceId }: Props) {
           toast.success(grant ? 'Escalation resolved: granted' : 'Escalation resolved: denied');
           handleOpenChange(false);
         },
-        onError: (err: unknown) => {
-          if (err && typeof err === 'object' && 'response' in err) {
-            const response = (err as { response?: Response }).response;
-            if (response) {
-              void response
-                .json()
-                .then((data: unknown) => {
-                  const drf = data as DRFFieldErrors;
-                  setError(drf.detail ?? drf.non_field_errors?.join(' ') ?? 'Failed to resolve.');
-                })
-                .catch(() => setError('Failed to resolve escalation.'));
-              return;
-            }
-          }
-          setError(err instanceof Error ? err.message : 'Failed to resolve escalation.');
-        },
+        onError: (err) => handleInlineError(err, setError, 'Failed to resolve escalation.'),
       }
     );
   }

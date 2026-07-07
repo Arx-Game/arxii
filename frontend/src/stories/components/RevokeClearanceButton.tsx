@@ -5,19 +5,8 @@
  */
 
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { useRevokeClearance } from '../queries';
+import { ClearanceConfirmButton, makeClearanceToastHandler } from './clearanceShared';
 
 interface Props {
   clearanceId: number;
@@ -29,50 +18,21 @@ export function RevokeClearanceButton({ clearanceId }: Props) {
   function handleConfirm() {
     mutation.mutate(clearanceId, {
       onSuccess: () => toast.success('Clearance revoked'),
-      onError: (err: unknown) => {
-        if (err && typeof err === 'object' && 'response' in err) {
-          const response = (err as { response?: Response }).response;
-          if (response) {
-            void response
-              .json()
-              .then((data: { detail?: string }) =>
-                toast.error(data.detail ?? 'Failed to revoke clearance.')
-              )
-              .catch(() => toast.error('Failed to revoke clearance.'));
-            return;
-          }
-        }
-        toast.error('Failed to revoke clearance.');
-      },
+      onError: makeClearanceToastHandler('Failed to revoke clearance.'),
     });
   }
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          disabled={mutation.isPending}
-          data-testid="revoke-clearance-btn"
-        >
-          {mutation.isPending ? 'Revoking…' : 'Revoke'}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Revoke this clearance?</AlertDialogTitle>
-          <AlertDialogDescription>
-            The requesting GM will lose permission to act on this subject. This is a soft revoke —
-            the decision trail is kept.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm}>Revoke</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ClearanceConfirmButton
+      title="Revoke this clearance?"
+      description="The requesting GM will lose permission to act on this subject. This is a soft revoke — the decision trail is kept."
+      confirmLabel="Revoke"
+      isPending={mutation.isPending}
+      onConfirm={handleConfirm}
+      triggerTestId="revoke-clearance-btn"
+      triggerLabel="Revoke"
+      pendingLabel="Revoking…"
+      triggerClassName="text-destructive hover:text-destructive"
+    />
   );
 }
