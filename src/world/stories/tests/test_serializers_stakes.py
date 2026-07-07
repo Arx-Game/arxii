@@ -916,6 +916,97 @@ class StakeAuthoringCustodyGateTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
 
+class StakeAuthoringCustodyPatchTests(APITestCase):
+    """PATCH-path merge-to-instance fallback in ``_candidate_subject_identity`` (#2001 Task 4).
+
+    ``StakeAuthoringCustodyGateTests`` only exercises the create path, where
+    ``self.instance`` is always None and every field comes straight out of
+    attrs. A partial update takes the other branch of ``_candidate_subject_identity``'s
+    ``merged()`` helper — fields absent from attrs must fall back to the
+    existing row rather than silently resolving to ``None``/unprotected.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = AccountFactory(is_staff=False)
+        cls.story = StoryFactory(owners=[cls.owner])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(episode=cls.episode, risk=RenownRisk.LOW, target_level=2)
+        cls.template = StakeTemplateFactory(
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            severity=StakeSeverity.GRAVE,
+            min_risk=RenownRisk.NONE,
+            max_risk=RenownRisk.EXTREME,
+        )
+        cls.protected_sheet = CharacterSheetFactory()
+        cls.other_protected_sheet = CharacterSheetFactory()
+
+        cls.protecting_story = StoryFactory()
+        gm_profile_a = GMProfileFactory()
+        table_a = GMTableFactory(gm=gm_profile_a)
+        cls.protecting_story.primary_table = table_a
+        cls.protecting_story.save(update_fields=["primary_table"])
+        StoryProtectedSubjectFactory(story=cls.protecting_story, subject_sheet=cls.protected_sheet)
+        cls.custodian_a_username = gm_profile_a.account.username
+
+        cls.other_protecting_story = StoryFactory()
+        gm_profile_b = GMProfileFactory()
+        table_b = GMTableFactory(gm=gm_profile_b)
+        cls.other_protecting_story.primary_table = table_b
+        cls.other_protecting_story.save(update_fields=["primary_table"])
+        StoryProtectedSubjectFactory(
+            story=cls.other_protecting_story, subject_sheet=cls.other_protected_sheet
+        )
+        cls.custodian_b_username = gm_profile_b.account.username
+
+        cls.stake = StakeFactory(
+            beat=cls.beat,
+            template=cls.template,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            severity=StakeSeverity.GRAVE,
+            subject_sheet=cls.protected_sheet,
+            subject_label="",
+            player_summary="The NPC's fate hangs in the balance.",
+        )
+
+    def test_patch_unrelated_field_still_blocked_via_instance_identity(self):
+        """attrs carries no subject fields — identity must fall back to the instance's row."""
+        self.client.force_authenticate(user=self.owner)
+        resp = self.client.patch(
+            reverse("stake-detail", kwargs={"pk": self.stake.pk}),
+            {"player_summary": "Edited summary only."},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        expected = (
+            "This subject is under another story's custody — request clearance "
+            f"from GM {self.custodian_a_username}."
+        )
+        self.assertIn(expected, str(resp.data))
+
+    def test_patch_repoint_subject_sheet_blocked_via_attrs_identity(self):
+        """Re-pointing subject_sheet must derive the identity from attrs, not the stale instance.
+
+        Both the original and the re-pointed sheet are protected, but by
+        DIFFERENT stories with distinct named custodians — the blocked
+        message must name the re-pointed sheet's custodian (story B), not
+        the original row's (story A), proving the identity came from attrs.
+        """
+        self.client.force_authenticate(user=self.owner)
+        resp = self.client.patch(
+            reverse("stake-detail", kwargs={"pk": self.stake.pk}),
+            {"subject_sheet": self.other_protected_sheet.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        expected = (
+            "This subject is under another story's custody — request clearance "
+            f"from GM {self.custodian_b_username}."
+        )
+        self.assertIn(expected, str(resp.data))
+
+
 class StakeResolutionWriterCustodyGateTests(APITestCase):
     """StakeResolutionSerializer.validate's HARM/REMOVE re-check (#2001 Task 4)."""
 
@@ -974,6 +1065,36 @@ class StakeResolutionWriterCustodyGateTests(APITestCase):
                 "stake": self.npc_stake.pk,
                 "column": "loss",
                 "narrative_summary": "It goes badly.",
+                "subject_standing_delta": -2,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(_CUSTODY_STAFF_MESSAGE, str(resp.data))
+
+    def test_win_column_with_pool_and_delta_still_derives_harm(self):
+        """The delta branch has no column gate (#2001 Task 4 review).
+
+        A WIN-column resolution carrying a consequence_pool would NOT alone
+        raise the scope past APPEAR (``column == LOSS and consequence_pool
+        is not None`` requires LOSS) — but a nonzero subject_standing_delta
+        raises it to HARM regardless of column, so the combination must
+        still be blocked.
+        """
+        from actions.factories import ConsequencePoolFactory
+
+        pool = ConsequencePoolFactory()
+        other_story = StoryFactory()
+        StoryProtectedSubjectFactory(story=other_story, subject_sheet=self.npc_sheet)
+
+        self.client.force_authenticate(user=self.owner)
+        resp = self.client.post(
+            reverse("stakeresolution-list"),
+            {
+                "stake": self.npc_stake.pk,
+                "column": "win",
+                "narrative_summary": "It goes well, mostly.",
+                "consequence_pool": pool.pk,
                 "subject_standing_delta": -2,
             },
             format="json",
@@ -1088,3 +1209,68 @@ class StakeResolutionWriterCustodyGateTests(APITestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+
+class StakeResolutionWriterCustodyPatchTests(APITestCase):
+    """PATCH-path merge-to-instance fallback in ``_writer_payload_scope`` (#2001 Task 4 review).
+
+    ``StakeResolutionWriterCustodyGateTests`` only exercises the create path.
+    A partial update on an EXISTING no-writer resolution must still re-derive
+    the writer-payload scope from the merged (attrs + instance) payload and
+    re-check custody when that PATCH alone raises the reach past APPEAR.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = AccountFactory(is_staff=False)
+        cls.story = StoryFactory(owners=[cls.owner])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(episode=cls.episode, risk=RenownRisk.LOW, target_level=2)
+        cls.npc_sheet = CharacterSheetFactory()
+        cls.npc_stake = StakeFactory(
+            beat=cls.beat,
+            template=None,
+            subject_kind=StakeSubjectKind.NPC_FATE,
+            severity=StakeSeverity.GRAVE,
+            subject_sheet=cls.npc_sheet,
+            subject_label="",
+        )
+        cls.other_story = StoryFactory()
+        cls.protection = StoryProtectedSubjectFactory(
+            story=cls.other_story, subject_sheet=cls.npc_sheet
+        )
+
+    def test_outsider_patch_to_standing_delta_blocked_at_harm(self):
+        """A no-writer resolution PATCHed to a HARM payload re-checks custody and blocks."""
+        resolution = StakeResolutionFactory(
+            stake=self.npc_stake, column="win", narrative_summary="Fine so far."
+        )
+        self.client.force_authenticate(user=self.owner)
+        resp = self.client.patch(
+            reverse("stakeresolution-detail", kwargs={"pk": resolution.pk}),
+            {"subject_standing_delta": -2},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(_CUSTODY_STAFF_MESSAGE, str(resp.data))
+
+    def test_cleared_user_patch_to_standing_delta_allowed(self):
+        """The same recheck ALLOWS once a HARM-scope clearance covers the acting GM."""
+        resolution = StakeResolutionFactory(
+            stake=self.npc_stake, column="win", narrative_summary="Fine so far."
+        )
+        owner_gm_profile = GMProfileFactory(account=self.owner)
+        CustodyClearanceFactory(
+            protected_subject=self.protection,
+            requested_by=owner_gm_profile,
+            scope=CustodyScope.HARM,
+            status=CustodyClearanceStatus.GRANTED,
+        )
+        self.client.force_authenticate(user=self.owner)
+        resp = self.client.patch(
+            reverse("stakeresolution-detail", kwargs={"pk": resolution.pk}),
+            {"subject_standing_delta": -2},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

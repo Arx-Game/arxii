@@ -601,6 +601,14 @@ def _fire_time_custody_actor(story: Story) -> AccountDB | None:
     ``primary_table``) has no one to name — treated as no clearance possible,
     matching ``check_subject_custody``'s ``custodian_gm_username=None`` posture
     for orphaned protecting stories.
+
+    If this Lead GM account also happens to be Django staff, the staff bypass
+    inside ``check_subject_custody`` applies at fire time exactly as it would
+    at authoring/writer-payload time — this is intended, not an oversight.
+    Staff are unrestricted across the whole custody design (every enforcement
+    point funnels through the same ``check_subject_custody`` seam, and staff
+    is the first check inside it); fire time gets no separate, narrower rule
+    just because there is no request user to inspect.
     """
     table = story.primary_table
     if table is None:
