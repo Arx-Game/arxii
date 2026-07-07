@@ -1009,7 +1009,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             )
         return ClashStateSerializer(clashes, many=True).data  # type: ignore[return-value]
 
-    def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, object]]:
+    def get_engagement_locks(self, obj: CombatEncounter) -> list[dict[str, Any]]:
         """Return active EngagementLock records for this encounter (#2020).
 
         Exposes foil pairings (who is dueling whom) to the frontend combat UI.

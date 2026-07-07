@@ -126,6 +126,7 @@ function makeEncounter(
     opponents,
     current_round_actions: [],
     clashes: [],
+    engagement_locks: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',
     completed_at: null,

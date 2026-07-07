@@ -193,6 +193,7 @@ function makeEncounterWithPositions(overrides: Partial<EncounterDetail> = {}): E
     opponents: [],
     current_round_actions: [],
     clashes: [],
+    engagement_locks: [],
     created_at: '2026-06-15T00:00:00Z',
     position_adjacency: [
       { position_id: 10, adjacent_position_ids: [20] },

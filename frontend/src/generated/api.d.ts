@@ -19707,7 +19707,20 @@ export interface components {
       readonly clashes: {
         [key: string]: unknown;
       }[];
-      readonly engagement_locks: string;
+      /**
+       * @description Return active EngagementLock records for this encounter (#2020).
+       *
+       *     Exposes foil pairings (who is dueling whom) to the frontend combat UI.
+       *     Returns only ACTIVE locks so resolved ones don't appear after breaking.
+       *
+       *     Uses the ``engagement_locks_cached`` prefetch-to-attr set on the
+       *     viewset's ``_base_queryset`` so no extra query fires during detail
+       *     serialization. Falls back to a direct filter for callers that don't
+       *     use the viewset (e.g. unit tests that call the serializer directly).
+       */
+      readonly engagement_locks: {
+        [key: string]: unknown;
+      }[];
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
