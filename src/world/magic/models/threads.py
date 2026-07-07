@@ -617,6 +617,14 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=SANCTUM; null otherwise. Plan 4 §F.",
     )
+    target_organization = models.ForeignKey(
+        "societies.Organization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=ORGANIZATION; null otherwise.",
+    )
     slot_kind = models.CharField(
         max_length=16,
         choices=SanctumSlotKind.choices,
@@ -678,6 +686,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -695,6 +704,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -712,6 +722,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -729,6 +740,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -757,6 +769,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -783,6 +796,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -817,6 +831,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_covenant_role__isnull=True)
                         & models.Q(target_mantle__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -843,6 +858,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_covenant_role__isnull=True)
                         & models.Q(target_gift__isnull=True)
                         & models.Q(target_sanctum_details__isnull=True)
+                        & models.Q(target_organization__isnull=True)
                     )
                 ),
             ),
@@ -897,6 +913,36 @@ class Thread(SharedMemoryModel):
                     )
                 ),
             ),
+            # ---- ORGANIZATION -----------------------------------------------
+            # One active thread per (owner, target_organization). Retired threads
+            # (retired_at IS NOT NULL) are excluded so a character can retire an
+            # org thread and later weave a new one on the same org.
+            models.UniqueConstraint(
+                fields=["owner", "target_organization"],
+                condition=models.Q(
+                    target_kind=TargetKind.ORGANIZATION,
+                    retired_at__isnull=True,
+                ),
+                name="uniq_thread_organization_active",
+            ),
+            models.CheckConstraint(
+                name="thread_organization_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.ORGANIZATION)
+                    | (
+                        models.Q(target_organization__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
+                        & models.Q(target_gift__isnull=True)
+                        & models.Q(target_mantle__isnull=True)
+                        & models.Q(target_sanctum_details__isnull=True)
+                    )
+                ),
+            ),
             models.CheckConstraint(
                 name="thread_slot_kind_only_for_sanctum",
                 check=(models.Q(target_kind=TargetKind.SANCTUM) | models.Q(slot_kind="")),
@@ -927,6 +973,7 @@ class Thread(SharedMemoryModel):
             TargetKind.GIFT: "target_gift",
             TargetKind.MANTLE: "target_mantle",
             TargetKind.SANCTUM: "target_sanctum_details",
+            TargetKind.ORGANIZATION: "target_organization",
         }
         attr = _kind_to_attr.get(self.target_kind)
         return getattr(self, attr) if attr is not None else None
@@ -949,6 +996,7 @@ class Thread(SharedMemoryModel):
             TargetKind.GIFT: "target_gift",
             TargetKind.MANTLE: "target_mantle",
             TargetKind.SANCTUM: "target_sanctum_details",
+            TargetKind.ORGANIZATION: "target_organization",
         }
         all_target_fields = (
             "target_trait",
@@ -960,6 +1008,7 @@ class Thread(SharedMemoryModel):
             "target_gift",
             "target_mantle",
             "target_sanctum_details",
+            "target_organization",
         )
 
         expected_field = kind_to_field.get(self.target_kind)

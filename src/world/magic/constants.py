@@ -91,6 +91,7 @@ class TargetKind(models.TextChoices):
     MANTLE = "MANTLE", "Mantle"
     SANCTUM = "SANCTUM", "Sanctum"
     GIFT = "GIFT", "Gift"
+    ORGANIZATION = "ORGANIZATION", "Organization"
 
 
 class GiftKind(models.TextChoices):

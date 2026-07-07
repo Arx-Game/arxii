@@ -62,7 +62,7 @@ treat those names as hints to confirm, not gospel.
 - [0014 — No persisted derived data; derive-on-read](0014-no-persisted-derived-data-derive-on-read.md)
 - [0015 — No polymorphic / GenericFK / ContentType models](0015-no-polymorphic-genericfk-models.md)
 - [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
-- [0093 — Service functions read through cached handlers, not bare ORM queries](0093-service-functions-use-cached-handlers-not-queries.md)
+- [0097 — Service functions read through cached handlers, not bare ORM queries](0097-service-functions-use-cached-handlers-not-queries.md)
 - [0017 — New subsystems are submodules of existing apps](0017-new-subsystems-are-submodules.md)
 - [0018 — Range-partition the Interaction table](0018-range-partition-the-interaction-table.md)
 - [0062 — The Secret↔act anchor puts the FK on the Secret, reversing the back-reference pattern](0062-secret-act-anchor-reverses-the-back-reference-fk.md)

@@ -162,7 +162,7 @@ def _bound_covenant_role_cap_by_court_grant(
     return min(base_cap, granted if granted is not None else 0)
 
 
-def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
+def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911, C901
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:
@@ -242,6 +242,12 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911
             return thread.target_sanctum_details.feature_instance.level * 10
         case TargetKind.GIFT:
             return _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
+        case TargetKind.ORGANIZATION:
+            org = thread.target_organization
+            handler = org.gift_grants_handler
+            grant_cap = handler.anchor_cap_for(thread.resonance)
+            path_cap = _current_path_stage(thread.owner) * ANCHOR_CAP_GIFT_PER_STAGE
+            return min(grant_cap, path_cap)
     return 0
 
 
@@ -459,28 +465,29 @@ def _has_weaving_unlock(
 ) -> bool:
     """Check if a character has the required ThreadWeavingUnlock for a given anchor.
 
-    Spec A §7.4 eligibility table (lines 449-457).
+    Spec A §7.4 eligibility table (lines 449-457). Delegates to the cached
+    CharacterWeavingUnlockHandler (ADR-0093) — no .filter()/.exists() queries.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
-    base = CharacterThreadWeavingUnlock.objects.filter(character=character_sheet)
+    handler = character_sheet.character.weaving_unlocks
     match target_kind:
         case TargetKind.TRAIT:
-            return base.filter(unlock__unlock_trait=target).exists()
+            return handler.has_unlock_for_trait(target)
         case TargetKind.TECHNIQUE:
-            return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
+            return handler.has_unlock_for_gift(target.gift)  # type: ignore[union-attr]
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL
-            return base.filter(unlock__unlock_track=track).exists()
-        case TargetKind.FACET:
-            # Single global FACET unlock — no per-facet variant; any FACET-kind unlock suffices.
-            return base.filter(unlock__target_kind=TargetKind.FACET).exists()
+            return handler.has_unlock_for_track(track)
+        # Kind-level unlocks: any unlock of that target_kind suffices.
+        case TargetKind.FACET | TargetKind.SANCTUM | TargetKind.ORGANIZATION:
+            return handler.has_unlock_for_kind(target_kind)
     return False
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913, C901
+def weave_thread(  # noqa: PLR0913, PLR0912, C901
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -534,6 +541,29 @@ def weave_thread(  # noqa: PLR0913, C901
         record_mantle_clearances(character_sheet, target)  # type: ignore[invalid-argument-type]
         if get_max_cleared_mantle_level(character_sheet, target) < 1:  # type: ignore[invalid-argument-type]
             raise MantleNotClearedError
+    elif target_kind == TargetKind.ORGANIZATION:
+        # Gate 1: active membership — the character's persona must be an active
+        # member of the target org. Read through the persona's membership list.
+        persona = character_sheet.primary_persona
+        if persona is None:
+            msg = "Character has no primary persona; cannot verify org membership."
+            raise WeavingUnlockMissing(msg)
+        memberships = list(persona.organization_memberships.all())
+        is_member = any(
+            m.organization_id == target.pk  # type: ignore[union-attr]
+            and m.left_at is None
+            and m.exiled_at is None
+            for m in memberships
+        )
+        if not is_member:
+            msg = "Character is not an active member of this organization."
+            raise WeavingUnlockMissing(msg)
+        # Gate 2: kind-level weaving unlock.
+        if not character_sheet.character.weaving_unlocks.has_unlock_for_kind(
+            TargetKind.ORGANIZATION
+        ):
+            msg = "Character lacks the ORGANIZATION weaving unlock."
+            raise WeavingUnlockMissing(msg)
     elif not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
@@ -573,6 +603,7 @@ def weave_thread(  # noqa: PLR0913, C901
         TargetKind.FACET: "target_facet",
         TargetKind.COVENANT_ROLE: "target_covenant_role",
         TargetKind.MANTLE: "target_mantle",
+        TargetKind.ORGANIZATION: "target_organization",
     }
     kwargs: dict[str, object] = {
         "owner": character_sheet,
@@ -587,6 +618,19 @@ def weave_thread(  # noqa: PLR0913, C901
     thread = Thread.objects.create(**kwargs)
     recompute_max_health_with_threads(character_sheet)
     character_sheet.character.threads.invalidate()
+
+    # For ORGANIZATION threads, mint CharacterTechnique rows for the org's
+    # acquired gifts whose supported-resonance set contains the thread's chosen
+    # resonance. Idempotent — existing technique ownership is skipped.
+    if target_kind == TargetKind.ORGANIZATION:
+        from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+        org = target  # type: ignore[assignment]
+        handler = org.gift_grants_handler
+        techniques = handler.acquired_techniques_for(resonance)
+        for technique in techniques:
+            CharacterTechnique.objects.get_or_create(character=character_sheet, technique=technique)
+
     return thread
 
 
@@ -824,12 +868,15 @@ def accept_thread_weaving_unlock(
 
     # TODO: Transfer gold when economy system exists (matching codex TODO).
 
-    return CharacterThreadWeavingUnlock.objects.create(
+    purchase = CharacterThreadWeavingUnlock.objects.create(
         character=learner,
         unlock=unlock,
         xp_spent=xp_cost,
         teacher=offer.teacher,
     )
+    # Invalidate the cached handler so the next read sees the new unlock (ADR-0093).
+    learner.character.weaving_unlocks.invalidate()
+    return purchase
 
 
 # =============================================================================
