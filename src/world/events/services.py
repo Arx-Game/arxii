@@ -167,12 +167,20 @@ def start_event(event: Event) -> Event:
         privacy = ScenePrivacyMode.PUBLIC if event.is_public else ScenePrivacyMode.PRIVATE
         if privacy != ScenePrivacyMode.PUBLIC and event.location.is_public:
             raise EventError(EventError.PRIVATE_IN_PUBLIC_ROOM)
-        Scene.objects.create(
+        scene = Scene.objects.create(
             name=event.name,
             location=event.location.objectdb,
             privacy_mode=privacy,
             event=event,
         )
+        # Link any accepted crossover invites to this freshly-spawned scene —
+        # creates the EpisodeScene row for each invited story's accepted episode
+        # and enrolls the invited Lead GM as a scene GM (#2002).
+        from world.stories.services.crossover import (  # noqa: PLC0415
+            link_accepted_invites_for_scene,
+        )
+
+        link_accepted_invites_for_scene(scene, event)
 
         _apply_room_overlay(event)
 
