@@ -2878,6 +2878,16 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     # Achievement counters: see world.combat.achievement_counters. Wired in
     # a follow-up phase — keeping the source_sheet kwarg in place so the
     # call sites are pre-threaded.
+    # Threat accumulation: damage dealt -> ThreatRecord increment (#2020).
+    # Only post-soak, post-resistance damage (damage_through) contributes — the
+    # real signal of who is hurting the NPC. No source_sheet = no threat record.
+    if source_sheet is not None and damage_through > 0:
+        participant = CombatParticipant.objects.filter(
+            encounter=opponent.encounter,
+            character_sheet=source_sheet,
+        ).first()
+        if participant is not None:
+            accumulate_threat(opponent.encounter, opponent, participant, damage_through)
     del source_sheet
 
     return OpponentDamageResult(
