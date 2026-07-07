@@ -215,7 +215,7 @@ def seeded_models() -> list[type[Model]]:
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
@@ -225,6 +225,7 @@ def seeded_models() -> list[type[Model]]:
         Affinity,
         Resonance,
         ItemTemplate,
+        Style,
         CheckType,
         ResultChart,
         SocialConsentCategory,
@@ -249,7 +250,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
@@ -277,7 +278,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
         "magic": [Affinity, Resonance],
-        "items": [ItemTemplate],
+        # Style also carries the seeded aesthetic vocabulary spread across the four
+        # audacity tiers (#2029).
+        "items": [ItemTemplate, Style],
         # Combat seeds check-types used by the resolution spine, not standalone
         # content rows; it still appears in the inventory as a seeded cluster.
         "combat": [],
