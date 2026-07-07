@@ -1046,7 +1046,7 @@ Character lifecycle management with web-first applications and player anonymity.
 
 ### GM
 Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a
-GM at a given level may author (#2000, ADR-0095).
+GM at a given level may author (#2000, ADR-0097).
 
 - **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
   `last_active_at` stub), `GMApplication` (freeform text, staff response, one PENDING
@@ -1100,7 +1100,7 @@ GM at a given level may author (#2000, ADR-0095).
 - **Source:** `src/world/gm/`
 - **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
 - **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
-  [../adr/0095-gm-trust-is-gmprofile-level.md](../adr/0095-gm-trust-is-gmprofile-level.md)
+  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md)
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social

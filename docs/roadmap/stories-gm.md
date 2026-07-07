@@ -44,7 +44,7 @@ What changes:
   runnable). Scope is **not** trust-gated. GROUP anchors to the GM table's
   people and/or an optional covenant seam.
 - **Risk** is a plain `Beat.risk` integer (no RiskTier model). The trust→risk ladder
-  has since arrived (#2000, ADR-0095): non-staff GMs are capped at their
+  has since arrived (#2000, ADR-0097): non-staff GMs are capped at their
   `GMLevelCap.max_beat_risk`/`allow_custom_stakes` (staff still bypass); see
   `docs/roadmap/gm-system.md`'s "Trust and Feedback" section.
 - **Per-story OOC notes ledger** (author + timestamp), separate from
@@ -55,7 +55,7 @@ via placeholder GM-mark. Sequenced follow-ups (each its own brainstorm):
 (1) Mission/Challenge engine via existing `resolve_challenge`,
 (2) Situation/Encounter resolution + Sessions,
 (3) consequence + reward computation (where risk numbers gain meaning),
-(4) ✅ GM leveling / the trust→risk gating hook (#2000 — see ADR-0095;
+(4) ✅ GM leveling / the trust→risk gating hook (#2000 — see ADR-0097;
 the automatic *feedback-driven earning curve* is still deliberately deferred,
 promotion is staff-only for now),
 (5) covenant entity.

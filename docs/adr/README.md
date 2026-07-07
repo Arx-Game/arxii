@@ -162,4 +162,4 @@ treat those names as hints to confirm, not gospel.
 - [0082 — Scandal is a derived per-society judgment; reach forks at act birth](0082-scandal-reach-derived-at-act-birth.md)
 - [0085 — The offer→staked-beat link lives on MissionOfferDetails, not NPCServiceOffer](0085-offer-to-beat-link-on-missionofferdetails.md)
 - [0087 — Building renovation swaps the catalog BuildingKind row, not per-building flags](0087-building-renovation-catalog-kind-reassignment.md)
-- [0095 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`](0095-gm-trust-is-gmprofile-level.md)
+- [0097 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`](0097-gm-trust-is-gmprofile-level.md)
