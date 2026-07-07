@@ -5,6 +5,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 
 from world.character_sheets.models import CharacterSheet
+from world.events.models import Event
 from world.gm.constants import GMTableStatus
 from world.gm.models import GMLevelCap, GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
@@ -16,6 +17,7 @@ from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
+    CrossoverInviteStatus,
     CustodyClearanceStatus,
     CustodyScope,
     ProgressStatus,
@@ -35,6 +37,7 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     Chapter,
+    CrossoverInvite,
     CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
@@ -2177,6 +2180,123 @@ class WithdrawOfferInputSerializer(serializers.Serializer):
         offer: StoryGMOffer = self.context["offer"]
         if offer.status != StoryGMOfferStatus.PENDING:
             msg = "Only PENDING offers can be withdrawn."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+# ---------------------------------------------------------------------------
+# #2002: Crossover invite serializers
+# ---------------------------------------------------------------------------
+
+
+class CrossoverInviteSerializer(serializers.ModelSerializer):
+    """Read serializer for CrossoverInvite records (#2002)."""
+
+    class Meta:
+        model = CrossoverInvite
+        fields = [
+            "id",
+            "event",
+            "from_gm",
+            "to_story",
+            "proposed_episode",
+            "accepted_episode",
+            "message",
+            "response_note",
+            "status",
+            "created_at",
+            "responded_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class CrossoverInviteCreateSerializer(serializers.Serializer):
+    """Input for POST /api/crossover-invites/.
+
+    Context required:
+        request: DRF request (for user identity + GMProfile resolution).
+
+    Validates:
+        - to_story exists (PrimaryKeyRelatedField).
+        - event exists (PrimaryKeyRelatedField).
+        - proposed_episode (if given) belongs to to_story.
+
+    Stores ``from_gm`` (GMProfile) in validated_data.
+    """
+
+    event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all())
+    to_story = serializers.PrimaryKeyRelatedField(queryset=Story.objects.all())
+    proposed_episode = serializers.PrimaryKeyRelatedField(
+        queryset=Episode.objects.all(), required=False
+    )
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        ep = attrs.get("proposed_episode")
+        if ep is not None and ep.chapter.story_id != attrs["to_story"].pk:
+            msg = "proposed_episode does not belong to to_story."
+            raise serializers.ValidationError({"proposed_episode": msg})
+        return attrs
+
+
+class CrossoverInviteAcceptSerializer(serializers.Serializer):
+    """Input for POST /api/crossover-invites/{id}/accept/.
+
+    Context required:
+        invite (CrossoverInvite): the invite being accepted.
+
+    Validates:
+        - invite.status == PENDING
+    """
+
+    accepted_episode = serializers.PrimaryKeyRelatedField(
+        queryset=Episode.objects.all(), required=False
+    )
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        invite: CrossoverInvite = self.context["invite"]
+        if invite.status != CrossoverInviteStatus.PENDING:
+            msg = "Only PENDING crossover invites can be accepted."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+class CrossoverInviteDeclineSerializer(serializers.Serializer):
+    """Input for POST /api/crossover-invites/{id}/decline/.
+
+    Context required:
+        invite (CrossoverInvite): the invite being declined.
+
+    Validates:
+        - invite.status == PENDING
+    """
+
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        invite: CrossoverInvite = self.context["invite"]
+        if invite.status != CrossoverInviteStatus.PENDING:
+            msg = "Only PENDING crossover invites can be declined."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+class CrossoverInviteWithdrawSerializer(serializers.Serializer):
+    """Input for POST /api/crossover-invites/{id}/withdraw/.
+
+    Context required:
+        invite (CrossoverInvite): the invite being withdrawn.
+
+    Validates:
+        - invite.status == PENDING
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        invite: CrossoverInvite = self.context["invite"]
+        if invite.status != CrossoverInviteStatus.PENDING:
+            msg = "Only PENDING crossover invites can be withdrawn."
             raise serializers.ValidationError({"non_field_errors": msg})
         return attrs
 

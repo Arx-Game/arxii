@@ -7,6 +7,7 @@ from world.stories.views import (
     BeatStakeAvailabilityView,
     BeatViewSet,
     ChapterViewSet,
+    CrossoverInviteViewSet,
     CustodyClearanceViewSet,
     EpisodeProgressionRequirementViewSet,
     EpisodeSceneViewSet,
@@ -81,6 +82,8 @@ router.register(r"treasured-signoffs", TreasuredSignoffViewSet, basename="treasu
 # #2001 Task 6: custody protection + clearance lifecycle
 router.register(r"protected-subjects", StoryProtectedSubjectViewSet)
 router.register(r"custody-clearances", CustodyClearanceViewSet, basename="custodyclearance")
+# #2002: crossover invite lifecycle
+router.register(r"crossover-invites", CrossoverInviteViewSet, basename="crossoverinvite")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).
