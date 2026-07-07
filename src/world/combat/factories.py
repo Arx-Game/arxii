@@ -54,6 +54,7 @@ from world.combat.models import (
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
+    ThreatRecord,
 )
 from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind
@@ -1312,3 +1313,19 @@ def wire_escalation_content() -> None:
     EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
     EscalationSpikeOnKilledTriggerDefinitionFactory()
     EscalationSpikeOnMortalPerilTriggerDefinitionFactory()
+
+
+class ThreatRecordFactory(factory_django.DjangoModelFactory):
+    """Factory for ThreatRecord (#2020)."""
+
+    class Meta:
+        model = ThreatRecord
+
+    encounter = factory.SubFactory(CombatEncounterFactory)
+    opponent = factory.SubFactory(
+        CombatOpponentFactory, encounter=factory.SelfAttribute("..encounter")
+    )
+    participant = factory.SubFactory(
+        CombatParticipantFactory, encounter=factory.SelfAttribute("..encounter")
+    )
+    threat_value = 0

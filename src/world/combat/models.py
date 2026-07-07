@@ -2507,3 +2507,47 @@ class DuelChallenge(SharedMemoryModel):
             f"DuelChallenge({self.challenger_sheet_id} → {self.challenged_sheet_id} "
             f"[{self.status}])"
         )
+
+
+class ThreatRecord(SharedMemoryModel):
+    """Per-(opponent, participant) threat score accumulated from real events (#2020).
+
+    The substrate for NPC target selection: damage dealt by a PC to an opponent
+    increments this, taunts (#2015) add to it, and the ``HIGHEST_THREAT`` /
+    ``SPECIFIC_ROLE`` target-selection modes read it. An active
+    ``EngagementLock`` overrides the locked pairing's threat to max.
+
+    One row per (NPC, PC) pairing within an encounter.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="threat_records",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="threat_records",
+    )
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="threat_records",
+    )
+    threat_value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Threat Record"
+        verbose_name_plural = "Threat Records"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "opponent", "participant"],
+                name="unique_threat_record_per_pairing",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"ThreatRecord(opp={self.opponent_id}, pc={self.participant_id}: {self.threat_value})"
+        )

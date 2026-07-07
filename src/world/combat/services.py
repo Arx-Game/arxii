@@ -102,6 +102,7 @@ from world.combat.models import (
     RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
+    ThreatRecord,
 )
 from world.combat.types import (
     ActionOutcome,
@@ -129,6 +130,58 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Threat record helpers (#2020)
+# ---------------------------------------------------------------------------
+
+
+def get_or_create_threat_record(
+    encounter: CombatEncounter,
+    opponent: CombatOpponent,
+    participant: CombatParticipant,
+) -> ThreatRecord:
+    """Get or create the ThreatRecord for an (opponent, participant) pairing (#2020).
+
+    Args:
+        encounter: The combat encounter.
+        opponent: The NPC opponent.
+        participant: The PC participant.
+
+    Returns:
+        The existing or newly-created ``ThreatRecord`` for this pairing.
+    """
+    record, _ = ThreatRecord.objects.get_or_create(
+        encounter=encounter,
+        opponent=opponent,
+        participant=participant,
+        defaults={"threat_value": 0},
+    )
+    return record
+
+
+def accumulate_threat(
+    encounter: CombatEncounter,
+    opponent: CombatOpponent,
+    participant: CombatParticipant,
+    amount: int,
+) -> None:
+    """Increment the threat value for an (opponent, participant) pairing (#2020).
+
+    Called from ``apply_damage_to_opponent`` (damage -> threat) and the taunt
+    verb (#2015). ``amount`` is a positive integer; negative values are clamped
+    to zero.
+
+    Args:
+        encounter: The combat encounter.
+        opponent: The NPC opponent being threatened against.
+        participant: The PC participant whose threat is accumulating.
+        amount: The threat increment (clamped to >= 0).
+    """
+    record = get_or_create_threat_record(encounter, opponent, participant)
+    record.threat_value = max(0, record.threat_value + amount)
+    record.save(update_fields=["threat_value"])
 
 
 # ---------------------------------------------------------------------------

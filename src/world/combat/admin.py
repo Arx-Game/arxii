@@ -26,6 +26,7 @@ from world.combat.models import (
     StrainConfig,
     ThreatPool,
     ThreatPoolEntry,
+    ThreatRecord,
 )
 
 
@@ -386,3 +387,10 @@ class EncounterScalingConfigAdmin(admin.ModelAdmin):
         "per_avg_level_pct",
         "updated_at",
     ]
+
+
+@admin.register(ThreatRecord)
+class ThreatRecordAdmin(admin.ModelAdmin):
+    list_display = ("encounter", "opponent", "participant", "threat_value")
+    list_filter = ("encounter",)
+    search_fields = ("opponent__name", "participant__character_sheet__character__db_key")
