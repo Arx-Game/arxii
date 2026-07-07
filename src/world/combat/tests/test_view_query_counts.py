@@ -109,7 +109,7 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_retrieve_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/"
         self.client.get(url)  # warm-up
-        # 5 queries on the warm call:
+        # 6 queries on the warm call:
         #   1. session + 2. encounter + 3. the lone remaining roster lookup
         #      the permission classes need (served by the account-level
         #      ``played_character_sheet_ids`` cached_property after warm-up).
@@ -122,10 +122,15 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
         #      viewer's own participant is vitals-visible — others return
         #      None before any lookup), so they do NOT scale with the
         #      participant count. The richer status surface is #521/#522.
+        #   6. DramaticSurgeRecord lookup for ``surge_beats`` (#2013) —
+        #      one query for this round's surge records, same per-request
+        #      shape as ``current_round_actions`` (query 5 above). Bounded
+        #      per request (filters on encounter + round_number); does not
+        #      scale with participant count.
         # The participants/opponents prefetches do not fire on the warm
         # call — they ran during warm-up and the identity-mapped encounter
         # retains the attribute.
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 

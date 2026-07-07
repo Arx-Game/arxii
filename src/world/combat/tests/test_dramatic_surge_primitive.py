@@ -108,3 +108,16 @@ class ApplyDramaticSurgeTests(TestCase):
         )
 
         self.assertEqual(beat.narration, f"{character.db_key} reacts to {{subject}}'s peril.")
+
+    def test_broadcasts_generic_narration_to_room(self):
+        from unittest.mock import patch
+
+        with patch.object(self.encounter.room, "msg_contents") as mock_msg:
+            apply_dramatic_surge(
+                encounter=self.encounter,
+                participant=self.participant,
+                amount=4,
+                trigger_kind=SurgeTriggerKind.HIGH_STAKES,
+            )
+
+        mock_msg.assert_called_once_with(f"{self.character.db_key}'s power surges.")
