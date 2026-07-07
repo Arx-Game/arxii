@@ -46232,6 +46232,7 @@ components:
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
+            * `ORGANIZATION` - Organization
         target_id:
           type: integer
           writeOnly: true
@@ -54149,6 +54150,7 @@ components:
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
+            * `ORGANIZATION` - Organization
         name:
           type: string
           default: ''
@@ -54357,6 +54359,7 @@ components:
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
+            * `ORGANIZATION` - Organization
         target_id:
           type: integer
           writeOnly: true
@@ -54385,6 +54388,7 @@ components:
       - MANTLE
       - SANCTUM
       - GIFT
+      - ORGANIZATION
       type: string
       description: |-
         * `TRAIT` - Trait
@@ -54396,6 +54400,7 @@ components:
         * `MANTLE` - Mantle
         * `SANCTUM` - Sanctum
         * `GIFT` - Gift
+        * `ORGANIZATION` - Organization
     ThreadWeavingTeachingOffer:
       type: object
       description: Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5).

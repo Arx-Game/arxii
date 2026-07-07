@@ -26012,6 +26012,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
@@ -29912,6 +29913,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       /** @default  */
@@ -30016,6 +30018,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
@@ -30035,6 +30038,7 @@ export interface components {
      *     * `MANTLE` - Mantle
      *     * `SANCTUM` - Sanctum
      *     * `GIFT` - Gift
+     *     * `ORGANIZATION` - Organization
      * @enum {string}
      */
     ThreadTargetKindEnum:
@@ -30046,7 +30050,8 @@ export interface components {
       | 'COVENANT_ROLE'
       | 'MANTLE'
       | 'SANCTUM'
-      | 'GIFT';
+      | 'GIFT'
+      | 'ORGANIZATION';
     /** @description Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5). */
     ThreadWeavingTeachingOffer: {
       readonly id: number;
