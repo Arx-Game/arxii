@@ -1957,6 +1957,36 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/house-claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET the draft's house claim; POST to submit one (#1884 Phase D).
+     *
+     *     POST body: title (id), template (id), house_name, backstory,
+     *     principles (mercy/method/status/change/allegiance/power ints).
+     *     The automated thematic gates run here; staff review follows in admin.
+     */
+    get: operations['character_creation_drafts_house_claim_retrieve'];
+    put?: never;
+    /**
+     * @description GET the draft's house claim; POST to submit one (#1884 Phase D).
+     *
+     *     POST body: title (id), template (id), house_name, backstory,
+     *     principles (mercy/method/status/change/allegiance/power ints).
+     *     The automated thematic gates run here; staff review follows in admin.
+     */
+    post: operations['character_creation_drafts_house_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/resubmit/': {
     parameters: {
       query?: never;
@@ -2170,6 +2200,40 @@ export interface paths {
     };
     /** @description ViewSet for listing gender options. */
     get: operations['character_creation_genders_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/house-titles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Vacant set-aside titles open to CG house definition (#1884 Phase D). */
+    get: operations['character_creation_house_titles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/house-titles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Vacant set-aside titles open to CG house definition (#1884 Phase D). */
+    get: operations['character_creation_house_titles_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -17644,6 +17708,16 @@ export interface components {
       readonly id: number;
       readonly name: string;
     };
+    /** @description A vacant set-aside title open to CG house definition (#1884 Phase D). */
+    ClaimableTitle: {
+      readonly id: number;
+      name: string;
+      tier: components['schemas']['Tier34dEnum'];
+      readonly realm_name: string;
+      /** @default  */
+      readonly seat_domain_name: string;
+      readonly templates: components['schemas']['HouseTemplateOption'][];
+    };
     /** @description Request serializer for staff clock adjustment. */
     ClockAdjustRequest: {
       /** Format: date-time */
@@ -20328,6 +20402,22 @@ export interface components {
     HighlightReelFeatured: {
       interaction_id: number;
     };
+    /** @description The draft's house claim, as CG shows it (#1884 Phase D). */
+    HouseClaimStatus: {
+      readonly id: number;
+      /** @description The family name (org renders "House <name>" for nobles). */
+      house_name: string;
+      readonly title_name: string;
+      status?: components['schemas']['HouseClaimStatusStatusEnum'];
+      review_note?: string;
+    };
+    /**
+     * @description * `pending` - Pending Review
+     *     * `approved` - Approved
+     *     * `rejected` - Rejected
+     * @enum {string}
+     */
+    HouseClaimStatusStatusEnum: 'pending' | 'approved' | 'rejected';
     /** @description The house block of an org payload (#1884) — null for non-family orgs. */
     HouseDetail: {
       family_name: string;
@@ -20345,22 +20435,36 @@ export interface components {
       unrest?: number;
       readonly holding_names: string[];
     };
+    /** @description A realm template a CG house claim may build from. */
+    HouseTemplateOption: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description roster.Family.FamilyType the defined family gets. */
+      family_type: string;
+      /** @description Full-match regex the proposed house name must satisfy — the realm's naming conventions as an automated gate. PLACEHOLDER. */
+      name_pattern?: string;
+      mercy_min?: number;
+      mercy_max?: number;
+      method_min?: number;
+      method_max?: number;
+      status_min?: number;
+      status_max?: number;
+      change_min?: number;
+      change_max?: number;
+      allegiance_min?: number;
+      allegiance_max?: number;
+      power_min?: number;
+      power_max?: number;
+    };
     HouseTitle: {
       readonly id: number;
       name: string;
-      tier: components['schemas']['HouseTitleTierEnum'];
+      tier: components['schemas']['Tier34dEnum'];
       readonly holder_name: string;
       /** @description Vacant slot set aside for the Phase D house creator. */
       is_claimable?: boolean;
     };
-    /**
-     * @description * `crown` - Crown
-     *     * `duchy` - Duchy
-     *     * `county` - County
-     *     * `barony` - Barony
-     * @enum {string}
-     */
-    HouseTitleTierEnum: 'crown' | 'duchy' | 'county' | 'barony';
     /** @description Serializer for HybridRelationshipType with nested requirements. */
     HybridRelationshipType: {
       readonly id: number;
@@ -29981,6 +30085,14 @@ export interface components {
       readonly gold_cost: number;
     };
     /**
+     * @description * `crown` - Crown
+     *     * `duchy` - Duchy
+     *     * `county` - County
+     *     * `barony` - Barony
+     * @enum {string}
+     */
+    Tier34dEnum: 'crown' | 'duchy' | 'county' | 'barony';
+    /**
      * @description * `1` - Cosmetic Touch
      *     * `2` - Marked
      *     * `3` - Touched
@@ -33462,6 +33574,52 @@ export interface operations {
       };
     };
   };
+  character_creation_drafts_house_claim_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HouseClaimStatus'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_house_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HouseClaimStatus'];
+        };
+      };
+    };
+  };
   character_creation_drafts_resubmit_create: {
     parameters: {
       query?: never;
@@ -33749,6 +33907,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Gender'];
+        };
+      };
+    };
+  };
+  character_creation_house_titles_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClaimableTitle'][];
+        };
+      };
+    };
+  };
+  character_creation_house_titles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this title. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClaimableTitle'];
         };
       };
     };

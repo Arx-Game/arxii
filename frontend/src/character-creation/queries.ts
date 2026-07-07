@@ -28,7 +28,9 @@ import {
   getFacetTree,
   getFamilies,
   getFamiliesWithOpenPositions,
+  getClaimableTitles,
   getFamilySlots,
+  getHouseClaim,
   getFamilyTree,
   getFormOptions,
   getGenders,
@@ -600,5 +602,24 @@ export function useAddDraftComment() {
         queryKey: characterCreationKeys.application(draftId),
       });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// House creator (#1884 Phase D)
+// ---------------------------------------------------------------------------
+
+export function useClaimableTitles() {
+  return useQuery({
+    queryKey: ['character-creation', 'house-titles'],
+    queryFn: getClaimableTitles,
+  });
+}
+
+export function useHouseClaim(draftId: number | undefined) {
+  return useQuery({
+    queryKey: ['character-creation', 'house-claim', draftId],
+    queryFn: () => getHouseClaim(draftId!),
+    enabled: draftId !== undefined,
   });
 }

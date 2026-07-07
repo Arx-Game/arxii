@@ -99,3 +99,7 @@ _Avoid_: province model, land parcel, estate (that's buildings/dwellings).
 **House Feed**:
 The pull feed of a household's own deeds and revealed scandals (`house_feed_for`, tidings) — the Arx 1 informs replacement. No feed model; query-and-merge like the public feed.
 _Avoid_: org informs, house inbox, notifications (it is not push).
+
+**House Claim**:
+The CG-only application defining the house behind a set-aside claimable `Title` (#1884 Phase D) — the character enters play as a representative of a house that has always existed. Automated thematic gates at submission, staff review in admin, materialization at CG finalization only. Founding a new house *in play* is a different, future loop.
+_Avoid_: house founding (in-play), ennoblement (future loop), house application (ambiguous with roster apps).

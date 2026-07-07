@@ -33,6 +33,9 @@ import { characterCreationKeys } from '../../queries';
 // Mock the API module
 vi.mock('../../api', () => ({
   getFamilies: vi.fn(),
+  getClaimableTitles: vi.fn().mockResolvedValue([]),
+  getHouseClaim: vi.fn().mockResolvedValue(null),
+  submitHouseClaim: vi.fn(),
   updateDraft: vi.fn(),
   getTarotCards: vi.fn(),
   getNamingRitualConfig: vi.fn(),

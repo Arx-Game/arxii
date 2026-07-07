@@ -588,3 +588,53 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
     list_display = ("outcome_tier", "reputation_delta")
     list_select_related = ("outcome_tier",)
     ordering = ("outcome_tier__success_level",)
+
+
+# ---------------------------------------------------------------------------
+# Houses (#1884 Phase D) — the staff review queue for CG house claims
+# ---------------------------------------------------------------------------
+
+from world.societies.houses.models import HouseClaim, HouseTemplate  # noqa: E402
+
+
+@admin.register(HouseTemplate)
+class HouseTemplateAdmin(admin.ModelAdmin):
+    """#1884 Phase D — realm recipes for CG-defined houses."""
+
+    list_display = ("name", "realm", "family_type", "liege", "starting_kin_slots")
+    list_select_related = ("realm", "liege")
+    list_filter = ("realm", "family_type")
+    search_fields = ("name",)
+    filter_horizontal = ("holdings",)
+
+
+@admin.register(HouseClaim)
+class HouseClaimAdmin(admin.ModelAdmin):
+    """#1884 Phase D — approve/reject CG house claims (v1 review surface).
+
+    Approval is the staff greenlight only; the house materializes at CG
+    finalization, so approving here never creates rows by itself.
+    """
+
+    list_display = ("house_name", "title", "template", "status", "created_at", "reviewed_by")
+    list_select_related = ("title", "template", "reviewed_by")
+    list_filter = ("status",)
+    search_fields = ("house_name", "backstory")
+    readonly_fields = ("draft", "reviewed_by", "reviewed_at")
+    actions = ("approve_claims", "reject_claims")
+
+    @admin.action(description="Approve selected claims")
+    def approve_claims(self, request, queryset):
+        from world.societies.houses.creator import approve_house_claim  # noqa: PLC0415
+
+        for claim in queryset:
+            approve_house_claim(claim, reviewer=request.user)
+        self.message_user(request, f"Approved {queryset.count()} claim(s).")
+
+    @admin.action(description="Reject selected claims")
+    def reject_claims(self, request, queryset):
+        from world.societies.houses.creator import reject_house_claim  # noqa: PLC0415
+
+        for claim in queryset:
+            reject_house_claim(claim, reviewer=request.user)
+        self.message_user(request, f"Rejected {queryset.count()} claim(s).")

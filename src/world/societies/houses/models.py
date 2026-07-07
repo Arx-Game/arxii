@@ -14,6 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.societies.houses.constants import (
     DomainCrisisSeverity,
+    HouseClaimStatus,
     PactCommitmentKind,
     PactDissolutionReason,
     RecognitionRuleKind,
@@ -456,3 +457,141 @@ class PactCommitment(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_kind_display()} on pact {self.pact_id}"
+
+
+class HouseTemplate(SharedMemoryModel):
+    """A realm's recipe for CG-defined houses on set-aside titles (#1884 Phase D).
+
+    The claimable ``Title`` is the slot; the template carries the automated
+    thematic gates (name pattern per the realm's naming conventions,
+    principle ranges) and the materialization package (society, liege,
+    succession law, holdings, starting kin slots). Numbers are PLACEHOLDER.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    realm = models.ForeignKey(
+        _REALM_FK,
+        on_delete=models.CASCADE,
+        related_name="house_templates",
+    )
+    family_type = models.CharField(
+        max_length=20,
+        help_text="roster.Family.FamilyType the defined family gets.",
+    )
+    society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+        help_text="The society the materialized org joins.",
+    )
+    liege = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+        help_text="The org the new house swears fealty to.",
+    )
+    default_succession_law = models.ForeignKey(
+        SuccessionLaw,
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+    )
+    name_pattern = models.CharField(
+        max_length=200,
+        default=r"[A-Z][a-z]{2,19}",
+        help_text=(
+            "Full-match regex the proposed house name must satisfy — the "
+            "realm's naming conventions as an automated gate. PLACEHOLDER."
+        ),
+    )
+    mercy_min = models.SmallIntegerField(default=-5)
+    mercy_max = models.SmallIntegerField(default=5)
+    method_min = models.SmallIntegerField(default=-5)
+    method_max = models.SmallIntegerField(default=5)
+    status_min = models.SmallIntegerField(default=-5)
+    status_max = models.SmallIntegerField(default=5)
+    change_min = models.SmallIntegerField(default=-5)
+    change_max = models.SmallIntegerField(default=5)
+    allegiance_min = models.SmallIntegerField(default=-5)
+    allegiance_max = models.SmallIntegerField(default=5)
+    power_min = models.SmallIntegerField(default=-5)
+    power_max = models.SmallIntegerField(default=5)
+    holdings = models.ManyToManyField(
+        HoldingKind,
+        blank=True,
+        related_name="house_templates",
+        help_text="Holdings materialized on the title's seat domain at finalization.",
+    )
+    starting_kin_slots = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="KinSlotPool capacity minted for the new family. PLACEHOLDER.",
+    )
+
+    class Meta:
+        ordering = ["realm", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class HouseClaim(SharedMemoryModel):
+    """A CG application defining the house behind a claimable title (#1884 Phase D).
+
+    CG-only by design (Apostate ruling): the character enters play as a
+    representative of a house that has always existed in fiction — founding
+    a brand-new house in play is a separate future loop. Rides the
+    ``CharacterDraft`` (dies with it, like the other Draft-scoped rows);
+    staff review happens in admin; the approved claim materializes at CG
+    finalization so an abandoned application never leaves a ghost house.
+    """
+
+    draft = models.OneToOneField(
+        "character_creation.CharacterDraft",
+        on_delete=models.CASCADE,
+        related_name="house_claim",
+    )
+    title = models.ForeignKey(
+        Title,
+        on_delete=models.CASCADE,
+        related_name="claims",
+        help_text="The vacant claimable title this house is defined behind.",
+    )
+    template = models.ForeignKey(
+        HouseTemplate,
+        on_delete=models.CASCADE,
+        related_name="claims",
+    )
+    house_name = models.CharField(
+        max_length=100,
+        help_text='The family name (org renders "House <name>" for nobles).',
+    )
+    backstory = models.TextField(
+        help_text="The thematic pitch staff reviews — the house as it has always been.",
+    )
+    mercy = models.SmallIntegerField(default=0)
+    method = models.SmallIntegerField(default=0)
+    status_principle = models.SmallIntegerField(default=0)
+    change = models.SmallIntegerField(default=0)
+    allegiance = models.SmallIntegerField(default=0)
+    power = models.SmallIntegerField(default=0)
+    status = models.CharField(
+        max_length=20,
+        choices=HouseClaimStatus.choices,
+        default=HouseClaimStatus.PENDING,
+    )
+    reviewed_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"House {self.house_name} claim ({self.get_status_display()})"

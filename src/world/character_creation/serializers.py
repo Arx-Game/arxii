@@ -2,6 +2,7 @@
 Character Creation serializers.
 """
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.character_creation.constants import (
@@ -29,6 +30,7 @@ from world.magic.models import Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
 from world.roster.serializers import FamilySerializer
+from world.societies.houses.models import HouseClaim, HouseTemplate, Title
 from world.species.models import Language, Species
 
 
@@ -796,3 +798,62 @@ class CGExplanationsSerializer:
     @staticmethod
     def to_dict() -> dict[str, str]:
         return {obj.key: obj.text for obj in CGExplanation.objects.all()}
+
+
+# ---------------------------------------------------------------------------
+# House creator (#1884 Phase D) — claimable titles + claim status for CG
+# ---------------------------------------------------------------------------
+
+
+class HouseTemplateOptionSerializer(serializers.ModelSerializer):
+    """A realm template a CG house claim may build from."""
+
+    class Meta:
+        model = HouseTemplate
+        fields = [
+            "id",
+            "name",
+            "description",
+            "family_type",
+            "name_pattern",
+            "mercy_min",
+            "mercy_max",
+            "method_min",
+            "method_max",
+            "status_min",
+            "status_max",
+            "change_min",
+            "change_max",
+            "allegiance_min",
+            "allegiance_max",
+            "power_min",
+            "power_max",
+        ]
+
+
+class ClaimableTitleSerializer(serializers.ModelSerializer):
+    """A vacant set-aside title open to CG house definition (#1884 Phase D)."""
+
+    realm_name = serializers.CharField(source="realm.name", read_only=True)
+    seat_domain_name = serializers.CharField(source="seat_domain.name", read_only=True, default="")
+    templates = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Title
+        fields = ["id", "name", "tier", "realm_name", "seat_domain_name", "templates"]
+
+    @extend_schema_field(HouseTemplateOptionSerializer(many=True))
+    def get_templates(self, obj):
+        from world.societies.houses.creator import templates_for_title  # noqa: PLC0415
+
+        return HouseTemplateOptionSerializer(templates_for_title(obj), many=True).data
+
+
+class HouseClaimStatusSerializer(serializers.ModelSerializer):
+    """The draft's house claim, as CG shows it (#1884 Phase D)."""
+
+    title_name = serializers.CharField(source="title.name", read_only=True)
+
+    class Meta:
+        model = HouseClaim
+        fields = ["id", "house_name", "title_name", "status", "review_note"]

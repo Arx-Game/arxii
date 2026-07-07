@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { components } from '@/generated/api';
 import type { PaginatedResponse } from '@/shared/types';
 import type {
   Affinity,
@@ -698,4 +699,60 @@ export async function getPendingApplicationCount(): Promise<number> {
   if (!res.ok) return 0;
   const data = await res.json();
   return data.count;
+}
+
+// ---------------------------------------------------------------------------
+// House creator (#1884 Phase D) — CG-defined houses on set-aside titles
+// ---------------------------------------------------------------------------
+
+export type ClaimableTitle = components['schemas']['ClaimableTitle'];
+export type HouseTemplateOption = components['schemas']['HouseTemplateOption'];
+export type HouseClaimStatus = components['schemas']['HouseClaimStatus'];
+
+export interface HouseClaimPayload {
+  title: number;
+  template: number;
+  house_name: string;
+  backstory: string;
+  mercy: number;
+  method: number;
+  status: number;
+  change: number;
+  allegiance: number;
+  power: number;
+}
+
+export async function getClaimableTitles(): Promise<ClaimableTitle[]> {
+  const res = await apiFetch(`${BASE_URL}/house-titles/`);
+  if (!res.ok) {
+    throw new Error('Failed to load claimable titles');
+  }
+  return res.json();
+}
+
+export async function getHouseClaim(draftId: number): Promise<HouseClaimStatus | null> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/house-claim/`);
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error('Failed to load house claim');
+  }
+  return res.json();
+}
+
+export async function submitHouseClaim(
+  draftId: number,
+  payload: HouseClaimPayload
+): Promise<HouseClaimStatus> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/house-claim/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(data.detail ?? 'Failed to submit house claim');
+  }
+  return res.json();
 }
