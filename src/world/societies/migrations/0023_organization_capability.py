@@ -6,11 +6,11 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0089_organization_thread_anchor"),
-        ("projects", "0011_organization_capability"),
+        ("magic", "0090_organization_thread_anchor"),
+        ("projects", "0012_organization_capability"),
         (
             "societies",
-            "0021_gangturfdetails_gangturftierthreshold_gangturfreputationaward",
+            "0022_alter_gangturfreputationaward_outcome_tier",
         ),
     ]
 

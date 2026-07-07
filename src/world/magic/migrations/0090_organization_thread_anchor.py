@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("covenants", "0022_covenantrank_can_lead_rituals"),
         ("items", "0026_iteminstance_access_policy"),
-        ("magic", "0088_merge_20260706_0314"),
+        ("magic", "0089_merge_20260706_0645"),
         ("relationships", "0007_temporaryrelationshipcondition"),
         (
             "societies",
