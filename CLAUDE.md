@@ -40,7 +40,17 @@ Explore/research agents). Two concrete failure modes motivate this:
   notifications re-invoke the main loop only — a subagent that backgrounds a
   command and ends its turn "waiting for the notification" dies silently holding
   uncommitted work (two stalls during #1909). Put a foreground-only instruction
-  in every implementer/fix dispatch prompt.
+  in every implementer/fix dispatch prompt. The instruction alone does not fully
+  prevent it (6+ recurrences on 2026-07-06/07) — when a subagent stalls this
+  way, the recovery is cheap and reliable: **resume it with a message** ordering
+  it to re-run the checks in the foreground and commit before ending its turn.
+- **Subagent dispatch prompts must anchor the worktree.** A subagent's FIRST
+  action must be `cd <worktree>` then `pwd` + `git status --short`, verifying
+  branch and tree before any edit; every path it edits and every test it runs
+  must live inside the worktree. An absolute worktree path in the prompt is not
+  enough — a subagent that skips the anchor step drifts into the shared main
+  checkout, where concurrent sessions clobber its uncommitted work (near-miss
+  on #2029).
 
 Destructive or approval-gated git operations (`reset --hard`, force-push) go
 alone in their own message. Never cite an issue/PR number that wasn't read

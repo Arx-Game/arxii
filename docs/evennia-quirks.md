@@ -17,6 +17,22 @@ arx manage makemigrations traits
 
 **Details**: See `core_management/CLAUDE.md` for full technical documentation of the solution.
 
+### makemigrations in a fresh worktree (no local dev DB)
+
+`arx manage makemigrations <app>` can fail in a freshly created worktree: the
+Evennia launcher requires `Account#1` (superuser) to exist before running *any*
+command — even schema-only ones — and worktrees don't carry over the main
+checkout's untracked local DB/`.env`, so `DATABASE_URL` falls back to the shared
+devcontainer Postgres (which may carry an unrelated `InconsistentMigrationHistory`).
+
+**Workaround (never touch the main dev DB):** create a disposable scratch
+Postgres DB on the same `db` host, run `python -m django migrate` and then
+`python -m django makemigrations <app>` directly against it (bypassing the
+`evennia` launcher's superuser pre-check), copy the generated migration file,
+and drop the scratch DB. Often the worktree's own `.venv` + SQLite fallback also
+works — try `arx manage makemigrations <app>` first; reach for the scratch DB
+only when the launcher blocks it.
+
 ### Evennia Integration Strategy
 - **Use Evennia Models**: Keep using Evennia's Account, ObjectDB, etc. - don't reinvent the wheel
 - **Extend via evennia_extensions**: Use the evennia_extensions app pattern for data storage that extends Evennia models
