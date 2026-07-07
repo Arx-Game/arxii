@@ -113,13 +113,6 @@ def _validate_weave_eligibility(
     slot_kind: str,
 ) -> None:
     """Per-slot-kind permission + level-cap checks. Raises SanctumWeavingError subclasses."""
-    # SANCTUM weaving-unlock gate (was missing — bundled bugfix per #1913 spec).
-    weaver_char = weaver.character
-    if not weaver_char.weaving_unlocks.has_unlock_for_kind(TargetKind.SANCTUM):
-        from world.magic.exceptions import WeavingUnlockMissing  # noqa: PLC0415
-
-        msg = "Character lacks the SANCTUM weaving unlock."
-        raise WeavingUnlockMissing(msg)
     room = sanctum.feature_instance.room_profile.objectdb
     ownership = effective_owner(room)
     if ownership is None:
@@ -130,6 +123,15 @@ def _validate_weave_eligibility(
         msg = f"Unknown SanctumSlotKind: {slot_kind!r}"
         raise SanctumWeavingError(msg)
     validator(sanctum, weaver, ownership)
+    # SANCTUM weaving-unlock gate (was missing — bundled bugfix per #1913 spec).
+    # Checked AFTER slot-specific validation so unauthorized weavers get the
+    # more specific ownership error first.
+    weaver_char = weaver.character
+    if not weaver_char.weaving_unlocks.has_unlock_for_kind(TargetKind.SANCTUM):
+        from world.magic.exceptions import WeavingUnlockMissing  # noqa: PLC0415
+
+        msg = "Character lacks the SANCTUM weaving unlock."
+        raise WeavingUnlockMissing(msg)
 
 
 def _validate_personal_own(sanctum, weaver, ownership) -> None:

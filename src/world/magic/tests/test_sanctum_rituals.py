@@ -342,6 +342,7 @@ class WeavingTests(TestCase):
         sanctum, owner = _personal_sanctum(level=1)
         weave_sanctum_thread(sanctum, owner.character_sheet, SanctumSlotKind.PERSONAL_OWN)
         helper = CharacterSheetFactory()
+        _grant_sanctum_unlock(helper)
         with self.assertRaises(SanctumWeavingLevelCapError):
             weave_sanctum_thread(sanctum, helper, SanctumSlotKind.HELPER)
 
