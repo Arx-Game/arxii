@@ -11,6 +11,8 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type { components } from '@/generated/api';
 
 export type Organization = components['schemas']['Organization'];
+export type HouseDetail = components['schemas']['HouseDetail'];
+export type PublicFeedItem = components['schemas']['PublicFeedItem'];
 
 interface PaginatedOrganizations {
   results: Organization[];
@@ -39,4 +41,14 @@ export async function fetchOrganizationById(id: number): Promise<Organization> {
   const res = await apiFetch(`/api/societies/organizations/${id}/`);
   if (!res.ok) throw new Error('Failed to load organization');
   return (await res.json()) as Organization;
+}
+
+/**
+ * Fetch the house feed (#1884): recent deeds + revealed scandals of the household.
+ * GET /api/societies/organizations/{id}/feed/
+ */
+export async function fetchHouseFeed(id: number): Promise<PublicFeedItem[]> {
+  const res = await apiFetch(`/api/societies/organizations/${id}/feed/`);
+  if (!res.ok) throw new Error('Failed to load house feed');
+  return (await res.json()) as PublicFeedItem[];
 }

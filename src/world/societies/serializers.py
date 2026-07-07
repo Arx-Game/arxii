@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from world.societies.houses.models import Domain, Title
 from world.societies.models import (
     Organization,
     OrganizationMembership,
@@ -29,10 +31,45 @@ class OrganizationRankSerializer(serializers.ModelSerializer):
         ]
 
 
+class HouseTitleSerializer(serializers.ModelSerializer):
+    holder_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Title
+        fields = ["id", "name", "tier", "holder_name", "is_claimable"]
+
+    def get_holder_name(self, obj) -> str:
+        from world.societies.houses.services import full_display_name  # noqa: PLC0415
+
+        return full_display_name(obj.holder) if obj.holder is not None else ""
+
+
+class HouseDomainSerializer(serializers.ModelSerializer):
+    holding_names = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Domain
+        fields = ["name", "population", "prosperity", "unrest", "holding_names"]
+
+    def get_holding_names(self, obj) -> list[str]:
+        return [holding.name for holding in obj.holdings.all()]
+
+
+class HouseDetailSerializer(serializers.Serializer):
+    """The house block of an org payload (#1884) — null for non-family orgs."""
+
+    family_name = serializers.CharField()
+    liege_name = serializers.CharField(allow_blank=True)
+    vassal_names = serializers.ListField(child=serializers.CharField())
+    titles = HouseTitleSerializer(many=True)
+    domains = HouseDomainSerializer(many=True)
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     society_name = serializers.CharField(source="society.name", read_only=True)
     org_type_name = serializers.CharField(source="org_type.name", read_only=True)
     ranks = OrganizationRankSerializer(many=True, read_only=True)
+    house = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
@@ -43,7 +80,25 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "society_name",
             "org_type_name",
             "ranks",
+            "house",
         ]
+
+    @extend_schema_field(HouseDetailSerializer(allow_null=True))
+    def get_house(self, obj) -> dict | None:
+        if obj.family is None:
+            return None
+        from world.societies.houses.models import FealtyEdge  # noqa: PLC0415
+        from world.societies.houses.services import vassals_of  # noqa: PLC0415
+
+        edge = FealtyEdge.objects.filter(vassal=obj).select_related("liege").first()
+        payload = {
+            "family_name": obj.family.name,
+            "liege_name": edge.liege.name if edge is not None else "",
+            "vassal_names": [vassal.name for vassal in vassals_of(obj)],
+            "titles": obj.titles.select_related("holder").order_by("tier", "name"),
+            "domains": obj.domains.prefetch_related("holdings"),  # noqa: PREFETCH_STRING
+        }
+        return HouseDetailSerializer(payload).data
 
 
 class OrganizationMembershipSerializer(serializers.ModelSerializer):

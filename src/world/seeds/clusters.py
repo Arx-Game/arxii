@@ -145,6 +145,12 @@ def _seed_kinship() -> None:
     seed_kinship_demo()
 
 
+def _seed_houses() -> None:
+    from world.seeds.houses import seed_houses_demo  # noqa: PLC0415
+
+    seed_houses_demo()
+
+
 def _seed_kudos() -> None:
     from world.progression.seeds import seed_kudos_content  # noqa: PLC0415
 
@@ -222,6 +228,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     "kudos": _seed_kudos,
     # Kinship: the PLACEHOLDER ducal demo tree + slots/pool + truth-pair (#2062).
     "kinship": _seed_kinship,
+    # Houses: the demo house made a landed peer — org + particle + recognition
+    # rules + succession law + fealty + ducal title + domain/holding (#1884).
+    # Rides "kinship" (calls its seed first).
+    "houses": _seed_houses,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -278,6 +288,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.roster.models import Kinsperson  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
+    from world.societies.houses.models import Title  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
     from world.traits.models import ResultChart  # noqa: PLC0415
 
@@ -336,4 +347,6 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "gm": [GMLevelCap],
         # Kinship: the PLACEHOLDER ducal demo tree (#2062).
         "kinship": [Kinsperson],
+        # Houses: the landed demo house; represented by Title (#1884).
+        "houses": [Title],
     }

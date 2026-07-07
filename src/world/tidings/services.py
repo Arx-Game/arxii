@@ -150,3 +150,39 @@ def hub_feed_for_room(
     profile = get_room_profile(room)
     societies = societies_for_area(profile.area)
     return public_feed_for_societies([society.pk for society in societies], limit=limit)
+
+
+def house_feed_for(organization, *, limit: int = _DEFAULT_LIMIT) -> list[PublicFeedItem]:
+    """The house feed (#1884): what the household hears about its own people.
+
+    Replaces Arx 1's org informs with a pull feed. Scope is the org's active
+    members' personas: their deeds (regardless of which societies know yet —
+    the household always hears of its own) and revealed scandals about their
+    characters. No feed model — same query-and-merge as the public feed.
+    """
+    member_persona_ids = OrganizationMembership.objects.filter(
+        organization=organization,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+    ).values("persona_id")
+    deeds = (
+        LegendEntry.objects.filter(persona_id__in=member_persona_ids, is_active=True)
+        .select_related("persona")
+        .prefetch_related("archetypes")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
+        .order_by("-updated_at")[:limit]
+    )
+    sheet_ids = OrganizationMembership.objects.filter(
+        organization=organization,
+        left_at__isnull=True,
+        exiled_at__isnull=True,
+    ).values("persona__character_sheet_id")
+    scandals = (
+        Secret.objects.filter(subject_sheet_id__in=sheet_ids, societies_exposed__isnull=False)
+        .select_related("subject_sheet__character")
+        .prefetch_related("archetypes")  # noqa: PREFETCH_STRING — no to_attr on SharedMemoryModel
+        .order_by("-updated_date")
+        .distinct()[:limit]
+    )
+    items = [_deed_item(entry) for entry in deeds] + [_scandal_item(secret) for secret in scandals]
+    items.sort(key=lambda item: item.occurred_at, reverse=True)
+    return items[:limit]

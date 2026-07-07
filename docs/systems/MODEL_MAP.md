@@ -457,6 +457,7 @@
   - allowed_building_kinds -> buildings.BuildingKind [M2M]
 **Pointed to by:**
   - gang_turf_projects <- societies.GangTurfDetails
+  - domain_profile <- societies.Domain
   - income_streams <- currency.OrgIncomeStream
   - gossip_heat <- secrets.SecretGossip
   - children <- areas.Area
@@ -2076,6 +2077,7 @@
   - organization -> societies.Organization [FK]
   - area -> areas.Area [FK] (nullable)
 **Pointed to by:**
+  - domain_holding <- societies.DomainHolding
   - declarations <- currency.IncomeDeclaration
   - garnishing_contracts <- currency.Contract
 
@@ -2087,6 +2089,8 @@
 **Foreign Keys:**
   - from_organization -> societies.Organization [FK]
   - to_organization -> societies.Organization [FK]
+**Pointed to by:**
+  - pact_commitment <- societies.PactCommitment
 
 ### ContributionRecord
 **Foreign Keys:**
@@ -4447,6 +4451,7 @@
   - resonance_grants <- magic.ResonanceGrant
   - organization_gift_grants <- societies.OrganizationGiftGrant
   - gang_turf_details <- societies.GangTurfDetails
+  - domain_improvement_details <- societies.DomainImprovementDetails
   - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
   - ransom_captivities <- captivity.Captivity
@@ -4506,6 +4511,9 @@
   - profiles <- character_sheets.Profile
   - starting_areas <- character_creation.StartingArea
   - societies <- societies.Society
+  - nobiliary_particles <- societies.NobiliaryParticle
+  - recognition_rules <- societies.HouseRecognitionRule
+  - titles <- societies.Title
   - areas <- areas.Area
 
 
@@ -4670,6 +4678,7 @@
   - kin_slot_pools <- roster.KinSlotPool
   - profiles <- character_sheets.Profile
   - character_drafts <- character_creation.CharacterDraft
+  - organizations <- societies.Organization
 
 ### Kinsperson
 **Foreign Keys:**
@@ -4688,6 +4697,8 @@
   - incarnations <- roster.SoulIncarnation
   - kin_slot_pools <- roster.KinSlotPool
   - drafts <- character_creation.CharacterDraft
+  - titles_held <- societies.Title
+  - pact_commitments <- societies.PactCommitment
 
 ### FamilyMembership
 **Foreign Keys:**
@@ -4707,6 +4718,7 @@
   - members -> roster.Kinsperson [M2M]
 **Pointed to by:**
   - births <- roster.ParentageEdge
+  - marriage_pact <- societies.MarriagePact
 
 ### ParentageEdge
 **Foreign Keys:**
@@ -5381,6 +5393,8 @@
 
 ### Organization
 **Foreign Keys:**
+  - family -> roster.Family [FK] (nullable)
+  - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
@@ -5392,6 +5406,12 @@
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
   - gang_turf_projects <- societies.GangTurfDetails
+  - fealty <- societies.FealtyEdge
+  - vassal_edges <- societies.FealtyEdge
+  - titles <- societies.Title
+  - domains <- societies.Domain
+  - pacts_as_senior <- societies.MarriagePact
+  - pacts_as_junior <- societies.MarriagePact
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
@@ -5571,6 +5591,80 @@
 ### GangTurfReputationAward
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### NobiliaryParticle
+**Foreign Keys:**
+  - realm -> realms.Realm [FK]
+
+### HouseRecognitionRule
+**Foreign Keys:**
+  - realm -> realms.Realm [FK]
+
+### FealtyEdge
+**Foreign Keys:**
+  - vassal -> societies.Organization [OneToOne]
+  - liege -> societies.Organization [FK]
+
+### SuccessionLaw
+**Foreign Keys:**
+  - chosen_heir -> roster.Kinsperson [FK] (nullable)
+**Pointed to by:**
+  - houses_defaulting <- societies.Organization
+  - titles <- societies.Title
+
+### Title
+**Foreign Keys:**
+  - realm -> realms.Realm [FK]
+  - house -> societies.Organization [FK] (nullable)
+  - holder -> roster.Kinsperson [FK] (nullable)
+  - seat_domain -> societies.Domain [FK] (nullable)
+  - succession_law -> societies.SuccessionLaw [FK] (nullable)
+
+### Domain
+**Foreign Keys:**
+  - area -> areas.Area [OneToOne]
+  - owner_org -> societies.Organization [FK]
+**Pointed to by:**
+  - seat_of <- societies.Title
+  - holdings <- societies.DomainHolding
+  - improvement_details <- societies.DomainImprovementDetails
+  - crises <- societies.DomainCrisis
+
+### HoldingKind
+**Pointed to by:**
+  - holdings <- societies.DomainHolding
+
+### DomainHolding
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+  - kind -> societies.HoldingKind [FK]
+  - income_stream -> currency.OrgIncomeStream [OneToOne] (nullable)
+**Pointed to by:**
+  - improvement_details <- societies.DomainImprovementDetails
+
+### DomainImprovementDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - domain -> societies.Domain [FK]
+  - holding -> societies.DomainHolding [FK] (nullable)
+
+### DomainCrisis
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+
+### MarriagePact
+**Foreign Keys:**
+  - union -> roster.Union [OneToOne]
+  - senior_house -> societies.Organization [FK]
+  - junior_house -> societies.Organization [FK]
+**Pointed to by:**
+  - commitments <- societies.PactCommitment
+
+### PactCommitment
+**Foreign Keys:**
+  - pact -> societies.MarriagePact [FK]
+  - committed_person -> roster.Kinsperson [FK] (nullable)
+  - obligation -> currency.OrgObligation [OneToOne] (nullable)
 
 ### OrganizationCapabilityProjectDetails
 **Foreign Keys:**

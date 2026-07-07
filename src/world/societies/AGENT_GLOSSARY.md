@@ -71,3 +71,31 @@ _Avoid_: stakeholders, audience list
 **Gang Turf (GANG_TURF)**:
 A `TIERED_PERIOD` `Project` kind — the first of its mode (#1891) — representing a gang organization's ongoing territorial pressure over a period, graded at deadline into a `CheckOutcome` tier by accumulated progress. The tier applies a data-driven reputation delta to the owning gang org via `bump_organization_reputation` (relational channel, not the archetype dot-product). Opened only by a leader-rank member (`OrganizationRank.can_lead_rituals`). "Turf" here is abstract menace/standing, **not** literal map control — a dedicated territory model is deferred (see the #1891 spec follow-ups).
 _Avoid_: territory (literal), zone control, gang influence (until the territory model lands).
+
+**House**:
+An `Organization` rooted in a kinship `Family` (`Organization.family`, #1884, ADR-0098) — noble, merchant, or crime; the type is the family's, the machinery is one. Never a standalone model.
+_Avoid_: House model, family org (ambiguous), dynasty (that's the soul-chain concept).
+
+**Recognition (birth)**:
+A realm's law deciding whether a newborn belongs to a parent's house — `HouseRecognitionRule` rows applied to public-record parentage edges by `recognize_birth`. The mother's-option case is an explicit human call (`acknowledge_into_family`), never auto-resolved.
+_Avoid_: legitimacy check (wedlock is one input, not the concept), auto-enrollment.
+
+**Succession Law**:
+Candidate derivation + ordering for a title (`SuccessionLaw`): house default on the org, per-title override (Imperial Tanistry). Runs on the omniscient public record; an empty candidate list is a succession crisis — story fuel, deliberately unresolved.
+_Avoid_: heir formula, inheritance rule (that's estates/wills, #1985).
+
+**Fealty**:
+The org→org vassal→liege edge (`FealtyEdge`, one liege per vassal, cycle-refused) forming the realm tree. Cascades the house channel audience downward.
+_Avoid_: allegiance (that's a principle axis), parent org.
+
+**Marriage Pact**:
+The alliance bound to a `Union` (`MarriagePact`, senior/junior house) that dies instantly with a spouse (the CK2 rule). Its `PactCommitment` rows are coded and fire mechanically — DOWRY (treasury transfer at signing), SUBSIDY (`OrgObligation`), RESIDENCY (marry-in membership), CRISIS_RESPONSE/CUSTOM (recorded; social). Breach stamps the commitment and stops the machinery; the scandal is staff-authored through Secrets.
+_Avoid_: alliance object, treaty, marriage contract (contracts are a different system).
+
+**Domain**:
+An org-owned decoration on a DOMAIN-level `Area` — PLACEHOLDER civ stats plus `DomainHolding` rows that each materialize an `OrgIncomeStream`. Abstract by design; visitable grids are a later phase.
+_Avoid_: province model, land parcel, estate (that's buildings/dwellings).
+
+**House Feed**:
+The pull feed of a household's own deeds and revealed scandals (`house_feed_for`, tidings) — the Arx 1 informs replacement. No feed model; query-and-merge like the public feed.
+_Avoid_: org informs, house inbox, notifications (it is not push).

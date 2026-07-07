@@ -1,0 +1,458 @@
+"""Houses models (#1884): fealty & titles, recognition, domains, pacts.
+
+A house IS an ``Organization`` (noble/merchant/crime are org rows with
+different holdings vocabularies); the org side holds the FK to the kinship
+``Family`` (specific→general, ADR-0010). Fealty is an org→org edge forming
+the realm tree; ``Title`` is first-class with succession law on the house
+and per-title overrides. Domains ride the #930 ruling (abstract Areas with
+civ stats) and feed the existing streams→treasury spine. Marriage pacts are
+union-bound (CK2 rule: a spouse dies, the pact dies) with coded commitments.
+"""
+
+from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
+
+from world.societies.houses.constants import (
+    DomainCrisisSeverity,
+    PactCommitmentKind,
+    PactDissolutionReason,
+    RecognitionRuleKind,
+    SuccessionDerivation,
+    SuccessionOrdering,
+    TitleTier,
+)
+
+_ORG_FK = "societies.Organization"
+_KINSPERSON_FK = "roster.Kinsperson"
+_REALM_FK = "realms.Realm"
+
+
+class NobiliaryParticle(SharedMemoryModel):
+    """Per-realm × family-type nobiliary particle (#1884).
+
+    Derived names render ``first_name + particle + house_name`` (e.g.
+    former-Luxen houses carry "du"). Particle strings are PLACEHOLDER in
+    seeds — the real per-realm particles are authored at content time.
+    """
+
+    realm = models.ForeignKey(
+        _REALM_FK,
+        on_delete=models.CASCADE,
+        related_name="nobiliary_particles",
+    )
+    family_type = models.CharField(
+        max_length=20,
+        help_text="roster.Family.FamilyType value this particle applies to.",
+    )
+    particle = models.CharField(
+        max_length=20,
+        help_text='The particle between first and house name (e.g. "du"). PLACEHOLDER.',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["realm", "family_type"],
+                name="societies_particle_unique_per_realm_type",
+            ),
+        ]
+        ordering = ["realm", "family_type"]
+
+    def __str__(self) -> str:
+        return f"{self.realm} {self.family_type}: '{self.particle}'"
+
+
+class HouseRecognitionRule(SharedMemoryModel):
+    """A realm's law for recognizing births into houses (#1884)."""
+
+    realm = models.ForeignKey(
+        _REALM_FK,
+        on_delete=models.CASCADE,
+        related_name="recognition_rules",
+    )
+    kind = models.CharField(max_length=30, choices=RecognitionRuleKind.choices)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["realm", "kind"],
+                name="societies_recognition_rule_unique",
+            ),
+        ]
+        ordering = ["realm", "kind"]
+
+    def __str__(self) -> str:
+        return f"{self.realm}: {self.get_kind_display()}"
+
+
+class FealtyEdge(SharedMemoryModel):
+    """Vassal → liege edge in the realm tree (#1884). One liege per vassal."""
+
+    vassal = models.OneToOneField(
+        _ORG_FK,
+        on_delete=models.CASCADE,
+        related_name="fealty",
+        help_text="The sworn house.",
+    )
+    liege = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.PROTECT,
+        related_name="vassal_edges",
+        help_text="The house fealty is sworn to.",
+    )
+    sworn_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["liege", "vassal"]
+
+    def __str__(self) -> str:
+        return f"{self.vassal} sworn to {self.liege}"
+
+
+class SuccessionLaw(SharedMemoryModel):
+    """How a house (or one title) passes: candidate derivation + ordering (#1884).
+
+    Every realm case from the lore is one row: Umbral matrilineal
+    recognition + Tanistry for the Imperial title; Luxen primogeniture-in-
+    wedlock with enatic tiebreak; Inferna female-line with consort children
+    ennobled; Ariwn chosen-heir; Lycan/Aythirmok most-powerful-Gifted of the
+    legitimate.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    derivation = models.CharField(max_length=30, choices=SuccessionDerivation.choices)
+    ordering_rule = models.CharField(
+        max_length=30,
+        choices=SuccessionOrdering.choices,
+        default=SuccessionOrdering.ELDEST,
+    )
+    enatic_tiebreak = models.BooleanField(
+        default=False,
+        help_text="Prefer the mother's line in disputes (Luxen).",
+    )
+    require_wedlock = models.BooleanField(
+        default=False,
+        help_text="Only in-wedlock births qualify (reads born_within_union + kind wedlock).",
+    )
+    chosen_heir = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="CHOSEN_HEIR derivation: the named heir.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Title(SharedMemoryModel):
+    """A landed/dynastic title (#1884): name, tier, realm, seat, holder.
+
+    ``succession_law`` overrides the holding house's default (the Imperial
+    Tanistry case). Vacant titles (holder null) with ``is_claimable`` are the
+    house-creator's app-in targets (Phase D).
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    tier = models.CharField(max_length=20, choices=TitleTier.choices)
+    realm = models.ForeignKey(
+        _REALM_FK,
+        on_delete=models.PROTECT,
+        related_name="titles",
+    )
+    house = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="titles",
+        help_text="The house currently holding this title.",
+    )
+    holder = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="titles_held",
+        help_text="The person holding the title (PC or NPC kinsperson node).",
+    )
+    seat_domain = models.ForeignKey(
+        "societies.Domain",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="seat_of",
+        help_text="The domain that is this title's seat, if any.",
+    )
+    succession_law = models.ForeignKey(
+        SuccessionLaw,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="titles",
+        help_text="Per-title override of the house's default law (Imperial Tanistry).",
+    )
+    is_claimable = models.BooleanField(
+        default=False,
+        help_text="Vacant slot set aside for the Phase D house creator.",
+    )
+
+    class Meta:
+        ordering = ["realm", "tier", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Domain(SharedMemoryModel):
+    """An org-owned landholding decorating a DOMAIN-level Area (#1884, #930 ruling).
+
+    Abstract for now — civ stats + holdings feeding the org books; visitable
+    room grids are a flagged later phase. Stats are PLACEHOLDER magnitudes.
+    """
+
+    area = models.OneToOneField(
+        "areas.Area",
+        on_delete=models.CASCADE,
+        related_name="domain_profile",
+        primary_key=True,
+    )
+    name = models.CharField(max_length=120, unique=True)
+    owner_org = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.PROTECT,
+        related_name="domains",
+    )
+    population = models.PositiveIntegerField(default=1000)
+    prosperity = models.PositiveSmallIntegerField(default=50, help_text="0-100 PLACEHOLDER.")
+    unrest = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class HoldingKind(SharedMemoryModel):
+    """Authorable catalog of domain holdings (farmland, mine, port...) (#1884)."""
+
+    name = models.CharField(max_length=80, unique=True)
+    description = models.TextField(blank=True)
+    stream_kind = models.CharField(
+        max_length=20,
+        help_text="currency.IncomeStreamKind value the materialized stream uses.",
+    )
+    base_gross = models.PositiveBigIntegerField(
+        help_text="Default coppers-per-cycle gross for a new holding. PLACEHOLDER.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class DomainHolding(SharedMemoryModel):
+    """One holding on a domain, materialized as an OrgIncomeStream (#1884)."""
+
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name="holdings",
+    )
+    kind = models.ForeignKey(
+        HoldingKind,
+        on_delete=models.PROTECT,
+        related_name="holdings",
+    )
+    name = models.CharField(max_length=120)
+    income_stream = models.OneToOneField(
+        "currency.OrgIncomeStream",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="domain_holding",
+        help_text="The materialized stream feeding the owner org's books.",
+    )
+
+    class Meta:
+        ordering = ["domain", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.domain.name})"
+
+
+class DomainImprovementDetails(SharedMemoryModel):
+    """Per-(DOMAIN_IMPROVEMENT Project) payload (#1884).
+
+    Long, difficult, expensive: completion raises the target stat or the
+    holding's gross; the bottom outcome tiers open a ``DomainCrisis``
+    instead — catastrophe is content, not just a debuff.
+    """
+
+    project = models.OneToOneField(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="domain_improvement_details",
+        primary_key=True,
+    )
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name="improvement_details",
+    )
+    holding = models.ForeignKey(
+        DomainHolding,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="improvement_details",
+        help_text="Null = improves the domain's prosperity instead of one holding.",
+    )
+    gross_increase = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers/cycle added to the holding's stream on success. PLACEHOLDER.",
+    )
+    prosperity_increase = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Prosperity points added on success (domain-target projects).",
+    )
+    applied_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = "Domain improvement details"
+
+    def __str__(self) -> str:
+        return f"Improvement of {self.domain_id} (project {self.project_id})"
+
+
+class DomainCrisis(SharedMemoryModel):
+    """A crisis opened on a domain (#1884) — content, not just a debuff.
+
+    Opened by catastrophic improvement outcomes (or staff); surfaces on the
+    house feed with response hooks; conversion into missions/situations is
+    the GM's move (situations need room anchors; domains are abstract).
+    """
+
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name="crises",
+    )
+    severity = models.CharField(
+        max_length=20,
+        choices=DomainCrisisSeverity.choices,
+        default=DomainCrisisSeverity.CRISIS,
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="PLACEHOLDER prose describing what went wrong.",
+    )
+    opened_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-opened_at"]
+        verbose_name_plural = "Domain crises"
+
+    def __str__(self) -> str:
+        return f"{self.get_severity_display()} on {self.domain.name}"
+
+
+class MarriagePact(SharedMemoryModel):
+    """A union-bound alliance between a senior and junior house (#1884).
+
+    CK2 rule: bound to the LIVING union — a spouse dies, the pact dissolves
+    that instant (explicit service call from the lifecycle setter, never a
+    signal). The junior party takes the senior's name and house; the senior
+    house owes the coded commitments. PCs are all Gifted — the pact's core
+    asset is the person.
+    """
+
+    union = models.OneToOneField(
+        "roster.Union",
+        on_delete=models.PROTECT,
+        related_name="marriage_pact",
+    )
+    senior_house = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.PROTECT,
+        related_name="pacts_as_senior",
+    )
+    junior_house = models.ForeignKey(
+        _ORG_FK,
+        on_delete=models.PROTECT,
+        related_name="pacts_as_junior",
+    )
+    signed_at = models.DateTimeField(auto_now_add=True)
+    dissolved_at = models.DateTimeField(null=True, blank=True)
+    dissolution_reason = models.CharField(
+        max_length=20,
+        choices=PactDissolutionReason.choices,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["-signed_at"]
+
+    def __str__(self) -> str:
+        state = "dissolved" if self.dissolved_at else "standing"
+        return f"Pact {self.senior_house} ↔ {self.junior_house} ({state})"
+
+
+class PactCommitment(SharedMemoryModel):
+    """One coded commitment on a pact (#1884). Fires mechanically; breach is
+    scandalous (fame/reputation hit + public tiding)."""
+
+    pact = models.ForeignKey(
+        MarriagePact,
+        on_delete=models.CASCADE,
+        related_name="commitments",
+    )
+    kind = models.CharField(max_length=20, choices=PactCommitmentKind.choices)
+    owed_by_senior = models.BooleanField(
+        default=True,
+        help_text="Whether the senior house owes this (dowries/subsidies usually do).",
+    )
+    committed_person = models.ForeignKey(
+        _KINSPERSON_FK,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pact_commitments",
+        help_text="The named Gifted for CRISIS_RESPONSE/RESIDENCY commitments.",
+    )
+    amount = models.PositiveBigIntegerField(
+        default=0,
+        help_text="Coppers: dowry lump (DOWRY kind). PLACEHOLDER.",
+    )
+    percent = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "SUBSIDY kind: percent of declared income owed per settlement "
+            "(materialized as the OrgObligation's percent). PLACEHOLDER."
+        ),
+    )
+    obligation = models.OneToOneField(
+        "currency.OrgObligation",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pact_commitment",
+        help_text="The materialized recurring obligation (SUBSIDY kind).",
+    )
+    notes = models.TextField(blank=True, help_text="CUSTOM commitments: the prose terms.")
+    breached_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["pact", "kind"]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()} on pact {self.pact_id}"

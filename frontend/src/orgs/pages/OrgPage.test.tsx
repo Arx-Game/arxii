@@ -18,6 +18,7 @@ import type { Organization } from '@/orgs/api';
 
 vi.mock('@/orgs/queries', () => ({
   useOrganizationQuery: vi.fn(),
+  useHouseFeedQuery: vi.fn(() => ({ data: [] })),
 }));
 
 import { useOrganizationQuery } from '@/orgs/queries';
@@ -30,6 +31,7 @@ const ORG: Organization = {
   society_name: 'Merchant Society',
   org_type_name: 'Guild',
   ranks: [],
+  house: null,
 };
 
 describe('OrgPageInner', () => {

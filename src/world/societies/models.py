@@ -238,6 +238,26 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="A description of the organization's purpose and history",
     )
+    family = models.ForeignKey(
+        "roster.Family",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organizations",
+        help_text=(
+            "The kinship Family this org is rooted in (#1884) — set for noble/"
+            "merchant/crime houses; null for non-family orgs. FK on the org side "
+            "(specific→general, ADR-0010); membership flows from recognition."
+        ),
+    )
+    default_succession_law = models.ForeignKey(
+        "societies.SuccessionLaw",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="houses_defaulting",
+        help_text="The house's succession law (#1884); Titles may carry overrides.",
+    )
     society = models.ForeignKey(
         Society,
         null=True,
@@ -1834,3 +1854,22 @@ class GangTurfReputationAward(OutcomeTierAward):
 
     def __str__(self) -> str:
         return f"{self.outcome_tier}: +{self.reputation_delta}"
+
+
+# ---------------------------------------------------------------------------
+# Houses submodule (#1884) — import last so all models above register first
+# ---------------------------------------------------------------------------
+from world.societies.houses.models import (  # noqa: E402,F401
+    Domain,
+    DomainCrisis,
+    DomainHolding,
+    DomainImprovementDetails,
+    FealtyEdge,
+    HoldingKind,
+    HouseRecognitionRule,
+    MarriagePact,
+    NobiliaryParticle,
+    PactCommitment,
+    SuccessionLaw,
+    Title,
+)

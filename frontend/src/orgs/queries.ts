@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchOrganizationByName, fetchOrganizationById } from './api';
+import { fetchOrganizationByName, fetchOrganizationById, fetchHouseFeed } from './api';
 
 /**
  * Resolve a same-named organization for a character's family (link target).
@@ -28,5 +28,17 @@ export function useOrganizationQuery(orgId: number) {
     queryKey: ['orgs', 'detail', orgId],
     queryFn: () => fetchOrganizationById(orgId),
     enabled: orgId > 0,
+  });
+}
+
+/**
+ * Fetch the house feed for a house org (#1884). Only enabled when the org
+ * has a house block — non-family orgs never fire it.
+ */
+export function useHouseFeedQuery(orgId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['orgs', 'houseFeed', orgId],
+    queryFn: () => fetchHouseFeed(orgId),
+    enabled: enabled && orgId > 0,
   });
 }

@@ -757,6 +757,21 @@ Social structures, organizations, reputation, and legend tracking.
 - **Integrates with:** realms (Society.realm FK), character_sheets (Persona for identity), magic (Audere Majora crossing deed via `AudereMajoraCrossing.legend_entry`), secrets (contained-scandal minting + exposure, #1464), justice (leaked crimes mint heat via the knowledge seam, #1765), actions (shared `action.run()` / `dispatch_player_action()` seam)
 - **Source:** `src/world/societies/`
 - **Details:** [societies.md](societies.md)
+
+### Houses (#1884)
+Noble/merchant/crime houses as first-class play — a house IS an `Organization`
+(`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
+
+- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
+- **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
+- **Key Services:** `full_display_name` (particle naming), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`
+- **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
+- **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
+- **Seeds:** cluster `houses` (rides `kinship`)
+- **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area), tidings (house feed), secrets (breach scandal channel)
+- **Source:** `src/world/societies/houses/`
+- **Details:** [houses.md](houses.md)
+
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
