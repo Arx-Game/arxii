@@ -68,6 +68,7 @@ from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
     Beat,
+    CanonReview,
     Chapter,
     CrossoverInvite,
     CustodyClearance,
@@ -166,6 +167,9 @@ from world.stories.serializers import (
     BeatSerializer,
     CancelClaimInputSerializer,
     CancelSessionRequestInputSerializer,
+    CanonReviewChangesInputSerializer,
+    CanonReviewClearInputSerializer,
+    CanonReviewSerializer,
     ChapterCreateSerializer,
     ChapterDetailSerializer,
     ChapterListSerializer,
@@ -237,6 +241,7 @@ from world.stories.serializers import (
     WithdrawOfferInputSerializer,
     stakes_summary_for_beat,
 )
+from world.stories.services.canon_review import clear_canon_review, request_changes
 from world.stories.services.custody_clearance import (
     deny_clearance,
     escalate_clearance,
@@ -257,6 +262,7 @@ from world.stories.types import (
     EligibleTransitionEntry,
     EpisodeReadyEntry,
     FrontierStoryEntry,
+    PendingCanonReviewEntry,
     PendingClaimEntry,
     PerGMQueueDepthEntry,
     StaleStoryEntry,
@@ -2827,6 +2833,21 @@ class StaffWorkloadView(APIView):
         counts_by_scope_qs = Story.objects.values("scope").annotate(count=Count("pk"))
         counts_by_scope: dict[str, int] = {row["scope"]: row["count"] for row in counts_by_scope_qs}
 
+        # --- pending canon reviews (#2003) ---
+        from world.stories.services.canon_review import pending_canon_reviews  # noqa: PLC0415
+
+        pending_canon_reviews_payload: list[PendingCanonReviewEntry] = [
+            PendingCanonReviewEntry(
+                review_id=review.pk,
+                story_id=review.story_id,
+                story_title=review.story.title,
+                tier=review.tier,
+                created_at=review.created_at,
+                days_aging=(now - review.created_at).days,
+            )
+            for review in pending_canon_reviews()
+        ]
+
         return Response(
             {
                 "per_gm_queue_depth": per_gm_queue,
@@ -2836,6 +2857,7 @@ class StaffWorkloadView(APIView):
                 "pending_agm_claims_count": pending_agm_count,
                 "open_session_requests_count": open_session_req_count,
                 "counts_by_scope": counts_by_scope,
+                "pending_canon_reviews": pending_canon_reviews_payload,
             }
         )
 
@@ -3757,3 +3779,48 @@ class PlayerPendingTreasuredSignoffsView(APIView):
         beats = list(Beat.objects.filter(pk__in=beat_ids))
         entries = player_pending_treasured_signoffs(player_data, beats)
         return Response(PendingTreasuredSignoffsSerializer(entries, many=True).data)
+
+
+class CanonReviewViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """ViewSet for the staff canon-review queue (#2003).
+
+    Read-only list/retrieve (staff-only) plus two lifecycle detail actions:
+    ``clear`` (approve — staked beats may now pay) and ``changes`` (send the
+    review back to the Lead GM with notes). Both delegate to
+    ``world.stories.services.canon_review``; no create/update/destroy — a
+    review is created via the ``story impact`` / ``request_canon_review`` seam.
+    """
+
+    queryset = CanonReview.objects.select_related("story", "reviewer").order_by("-created_at")
+    serializer_class = CanonReviewSerializer
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["status", "tier"]
+    ordering_fields = ["created_at", "resolved_at"]
+    ordering = ["-created_at"]
+
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[permissions.IsAdminUser])
+    def clear(self, request: Request, pk: int) -> Response:
+        """POST /api/canon-reviews/{id}/clear/ — staff approves a PENDING review."""
+        review = self.get_object()
+        ser = CanonReviewClearInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        updated = clear_canon_review(
+            review, cast(AccountDB, request.user), notes=ser.validated_data.get("notes", "")
+        )
+        return Response(CanonReviewSerializer(updated).data)
+
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[permissions.IsAdminUser])
+    def changes(self, request: Request, pk: int) -> Response:
+        """POST /api/canon-reviews/{id}/changes/ — staff requests changes with notes."""
+        review = self.get_object()
+        ser = CanonReviewChangesInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        updated = request_changes(
+            review, cast(AccountDB, request.user), notes=ser.validated_data["notes"]
+        )
+        return Response(CanonReviewSerializer(updated).data)

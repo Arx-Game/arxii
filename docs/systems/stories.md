@@ -40,6 +40,12 @@ from world.stories.constants import (
     TransitionMode,         # AUTO, GM_CHOICE
     AssistantClaimStatus,   # REQUESTED, APPROVED, REJECTED, CANCELLED, COMPLETED
     SessionRequestStatus,   # OPEN, SCHEDULED, RESOLVED, CANCELLED
+    ImpactTier,             # TABLE (default) / REGIONAL / WORLD — story-side canon
+                            # review axis (#2003, ADR-0101). TABLE is never reviewed;
+                            # REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires
+                            # a CLEARED CanonReview before staked beats pay.
+    CanonReviewStatus,      # PENDING, CLEARED, CHANGES_REQUESTED — lifecycle of a
+                            # staff CanonReview of a world-touching story (#2003).
 )
 
 # types.py — pre-Phase-1 (unchanged)
@@ -103,6 +109,7 @@ Top-level campaign container.
 | `status` | StoryStatus | ACTIVE, INACTIVE, COMPLETED, CANCELLED |
 | `privacy` | StoryPrivacy | PUBLIC, PRIVATE, INVITE_ONLY |
 | `scope` | StoryScope | UNASSIGNED (default) / CHARACTER / GROUP / GLOBAL — `create_*_progress` rejects UNASSIGNED stories |
+| `impact_tier` | ImpactTier | TABLE (default) / REGIONAL / WORLD — story-side canon review axis (#2003, see ADR-0101). TABLE is never reviewed; REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires a CLEARED `CanonReview` before its staked beats pay (auto-downgrade, never hard-block). Authored by the Lead GM, frozen once a review is CLEARED. |
 | `maturity` | StoryMaturity | PITCH (default) / OUTLINE / PLOT — authoring completeness |
 | `character_sheet` | FK → character_sheets.CharacterSheet (nullable) | For CHARACTER-scope stories |
 | `created_in_era` | FK → stories.Era (nullable) | |
@@ -739,3 +746,66 @@ be performed by an approved Assistant GM for that beat.
 | `story resolve <episode-id> [transition-id] [notes]` | `resolve_episode` | Advance the story's active progress through a transition. |
 | `story promote <episode-id> <pitch|outline|plot>` | `promote_episode` | Change the episode's authoring maturity. |
 | `story mark <beat-id> <success|failure> [notes]` | `mark_beat` | Record a GM-marked outcome on a beat. |
+
+## Canon-impact review (#2003)
+
+A story-side review axis for world-touching content — stops plots that "could
+never canonically happen" before they *pay*, without making staff a bottleneck
+for routine table play. See ADR-0101 for the design rationale and ADR-0067's
+disambiguation table for how `Story.impact_tier` stays distinct from `Beat.risk`,
+`combat.RiskLevel`, and `StakesLevel`.
+
+### `Story.impact_tier`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `impact_tier` | ImpactTier | TABLE (default) / REGIONAL / WORLD. Authored by the Lead GM at pitch time; editable until a review is CLEARED, then frozen. |
+
+### `CanonReview`
+
+A staff review of a world-touching story. One PENDING review per story (partial
+unique constraint `unique_pending_canon_review_per_story`).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | FK → Story (`canon_reviews`) | CASCADE |
+| `tier` | ImpactTier | Snapshot of `story.impact_tier` at review time |
+| `status` | CanonReviewStatus | PENDING (default) → CLEARED / CHANGES_REQUESTED |
+| `reviewer` | FK → accounts.AccountDB (nullable) | Staff account that decided the review |
+| `notes` | TextField (blank) | Staff notes (carried back to the Lead GM on CHANGES_REQUESTED) |
+| `created_at` / `resolved_at` | DateTimeField | `resolved_at` stamps when status left PENDING |
+
+### Gating — auto-downgrade, never hard-block
+
+Mirrors the stakes pillar-7 pattern (ADR-0077):
+
+- **WORLD tier**: staked beats are UNREADY (`validate_stakes_readiness` adds a
+  canon-review problem → effective risk NONE via `StakeContractActivation`;
+  the scene still runs, nothing pays) until a CLEARED review exists.
+- **GLOBAL-scope WORLD-tier activation**: `create_global_progress` *additionally*
+  refuses to activate without a CLEARED review (the one hard block — a GLOBAL
+  story moving the metaplot is not auto-downgradable play).
+- **REGIONAL tier**: auto-cleared for GMs at EXPERIENCED+ (`GMLevelCap.auto_clear_regional`).
+- **TABLE tier**: never reviewed.
+
+### Beat-level escalation heuristic
+
+`escalation_tier_for_story(story)` derives the effective review tier from
+authored beat data (never parsed from prose): a GROUP/GLOBAL story whose beats
+stake a society-level FACTION subject (`StakeSubjectKind.FACTION` +
+`subject_society`) or carry EXTREME declared risk escalates to ≥REGIONAL for
+review purposes. Surfaced as a readiness problem, not a hard block; the author's
+`impact_tier` on the model is unchanged.
+
+### Queue + verbs
+
+- **Staff queue**: `StaffWorkloadView` (`GET /api/stories/staff-workload/`)
+  surfaces `pending_canon_reviews` (aged).
+- **Web verbs**: `CanonReviewViewSet` (`/api/canon-reviews/`) — staff-only
+  `list`/`retrieve` + `clear` (approve) and `changes` (request changes) detail
+  actions.
+- **Telnet**: `canonreview list|clear <id> [notes=...]|changes <id> notes=...`
+  (staff, `perm(Admin)`), and `story impact <story-id>=<tier>` /
+  `story review-status <story-id>` (Lead GM).
+- **Notifications**: `clear_canon_review` / `request_changes` fan out a SYSTEM
+  `NarrativeMessage` to the story's owning GMs.

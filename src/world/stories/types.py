@@ -273,6 +273,17 @@ class FrontierStoryEntry(TypedDict):
     scope: str
 
 
+class PendingCanonReviewEntry(TypedDict):
+    """A PENDING canon review in StaffWorkloadView.pending_canon_reviews (#2003)."""
+
+    review_id: int
+    story_id: int
+    story_title: str
+    tier: str
+    created_at: datetime
+    days_aging: int
+
+
 @dataclass(frozen=True)
 class StakeBoundaryReport:
     """Result of check_stake_boundaries (world.stories.services.boundaries).

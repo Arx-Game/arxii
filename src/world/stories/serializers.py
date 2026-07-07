@@ -36,6 +36,7 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     BeatCompletion,
+    CanonReview,
     Chapter,
     CrossoverInvite,
     CustodyClearance,
@@ -162,6 +163,7 @@ class StoryListSerializer(serializers.ModelSerializer):
             "status",
             "privacy",
             "scope",
+            "impact_tier",
             "owners_count",
             "active_gms_count",
             "participants_count",
@@ -241,6 +243,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "status",
             "privacy",
             "scope",
+            "impact_tier",
             "owners",
             "active_gms",
             "trust_requirements",
@@ -3799,3 +3802,53 @@ class CustodyClearanceRevokeInputSerializer(serializers.Serializer):
                 }
             )
         return attrs
+
+
+class CanonReviewSerializer(serializers.ModelSerializer):
+    """Read/response serializer for CanonReview (#2003).
+
+    Every field is read-only here — writes go through the per-action input
+    serializers (clear/changes) and the ``world.stories.services.canon_review``
+    service. ``reviewer`` is the staff account that decided the review.
+    """
+
+    story = serializers.PrimaryKeyRelatedField(read_only=True)
+    reviewer = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = CanonReview
+        fields = [
+            "id",
+            "story",
+            "tier",
+            "status",
+            "reviewer",
+            "notes",
+            "created_at",
+            "resolved_at",
+        ]
+        read_only_fields = fields
+
+
+class CanonReviewClearInputSerializer(serializers.Serializer):
+    """Input for ``CanonReviewViewSet.clear`` -> ``clear_canon_review``."""
+
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_notes(self, notes: str) -> str:
+        return notes
+
+
+class CanonReviewChangesInputSerializer(serializers.Serializer):
+    """Input for ``CanonReviewViewSet.changes`` -> ``request_changes``.
+
+    ``notes`` is required — the Lead GM must be told what to change.
+    """
+
+    notes = serializers.CharField(required=True, allow_blank=False)
+
+    def validate_notes(self, notes: str) -> str:
+        if not notes.strip():
+            msg = "Notes may not be blank when requesting changes."
+            raise serializers.ValidationError(msg)
+        return notes

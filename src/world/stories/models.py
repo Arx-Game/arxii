@@ -14,10 +14,12 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
+    CanonReviewStatus,
     CrossoverInviteStatus,
     CustodyClearanceStatus,
     CustodyScope,
     EraStatus,
+    ImpactTier,
     ProgressStatus,
     SessionRequestStatus,
     StakeOutcomeMethod,
@@ -151,6 +153,16 @@ class Story(SharedMemoryModel):
         help_text=(
             "Whether this story belongs to one character (CHARACTER), "
             "a covenant/group (GROUP), or the whole metaplot (GLOBAL)."
+        ),
+    )
+    impact_tier = models.CharField(
+        max_length=20,
+        choices=ImpactTier.choices,
+        default=ImpactTier.TABLE,
+        help_text=(
+            "Story-side canon-impact tier (#2003). TABLE is never reviewed; "
+            "REGIONAL auto-clears for EXPERIENCED+ GMs; WORLD requires staff "
+            "sign-off before staked beats pay (auto-downgrade, never hard-block)."
         ),
     )
     maturity = models.CharField(
@@ -2789,3 +2801,60 @@ class CustodyClearance(SharedMemoryModel):
             f"CustodyClearance(subject=#{self.protected_subject_id}, "
             f"requester=#{self.requested_by_id}, scope={self.scope}, status={self.status})"
         )
+
+
+class CanonReview(SharedMemoryModel):
+    """A staff canon-review of a world-touching story (#2003).
+
+    One PENDING review per story (partial unique). Lifecycle::
+
+        PENDING -> CLEARED          (staff approves — staked beats may now pay)
+                -> CHANGES_REQUESTED (staff asks the Lead GM to revise)
+
+    Auto-downgrade, never hard-block: an unreviewed WORLD-tier story's staked
+    beats activate UNREADY (effective risk NONE; the scene still runs). All
+    lifecycle transitions live in ``world.stories.services.canon_review``.
+    """
+
+    story = models.ForeignKey(
+        "stories.Story",
+        on_delete=models.CASCADE,
+        related_name="canon_reviews",
+    )
+    tier = models.CharField(max_length=20, choices=ImpactTier.choices)
+    status = models.CharField(
+        max_length=20,
+        choices=CanonReviewStatus.choices,
+        default=CanonReviewStatus.PENDING,
+    )
+    reviewer = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Staff account that decided this review.",
+    )
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When status left PENDING for CLEARED / CHANGES_REQUESTED.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["story"],
+                condition=models.Q(status=CanonReviewStatus.PENDING),
+                name="unique_pending_canon_review_per_story",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["story", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"CanonReview(story=#{self.story_id}, tier={self.tier}, status={self.status})"

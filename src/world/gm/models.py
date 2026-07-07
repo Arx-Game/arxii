@@ -295,6 +295,13 @@ class GMLevelCap(SharedMemoryModel):
         default=False,
         help_text="Whether a GM at this level may author global-scope content.",
     )
+    auto_clear_regional = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether a GM at this level auto-clears REGIONAL impact-tier "
+            "stories without a manual CanonReview (#2003)."
+        ),
+    )
 
     class Meta:
         verbose_name = "GM Level Cap"

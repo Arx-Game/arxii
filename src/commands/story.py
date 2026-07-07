@@ -60,8 +60,14 @@ _USAGE = (
     "  story mark <beat-id> <success|failure> [notes]\n"
     "  story protect <story-id> add|remove|list ...  — custody protection (#2001)\n"
     "  story clearance request|grant|deny|escalate|resolve|revoke|list ...\n"
-    "                                     — custody clearance lifecycle (#2001)"
+    "                                     — custody clearance lifecycle (#2001)\n"
+    "  story impact <story-id>=<table|regional|world>\n"
+    "                                     — set impact tier (Lead GM; #2003)\n"
+    "  story review-status <story-id>     — tier + review state (#2003)"
 )
+
+_IMPACT_USAGE = "Usage: story impact <story-id>=<table|regional|world>"
+_REVIEW_STATUS_USAGE = "Usage: story review-status <story-id>"
 
 _COMPLETE_USAGE = "Usage: story complete <story-id>"
 _RESOLVE_USAGE = "Usage: story resolve <episode-id> [transition-id] [notes]"
@@ -170,6 +176,8 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "protect": "_handle_protect",
     "clearance": "_handle_clearance",
     "crossover": "_handle_crossover",
+    "impact": "_handle_impact",
+    "review-status": "_handle_review_status",
 }
 
 
@@ -1168,6 +1176,86 @@ class CmdStory(ArxNamespaceCommand):
                 f"  [{invite.pk}] {direction} — {invite.to_story.title}"
                 f' / event "{invite.event.name}" ({invite.status})'
             )
+        self.msg("\n".join(lines))
+
+    def _handle_impact(self, rest: str) -> None:
+        """Set a story's impact tier (Lead GM; editable until cleared, #2003).
+
+        ``story impact <story-id>=<table|regional|world>``. Gated on the
+        story's Lead GM or staff — mirrors ``user_owns_or_leads_story`` exactly
+        so telnet can't escalate past the web API. Refuses to lower a tier once
+        a review is CLEARED (the tier is frozen at clearance).
+        """
+        from world.stories.constants import ImpactTier  # noqa: PLC0415
+        from world.stories.permissions import user_owns_or_leads_story  # noqa: PLC0415
+        from world.stories.services.canon_review import story_is_cleared  # noqa: PLC0415
+
+        if "=" not in rest:
+            raise CommandError(_IMPACT_USAGE)
+        story_part, tier_part = rest.split("=", 1)
+        story = resolve_story_or_error(story_part.strip())
+        tier_text = tier_part.strip().lower()
+
+        tier_map = {
+            "table": ImpactTier.TABLE,
+            "regional": ImpactTier.REGIONAL,
+            "world": ImpactTier.WORLD,
+        }
+        if tier_text not in tier_map:
+            raise CommandError(_IMPACT_USAGE)
+        new_tier = tier_map[tier_text]
+
+        account = self.caller.account
+        is_staff = bool(account and account.is_staff)
+        if not is_staff and not user_owns_or_leads_story(account, story):
+            msg = "You do not own or lead this story."
+            raise CommandError(msg)
+        if story_is_cleared(story):
+            msg = "This story's impact tier is frozen — it has a cleared canon review."
+            raise CommandError(msg)
+
+        story.impact_tier = new_tier
+        story.save(update_fields=["impact_tier"])
+        self.msg(f"Impact tier set to {new_tier} for {story.title}.")
+
+    def _handle_review_status(self, rest: str) -> None:
+        """Show a story's impact tier, review state, and readiness problems (#2003).
+
+        ``story review-status <story-id>`` — the Lead GM's own readout.
+        """
+        from world.stories.constants import CanonReviewStatus  # noqa: PLC0415
+        from world.stories.permissions import user_owns_or_leads_story  # noqa: PLC0415
+        from world.stories.services.canon_review import (  # noqa: PLC0415
+            escalation_tier_for_story,
+            latest_review_for_story,
+            story_is_cleared,
+        )
+
+        tokens = rest.split()
+        if not tokens:
+            raise CommandError(_REVIEW_STATUS_USAGE)
+        story = resolve_story_or_error(tokens[0])
+
+        account = self.caller.account
+        is_staff = bool(account and account.is_staff)
+        if not is_staff and not user_owns_or_leads_story(account, story):
+            msg = "You do not own or lead this story."
+            raise CommandError(msg)
+
+        effective_tier = escalation_tier_for_story(story)
+        review = latest_review_for_story(story)
+        cleared = story_is_cleared(story)
+
+        lines = [f"Impact tier: {story.impact_tier} (effective: {effective_tier})"]
+        if cleared:
+            lines.append("Canon review: CLEARED")
+        elif review is not None:
+            status_label = dict(CanonReviewStatus.choices).get(review.status, review.status)
+            lines.append(f"Canon review: {status_label}")
+            if review.notes:
+                lines.append(f"  Notes: {review.notes}")
+        else:
+            lines.append("Canon review: none requested")
         self.msg("\n".join(lines))
 
     def _get_crossover_or_error(self, invite_id: int) -> CrossoverInvite:

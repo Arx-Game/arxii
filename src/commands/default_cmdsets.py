@@ -22,6 +22,7 @@ from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.alterations import CmdMageScar
 from commands.battle import CmdBattle
+from commands.canon_review import CmdCanonReview
 from commands.captivity import CmdDemandRansom
 from commands.combat import CmdClashCommit, CmdDeclareTechnique
 from commands.combat_maneuvers import CmdCombat
@@ -264,6 +265,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdSearch,
             # #1450 — the staff push face: hand-authored gemits scoped by reach.
             CmdGemit,
+            # #2003 — staff canon-review queue (perm(Admin)).
+            CmdCanonReview,
             # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
             CmdGMTable,
             # #1496 — staff/GM technique authoring workbench (perm(Builder)).

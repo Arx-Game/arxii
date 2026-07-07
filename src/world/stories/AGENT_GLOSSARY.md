@@ -132,3 +132,25 @@ internal/audit-only and never player-serialized — a blocked actor learns only
 the protecting story, beat, or reason (mirrors the boundaries privacy
 posture, ADR-0033/ADR-0086).
 _Avoid_: custody check result, permission verdict.
+
+**Impact Tier**:
+`Story.impact_tier` (`ImpactTier`: TABLE / REGIONAL / WORLD, default TABLE,
+#2003) — the story-side *canon review* axis: how far a story touches the
+shared world, authored by the story's Lead GM at pitch time and frozen once a
+review is CLEARED. Distinct from `Beat.risk` (declared danger/reward
+magnitude) and `StakesLevel` (GM combat access scope) — see ADR-0067's
+disambiguation table and ADR-0101. TABLE is never reviewed; REGIONAL
+auto-clears for EXPERIENCED+ GMs (`GMLevelCap.auto_clear_regional`); WORLD
+requires staff sign-off before its staked beats pay.
+_Avoid_: stakes level, risk tier, scope (scope is the CHARACTER/GROUP/GLOBAL subject axis; impact tier is the review axis).
+
+**Canon Review**:
+A `CanonReview` row (#2003) — a staff review of a WORLD-tier story's
+canon-touching content before it pays. One PENDING review per story (partial
+unique); `CanonReviewStatus` (PENDING → CLEARED / CHANGES_REQUESTED). The gate
+is auto-downgrade-not-block (pillar-7 pattern): an unreviewed WORLD-tier
+story's staked beats are UNREADY → effective risk NONE (the scene still runs,
+nothing pays) via `validate_stakes_readiness`'s canon-review problem. Surfaced
+on the staff `StaffWorkloadView` pending-queue and decided via the
+`canonreview` telnet command or `CanonReviewViewSet` web verbs.
+_Avoid_: sign-off (that's `TreasuredSignoff` / custody), approval gate.

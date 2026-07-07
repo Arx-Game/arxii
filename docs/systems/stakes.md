@@ -659,7 +659,7 @@ stake's severity label + `player_summary` and the locked effective risk.
 |---|---|---|
 | `risk_index` | `(risk: str) -> int` | Position of a `RenownRisk` value on `RISK_LADDER` |
 | `compute_effective_risk` | `(declared_risk, target_level, party_average_level) -> str` | See [Effective Risk](#effective-risk) |
-| `validate_stakes_readiness` | `(beat: Beat) -> StakesReadinessReport` | Readiness gate: target_level declared, ≥1 stake, every stake has WIN+LOSS resolutions, severity within calibration bands, WIN reward total within the tier's reward band (PR3; skipped when `reward_ceiling == 0`), removal reachable within `max_fuse_hops`. Unstaked beats (`risk == NONE`) are trivially ready |
+| `validate_stakes_readiness` | `(beat: Beat) -> StakesReadinessReport` | Readiness gate: target_level declared, ≥1 stake, every stake has WIN+LOSS resolutions, severity within calibration bands, WIN reward total within the tier's reward band (PR3; skipped when `reward_ceiling == 0`), removal reachable within `max_fuse_hops`, and (for WORLD impact-tier stories, #2003) a CLEARED `CanonReview`. Unstaked beats (`risk == NONE`) are trivially ready |
 | `get_open_activation` | `(beat: Beat) -> StakeContractActivation \| None` | The single open activation for a beat, if any |
 | `activate_stakes_contract` | `(beat, participants, *, scale_by_party_level=True) -> StakeContractActivation` | Idempotent lock — see [Lock Lifecycle](#lock-lifecycle-authoring--activation--completion); `scale_by_party_level=False` (Battle only, #1785) prices at declared risk unconditionally — see [Effective Risk](#effective-risk) |
 | `effective_risk_for_beat` | `(beat: Beat) -> str` | Read seam: open activation's effective risk, else `beat.risk` |

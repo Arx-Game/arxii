@@ -41,6 +41,14 @@ class SeedDefaultGmLevelCapsTest(TestCase):
         for level in GMLevel.values:
             assert caps[level].allow_global_scope_authoring is False
 
+    def test_auto_clear_regional_for_experienced_and_senior(self) -> None:
+        caps = seed_default_gm_level_caps()
+
+        for level in (GMLevel.STARTING, GMLevel.JUNIOR, GMLevel.GM):
+            assert caps[level].auto_clear_regional is False
+        assert caps[GMLevel.EXPERIENCED].auto_clear_regional is True
+        assert caps[GMLevel.SENIOR].auto_clear_regional is True
+
     def test_idempotent(self) -> None:
         first = seed_default_gm_level_caps()
         first_pks = {level: cap.pk for level, cap in first.items()}
