@@ -3,7 +3,12 @@
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from world.societies.houses.creator import submit_house_claim
+from world.character_sheets.factories import CharacterSheetFactory
+from world.societies.houses.creator import (
+    approve_house_claim,
+    materialize_house_claim,
+    submit_house_claim,
+)
 from world.societies.houses.models import (
     HouseAspectDefinition,
     HouseAspectOption,
@@ -160,3 +165,26 @@ class CreatorAspectGateTests(AspectTestData):
     def test_blank_lands_refused_for_landed_title(self):
         with self.assertRaises(HousesServiceError):
             self._submit_full(lands_writeup="")
+
+
+class MaterializationAspectTests(AspectTestData):
+    """Approved claims write stylings, facets, features, and lands onto the world."""
+
+    def test_materialization_writes_identity(self):
+        from evennia_extensions.factories import AccountFactory
+
+        claim = self._submit_full()
+        approve_house_claim(claim, reviewer=AccountFactory())
+        sheet = CharacterSheetFactory()
+        org = materialize_house_claim(claim, sheet=sheet)
+
+        self.assertEqual(org.words, "The Fens Endure")
+        self.assertEqual(org.colors, "russet and bog-iron grey")
+        self.assertIn("heron", org.sigil_description)
+        self.assertEqual(org.aspects.count(), 3)
+        picked = {a.option.name for a in org.aspects.select_related("option")}
+        self.assertEqual(picked, {"Fortitude", "Vigil", "Tithe"})
+        self.assertEqual(org.features.count(), 1)
+        self.assertEqual(org.features.first().feature.slug, "hearth-right")
+        self.seat.refresh_from_db()
+        self.assertIn("eel weirs", self.seat.description)

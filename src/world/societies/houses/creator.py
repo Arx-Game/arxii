@@ -20,7 +20,14 @@ from django.utils import timezone
 
 from world.roster.models import Family
 from world.societies.houses.constants import HouseClaimStatus
-from world.societies.houses.models import HouseClaim, HouseClaimAspect, HouseTemplate, Title
+from world.societies.houses.models import (
+    HouseClaim,
+    HouseClaimAspect,
+    HouseTemplate,
+    OrganizationAspect,
+    OrganizationFeature,
+    Title,
+)
 from world.societies.houses.services import (
     HousesServiceError,
     add_holding,
@@ -283,6 +290,9 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
     org = Organization.objects.create(
         name=org_name,
         description=claim.backstory,
+        words=claim.words,
+        colors=claim.colors,
+        sigil_description=claim.sigil_description,
         society=template.society,
         org_type=template.liege.org_type,
         family=family,
@@ -296,6 +306,16 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
     )
     ensure_default_rank_ladder(org)
     swear_fealty(vassal=org, liege=template.liege)
+
+    # #2079 — the claim's picks become permanent identity facets; the
+    # template's cultural facts stamp onto the org (slug-anchored for
+    # future systems: a ledger UI checks the org has 'black-ledger').
+    for picked in claim.aspects.select_related("definition", "option"):
+        OrganizationAspect.objects.create(
+            organization=org, definition=picked.definition, option=picked.option
+        )
+    for feature in template.features.all():
+        OrganizationFeature.objects.create(organization=org, feature=feature)
 
     # ``family`` is a forwarding property onto the sheet's true Profile
     # (#1270); a plain save() persists the profile first.
@@ -314,7 +334,11 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
     if title.seat_domain is not None:
         domain = title.seat_domain
         domain.owner_org = org
-        domain.save(update_fields=["owner_org"])
+        if claim.lands_writeup.strip():
+            domain.description = claim.lands_writeup
+            domain.save(update_fields=["owner_org", "description"])
+        else:
+            domain.save(update_fields=["owner_org"])
         for kind in template.holdings.all():
             add_holding(domain=domain, kind=kind)
 
