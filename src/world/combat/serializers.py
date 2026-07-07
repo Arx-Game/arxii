@@ -1095,6 +1095,10 @@ class AddOpponentSerializer(serializers.Serializer):
     formula fills every stat field automatically (Task 5 auto-fill mode).
     All other stat fields are optional overrides.
 
+    ``position_id`` (#2005) is optional; when supplied it must name a Position
+    in the encounter's own room — validated against the encounter's room here
+    so a mismatched position never reaches the service layer.
+
     Expects ``encounter`` and ``request`` in serializer context (provided by the
     view) so that ``validate()`` can run the stakes gate.
     """
@@ -1109,9 +1113,11 @@ class AddOpponentSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+    position_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs: dict) -> dict:
-        """Run stakes requirement gate for the encounter + requesting user."""
+        """Run stakes requirement gate + validate position_id against the encounter's room."""
+        from world.areas.positioning.models import Position  # noqa: PLC0415
         from world.combat.scaling import (  # noqa: PLC0415
             StakesRequirementError,
             validate_stakes_requirement,
@@ -1124,6 +1130,13 @@ class AddOpponentSerializer(serializers.Serializer):
                 validate_stakes_requirement(encounter, cast(AccountDB, request.user))
             except StakesRequirementError as exc:
                 raise serializers.ValidationError({"non_field_errors": exc.user_message}) from exc
+
+        position_id = attrs.get("position_id")
+        if position_id is not None and encounter is not None:
+            if not Position.objects.filter(pk=position_id, room=encounter.room).exists():
+                raise serializers.ValidationError(
+                    {"position_id": "That position is not in this encounter's room."}
+                )
         return attrs
 
 

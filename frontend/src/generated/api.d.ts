@@ -16067,6 +16067,32 @@ export interface components {
     ActivePersonaResult: {
       readonly active_persona_id: number;
     };
+    /**
+     * @description Write serializer for adding an opponent to an encounter.
+     *
+     *     ``tier`` is required.  ``max_health`` is optional — when omitted the scaling
+     *     formula fills every stat field automatically (Task 5 auto-fill mode).
+     *     All other stat fields are optional overrides.
+     *
+     *     ``position_id`` (#2005) is optional; when supplied it must name a Position
+     *     in the encounter's own room — validated against the encounter's room here
+     *     so a mismatched position never reaches the service layer.
+     *
+     *     Expects ``encounter`` and ``request`` in serializer context (provided by the
+     *     view) so that ``validate()`` can run the stakes gate.
+     */
+    AddOpponentRequest: {
+      name: string;
+      tier: components['schemas']['Tier756Enum'];
+      max_health?: number | null;
+      threat_pool_id: number;
+      /** @default  */
+      description: string;
+      /** @default 0 */
+      soak_value: number;
+      probing_threshold?: number | null;
+      position_id?: number | null;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -22086,7 +22112,7 @@ export interface components {
       readonly objectdb_id: number | null;
       name: string;
       description?: string;
-      tier: components['schemas']['OpponentTierEnum'];
+      tier: components['schemas']['Tier756Enum'];
       health: number;
       max_health: number;
       /** @description Soak value — GM/staff only. */
@@ -22156,7 +22182,7 @@ export interface components {
     OpponentRequest: {
       name: string;
       description?: string;
-      tier: components['schemas']['OpponentTierEnum'];
+      tier: components['schemas']['Tier756Enum'];
       health: number;
       max_health: number;
       probing_current?: number;
@@ -22170,15 +22196,6 @@ export interface components {
      * @enum {string}
      */
     OpponentStatusEnum: 'active' | 'defeated' | 'fled';
-    /**
-     * @description * `swarm` - Swarm
-     *     * `mook` - Mook
-     *     * `elite` - Elite
-     *     * `boss` - Boss
-     *     * `hero_killer` - Hero Killer
-     * @enum {string}
-     */
-    OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /**
      * @description * `branch` - Branch
      *     * `check` - Check
@@ -29758,6 +29775,15 @@ export interface components {
      */
     Tier3f5Enum: 1 | 2 | 3 | 4 | 5;
     /**
+     * @description * `swarm` - Swarm
+     *     * `mook` - Mook
+     *     * `elite` - Elite
+     *     * `boss` - Boss
+     *     * `hero_killer` - Hero Killer
+     * @enum {string}
+     */
+    Tier756Enum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
+    /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
      *     * `dusk` - Dusk
@@ -34411,7 +34437,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['EncounterDetailRequest'];
+        'application/json': components['schemas']['AddOpponentRequest'];
       };
     };
     responses: {

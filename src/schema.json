@@ -4353,7 +4353,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
+              $ref: '#/components/schemas/AddOpponentRequest'
         required: true
       security:
       - cookieAuth: []
@@ -27094,6 +27094,51 @@ components:
           readOnly: true
       required:
       - active_persona_id
+    AddOpponentRequest:
+      type: object
+      description: |-
+        Write serializer for adding an opponent to an encounter.
+
+        ``tier`` is required.  ``max_health`` is optional — when omitted the scaling
+        formula fills every stat field automatically (Task 5 auto-fill mode).
+        All other stat fields are optional overrides.
+
+        ``position_id`` (#2005) is optional; when supplied it must name a Position
+        in the encounter's own room — validated against the encounter's room here
+        so a mismatched position never reaches the service layer.
+
+        Expects ``encounter`` and ``request`` in serializer context (provided by the
+        view) so that ``validate()`` can run the stakes gate.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        tier:
+          $ref: '#/components/schemas/Tier756Enum'
+        max_health:
+          type: integer
+          minimum: 1
+          nullable: true
+        threat_pool_id:
+          type: integer
+        description:
+          type: string
+          minLength: 1
+          default: ''
+        soak_value:
+          type: integer
+          default: 0
+        probing_threshold:
+          type: integer
+          nullable: true
+        position_id:
+          type: integer
+          nullable: true
+      required:
+      - name
+      - threat_pool_id
+      - tier
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -39658,7 +39703,7 @@ components:
         description:
           type: string
         tier:
-          $ref: '#/components/schemas/OpponentTierEnum'
+          $ref: '#/components/schemas/Tier756Enum'
         health:
           type: integer
           maximum: 2147483647
@@ -39807,7 +39852,7 @@ components:
         description:
           type: string
         tier:
-          $ref: '#/components/schemas/OpponentTierEnum'
+          $ref: '#/components/schemas/Tier756Enum'
         health:
           type: integer
           maximum: 2147483647
@@ -39841,20 +39886,6 @@ components:
         * `active` - Active
         * `defeated` - Defeated
         * `fled` - Fled
-    OpponentTierEnum:
-      enum:
-      - swarm
-      - mook
-      - elite
-      - boss
-      - hero_killer
-      type: string
-      description: |-
-        * `swarm` - Swarm
-        * `mook` - Mook
-        * `elite` - Elite
-        * `boss` - Boss
-        * `hero_killer` - Hero Killer
     OptionKindEnum:
       enum:
       - branch
@@ -53835,6 +53866,20 @@ components:
         * `3` - Touched
         * `4` - Marked Profoundly
         * `5` - Remade
+    Tier756Enum:
+      enum:
+      - swarm
+      - mook
+      - elite
+      - boss
+      - hero_killer
+      type: string
+      description: |-
+        * `swarm` - Swarm
+        * `mook` - Mook
+        * `elite` - Elite
+        * `boss` - Boss
+        * `hero_killer` - Hero Killer
     TimePhaseEnum:
       enum:
       - dawn
