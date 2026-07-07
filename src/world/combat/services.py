@@ -1089,6 +1089,11 @@ def _create_participant(
         status=status,
     )
     _ensure_combat_engagement(participant)
+
+    from world.combat.escalation import check_hated_foe_surges_for_new_participant  # noqa: PLC0415
+
+    check_hated_foe_surges_for_new_participant(participant)
+
     if encounter.scene_id:
         from world.scenes.interaction_services import ensure_scene_participation  # noqa: PLC0415
 
@@ -1637,6 +1642,10 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
                 for spec in block.phases
             ]
         )
+
+    from world.combat.escalation import check_hated_foe_surges_for_new_opponent  # noqa: PLC0415
+
+    check_hated_foe_surges_for_new_opponent(opp)
 
     return opp
 

@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from world.scenes.models import SceneRound
 
 
-def _acute_peril_condition_names() -> list[str]:
+def acute_peril_condition_names() -> list[str]:
     """The condition names subject to the #1479 involved-party HOLD / abandonment.
 
     This is the HOLD/ABANDONMENT classification — "whose peril depends on who is
@@ -56,13 +56,13 @@ def _acute_peril_condition_names() -> list[str]:
 def acute_peril_instances(victim_sheet: "CharacterSheet") -> "QuerySet[ConditionInstance]":
     """Return the victim's active hold/abandonment-eligible ConditionInstances (Bleeding Out).
 
-    Plummeting is excluded by ``_acute_peril_condition_names`` — see its docstring.
+    Plummeting is excluded by ``acute_peril_condition_names`` — see its docstring.
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
     return ConditionInstance.objects.filter(
         target_id=victim_sheet.character_id,
-        condition__name__in=_acute_peril_condition_names(),
+        condition__name__in=acute_peril_condition_names(),
     )
 
 

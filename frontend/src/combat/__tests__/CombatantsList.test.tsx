@@ -137,6 +137,7 @@ function makeEncounter(
     position_adjacency: [],
     is_lethal: false,
     duel_winner: null,
+    surge_beats: [],
   };
 }
 

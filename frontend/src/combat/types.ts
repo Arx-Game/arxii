@@ -34,6 +34,18 @@ export type EncounterDetail = components['schemas']['EncounterDetail'];
 // For Phase 7 we surface them as opaque blobs; a typed shape is a follow-up.
 export type RoundAction = Record<string, unknown>;
 
+// surge_beats is typed as {[key: string]: unknown}[] in the schema — the
+// backend serializes owner-scoped keys (trigger_kind/amount/participant)
+// conditionally, so only `narration` is guaranteed present.
+export type SurgeBeat = Record<string, unknown>;
+
+export interface SurgeBeatTyped extends SurgeBeat {
+  narration: string;
+  trigger_kind?: string;
+  amount?: number;
+  participant?: number;
+}
+
 /**
  * Typed overlay for RoundAction entries from RoundActionSerializer.
  * Extends the opaque blob with the fields we actually consume in the UI.

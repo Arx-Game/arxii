@@ -64,6 +64,15 @@ class StakesLevel(models.TextChoices):
     WORLD = "world", "World"
 
 
+class SurgeTriggerKind(models.TextChoices):
+    """What dramatic beat produced a DramaticSurgeRecord (#2013)."""
+
+    ALLY_FALLEN = "ally_fallen", "Ally Fallen"
+    ALLY_PERIL = "ally_peril", "Ally In Peril"
+    HATED_FOE = "hated_foe", "Hated Foe"
+    HIGH_STAKES = "high_stakes", "High Stakes"
+
+
 class PaceMode(models.TextChoices):
     """How round timing is managed."""
 

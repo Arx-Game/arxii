@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { useEndEncounter } from '../queries';
-import type { EncounterDetail, Participant, RoundAction } from '../types';
+import type { EncounterDetail, Participant, RoundAction, SurgeBeatTyped } from '../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -99,6 +99,30 @@ function EscalationStrip({ encounter }: { encounter: EncounterDetail }) {
           {encounter.escalation_tick_narration}
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SurgeBeats — dramatic surge lines for this round (#2013)
+// ---------------------------------------------------------------------------
+
+function SurgeBeats({ encounter }: { encounter: EncounterDetail }) {
+  const beats = (encounter.surge_beats ?? []) as SurgeBeatTyped[];
+  if (beats.length === 0) {
+    return null;
+  }
+  return (
+    <div className="space-y-1" data-testid="surge-beats">
+      {beats.map((beat, index) => (
+        <p
+          key={index}
+          className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs font-semibold italic text-rose-300"
+          data-testid="surge-beat-line"
+        >
+          {beat.narration}
+        </p>
+      ))}
     </div>
   );
 }
@@ -225,6 +249,9 @@ export function RoundFlow({ encounter, collapsed = false, onToggleCollapse }: Ro
 
           {/* Escalation strip (escalating encounters only) */}
           <EscalationStrip encounter={encounter} />
+
+          {/* Dramatic surge beats this round (#2013) */}
+          <SurgeBeats encounter={encounter} />
 
           {/* Declarations counter */}
           <div

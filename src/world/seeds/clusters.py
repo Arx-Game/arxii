@@ -19,6 +19,7 @@ def _seed_items() -> None:
 
 def _seed_combat() -> None:
     from world.seeds.game_content.combat import (  # noqa: PLC0415
+        seed_dramatic_surge_content,
         seed_encounter_beat_wiring,
         seed_flee_check,
         seed_penetration_contest,
@@ -27,6 +28,7 @@ def _seed_combat() -> None:
     seed_penetration_contest()
     seed_flee_check()
     seed_encounter_beat_wiring()
+    seed_dramatic_surge_content()
 
 
 def _seed_battles() -> None:

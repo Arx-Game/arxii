@@ -377,7 +377,7 @@ you":
 - `resolve_scene_round` exempts plummeting participants (`_plummeting_character_ids`) from the
   #1480 AFK own-peril skip, so the descent advances on every END tick regardless of who drove
   the round;
-- `world.vitals.peril_resolution._acute_peril_condition_names()` (the HOLD/ABANDONMENT
+- `world.vitals.peril_resolution.acute_peril_condition_names()` (the HOLD/ABANDONMENT
   classification) is **BLEED_OUT only** — a plummeting victim is never a "held downed victim,"
   is never `abandoned_since_round`-marked, and is never resolved through an abandonment
   consequence pool (`resolve_abandonment` / `resolve_solo_abandoned_victims` skip it). This is

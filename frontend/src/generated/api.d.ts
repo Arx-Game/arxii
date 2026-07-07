@@ -18934,6 +18934,17 @@ export interface components {
       readonly current_round_actions: {
         [key: string]: unknown;
       }[];
+      /**
+       * @description Return this round's dramatic-surge beats (#2013).
+       *
+       *     Every viewer sees the generic ``narration`` line (never names the
+       *     bond/track/subject — the leak rule). ``trigger_kind``/``amount`` are
+       *     added only for the surging participant's own owner, GMs, and staff —
+       *     mirrors ``get_current_round_actions``'s covenant-scoped pattern.
+       */
+      readonly surge_beats: {
+        [key: string]: unknown;
+      }[];
       /** @description Check whether the requesting user has a character in this encounter. */
       readonly is_participant: boolean;
       /** @description Check whether the requesting user is GM of the linked scene. */
