@@ -557,3 +557,125 @@ class CmdStoryPlayerSignoffTests(TestCase):
         self.assertIsNone(other_signoff.withdrawn_at)
         # And the caller's own unrelated signoff-count is untouched.
         self.assertEqual(TreasuredSignoff.objects.filter(player_data=other_player_data).count(), 1)
+
+
+class CmdStoryCrossoverTests(TestCase):
+    """`story crossover invite|accept|decline|withdraw|list` (#2002)."""
+
+    def setUp(self) -> None:
+        from unittest.mock import MagicMock
+
+        from evennia_extensions.factories import AccountFactory
+        from world.events.factories import EventFactory
+        from world.gm.factories import GMProfileFactory
+        from world.stories.factories import EpisodeFactory, StoryFactory
+
+        self.sender_gm = GMProfileFactory()
+        self.recipient_account = AccountFactory()
+        self.story = StoryFactory()
+        self.story.owners.add(self.recipient_account)
+        self.episode = EpisodeFactory(chapter__story=self.story)
+        self.event = EventFactory()
+
+        self.caller = MagicMock()
+        self.caller.msg = MagicMock()
+        self.caller.account = self.sender_gm.account
+
+    def _run(self, args: str) -> list[str]:
+        cmd = _make_cmd(self.caller, args)
+        cmd.func()
+        return _messages(self.caller)
+
+    def _run_as(self, account, args: str) -> list[str]:
+        self.caller.account = account
+        return self._run(args)
+
+    def test_invite_creates_pending_invite(self) -> None:
+        from world.stories.constants import CrossoverInviteStatus
+        from world.stories.models import CrossoverInvite
+
+        messages = self._run(
+            f"crossover invite {self.event.pk} story={self.story.pk} episode={self.episode.pk}"
+        )
+        self.assertTrue(any("sent" in m for m in messages), messages)
+        invite = CrossoverInvite.objects.get()
+        self.assertEqual(invite.status, CrossoverInviteStatus.PENDING)
+        self.assertEqual(invite.to_story_id, self.story.pk)
+
+    def test_invite_requires_gm_profile(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+
+        non_gm = AccountFactory()
+        messages = self._run_as(non_gm, f"crossover invite {self.event.pk} story={self.story.pk}")
+        self.assertTrue(any("GM profile" in m for m in messages), messages)
+
+    def test_accept_by_story_owner(self) -> None:
+        from world.stories.constants import CrossoverInviteStatus
+        from world.stories.services.crossover import create_crossover_invite
+
+        invite = create_crossover_invite(
+            from_gm=self.sender_gm,
+            event=self.event,
+            to_story=self.story,
+            proposed_episode=self.episode,
+        )
+        messages = self._run_as(self.recipient_account, f"crossover accept {invite.pk}")
+        self.assertTrue(any("accepted" in m for m in messages), messages)
+        invite.refresh_from_db()
+        self.assertEqual(invite.status, CrossoverInviteStatus.ACCEPTED)
+
+    def test_accept_by_non_owner_denied(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.stories.services.crossover import create_crossover_invite
+
+        invite = create_crossover_invite(
+            from_gm=self.sender_gm, event=self.event, to_story=self.story
+        )
+        outsider = AccountFactory()
+        messages = self._run_as(outsider, f"crossover accept {invite.pk}")
+        self.assertTrue(any("Lead GM" in m for m in messages), messages)
+
+    def test_withdraw_by_sender(self) -> None:
+        from world.stories.constants import CrossoverInviteStatus
+        from world.stories.services.crossover import create_crossover_invite
+
+        invite = create_crossover_invite(
+            from_gm=self.sender_gm, event=self.event, to_story=self.story
+        )
+        messages = self._run(f"crossover withdraw {invite.pk}")
+        self.assertTrue(any("withdrawn" in m for m in messages), messages)
+        invite.refresh_from_db()
+        self.assertEqual(invite.status, CrossoverInviteStatus.WITHDRAWN)
+
+    def test_withdraw_by_non_sender_denied(self) -> None:
+        from world.stories.services.crossover import create_crossover_invite
+
+        invite = create_crossover_invite(
+            from_gm=self.sender_gm, event=self.event, to_story=self.story
+        )
+        messages = self._run_as(self.recipient_account, f"crossover withdraw {invite.pk}")
+        self.assertTrue(any("inviting GM" in m for m in messages), messages)
+
+    def test_list_shows_invites(self) -> None:
+        from world.stories.services.crossover import create_crossover_invite
+
+        create_crossover_invite(from_gm=self.sender_gm, event=self.event, to_story=self.story)
+        messages = self._run("crossover list")
+        self.assertTrue(any("crossover invites" in m for m in messages), messages)
+
+    def test_list_pending_filter(self) -> None:
+        from world.stories.services.crossover import (
+            accept_crossover_invite,
+            create_crossover_invite,
+        )
+
+        invite = create_crossover_invite(
+            from_gm=self.sender_gm,
+            event=self.event,
+            to_story=self.story,
+            proposed_episode=self.episode,
+        )
+        accept_crossover_invite(invite, accepting_account=self.recipient_account)
+        # Accepted invite should not appear under "pending".
+        messages = self._run("crossover list pending")
+        self.assertTrue(any("no crossover" in m.lower() for m in messages), messages)

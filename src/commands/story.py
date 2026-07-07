@@ -38,7 +38,12 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.gm.models import GMProfile
     from world.societies.models import Organization, Society
-    from world.stories.models import CustodyClearance, Story, StoryProtectedSubject
+    from world.stories.models import (
+        CrossoverInvite,
+        CustodyClearance,
+        Story,
+        StoryProtectedSubject,
+    )
 
 _SignoffMatchT = TypeVar("_SignoffMatchT")
 
@@ -101,6 +106,23 @@ _RESOLVE_CLEARANCE_USAGE = "Usage: story clearance resolve <id> grant|deny [note
 _REVOKE_USAGE = "Usage: story clearance revoke <id>"
 _NEEDS_GM_PROFILE = "You must have a GM profile to do that."
 
+_CROSSOVER_USAGE = (
+    "Usage:\n"
+    "  story crossover invite <event-id> story=<id> [episode=<id>] [message=<text>]\n"
+    "                                     — invite another GM's story into a shared event\n"
+    "  story crossover accept <invite-id> [episode=<id>] [note=<text>]\n"
+    "                                     — accept an invite (invited story's Lead GM only)\n"
+    "  story crossover decline <invite-id> [note=<text>]\n"
+    "                                     — decline an invite (invited story's Lead GM only)\n"
+    "  story crossover withdraw <invite-id>\n"
+    "                                     — rescind an invite you sent\n"
+    "  story crossover list [pending]     — your sent + received invites"
+)
+_CROSSOVER_INVITE_USAGE = (
+    "Usage: story crossover invite <event-id> story=<id> [episode=<id>] [message=<text>]"
+)
+_CROSSOVER_MULTIWORD_KEYS = frozenset({"message", "note"})
+
 # Subject-kind keys accepted for `story protect ... add` / `story clearance request`'s
 # identity path (#2001 Task 7) — mirrors StakeSubjectKind, minus CAMPAIGN_TRACK (not
 # exposed to this grammar per the Task 7 brief). `org`/`society` are disambiguating
@@ -147,6 +169,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "signoff": "_handle_signoff",
     "protect": "_handle_protect",
     "clearance": "_handle_clearance",
+    "crossover": "_handle_crossover",
 }
 
 
@@ -932,6 +955,239 @@ class CmdStory(ArxNamespaceCommand):
                 f" (requested by {clearance.requested_by.account.username})"
             )
         self.msg("\n".join(lines))
+
+    # -- crossover (#2002) ------------------------------------------------------
+
+    def _handle_crossover(self, rest: str) -> None:
+        """Route ``crossover invite|accept|decline|withdraw|list ...`` (#2002).
+
+        Thin over ``world.stories.services.crossover`` — the same services the
+        ``CrossoverInviteViewSet`` calls. Authorization replicated inline to
+        match the API's permission classes exactly (sender-only withdraw,
+        recipient-only accept/decline) so telnet cannot escalate.
+        """
+        tokens = rest.split(maxsplit=1)
+        if not tokens:
+            raise CommandError(_CROSSOVER_USAGE)
+        subverb = tokens[0].lower()
+        tail = tokens[1].strip() if len(tokens) > 1 else ""
+
+        handlers = {
+            "invite": self._handle_crossover_invite,
+            "accept": self._handle_crossover_accept,
+            "decline": self._handle_crossover_decline,
+            "withdraw": self._handle_crossover_withdraw,
+            "list": self._handle_crossover_list,
+        }
+        handler = handlers.get(subverb)
+        if handler is None:
+            raise CommandError(_CROSSOVER_USAGE)
+        handler(tail)
+
+    def _handle_crossover_invite(self, tail: str) -> None:
+        """Parse ``invite <event-id> story=<id> [episode=<id>] [message=<text>]``."""
+        from world.events.models import Event  # noqa: PLC0415
+        from world.stories.models import Episode, Story  # noqa: PLC0415
+
+        if not tail:
+            raise CommandError(_CROSSOVER_INVITE_USAGE)
+        parts = tail.split(maxsplit=1)
+        event_token = parts[0].strip()
+        kv_tail = parts[1].strip() if len(parts) > 1 else ""
+        if not event_token.isdigit():
+            raise CommandError(_CROSSOVER_INVITE_USAGE)
+
+        account = self.caller.account
+        gm_profile = self._require_gm_profile(account)
+
+        kwargs, _flags = parse_kv_and_flags(
+            kv_tail, multiword_keys=_CROSSOVER_MULTIWORD_KEYS, known_flags=frozenset()
+        )
+        story_token = kwargs.get("story", "").strip()
+        episode_token = kwargs.get("episode", "").strip()
+        message = kwargs.get("message", "").strip()
+        if not story_token.isdigit():
+            raise CommandError(_CROSSOVER_INVITE_USAGE)
+
+        try:
+            event = Event.objects.get(pk=int(event_token))
+        except Event.DoesNotExist as exc:
+            msg = "No event with that ID exists."
+            raise CommandError(msg) from exc
+        try:
+            story = Story.objects.get(pk=int(story_token))
+        except Story.DoesNotExist as exc:
+            msg = "No story with that ID exists."
+            raise CommandError(msg) from exc
+        proposed_episode = None
+        if episode_token:
+            if not episode_token.isdigit():
+                msg = "episode must be a numeric ID."
+                raise CommandError(msg)
+            try:
+                proposed_episode = Episode.objects.get(pk=int(episode_token))
+            except Episode.DoesNotExist as exc:
+                msg = "No episode with that ID exists."
+                raise CommandError(msg) from exc
+
+        from world.stories.services.crossover import (  # noqa: PLC0415
+            CrossoverError,
+            create_crossover_invite,
+        )
+
+        try:
+            invite = create_crossover_invite(
+                from_gm=gm_profile,
+                event=event,
+                to_story=story,
+                proposed_episode=proposed_episode,
+                message=message,
+            )
+        except CrossoverError as exc:
+            raise CommandError(str(exc)) from exc
+        self.msg(
+            f"Crossover invite #{invite.pk} sent: {story.title} invited to event"
+            f' "{event.name}" (status: pending).'
+        )
+
+    def _handle_crossover_accept(self, tail: str) -> None:
+        """Parse ``accept <invite-id> [episode=<id>] [note=<text>]``."""
+        if not tail:
+            raise CommandError(_CROSSOVER_USAGE)
+        parts = tail.split(maxsplit=1)
+        invite_token = parts[0].strip()
+        kv_tail = parts[1].strip() if len(parts) > 1 else ""
+        if not invite_token.isdigit():
+            raise CommandError(_CROSSOVER_USAGE)
+
+        invite = self._get_crossover_or_error(int(invite_token))
+        kwargs, _flags = parse_kv_and_flags(
+            kv_tail, multiword_keys=_CROSSOVER_MULTIWORD_KEYS, known_flags=frozenset()
+        )
+        episode_token = kwargs.get("episode", "").strip()
+        note = kwargs.get("note", "").strip()
+
+        from world.stories.models import Episode  # noqa: PLC0415
+
+        accepted_episode = None
+        if episode_token:
+            if not episode_token.isdigit():
+                msg = "episode must be a numeric ID."
+                raise CommandError(msg)
+            try:
+                accepted_episode = Episode.objects.get(pk=int(episode_token))
+            except Episode.DoesNotExist as exc:
+                msg = "No episode with that ID exists."
+                raise CommandError(msg) from exc
+
+        from world.stories.services.crossover import (  # noqa: PLC0415
+            CrossoverError,
+            accept_crossover_invite,
+        )
+
+        try:
+            updated = accept_crossover_invite(
+                invite=invite,
+                accepting_account=self.caller.account,
+                accepted_episode=accepted_episode,
+                response_note=note,
+            )
+        except CrossoverError as exc:
+            raise CommandError(str(exc)) from exc
+        self.msg(
+            f"Crossover invite #{updated.pk} accepted: {updated.to_story.title}"
+            " linked to the shared event."
+        )
+
+    def _handle_crossover_decline(self, tail: str) -> None:
+        """Parse ``decline <invite-id> [note=<text>]``."""
+        if not tail:
+            raise CommandError(_CROSSOVER_USAGE)
+        parts = tail.split(maxsplit=1)
+        invite_token = parts[0].strip()
+        kv_tail = parts[1].strip() if len(parts) > 1 else ""
+        if not invite_token.isdigit():
+            raise CommandError(_CROSSOVER_USAGE)
+
+        invite = self._get_crossover_or_error(int(invite_token))
+        kwargs, _flags = parse_kv_and_flags(
+            kv_tail, multiword_keys=_CROSSOVER_MULTIWORD_KEYS, known_flags=frozenset()
+        )
+        note = kwargs.get("note", "").strip()
+
+        from world.stories.services.crossover import (  # noqa: PLC0415
+            CrossoverError,
+            decline_crossover_invite,
+        )
+
+        try:
+            updated = decline_crossover_invite(
+                invite=invite,
+                responding_account=self.caller.account,
+                response_note=note,
+            )
+        except CrossoverError as exc:
+            raise CommandError(str(exc)) from exc
+        self.msg(f"Crossover invite #{updated.pk} declined.")
+
+    def _handle_crossover_withdraw(self, tail: str) -> None:
+        """Parse ``withdraw <invite-id>``."""
+        if not tail or not tail.strip().isdigit():
+            raise CommandError(_CROSSOVER_USAGE)
+        invite = self._get_crossover_or_error(int(tail.strip()))
+
+        from world.stories.services.crossover import (  # noqa: PLC0415
+            CrossoverError,
+            withdraw_crossover_invite,
+        )
+
+        try:
+            updated = withdraw_crossover_invite(
+                invite=invite,
+                withdrawing_account=self.caller.account,
+            )
+        except CrossoverError as exc:
+            raise CommandError(str(exc)) from exc
+        self.msg(f"Crossover invite #{updated.pk} withdrawn.")
+
+    def _handle_crossover_list(self, tail: str) -> None:
+        """List the caller's sent + received crossover invites."""
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.stories.constants import CrossoverInviteStatus  # noqa: PLC0415
+        from world.stories.models import CrossoverInvite  # noqa: PLC0415
+
+        account = self.caller.account
+        if account is None:
+            raise CommandError(_NEEDS_GM_PROFILE)
+        qs = CrossoverInvite.objects.filter(
+            Q(from_gm__account=account) | Q(to_story__owners=account)
+        ).distinct()
+        if tail.strip().lower() == "pending":  # noqa: STRING_LITERAL
+            qs = qs.filter(status=CrossoverInviteStatus.PENDING)
+        qs = qs.order_by("-created_at")
+        if not qs:
+            self.msg("You have no crossover invites.")
+            return
+        lines = ["Your crossover invites:"]
+        for invite in qs.select_related("event", "to_story", "from_gm__account"):
+            direction = "sent" if invite.from_gm.account_id == account.pk else "received"
+            lines.append(
+                f"  [{invite.pk}] {direction} — {invite.to_story.title}"
+                f' / event "{invite.event.name}" ({invite.status})'
+            )
+        self.msg("\n".join(lines))
+
+    def _get_crossover_or_error(self, invite_id: int) -> CrossoverInvite:
+        from world.stories.models import CrossoverInvite  # noqa: PLC0415
+
+        try:
+            return CrossoverInvite.objects.select_related(
+                "event", "to_story", "from_gm__account"
+            ).get(pk=invite_id)
+        except CrossoverInvite.DoesNotExist as exc:
+            msg = "No crossover invite with that ID exists."
+            raise CommandError(msg) from exc
 
     # -- shared custody helpers --------------------------------------------------
 
