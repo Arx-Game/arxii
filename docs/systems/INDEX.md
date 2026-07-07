@@ -332,6 +332,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   cardinality field `Technique.target_type`)
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
   `InvalidImbueAmount`, `ResonanceInsufficient`, `WeavingUnlockMissing`,
+  `RelationshipBondNotOwned` (weaving a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE
+  thread on a track/capstone row whose `relationship.source` isn't the weaver, #2033),
   `XPInsufficient`, `RitualComponentError`,
   `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
   `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`

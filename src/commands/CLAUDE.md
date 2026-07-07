@@ -156,10 +156,22 @@ actions, backends, and service functions.
     any site. `parse_draft`: no-op (officiant supplies nothing extra at draft time).
   Unregistered rituals use the base `RitualDraftAdapter` (no-op empty parses — the behavior
   before adapters were introduced). `get_adapter(ritual)` is the public entry point.
-- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
-  parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
-  reference grammar; other anchor kinds are extended by the thread-weaving journey
-  issue). Proves the direct-viewset→Action telnet pattern (#1337)
+- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`; parses
+  `weave resonance=<name> <anchor>=<value> [name=<...>]`, one anchor kwarg per call (#2033
+  extends the original TRAIT-only reference grammar to mirror `ThreadSerializer
+  ._resolve_target`'s `TargetKind` coverage): `trait=<name or id>`,
+  `track=<partner>/<track name>` (the caller's OWN developed `RelationshipTrackProgress`
+  toward the named partner — partner name resolves via `search_or_raise`, the same
+  found/not-found/numbered-disambiguation convention every other command uses),
+  `capstone=<id or title>` (one of the caller's OWN recorded `RelationshipCapstone` rows),
+  `facet=<name or id>`, `technique=<name or id>` (signature thread; caller must know it),
+  `role=<name or id>` (covenant role), `mantle=<name or id>`. SANCTUM (own slot grammar,
+  `commands/sanctum.py`) and GIFT (CG/latent-provision only) are not reachable from this
+  generic grammar. `weave_thread` (`world/magic/services/threads.py`) asserts ownership on
+  the RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchors (`relationship.source ==
+  character_sheet`, raising `RelationshipBondNotOwned`) — protects the web path too, since
+  both routes converge on the same service call. Proves the direct-viewset→Action telnet
+  pattern (#1337)
 - **`alterations.py`**: `CmdMageScar` (`magescar`) — telnet face of `ResolveAlterationAction` (#1490); lists and resolves pending Mage Scars by library template or scratch-authored fields. Uses namespaced `magescar list` / `magescar resolve <id> ...` subcommands.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`

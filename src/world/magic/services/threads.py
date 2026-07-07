@@ -31,6 +31,7 @@ from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
     MantleNotClearedError,
+    RelationshipBondNotOwned,
     WeavingUnlockMissing,
     XPInsufficient,
 )
@@ -479,7 +480,7 @@ def _has_weaving_unlock(
 
 
 @transaction.atomic
-def weave_thread(  # noqa: PLR0913
+def weave_thread(  # noqa: PLR0913, C901
     character_sheet: CharacterSheet,
     target_kind: str,
     target: object,
@@ -509,6 +510,9 @@ def weave_thread(  # noqa: PLR0913
         WeavingUnlockMissing: If the character lacks the required weaving unlock.
         CovenantRoleNeverHeldError: If target_kind is COVENANT_ROLE and the
                 character has never held the role.
+        RelationshipBondNotOwned: If target_kind is RELATIONSHIP_TRACK or
+                RELATIONSHIP_CAPSTONE and the target's relationship is not the
+                weaving character's own (relationship.source != character_sheet).
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
@@ -516,6 +520,14 @@ def weave_thread(  # noqa: PLR0913
         return _weave_gift_thread(
             character_sheet, target, resonance, name=name, description=description
         )
+    if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
+        # Both RelationshipTrackProgress and RelationshipCapstone expose
+        # ``.relationship``; only the relationship's own source may weave a
+        # thread on it — the unlock check below is necessary but not
+        # sufficient (#2033), since the two rows can belong to ANY
+        # character's relationship, not just the caller's.
+        if target.relationship.source_id != character_sheet.pk:  # type: ignore[union-attr]
+            raise RelationshipBondNotOwned
     if target_kind == TargetKind.COVENANT_ROLE:
         from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
 

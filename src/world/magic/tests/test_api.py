@@ -278,6 +278,96 @@ class ThreadViewSetTests(APITestCase):
         self.assertIn("FACET", str(response.data))
 
     # ------------------------------------------------------------------
+    # RELATIONSHIP_TRACK ownership tests (#2033)
+    # ------------------------------------------------------------------
+
+    def test_create_relationship_track_thread_rejects_foreign_ownership(self) -> None:
+        """The web path must reject weaving a RELATIONSHIP_TRACK thread on a
+        track-progress row belonging to SOMEONE ELSE's relationship, even
+        though the requesting sheet holds a matching RELATIONSHIP_TRACK
+        ThreadWeavingUnlock — ``ThreadSerializer`` previously let this through
+        since only the unlock gate (not ownership) was checked (#2033).
+        """
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        track = RelationshipTrackFactory()
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        foreign_relationship = CharacterRelationshipFactory(
+            source=self.other_sheet, target=CharacterSheetFactory()
+        )
+        foreign_progress = RelationshipTrackProgressFactory(
+            relationship=foreign_relationship, track=track, developed_points=10
+        )
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_TRACK,
+                "target_id": foreign_progress.pk,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            Thread.objects.filter(
+                owner=self.sheet, target_relationship_track=foreign_progress
+            ).exists()
+        )
+
+    def test_create_relationship_track_thread_succeeds_for_own_row(self) -> None:
+        """Sanity check: weaving the CALLER's own track-progress row still works."""
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        track = RelationshipTrackFactory()
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        own_relationship = CharacterRelationshipFactory(
+            source=self.sheet, target=CharacterSheetFactory()
+        )
+        own_progress = RelationshipTrackProgressFactory(
+            relationship=own_relationship, track=track, developed_points=10
+        )
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_TRACK,
+                "target_id": own_progress.pk,
+                "character_sheet_id": self.sheet.pk,
+                "name": "Bound to Marcus",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Thread.objects.filter(owner=self.sheet, target_relationship_track=own_progress).exists()
+        )
+
+    # ------------------------------------------------------------------
     # COVENANT_ROLE thread creation tests
     # ------------------------------------------------------------------
 

@@ -1405,8 +1405,15 @@ the legacy ThreadType lookup no longer exists.
   `character_sheet_id` — no implicit first-sheet selection.
 - Service functions raise typed exceptions with `user_message` properties
   (`AnchorCapExceeded`, `InvalidImbueAmount`, `ResonanceInsufficient`,
-  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError`). Views
-  surface those messages as HTTP 400 detail (never raw `str(exc)`).
+  `WeavingUnlockMissing`, `RelationshipBondNotOwned`, `XPInsufficient`,
+  `RitualComponentError`). Views surface those messages as HTTP 400 detail
+  (never raw `str(exc)`).
+- `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
+  RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
+  raising `RelationshipBondNotOwned`, #2033) — the unlock gate alone is not
+  sufficient because track-progress/capstone rows can belong to any
+  character's relationship. Guards both the web serializer path and the
+  telnet `weave` command, which converge on the same service.
 - `ThreadViewSet` uses `IsThreadOwner` permission plus ownership filtering
   in `get_queryset()`; staff see all.
 

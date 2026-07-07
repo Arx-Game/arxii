@@ -451,6 +451,17 @@ class TechniqueNotOwned(MagicError):
     user_message = "You do not know this technique."
 
 
+class RelationshipBondNotOwned(MagicError):
+    """Raised when weaving a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE thread on a
+    relationship-track or capstone row the weaving character does not itself hold
+    (i.e. the row's ``relationship.source`` is a different CharacterSheet, #2033).
+    Protects both the telnet and web (``ThreadSerializer``) weave paths — the two
+    relationship-kind anchors are the only ones whose owning row can belong to
+    someone else's relationship."""
+
+    user_message = "That isn't your own relationship bond to weave a thread on."
+
+
 # =============================================================================
 # Signature-bonus selection exceptions (#1582)
 # =============================================================================
