@@ -65,8 +65,14 @@ class GMLevelCapAdmin(admin.ModelAdmin):
         "max_beat_risk",
         "allow_custom_stakes",
         "allow_global_scope_authoring",
+        "auto_clear_regional",
     ]
-    list_filter = ["max_beat_risk", "allow_custom_stakes", "allow_global_scope_authoring"]
+    list_filter = [
+        "max_beat_risk",
+        "allow_custom_stakes",
+        "allow_global_scope_authoring",
+        "auto_clear_regional",
+    ]
 
 
 @admin.register(GMLevelChange)

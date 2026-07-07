@@ -78,6 +78,7 @@ class GMLevelCapFactory(factory_django.DjangoModelFactory):
     max_beat_risk = RenownRisk.NONE
     allow_custom_stakes = False
     allow_global_scope_authoring = False
+    auto_clear_regional = False
 
 
 class GMLevelChangeFactory(factory_django.DjangoModelFactory):
@@ -112,26 +113,31 @@ def seed_default_gm_level_caps() -> dict[str, GMLevelCap]:
             "max_beat_risk": RenownRisk.LOW,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
+            "auto_clear_regional": False,
         },
         GMLevel.JUNIOR: {
             "max_beat_risk": RenownRisk.MODERATE,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
+            "auto_clear_regional": False,
         },
         GMLevel.GM: {
             "max_beat_risk": RenownRisk.HIGH,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
+            "auto_clear_regional": False,
         },
         GMLevel.EXPERIENCED: {
             "max_beat_risk": RenownRisk.EXTREME,
             "allow_custom_stakes": False,
             "allow_global_scope_authoring": False,
+            "auto_clear_regional": True,
         },
         GMLevel.SENIOR: {
             "max_beat_risk": RenownRisk.EXTREME,
             "allow_custom_stakes": True,
             "allow_global_scope_authoring": False,
+            "auto_clear_regional": True,
         },
     }
     caps: dict[str, GMLevelCap] = {}
