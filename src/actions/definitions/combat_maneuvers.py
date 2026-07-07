@@ -426,3 +426,84 @@ class LeaveEncounterAction(Action):
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
         return ActionResult(success=True, message="You withdraw from the fight.")
+
+
+@dataclass
+class EngageAction(Action):
+    """Challenge an NPC — adds threat to trigger an engagement lock (#2020).
+
+    The PC calls ``accumulate_threat`` with ``amount = opponent.auto_lock_threshold + 1``,
+    guaranteeing the pairing crosses threshold on the next ``select_npc_actions``
+    pass. The NPC "accepts" by the threshold crossing.
+    """
+
+    key: str = "combat_engage"
+    name: str = "Engage"
+    icon: str = "swords"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.engagement_locks import (  # noqa: PLC0415
+            create_engagement_lock_for_challenge,
+        )
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+
+        opponent_id = kwargs.get("opponent_id")
+        if opponent_id is None:
+            return ActionResult(success=False, message="You must specify an opponent to engage.")
+
+        try:
+            create_engagement_lock_for_challenge(participant, opponent_id)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You challenge your opponent to a duel!")
+
+
+@dataclass
+class DisengageAction(Action):
+    """Break your active engagement lock (#2020)."""
+
+    key: str = "combat_disengage"
+    name: str = "Disengage"
+    icon: str = "shield-off"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.constants import (  # noqa: PLC0415
+            EngagementLockStatus,
+            LockBreakReason,
+        )
+        from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
+        from world.combat.models import EngagementLock  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+
+        active_lock = EngagementLock.objects.filter(
+            participant=participant,
+            status=EngagementLockStatus.ACTIVE,
+        ).first()
+        if active_lock is None:
+            return ActionResult(success=False, message="You are not engaged in a duel.")
+        break_engagement_lock(active_lock, reason=LockBreakReason.DISENGAGE)
+        return ActionResult(success=True, message="You disengage from the duel.")
