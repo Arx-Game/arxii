@@ -20,6 +20,8 @@ from world.combat.constants import (
     DuelChallengeStatus,
     EncounterOutcome,
     EncounterType,
+    EngagementLockStatus,
+    LockInitiator,
     LockPcRole,
     OpponentTier,
     PaceMode,
@@ -47,6 +49,7 @@ from world.combat.models import (
     DuelChallenge,
     EncounterAftermathRule,
     EncounterScalingConfig,
+    EngagementLock,
     EscalationCurve,
     OpponentTierTemplate,
     RiskScalingModifier,
@@ -1329,3 +1332,21 @@ class ThreatRecordFactory(factory_django.DjangoModelFactory):
         CombatParticipantFactory, encounter=factory.SelfAttribute("..encounter")
     )
     threat_value = 0
+
+
+class EngagementLockFactory(factory_django.DjangoModelFactory):
+    """Factory for EngagementLock (#2020)."""
+
+    class Meta:
+        model = EngagementLock
+
+    encounter = factory.SubFactory(CombatEncounterFactory)
+    opponent = factory.SubFactory(
+        CombatOpponentFactory, encounter=factory.SelfAttribute("..encounter")
+    )
+    participant = factory.SubFactory(
+        CombatParticipantFactory, encounter=factory.SelfAttribute("..encounter")
+    )
+    status = EngagementLockStatus.ACTIVE
+    initiated_by = LockInitiator.THREAT
+    started_round = 1

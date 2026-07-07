@@ -34,6 +34,9 @@ from world.combat.constants import (
     DuelChallengeStatus,
     EncounterOutcome,
     EncounterType,
+    EngagementLockStatus,
+    LockBreakReason,
+    LockInitiator,
     LockPcRole,
     OpponentStatus,
     OpponentTier,
@@ -448,6 +451,18 @@ class CombatOpponent(SharedMemoryModel):
         blank=True,
         related_name="mirror_surface",
         help_text="If set, this opponent is a passive duel mirror of that PC participant.",
+    )
+
+    # === Foil duel fields (#2020) ===
+    has_foil_behavior = models.BooleanField(
+        default=False,
+        help_text="Marks named NPCs that should pair off in foil duels. "
+        "Informational; designers set a lower auto_lock_threshold for these.",
+    )
+    auto_lock_threshold = models.PositiveIntegerField(
+        default=100,
+        help_text="Threat value at which an autonomous engagement lock forms "
+        "for this opponent. Lower for foils (e.g. 20); high default for mooks.",
     )
 
     # === Allegiance + summon fields (Task 1 / #1584) ===
@@ -2366,6 +2381,11 @@ class EscalationCurve(SharedMemoryModel):
         default=3,
         help_text="Intensity spike applied when a hated NPC foe enters the encounter (#2013).",
     )
+    interference_spike_intensity_amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Intensity spike for the locked duelist when a non-locked PC "
+        "interferes with the duel (#2020).",
+    )
     surge_narration = models.TextField(
         blank=True,
         help_text=(
@@ -2551,3 +2571,82 @@ class ThreatRecord(SharedMemoryModel):
         return (
             f"ThreatRecord(opp={self.opponent_id}, pc={self.participant_id}: {self.threat_value})"
         )
+
+
+class EngagementLock(SharedMemoryModel):
+    """A declarable foil pairing between one PC and one opponent (#2020).
+
+    While ACTIVE, the locked NPC's targeting is narrowed to just the locked PC
+    (the provable-targeting guarantee). Lock formation/breaking emit flow events
+    for narration. An optional ``clash`` FK links to the metered contest
+    (Clash) when one opens between the locked pair — the lock orchestrates the
+    pairing, the Clash is the struggle.
+
+    Interference by a non-locked PC is a narrative payoff: the
+    ``break_in_consequence_pool`` fires dramatic effects and a
+    ``SurgeTriggerKind.INTERFERENCE`` surge fires for the locked duelist.
+    """
+
+    encounter = models.ForeignKey(
+        CombatEncounter,
+        on_delete=models.CASCADE,
+        related_name="engagement_locks",
+    )
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="engagement_locks",
+    )
+    participant = models.ForeignKey(
+        CombatParticipant,
+        on_delete=models.CASCADE,
+        related_name="engagement_locks",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=EngagementLockStatus.choices,
+        default=EngagementLockStatus.ACTIVE,
+    )
+    initiated_by = models.CharField(
+        max_length=20,
+        choices=LockInitiator.choices,
+        default=LockInitiator.THREAT,
+    )
+    started_round = models.PositiveIntegerField()
+    ended_round = models.PositiveIntegerField(null=True, blank=True)
+    break_reason = models.CharField(
+        max_length=15,
+        choices=LockBreakReason.choices,
+        null=True,
+        blank=True,
+    )
+    clash = models.ForeignKey(
+        "Clash",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="engagement_locks",
+        help_text="Set when a metered contest (Clash) opens between the locked pair.",
+    )
+    break_in_consequence_pool = models.ForeignKey(
+        CONSEQUENCE_POOL_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="GM-authored dramatic effects fired when a non-locked PC interferes.",
+    )
+
+    class Meta:
+        verbose_name = "Engagement Lock"
+        verbose_name_plural = "Engagement Locks"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "opponent"],
+                condition=Q(status="active"),
+                name="one_active_lock_per_opponent",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"EngagementLock(opp={self.opponent_id}→pc={self.participant_id} [{self.status}])"

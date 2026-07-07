@@ -19,6 +19,7 @@ from world.combat.models import (
     ComboLearning,
     ComboSlot,
     EncounterScalingConfig,
+    EngagementLock,
     EscalationCurve,
     OpponentTierTemplate,
     RiskScalingModifier,
@@ -394,3 +395,20 @@ class ThreatRecordAdmin(admin.ModelAdmin):
     list_display = ("encounter", "opponent", "participant", "threat_value")
     list_filter = ("encounter",)
     search_fields = ("opponent__name", "participant__character_sheet__character__db_key")
+
+
+@admin.register(EngagementLock)
+class EngagementLockAdmin(admin.ModelAdmin):
+    list_display = (
+        "encounter",
+        "opponent",
+        "participant",
+        "status",
+        "initiated_by",
+        "started_round",
+    )
+    list_filter = ("status", "initiated_by")
+    search_fields = (
+        "opponent__name",
+        "participant__character_sheet__character__db_key",
+    )
