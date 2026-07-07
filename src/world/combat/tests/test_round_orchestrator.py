@@ -1105,3 +1105,127 @@ class ResolveDeclaredChallengesTests(TestCase):
                 character=participant_eligible.character_sheet.character,
             ).exists(),
         )
+
+
+class OffenseCheckSourceTests(TestCase):
+    """#2014: the offense check is the caster's personal check when provisioned."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
+        cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
+    def _setup_encounter(self):
+        """Create a simple encounter: 1 PC, 1 mook, declaration phase.
+
+        Copied from ResolveRoundBasicTests._setup_encounter — sets up the full
+        magic pipeline requirements (CharacterAnima, CharacterEngagement, room
+        location) so tests can pass an offense_check_fn to route through
+        resolve_combat_technique.
+        """
+        encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING,
+            round_number=1,
+        )
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(pool=pool, base_damage=30)
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=50,
+            max_health=50,
+            threat_pool=pool,
+        )
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+        )
+        CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomOffenseCheckSource",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+
+        technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=opponent,
+        )
+        # NPC action targeting the PC
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=entry,
+        )
+        npc_action.targets.add(participant)
+
+        return encounter, participant, opponent, action, npc_action
+
+    def _recording_check_fn(self, captured):
+        """Wrap this file's existing offense_check_fn fake so it also records."""
+
+        def inner(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        def check_fn(character, check_type, extra_modifiers=0, fatigue_penalty=0):
+            captured.append(check_type)
+            return inner(
+                character,
+                check_type,
+                extra_modifiers=extra_modifiers,
+                fatigue_penalty=fatigue_penalty,
+            )
+
+        return check_fn
+
+    def test_unprovisioned_pc_rolls_template_check(self) -> None:
+        encounter, _participant, _opponent, action, _npc_action = self._setup_encounter()
+        technique = action.focused_action
+        captured = []
+        resolve_round(encounter, offense_check_fn=self._recording_check_fn(captured))
+        self.assertEqual(captured, [technique.action_template.check_type])
+
+    def test_provisioned_pc_rolls_personal_check(self) -> None:
+        from evennia.accounts.models import AccountDB
+
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.models.rituals import Ritual
+
+        encounter, participant, _opponent, action, _npc_action = self._setup_encounter()
+        technique = action.focused_action
+        character = participant.character_sheet.character
+        account = AccountDB.objects.create(username=f"combat_cc_{id(self)}")
+        ritual = Ritual.objects.create(
+            name=f"combat_cc_ritual_{id(self)}",
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        config = RitualCheckConfigFactory(ritual=ritual)
+        character.db_account = account
+        character.save(update_fields=["db_account"])
+
+        captured = []
+        resolve_round(encounter, offense_check_fn=self._recording_check_fn(captured))
+        self.assertEqual(captured, [config.check_type])
+        self.assertNotEqual(config.check_type, technique.action_template.check_type)

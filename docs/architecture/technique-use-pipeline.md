@@ -57,7 +57,7 @@ intensity-vs-power table in §6.
 
 ---
 
-## 3. Entry points — three ways a cast starts
+## 3. Entry points — four ways a cast starts
 
 Every path converges on `use_technique`. Prerequisites (the caster knows the
 technique; the technique has a castable `action_template`; hostility/consent rules)
@@ -68,6 +68,7 @@ are enforced at the entry layer, before `use_technique` runs.
 | **Scene cast (non-combat)** | `request_technique_cast` → `_resolve_cast` (`world/scenes/cast_services.py`) | Routes to immediate (self/room/no-target), benign (PENDING consent), or hostile (seeds/feeds a combat encounter). |
 | **Combat round** | `_resolve_pc_action` → `resolve_combat_technique` (`world/combat/services.py`) | Builds a `CombatTechniqueResolver` and passes it as the resolve function. |
 | **Clash contribution** | `commit_to_clash` (`world/combat/clash.py`) | Check-only resolve function — no damage; power drives `outcome_to_delta` → clash progress. |
+| **Battle technique resolution** | `resolve_battle_technique` (`world/battles/resolution.py`) | Casts a `BattleActionDeclaration`'s technique through the real magic envelope — converges on `use_technique` like the others, so anima/Soulfray/mishap and Audere escalation apply normally; the result routes to unit attrition / VP. |
 
 Hostile scene casts against another PC may park as a PENDING `SceneActionRequest`
 until the target consents; on accept the request re-routes through the same lifecycle.
@@ -82,10 +83,12 @@ flowchart TD
         A["Scene cast<br/>request_technique_cast"]
         B["Combat round<br/>resolve_combat_technique"]
         C["Clash<br/>commit_to_clash"]
+        D["Battle round<br/>resolve_battle_technique"]
     end
     A --> UT
     B --> UT
     C --> UT
+    D --> UT
     UT(["use_technique — canonical lifecycle"])
     UT --> S1["1 · runtime stats → INTENSITY + control<br/>get_runtime_technique_stats"]
     S1 --> S2["2 · effective anima cost<br/>control_delta = control − intensity (+ strain)"]
@@ -101,9 +104,11 @@ flowchart TD
     RES -- "scene" --> RSCENE["start_action_resolution — check"]
     RES -- "combat" --> RCOMBAT["CombatTechniqueResolver<br/>COMBAT_PULL → PENETRATION → damage + conditions"]
     RES -- "clash" --> RCLASH["perform_check → outcome_to_delta<br/>→ clash progress (no damage)"]
+    RES -- "battle" --> RBATTLE["resolve_battle_technique<br/>perform_check → battle effect deltas"]
     RSCENE --> CONS
     RCOMBAT --> CONS
     RCLASH --> CONS
+    RBATTLE --> CONS
     CONS["10 · consequences (read INTENSITY):<br/>Soulfray · control mishap · fatigue ·<br/>Audere / Audere Majora offers ·<br/>resonance attribution · corruption ·<br/>environment backfire / defile"]
     CONS --> EV["11 · emit TECHNIQUE_CAST + TECHNIQUE_AFFECTED (frozen)"]
     EV --> NARR["12 · narration — render_*_outcome_narration<br/>+ power_outcome_clause (ward / environment)"]

@@ -415,6 +415,58 @@ class CommitToClashTests(TestCase):
 
         self.assertIsNone(result.clash_interaction)
 
+    # -------------------------------------------------------------------------
+    # 7. #2014 — the caster's personal check wins over the template's fallback
+    # -------------------------------------------------------------------------
+
+    def test_commit_rolls_personal_check_when_provisioned(self) -> None:
+        """#2014: a provisioned caster's clash contribution rolls THEIR check."""
+        from evennia.accounts.models import AccountDB
+
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.models.rituals import Ritual
+
+        character_sheet, _anima = self._make_character_with_anima()
+        technique = self._make_technique_with_template(anima_cost=3)
+
+        account = AccountDB.objects.create(username=f"clash_cc_{id(self)}")
+        ritual = Ritual.objects.create(
+            name=f"clash_cc_ritual_{id(self)}",
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        config = RitualCheckConfigFactory(ritual=ritual)
+        character_sheet.character.db_account = account
+        character_sheet.character.save(update_fields=["db_account"])
+
+        captured = []
+        from world.checks.services import perform_check as real_perform_check
+
+        def recording_perform_check(objectdb, check_type, **kwargs):
+            captured.append(check_type)
+            return real_perform_check(objectdb, check_type, **kwargs)
+
+        with (
+            force_check_outcome(self.success_outcome),
+            patch(
+                "world.checks.services.perform_check",
+                recording_perform_check,
+            ),
+        ):
+            commit_to_clash(
+                character_sheet=character_sheet,
+                technique=technique,
+                clash=self.clash,
+                strain_commitment=0,
+                action_slot="FOCUSED",
+                config_clash=self.config_clash,
+                config_strain=self.config_strain,
+            )
+
+        self.assertEqual(captured, [config.check_type])
+        self.assertNotEqual(config.check_type, technique.action_template.check_type)
+
 
 class CommitToClashLethalFlagTests(TestCase):
     """commit_to_clash threads lethal=clash.encounter.is_lethal into use_technique (#1182).

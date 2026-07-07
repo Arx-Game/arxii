@@ -91,6 +91,13 @@ and `ChallengeApproach.action_template`
 > `approach.check_type`; registry → `template.check_type`. `action_template`
 > is carried on the descriptor only when present (combat techniques, registry
 > templates, override challenge approaches).
+>
+> **Superseded (2026-07-06, #2014, ADR-0096):** combat no longer reads
+> `technique.action_template.check_type` directly. Every cast path — combat,
+> clash, and standalone — now resolves the offense check via
+> `resolve_cast_check_type` (`world/magic/services/anima.py`): the caster's
+> provisioned personal magic check wins; the template's `check_type` is only a
+> fallback for an unprovisioned caster.
 
 "CheckType belongs in the action layer, defined once" holds — realized via the
 `CheckType` that every backend already resolves. The combat bug is still that
@@ -118,7 +125,10 @@ it. Scope = "player does thing with their character."
    `offense_check_type` from `Technique.action_template.check_type`;
    `action_template` becomes **required** for combat-usable techniques (explicit
    config error, no silent no-op, no "legacy"). Add `focused_ally_target` to the
-   `/dispatch/` path. **This is the #1 fix.**
+   `/dispatch/` path. **This is the #1 fix.** (Superseded 2026-07-06, #2014,
+   ADR-0096: the direct `action_template.check_type` read is now only the
+   unprovisioned-caster fallback inside `resolve_cast_check_type`, not the
+   sourcing itself.)
 4. **Combat-agnostic tempo seam** — `get_active_round_context(character)`;
    combat is the sole implementor; no general-scene provider, no plugin
    framework.
@@ -280,6 +290,9 @@ them costs a round is pre-existing combat-design, not this interface's concern.
 - In `_resolve_pc_action` (`src/world/combat/services.py:1764`),
   `offense_check_type` is derived from
   `action.focused_action.action_template.check_type` — not received as `None`.
+  (Superseded 2026-07-06, #2014, ADR-0096: now derived from
+  `resolve_cast_check_type`, which prefers the caster's personal check and
+  falls back to this `action_template.check_type` only when unprovisioned.)
 - The silent `if offense_check_type is not None` no-op guard is **deleted**. A
   combat-usable technique with no `action_template` is a configuration error
   that raises a typed exception, never a silent skip.

@@ -312,18 +312,20 @@ character's ACTIVE `BattleParticipant` whose `battle.scene.is_active=True`, orde
 
 `resolve_battle_technique(*, declaration) -> CheckResult | None` casts `declaration.technique`
 through the real magic envelope (`world.magic.services.use_technique`) rather than a generic
-shared check. Routing through `use_technique` means the check is sourced from the caster's
-actual technique (`technique.action_template.check_type`), anima cost / Soulfray accumulation
-apply normally, and the Audere / Audere Majora escalation hook fires automatically (it's
-wired inside `use_technique` itself — no separate battle-side call site is needed).
-`confirm_soulfray_risk=True` because a batch round-resolve cannot pause mid-batch for one
-participant's consent prompt. Returns `None` (treated as `success_level=0`, a failure) if the
-cast is interrupted before resolution (e.g. a reactive PRE_CAST cancellation).
+shared check. Routing through `use_technique` means the check is sourced from
+`resolve_cast_check_type(character, template)` (`world/magic/services/anima.py`, ADR-0096) —
+the caster's provisioned personal magic check when they have one, falling back to the
+technique's `action_template.check_type` only for an unprovisioned caster — anima cost /
+Soulfray accumulation apply normally, and the Audere / Audere Majora escalation hook fires
+automatically (it's wired inside `use_technique` itself — no separate battle-side call site
+is needed). `confirm_soulfray_risk=True` because a batch round-resolve cannot pause mid-batch
+for one participant's consent prompt. Returns `None` (treated as `success_level=0`, a failure)
+if the cast is interrupted before resolution (e.g. a reactive PRE_CAST cancellation).
 
 `BattleTechniqueResolver` is the `resolve_fn` dataclass passed to `use_technique`; its
-`__call__` rolls the declared technique's own check via `perform_check` — battle applies no
-damage-profile/condition logic of its own, that stays in `resolve_battle_round`'s
-STRIKE/SUPPORT/failure routing below.
+`__call__` resolves the check type via `resolve_cast_check_type` and rolls it via
+`perform_check` — battle applies no damage-profile/condition logic of its own, that stays in
+`resolve_battle_round`'s STRIKE/SUPPORT/failure routing below.
 
 ### `resolve_battle_round` (`src/world/battles/resolution.py`)
 
@@ -1160,9 +1162,11 @@ payload data is applied directly; invalidation alone triggers the refetch.
   (#1794), implemented by both `BattleUnit` and `character_sheets.CharacterSheet` — the
   modifier stack's `_property_affinity_modifier`/`_terrain_property_modifier` read either
   kind of holder with no `isinstance` branching.
-- **Checks** — `perform_check`, sourced from the cast technique's
-  `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`;
-  the Surrounded entry roll and per-round resist checks are dispatched through
+- **Checks** — `perform_check`, sourced from `resolve_cast_check_type` (ADR-0096: the
+  caster's provisioned personal magic check, falling back to the cast technique's
+  `action_template.check_type` only when unprovisioned) via `use_technique`, not a generic
+  battle-wide `CheckType`; the Surrounded entry roll and per-round resist checks are
+  dispatched through
   `world.checks.consequence_resolution.select_consequence` against authored
   `ConsequencePool` rows (#1733)
 - **Combat** — `BattlePlace.combat_encounter` bridge seam, now wired for Champion duels

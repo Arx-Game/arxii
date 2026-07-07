@@ -71,6 +71,20 @@ def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia cha
     return ritual.check_config.check_type
 
 
+def resolve_cast_check_type(character, template):  # noqa: OBJECTDB_PARAM — Evennia character
+    """The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).
+
+    Precedence: the caster's provisioned personal magic check always wins;
+    an ActionTemplate's ``check_type`` is a fallback, never an override.
+    Returns None only when the caster is unprovisioned AND ``template`` is None
+    (callers that require a concrete check guard ``template is None`` first).
+    """
+    personal = get_character_cast_check(character)
+    if personal is not None:
+        return personal
+    return template.check_type if template is not None else None
+
+
 @transaction.atomic
 def perform_anima_ritual(
     character_sheet: CharacterSheet,

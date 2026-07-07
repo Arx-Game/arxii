@@ -3999,11 +3999,15 @@ def _resolve_pc_action(
         template = technique.action_template
         if template is None:
             raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
+        from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+
         combat_result = resolve_combat_technique(
             participant=participant,
             action=action,
             fatigue_category=fatigue_category,
-            offense_check_type=template.check_type,
+            offense_check_type=resolve_cast_check_type(
+                participant.character_sheet.character, template
+            ),
             offense_check_fn=offense_check_fn,
         )
         outcome.damage_results.extend(combat_result.damage_results)
@@ -5552,8 +5556,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_fn: Optional ``perform_check`` override for PC defense.
         defense_check_type: The CheckType used for defensive rolls.
         offense_check_fn: Optional ``perform_check`` override for PC offense.
-            The offense_check_type is now sourced from the declared technique's
-            action_template.check_type — it is no longer passed externally.
+            The offense_check_type is now sourced from ``resolve_cast_check_type``
+            (the caster's personal check, falling back to the declared technique's
+            action_template.check_type only when unprovisioned, ADR-0096) — it is
+            no longer passed externally.
 
     Returns:
         ``RoundResolutionResult`` with outcomes and phase transitions.

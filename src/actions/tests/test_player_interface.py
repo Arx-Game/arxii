@@ -243,6 +243,36 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         self.assertIsInstance(action.check_type, CheckType)
         self.assertEqual(action.check_type.pk, self.check_type.pk)
 
+    def test_combat_action_check_type_prefers_personal_check_when_provisioned(self) -> None:
+        """#2014: when the caster is provisioned with a personal magic check,
+        the COMBAT PlayerAction.check_type must be THEIR check, not the
+        template's fallback — the action-picker UI must show the same check
+        the resolver actually rolls (resolve_cast_check_type)."""
+        from evennia.accounts.models import AccountDB
+
+        from actions.player_interface import get_player_actions
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.models.rituals import Ritual
+
+        account = AccountDB.objects.create(username=f"combat_check_{id(self)}")
+        ritual = Ritual.objects.create(
+            name=f"combat_check_ritual_{id(self)}",
+            author_account=account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        config = RitualCheckConfigFactory(ritual=ritual)
+        self.character.db_account = account
+        self.character.save(update_fields=["db_account"])
+
+        actions = get_player_actions(self.character)
+        combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]
+        self.assertTrue(len(combat_actions) >= 1)
+        action = combat_actions[0]
+
+        self.assertEqual(action.check_type.pk, config.check_type.pk)
+        self.assertNotEqual(action.check_type.pk, self.template.check_type.pk)
+
     def test_combat_action_has_action_template(self) -> None:
         """COMBAT PlayerAction.action_template is the technique's action_template."""
         from actions.models import ActionTemplate
