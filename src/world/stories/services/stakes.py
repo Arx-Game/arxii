@@ -304,7 +304,32 @@ def validate_stakes_readiness(beat: Beat) -> StakesReadinessReport:
     if calibration is not None and stakes:
         problems.extend(_calibration_band_problems(beat, calibration, stakes))
 
+    # --- canon-impact review gate (#2003) ---
+    # A WORLD-tier story whose staked beats would touch the shared world must
+    # carry a CLEARED CanonReview before its stakes pay. Auto-downgrade, never
+    # hard-block: the beat still activates (effective NONE) and the scene runs.
+    problems.extend(_canon_review_problems(beat))
+
     return StakesReadinessReport(is_staked=True, is_ready=not problems, problems=tuple(problems))
+
+
+def _canon_review_problems(beat: Beat) -> list[str]:
+    """Readiness problems caused by an uncleared canon-impact review (#2003).
+
+    Only WORLD-tier stories are gated here: TABLE is never reviewed, and
+    REGIONAL auto-clears for EXPERIENCED+ GMs (so it never blocks readiness
+    at this seam — the auto-clear decision is a separate concern handled when
+    a review is requested/decided, not at activation time).
+    """
+    from world.stories.constants import ImpactTier  # noqa: PLC0415
+    from world.stories.services.canon_review import story_is_cleared  # noqa: PLC0415
+
+    story = beat.episode.chapter.story
+    if story.impact_tier != ImpactTier.WORLD:
+        return []
+    if story_is_cleared(story):
+        return []
+    return ["story has a WORLD impact tier but no cleared canon review (effective risk NONE)"]
 
 
 def get_open_activation(beat: Beat) -> StakeContractActivation | None:
