@@ -972,6 +972,30 @@ class LethalDuelFactory:
         return create_lethal_duel(pc_sheet, opponent_kwargs, room, tier=tier)
 
 
+def ensure_escalation_pace_check_type() -> object:
+    """Get-or-create the 'Escalation Pace' CheckType (#872, extracted for #2013 reuse)."""
+    from decimal import Decimal
+
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+    from world.traits.factories import StatTraitFactory
+    from world.traits.models import TraitCategory
+
+    category, _ = CheckCategory.objects.get_or_create(name="Combat")
+    check, _ = CheckType.objects.get_or_create(
+        name="Escalation Pace",
+        category=category,
+        defaults={"description": "Keep control in pace with rising intensity."},
+    )
+    # #1706 — seed the Escalation Pace check's wits stat leg (split-second
+    # reading of rising combat intensity). Idempotent get_or_create.
+    CheckTypeTrait.objects.get_or_create(
+        check_type=check,
+        trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
+        defaults={"weight": Decimal("1.00")},
+    )
+    return check
+
+
 class EscalationCurveFactory(factory_django.DjangoModelFactory):
     """Factory for EscalationCurve. Doubles as seed content for staff authoring."""
 
@@ -993,30 +1017,7 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:
-        from decimal import Decimal
-
-        from world.checks.models import (
-            CheckCategory,
-            CheckType,
-            CheckTypeTrait,
-        )
-        from world.traits.factories import StatTraitFactory
-        from world.traits.models import TraitCategory
-
-        category, _ = CheckCategory.objects.get_or_create(name="Combat")
-        check, _ = CheckType.objects.get_or_create(
-            name="Escalation Pace",
-            category=category,
-            defaults={"description": "Keep control in pace with rising intensity."},
-        )
-        # #1706 — seed the Escalation Pace check's wits stat leg (split-second
-        # reading of rising combat intensity). Idempotent get_or_create.
-        CheckTypeTrait.objects.get_or_create(
-            check_type=check,
-            trait=StatTraitFactory(name="wits", category=TraitCategory.MENTAL),
-            defaults={"weight": Decimal("1.00")},
-        )
-        return check
+        return ensure_escalation_pace_check_type()
 
 
 def wire_flee_config():
