@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from world.stories.constants import BeatOutcome, CustodyScope, StakeResolutionColumn
 from world.stories.models import StoryParticipation, StoryProtectedSubject
 from world.stories.services.boundaries import SubjectIdentity, _subject_identity
+from world.stories.services.custody_clearance import active_clearance_exists
 from world.stories.types import CustodyVerdict, StoryStatus
 
 if TYPE_CHECKING:
@@ -101,18 +102,18 @@ def _actor_character_ids(actor_account: AccountDB | None) -> set[int]:
 
 
 def _active_clearance_allows(
-    protection: StoryProtectedSubject,  # noqa: ARG001 — wired in Task 3
-    actor_account: AccountDB | None,  # noqa: ARG001 — wired in Task 3
-    scope: str,  # noqa: ARG001 — wired in Task 3
+    protection: StoryProtectedSubject,
+    actor_account: AccountDB | None,
+    scope: str,
 ) -> bool:
     """Whether an active, unrevoked ``CustodyClearance`` covers this actor at ``scope``.
 
-    ``CustodyClearance`` doesn't exist yet — Task 3 adds the model (grant/deny
-    by the protecting story's Lead GM, staff-tiebreak escalation) and wires
-    the real lookup here. Until then this always returns False, so custody
-    defaults closed (deny) rather than silently open.
+    Delegates to ``custody_clearance.active_clearance_exists`` (#2001 Task 3) —
+    active means status GRANTED, ``revoked_at`` null, scope index >= the
+    required scope's index, and the clearance's requester's account matches
+    ``actor_account``.
     """
-    return False
+    return active_clearance_exists(protected_subject=protection, account=actor_account, scope=scope)
 
 
 def check_subject_custody(
@@ -133,7 +134,7 @@ def check_subject_custody(
       that protecting story (mirrors ``is_death_prevented_by_story``'s
       participation test, resolved via the actor's currently-played
       characters), OR an active, unrevoked ``CustodyClearance`` at >= scope
-      exists for the actor (Task 3 — stubbed False today).
+      exists for the actor (``custody_clearance.active_clearance_exists``).
 
     When blocked, ``requires_scope`` echoes ``scope`` back: a
     ``StoryProtectedSubject`` row has no per-scope grain of its own (that is

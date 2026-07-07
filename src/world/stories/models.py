@@ -14,6 +14,8 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
+    CustodyClearanceStatus,
+    CustodyScope,
     EraStatus,
     ProgressStatus,
     SessionRequestStatus,
@@ -2586,3 +2588,112 @@ class StoryProtectedSubject(SharedMemoryModel):
         scope = f"beat #{self.beat_id}" if self.beat_id else "story-level"
         subject = self.subject_label or self.pk
         return f"StoryProtectedSubject({self.get_subject_kind_display()}: {subject}, {scope})"
+
+
+class CustodyClearance(SharedMemoryModel):
+    """A GM's request for permission to act on another story's protected subject (#2001).
+
+    Lifecycle::
+
+        PENDING -> GRANTED  (custodian GM approves)
+                -> DENIED   (custodian GM refuses)
+                -> ESCALATED -> GRANTED/DENIED (staff tiebreak, via resolve_escalation)
+
+    A DENIED clearance may be escalated by the requester; a PENDING one may also be
+    escalated once it goes stale (see ``CUSTODY_ESCALATION_STALE_DAYS`` in constants.py).
+    ``revoked_at`` soft-revokes a GRANTED clearance — the row is never deleted, so the
+    decision trail survives. All lifecycle transitions live in
+    ``world.stories.services.custody_clearance``; this model carries no behavior of its
+    own beyond the partial-uniqueness invariant below.
+    """
+
+    protected_subject = models.ForeignKey(
+        StoryProtectedSubject,
+        on_delete=models.CASCADE,
+        related_name="clearances",
+    )
+    requested_by = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.PROTECT,
+        related_name="custody_requests",
+        help_text="The GM requesting permission to act on the protected subject.",
+    )
+    requesting_story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The requester's own story this clearance is needed for, if any.",
+    )
+    requesting_beat = models.ForeignKey(
+        "stories.Beat",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The requester's own beat this clearance is needed for, if any.",
+    )
+    scope = models.CharField(max_length=20, choices=CustodyScope.choices)
+    status = models.CharField(
+        max_length=20,
+        choices=CustodyClearanceStatus.choices,
+        default=CustodyClearanceStatus.PENDING,
+    )
+    granted_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The custodian GM who directly decided this clearance (GRANTED or DENIED). "
+            "Null while PENDING/ESCALATED, and null for a staff-resolved escalation "
+            "(see staff_resolver)."
+        ),
+    )
+    staff_resolver = models.ForeignKey(
+        ACCOUNT_DB_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="The staff account that resolved this clearance's ESCALATED tiebreak.",
+    )
+    message = models.TextField(blank=True, help_text="Requester's note explaining the request.")
+    response_note = models.TextField(blank=True, help_text="Custodian's or staff's response note.")
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Soft-revoke timestamp for a GRANTED clearance. Never hard-deleted.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When status left PENDING/ESCALATED for GRANTED/DENIED.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["protected_subject", "requested_by", "scope"],
+                condition=models.Q(
+                    status__in=(
+                        CustodyClearanceStatus.PENDING,
+                        CustodyClearanceStatus.ESCALATED,
+                    )
+                ),
+                name="unique_live_clearance_per_subject_requester_scope",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["protected_subject", "status"]),
+            models.Index(fields=["requested_by", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"CustodyClearance(subject=#{self.protected_subject_id}, "
+            f"requester=#{self.requested_by_id}, scope={self.scope}, status={self.status})"
+        )

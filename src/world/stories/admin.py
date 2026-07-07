@@ -7,6 +7,7 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     Chapter,
+    CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
     EpisodeResolution,
@@ -618,4 +619,33 @@ class StakeContractActivationAdmin(admin.ModelAdmin):
     list_filter = ("effective_risk", "is_ready")
     search_fields = ("beat__internal_description",)
     readonly_fields = tuple(f.name for f in StakeContractActivation._meta.fields)  # noqa: SLF001
-    raw_id_fields = ("beat",)
+
+
+@admin.register(CustodyClearance)
+class CustodyClearanceAdmin(admin.ModelAdmin):
+    """Admin for GM custody-clearance requests (#2001)."""
+
+    list_display = (
+        "protected_subject",
+        "requested_by",
+        "scope",
+        "status",
+        "granted_by",
+        "revoked_at",
+        "created_at",
+    )
+    list_filter = ("scope", "status")
+    search_fields = (
+        "requested_by__account__username",
+        "granted_by__account__username",
+        "protected_subject__subject_label",
+    )
+    readonly_fields = ("created_at", "resolved_at")
+    raw_id_fields = (
+        "protected_subject",
+        "requested_by",
+        "requesting_story",
+        "requesting_beat",
+        "granted_by",
+        "staff_resolver",
+    )

@@ -282,3 +282,10 @@ class CustodyClearanceStatus(models.TextChoices):
     GRANTED = "granted", "Granted"
     DENIED = "denied", "Denied"
     ESCALATED = "escalated", "Escalated"
+
+
+# How many days a PENDING CustodyClearance may sit before the requester may
+# escalate it to staff without waiting for a DENIED response. Designer-tunable
+# later (see #2001 Task 3 brief) — a module constant is enough for now; do not
+# invent a config model for this single knob.
+CUSTODY_ESCALATION_STALE_DAYS = 7
