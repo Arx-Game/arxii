@@ -257,6 +257,7 @@ class AddOpponentAction(Action):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
+        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
         from world.combat.services import add_opponent  # noqa: PLC0415
 
         encounter, error = _active_encounter_for_gm(actor)
@@ -279,6 +280,9 @@ class AddOpponentAction(Action):
             )
         except ValueError as err:
             return ActionResult(success=False, message=str(err))
+        except PositionError as exc:
+            # A position in a different room than the encounter's spawn room.
+            return ActionResult(success=False, message=exc.user_message)
 
         return ActionResult(
             success=True,
