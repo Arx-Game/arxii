@@ -683,6 +683,49 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 | `StoryFeedback` | Post-story trust-building feedback |
 | `TrustCategoryFeedbackRating` | Per-category rating within feedback |
 | `EpisodeScene` | Links scenes to episodes |
+| `CrossoverInvite` | Lead-GM consent to link another GM's story to a shared event (#2002) |
+| `BeatCompletion.ran_by_table` | Audit: which table's session actually resolved a beat (#2002) |
+
+## Crossover events (#2002)
+
+Crossover events let multiple GMs' stories share one Event/scene, resolving beats
+across stories with credit and Legend flowing back to every participating story.
+
+### Consent flow
+
+A `CrossoverInvite` records a GM's invitation to link another GM's story episode to
+a shared event. The lifecycle mirrors `StoryGMOffer` (PENDING → ACCEPTED/DECLINED/WITHDRAWN),
+with a partial unique on PENDING per `(event, to_story)`.
+
+- **Accepting** creates the `EpisodeScene` link when the scene spawns (or immediately
+  if the event already has an active scene) and marks the invited story's Lead GM as
+  a scene GM (`SceneParticipation.is_gm=True`).
+- Only a story's Lead GM (an owner) may accept/decline an invite for that story.
+- Only the inviting GM may withdraw.
+
+### Stakes per story
+
+Each linked beat's contract activates for the participants opting into *that* beat
+(existing party-level math and boundary screening per activation). Multi-activation on
+one scene is idempotent — `activate_stakes_contract` re-fetches the existing open
+activation. The existing `staked_unsatisfied_beats_for_scene` walks all `EpisodeScene`
+rows, so a shared scene sees all linked stories' staked beats.
+
+### Credit routing audit
+
+`BeatCompletion.ran_by_table` records which table's session actually resolved a beat.
+It defaults to the story's own `gm_table` today; a crossover resolution path may
+override it with the resolving table. Read-only; no behavior change.
+
+### Crossover telnet commands
+
+| Subcommand | Purpose |
+|---|---|
+| `story crossover invite <event-id> story=<id> [episode=<id>] [message=<text>]` | Invite another GM's story into a shared event. |
+| `story crossover accept <invite-id> [episode=<id>] [note=<text>]` | Accept (invited story's Lead GM only). |
+| `story crossover decline <invite-id> [note=<text>]` | Decline (invited story's Lead GM only). |
+| `story crossover withdraw <invite-id>` | Rescind an invite you sent. |
+| `story crossover list [pending]` | Your sent + received invites. |
 
 ## GM story lifecycle (telnet)
 
