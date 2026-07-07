@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from world.roster.models import Family
 from world.societies.houses.constants import HouseClaimStatus
-from world.societies.houses.models import HouseClaim, HouseTemplate, Title
+from world.societies.houses.models import HouseClaim, HouseClaimAspect, HouseTemplate, Title
 from world.societies.houses.services import (
     HousesServiceError,
     add_holding,
@@ -64,6 +64,11 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     house_name: str,
     backstory: str,
     principles: dict[str, int],
+    words: str,
+    colors: str,
+    sigil_description: str,
+    lands_writeup: str,
+    aspect_picks: dict[int, list[int]],
 ) -> None:
     """The automated thematic gates. Staff review is the human gate after."""
     if HouseClaim.objects.filter(draft=draft).exists():
@@ -95,6 +100,14 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     if not backstory.strip():
         msg = "empty backstory"
         raise HousesServiceError(msg, user_message="The house needs its story.")
+    _validate_stylings(
+        title=title,
+        words=words,
+        colors=colors,
+        sigil_description=sigil_description,
+        lands_writeup=lands_writeup,
+    )
+    _validate_aspect_picks(template=template, aspect_picks=aspect_picks)
     for axis in _PRINCIPLE_AXES:
         value = principles.get(axis, 0)
         low = getattr(template, f"{axis}_min")
@@ -110,6 +123,63 @@ def _validate_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
             )
 
 
+def _validate_stylings(
+    *,
+    title: Title,
+    words: str,
+    colors: str,
+    sigil_description: str,
+    lands_writeup: str,
+) -> None:
+    """Shared stylings are required prose (#2079); lands only for landed titles."""
+    for label, value in (
+        ("words", words),
+        ("colors", colors),
+        ("sigil", sigil_description),
+    ):
+        if not value.strip():
+            msg = f"empty {label}"
+            raise HousesServiceError(msg, user_message=f"The house needs its {label}.")
+    if title.seat_domain is not None and not lands_writeup.strip():
+        msg = "empty lands writeup for landed title"
+        raise HousesServiceError(msg, user_message="Describe the house's lands.")
+
+
+def _validate_aspect_picks(*, template: HouseTemplate, aspect_picks: dict[int, list[int]]) -> None:
+    """The catalog fence (#2079, ADR-0101): picks only, counted, from the template."""
+    definitions = {d.pk: d for d in template.aspect_definitions.all()}
+    unknown = set(aspect_picks) - set(definitions)
+    if unknown:
+        msg = f"aspect picks for definitions {sorted(unknown)} not on template {template.pk}"
+        raise HousesServiceError(
+            msg, user_message="One of those choices does not apply to this charter."
+        )
+    for definition in definitions.values():
+        picks = aspect_picks.get(definition.pk, [])
+        if len(set(picks)) != len(picks):
+            msg = f"duplicate picks for definition {definition.pk}"
+            raise HousesServiceError(msg, user_message=f"{definition.name}: duplicate choice.")
+        if not (definition.min_picks <= len(picks) <= definition.max_picks):
+            msg = (
+                f"definition {definition.pk} needs "
+                f"[{definition.min_picks}, {definition.max_picks}] picks, got {len(picks)}"
+            )
+            raise HousesServiceError(
+                msg,
+                user_message=(
+                    f"{definition.name}: choose between {definition.min_picks} "
+                    f"and {definition.max_picks}."
+                ),
+            )
+        valid_ids = {option.pk for option in definition.options.all() if option.is_active}
+        bad = set(picks) - valid_ids
+        if bad:
+            msg = f"options {sorted(bad)} invalid for definition {definition.pk}"
+            raise HousesServiceError(
+                msg, user_message=f"{definition.name}: that is not one of the choices."
+            )
+
+
 def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate input
     *,
     draft: CharacterDraft,
@@ -118,9 +188,15 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
     house_name: str,
     backstory: str,
     principles: dict[str, int] | None = None,
+    words: str = "",
+    colors: str = "",
+    sigil_description: str = "",
+    lands_writeup: str = "",
+    aspect_picks: dict[int, list[int]] | None = None,
 ) -> HouseClaim:
     """Run the automated gates and file the claim for staff review."""
     principles = principles or {}
+    aspect_picks = aspect_picks or {}
     _validate_claim(
         draft=draft,
         title=title,
@@ -128,16 +204,32 @@ def submit_house_claim(  # noqa: PLR0913 — keyword-only; one arg per gate inpu
         house_name=house_name,
         backstory=backstory,
         principles=principles,
+        words=words,
+        colors=colors,
+        sigil_description=sigil_description,
+        lands_writeup=lands_writeup,
+        aspect_picks=aspect_picks,
     )
     field_values = {_CLAIM_FIELD[axis]: principles.get(axis, 0) for axis in _PRINCIPLE_AXES}
-    return HouseClaim.objects.create(
-        draft=draft,
-        title=title,
-        template=template,
-        house_name=house_name,
-        backstory=backstory,
-        **field_values,
-    )
+    with transaction.atomic():
+        claim = HouseClaim.objects.create(
+            draft=draft,
+            title=title,
+            template=template,
+            house_name=house_name,
+            backstory=backstory,
+            words=words,
+            colors=colors,
+            sigil_description=sigil_description,
+            lands_writeup=lands_writeup,
+            **field_values,
+        )
+        for definition_id, option_ids in aspect_picks.items():
+            for option_id in option_ids:
+                HouseClaimAspect.objects.create(
+                    claim=claim, definition_id=definition_id, option_id=option_id
+                )
+    return claim
 
 
 def approve_house_claim(claim: HouseClaim, *, reviewer: AccountDB) -> HouseClaim:
