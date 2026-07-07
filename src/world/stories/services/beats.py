@@ -184,6 +184,10 @@ def _scope_completion_kwargs(  # noqa: PLR0913
         kwargs["roster_entry"] = _current_roster_entry(sheet)
     elif scope == StoryScope.GROUP:
         kwargs["gm_table"] = progress.gm_table
+        # Audit: which table's session actually resolved this beat. Defaults to
+        # the story's own table today; a crossover resolution path may override
+        # this with the resolving table (#2002). Read-only; no behavior change.
+        kwargs["ran_by_table"] = progress.gm_table
     # GLOBAL: no scope-specific FK
     return kwargs
 
@@ -508,6 +512,7 @@ def _finalize_aggregate_crossing(  # noqa: PLR0913
         group_progress = get_active_progress_for_story(story)
         if group_progress is not None:
             completion_kwargs["gm_table"] = group_progress.gm_table
+            completion_kwargs["ran_by_table"] = group_progress.gm_table
     # GLOBAL: no scope-specific FK
 
     aggregate_completion = BeatCompletion.objects.create(**completion_kwargs)
@@ -643,6 +648,7 @@ def _evaluate_and_record_beat(  # noqa: PLR0913
         completion_kwargs["roster_entry"] = roster_entry
     elif scope == StoryScope.GROUP:
         completion_kwargs["gm_table"] = progress.gm_table
+        completion_kwargs["ran_by_table"] = progress.gm_table
     # GLOBAL: no scope-specific FK
 
     completion = BeatCompletion.objects.create(**completion_kwargs)
