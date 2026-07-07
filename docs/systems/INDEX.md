@@ -2706,6 +2706,21 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
+- **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
+  trigger_kind, subject_sheet=None)` (`world/combat/escalation.py`) — the one write path for
+  every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row; `SurgeTriggerKind`:
+  ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES). Three new trigger legs alongside the
+  existing #872 grief spike: mortal-peril (`escalation_spike_on_mortal_peril` on
+  `CONDITION_APPLIED`, filtered via `world.vitals.peril_resolution
+  .acute_peril_condition_names()`), hated-foe (checked on encounter join and NPC opponent add,
+  reading `CombatOpponent.persona.character_sheet` against the PC's own negative-sign
+  `CharacterRelationship`), and stakes (`StakesEscalationModifier`, one row per `StakesLevel`:
+  per-tick `intensity_step_bonus` + one-shot `initial_surge` + `default_curve`
+  auto-assigned at encounter creation). `EscalationCurve` gained
+  `peril_spike_intensity_amount` / `hated_foe_spike_intensity_amount` / `surge_narration`
+  (generic `{character}`-only template). Surfaced to the web combat panel via
+  `EncounterDetailSerializer.surge_beats` (owner/GM-scoped provenance) and broadcast to the
+  room via `room.msg_contents(...)` (telnet).
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
