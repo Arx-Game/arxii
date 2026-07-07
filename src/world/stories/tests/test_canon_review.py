@@ -29,6 +29,7 @@ from world.stories.factories import (
 )
 from world.stories.models import Beat, CanonReview, Story, TransitionRequiredOutcome
 from world.stories.services.canon_review import (
+    _notify_story_owners,
     clear_canon_review,
     latest_review_for_story,
     pending_canon_reviews,
@@ -352,6 +353,56 @@ class GlobalActivationGateTests(TestCase):
         story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.TABLE)
         progress = create_global_progress(story=story)
         self.assertEqual(progress.story, story)
+
+
+class CanonReviewNarrativeNotificationTests(TestCase):
+    """clear_canon_review / request_changes fan out a SYSTEM NarrativeMessage
+    to the story's owning GMs (#2003).
+
+    The ``_notify_story_owners`` helper mirrors ``custody_clearance._notify_gm``
+    (which has its own coverage); here we verify the wiring — that the decision
+    services call it with a body naming the story and (for changes) the notes.
+    """
+
+    def test_clear_notifies_story_owners(self) -> None:
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import AccountFactory
+
+        staff = AccountFactory()
+        story = StoryFactory(impact_tier=ImpactTier.WORLD)
+        review = request_canon_review(story)
+        with patch("world.stories.services.canon_review._notify_story_owners") as mock_notify:
+            clear_canon_review(review, staff)
+        mock_notify.assert_called_once()
+        called_story, kwargs = mock_notify.call_args.args[0], mock_notify.call_args.kwargs
+        self.assertEqual(called_story, story)
+        self.assertIn(story.title, kwargs["body"])
+        self.assertIn("cleared", kwargs["body"].lower())
+
+    def test_changes_notifies_with_notes(self) -> None:
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import AccountFactory
+
+        staff = AccountFactory()
+        story = StoryFactory(impact_tier=ImpactTier.WORLD)
+        review = request_canon_review(story)
+        with patch("world.stories.services.canon_review._notify_story_owners") as mock_notify:
+            request_changes(review, staff, notes="narrow scope")
+        mock_notify.assert_called_once()
+        called_story, kwargs = mock_notify.call_args.args[0], mock_notify.call_args.kwargs
+        self.assertEqual(called_story, story)
+        self.assertIn("narrow scope", kwargs["body"])
+
+    def test_notify_skips_gracefully_when_no_owners(self) -> None:
+        """A story with no owning GMs notifies nobody (no error)."""
+        from world.narrative.models import NarrativeMessage
+
+        story = StoryFactory(impact_tier=ImpactTier.WORLD)
+        # No owners set — _notify_story_owners resolves no GM profiles.
+        _notify_story_owners(story, body="test")
+        self.assertFalse(NarrativeMessage.objects.filter(related_story=story).exists())
 
 
 class CanonReviewViewSetTests(APITestCase):

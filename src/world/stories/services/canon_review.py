@@ -25,6 +25,35 @@ if TYPE_CHECKING:
     from world.gm.models import GMProfile
 
 
+def _notify_story_owners(story: Story, *, body: str) -> None:
+    """Fan out a SYSTEM NarrativeMessage to each owning GM's notification sheet.
+
+    Mirrors ``custody_clearance._notify_gm``: resolves each owner account's
+    GM notification-target CharacterSheet via ``get_notification_target_for_gm``
+    and skips gracefully when none is resolvable.
+    """
+    from world.gm.models import GMProfile  # noqa: PLC0415
+    from world.gm.services import get_notification_target_for_gm  # noqa: PLC0415
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    owner_ids = list(story.owners.values_list("pk", flat=True))
+    gm_profiles = GMProfile.objects.filter(account_id__in=owner_ids)
+    sheets = [
+        sheet
+        for sheet in (get_notification_target_for_gm(gm) for gm in gm_profiles)
+        if sheet is not None
+    ]
+    if not sheets:
+        return
+    send_narrative_message(
+        recipients=sheets,
+        body=body,
+        category=NarrativeCategory.SYSTEM,
+        related_story=story,
+    )
+
+
 def latest_review_for_story(story: Story) -> CanonReview | None:
     """The most recent ``CanonReview`` for ``story`` (any status), or None."""
     return story.canon_reviews.order_by("-created_at").first()
@@ -125,6 +154,13 @@ def clear_canon_review(
     review.notes = notes
     review.resolved_at = timezone.now()
     review.save(update_fields=["status", "reviewer", "notes", "resolved_at"])
+    _notify_story_owners(
+        review.story,
+        body=(
+            f'Your story "{review.story.title}" has been cleared for canon '
+            f"impact (tier {review.tier})."
+        ),
+    )
     return review
 
 
@@ -146,4 +182,11 @@ def request_changes(
     review.notes = notes
     review.resolved_at = timezone.now()
     review.save(update_fields=["status", "reviewer", "notes", "resolved_at"])
+    _notify_story_owners(
+        review.story,
+        body=(
+            f'Staff requested changes on your story "{review.story.title}"\'s '
+            f"canon review (tier {review.tier}): {notes}"
+        ),
+    )
     return review
