@@ -19707,6 +19707,7 @@ export interface components {
       readonly clashes: {
         [key: string]: unknown;
       }[];
+      readonly engagement_locks: string;
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
