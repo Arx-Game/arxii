@@ -41,6 +41,7 @@ from world.combat.constants import (
     ParticipantStatus,
     RiskLevel,
     StakesLevel,
+    SurgeTriggerKind,
     TargetingMode,
     TargetSelection,
 )
@@ -1775,6 +1776,45 @@ class StakesLevelRequirement(SharedMemoryModel):
         return f"StakesLevelRequirement({self.stakes_level})"
 
 
+class StakesEscalationModifier(SharedMemoryModel):
+    """Authored stakes→escalation coupling (#2013).
+
+    One row per StakesLevel (unique). Read by ``apply_escalation_tick`` (step
+    bonus + one-shot initial surge) and by ``assign_default_escalation_curve``
+    at encounter creation.
+    """
+
+    stakes_level = models.CharField(max_length=20, choices=StakesLevel.choices, unique=True)
+    intensity_step_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to the curve's intensity_step during each escalation tick.",
+    )
+    initial_surge = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "HIGH_STAKES-kind surge amount granted once to every ACTIVE PC "
+            "participant. 0 = no initial surge."
+        ),
+    )
+    default_curve = models.ForeignKey(
+        "combat.EscalationCurve",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Curve auto-assigned at encounter creation when the encounter's "
+            "escalation_curve is null and its stakes_level matches this row."
+        ),
+    )
+
+    class Meta:
+        ordering = ["stakes_level"]
+
+    def __str__(self) -> str:
+        return f"StakesEscalationModifier({self.stakes_level})"
+
+
 class EncounterScalingConfig(SharedMemoryModel):
     """Singleton (pk=1): global scaling parameters for encounter budgets (#566).
 
@@ -2315,6 +2355,26 @@ class EscalationCurve(SharedMemoryModel):
         blank=True,
         help_text="Narrative line surfaced to the combat panel on each tick.",
     )
+    peril_spike_intensity_amount = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "Intensity spike applied to bonded co-combatants when an ally enters "
+            "mortal peril (#2013)."
+        ),
+    )
+    hated_foe_spike_intensity_amount = models.PositiveIntegerField(
+        default=3,
+        help_text="Intensity spike applied when a hated NPC foe enters the encounter (#2013).",
+    )
+    surge_narration = models.TextField(
+        blank=True,
+        help_text=(
+            "Generic dramatic-surge narration template. Only the literal substring "
+            "'{character}' is substituted (the surging PC's name) — never the bond, "
+            "track, or subject, per the leak rule (#2013). Blank uses a built-in "
+            "generic line."
+        ),
+    )
 
     class Meta:
         verbose_name = "Escalation Curve"
@@ -2323,6 +2383,63 @@ class EscalationCurve(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class DramaticSurgeRecord(SharedMemoryModel):
+    """Audit + dedup record for one dramatic-surge event (#2013).
+
+    Created by ``apply_dramatic_surge``; a given (encounter, participant,
+    trigger_kind, subject_sheet) tuple surges at most once — a bonded ally's
+    peril surges you once per encounter; their later fall is a different
+    trigger_kind and surges again. Two partial UniqueConstraints (mirroring
+    the ``NpcRegard`` precedent, ``world/npc_services/models.py``) because
+    Postgres never matches NULL=NULL — a single constraint spanning the
+    nullable subject_sheet column would let subjectless (HIGH_STAKES)
+    duplicates through.
+    """
+
+    encounter = models.ForeignKey(
+        COMBAT_ENCOUNTER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dramatic_surges",
+    )
+    participant = models.ForeignKey(
+        COMBAT_PARTICIPANT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dramatic_surges",
+    )
+    trigger_kind = models.CharField(max_length=20, choices=SurgeTriggerKind.choices)
+    subject_sheet = models.ForeignKey(
+        CHARACTER_SHEET_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The bonded ally / hated foe this surge is about; null for HIGH_STAKES.",
+    )
+    amount = models.PositiveIntegerField()
+    round_number = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Dramatic Surge Record"
+        verbose_name_plural = "Dramatic Surge Records"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "participant", "trigger_kind", "subject_sheet"],
+                condition=models.Q(subject_sheet__isnull=False),
+                name="unique_surge_with_subject",
+            ),
+            models.UniqueConstraint(
+                fields=["encounter", "participant", "trigger_kind"],
+                condition=models.Q(subject_sheet__isnull=True),
+                name="unique_surge_without_subject",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"DramaticSurgeRecord({self.trigger_kind}, +{self.amount})"
 
 
 # =============================================================================

@@ -988,6 +988,8 @@ class EscalationCurveFactory(factory_django.DjangoModelFactory):
     control_step_on_botch = -1
     spike_intensity_amount = 2
     spike_minimum_track_points = 1
+    peril_spike_intensity_amount = 3
+    hated_foe_spike_intensity_amount = 3
 
     @factory.lazy_attribute
     def pace_check_type(self) -> object:
