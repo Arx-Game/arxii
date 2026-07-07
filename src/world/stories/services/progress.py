@@ -127,13 +127,28 @@ def create_global_progress(
     story: Story,
     current_episode: Episode | None = None,
 ) -> GlobalStoryProgress:
-    """Create a GlobalStoryProgress singleton and immediately evaluate auto-beats."""
-    from world.stories.exceptions import StoryNotAssignedError  # noqa: PLC0415
+    """Create a GlobalStoryProgress singleton and immediately evaluate auto-beats.
+
+    A GLOBAL-scope story at WORLD impact tier additionally requires a CLEARED
+    canon review before it may be activated (#2003) — world-touching content
+    must pass staff sign-off before the metaplot moves. Raises ``StoryError``
+    if the story is WORLD-tier and uncleared.
+    """
+    from world.stories.constants import ImpactTier  # noqa: PLC0415
+    from world.stories.exceptions import StoryError, StoryNotAssignedError  # noqa: PLC0415
     from world.stories.models import GlobalStoryProgress  # noqa: PLC0415
     from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+    from world.stories.services.canon_review import story_is_cleared  # noqa: PLC0415
 
     if story.scope == StoryScope.UNASSIGNED:
         raise StoryNotAssignedError
+
+    if story.impact_tier == ImpactTier.WORLD and not story_is_cleared(story):
+        msg = (
+            f"Story {story.pk!r} is a WORLD impact-tier GLOBAL story without a "
+            "cleared canon review; it cannot be activated until staff clears it."
+        )
+        raise StoryError(msg)
 
     progress = GlobalStoryProgress.objects.create(
         story=story,

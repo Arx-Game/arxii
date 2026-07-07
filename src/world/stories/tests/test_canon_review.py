@@ -315,3 +315,39 @@ class EscalationHeuristicTests(TestCase):
             severity=StakeSeverity.SETBACK,
         )
         self.assertEqual(escalation_tier_for_story(story), ImpactTier.TABLE)
+
+
+class GlobalActivationGateTests(TestCase):
+    """GLOBAL-scope WORLD-tier story activation requires a CLEARED review (#2003).
+
+    create_global_progress refuses to activate a WORLD-tier GLOBAL story
+    without a cleared canon review (raises StoryError). TABLE/REGIONAL tiers
+    and CLEARED WORLD stories activate normally.
+    """
+
+    def test_world_global_story_blocked_without_cleared_review(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.exceptions import StoryError
+        from world.stories.services.progress import create_global_progress
+
+        story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.WORLD)
+        with self.assertRaises(StoryError):
+            create_global_progress(story=story)
+
+    def test_world_global_story_activates_after_clear(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.services.progress import create_global_progress
+
+        story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.WORLD)
+        review = request_canon_review(story)
+        clear_canon_review(review, AccountFactory())
+        progress = create_global_progress(story=story)
+        self.assertEqual(progress.story, story)
+
+    def test_table_global_story_activates_without_review(self) -> None:
+        from world.stories.constants import StoryScope
+        from world.stories.services.progress import create_global_progress
+
+        story = StoryFactory(scope=StoryScope.GLOBAL, impact_tier=ImpactTier.TABLE)
+        progress = create_global_progress(story=story)
+        self.assertEqual(progress.story, story)
