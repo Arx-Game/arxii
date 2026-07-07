@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from world.boundaries.models import TreasuredSubject
     from world.character_sheets.models import CharacterSheet
     from world.gm.models import GMProfile
+    from world.societies.models import Organization, Society
     from world.stories.models import CustodyClearance, Story, StoryProtectedSubject
 
 _SignoffMatchT = TypeVar("_SignoffMatchT")
@@ -98,18 +99,38 @@ _NEEDS_GM_PROFILE = "You must have a GM profile to do that."
 
 # Subject-kind keys accepted for `story protect ... add` / `story clearance request`'s
 # identity path (#2001 Task 7) — mirrors StakeSubjectKind, minus CAMPAIGN_TRACK (not
-# exposed to this grammar per the Task 7 brief).
+# exposed to this grammar per the Task 7 brief). `org`/`society` are disambiguating
+# aliases for `faction` (Task 7 review Fix 2) — used when a name matches both an
+# Organization and a Society, mirroring gemit.py's explicit-switch spirit.
 _SUBJECT_KIND_KEYS = frozenset(
-    {"npc_fate", "personal_jeopardy", "item", "faction", "location", "custom"}
+    {"npc_fate", "personal_jeopardy", "item", "faction", "org", "society", "location", "custom"}
 )
 # Keys whose value may span multiple bare tokens (character/faction/custom names,
 # free-text notes/messages) — mirrors journals.py/goals.py's free-text-runs-to-next-key
 # convention (parse_kv_and_flags).
 _PROTECT_ADD_MULTIWORD_KEYS = frozenset(
-    {"npc_fate", "personal_jeopardy", "faction", "location", "custom", "notes"}
+    {
+        "npc_fate",
+        "personal_jeopardy",
+        "faction",
+        "org",
+        "society",
+        "location",
+        "custom",
+        "notes",
+    }
 )
 _CLEARANCE_REQUEST_MULTIWORD_KEYS = frozenset(
-    {"npc_fate", "personal_jeopardy", "faction", "location", "custom", "message"}
+    {
+        "npc_fate",
+        "personal_jeopardy",
+        "faction",
+        "org",
+        "society",
+        "location",
+        "custom",
+        "message",
+    }
 )
 
 _SUBVERB_HANDLERS: dict[str, str] = {
@@ -956,11 +977,13 @@ class CmdStory(ArxNamespaceCommand):
         and ``clearance request``'s identity path (builds a ``SubjectIdentity``
         tuple). NPC_FATE/PERSONAL_JEOPARDY resolve a character by name (global
         search, mirrors ``grant_item.py``); ITEM by numeric id; FACTION tries an
-        Organization name, then a Society name; LOCATION/CUSTOM take the ref
+        Organization name, then a Society name, raising a ``CommandError`` asking
+        the caller to disambiguate via ``org=``/``society=`` when a name matches
+        both (Task 7 review Fix 2, mirrors ``gemit.py``'s explicit-switch spirit);
+        LOCATION/CUSTOM take the ref
         itself as the freeform label.
         """
         from world.items.models import ItemInstance  # noqa: PLC0415
-        from world.societies.models import Organization, Society  # noqa: PLC0415
         from world.stories.constants import StakeSubjectKind  # noqa: PLC0415
 
         if kind_key in ("npc_fate", "personal_jeopardy"):
@@ -983,21 +1006,74 @@ class CmdStory(ArxNamespaceCommand):
                 raise CommandError(msg) from exc
             return StakeSubjectKind.ITEM, {"subject_item": item}
 
-        if kind_key == "faction":  # noqa: STRING_LITERAL
-            organization = Organization.objects.filter(name__iexact=subject_ref).first()
-            if organization is not None:
-                return StakeSubjectKind.FACTION, {"subject_organization": organization}
-            society = Society.objects.filter(name__iexact=subject_ref).first()
-            if society is not None:
-                return StakeSubjectKind.FACTION, {"subject_society": society}
-            msg = f"No organization or society named '{subject_ref}'."
-            raise CommandError(msg)
+        if kind_key in ("org", "society", "faction"):  # noqa: STRING_LITERAL
+            return self._resolve_faction_ref(kind_key, subject_ref)
 
         if kind_key == "location":  # noqa: STRING_LITERAL
             return StakeSubjectKind.LOCATION, {"subject_label": subject_ref}
 
         # kind_key == "custom"
         return StakeSubjectKind.CUSTOM, {"subject_label": subject_ref}
+
+    def _resolve_faction_ref(
+        self, kind_key: str, subject_ref: str
+    ) -> tuple[str, dict[str, object]]:
+        """Resolve a FACTION subject-ref for ``kind_key`` in ``{"org", "society", "faction"}``.
+
+        ``org``/``society`` are explicit disambiguating aliases (Task 7 review Fix
+        2): the caller names which kind of faction they mean, so only that lookup
+        runs. Plain ``faction`` tries both and raises a ``CommandError`` asking the
+        caller to pick ``org=``/``society=`` when a name matches both — mirrors
+        ``gemit.py``'s explicit-switch spirit.
+        """
+        from world.stories.constants import StakeSubjectKind  # noqa: PLC0415
+
+        organization = (
+            None
+            if kind_key == "society"  # noqa: STRING_LITERAL
+            else self._resolve_organization_by_name(subject_ref)
+        )
+        society = (
+            None
+            if kind_key == "org"  # noqa: STRING_LITERAL
+            else self._resolve_society_by_name(subject_ref)
+        )
+
+        if kind_key == "org":  # noqa: STRING_LITERAL
+            if organization is None:
+                msg = f"No organization named '{subject_ref}'."
+                raise CommandError(msg)
+            return StakeSubjectKind.FACTION, {"subject_organization": organization}
+
+        if kind_key == "society":  # noqa: STRING_LITERAL
+            if society is None:
+                msg = f"No society named '{subject_ref}'."
+                raise CommandError(msg)
+            return StakeSubjectKind.FACTION, {"subject_society": society}
+
+        # kind_key == "faction"
+        if organization is not None and society is not None:
+            msg = (
+                f"'{subject_ref}' matches both an organization and a society — "
+                "specify org=<name> or society=<name>."
+            )
+            raise CommandError(msg)
+        if organization is not None:
+            return StakeSubjectKind.FACTION, {"subject_organization": organization}
+        if society is not None:
+            return StakeSubjectKind.FACTION, {"subject_society": society}
+        msg = f"No organization or society named '{subject_ref}'."
+        raise CommandError(msg)
+
+    def _resolve_organization_by_name(self, subject_ref: str) -> Organization | None:
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        return Organization.objects.filter(name__iexact=subject_ref).first()
+
+    def _resolve_society_by_name(self, subject_ref: str) -> Society | None:
+        from world.societies.models import Society  # noqa: PLC0415
+
+        return Society.objects.filter(name__iexact=subject_ref).first()
 
     def _resolve_character_sheet_by_name(self, name: str) -> CharacterSheet:
         """Resolve a ``CharacterSheet`` by character name via a global search

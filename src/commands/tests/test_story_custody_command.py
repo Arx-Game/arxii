@@ -204,6 +204,37 @@ class CmdStoryProtectAddTests(TestCase):
         joined = " ".join(messages)
         self.assertIn("no organization or society", joined.lower())
 
+    def test_faction_name_collision_between_org_and_society_errors(self) -> None:
+        # #2001 Task 7 review Fix 2: an ambiguous name matching both an Organization
+        # and a Society must not silently pick the Organization — it asks the GM to
+        # disambiguate via org=/society=.
+        OrganizationFactory(name="The Ashfall Concord")
+        SocietyFactory(name="The Ashfall Concord")
+        messages = self._add("faction=The Ashfall Concord")
+        joined = " ".join(messages)
+        self.assertIn("matches both an organization and a society", joined.lower())
+        self.assertIn("org=<name>", joined)
+        self.assertIn("society=<name>", joined)
+        self.assertFalse(StoryProtectedSubject.objects.filter(story=self.story).exists())
+
+    def test_faction_name_collision_resolves_via_org_key(self) -> None:
+        org = OrganizationFactory(name="The Ashfall Concord")
+        SocietyFactory(name="The Ashfall Concord")
+        messages = self._add("org=The Ashfall Concord")
+        self.assertTrue(any("Protected #" in m for m in messages), messages)
+        protected = StoryProtectedSubject.objects.get(story=self.story)
+        self.assertEqual(protected.subject_kind, StakeSubjectKind.FACTION)
+        self.assertEqual(protected.subject_organization_id, org.pk)
+
+    def test_faction_name_collision_resolves_via_society_key(self) -> None:
+        OrganizationFactory(name="The Ashfall Concord")
+        society = SocietyFactory(name="The Ashfall Concord")
+        messages = self._add("society=The Ashfall Concord")
+        self.assertTrue(any("Protected #" in m for m in messages), messages)
+        protected = StoryProtectedSubject.objects.get(story=self.story)
+        self.assertEqual(protected.subject_kind, StakeSubjectKind.FACTION)
+        self.assertEqual(protected.subject_society_id, society.pk)
+
     def test_location_uses_freeform_label(self) -> None:
         messages = self._add("location=The Old Well")
         self.assertTrue(any("Protected #" in m for m in messages), messages)
@@ -422,14 +453,6 @@ class CmdStoryClearanceRequestTests(TestCase):
             ).exists()
         )
         # Still only the one pre-existing clearance for the first subject — no dupe.
-        self.assertEqual(
-            CustodyClearance.objects.filter(
-                protected_subject=self.subject, requested_by=self.requester_gm
-            ).count(),
-            1,
-        )
-        self.assertIn("already had a live request", joined.lower())
-        # Still only the one pre-existing clearance — no duplicate row created.
         self.assertEqual(
             CustodyClearance.objects.filter(
                 protected_subject=self.subject, requested_by=self.requester_gm

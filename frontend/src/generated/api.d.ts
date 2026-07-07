@@ -12630,6 +12630,11 @@ export interface paths {
      *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
      *     carries the identical ownership gate for create (DRF never calls
      *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
      */
     get: operations['protected_subjects_list'];
     put?: never;
@@ -12643,6 +12648,11 @@ export interface paths {
      *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
      *     carries the identical ownership gate for create (DRF never calls
      *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
      */
     post: operations['protected_subjects_create'];
     delete?: never;
@@ -12668,6 +12678,11 @@ export interface paths {
      *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
      *     carries the identical ownership gate for create (DRF never calls
      *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
      */
     get: operations['protected_subjects_retrieve'];
     /**
@@ -12680,19 +12695,24 @@ export interface paths {
      *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
      *     carries the identical ownership gate for create (DRF never calls
      *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
      */
     put: operations['protected_subjects_update'];
     post?: never;
     /**
-     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     * @description Soft-deactivate (``is_active=False``), never a hard delete.
      *
-     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
-     *     posture): ``get_queryset`` excludes every row belonging to a story the
-     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
-     *     another story's protected subject 404s rather than 403ing or leaking the
-     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
-     *     carries the identical ownership gate for create (DRF never calls
-     *     ``has_object_permission`` for a row that doesn't exist yet).
+     *     A ``StoryProtectedSubject`` is story-significant data: its
+     *     ``CustodyClearance`` decision trail CASCADEs from it, so a hard
+     *     ``DELETE`` would destroy the record of every grant/deny/escalate/
+     *     resolve/revoke ever made against it (the never-hard-delete-story-
+     *     significant-data rule). Mirrors telnet's `story protect ... remove`
+     *     (``commands/story.py``) exactly — same field, same "204 either way"
+     *     response.
      */
     delete: operations['protected_subjects_destroy'];
     options?: never;
@@ -12707,6 +12727,11 @@ export interface paths {
      *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
      *     carries the identical ownership gate for create (DRF never calls
      *     ``has_object_permission`` for a row that doesn't exist yet).
+     *
+     *     ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+     *     a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+     *     ... remove`. ``is_active`` also stays writable directly via
+     *     ``PATCH``/``PUT``, so a client may equally reactivate a protection.
      */
     patch: operations['protected_subjects_partial_update'];
     trace?: never;

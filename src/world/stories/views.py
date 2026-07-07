@@ -3230,6 +3230,11 @@ class StoryProtectedSubjectViewSet(viewsets.ModelViewSet):
     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
     carries the identical ownership gate for create (DRF never calls
     ``has_object_permission`` for a row that doesn't exist yet).
+
+    ``DELETE`` is overridden to soft-deactivate (``is_active=False``), never
+    a hard delete — see ``destroy()`` — mirroring telnet's `story protect
+    ... remove`. ``is_active`` also stays writable directly via
+    ``PATCH``/``PUT``, so a client may equally reactivate a protection.
     """
 
     queryset = StoryProtectedSubject.objects.select_related(
@@ -3261,6 +3266,23 @@ class StoryProtectedSubjectViewSet(viewsets.ModelViewSet):
         if gm_profile is not None:
             filters_q |= models.Q(story__primary_table__gm=gm_profile)
         return qs.filter(filters_q).distinct()
+
+    @extend_schema(responses={204: None})
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Soft-deactivate (``is_active=False``), never a hard delete.
+
+        A ``StoryProtectedSubject`` is story-significant data: its
+        ``CustodyClearance`` decision trail CASCADEs from it, so a hard
+        ``DELETE`` would destroy the record of every grant/deny/escalate/
+        resolve/revoke ever made against it (the never-hard-delete-story-
+        significant-data rule). Mirrors telnet's `story protect ... remove`
+        (``commands/story.py``) exactly — same field, same "204 either way"
+        response.
+        """
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CustodyClearanceViewSet(

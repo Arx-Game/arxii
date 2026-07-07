@@ -183,6 +183,50 @@ class StoryProtectedSubjectViewSetTests(APITestCase):
         assert inactive.pk in ids
         assert self.subject.pk not in ids
 
+    def test_delete_soft_deactivates_not_hard_deletes(self):
+        """Task 7 review Fix 1: DELETE must never hard-delete story-significant data —
+        the row and its CustodyClearance decision trail must both survive, mirroring
+        telnet's `story protect ... remove`."""
+        CustodyClearanceFactory(
+            protected_subject=self.subject,
+            requested_by=GMProfileFactory(),
+            scope=CustodyScope.APPEAR,
+            status=CustodyClearanceStatus.PENDING,
+        )
+        self.client.force_authenticate(user=self.owner_account)
+        detail_url = reverse("storyprotectedsubject-detail", kwargs={"pk": self.subject.pk})
+        resp = self.client.delete(detail_url)
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+        self.subject.refresh_from_db()
+        assert self.subject.is_active is False
+        assert CustodyClearance.objects.filter(protected_subject=self.subject).exists()
+
+    def test_deactivated_subject_no_longer_blocks_custody(self):
+        """A DELETE-deactivated subject stops blocking check_subject_custody — the
+        is_active filter in ``_matching_protections`` covers the delete-path row too."""
+        subject_identity = _subject_identity(
+            StakeSubjectKind.NPC_FATE, self.sheet.pk, None, None, None, ""
+        )
+        before = check_subject_custody(
+            subject_identity=subject_identity,
+            actor_account=self.outsider_account,
+            scope=CustodyScope.APPEAR,
+        )
+        assert not before.allowed
+
+        self.client.force_authenticate(user=self.owner_account)
+        detail_url = reverse("storyprotectedsubject-detail", kwargs={"pk": self.subject.pk})
+        resp = self.client.delete(detail_url)
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+        after = check_subject_custody(
+            subject_identity=subject_identity,
+            actor_account=self.outsider_account,
+            scope=CustodyScope.APPEAR,
+        )
+        assert after.allowed
+
 
 class CustodyClearanceCreateTests(APITestCase):
     @classmethod

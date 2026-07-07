@@ -497,7 +497,9 @@ actions, backends, and service functions.
   permission-class-gated Action, so authorization is replicated inline to match the API's
   permission classes exactly, never looser): `story protect <story-id> add <kind>=<subject-ref>
   [beat=<id>] [notes=<text>]` (`kind` one of `npc_fate`/`personal_jeopardy` — character by name,
-  global search — `item` — id — `faction` — Organization name, falling back to Society name —
+  global search — `item` — id — `faction` — Organization name, falling back to Society name (a
+  name matching both raises a disambiguation error asking for `org=<name>` or `society=<name>`,
+  the two accepted alias kind-keys — mirrors `gemit.py`'s explicit-switch spirit) —
   `location`/`custom` — freeform label) creates a `StoryProtectedSubject`; `story protect
   <story-id> remove <protected-id>` soft-deactivates (`is_active=False`, never a hard delete —
   its `CustodyClearance` decision trail CASCADEs from it); `story protect <story-id> list` shows
