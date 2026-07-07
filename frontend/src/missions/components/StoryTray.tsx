@@ -94,7 +94,11 @@ function StoryRow({
       {!open ? <CompassLine entry={entry} /> : null}
       {open ? (
         entry.participant_count > 1 ? (
-          <GroupBeatCard instanceId={entry.instance_id} roomKey={roomKey} />
+          <GroupBeatCard
+            instanceId={entry.instance_id}
+            roomKey={roomKey}
+            isContractHolder={entry.is_contract_holder}
+          />
         ) : (
           <BeatCard instanceId={entry.instance_id} roomKey={roomKey} />
         )

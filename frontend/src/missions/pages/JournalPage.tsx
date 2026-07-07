@@ -11,6 +11,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+import { PendingInvitesSection } from '../components/PendingInvitesSection';
 import { useJournal } from '../queries';
 import type { JournalEntry } from '../types';
 
@@ -19,6 +20,8 @@ export function JournalPage() {
   const entries = data?.results ?? [];
   const active = entries.filter((entry) => entry.status === 'active');
   const past = entries.filter((entry) => entry.status !== 'active');
+  // Invites are persona-scoped (not per-entry) — surface the union once.
+  const pendingInvites = entries[0]?.pending_invites ?? [];
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-6">
@@ -29,6 +32,7 @@ export function JournalPage() {
         <p className="text-sm text-muted-foreground">…</p>
       ) : (
         <div className="space-y-6">
+          <PendingInvitesSection invites={pendingInvites} />
           <section className="space-y-3">
             <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
               Active stories

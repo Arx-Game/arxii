@@ -16,14 +16,21 @@ import { Button } from '@/components/ui/button';
 import { ApiValidationError, flattenErrorMessage } from '../api';
 import { useCastGroupVote, useGroupBeat, useSubmitGroupPick } from '../queries';
 import type { GroupBeatView, ResolvedBeat } from '../types';
+import { InvitePicker } from './InvitePicker';
 
 interface GroupBeatCardProps {
   instanceId: number;
   /** Stable identifier of the player's current room (refetch key). */
   roomKey: string;
+  /** Whether the viewer is the contract holder (shows the invite affordance). */
+  isContractHolder?: boolean;
 }
 
-export function GroupBeatCard({ instanceId, roomKey }: GroupBeatCardProps) {
+export function GroupBeatCard({
+  instanceId,
+  roomKey,
+  isContractHolder = false,
+}: GroupBeatCardProps) {
   const { data: result, isLoading } = useGroupBeat(instanceId, roomKey);
   const [resolved, setResolved] = useState<ResolvedBeat | null>(null);
 
@@ -46,7 +53,14 @@ export function GroupBeatCard({ instanceId, roomKey }: GroupBeatCardProps) {
     );
   }
 
-  return <GroupBeatView instanceId={instanceId} beat={beat} onResolved={setResolved} />;
+  return (
+    <GroupBeatView
+      instanceId={instanceId}
+      beat={beat}
+      onResolved={setResolved}
+      isContractHolder={isContractHolder}
+    />
+  );
 }
 
 function ResolvedView({
@@ -78,10 +92,12 @@ function GroupBeatView({
   instanceId,
   beat,
   onResolved,
+  isContractHolder,
 }: {
   instanceId: number;
   beat: GroupBeatView;
   onResolved: (beat: ResolvedBeat) => void;
+  isContractHolder: boolean;
 }) {
   const submitPick = useSubmitGroupPick();
   const castVote = useCastGroupVote();
@@ -156,6 +172,8 @@ function GroupBeatView({
           The window closed — waiting for the server to resolve.
         </p>
       ) : null}
+
+      {isContractHolder ? <InvitePicker instanceId={instanceId} /> : null}
     </div>
   );
 }
