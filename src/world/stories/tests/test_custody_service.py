@@ -191,6 +191,46 @@ class CheckSubjectCustodyTests(TestCase):
         )
         self.assertTrue(verdict.allowed)
 
+    def test_oldest_blocking_protection_named_custodian(self):
+        """When two different stories both block for an outsider, the reported
+        custodian is the OLDER protection's GM (the original custodian is the
+        natural authority to route a clearance request to) — not whichever
+        story most recently declared an overlapping protection.
+
+        ``StoryProtectedSubject.Meta.ordering`` is ``-created_at, -pk``
+        (newest first); the custody seam deliberately queries ascending
+        instead. Created sequentially so ``auto_now_add`` stamps
+        monotonically — no freezegun needed for a deterministic order.
+        """
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+
+        older_gm = GMProfileFactory()
+        older_table = GMTableFactory(gm=older_gm)
+        self.story.primary_table = older_table
+        self.story.save(update_fields=["primary_table"])
+        older_protection = StoryProtectedSubjectFactory(
+            story=self.story, subject_sheet=self.npc_sheet
+        )
+
+        story_b = StoryFactory(status=StoryStatus.ACTIVE)
+        newer_gm = GMProfileFactory()
+        newer_table = GMTableFactory(gm=newer_gm)
+        story_b.primary_table = newer_table
+        story_b.save(update_fields=["primary_table"])
+        StoryProtectedSubjectFactory(story=story_b, subject_sheet=self.npc_sheet)
+
+        outsider_sheet = CharacterSheetFactory()
+        outsider_account = _account_playing(outsider_sheet)
+
+        verdict = check_subject_custody(
+            subject_identity=self.subject_identity,
+            actor_account=outsider_account,
+            scope=CustodyScope.HARM,
+        )
+        self.assertFalse(verdict.allowed)
+        self.assertEqual(verdict.custodian_gm_username, older_gm.account.username)
+        self.assertEqual(verdict.protecting_subject_id, older_protection.pk)
+
 
 class CustodyVerdictForStakeTests(TestCase):
     @classmethod

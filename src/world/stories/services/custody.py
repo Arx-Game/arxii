@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.stories.constants import BeatOutcome, StakeResolutionColumn
+from world.stories.constants import BeatOutcome, CustodyScope, StakeResolutionColumn
 from world.stories.models import StoryParticipation, StoryProtectedSubject
 from world.stories.services.boundaries import SubjectIdentity, _subject_identity
 from world.stories.types import CustodyVerdict, StoryStatus
@@ -54,12 +54,19 @@ def _matching_protections(subject_identity: SubjectIdentity) -> list[StoryProtec
     narrows the row scan at the database; the typed-FK-or-label identity
     comparison happens in Python via ``_subject_identity``, mirroring how
     ``boundaries.py`` matches ``Stake`` rows against ``TreasuredSubject`` rows.
+
+    Ordered ``created_at, pk`` ascending (oldest first) rather than the
+    model's default ``Meta.ordering`` (``-created_at, -pk``, newest first):
+    ``check_subject_custody`` reports the FIRST row of this list as the
+    blocking custodian, and the oldest-declared protection is the original
+    custodian — the natural authority to route a clearance request to.
     """
     kind = subject_identity[0]
-    candidates = StoryProtectedSubject.objects.filter(
-        subject_kind=kind,
-        is_active=True,
-    ).select_related("story__primary_table__gm__account", "beat")
+    candidates = (
+        StoryProtectedSubject.objects.filter(subject_kind=kind, is_active=True)
+        .select_related("story__primary_table__gm__account", "beat")
+        .order_by("created_at", "pk")
+    )
     return [
         row
         for row in candidates
@@ -132,8 +139,13 @@ def check_subject_custody(
     ``StoryProtectedSubject`` row has no per-scope grain of its own (that is
     what ``CustodyClearance.scope`` will express), so an active protection
     blocks every scope uniformly until a clearance says otherwise.
-    ``custodian_gm_username``/``protecting_subject_id`` report the FIRST
-    blocking protection when several stories protect the same identity.
+    ``custodian_gm_username``/``protecting_subject_id`` report the OLDEST
+    blocking protection (earliest ``created_at``, tie-broken by ``pk``) when
+    several stories protect the same identity: the original custodian is the
+    natural authority to route a clearance request to, so the verdict must
+    not drift onto whichever story most recently added an overlapping
+    protection. ``_matching_protections`` orders ascending for this reason —
+    it does not rely on the model's default (most-recent-first) ordering.
 
     Batched: one query for matching protections, one for participation
     across every still-unresolved protecting story — never a query per
@@ -196,8 +208,6 @@ def _stake_intended_scope(stake: Stake) -> str:
     subject item; else HARM if any resolution adjusts standing (any column)
     or fires a consequence pool on its LOSS branch; else APPEAR.
     """
-    from world.stories.constants import CustodyScope  # noqa: PLC0415
-
     resolutions = list(stake.resolutions.all())
     if any(r.sets_subject_lifecycle or r.forfeits_subject_item for r in resolutions):
         return CustodyScope.REMOVE
