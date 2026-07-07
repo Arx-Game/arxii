@@ -28,6 +28,8 @@ from world.societies.models import LegendEvent
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
+    CustodyClearanceStatus,
+    CustodyScope,
     StakeOutcomeMethod,
     StakeResolutionColumn,
     StakeSubjectKind,
@@ -37,6 +39,7 @@ from world.stories.constants import (
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
+    CustodyClearanceFactory,
     EpisodeFactory,
     GroupStoryProgressFactory,
     StakeFactory,
@@ -44,6 +47,7 @@ from world.stories.factories import (
     StakeResolutionFactory,
     StoryFactory,
     StoryProgressFactory,
+    StoryProtectedSubjectFactory,
     TransitionFactory,
     TreasuredSignoffFactory,
     seed_default_risk_calibrations,
@@ -780,6 +784,169 @@ class WriterTests(EvenniaTestCase):
 
         held_sheet.refresh_from_db()
         self.assertEqual(held_sheet.lifecycle_state, LifecycleState.ALIVE)
+
+
+class WriterFireTimeCustodyTests(EvenniaTestCase):
+    """Fire-time custody re-check before writers apply (#2001 Task 4).
+
+    The stake's own beat/story is the acting context; a StoryProtectedSubject
+    declared by a DIFFERENT story blocks the REMOVE (lifecycle/forfeit) and
+    HARM (standing) writers unless the acting story's Lead GM has a granted
+    clearance at that scope. The StakeOutcome audit row is still recorded —
+    only the writer itself skips (mirroring the pillar-12 skip-and-log
+    pattern already in this module).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.fail_tier = CheckOutcomeFactory(name="Custody Writer Rout", success_level=-1)
+
+    def test_lifecycle_write_skipped_when_protected_cross_story(self):
+        _sheet, beat, progress = _character_story_beat()
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            sets_subject_lifecycle=LifecycleState.DEAD,
+        )
+        other_story = StoryFactory()
+        StoryProtectedSubjectFactory(story=other_story, subject_sheet=npc_sheet)
+
+        with self.assertLogs("world.stories.services.stake_resolution", level="WARNING") as logs:
+            record_outcome_tier_completion(
+                progress=progress, beat=beat, outcome_tier=self.fail_tier
+            )
+
+        npc_sheet.refresh_from_db()
+        self.assertEqual(npc_sheet.lifecycle_state, LifecycleState.ALIVE)
+        self.assertTrue(StakeOutcome.objects.filter(stake=stake).exists())
+        self.assertTrue(any("custody" in line.lower() for line in logs.output))
+
+    def test_item_forfeit_skipped_when_protected_cross_story(self):
+        _sheet, beat, progress = _character_story_beat()
+        item = ItemInstanceFactory(template=ItemTemplateFactory())
+        stake = StakeFactory(beat=beat, subject_kind=StakeSubjectKind.ITEM, subject_item=item)
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, forfeits_subject_item=True
+        )
+        other_story = StoryFactory()
+        StoryProtectedSubjectFactory(
+            story=other_story,
+            subject_kind=StakeSubjectKind.ITEM,
+            subject_sheet=None,
+            subject_item=item,
+        )
+
+        with self.assertLogs("world.stories.services.stake_resolution", level="WARNING") as logs:
+            record_outcome_tier_completion(
+                progress=progress, beat=beat, outcome_tier=self.fail_tier
+            )
+
+        item.refresh_from_db()
+        self.assertIsNone(item.destroyed_at)
+        self.assertTrue(StakeOutcome.objects.filter(stake=stake).exists())
+        self.assertTrue(any("custody" in line.lower() for line in logs.output))
+
+    def test_standing_write_skipped_when_protected_cross_story(self):
+        sheet, beat, progress = _character_story_beat()
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
+        )
+        StakeResolutionFactory(
+            stake=stake, column=StakeResolutionColumn.LOSS, subject_standing_delta=-3
+        )
+        other_story = StoryFactory()
+        StoryProtectedSubjectFactory(story=other_story, subject_sheet=npc_sheet)
+
+        with self.assertLogs("world.stories.services.stake_resolution", level="WARNING") as logs:
+            record_outcome_tier_completion(
+                progress=progress, beat=beat, outcome_tier=self.fail_tier
+            )
+
+        self.assertFalse(
+            NPCStanding.objects.filter(
+                persona=sheet.primary_persona, npc_persona=npc_sheet.primary_persona
+            ).exists()
+        )
+        self.assertTrue(StakeOutcome.objects.filter(stake=stake).exists())
+        self.assertTrue(any("custody" in line.lower() for line in logs.output))
+
+    def test_write_proceeds_when_protecting_story_is_the_stakes_own_story(self):
+        _sheet, beat, progress = _character_story_beat()
+        story = beat.episode.chapter.story
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            sets_subject_lifecycle=LifecycleState.DEAD,
+        )
+        # The protecting story IS the stake's own beat's story — never blocks.
+        StoryProtectedSubjectFactory(story=story, subject_sheet=npc_sheet)
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
+
+        npc_sheet.refresh_from_db()
+        self.assertEqual(npc_sheet.lifecycle_state, LifecycleState.DEAD)
+
+    def test_write_proceeds_when_lead_gm_has_granted_clearance(self):
+        _sheet, beat, progress = _character_story_beat()
+        story = beat.episode.chapter.story
+        gm_profile = GMProfileFactory()
+        table = GMTableFactory(gm=gm_profile)
+        story.primary_table = table
+        story.save(update_fields=["primary_table"])
+
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            sets_subject_lifecycle=LifecycleState.DEAD,
+        )
+        other_story = StoryFactory()
+        protection = StoryProtectedSubjectFactory(story=other_story, subject_sheet=npc_sheet)
+        CustodyClearanceFactory(
+            protected_subject=protection,
+            requested_by=gm_profile,
+            scope=CustodyScope.REMOVE,
+            status=CustodyClearanceStatus.GRANTED,
+        )
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
+
+        npc_sheet.refresh_from_db()
+        self.assertEqual(npc_sheet.lifecycle_state, LifecycleState.DEAD)
+
+    def test_orphaned_acting_story_still_blocked_without_clearance(self):
+        """No primary_table -> no Lead GM account -> no clearance is possible."""
+        _sheet, beat, progress = _character_story_beat()
+        story = beat.episode.chapter.story
+        self.assertIsNone(story.primary_table)
+        npc_sheet = CharacterSheetFactory()
+        stake = StakeFactory(
+            beat=beat, subject_kind=StakeSubjectKind.NPC_FATE, subject_sheet=npc_sheet
+        )
+        StakeResolutionFactory(
+            stake=stake,
+            column=StakeResolutionColumn.LOSS,
+            sets_subject_lifecycle=LifecycleState.DEAD,
+        )
+        other_story = StoryFactory()
+        StoryProtectedSubjectFactory(story=other_story, subject_sheet=npc_sheet)
+
+        record_outcome_tier_completion(progress=progress, beat=beat, outcome_tier=self.fail_tier)
+
+        npc_sheet.refresh_from_db()
+        self.assertEqual(npc_sheet.lifecycle_state, LifecycleState.ALIVE)
 
 
 class StakeRoutingTests(EvenniaTestCase):

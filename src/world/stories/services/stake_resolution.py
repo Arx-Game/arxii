@@ -17,6 +17,7 @@ from django.db.models import Prefetch
 from world.societies.constants import RenownRisk
 from world.stories.constants import (
     BeatOutcome,
+    CustodyScope,
     StakeOutcomeMethod,
     StakeResolutionColumn,
     StakeRewardSink,
@@ -27,10 +28,12 @@ from world.stories.models import StakeOutcome, StakeResolution, StakeRewardLine
 from world.stories.types import StakePayloadProblem
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.gm.models import GMProfile
     from world.scenes.models import Persona
-    from world.stories.models import Beat, BeatCompletion, Stake, StakeContractActivation
+    from world.stories.models import Beat, BeatCompletion, Stake, StakeContractActivation, Story
     from world.stories.types import AnyStoryProgress
     from world.traits.models import CheckOutcome
 
@@ -589,6 +592,55 @@ def _activation_for_gm_pick(beat: Beat) -> StakeContractActivation | None:
 # ---------------------------------------------------------------------------
 
 
+def _fire_time_custody_actor(story: Story) -> AccountDB | None:
+    """Lead GM account of ``story``, the acting authority for fire-time custody (#2001 Task 4).
+
+    Branch writers fire with no request user — the acting authority is the
+    completing beat's own story's Lead GM account, so a ``CustodyClearance``
+    THAT GM requested (and was granted) is honored. An orphaned story (no
+    ``primary_table``) has no one to name — treated as no clearance possible,
+    matching ``check_subject_custody``'s ``custodian_gm_username=None`` posture
+    for orphaned protecting stories.
+    """
+    table = story.primary_table
+    if table is None:
+        return None
+    return table.gm.account
+
+
+def _custody_allows_fire_time_write(stake: Stake, scope: str) -> bool:
+    """Cross-story custody re-check at branch-fire time (#2001 Task 4).
+
+    ``acting_story`` is the completing beat's own story (``stake.beat.episode
+    .chapter.story``) — a protection declared BY that same story never blocks
+    it (``check_subject_custody``'s acting-story exemption); this only bites
+    when a DIFFERENT story's ``StoryProtectedSubject`` guards the wagered
+    subject and neither participation nor an active clearance covers the
+    acting story's Lead GM. Mirrors ``custody_verdict_for_stake``'s identity
+    derivation, but resolves the identity + acting story directly since the
+    caller already has ``scope`` pinned to the specific writer about to fire.
+    """
+    from world.stories.services.boundaries import _subject_identity  # noqa: PLC0415
+    from world.stories.services.custody import check_subject_custody  # noqa: PLC0415
+
+    story = stake.beat.episode.chapter.story
+    subject_identity = _subject_identity(
+        stake.subject_kind,
+        stake.subject_sheet_id,
+        stake.subject_item_id,
+        stake.subject_society_id,
+        stake.subject_organization_id,
+        stake.subject_label,
+    )
+    verdict = check_subject_custody(
+        subject_identity=subject_identity,
+        actor_account=_fire_time_custody_actor(story),
+        scope=scope,
+        acting_story=story,
+    )
+    return verdict.allowed
+
+
 def _apply_branch_writers(
     resolution: StakeResolution,
     stake: Stake,
@@ -600,13 +652,51 @@ def _apply_branch_writers(
     raising — a half-applicable branch must not roll back the completion.
     Captivity of a PC is deliberately NOT a branch write (pillar 12): capture
     arrives via terminal consequence pools / EffectType.CAPTURE.
+
+    #2001 Task 4: before the lifecycle/forfeit (REMOVE) and standing (HARM)
+    writers fire, re-check custody for the RESOLVING context — a stake on
+    story A resolving writers against a subject protected by story B without
+    clearance skips-and-logs that writer (mirroring this same function's
+    unresolvable-subject skip-and-log posture); the StakeOutcome audit row is
+    still recorded by the caller regardless.
     """
+    needs_remove = resolution.sets_subject_lifecycle or resolution.forfeits_subject_item
+    remove_allowed = (
+        _custody_allows_fire_time_write(stake, CustodyScope.REMOVE) if needs_remove else True
+    )
+
     if resolution.sets_subject_lifecycle:
-        _write_subject_lifecycle(resolution, stake)
+        if remove_allowed:
+            _write_subject_lifecycle(resolution, stake)
+        else:
+            logger.warning(
+                "StakeResolution %s: sets_subject_lifecycle=%r blocked by cross-story "
+                "custody on stake %s's subject; skipping.",
+                resolution.pk,
+                resolution.sets_subject_lifecycle,
+                stake.pk,
+            )
     if resolution.forfeits_subject_item:
-        _write_item_forfeit(resolution, stake)
+        if remove_allowed:
+            _write_item_forfeit(resolution, stake)
+        else:
+            logger.warning(
+                "StakeResolution %s: forfeits_subject_item blocked by cross-story custody "
+                "on stake %s's subject; skipping.",
+                resolution.pk,
+                stake.pk,
+            )
     if resolution.subject_standing_delta != 0:
-        _write_subject_standing(resolution, stake, participants)
+        if _custody_allows_fire_time_write(stake, CustodyScope.HARM):
+            _write_subject_standing(resolution, stake, participants)
+        else:
+            logger.warning(
+                "StakeResolution %s: subject_standing_delta=%s blocked by cross-story "
+                "custody on stake %s's subject; skipping.",
+                resolution.pk,
+                resolution.subject_standing_delta,
+                stake.pk,
+            )
 
 
 def _write_subject_lifecycle(resolution: StakeResolution, stake: Stake) -> None:

@@ -13,6 +13,7 @@ from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
+    CustodyScope,
     ProgressStatus,
     SessionRequestStatus,
     StakeResolutionColumn,
@@ -69,6 +70,26 @@ from world.stories.types import (
 )
 
 _STAKES_LOCKED_MESSAGE = "This beat's stakes contract is locked by an open activation."
+
+
+def _custody_blocked_message(verdict: Any) -> str:
+    """Disclosure-safe custody-block message (#2001 Task 4).
+
+    Shared by StakeSerializer and StakeResolutionSerializer's custody gates.
+    Never the protecting story's title or notes (ADR-0033-style disclosure
+    posture) — only the custodian GM's username, or a staff-routed fallback
+    when the protecting story is orphaned (no primary_table/GM to name).
+    """
+    if verdict.custodian_gm_username:
+        return (
+            "This subject is under another story's custody — request clearance "
+            f"from GM {verdict.custodian_gm_username}."
+        )
+    return (
+        "This subject is under another story's custody — request clearance "
+        "from the story's GM via staff."
+    )
+
 
 # ---------------------------------------------------------------------------
 # Wave 6: Era lifecycle serializer
@@ -2649,6 +2670,8 @@ class StakeSerializer(serializers.ModelSerializer):
 
         self._check_boundaries(beat, attrs)
 
+        self._check_custody(beat, attrs, user)
+
         return attrs
 
     def _apply_template_defaults(self, template: Any, beat: Any, attrs: Any) -> None:
@@ -2741,6 +2764,62 @@ class StakeSerializer(serializers.ModelSerializer):
         if not report.cleared:
             msg = "These stakes could not be authored against a player boundary."
             raise serializers.ValidationError(msg)
+
+    def _candidate_subject_identity(self, attrs: Any) -> Any:
+        """This write's effective wagered-subject identity (#2001 Task 4).
+
+        Merges attrs with the instance exactly like ``_candidate_stake``
+        (partial update falls back to the current row's values), but returns
+        the typed-FK-or-label identity tuple directly — ``check_subject_custody``
+        only needs the identity, not a full (unsaved, un-pk'd) ``Stake`` row.
+        """
+        from world.stories.services.boundaries import _subject_identity  # noqa: PLC0415
+
+        def merged(field_name: str, default: Any = None) -> Any:
+            if field_name in attrs:
+                return attrs[field_name]
+            if self.instance is not None:
+                return getattr(self.instance, field_name)
+            return default
+
+        subject_sheet = merged("subject_sheet")
+        subject_item = merged("subject_item")
+        subject_society = merged("subject_society")
+        subject_organization = merged("subject_organization")
+        return _subject_identity(
+            merged("subject_kind", default=""),
+            subject_sheet.pk if subject_sheet is not None else None,
+            subject_item.pk if subject_item is not None else None,
+            subject_society.pk if subject_society is not None else None,
+            subject_organization.pk if subject_organization is not None else None,
+            merged("subject_label", default=""),
+        )
+
+    def _check_custody(self, beat: Any, attrs: Any, user: Any) -> None:
+        """Authoring-time custody gate (#2001 Task 4).
+
+        Resolutions don't exist yet at authoring time, so this always checks
+        at APPEAR scope (the weakest guarantee — merely wagering the subject
+        into a contract). A writer payload later raising the reach to
+        HARM/REMOVE is re-checked at that scope by
+        ``StakeResolutionSerializer.validate``. Staff bypass and the
+        acting-story/participant/clearance rules all live inside
+        ``check_subject_custody`` itself — this is a single call, not a
+        duplicate gate. Never leak the protecting story's identity in the
+        error (``_custody_blocked_message``, ADR-0033-style disclosure).
+        """
+        if beat is None:
+            return
+        from world.stories.services.custody import check_subject_custody  # noqa: PLC0415
+
+        verdict = check_subject_custody(
+            subject_identity=self._candidate_subject_identity(attrs),
+            actor_account=user,
+            scope=CustodyScope.APPEAR,
+            acting_story=beat.episode.chapter.story,
+        )
+        if not verdict.allowed:
+            raise serializers.ValidationError(_custody_blocked_message(verdict))
 
 
 class StakeRewardLineSerializer(serializers.ModelSerializer):
@@ -2914,7 +2993,7 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
 
         self._validate_writer_payloads(attrs, stake)
 
-        self._validate_writer_payloads(attrs, stake)
+        self._check_writer_custody(attrs, stake, user)
 
         return attrs
 
@@ -2991,6 +3070,56 @@ class StakeResolutionSerializer(serializers.ModelSerializer):
         )
         if problems:
             raise serializers.ValidationError({p.field: p.message for p in problems})
+
+    def _writer_payload_scope(self, attrs: Any) -> str:
+        """The custody scope THIS write's writer-payload combination reaches for.
+
+        Mirrors ``custody._stake_intended_scope``'s ladder, but over just this
+        write's merged payload rather than the stake's full authored
+        resolution set — a re-check scoped to the one branch actually being
+        authored/edited (#2001 Task 4).
+        """
+
+        def merged(field_name: str, default: Any) -> Any:
+            if field_name in attrs:
+                return attrs[field_name]
+            if self.instance is not None:
+                return getattr(self.instance, field_name)
+            return default
+
+        sets_subject_lifecycle = merged("sets_subject_lifecycle", default="")
+        forfeits_subject_item = merged("forfeits_subject_item", default=False)
+        subject_standing_delta = merged("subject_standing_delta", default=0)
+        column = merged("column", default="")
+        consequence_pool = merged("consequence_pool", default=None)
+
+        if sets_subject_lifecycle or forfeits_subject_item:
+            return CustodyScope.REMOVE
+        if subject_standing_delta != 0 or (
+            column == StakeResolutionColumn.LOSS and consequence_pool is not None
+        ):
+            return CustodyScope.HARM
+        return CustodyScope.APPEAR
+
+    def _check_writer_custody(self, attrs: Any, stake: Any, user: Any) -> None:
+        """Re-check custody when this write raises the stake's reach (#2001 Task 4).
+
+        A writer payload merely reaching APPEAR was already covered at
+        stake-authoring time (``StakeSerializer._check_custody``) — this only
+        re-checks when the payload raises the reach to HARM/REMOVE. Never
+        leak the protecting story's identity in the error
+        (``_custody_blocked_message``, ADR-0033-style disclosure).
+        """
+        if stake is None:
+            return
+        scope = self._writer_payload_scope(attrs)
+        if scope == CustodyScope.APPEAR:
+            return
+        from world.stories.services.custody import custody_verdict_for_stake  # noqa: PLC0415
+
+        verdict = custody_verdict_for_stake(stake, user, intended_scope=scope)
+        if not verdict.allowed:
+            raise serializers.ValidationError(_custody_blocked_message(verdict))
 
 
 class StakeContractActivationSerializer(serializers.ModelSerializer):
