@@ -102,11 +102,14 @@ def _require_custodian_gm(protected_subject: StoryProtectedSubject, gm_profile: 
 # ---------------------------------------------------------------------------
 
 
-def _subject_display_label(protected_subject: StoryProtectedSubject) -> str:
+def subject_display_label(protected_subject: StoryProtectedSubject) -> str:
     """A player/GM-safe display label for the protected subject.
 
     Mirrors ``StoryProtectedSubject.clean()``'s exactly-one-subject precedence
     ordering. Never touches ``notes`` (GM-private) or the protecting story's title.
+
+    Public (Task 7) — ``commands/story.py``'s ``protect``/``clearance`` telnet
+    subverbs reuse this exact label rule rather than re-deriving it.
     """
     if protected_subject.subject_label:
         return protected_subject.subject_label
@@ -195,7 +198,7 @@ def request_clearance(  # noqa: PLR0913
         status=CustodyClearanceStatus.PENDING,
         message=message,
     )
-    subject_label = _subject_display_label(protected_subject)
+    subject_label = subject_display_label(protected_subject)
     _notify_custodian(
         clearance,
         body=(
@@ -228,7 +231,7 @@ def grant_clearance(
     clearance.save(
         update_fields=["status", "granted_by", "response_note", "resolved_at"],
     )
-    subject_label = _subject_display_label(clearance.protected_subject)
+    subject_label = subject_display_label(clearance.protected_subject)
     _notify_requester(
         clearance,
         body=(
@@ -262,7 +265,7 @@ def deny_clearance(
     clearance.save(
         update_fields=["status", "granted_by", "response_note", "resolved_at"],
     )
-    subject_label = _subject_display_label(clearance.protected_subject)
+    subject_label = subject_display_label(clearance.protected_subject)
     _notify_requester(
         clearance,
         body=(
@@ -310,7 +313,7 @@ def escalate_clearance(clearance: CustodyClearance) -> CustodyClearance:
     clearance.status = CustodyClearanceStatus.ESCALATED
     clearance.resolved_at = None
     clearance.save(update_fields=["status", "resolved_at"])
-    subject_label = _subject_display_label(clearance.protected_subject)
+    subject_label = subject_display_label(clearance.protected_subject)
     _notify_custodian(
         clearance,
         body=(
@@ -347,7 +350,7 @@ def resolve_escalation(
     clearance.save(
         update_fields=["status", "staff_resolver", "response_note", "resolved_at"],
     )
-    subject_label = _subject_display_label(clearance.protected_subject)
+    subject_label = subject_display_label(clearance.protected_subject)
     verb = "granted" if grant else "denied"
     _notify_requester(
         clearance,
@@ -379,7 +382,7 @@ def revoke_clearance(clearance: CustodyClearance, *, revoked_by: AccountDB) -> N
 
     clearance.revoked_at = timezone.now()
     clearance.save(update_fields=["revoked_at"])
-    subject_label = _subject_display_label(clearance.protected_subject)
+    subject_label = subject_display_label(clearance.protected_subject)
     _notify_requester(
         clearance,
         body=(

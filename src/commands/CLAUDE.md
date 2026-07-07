@@ -491,6 +491,32 @@ actions, backends, and service functions.
   (`player_pending_treasured_signoffs`); `story signoff <beat-id> <subject> [withdraw]`
   grants/withdraws via `grant_treasured_signoff`/`withdraw_treasured_signoff` — the same service
   functions `TreasuredSignoffViewSet` calls. No business logic in the command.
+  `story protect`/`story clearance` (#2001 Task 7) are the telnet face of GM-authorable
+  custody protection — thin ORM + service calls over `world.stories.services.custody_clearance`
+  (there is no dedicated Action here; Task 6 built plain permission functions, not a
+  permission-class-gated Action, so authorization is replicated inline to match the API's
+  permission classes exactly, never looser): `story protect <story-id> add <kind>=<subject-ref>
+  [beat=<id>] [notes=<text>]` (`kind` one of `npc_fate`/`personal_jeopardy` — character by name,
+  global search — `item` — id — `faction` — Organization name, falling back to Society name —
+  `location`/`custom` — freeform label) creates a `StoryProtectedSubject`; `story protect
+  <story-id> remove <protected-id>` soft-deactivates (`is_active=False`, never a hard delete —
+  its `CustodyClearance` decision trail CASCADEs from it); `story protect <story-id> list` shows
+  every protection (active and inactive) for the story. All three are gated on the story's Lead
+  GM or staff (`world.stories.permissions.user_owns_or_leads_story`, mirroring
+  `IsProtectedSubjectStoryOwnerOrStaff`). `story clearance request <kind>=<subject-ref>
+  scope=<appear|harm|remove> [story=<id>] [message=<text>]` is the identity-based path (fans out
+  to every active protection sharing that identity across stories, Task 6 review Fix 4 —
+  `matching_active_protected_subjects`, skipping any already-live request and reporting it back);
+  `story clearance request protected=<id> scope=... [story=<id>] [message=<text>]` is the raw-pk
+  variant for a custodian-relayed id (a duplicate there is a hard error, not a skip). `story
+  clearance grant|deny <id> [note=<text>]` — custodian Lead GM only, no staff bypass (staff act
+  only through escalate→resolve); `story clearance escalate <id>` — requester-only; `story
+  clearance resolve <id> grant|deny [note=<text>]` — staff-only; `story clearance revoke <id>` —
+  custodian or staff; `story clearance list [pending]` — the caller's own requests plus requests
+  against stories they own/lead, staff sees all (mirrors `CustodyClearanceViewSet.get_queryset`).
+  Disclosure in every line of output follows the same rule as the API (custodian GM username,
+  subject label via the shared `subject_display_label` helper, and scope only — never another
+  story's title/notes).
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`
