@@ -783,10 +783,12 @@
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - renovation_details <- buildings.BuildingRenovationDetails
+  - preparation_details <- buildings.BuildingPreparationDetails
   - upgrade_details <- buildings.BuildingUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
+  - mothballed_room_states <- buildings.MothballedRoomState
   - ship_details <- ships.ShipDetails
 
 ### BuildingMaterial
@@ -821,6 +823,11 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
   - target_kind -> buildings.BuildingKind [FK]
+
+### BuildingPreparationDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
 
 ### BuildingUpgradeDetails
 **Foreign Keys:**
@@ -916,6 +923,11 @@
 **Foreign Keys:**
   - room_profile -> evennia_extensions.RoomProfile [FK]
   - kind -> buildings.DecorationKind [FK]
+
+### MothballedRoomState
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - room_profile -> evennia_extensions.RoomProfile [FK]
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
@@ -4428,6 +4440,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - building_preparation_details <- buildings.BuildingPreparationDetails
   - building_upgrade_details <- buildings.BuildingUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails

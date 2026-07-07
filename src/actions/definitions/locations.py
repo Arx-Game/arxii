@@ -828,3 +828,234 @@ class StartBuildingRenovationAction(_RoomBuilderAction):
             success=True,
             message=f"'{kind.name}' renovation commissioned (project #{project.pk}).",
         )
+
+
+def _building_condition_status(building) -> str:
+    """Owner-only condition/upkeep readout (#1930).
+
+    The public renown payload carries only the fiction label; exact
+    arrears / miss counts / ultra state surface here, on the owner's own
+    actions.
+    """
+    from world.buildings.upkeep_services import building_weekly_upkeep  # noqa: PLC0415
+
+    parts = [
+        f"Condition: {building.get_condition_tier_display()}.",
+        f"Weekly upkeep: {building_weekly_upkeep(building)} coppers.",
+    ]
+    if building.upkeep_arrears:
+        parts.append(f"Arrears owed: {building.upkeep_arrears} coppers.")
+    if building.consecutive_missed_upkeep:
+        parts.append(f"Missed weeks: {building.consecutive_missed_upkeep}.")
+    if building.ultra_upkeep:
+        parts.append("Ultra upkeep: ON.")
+    if building.mothballed_at is not None:
+        parts.append("Mothballed (hidden; upkeep frozen).")
+    return " ".join(parts)
+
+
+def _resolve_building_and_purse(actor: ObjectDB, kwargs: dict[str, Any]):
+    """Shared resolution for the condition action family (#1930).
+
+    Returns ``(building, purse, error_result)`` — exactly one of
+    building/error_result is set; purse accompanies a resolved building.
+    """
+    from world.buildings.room_services import building_for_room  # noqa: PLC0415
+    from world.currency.services import get_or_create_purse  # noqa: PLC0415
+
+    room = _resolve_room(actor, kwargs)
+    if room is None:
+        return None, None, ActionResult(success=False, message=_no_room_message(kwargs))
+    building = building_for_room(room)
+    if building is None:
+        return (
+            None,
+            None,
+            ActionResult(success=False, message="This room isn't part of a building."),
+        )
+    persona = _persona_for(actor)
+    purse = get_or_create_purse(persona.character_sheet)
+    return building, purse, None
+
+
+@dataclass
+class SettleBuildingArrearsAction(_RoomBuilderAction):
+    """Pay off the building's accrued upkeep arrears (#1930).
+
+    Bare invocation shows the owner-only condition/arrears status; pass
+    ``confirm`` to pay. Kwargs: optional ``room_id`` (web canvas),
+    optional ``confirm``.
+    """
+
+    key: str = "settle_building_arrears"
+    name: str = "Settle Upkeep Arrears"
+    icon: str = "coins"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.buildings.condition_services import settle_upkeep_arrears  # noqa: PLC0415
+
+        building, purse, error = _resolve_building_and_purse(actor, kwargs)
+        if error is not None:
+            return error
+        if not kwargs.get("confirm"):
+            status = _building_condition_status(building)
+            return ActionResult(success=False, message=f"{status} Confirm to settle.")
+        try:
+            paid = settle_upkeep_arrears(building=building, payer_purse=purse)
+        except ValidationError as exc:
+            return ActionResult(success=False, message=exc.messages[0])
+        if paid == 0:
+            return ActionResult(success=True, message="Nothing is owed on this building.")
+        return ActionResult(success=True, message=f"You settle {paid} coppers of back upkeep.")
+
+
+@dataclass
+class RefurbishBuildingAction(_RoomBuilderAction):
+    """Restore the building's condition to Excellent for coppers (#1930).
+
+    Distinct from the ``start_building_renovation`` kind-swap project —
+    refurbishment is the priced condition restore. Bare invocation quotes
+    the cost; pass ``confirm`` to pay. Kwargs: optional ``room_id``,
+    optional ``confirm``.
+    """
+
+    key: str = "refurbish_building"
+    name: str = "Refurbish Building"
+    icon: str = "paint-roller"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.buildings.condition_services import (  # noqa: PLC0415
+            ConditionServiceError,
+            refurbish_building,
+            refurbish_cost,
+        )
+
+        building, purse, error = _resolve_building_and_purse(actor, kwargs)
+        if error is not None:
+            return error
+        if not kwargs.get("confirm"):
+            status = _building_condition_status(building)
+            cost = refurbish_cost(building)
+            return ActionResult(
+                success=False,
+                message=f"{status} Refurbishing to Excellent costs {cost} coppers. "
+                "Confirm to proceed.",
+            )
+        try:
+            cost = refurbish_building(building=building, payer_purse=purse)
+        except ConditionServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except ValidationError as exc:
+            return ActionResult(success=False, message=exc.messages[0])
+        return ActionResult(
+            success=True,
+            message=f"Craftsmen sweep through for {cost} coppers — the building is "
+            "restored to excellent condition.",
+        )
+
+
+@dataclass
+class PrepareBuildingAction(_RoomBuilderAction):
+    """Grand preparation: commission the cleanup project pushing above normal (#1930).
+
+    The party-preparation loop — each project pushes one tier above
+    Excellent (then Immaculate) for a temporary prestige kick that decays
+    back within about a week. The cost is a proportion of the house's
+    prestige; the commissioned project is funded with coppers
+    (``project/donate``) and sped along with AP Household Command checks
+    (``project/check``). Bare invocation quotes the cost; pass ``confirm``
+    to commission. Kwargs: optional ``room_id``, optional ``confirm``.
+    """
+
+    key: str = "prepare_building"
+    name: str = "Grand Preparation"
+    icon: str = "sparkles"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.condition_services import (  # noqa: PLC0415
+            ConditionServiceError,
+            prepare_cost,
+            start_building_preparation,
+        )
+
+        building, _purse, error = _resolve_building_and_purse(actor, kwargs)
+        if error is not None:
+            return error
+        if not kwargs.get("confirm"):
+            status = _building_condition_status(building)
+            try:
+                cost = prepare_cost(building)
+            except ConditionServiceError as exc:
+                return ActionResult(success=False, message=f"{status} {exc.user_message}")
+            return ActionResult(
+                success=False,
+                message=f"{status} A grand preparation will take {cost} coppers of funding. "
+                "Confirm to commission the project.",
+            )
+        try:
+            project = start_building_preparation(building=building, persona=_persona_for(actor))
+        except ConditionServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"The household begins the grand preparation (project #{project.pk}). "
+            f"Fund it with 'project/donate {project.pk}=<coppers>' or lend a hand with "
+            f"'project/check {project.pk}=Direct the Household'.",
+        )
+
+
+@dataclass
+class ToggleUltraUpkeepAction(_RoomBuilderAction):
+    """Toggle the ultra-upkeep premium that holds Immaculate condition (#1930).
+
+    While on (and affordable), the weekly sweep charges an outrageous
+    premium on top of normal upkeep to keep the building Immaculate past
+    its dwell. Kwargs: optional ``room_id``.
+    """
+
+    key: str = "toggle_ultra_upkeep"
+    name: str = "Ultra Upkeep"
+    icon: str = "gem"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.buildings.condition_services import set_ultra_upkeep  # noqa: PLC0415
+        from world.buildings.constants import ULTRA_UPKEEP_MULTIPLIER  # noqa: PLC0415
+        from world.buildings.upkeep_services import building_weekly_upkeep  # noqa: PLC0415
+
+        building, _purse, error = _resolve_building_and_purse(actor, kwargs)
+        if error is not None:
+            return error
+        enabled = not building.ultra_upkeep
+        set_ultra_upkeep(building=building, enabled=enabled)
+        if enabled:
+            premium = ULTRA_UPKEEP_MULTIPLIER * building_weekly_upkeep(building)
+            return ActionResult(
+                success=True,
+                message=f"Ultra upkeep engaged — {premium} coppers per week on top of "
+                "normal upkeep while the building is Immaculate.",
+            )
+        return ActionResult(success=True, message="Ultra upkeep discontinued.")

@@ -131,6 +131,12 @@ def _seed_civic_hubs() -> None:
     ensure_town_crier_kind()
 
 
+def _seed_building_condition() -> None:
+    from world.buildings.seeds import ensure_preparation_contribution_method  # noqa: PLC0415
+
+    ensure_preparation_contribution_method()
+
+
 def _seed_kudos() -> None:
     from world.progression.seeds import seed_kudos_content  # noqa: PLC0415
 
@@ -198,6 +204,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Civic hubs: the Notice Board / Town Crier RoomFeatureKinds + the crier
     # NPCRole (#1450). Instances (which room carries one) are world data.
     "civic_hubs": _seed_civic_hubs,
+    # Building condition: the Grand Preparation AP-check contribution method
+    # (#1930). After "governance" (rides its Household Command CheckType).
+    "building_condition": _seed_building_condition,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
     # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
@@ -253,6 +262,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
+    from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
@@ -301,6 +311,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).
         "civic_hubs": [RoomFeatureKind],
+        # Building condition: the Grand Preparation "Direct the Household"
+        # ContributionMethod (#1930).
+        "building_condition": [ContributionMethod],
         # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).

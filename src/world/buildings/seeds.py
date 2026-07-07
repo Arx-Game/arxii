@@ -223,3 +223,40 @@ def ensure_decoration_kinds() -> None:
             DecorationAffinity.objects.update_or_create(
                 kind=kind, stat_key=stat_key, defaults={"value": value}
             )
+
+
+PREPARATION_METHOD_NAME = "Direct the Household"
+
+
+def ensure_preparation_contribution_method() -> None:
+    """Seed the AP-check contribution method for Grand Preparation (#1930).
+
+    ``Household Command`` (presence + Leadership + Stewardship, the #930
+    governance seed) is the check — rallying your household to scrub,
+    polish, and hang the garlands. Depends on the governance content;
+    calls its idempotent seed to guarantee the composed CheckType exists.
+    AP cost / progress magnitudes are PLACEHOLDER (tuning ledger §6).
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.projects.constants import ProjectKind  # noqa: PLC0415
+    from world.projects.models import ContributionMethod  # noqa: PLC0415
+    from world.seeds.governance_checks import seed_governance_check_content  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name="Household Command").first()
+    if check_type is None:
+        seed_governance_check_content()
+        check_type = CheckType.objects.get(name="Household Command")
+
+    ContributionMethod.objects.update_or_create(
+        kind=ProjectKind.BUILDING_PREPARATION,
+        name=PREPARATION_METHOD_NAME,
+        defaults={
+            "description": (
+                "PLACEHOLDER — rally the household to scrub, polish, and prepare; "
+                "a successful command speeds the preparation along."
+            ),
+            "check_type": check_type,
+            "ap_cost": 5,
+            "progress_on_success": 10,
+        },
+    )

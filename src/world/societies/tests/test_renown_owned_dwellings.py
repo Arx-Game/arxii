@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 from django.test import TestCase
-from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.areas.factories import AreaFactory
+from world.buildings.constants import ConditionTier
 from world.buildings.factories import BuildingFactory
 from world.buildings.models import (
     BuildingPolish,
-    BuildingProjectInstance,
     PolishCategory,
-    ProjectTemplate,
     TierThreshold,
 )
 from world.character_sheets.factories import CharacterSheetFactory
@@ -43,10 +41,7 @@ class OwnedDwellingsPayloadShapeTests(TestCase):
         self.assertEqual(len(payload["owned_dwellings"]), 1)
         entry = payload["owned_dwellings"][0]
         self.assertEqual(entry["name"], "Vermillion Hall")
-        self.assertFalse(entry["upkeep_warning"])
-        self.assertEqual(entry["decayed_features_count"], 0)
-        self.assertFalse(entry["dormant"])
-        self.assertIsNone(entry["dormant_since"])
+        self.assertEqual(entry["condition_label"], "Excellent")
         self.assertEqual(entry["polish_by_category"], [])
 
     def test_buildings_owned_by_others_are_excluded(self) -> None:
@@ -86,60 +81,31 @@ class PolishByCategoryTests(TestCase):
         self.assertEqual(polish[0]["tier_label"], "Grand")
 
 
-class UpkeepWarningTests(TestCase):
-    def test_warning_false_when_no_missed_upkeep(self) -> None:
+class ConditionLabelTests(TestCase):
+    """#1930 — the payload carries only the public condition fiction label."""
+
+    def test_condition_label_reflects_tier(self) -> None:
         owner = _make_primary_persona()
         building = _make_building(owner)
-        template = ProjectTemplate.objects.create(name="Hall")
-        BuildingProjectInstance.objects.create(
-            building=building, template=template, consecutive_missed_upkeep=0
-        )
-        payload = build_renown_payload(owner)
-        self.assertFalse(payload["owned_dwellings"][0]["upkeep_warning"])
-
-    def test_warning_true_when_any_instance_missed_upkeep(self) -> None:
-        owner = _make_primary_persona()
-        building = _make_building(owner)
-        template = ProjectTemplate.objects.create(name="Hall")
-        BuildingProjectInstance.objects.create(
-            building=building, template=template, consecutive_missed_upkeep=0
-        )
-        BuildingProjectInstance.objects.create(
-            building=building, template=template, consecutive_missed_upkeep=2
-        )
-        payload = build_renown_payload(owner)
-        self.assertTrue(payload["owned_dwellings"][0]["upkeep_warning"])
-
-    def test_decayed_features_count_reflects_decayed_at(self) -> None:
-        owner = _make_primary_persona()
-        building = _make_building(owner)
-        template = ProjectTemplate.objects.create(name="Hall")
-        BuildingProjectInstance.objects.create(
-            building=building, template=template, decayed_at=timezone.now()
-        )
-        BuildingProjectInstance.objects.create(
-            building=building, template=template, decayed_at=timezone.now()
-        )
-        BuildingProjectInstance.objects.create(
-            building=building, template=template, decayed_at=None
-        )
-        payload = build_renown_payload(owner)
-        self.assertEqual(payload["owned_dwellings"][0]["decayed_features_count"], 2)
-
-
-class DormancyTests(TestCase):
-    def test_dormant_building_surfaces_with_dormant_since(self) -> None:
-        owner = _make_primary_persona()
-        building = _make_building(owner)
-        building.is_accessible = False
-        building.dormant_since = timezone.now()
-        building.save(update_fields=["is_accessible", "dormant_since"])
+        building.condition_tier = ConditionTier.RAMSHACKLE
+        building.save(update_fields=["condition_tier"])
 
         payload = build_renown_payload(owner)
         entry = payload["owned_dwellings"][0]
 
-        self.assertTrue(entry["dormant"])
-        self.assertIsNotNone(entry["dormant_since"])
+        self.assertEqual(entry["condition_label"], "Ramshackle")
+
+    def test_no_financial_state_leaks_to_the_public_payload(self) -> None:
+        owner = _make_primary_persona()
+        building = _make_building(owner)
+        building.upkeep_arrears = 999
+        building.consecutive_missed_upkeep = 5
+        building.save(update_fields=["upkeep_arrears", "consecutive_missed_upkeep"])
+
+        payload = build_renown_payload(owner)
+        entry = payload["owned_dwellings"][0]
+
+        self.assertEqual(set(entry.keys()), {"id", "name", "polish_by_category", "condition_label"})
 
 
 def _tenancy_in(room, persona, *, is_primary_home=False) -> None:

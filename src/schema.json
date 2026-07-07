@@ -55834,7 +55834,13 @@ components:
       - xp_cost
     _OwnedDwelling:
       type: object
-      description: One building the persona owns, with polish breakdown + upkeep state.
+      description: |-
+        One building the persona owns, with polish breakdown + condition label.
+
+        The renown payload is viewable by any authenticated player, so this
+        carries only the public fiction: the qualitative condition-tier label
+        (#1930, ADR-0031). Arrears / miss counters / mothball state are
+        owner-only and surface through the owner action family instead.
       properties:
         id:
           type: integer
@@ -55844,24 +55850,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/_CategoryPolish'
-        upkeep_warning:
-          type: boolean
-        decayed_features_count:
-          type: integer
-        dormant:
-          type: boolean
-        dormant_since:
+        condition_label:
           type: string
-          format: date-time
-          nullable: true
       required:
-      - decayed_features_count
-      - dormant
-      - dormant_since
+      - condition_label
       - id
       - name
       - polish_by_category
-      - upkeep_warning
     _PrestigeBreakdown:
       type: object
       description: Five-axis breakdown of the persona's total_prestige.

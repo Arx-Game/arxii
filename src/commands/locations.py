@@ -19,6 +19,8 @@ rhythm, no monster one-liner):
   room/evict <character>          room/extend <units>
   room/decorate <template> [here]         room/style <style name>
   room/renovate <kind name|id>
+  room/settle [confirm]           room/refurbish [confirm]
+  room/prepare [confirm]          room/ultraupkeep
 """
 
 from __future__ import annotations
@@ -38,10 +40,15 @@ _USAGE = (
     "  room/home  ·  room/tenant <character>  ·  room/evict <character>\n"
     "  room/extend <units>  ·  room/decorate <template> [here]\n"
     "  room/style <style name>  ·  room/fixture <kind>  ·  room/removefixture <kind>\n"
-    "  room/renovate <kind name|id>"
+    "  room/renovate <kind name|id>\n"
+    "  room/settle [confirm]  ·  room/refurbish [confirm]  ·  room/prepare [confirm]\n"
+    "  room/ultraupkeep"
 )
 
 _AFFIRMATIVE = frozenset({"yes", "y", "true", "on", "1", "public"})
+
+# #1930 condition verbs: the sole argument that flips a status quote into a payment.
+_CONFIRM_ARG = "confirm"
 
 
 def _split_trailing_kwargs(text: str, keys: tuple[str, ...]) -> tuple[str, dict[str, str]]:
@@ -108,6 +115,12 @@ class CmdRoom(ArxCommand):
             "renovate": lambda a: self._run("start_building_renovation", target_kind=a),
             "fixture": lambda a: self._run("place_room_fixture", kind=a),
             "removefixture": lambda a: self._run("remove_room_fixture", kind=a),
+            # #1930 condition family — bare shows the owner status/quote,
+            # "confirm" pays.
+            "settle": lambda a: self._condition_verb("settle_building_arrears", a),
+            "refurbish": lambda a: self._condition_verb("refurbish_building", a),
+            "prepare": lambda a: self._condition_verb("prepare_building", a),
+            "ultraupkeep": lambda a: self._run("toggle_ultra_upkeep"),  # noqa: ARG005
         }
         for switch in switches:
             handler = handlers.get(switch)
@@ -131,6 +144,13 @@ class CmdRoom(ArxCommand):
         action = get_action(action_key)
         result = action.run(actor=self.caller, **kwargs)
         self.msg(result.message)
+
+    def _condition_verb(self, action_key: str, args: str) -> None:
+        """#1930 settle/refurbish/prepare: bare = status/quote, ``confirm`` = pay."""
+        if args.strip().lower() == _CONFIRM_ARG:
+            self._run(action_key, confirm=True)
+        else:
+            self._run(action_key)
 
     def _edit(self, *, error: str, **kwargs: Any) -> None:
         supplied = {k: v for k, v in kwargs.items() if v != ""}

@@ -7,10 +7,7 @@ function makeDwelling(overrides: Partial<OwnedDwelling> = {}): OwnedDwelling {
     id: 1,
     name: 'Vermillion Hall',
     polish_by_category: [],
-    upkeep_warning: false,
-    decayed_features_count: 0,
-    dormant: false,
-    dormant_since: null,
+    condition_label: 'Excellent',
     ...overrides,
   };
 }
@@ -59,38 +56,8 @@ describe('OwnedDwellingsCard', () => {
     expect(screen.queryByText('Grand')).not.toBeInTheDocument();
   });
 
-  it('shows upkeep-missed badge when upkeep_warning is true', () => {
-    render(<OwnedDwellingsCard dwellings={[makeDwelling({ upkeep_warning: true })]} />);
-    expect(screen.getByText(/upkeep missed/i)).toBeInTheDocument();
-  });
-
-  it('shows decayed-features count when > 0', () => {
-    render(<OwnedDwellingsCard dwellings={[makeDwelling({ decayed_features_count: 3 })]} />);
-    expect(screen.getByText(/3 decayed/i)).toBeInTheDocument();
-  });
-
-  it('shows dormant badge when dwelling is dormant', () => {
-    render(
-      <OwnedDwellingsCard
-        dwellings={[makeDwelling({ dormant: true, dormant_since: '2026-01-15T00:00:00Z' })]}
-      />
-    );
-    expect(screen.getByText(/Dormant/)).toBeInTheDocument();
-  });
-
-  it('suppresses the upkeep badge when dormant (dormant supersedes)', () => {
-    render(
-      <OwnedDwellingsCard
-        dwellings={[
-          makeDwelling({
-            upkeep_warning: true,
-            dormant: true,
-            dormant_since: '2026-01-15T00:00:00Z',
-          }),
-        ]}
-      />
-    );
-    expect(screen.queryByText(/upkeep missed/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Dormant/)).toBeInTheDocument();
+  it('shows the condition label badge', () => {
+    render(<OwnedDwellingsCard dwellings={[makeDwelling({ condition_label: 'Ramshackle' })]} />);
+    expect(screen.getByText('Ramshackle')).toBeInTheDocument();
   });
 });
