@@ -65,6 +65,12 @@ def apply_escalation_tick(
     Failure consequences are lag-only by design: a widening intensity−control
     deficit bites at the character's next cast through the existing mishap
     pipeline. No mishaps are rolled here.
+
+    Stakes coupling (#2013): ``StakesEscalationModifier.intensity_step_bonus``
+    for this encounter's stakes_level is added to every participant's per-tick
+    intensity gain; ``initial_surge`` fires once (ever, via
+    ``apply_dramatic_surge``'s dedup) as a HIGH_STAKES beat, independent of
+    ``curve.start_round`` gating below.
     """
     from world.combat.models import CombatParticipant  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
@@ -80,10 +86,13 @@ def apply_escalation_tick(
 
     encounter_ct = ContentType.objects.get_for_model(encounter)
     results: list[EscalationTickResult] = []
-    participants = CombatParticipant.objects.filter(
-        encounter=encounter,
-        status=ParticipantStatus.ACTIVE,
-    ).select_related("character_sheet__character")
+    participants = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        ).select_related("character_sheet__character")
+    )
+    step_bonus = _stakes_intensity_step_bonus(encounter.stakes_level)
 
     for participant in participants:
         character = participant.character_sheet.character
@@ -110,7 +119,7 @@ def apply_escalation_tick(
         pace_success_level: int | None = None
         if not capped:
             engagement.escalation_level += 1
-            engagement.intensity_modifier += curve.intensity_step
+            engagement.intensity_modifier += curve.intensity_step + step_bonus
             difficulty = (
                 curve.pace_difficulty_base
                 + curve.pace_difficulty_per_level * engagement.escalation_level
@@ -139,7 +148,46 @@ def apply_escalation_tick(
             )
         )
 
+    _apply_initial_stakes_surge(encounter, participants)
+
     return results
+
+
+def _stakes_intensity_step_bonus(stakes_level: str) -> int:
+    """The authored intensity_step_bonus for ``stakes_level``, or 0 if unseeded (#2013)."""
+    from world.combat.models import StakesEscalationModifier  # noqa: PLC0415
+
+    return (
+        StakesEscalationModifier.objects.filter(stakes_level=stakes_level)
+        .values_list("intensity_step_bonus", flat=True)
+        .first()
+        or 0
+    )
+
+
+def _apply_initial_stakes_surge(
+    encounter: CombatEncounter,
+    participants: list[CombatParticipant],
+) -> None:
+    """Grant the one-shot HIGH_STAKES surge to every ticked participant (#2013).
+
+    Attempted on every tick — safe because ``apply_dramatic_surge``'s dedup
+    makes every call after the first a clean no-op. No-ops entirely when the
+    stakes row is unseeded or authored with initial_surge=0.
+    """
+    from world.combat.models import StakesEscalationModifier  # noqa: PLC0415
+
+    modifier = StakesEscalationModifier.objects.filter(stakes_level=encounter.stakes_level).first()
+    if modifier is None or modifier.initial_surge <= 0:
+        return
+    for participant in participants:
+        apply_dramatic_surge(
+            encounter=encounter,
+            participant=participant,
+            amount=modifier.initial_surge,
+            trigger_kind=SurgeTriggerKind.HIGH_STAKES,
+            subject_sheet=None,
+        )
 
 
 ESCALATION_SPIKE_TRIGGER_NAMES = (
@@ -523,3 +571,31 @@ def check_hated_foe_surges_for_new_participant(participant: CombatParticipant) -
             subject_sheet=opponent.persona.character_sheet,
             curve=curve,
         )
+
+
+def assign_default_escalation_curve(encounter: CombatEncounter) -> None:
+    """Assign the stakes-authored default curve when the encounter has none (#2013).
+
+    No-op when ``encounter.escalation_curve`` is already set (explicit GM
+    authoring always wins) or when the encounter's ``stakes_level`` has no
+    ``StakesEscalationModifier`` row, or that row has no ``default_curve``.
+    Called once, right after a ``CombatEncounter`` is created — the web
+    ``CombatEncounterViewSet.perform_create``, the two duel-seed functions
+    (``world.combat.duels``), and hostile-cast encounter seeding
+    (``world.combat.cast_seed.seed_or_feed_encounter_from_cast``) — this is
+    how a high-stakes fight becomes escalating (and surging) without GM
+    micro-setup.
+    """
+    if encounter.escalation_curve_id is not None:
+        return
+    from world.combat.models import StakesEscalationModifier  # noqa: PLC0415
+
+    modifier = (
+        StakesEscalationModifier.objects.filter(stakes_level=encounter.stakes_level)
+        .select_related("default_curve")
+        .first()
+    )
+    if modifier is None or modifier.default_curve_id is None:
+        return
+    encounter.escalation_curve = modifier.default_curve
+    encounter.save(update_fields=["escalation_curve"])

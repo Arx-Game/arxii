@@ -190,6 +190,9 @@ def seed_or_feed_encounter_from_cast(
             risk_level=RiskLevel.MODERATE,
             encounter_type=EncounterType.PARTY_COMBAT,
         )
+        from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+
+        assign_default_escalation_curve(encounter)
 
     caster_participant = _caster_participant(encounter, caster_sheet)
     # Idempotent: the DECLARING self-join path already recorded an ack inside

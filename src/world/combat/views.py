@@ -17,7 +17,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.serializers import Serializer
+from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
 from actions.constants import ActionBackend
@@ -127,6 +127,12 @@ class CombatEncounterViewSet(ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CombatEncounterFilter
     pagination_class = StandardResultsSetPagination
+
+    def perform_create(self, serializer: BaseSerializer[CombatEncounter]) -> None:
+        from world.combat.escalation import assign_default_escalation_curve  # noqa: PLC0415
+
+        encounter = serializer.save()
+        assign_default_escalation_curve(encounter)
 
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
