@@ -69,6 +69,7 @@ function makeEncounter(
     participants,
     opponents: [],
     current_round_actions: currentRoundActions,
+    surge_beats: [],
     clashes: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',
@@ -278,5 +279,33 @@ describe('RoundFlow — GM end-encounter control (#876)', () => {
     const trigger = screen.getByTestId('end-encounter-trigger');
     expect(trigger).toBeDisabled();
     expect(trigger).toHaveTextContent('Ending…');
+  });
+});
+
+describe('SurgeBeats', () => {
+  it('renders a surge beat narration line', () => {
+    const encounter = makeEncounter([], [], 1, {
+      escalation_curve_name: 'Standard Dramatic Escalation',
+      surge_beats: [{ narration: "Kira's power surges with sudden, dramatic force." }],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('surge-beat-line')).toHaveTextContent(
+      "Kira's power surges with sudden, dramatic force."
+    );
+  });
+
+  it('renders nothing when there are no surge beats this round', () => {
+    const encounter = makeEncounter([], [], 1, {
+      escalation_curve_name: 'Standard Dramatic Escalation',
+      surge_beats: [],
+    });
+    mockedUseEndEncounter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+
+    render(<RoundFlow encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.queryByTestId('surge-beat-line')).not.toBeInTheDocument();
   });
 });
