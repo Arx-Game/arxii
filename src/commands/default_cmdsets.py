@@ -91,6 +91,7 @@ from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
 from commands.persona import CmdPersona
 from commands.places import CmdPlaces  # #1866
+from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
@@ -333,6 +334,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdOutfit,
             # #1866 — places join/leave telnet namespace.
             CmdPlaces,
+            # #2005 — tactical position graph: list/take/move telnet namespace.
+            CmdPosition,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             # #1832 — ship commission/upgrade/repair/status namespace.

@@ -83,6 +83,33 @@ class AddOpponentTests(EvenniaTestCase):
         )
         self.assertEqual(position_of(opp.objectdb), position)
 
+    def test_add_opponent_cross_room_position_raises_before_persisting_opponent(self):
+        """Task 4 fold-in (#2005): a cross-room position must not orphan an opponent row."""
+        from world.areas.positioning.exceptions import PositionError
+        from world.areas.positioning.services import create_position
+        from world.combat.factories import CombatEncounterFactory, ThreatPoolFactory
+        from world.combat.models import CombatOpponent
+        from world.combat.services import add_opponent
+
+        encounter = CombatEncounterFactory()
+        pool = ThreatPoolFactory()
+        other_room = create_object("typeclasses.rooms.Room", key="OtherRoom", nohome=True)
+        position = create_position(other_room, "elsewhere")
+
+        with self.assertRaises(PositionError):
+            add_opponent(
+                encounter,
+                name="Misplaced Goblin",
+                tier="mook",
+                max_health=20,
+                threat_pool=pool,
+                position=position,
+            )
+
+        self.assertFalse(
+            CombatOpponent.objects.filter(encounter=encounter, name="Misplaced Goblin").exists()
+        )
+
     def test_add_opponent_without_position_leaves_objectdb_unplaced(self):
         """Backward compat: omitted position= leaves the opponent unplaced."""
         from world.combat.factories import CombatEncounterFactory, ThreatPoolFactory

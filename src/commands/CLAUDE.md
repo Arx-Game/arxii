@@ -88,6 +88,14 @@ actions, backends, and service functions.
   (telnet has no pk to reference); `places leave` leaves whichever Place the
   caller's active persona currently occupies. Calls `JoinPlaceAction`/
   `LeavePlaceAction` (`actions/definitions/places.py`) directly.
+- **`positions.py`**: `CmdPosition` (`position`, #2005) — the telnet face of the tactical
+  position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
+  room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or
+  `"This room has no positions staged."`); `position <name>` resolves a `Position` by name
+  scoped to the caller's room (case-insensitive exact, then unique-prefix) and dispatches
+  `TakePositionAction` when the caller is unplaced, else `MoveToPositionAction`
+  (`actions/definitions/positioning.py`) — the same seam the web position panel uses.
+  Ineligible/gated/non-adjacent failures surface the action's own error text verbatim.
 - **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
   implementation (replacing the former stubs) dispatching to `LockAction`/
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the

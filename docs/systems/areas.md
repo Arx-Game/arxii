@@ -218,6 +218,23 @@ AERIAL_PROPERTY_NAME = "aerial"  # ObjectProperty tag set on airborne objects
 
 The `_set_the_stage_actions(character)` helper in `src/actions/player_interface.py` surfaces one quick-action using the room's `default_blueprint` for staff.
 
+### Telnet [BUILT & WIRED]
+
+**`src/commands/positions.py`** — `CmdPosition` (`position`, #2005), the telnet face of the
+position graph, mirroring `CmdPlaces`' shape:
+
+- Bare `position` — lists the caller's current room's staged positions with their kind,
+  occupants, and ADJACENT-reach adjacency (via `room_position_adjacency`), or reports
+  `"This room has no positions staged."` when the room has none.
+- `position <name>` — resolves a `Position` by name scoped to the caller's room
+  (case-insensitive exact match, falling back to a unique prefix match) and calls
+  `TakePositionAction().run(caller, position_id=...)` when the caller is unplaced
+  (`position_of(caller) is None`), else `MoveToPositionAction().run(caller, position_id=...)`.
+  Ineligible-kind, non-adjacent, and gated/immobile failures surface the action's own
+  `ActionResult.message` verbatim (no separate telnet error copy).
+
+Registered in `commands/default_cmdsets.py` alongside `CmdPlaces`.
+
 ### Shared Serializers [BUILT & WIRED]
 
 **`src/world/areas/positioning/serializers.py`** — imported by both combat and scenes layers:
