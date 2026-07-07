@@ -140,6 +140,7 @@ def apply_escalation_tick(
 ESCALATION_SPIKE_TRIGGER_NAMES = (
     "escalation_spike_on_incapacitated",
     "escalation_spike_on_killed",
+    "escalation_spike_on_mortal_peril",
 )
 
 
@@ -351,3 +352,78 @@ def relationship_spike_handler(*, payload: Any) -> None:
     if room is None:
         return
     apply_relationship_escalation_spike(fallen_character=character, room=room)
+
+
+def apply_peril_escalation_spike(
+    *,
+    victim_character: ObjectDB,  # noqa: OBJECTDB_PARAM — payload carries ObjectDB
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM — emit location is the room ObjectDB
+) -> None:
+    """Spike intensity for bonded co-combatants when an ally enters mortal peril (#2013).
+
+    Mirrors ``apply_relationship_escalation_spike`` exactly, except: fires on
+    the victim ENTERING an acute-peril condition (not falling), reads
+    ``curve.peril_spike_intensity_amount``, and tags the record
+    ``SurgeTriggerKind.ALLY_PERIL``. Dedup (one surge per victim per
+    encounter, even across a re-applied/stacked condition) is enforced by
+    ``DramaticSurgeRecord``'s unique constraint via ``apply_dramatic_surge`` —
+    no separate one-shot bookkeeping needed here.
+    """
+    from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
+    from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+    victim_sheet = getattr(victim_character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if victim_sheet is None:
+        return
+
+    encounters = CombatEncounter.objects.filter(
+        room=room,
+        escalation_curve__isnull=False,
+    ).exclude(status=RoundStatus.COMPLETED)
+
+    for encounter in encounters:
+        curve = encounter.escalation_curve
+        participants = (
+            CombatParticipant.objects.filter(
+                encounter=encounter,
+                status=ParticipantStatus.ACTIVE,
+            )
+            .exclude(character_sheet=victim_sheet)
+            .select_related("character_sheet__character")
+        )
+        for participant in participants:
+            qualifies = CharacterRelationship.objects.filter(
+                source=participant.character_sheet,
+                target=victim_sheet,
+                is_active=True,
+                is_pending=False,
+                track_progress__track__fuels_escalation_spikes=True,
+                track_progress__developed_points__gte=curve.spike_minimum_track_points,
+            ).exists()
+            if not qualifies:
+                continue
+            apply_dramatic_surge(
+                encounter=encounter,
+                participant=participant,
+                amount=curve.peril_spike_intensity_amount,
+                trigger_kind=SurgeTriggerKind.ALLY_PERIL,
+                subject_sheet=victim_sheet,
+            )
+
+
+def peril_spike_handler(*, payload: Any) -> None:
+    """Flow-callable subscriber for CONDITION_APPLIED (#2013).
+
+    Filters to the acute-peril condition names (reuses
+    ``acute_peril_condition_names`` — doesn't duplicate the list) before doing
+    any relationship read, mirroring ``relationship_spike_handler``'s shape.
+    """
+    from world.vitals.peril_resolution import acute_peril_condition_names  # noqa: PLC0415
+
+    if payload.instance.condition.name not in acute_peril_condition_names():
+        return
+    room = payload.target.location
+    if room is None:
+        return
+    apply_peril_escalation_spike(victim_character=payload.target, room=room)

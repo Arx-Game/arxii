@@ -1177,6 +1177,42 @@ class EscalationSpikeOnKilledTriggerDefinitionFactory(factory_django.DjangoModel
     base_filter_condition = None  # all filtering happens in the service function
 
 
+def _build_peril_spike_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the peril handler (#2013)."""
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="escalation_peril_spike")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.combat.escalation.peril_spike_handler",
+            parameters={"payload": _PAYLOAD_PARAM},
+        )
+    return flow
+
+
+class EscalationSpikeOnMortalPerilTriggerDefinitionFactory(factory_django.DjangoModelFactory):
+    """TriggerDefinition for the CONDITION_APPLIED mortal-peril spike (#2013).
+
+    Installed on encounter rooms by ``install_escalation_room_triggers``
+    alongside the two existing spike triggers; all filtering happens in
+    ``peril_spike_handler``.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "escalation_spike_on_mortal_peril"
+    event_name = "condition_applied"
+    flow_definition = factory.LazyFunction(_build_peril_spike_flow)
+    priority = 50
+    base_filter_condition = None  # all filtering happens in the service function
+
+
 def _build_encounter_beat_flow() -> object:
     """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the beat handler.
 
@@ -1266,9 +1302,12 @@ def wire_escalation_content() -> None:
       step -> world.combat.escalation.relationship_spike_handler)
     - "escalation_spike_on_incapacitated" TriggerDefinition
     - "escalation_spike_on_killed" TriggerDefinition
+    - "escalation_peril_spike" FlowDefinition + "escalation_spike_on_mortal_peril"
+      TriggerDefinition (#2013)
 
     Doubles as integration-test setup and staff seed content. Safe to call
     multiple times — does not create duplicates.
     """
     EscalationSpikeOnIncapacitatedTriggerDefinitionFactory()
     EscalationSpikeOnKilledTriggerDefinitionFactory()
+    EscalationSpikeOnMortalPerilTriggerDefinitionFactory()
