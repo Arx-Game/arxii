@@ -12,11 +12,13 @@ import { apiFetch } from '@/evennia_replacements/api';
 
 import type {
   BeatView,
+  GroupBeatResult,
   JournalEntry,
   MissionCategory,
   MissionGiver,
   MissionGiverRequest,
   MissionInstance,
+  MissionInviteResult,
   MissionNode,
   MissionOption,
   MissionOptionRoute,
@@ -439,5 +441,79 @@ export async function resolveBeat(
     throw new ApiValidationError(await res.json());
   }
   if (!res.ok) throw new Error('Failed to resolve the option');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// #1036 group beat + #887 invite surface (#2049 frontend).
+// ---------------------------------------------------------------------------
+
+export async function getGroupBeat(instanceId: number): Promise<GroupBeatResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/group-beat/`);
+  if (res.status === 404) return { group_beat: null, resolved: null };
+  if (!res.ok) throw new Error('Failed to load the group beat');
+  return res.json();
+}
+
+export async function submitGroupPick(
+  instanceId: number,
+  body: { option_id: number; approach_id?: number | null }
+): Promise<GroupBeatResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/group-pick/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 400) throw new ApiValidationError(await res.json());
+  if (!res.ok) throw new Error('Failed to submit your pick');
+  return res.json();
+}
+
+export async function castGroupVote(
+  instanceId: number,
+  body: { option_id: number }
+): Promise<GroupBeatResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/group-vote/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 400) throw new ApiValidationError(await res.json());
+  if (!res.ok) throw new Error('Failed to submit your vote');
+  return res.json();
+}
+
+export async function inviteToMission(
+  instanceId: number,
+  body: { invitee_character_id: number }
+): Promise<MissionInviteResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/invite/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 400) throw new ApiValidationError(await res.json());
+  if (!res.ok) throw new Error('Failed to send the invite');
+  return res.json();
+}
+
+export async function respondToMissionInvite(body: {
+  invite_id: number;
+  response: 'accept' | 'decline';
+}): Promise<MissionInviteResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/respond/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 400) throw new ApiValidationError(await res.json());
+  if (!res.ok) throw new Error('Failed to respond to the invite');
+  return res.json();
+}
+
+/** Search co-located characters for the invite picker (#2049). */
+export async function searchRoomCharacters(query: string): Promise<EntitySearchResult[]> {
+  const res = await apiFetch(`/api/characters/room/?search=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error('Failed to search room characters');
   return res.json();
 }

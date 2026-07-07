@@ -11,8 +11,13 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import {
   assignMission,
   getBeat,
+  getGroupBeat,
+  inviteToMission,
   listJournal,
   resolveBeat,
+  respondToMissionInvite,
+  castGroupVote,
+  submitGroupPick,
   copyNode,
   copySubtree,
   copyTemplate,
@@ -38,6 +43,7 @@ import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './ap
 export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
 import type {
   BeatView,
+  GroupBeatResult,
   JournalEntry,
   MissionCategory,
   MissionGiver,
@@ -78,6 +84,10 @@ export const missionKeys = {
   // refetches liveness — the server computes "live here" from the puppet.
   beat: (instanceId: number, roomKey: string) =>
     [...missionKeys.all, 'beat', instanceId, roomKey] as const,
+  // Same roomKey threading for the group beat (options are per-viewer +
+  // location-gated).
+  groupBeat: (instanceId: number, roomKey: string) =>
+    [...missionKeys.all, 'group-beat', instanceId, roomKey] as const,
   giversFor: (filters: object) => [...missionKeys.givers(), filters] as const,
 };
 
@@ -359,5 +369,74 @@ export function useResolveBeat() {
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
       qc.invalidateQueries({ queryKey: [...missionKeys.all, 'beat'] }).catch(() => {});
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// #1036 group beat + #887 invite hooks (#2049).
+// ---------------------------------------------------------------------------
+
+export function useGroupBeat(
+  instanceId: number | undefined,
+  roomKey: string
+): UseQueryResult<GroupBeatResult> {
+  return useQuery({
+    queryKey: missionKeys.groupBeat(instanceId ?? 0, roomKey),
+    queryFn: () => getGroupBeat(instanceId as number),
+    enabled: instanceId !== undefined,
+  });
+}
+
+export function useSubmitGroupPick() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      option_id,
+      approach_id,
+    }: {
+      instanceId: number;
+      option_id: number;
+      approach_id?: number | null;
+    }) => submitGroupPick(instanceId, { option_id, approach_id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...missionKeys.all, 'group-beat'] }).catch(() => {});
+      qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+    },
+  });
+}
+
+export function useCastGroupVote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, option_id }: { instanceId: number; option_id: number }) =>
+      castGroupVote(instanceId, { option_id }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...missionKeys.all, 'group-beat'] }).catch(() => {});
+      qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
+    },
+  });
+}
+
+export function useInviteToMission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      invitee_character_id,
+    }: {
+      instanceId: number;
+      invitee_character_id: number;
+    }) => inviteToMission(instanceId, { invitee_character_id }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
+  });
+}
+
+export function useRespondToMissionInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { invite_id: number; response: 'accept' | 'decline' }) =>
+      respondToMissionInvite(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
   });
 }
