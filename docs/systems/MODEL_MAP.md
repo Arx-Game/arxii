@@ -2316,6 +2316,7 @@
   - assistant_claims_approved <- stories.AssistantGMClaim
   - assigned_session_requests <- stories.SessionRequest
   - story_offers_received <- stories.StoryGMOffer
+  - crossover_invites_sent <- stories.CrossoverInvite
   - stake_outcomes <- stories.StakeOutcome
   - custody_requests <- stories.CustodyClearance
   - tables <- gm.GMTable
@@ -2335,6 +2336,7 @@
   - draft_characters <- character_creation.CharacterDraft
   - primary_stories <- stories.Story
   - beat_completions <- stories.BeatCompletion
+  - ran_beat_completions <- stories.BeatCompletion
   - episode_resolutions <- stories.EpisodeResolution
   - story_progress <- stories.GroupStoryProgress
   - bulletin_posts <- stories.TableBulletinPost
@@ -5476,6 +5478,8 @@
   - pacts_as_senior <- societies.MarriagePact
   - pacts_as_junior <- societies.MarriagePact
   - house_templates <- societies.HouseTemplate
+  - aspects <- societies.OrganizationAspect
+  - features <- societies.OrganizationFeature
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
@@ -5742,6 +5746,8 @@
   - liege -> societies.Organization [FK]
   - default_succession_law -> societies.SuccessionLaw [FK]
   - holdings -> societies.HoldingKind [M2M]
+  - aspect_definitions -> societies.HouseAspectDefinition [M2M]
+  - features -> societies.HouseFeature [M2M]
 **Pointed to by:**
   - claims <- societies.HouseClaim
 
@@ -5751,6 +5757,39 @@
   - title -> societies.Title [FK]
   - template -> societies.HouseTemplate [FK]
   - reviewed_by -> accounts.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - aspects <- societies.HouseClaimAspect
+
+### HouseAspectDefinition
+**Pointed to by:**
+  - templates <- societies.HouseTemplate
+  - options <- societies.HouseAspectOption
+
+### HouseAspectOption
+**Foreign Keys:**
+  - definition -> societies.HouseAspectDefinition [FK]
+
+### HouseFeature
+**Pointed to by:**
+  - templates <- societies.HouseTemplate
+  - organization_features <- societies.OrganizationFeature
+
+### HouseClaimAspect
+**Foreign Keys:**
+  - claim -> societies.HouseClaim [FK]
+  - definition -> societies.HouseAspectDefinition [FK]
+  - option -> societies.HouseAspectOption [FK]
+
+### OrganizationAspect
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - definition -> societies.HouseAspectDefinition [FK]
+  - option -> societies.HouseAspectOption [FK]
+
+### OrganizationFeature
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - feature -> societies.HouseFeature [FK]
 
 ### OrganizationCapabilityProjectDetails
 **Foreign Keys:**
@@ -5805,6 +5844,7 @@
   - progress_records <- stories.StoryProgress
   - notes <- stories.StoryNote
   - gm_offers <- stories.StoryGMOffer
+  - crossover_invites_received <- stories.CrossoverInvite
   - bulletin_posts <- stories.TableBulletinPost
   - protected_subjects <- stories.StoryProtectedSubject
   - legend_events <- societies.LegendEvent
@@ -5846,6 +5886,8 @@
   - active_global_progress_records <- stories.GlobalStoryProgress
   - active_progress_records <- stories.StoryProgress
   - session_requests <- stories.SessionRequest
+  - crossover_invites <- stories.CrossoverInvite
+  - crossover_invites_accepted <- stories.CrossoverInvite
 
 ### EpisodeScene
 **Foreign Keys:**
@@ -5944,6 +5986,7 @@
   - beat -> stories.Beat [FK]
   - character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_table -> gm.GMTable [FK] (nullable)
+  - ran_by_table -> gm.GMTable [FK] (nullable)
   - roster_entry -> roster.RosterEntry [FK] (nullable)
   - outcome_tier -> traits.CheckOutcome [FK] (nullable)
   - era -> stories.Era [FK] (nullable)
@@ -6004,6 +6047,14 @@
   - story -> stories.Story [FK]
   - offered_to -> gm.GMProfile [FK]
   - offered_by_account -> accounts.AccountDB [FK]
+
+### CrossoverInvite
+**Foreign Keys:**
+  - event -> events.Event [FK]
+  - from_gm -> gm.GMProfile [FK]
+  - to_story -> stories.Story [FK]
+  - proposed_episode -> stories.Episode [FK] (nullable)
+  - accepted_episode -> stories.Episode [FK] (nullable)
 
 ### TableBulletinPost
 **Foreign Keys:**
