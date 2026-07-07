@@ -69,8 +69,9 @@ def apply_escalation_tick(
     Stakes coupling (#2013): ``StakesEscalationModifier.intensity_step_bonus``
     for this encounter's stakes_level is added to every participant's per-tick
     intensity gain; ``initial_surge`` fires once (ever, via
-    ``apply_dramatic_surge``'s dedup) as a HIGH_STAKES beat, independent of
-    ``curve.start_round`` gating below.
+    ``apply_dramatic_surge``'s dedup) as a HIGH_STAKES beat on the first tick
+    that actually runs — it shares the ``curve.start_round`` gate above, per
+    the spec's "at the first tick round".
     """
     from world.combat.models import CombatParticipant  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
