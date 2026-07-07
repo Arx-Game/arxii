@@ -147,6 +147,14 @@ from actions.definitions.locations import (
     ToggleUltraUpkeepAction,
     UnlinkRoomsAction,
 )
+from actions.definitions.market import (
+    BuyStockAction,
+    BuyWareAction,
+    FinishWareAction,
+    ListWareAction,
+    ServiceCraftAction,
+    SetServiceOfferAction,
+)
 from actions.definitions.movement import (
     DropAction,
     GetAction,
@@ -468,6 +476,12 @@ _ALL_ACTIONS: list[Action] = [
     SignatureListAction(),
     StartRoomFeatureProjectAction(),
     RepairLabStationAction(),
+    BuyStockAction(),
+    BuyWareAction(),
+    ListWareAction(),
+    FinishWareAction(),
+    SetServiceOfferAction(),
+    ServiceCraftAction(),
     CommissionShipAction(),
     UpgradeShipAction(),
     RepairShipAction(),

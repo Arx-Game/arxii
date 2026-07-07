@@ -86,6 +86,7 @@ from commands.imbue import CmdImbue
 from commands.investigation import CmdSearch  # #1866
 from commands.journals import CmdJournal
 from commands.locations import CmdRoom
+from commands.market import CmdMarket
 from commands.missions import CmdMission
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
@@ -339,6 +340,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdPlaces,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
+            CmdMarket,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
             # #2032 — spendable resonance balances + grant history (bare/history subverbs).

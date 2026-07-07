@@ -2,6 +2,7 @@
 
 from rest_framework.routers import DefaultRouter
 
+from world.items.market.views import MarketSquareViewSet, ServiceOfferViewSet
 from world.items.views import (
     EquippedItemViewSet,
     FashionJudgementViewSet,
@@ -21,6 +22,8 @@ from world.items.views_station import LabStationViewSet
 
 router = DefaultRouter()
 router.register("quality-tiers", QualityTierViewSet, basename="quality-tier")
+router.register("market-squares", MarketSquareViewSet, basename="market-square")
+router.register("service-offers", ServiceOfferViewSet, basename="service-offer")
 router.register("interaction-types", InteractionTypeViewSet, basename="interaction-type")
 router.register("templates", ItemTemplateViewSet, basename="item-template")
 router.register("item-facets", ItemFacetViewSet, basename="item-facet")

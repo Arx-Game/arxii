@@ -228,6 +228,27 @@ The test: would a player feel a sense of ownership / pride about the
 existence of this thing in the world? If yes, IC space. If it's just
 admin, UI.
 
+### Distributed RP hubs over one crowded square (#2066)
+
+Concentrating everything players need in one location paradoxically
+squelches RP: a gigantic, OOC-busy crowd nobody dares pose in front of.
+Instead, give small places a *coded reason to be visited* (a crafter's shop
+holds the stations, bonuses, and standing service offers; the market square
+holds only the transactional trade) so traffic spreads into many small hubs
+that generate chance meetings. Apply this to any system that creates a
+destination: prefer several distinct, purposeful places over one
+all-in-one hall.
+
+### The description belongs to the player (#2066)
+
+Prose is the product's soul and the buyer's labor of love: never
+auto-generate item descriptions (template mad-libs or AI prose alike).
+Mechanical defaults are stats-only and are superseded the moment a player
+writes their own words. Markets therefore trade *materials, mechanical
+designs, and skill* — not finished prose; hand-written pieces remain the
+personal channel crafters use to delight people they like. Dual provenance
+credits both hands: "Crafted by X, Designed by Y".
+
 ### IC vs OOC ownership boundary
 
 **IC possessions belong to the character.** Items, gold, in-game reputation,

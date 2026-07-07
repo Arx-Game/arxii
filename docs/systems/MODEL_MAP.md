@@ -379,6 +379,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - placed_items <- items.RoomItem
+  - crafting_service_offers <- items.CraftingServiceOffer
   - events <- events.Event
   - functionaries <- npc_services.Functionary
   - entry_for_buildings <- buildings.Building
@@ -467,6 +468,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancy_records <- locations.LocationTenancy
   - weather_state <- weather.RegionWeatherState
+  - market_squares <- items.MarketSquare
   - battles <- battles.Battle
   - default_permits_offered <- npc_services.PermitOfferDetails
   - building_profile <- buildings.Building
@@ -711,6 +713,7 @@
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 - `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
+- `notify_battle_state_changed(battle: 'Battle') -> 'None' — Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
@@ -1173,6 +1176,7 @@
   - owned_items <- items.ItemInstance
   - crafted_items <- items.ItemInstance
   - attuned_touchstones <- items.ItemInstance
+  - designed_items <- items.ItemInstance
   - items_given_away <- items.OwnershipEvent
   - items_received <- items.OwnershipEvent
   - outfits <- items.Outfit
@@ -1260,6 +1264,7 @@
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
+  - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
   - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
@@ -2435,6 +2440,7 @@
   - interaction_bindings <- items.TemplateInteraction
   - check_modifiers <- items.ItemCheckModifier
   - garment_mitigations <- items.GarmentMitigation
+  - stock_listings <- items.StockListing
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
 
@@ -2451,6 +2457,8 @@
   - crafter_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - attuned_to_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - crafter_persona_display -> scenes.Persona [FK] (nullable)
+  - designer_character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - designer_persona_display -> scenes.Persona [FK] (nullable)
   - contained_in -> items.ItemInstance [FK] (nullable)
   - image -> evennia_extensions.PlayerMedia [FK] (nullable)
 **Pointed to by:**
@@ -2464,6 +2472,8 @@
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - mantle <- items.Mantle
+  - ware_listing <- items.WareListing
+  - market_sales <- items.MarketSale
   - project_contributions <- projects.Contribution
   - building_permit_details <- buildings.BuildingPermitDetails
 
@@ -2619,6 +2629,51 @@
 ### LabStationDetails
 **Foreign Keys:**
   - feature_instance -> room_features.RoomFeatureInstance [OneToOne]
+
+### MarketSquare
+**Foreign Keys:**
+  - area -> areas.Area [FK]
+  - realm -> realms.Realm [FK] (nullable)
+**Pointed to by:**
+  - stalls <- items.MarketStall
+
+### MarketStall
+**Foreign Keys:**
+  - square -> items.MarketSquare [FK]
+  - owner_persona -> scenes.Persona [FK] (nullable)
+  - host_org -> societies.Organization [FK] (nullable)
+**Pointed to by:**
+  - stock_listings <- items.StockListing
+  - ware_listings <- items.WareListing
+
+### StockListing
+**Foreign Keys:**
+  - stall -> items.MarketStall [FK]
+  - template -> items.ItemTemplate [FK]
+
+### WareListing
+**Foreign Keys:**
+  - stall -> items.MarketStall [FK]
+  - item_instance -> items.ItemInstance [OneToOne]
+  - seller_persona -> scenes.Persona [FK]
+**Pointed to by:**
+  - finishing_pass <- items.FinishingPass
+
+### FinishingPass
+**Foreign Keys:**
+  - listing -> items.WareListing [OneToOne]
+  - buyer_persona -> scenes.Persona [FK]
+
+### CraftingServiceOffer
+**Foreign Keys:**
+  - crafter_persona -> scenes.Persona [FK]
+  - shop_room -> evennia_extensions.RoomProfile [FK]
+
+### MarketSale
+**Foreign Keys:**
+  - buyer_persona -> scenes.Persona [FK]
+  - seller_persona -> scenes.Persona [FK] (nullable)
+  - item_instance -> items.ItemInstance [FK] (nullable)
 
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' — Attach ``facet`` to ``item_instance``.`
@@ -3572,11 +3627,12 @@
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
-- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
+- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
 - `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' — Validate and atomically consume ``ritual``'s components from ``components``.`
+- `resolve_cast_check_type(character, template) — The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0) -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
@@ -4491,6 +4547,7 @@
   - starting_areas <- character_creation.StartingArea
   - societies <- societies.Society
   - areas <- areas.Area
+  - market_squares <- items.MarketSquare
 
 
 ## world.relationships
@@ -4872,6 +4929,12 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - trendsetter_crownings <- items.Trendsetter
+  - market_stalls <- items.MarketStall
+  - ware_listings <- items.WareListing
+  - finishing_passes <- items.FinishingPass
+  - crafting_service_offers <- items.CraftingServiceOffer
+  - market_purchases <- items.MarketSale
+  - market_sales <- items.MarketSale
   - hosted_events <- events.EventHost
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
@@ -5338,6 +5401,7 @@
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy
   - captives <- captivity.Captivity
+  - hosted_stalls <- items.MarketStall
   - event_invitations <- events.EventInvitation
   - covenant <- covenants.Covenant
   - gemits <- narrative.Gemit

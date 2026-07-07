@@ -1,5 +1,24 @@
 # Crafting, Fashion & Economy
 
+## Built (2026-07-07, #2066 — the market)
+
+- Two-tier commerce shipped: capital **market squares** (NPC material/
+  reagent/necessity stock as pure sinks; PC stalls of **unfinished wares** —
+  real crafted instances the buyer names and describes via a one-shot
+  finishing pass) and **crafter shops** (standing craft-as-service offers:
+  the buyer runs the attempt with the CRAFTER's skill at their shop, fee up
+  front — Arx 1's real loop made consensual). Dual provenance: "Crafted by
+  X, Designed by Y".
+- Surfaces: web `/market` center + shop directory, telnet `market`
+  namespace, 6 REGISTRY actions, org-hosted stall cuts feeding treasuries
+  (#1884 stream), PLACEHOLDER seeds (cluster `market`).
+- Design tenets recorded: distributed RP hubs over one crowded square; the
+  description belongs to the player (no generated prose, ever).
+- Honest gap: no item-minting crafting flow exists yet (crafting =
+  facet/style attachment) — ware stock comes from existing channels until a
+  minting journey ships.
+
+
 **Status:** in-progress
 **Depends on:** Items & Equipment, Magic (resonance/facets), Societies, Areas
 

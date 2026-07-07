@@ -1036,6 +1036,24 @@ Multi-stage character creation flow with draft system.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
+### Market (#2066)
+Two-tier commerce: capital market squares (NPC stock sinks + PC stalls of
+unfinished wares w/ buyer finishing passes) and crafter shops (stations +
+craft-as-service offers). The description belongs to the player; dual
+provenance ("Crafted by X, Designed by Y").
+
+- **Models:** `MarketSquare`, `MarketStall` (host-org cuts), `StockListing`,
+  `WareListing`, `FinishingPass`, `CraftingServiceOffer`, `MarketSale`;
+  `ItemInstance.designer_*` pair
+- **Services:** `world.items.market.services` — purchase_stock/list_ware/
+  purchase_ware/finish_ware/set_service_offer/run_service_craft (offering
+  crafter as skill source, shop-anchored), dual_provenance_line
+- **Surfaces:** 6 `market_*` REGISTRY actions; `/api/items/market-squares/`
+  + `/service-offers/` (read-only; directory advertises, execution requires
+  visiting); web `/market`; telnet `market` namespace; seeds cluster `market`
+- **Source:** `src/world/items/market/`
+- **Details:** [market.md](market.md)
+
 ### Roster
 Character lifecycle management with web-first applications and player anonymity.
 

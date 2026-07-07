@@ -137,6 +137,12 @@ def _seed_building_condition() -> None:
     ensure_preparation_contribution_method()
 
 
+def _seed_market() -> None:
+    from world.seeds.market import seed_market_demo  # noqa: PLC0415
+
+    seed_market_demo()
+
+
 def _seed_kudos() -> None:
     from world.progression.seeds import seed_kudos_content  # noqa: PLC0415
 
@@ -212,6 +218,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
     # any other cluster.
     "kudos": _seed_kudos,
+    # Market: the PLACEHOLDER capital square + NPC stock stall (#2066).
+    "market": _seed_market,
     # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
@@ -258,6 +266,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
     from world.gm.models import GMLevelCap  # noqa: PLC0415
+    from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
@@ -318,6 +327,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
         "kudos": [KudosSourceCategory],
+        # Market: the PLACEHOLDER capital square (#2066).
+        "market": [MarketSquare],
         # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
         "gm": [GMLevelCap],
     }
