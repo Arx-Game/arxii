@@ -2529,6 +2529,11 @@ def select_npc_actions(
         )
         raise ValueError(msg)
 
+    # Auto-lock formation: check threat thresholds before NPC targeting (#2020).
+    from world.combat.engagement_locks import check_auto_lock_formation  # noqa: PLC0415
+
+    check_auto_lock_formation(encounter)
+
     opponents = list(
         CombatOpponent.objects.filter(
             encounter=encounter,
@@ -2980,6 +2985,18 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     defeated = opponent.health <= 0 and opponent.tier != OpponentTier.HERO_KILLER
     if defeated:
         defeated = _resolve_opponent_defeat(opponent, source_sheet)
+
+    # Break active engagement lock on opponent defeat (#2020).
+    if defeated:
+        from world.combat.constants import LockBreakReason  # noqa: PLC0415
+        from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
+
+        active_lock = EngagementLock.objects.filter(
+            opponent=opponent,
+            status=EngagementLockStatus.ACTIVE,
+        ).first()
+        if active_lock is not None:
+            break_engagement_lock(active_lock, reason=LockBreakReason.DEFEAT)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
 
