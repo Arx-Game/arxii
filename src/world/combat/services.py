@@ -75,6 +75,7 @@ from world.combat.constants import (
     CombatManeuver,
     EncounterOutcome,
     EncounterType,
+    EngagementLockStatus,
     OpponentStatus,
     OpponentTier,
     ParticipantStatus,
@@ -97,11 +98,13 @@ from world.combat.models import (
     ComboSlot,
     EncounterAftermathRule,
     EncounterRiskAcknowledgement,
+    EngagementLock,
     FleeConfig,
     FleeTierModifier,
     RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
+    ThreatRecord,
 )
 from world.combat.types import (
     ActionOutcome,
@@ -129,6 +132,58 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Threat record helpers (#2020)
+# ---------------------------------------------------------------------------
+
+
+def get_or_create_threat_record(
+    encounter: CombatEncounter,
+    opponent: CombatOpponent,
+    participant: CombatParticipant,
+) -> ThreatRecord:
+    """Get or create the ThreatRecord for an (opponent, participant) pairing (#2020).
+
+    Args:
+        encounter: The combat encounter.
+        opponent: The NPC opponent.
+        participant: The PC participant.
+
+    Returns:
+        The existing or newly-created ``ThreatRecord`` for this pairing.
+    """
+    record, _ = ThreatRecord.objects.get_or_create(
+        encounter=encounter,
+        opponent=opponent,
+        participant=participant,
+        defaults={"threat_value": 0},
+    )
+    return record
+
+
+def accumulate_threat(
+    encounter: CombatEncounter,
+    opponent: CombatOpponent,
+    participant: CombatParticipant,
+    amount: int,
+) -> None:
+    """Increment the threat value for an (opponent, participant) pairing (#2020).
+
+    Called from ``apply_damage_to_opponent`` (damage -> threat) and the taunt
+    verb (#2015). ``amount`` is a positive integer; negative values are clamped
+    to zero.
+
+    Args:
+        encounter: The combat encounter.
+        opponent: The NPC opponent being threatened against.
+        participant: The PC participant whose threat is accumulating.
+        amount: The threat increment (clamped to >= 0).
+    """
+    record = get_or_create_threat_record(encounter, opponent, participant)
+    record.threat_value = max(0, record.threat_value + amount)
+    record.save(update_fields=["threat_value"])
 
 
 # ---------------------------------------------------------------------------
@@ -2217,20 +2272,29 @@ def _get_eligible_entries(
 _TargetT = TypeVar("_TargetT")
 
 
-def _select_targets_core(
+def _select_targets_core(  # noqa: PLR0911
     entry: ThreatPoolEntry,
     candidates: list[_TargetT],
     health_of: Callable[[list[_TargetT]], list[int]],
     rotation: int = 0,
+    *,
+    _threat_map: dict[int, int] | None = None,
+    _shield_participant_ids: set[int] | None = None,
 ) -> list[_TargetT]:
     """Shared targeting-mode selector for participants and opponents (#1584).
 
-    One algorithm (ALL / MULTI / RANDOM / LOWEST_HEALTH / rotated-default) drives
-    both the participant ``targets`` path and the opponent ``opponent_targets``
-    path (ADR-0016 — no parallel selector). ``health_of`` returns health values
-    parallel to ``candidates`` and is only invoked for the LOWEST_HEALTH mode, so
-    participants keep their single batch query and opponents read ``.health``
-    directly.
+    One algorithm (ALL / MULTI / RANDOM / LOWEST_HEALTH / HIGHEST_THREAT /
+    SPECIFIC_ROLE / rotated-default) drives both the participant ``targets``
+    path and the opponent ``opponent_targets`` path (ADR-0016 — no parallel
+    selector).
+
+    ``health_of`` returns health values parallel to ``candidates`` and is only
+    invoked for the LOWEST_HEALTH mode, so participants keep their single batch
+    query and opponents read ``.health`` directly.
+
+    ``_threat_map`` and ``_shield_participant_ids`` are pre-computed by
+    ``select_npc_actions`` for HIGHEST_THREAT / SPECIFIC_ROLE modes (#2020).
+    They map candidate PKs to threat values and identify SHIELD-archetype PCs.
 
     ``rotation`` offsets the deterministic (non-random, non-health-sorted)
     selection so a swarm's successive attacks fan across distinct targets rather
@@ -2267,11 +2331,31 @@ def _select_targets_core(
     if selection == TargetSelection.RANDOM:
         return random.sample(candidates, count)  # NOSONAR game RNG (combat targeting), not crypto
 
-    # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
-    # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
-    # Placeholder: pick candidates by DB order, rotated so a swarm's successive
-    # attacks fan across distinct targets instead of all landing on the first
-    # one (#983).
+    # HIGHEST_THREAT: sort candidates by ThreatRecord.threat_value desc (#2020).
+    # Falls back to rotated order when no threat records exist (pre-threat
+    # encounters or mooks with no damage yet).
+    if selection == TargetSelection.HIGHEST_THREAT and _threat_map:
+        sorted_by_threat = sorted(
+            candidates,
+            key=lambda c: _threat_map.get(c.pk, 0),
+            reverse=True,
+        )
+        return sorted_by_threat[:count]
+
+    # SPECIFIC_ROLE: prioritize SHIELD-archetype (defense) PCs, then break ties
+    # by highest threat (#2020). Falls back to highest-threat-only (or rotated)
+    # when no SHIELD-archetype PC is present.
+    if selection == TargetSelection.SPECIFIC_ROLE and _shield_participant_ids:
+        shielded = [c for c in candidates if c.pk in _shield_participant_ids]
+        if shielded:
+            if _threat_map:
+                shielded.sort(
+                    key=lambda c: _threat_map.get(c.pk, 0),
+                    reverse=True,
+                )
+            return shielded[:count]
+
+    # Default: rotated DB order (no threat data available).
     offset = rotation % len(candidates)
     rotated = candidates[offset:] + candidates[:offset]
     return list(rotated[:count])
@@ -2281,6 +2365,9 @@ def _select_targets(
     entry: ThreatPoolEntry,
     active_participants: list[CombatParticipant],
     rotation: int = 0,
+    *,
+    _threat_map: dict[int, int] | None = None,
+    _shield_participant_ids: set[int] | None = None,
 ) -> list[CombatParticipant]:
     """Select participant targets for a threat pool entry (typed wrapper)."""
 
@@ -2295,13 +2382,23 @@ def _select_targets(
         )
         return [health_map.get(p.character_sheet_id, 0) for p in candidates]
 
-    return _select_targets_core(entry, active_participants, _participant_healths, rotation)
+    return _select_targets_core(
+        entry,
+        active_participants,
+        _participant_healths,
+        rotation,
+        _threat_map=_threat_map,
+        _shield_participant_ids=_shield_participant_ids,
+    )
 
 
 def _select_opponent_targets(
     entry: ThreatPoolEntry,
     active_opponents: list[CombatOpponent],
     rotation: int = 0,
+    *,
+    _threat_map: dict[int, int] | None = None,
+    _shield_participant_ids: set[int] | None = None,
 ) -> list[CombatOpponent]:
     """Select opponent targets for a threat pool entry (typed wrapper, #1584).
 
@@ -2313,6 +2410,8 @@ def _select_opponent_targets(
         active_opponents,
         lambda opps: [o.health for o in opps],
         rotation,
+        _threat_map=_threat_map,
+        _shield_participant_ids=_shield_participant_ids,
     )
 
 
@@ -2430,6 +2529,11 @@ def select_npc_actions(
         )
         raise ValueError(msg)
 
+    # Auto-lock formation: check threat thresholds before NPC targeting (#2020).
+    from world.combat.engagement_locks import check_auto_lock_formation  # noqa: PLC0415
+
+    check_auto_lock_formation(encounter)
+
     opponents = list(
         CombatOpponent.objects.filter(
             encounter=encounter,
@@ -2477,6 +2581,35 @@ def select_npc_actions(
         if can_act(p.character_sheet) and not is_untargetable(p.character_sheet.character)
     ]
 
+    # Batch-prefetch ThreatRecord data for HIGHEST_THREAT/SPECIFIC_ROLE (#2020)
+    active_participant_ids = [p.pk for p in active_participants]
+    threat_maps: dict[int, dict[int, int]] = defaultdict(dict)
+    if active_participant_ids:
+        for tr in ThreatRecord.objects.filter(
+            opponent__in=opponents,
+            participant_id__in=active_participant_ids,
+        ):
+            threat_maps[tr.opponent_id][tr.participant_id] = tr.threat_value
+
+    # Batch-prefetch active EngagementLocks for lock narrowing (#2020)
+    active_locks_by_opponent: dict[int, int] = {}
+    for lock in EngagementLock.objects.filter(
+        encounter=encounter,
+        opponent__in=opponents,
+        status=EngagementLockStatus.ACTIVE,
+    ).values("opponent_id", "participant_id"):
+        active_locks_by_opponent[lock["opponent_id"]] = lock["participant_id"]
+
+    # Batch-prefetch SHIELD-archetype participant IDs for SPECIFIC_ROLE (#2020)
+    from world.covenants.constants import RoleArchetype  # noqa: PLC0415
+    from world.covenants.services import precedence_role_for_combat  # noqa: PLC0415
+
+    shield_participant_ids: set[int] = set()
+    for p in active_participants:
+        role = precedence_role_for_combat(p.character_sheet)
+        if role is not None and role.archetype == RoleArchetype.SHIELD:
+            shield_participant_ids.add(p.pk)
+
     actions: list[CombatOpponentAction] = []
 
     for opponent in opponents:
@@ -2489,6 +2622,9 @@ def select_npc_actions(
                 cooldown_used,
                 active_participants,
                 encounter,
+                threat_map=threat_maps.get(opponent.pk),
+                shield_participant_ids=shield_participant_ids,
+                locked_participant_id=active_locks_by_opponent.get(opponent.pk),
             )
         )
 
@@ -2520,12 +2656,16 @@ def _get_companion_order(opponent: CombatOpponent, round_number: int) -> object 
     ).first()
 
 
-def _build_opponent_round_actions(
+def _build_opponent_round_actions(  # noqa: C901, PLR0913
     opponent: CombatOpponent,
     pool_entries: list[ThreatPoolEntry],
     cooldown_used: set[int],
     active_participants: list[CombatParticipant],
     encounter: CombatEncounter,
+    *,
+    threat_map: dict[int, int] | None = None,
+    shield_participant_ids: set[int] | None = None,
+    locked_participant_id: int | None = None,
 ) -> list[CombatOpponentAction]:
     """Create one opponent's NPC action rows for the current round.
 
@@ -2543,6 +2683,12 @@ def _build_opponent_round_actions(
     )
     if not target_pool:
         return []
+
+    # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
+    if locked_participant_id is not None and targeting_participants:
+        locked_pool = [p for p in target_pool if p.pk == locked_participant_id]
+        if locked_pool:
+            target_pool = locked_pool
 
     # --- Companion order integration (#1921) ---
     # An ALLY summon with a CompanionOrder may override its target or skip.
@@ -2587,6 +2733,8 @@ def _build_opponent_round_actions(
             target_pool,
             targeting_participants=targeting_participants,
             rotation=attack_index,
+            threat_map=threat_map,
+            shield_participant_ids=shield_participant_ids,
         )
         actions.append(action)
 
@@ -2630,19 +2778,37 @@ def _npc_action_target_pool(
     return _get_opponent_targets(opponent, active_participants, encounter), True
 
 
-def _set_npc_action_targets(
+def _set_npc_action_targets(  # noqa: PLR0913
     action: CombatOpponentAction,
     entry: ThreatPoolEntry,
     target_pool: list,
     *,
     targeting_participants: bool,
     rotation: int,
+    threat_map: dict[int, int] | None = None,
+    shield_participant_ids: set[int] | None = None,
 ) -> None:
     """Populate exactly one target relation on an NPC action (#1584)."""
     if targeting_participants:
-        action.targets.set(_select_targets(entry, target_pool, rotation=rotation))
+        action.targets.set(
+            _select_targets(
+                entry,
+                target_pool,
+                rotation=rotation,
+                _threat_map=threat_map,
+                _shield_participant_ids=shield_participant_ids,
+            )
+        )
     else:
-        action.opponent_targets.set(_select_opponent_targets(entry, target_pool, rotation=rotation))
+        action.opponent_targets.set(
+            _select_opponent_targets(
+                entry,
+                target_pool,
+                rotation=rotation,
+                _threat_map=threat_map,
+                _shield_participant_ids=shield_participant_ids,
+            )
+        )
 
 
 def swarm_kills(raw_damage: int, body_toughness: int) -> int:
@@ -2820,11 +2986,33 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     if defeated:
         defeated = _resolve_opponent_defeat(opponent, source_sheet)
 
+    # Break active engagement lock on opponent defeat (#2020).
+    if defeated:
+        from world.combat.constants import LockBreakReason  # noqa: PLC0415
+        from world.combat.engagement_locks import break_engagement_lock  # noqa: PLC0415
+
+        active_lock = EngagementLock.objects.filter(
+            opponent=opponent,
+            status=EngagementLockStatus.ACTIVE,
+        ).first()
+        if active_lock is not None:
+            break_engagement_lock(active_lock, reason=LockBreakReason.DEFEAT)
+
     opponent.save(update_fields=["health", "probing_current", "status"])
 
     # Achievement counters: see world.combat.achievement_counters. Wired in
     # a follow-up phase — keeping the source_sheet kwarg in place so the
     # call sites are pre-threaded.
+    # Threat accumulation: damage dealt -> ThreatRecord increment (#2020).
+    # Only post-soak, post-resistance damage (damage_through) contributes — the
+    # real signal of who is hurting the NPC. No source_sheet = no threat record.
+    if source_sheet is not None and damage_through > 0:
+        participant = CombatParticipant.objects.filter(
+            encounter=opponent.encounter,
+            character_sheet=source_sheet,
+        ).first()
+        if participant is not None:
+            accumulate_threat(opponent.encounter, opponent, participant, damage_through)
     del source_sheet
 
     return OpponentDamageResult(

@@ -137,6 +137,7 @@ function mockEncounter(overrides?: Partial<EncounterDetail>) {
     opponents: [],
     current_round_actions: [],
     clashes: [],
+    engagement_locks: [],
     created_at: '2026-05-24T00:00:00Z',
     outcome: '',
     completed_at: null,

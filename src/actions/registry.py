@@ -14,6 +14,8 @@ from actions.definitions.battles import (
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.combat_maneuvers import (
     CoverAction,
+    DisengageAction,
+    EngageAction,
     FleeAction,
     InterposeAction,
     JoinEncounterAction,
@@ -379,6 +381,8 @@ _ALL_ACTIONS: list[Action] = [
     CoverAction(),
     InterposeAction(),
     SuccorAction(),
+    EngageAction(),
+    DisengageAction(),
     ReadyAction(),
     UpgradeComboAction(),
     RevertComboAction(),

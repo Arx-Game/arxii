@@ -93,3 +93,15 @@ _Avoid_: cancel-event interceptor, reactive cancel, shield handler
 **Knockback**:
 A deterministic on-hit effect that shoves the defender one Position away from the attacker, authored via `ThreatPoolEntry.on_hit_consequence_pool` firing a `MOVE_TO_POSITION`/`AWAY_FROM_ACTOR` consequence effect. Fires only after the #1273 Interpose seam resolves — a clean block prevents it for free.
 _Avoid_: push ("push" is already ambiguous with Strain and Clash's tug-of-war progress — see those entries), shove, displace
+
+**ThreatRecord**:
+A per-(opponent, participant) threat score accumulated from real events — damage dealt, taunts (#2015), protective actions. The substrate for NPC target selection: `HIGHEST_THREAT` sorts candidates by threat value, and `SPECIFIC_ROLE` prioritizes SHIELD-archetype PCs then breaks ties by threat. An active `EngagementLock` narrows the locked NPC's targeting to just the locked PC.
+_Avoid_: aggro table, hate list, enmity
+
+**EngagementLock**:
+A declarable foil pairing between one PC and one opponent within a group encounter (#2020). While ACTIVE, the NPC's targeting is narrowed to just the locked PC (the provable-targeting guarantee). An optional `clash` FK links to the metered contest (Clash) when one opens between the locked pair — the lock orchestrates the pairing, the Clash is the struggle. Lock formation is autonomous (threat threshold) or PC-initiated (`combat engage`). Interference by a non-locked PC is a narrative payoff, not a penalty.
+_Avoid_: duel lock, mark, fixate (use for the pairing specifically), taunt (taunt is the threat verb, not the lock)
+
+**Foil**:
+An NPC opponent designated to pair off against a specific PC in a rival duel within a group fight — the dramatic thread inside the melee. Marked by `has_foil_behavior=True` on `CombatOpponent` with a lower `auto_lock_threshold` so the pairing forms readily from threat accumulation.
+_Avoid_: rival, nemesis (narrative terms — use "foil" for the mechanical pairing)

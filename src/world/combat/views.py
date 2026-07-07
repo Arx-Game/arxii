@@ -29,6 +29,7 @@ from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     ClashStatus,
     DuelChallengeStatus,
+    EngagementLockStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -41,6 +42,7 @@ from world.combat.models import (
     CombatRoundAction,
     ComboDefinition,
     DuelChallenge,
+    EngagementLock,
     ThreatPool,
 )
 from world.combat.permissions import (
@@ -257,6 +259,13 @@ class CombatEncounterViewSet(ModelViewSet):
                     "npc_opponent"
                 ),
                 to_attr="clashes_cached",
+            ),
+            Prefetch(
+                "engagement_locks",
+                queryset=EngagementLock.objects.filter(
+                    status=EngagementLockStatus.ACTIVE,
+                ).select_related("opponent", "participant"),
+                to_attr="engagement_locks_cached",
             ),
         )
 

@@ -71,6 +71,7 @@ class SurgeTriggerKind(models.TextChoices):
     ALLY_PERIL = "ally_peril", "Ally In Peril"
     HATED_FOE = "hated_foe", "Hated Foe"
     HIGH_STAKES = "high_stakes", "High Stakes"
+    INTERFERENCE = "interference", "Interference"
 
 
 class PaceMode(models.TextChoices):
@@ -97,6 +98,34 @@ class CombatManeuver(models.TextChoices):
     YIELD = "yield", "Yield"
     INTERPOSE = "interpose", "Interpose"
     SUCCOR = "succor", "Succor"
+    ENGAGE = "engage", "Engage"
+    DISENGAGE = "disengage", "Disengage"
+
+
+class EngagementLockStatus(models.TextChoices):
+    """Lifecycle status of an EngagementLock (#2020)."""
+
+    ACTIVE = "active", "Active"
+    BROKEN = "broken", "Broken"
+    ENDED = "ended", "Ended"
+
+
+class LockInitiator(models.TextChoices):
+    """How an engagement lock was formed (#2020)."""
+
+    THREAT = "threat", "Threat Threshold"
+    PC_CHALLENGE = "pc_challenge", "PC Challenge"
+    GM_DECLARED = "gm_declared", "GM Declared"
+
+
+class LockBreakReason(models.TextChoices):
+    """Why an engagement lock ended (#2020)."""
+
+    DEFEAT = "defeat", "Opponent Defeated"
+    FLEE = "flee", "Locked PC Fled"
+    DISENGAGE = "disengage", "Deliberate Disengage"
+    INTERFERENCE = "interference", "Interference Defeated"
+    EXPIRED = "expired", "Expired"
 
 
 class DuelChallengeStatus(models.TextChoices):

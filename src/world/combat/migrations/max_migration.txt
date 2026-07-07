@@ -1,1 +1,1 @@
-0033_escalationcurve_hated_foe_spike_intensity_amount_and_more
+0036_combatopponent_auto_lock_threshold_and_more

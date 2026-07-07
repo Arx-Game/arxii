@@ -71,6 +71,7 @@ function makeEncounter(
     current_round_actions: currentRoundActions,
     surge_beats: [],
     clashes: [],
+    engagement_locks: [],
     created_at: '2026-01-01T00:00:00Z',
     outcome: '',
     completed_at: null,

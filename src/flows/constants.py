@@ -58,3 +58,6 @@ class EventName(models.TextChoices):
     FELL = "fell", "Fell"
     # Combat round lifecycle (#1584): fires at the top of resolve_round.
     COMBAT_ROUND_STARTING = "combat_round_starting", "Combat Round Starting"
+    # Engagement lock lifecycle (#2020)
+    ENGAGEMENT_LOCK_FORMED = "engagement_lock_formed", "Engagement Lock Formed"
+    ENGAGEMENT_LOCK_BROKEN = "engagement_lock_broken", "Engagement Lock Broken"

@@ -242,6 +242,8 @@ class ActionRegistryTests(TestCase):
             "combat_cover",
             "combat_interpose",
             "combat_succor",
+            "combat_engage",
+            "combat_disengage",
             "combat_ready",
             "combat_combo",
             "combat_revert",

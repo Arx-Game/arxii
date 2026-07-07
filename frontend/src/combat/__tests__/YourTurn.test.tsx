@@ -249,6 +249,7 @@ function makeEncounter(overrides: Partial<EncounterDetail> = {}): EncounterDetai
     opponents: [],
     current_round_actions: [],
     clashes: [],
+    engagement_locks: [],
     created_at: '2026-06-11T00:00:00Z',
     ...overrides,
   } as unknown as EncounterDetail;
