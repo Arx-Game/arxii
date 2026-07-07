@@ -15,7 +15,7 @@ from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import send_room_state
 from world.areas.positioning.exceptions import PositionError
 from world.areas.positioning.models import Position, PositionBlueprint
-from world.areas.positioning.services import instantiate_blueprint, move_to_position
+from world.areas.positioning.services import instantiate_blueprint, move_to_position, take_position
 
 
 @dataclass
@@ -61,6 +61,59 @@ class MoveToPositionAction(Action):
 
         try:
             move_to_position(actor, target)
+        except PositionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        send_room_state(actor_state)
+
+        return ActionResult(success=True)
+
+
+@dataclass
+class TakePositionAction(Action):
+    """Voluntary entry onto the position graph for an UNPLACED actor (#2005).
+
+    Position is NOT an ObjectDB, so this action does not use the ObjectDB
+    target resolution path. The destination is passed as ``position_id``
+    (an int pk) in the action kwargs, mirroring ``MoveToPositionAction``.
+
+    Dispatch convention
+    -------------------
+    REGISTRY ActionRef: ``registry_key="take_position"``,
+    ``position_id=<Position.pk>``.
+
+    The dispatch layer passes the ref's ``position_id`` as a kwarg; this
+    action resolves it to a ``Position`` instance and delegates to
+    ``services.take_position``. Restricted to PRIMARY/FEATURE entry-point
+    kinds by the service; ELEVATED/AERIAL/etc. are unreachable this way.
+    """
+
+    key: str = "take_position"
+    name: str = "Take position"
+    icon: str = "map-marker"
+    category: str = "movement"
+    action_category: ActionCategory = ActionCategory.PHYSICAL
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        position_id = kwargs.get("position_id")
+        if position_id is None:
+            return ActionResult(success=False, message="Take position where?")
+
+        try:
+            target = Position.objects.get(pk=position_id)
+        except Position.DoesNotExist:
+            return ActionResult(success=False, message="That position does not exist.")
+
+        try:
+            take_position(actor, target)
         except PositionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
