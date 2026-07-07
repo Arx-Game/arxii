@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from actions.models.consequence_pools import ConsequencePool
     from flows.events.payloads import DamageSource
     from typeclasses.characters import Character
+    from world.areas.positioning.models import Position
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult, ModifierBreakdown, PendingResolution
@@ -1522,6 +1523,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     auto_phases: bool = True,
     persona: Persona | None = None,
     existing_objectdb: ObjectDB | None = None,
+    position: Position | None = None,
 ) -> CombatOpponent:
     """Create a CombatOpponent. Three sources for the ObjectDB:
 
@@ -1537,6 +1539,14 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     values always win over the formula.  Pass ``auto_phases=False`` to skip
     automatic ``BossPhase`` creation for BOSS-tier opponents (manual mode also
     creates no phases, since no block is computed).
+
+    ``position`` (#2005) places the resolved objectdb there via
+    ``place_in_position`` — the unchecked staging primitive, not the validated
+    voluntary-entry one — once the opponent's objectdb is known. The room match
+    is validated *before* the ``CombatOpponent`` row is persisted, so a
+    cross-room ``position`` raises ``PositionError`` with no saved-but-unplaced
+    opponent left behind. Omitted (default) leaves the opponent unplaced,
+    matching legacy behavior.
     """
     from world.combat.scaling import compute_opponent_stat_block  # noqa: PLC0415
 
@@ -1567,6 +1577,18 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         encounter, name, persona, existing_objectdb
     )
 
+    if position is not None and position.room_id != objectdb.db_location_id:
+        # Validate the room match before persisting the CombatOpponent row below —
+        # the resolved objectdb is known now, so a bad position fails fast instead
+        # of leaving a saved-but-unplaced opponent behind a failure ActionResult
+        # (Task 4 fold-in, #2005). The post-save place_in_position call further
+        # down re-checks the identical invariant; it can no longer fail once
+        # execution reaches it.
+        from world.areas.positioning.exceptions import PositionError  # noqa: PLC0415
+
+        msg = "That position is not in the same room as the opponent."
+        raise PositionError(msg)
+
     opp = CombatOpponent(
         encounter=encounter,
         name=name,
@@ -1590,6 +1612,15 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     )
     opp.full_clean()
     opp.save()
+
+    if position is not None:
+        from typing import cast  # noqa: PLC0415
+
+        from world.areas.positioning.services import place_in_position  # noqa: PLC0415
+
+        # _resolve_objectdb_for_opponent is annotated tuple[object, bool];
+        # every branch actually returns an ObjectDB (Character or CombatNPC).
+        place_in_position(cast("ObjectDB", objectdb), position)
 
     # --- Auto-generate BossPhase rows from the computed block ---
     if tier == OpponentTier.BOSS and auto_phases and block is not None and block.phases:

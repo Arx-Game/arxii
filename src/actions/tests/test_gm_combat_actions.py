@@ -222,6 +222,29 @@ class AddOpponentActionTests(GMCombatActionTestBase):
         result = AddOpponentAction().run(self.gm_actor, name="", tier="")
         self.assertFalse(result.success)
 
+    def test_cross_room_position_fails_without_orphaning_opponent(self) -> None:
+        """Task 4 fold-in (#2005): a cross-room position surfaces a failure
+
+        ActionResult and leaves no saved-but-unplaced CombatOpponent behind.
+        """
+        from world.areas.positioning.services import create_position
+
+        other_room = _make_room("OtherRoomForPosition")
+        position = create_position(other_room, "elsewhere")
+
+        result = AddOpponentAction().run(
+            self.gm_actor,
+            name="Misplaced Mook",
+            tier=OpponentTier.MOOK,
+            threat_pool_id=str(self.pool.pk),
+            position_id=position.pk,
+        )
+
+        self.assertFalse(result.success)
+        self.assertFalse(
+            CombatOpponent.objects.filter(encounter=self.encounter, name="Misplaced Mook").exists()
+        )
+
 
 class AddEncounterParticipantActionTests(GMCombatActionTestBase):
     """AddEncounterParticipantAction enrolls a PC in the encounter."""

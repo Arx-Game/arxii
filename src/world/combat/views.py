@@ -24,6 +24,7 @@ from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef, ActionResult, DispatchResult
+from world.areas.positioning.models import Position
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     ClashStatus,
@@ -363,6 +364,7 @@ class CombatEncounterViewSet(ModelViewSet):
         ]
         return self._serialize_encounter(request, encounter)
 
+    @extend_schema(request=AddOpponentSerializer)
     @action(detail=True, methods=[HTTPMethod.POST])
     def add_opponent(self, request: Request, pk: int | None = None) -> Response:
         """Add an NPC opponent to the encounter (GM action)."""
@@ -374,6 +376,10 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         pool = get_object_or_404(ThreatPool, pk=data["threat_pool_id"])
+        position = None
+        position_id = data.get("position_id")
+        if position_id is not None:
+            position = get_object_or_404(Position, pk=position_id)
         new_opponent = add_opponent(
             encounter,
             name=data["name"],
@@ -383,6 +389,7 @@ class CombatEncounterViewSet(ModelViewSet):
             description=data.get("description", ""),
             soak_value=data.get("soak_value", 0),
             probing_threshold=data.get("probing_threshold"),
+            position=position,
         )
         # Update cached opponent list in-place
         encounter.opponents_cached.append(new_opponent)

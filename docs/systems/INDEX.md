@@ -659,8 +659,14 @@ effects for graph mutation and flight).
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
   and scenes layers)
-- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`) + staff-only
-  `SetTheStageAction` (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
+  (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
+  #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
+  unchecked placement, #2005) + staff-only `SetTheStageAction`
+  (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Telnet:** `CmdPosition` (`position` / `position <name>`, #2005) — list/take/move face over
+  `TakePositionAction`/`MoveToPositionAction`, room-scoped name resolution; see
+  [areas.md](areas.md) "Telnet" section
 - **Scene API:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`,
   `persona_positions`
 - **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
@@ -673,10 +679,12 @@ effects for graph mutation and flight).
 - **Gated blueprint edges (built — #1216):** `BlueprintEdge.gating_challenge_template` →
   `instantiate_blueprint` mints a live `ChallengeInstance` via `instantiate_challenge`
   (`world.mechanics.challenge_resolution`) on staging.
-- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
+- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`;
+  `add_opponent(..., position=...)` spawns an opponent already placed, #2005),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),
-  actions (`MoveToPositionAction` / `SetTheStageAction`)
+  actions (`MoveToPositionAction` / `TakePositionAction` / `GMPlaceInPositionAction` /
+  `SetTheStageAction`), commands (`CmdPosition`, #2005)
 - **Source:** `src/world/areas/positioning/`
 - **Details:** [areas.md](areas.md)
 ### Instances
