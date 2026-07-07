@@ -55,6 +55,22 @@ class HouseDomainSerializer(serializers.ModelSerializer):
         return [holding.name for holding in obj.holdings.all()]
 
 
+class HouseAspectFacetSerializer(serializers.Serializer):
+    """One picked identity facet on the house block (#2079)."""
+
+    definition = serializers.CharField()
+    option = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+
+
+class HouseFeatureFacetSerializer(serializers.Serializer):
+    """One cultural feature on the house block (#2079)."""
+
+    name = serializers.CharField()
+    slug = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+
+
 class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
@@ -63,6 +79,8 @@ class HouseDetailSerializer(serializers.Serializer):
     vassal_names = serializers.ListField(child=serializers.CharField())
     titles = HouseTitleSerializer(many=True)
     domains = HouseDomainSerializer(many=True)
+    aspects = HouseAspectFacetSerializer(many=True)
+    features = HouseFeatureFacetSerializer(many=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -77,6 +95,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
+            "words",
+            "colors",
+            "sigil_description",
             "society_name",
             "org_type_name",
             "ranks",
@@ -97,6 +118,22 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "vassal_names": [vassal.name for vassal in vassals_of(obj)],
             "titles": obj.titles.select_related("holder").order_by("tier", "name"),
             "domains": obj.domains.prefetch_related("holdings"),  # noqa: PREFETCH_STRING
+            "aspects": [
+                {
+                    "definition": facet.definition.name,
+                    "option": facet.option.name,
+                    "description": facet.option.description,
+                }
+                for facet in obj.aspects.select_related("definition", "option")
+            ],
+            "features": [
+                {
+                    "name": stamped.feature.name,
+                    "slug": stamped.feature.slug,
+                    "description": stamped.feature.description,
+                }
+                for stamped in obj.features.select_related("feature")
+            ],
         }
         return HouseDetailSerializer(payload).data
 

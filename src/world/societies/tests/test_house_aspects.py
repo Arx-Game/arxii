@@ -188,3 +188,56 @@ class MaterializationAspectTests(AspectTestData):
         self.assertEqual(org.features.first().feature.slug, "hearth-right")
         self.seat.refresh_from_db()
         self.assertIn("eel weirs", self.seat.description)
+
+
+class DisplaySurfaceTests(AspectTestData):
+    """Org payload + telnet sheet/house carry the identity facets."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from evennia_extensions.factories import AccountFactory
+
+        super().setUpTestData()
+        claim = submit_house_claim(
+            draft=cls.draft,
+            title=cls.title,
+            template=cls.template,
+            house_name="Thornwood",
+            backstory="An old marcher line.",
+            words="The Fens Endure",
+            colors="russet and bog-iron grey",
+            sigil_description="A heron statant on a black chief.",
+            lands_writeup="Fen villages and eel weirs along the marches.",
+            aspect_picks={
+                cls.virtue.pk: [cls.fortitude.pk],
+                cls.traditions.pk: [cls.trad_a.pk, cls.trad_b.pk],
+            },
+        )
+        approve_house_claim(claim, reviewer=AccountFactory())
+        cls.sheet = CharacterSheetFactory()
+        cls.org = materialize_house_claim(claim, sheet=cls.sheet)
+
+    def test_org_payload_carries_stylings_and_facets(self):
+        from world.societies.serializers import OrganizationSerializer
+
+        payload = OrganizationSerializer(self.org).data
+        self.assertEqual(payload["words"], "The Fens Endure")
+        self.assertEqual(payload["colors"], "russet and bog-iron grey")
+        self.assertIn("heron", payload["sigil_description"])
+        house = payload["house"]
+        picked = {(a["definition"], a["option"]) for a in house["aspects"]}
+        self.assertIn(("House Virtue", "Fortitude"), picked)
+        self.assertEqual(len(house["aspects"]), 3)
+        self.assertEqual(house["features"][0]["slug"], "hearth-right")
+
+    def test_sheet_house_section_lists_identity(self):
+        from types import SimpleNamespace
+
+        from commands.account.sheet_sections import _render_house_section
+
+        command = SimpleNamespace(caller=SimpleNamespace(sheet_data=self.sheet))
+        lines = "\n".join(_render_house_section(command))
+        self.assertIn("The Fens Endure", lines)
+        self.assertIn("russet and bog-iron grey", lines)
+        self.assertIn("House Virtue: Fortitude", lines)
+        self.assertIn("Hearth Right", lines)
