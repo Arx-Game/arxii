@@ -115,6 +115,15 @@ class StoryGMOfferStatus(models.TextChoices):
     WITHDRAWN = "withdrawn", "Withdrawn"
 
 
+class CrossoverInviteStatus(models.TextChoices):
+    """Lifecycle of a CrossoverInvite — Lead-GM consent to link a story (#2002)."""
+
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    DECLINED = "declined", "Declined"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
 class StoryEpisodeStatus(models.TextChoices):
     """Coarse status of a story's current episode, exposed via dashboards.
 

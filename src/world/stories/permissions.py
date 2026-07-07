@@ -1116,6 +1116,88 @@ class IsStoryGMOfferParticipantOrStaff(permissions.BasePermission):
             return False
 
 
+class IsCrossoverInviteParticipantOrStaff(permissions.BasePermission):
+    """Read access for CrossoverInviteViewSet list / retrieve (#2002).
+
+    Allowed:
+    - The GM who sent the invite (from_gm.account == user)
+    - An owner of the invited story (to_story.owners == user)
+    - Staff
+    """
+
+    message = "You do not have permission to view this crossover invite."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Read + create allowed for authenticated users; other writes staff-only."""
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Create is allowed for any authenticated user (GM-profile check is in
+        # the view's create() method). Other write methods (update/delete) are
+        # staff-only — state transitions go through @action endpoints with their
+        # own permission classes.
+        if view.action == "create":  # noqa: STRING_LITERAL
+            return True
+        return request.user.is_staff
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        invite = cast(Any, obj)
+        # GM who sent the invite
+        if invite.from_gm.account_id == request.user.pk:
+            return True
+        # Owner of the invited story
+        return invite.to_story.owners.filter(id=request.user.pk).exists()
+
+
+class IsCrossoverInviteRecipientOrStaff(permissions.BasePermission):
+    """Accept / decline actions: only an owner of the invited story, or staff (#2002).
+
+    Object-level permission; obj is a CrossoverInvite.
+    """
+
+    message = (
+        "Only the invited story's Lead GM, or staff, may accept or decline a crossover invite."
+    )
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        invite = cast(Any, obj)
+        return invite.to_story.owners.filter(id=request.user.pk).exists()
+
+
+class IsCrossoverInviteSenderOrStaff(permissions.BasePermission):
+    """Withdraw action: only the GM who sent the invite, or staff (#2002).
+
+    Object-level permission; obj is a CrossoverInvite.
+    """
+
+    message = "Only the GM who sent this invite, or staff, may withdraw it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        invite = cast(Any, obj)
+        return invite.from_gm.account_id == request.user.pk
+
+
 # ---------------------------------------------------------------------------
 # Story log viewer role classifier
 # ---------------------------------------------------------------------------

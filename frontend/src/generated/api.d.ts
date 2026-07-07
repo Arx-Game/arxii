@@ -4783,6 +4783,135 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/crossover-invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CrossoverInvite — co-GM consent to link stories to a shared event (#2002).
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     Create: POST /api/crossover-invites/ — any GM may invite another story.
+     *     State transitions: custom @action endpoints:
+     *       POST /api/crossover-invites/{id}/accept/   — invited story's Lead GM
+     *       POST /api/crossover-invites/{id}/decline/   — invited story's Lead GM
+     *       POST /api/crossover-invites/{id}/withdraw/  — inviting GM
+     *
+     *     Queryset scoping:
+     *       - Staff: all invites.
+     *       - GM: invites they sent (from_gm.account == user) or received (to_story.owners == user).
+     */
+    get: operations['crossover_invites_list'];
+    put?: never;
+    /**
+     * @description POST /api/crossover-invites/ — create a PENDING crossover invite.
+     *
+     *     Body: { event: int, to_story: int, proposed_episode?: int, message?: string }
+     *
+     *     The inviting GM is resolved from request.user.gm_profile.
+     */
+    post: operations['crossover_invites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/crossover-invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CrossoverInvite — co-GM consent to link stories to a shared event (#2002).
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     Create: POST /api/crossover-invites/ — any GM may invite another story.
+     *     State transitions: custom @action endpoints:
+     *       POST /api/crossover-invites/{id}/accept/   — invited story's Lead GM
+     *       POST /api/crossover-invites/{id}/decline/   — invited story's Lead GM
+     *       POST /api/crossover-invites/{id}/withdraw/  — inviting GM
+     *
+     *     Queryset scoping:
+     *       - Staff: all invites.
+     *       - GM: invites they sent (from_gm.account == user) or received (to_story.owners == user).
+     */
+    get: operations['crossover_invites_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/crossover-invites/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/crossover-invites/{id}/accept/ — invited Lead GM accepts.
+     *
+     *     Body: { accepted_episode?: int, response_note?: string }
+     *
+     *     Creates the EpisodeScene link (immediately if the event has an active
+     *     scene, or deferred to scene-spawn). Enrolls the Lead GM as a scene GM.
+     */
+    post: operations['crossover_invites_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/crossover-invites/{id}/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/crossover-invites/{id}/decline/ — invited Lead GM declines.
+     *
+     *     Body: { response_note?: string }
+     */
+    post: operations['crossover_invites_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/crossover-invites/{id}/withdraw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/crossover-invites/{id}/withdraw/ — inviting GM rescinds. */
+    post: operations['crossover_invites_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/currency/org-books/': {
     parameters: {
       query?: never;
@@ -18766,6 +18895,31 @@ export interface components {
       unlocked_level: number;
       xp_spent: number;
     };
+    /** @description Read serializer for CrossoverInvite records (#2002). */
+    CrossoverInvite: {
+      readonly id: number;
+      readonly event: number;
+      /** @description The GM inviting another story into this shared event. */
+      readonly from_gm: number;
+      /** @description The story being invited into this shared event. */
+      readonly to_story: number;
+      /** @description Optional specific episode to link; null lets the Lead GM pick on accept. */
+      readonly proposed_episode: number | null;
+      /** @description The episode actually linked on accept (proposed_episode or Lead GM's choice). */
+      readonly accepted_episode: number | null;
+      /** @description Optional note from the inviting GM. */
+      readonly message: string;
+      /** @description Optional Lead GM response. */
+      readonly response_note: string;
+      /** @default pending */
+      readonly status: components['schemas']['Status83bEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly responded_at: string | null;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
     /**
      * @description * `1` - Origin
      *     * `2` - Heritage
@@ -23473,6 +23627,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
+    };
+    PaginatedCrossoverInviteList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CrossoverInvite'][];
     };
     PaginatedCustodyClearanceList: {
       /** @example 123 */
@@ -29723,6 +29892,14 @@ export interface components {
      */
     Status4e6Enum: 'declaring' | 'resolving' | 'between_rounds' | 'completed';
     /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     *     * `withdrawn` - Withdrawn
+     * @enum {string}
+     */
+    Status83bEnum: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+    /**
      * @description * `open` - Open — awaiting scheduling
      *     * `scheduled` - Scheduled (Event created)
      *     * `resolved` - Resolved (session complete)
@@ -29909,7 +30086,7 @@ export interface components {
       readonly offered_to: number;
       readonly offered_by_account: number;
       /** @default pending */
-      readonly status: components['schemas']['StoryGMOfferStatusEnum'];
+      readonly status: components['schemas']['Status83bEnum'];
       /** @description Optional note from offerer. */
       readonly message: string;
       /** @description Optional GM response. */
@@ -29921,14 +30098,6 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
-    /**
-     * @description * `pending` - Pending
-     *     * `accepted` - Accepted
-     *     * `declined` - Declined
-     *     * `withdrawn` - Withdrawn
-     * @enum {string}
-     */
-    StoryGMOfferStatusEnum: 'pending' | 'accepted' | 'declined' | 'withdrawn';
     /** @description Lightweight serializer for story list views */
     StoryList: {
       readonly id: number;
@@ -37681,6 +37850,149 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CovenantRole'];
+        };
+      };
+    };
+  };
+  crossover_invites_list: {
+    parameters: {
+      query?: {
+        event?: number;
+        from_gm?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `pending` - Pending
+         *     * `accepted` - Accepted
+         *     * `declined` - Declined
+         *     * `withdrawn` - Withdrawn
+         */
+        status?: 'accepted' | 'declined' | 'pending' | 'withdrawn';
+        to_story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCrossoverInviteList'];
+        };
+      };
+    };
+  };
+  crossover_invites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrossoverInvite'];
+        };
+      };
+    };
+  };
+  crossover_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this crossover invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrossoverInvite'];
+        };
+      };
+    };
+  };
+  crossover_invites_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this crossover invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrossoverInvite'];
+        };
+      };
+    };
+  };
+  crossover_invites_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this crossover invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrossoverInvite'];
+        };
+      };
+    };
+  };
+  crossover_invites_withdraw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this crossover invite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrossoverInvite'];
         };
       };
     };

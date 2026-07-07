@@ -11,7 +11,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
-from rest_framework import filters, mixins, permissions, status, viewsets
+from rest_framework import filters, mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
@@ -69,6 +69,7 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     Chapter,
+    CrossoverInvite,
     CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
@@ -123,6 +124,9 @@ from world.stories.permissions import (
     IsClearanceCustodianOrStaff,
     IsClearanceRequesterGM,
     IsContributorOrLeadGMOrStaff,
+    IsCrossoverInviteParticipantOrStaff,
+    IsCrossoverInviteRecipientOrStaff,
+    IsCrossoverInviteSenderOrStaff,
     IsEpisodeStoryOwnerOrStaff,
     IsGlobalProgressReadableOrStaff,
     IsGMProfile,
@@ -170,6 +174,11 @@ from world.stories.serializers import (
     CreateBulletinPostInputSerializer,
     CreateBulletinReplyInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
+    CrossoverInviteAcceptSerializer,
+    CrossoverInviteCreateSerializer,
+    CrossoverInviteDeclineSerializer,
+    CrossoverInviteSerializer,
+    CrossoverInviteWithdrawSerializer,
     CustodyClearanceDecisionInputSerializer,
     CustodyClearanceEscalateInputSerializer,
     CustodyClearanceRequestSerializer,
@@ -1684,6 +1693,153 @@ class StoryGMOfferViewSet(viewsets.ReadOnlyModelViewSet):
         ser.is_valid(raise_exception=True)
         updated = withdraw_story_offer(offer=offer)
         return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+class CrossoverInviteViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for CrossoverInvite — co-GM consent to link stories to a shared event (#2002).
+
+    Read: ReadOnlyModelViewSet (list + retrieve).
+    Create: POST /api/crossover-invites/ — any GM may invite another story.
+    State transitions: custom @action endpoints:
+      POST /api/crossover-invites/{id}/accept/   — invited story's Lead GM
+      POST /api/crossover-invites/{id}/decline/   — invited story's Lead GM
+      POST /api/crossover-invites/{id}/withdraw/  — inviting GM
+
+    Queryset scoping:
+      - Staff: all invites.
+      - GM: invites they sent (from_gm.account == user) or received (to_story.owners == user).
+    """
+
+    serializer_class = CrossoverInviteSerializer
+    permission_classes = [IsCrossoverInviteParticipantOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["event", "to_story", "status", "from_gm"]
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "responded_at", "updated_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> models.QuerySet[CrossoverInvite]:
+        user = self.request.user
+        if not user.is_authenticated:
+            return CrossoverInvite.objects.none()
+        if user.is_staff:
+            return CrossoverInvite.objects.all()
+        return CrossoverInvite.objects.filter(
+            models.Q(from_gm__account=user) | models.Q(to_story__owners=user)
+        ).distinct()
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """POST /api/crossover-invites/ — create a PENDING crossover invite.
+
+        Body: { event: int, to_story: int, proposed_episode?: int, message?: string }
+
+        The inviting GM is resolved from request.user.gm_profile.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import create_crossover_invite  # noqa: PLC0415
+
+        ser = CrossoverInviteCreateSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return Response(
+                {"detail": "You must have a GM profile to send crossover invites."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            invite = create_crossover_invite(
+                from_gm=gm_profile,
+                event=ser.validated_data["event"],
+                to_story=ser.validated_data["to_story"],
+                proposed_episode=ser.validated_data.get("proposed_episode"),
+                message=ser.validated_data.get("message", ""),
+            )
+        except CrossoverError as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CrossoverInviteSerializer(invite).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="accept",
+        permission_classes=[IsCrossoverInviteRecipientOrStaff],
+    )
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/crossover-invites/{id}/accept/ — invited Lead GM accepts.
+
+        Body: { accepted_episode?: int, response_note?: string }
+
+        Creates the EpisodeScene link (immediately if the event has an active
+        scene, or deferred to scene-spawn). Enrolls the Lead GM as a scene GM.
+        """
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import accept_crossover_invite  # noqa: PLC0415
+
+        invite = self.get_object()
+        ser = CrossoverInviteAcceptSerializer(data=request.data, context={"invite": invite})
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = accept_crossover_invite(
+                invite=invite,
+                accepting_account=cast(AccountDB, request.user),
+                accepted_episode=ser.validated_data.get("accepted_episode"),
+                response_note=ser.validated_data.get("response_note", ""),
+            )
+        except CrossoverError as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CrossoverInviteSerializer(updated).data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="decline",
+        permission_classes=[IsCrossoverInviteRecipientOrStaff],
+    )
+    def decline(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/crossover-invites/{id}/decline/ — invited Lead GM declines.
+
+        Body: { response_note?: string }
+        """
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import decline_crossover_invite  # noqa: PLC0415
+
+        invite = self.get_object()
+        ser = CrossoverInviteDeclineSerializer(data=request.data, context={"invite": invite})
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = decline_crossover_invite(
+                invite=invite,
+                responding_account=cast(AccountDB, request.user),
+                response_note=ser.validated_data.get("response_note", ""),
+            )
+        except CrossoverError as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CrossoverInviteSerializer(updated).data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="withdraw",
+        permission_classes=[IsCrossoverInviteSenderOrStaff],
+    )
+    def withdraw(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/crossover-invites/{id}/withdraw/ — inviting GM rescinds."""
+        from world.stories.exceptions import CrossoverError  # noqa: PLC0415
+        from world.stories.services.crossover import withdraw_crossover_invite  # noqa: PLC0415
+
+        invite = self.get_object()
+        ser = CrossoverInviteWithdrawSerializer(data=request.data, context={"invite": invite})
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = withdraw_crossover_invite(
+                invite=invite,
+                withdrawing_account=cast(AccountDB, request.user),
+            )
+        except CrossoverError as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(CrossoverInviteSerializer(updated).data, status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------

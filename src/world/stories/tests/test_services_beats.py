@@ -830,6 +830,7 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
         self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
         self.assertIsInstance(completion, BeatCompletion)
         self.assertEqual(completion.gm_table, gm_table)
+        self.assertEqual(completion.ran_by_table, gm_table)
         self.assertIsNone(completion.character_sheet)
         self.assertEqual(completion.gm_notes, "Group beat done")
 
@@ -860,6 +861,7 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
         self.assertIsInstance(completion, BeatCompletion)
         self.assertIsNone(completion.character_sheet)
         self.assertIsNone(completion.gm_table)
+        self.assertIsNone(completion.ran_by_table)
         self.assertEqual(completion.gm_notes, "Global beat failed")
 
 

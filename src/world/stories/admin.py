@@ -7,6 +7,7 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     Chapter,
+    CrossoverInvite,
     CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
@@ -456,6 +457,20 @@ class BeatCompletionAdmin(admin.ModelAdmin):
     search_fields = ("beat__internal_description", "character_sheet__name")
     readonly_fields = tuple(f.name for f in BeatCompletion._meta.fields)  # noqa: SLF001
     ordering = ("-recorded_at",)
+
+
+@admin.register(CrossoverInvite)
+class CrossoverInviteAdmin(admin.ModelAdmin):
+    list_display = ("id", "event", "from_gm", "to_story", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("to_story__title", "event__name")
+    autocomplete_fields = (
+        "event",
+        "from_gm",
+        "to_story",
+        "proposed_episode",
+        "accepted_episode",
+    )
 
 
 @admin.register(EpisodeResolution)

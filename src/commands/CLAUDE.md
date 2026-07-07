@@ -559,7 +559,12 @@ actions, backends, and service functions.
   against stories they own/lead, staff sees all (mirrors `CustodyClearanceViewSet.get_queryset`).
   Disclosure in every line of output follows the same rule as the API (custodian GM username,
   subject label via the shared `subject_display_label` helper, and scope only — never another
-  story's title/notes).
+  story's title/notes). `story crossover invite <event-id> story=<id> [episode=<id>] [message=<text>]`
+  (inviting GM), `story crossover accept|decline <invite-id> [episode=<id>] [note=<text>]` (invited
+  story's Lead GM), `withdraw <invite-id>` (inviter), `list [pending]` (#2002) — thin over
+  `world.stories.services.crossover` (the same service the web `CrossoverInviteViewSet` calls);
+  authorization replicated inline (sender-only withdraw, recipient-only accept/decline) so telnet
+  cannot escalate.
 - **`durance.py`**: `CmdDurance` (`durance`, Progression, #1700) — the Ritual of the Durance
   readiness hub + site-convene surface. Bare `durance`/`durance status` shows level, unlock
   gate, eligible paths, declared intent, and training-site presence. `durance intent <path>`

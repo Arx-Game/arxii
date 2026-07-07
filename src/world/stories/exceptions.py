@@ -89,6 +89,25 @@ class CustodyClearanceAuthorityError(CustodyClearanceError):
     _SAFE_MESSAGE = "You are not authorized to act on this custody clearance."
 
 
+class CrossoverError(StoryError):
+    """Base class for CrossoverInvite lifecycle errors (#2002)."""
+
+    _SAFE_MESSAGE = "This crossover invite cannot be processed."
+
+
+class CrossoverAuthorityError(CrossoverError):
+    """Raised when the acting account lacks the required Lead-GM/sender authority."""
+
+    _SAFE_MESSAGE = "You are not authorized to act on this crossover invite."
+
+
+class CrossoverStateError(CrossoverError):
+    """Raised when a lifecycle transition is attempted from an ineligible state
+    (not PENDING, duplicate pending, episode mismatch, no episode to link)."""
+
+    _SAFE_MESSAGE = "This crossover invite is not in a state that allows that action."
+
+
 class EraAdvanceError(StoryError):
     """Raised when an era lifecycle transition is not permitted."""
 
