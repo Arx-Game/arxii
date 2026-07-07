@@ -238,6 +238,20 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="A description of the organization's purpose and history",
     )
+    words = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Words / motto — house words, gang credo, guild maxim (#2079).",
+    )
+    colors = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="The organization's colors, in prose (#2079).",
+    )
+    sigil_description = models.TextField(
+        blank=True,
+        help_text="Sigil / emblem, described (#2079).",
+    )
     family = models.ForeignKey(
         "roster.Family",
         null=True,

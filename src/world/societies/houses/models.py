@@ -224,6 +224,10 @@ class Domain(SharedMemoryModel):
         primary_key=True,
     )
     name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(
+        blank=True,
+        help_text="The lands, described — CG lands_writeup materializes here (#2079).",
+    )
     owner_org = models.ForeignKey(
         _ORG_FK,
         on_delete=models.PROTECT,
@@ -526,6 +530,18 @@ class HouseTemplate(SharedMemoryModel):
         default=3,
         help_text="KinSlotPool capacity minted for the new family. PLACEHOLDER.",
     )
+    aspect_definitions = models.ManyToManyField(
+        "societies.HouseAspectDefinition",
+        blank=True,
+        related_name="templates",
+        help_text="Required catalog choices for claims on this template (#2079).",
+    )
+    features = models.ManyToManyField(
+        "societies.HouseFeature",
+        blank=True,
+        related_name="templates",
+        help_text="Cultural facts stamped on materialized houses (#2079).",
+    )
 
     class Meta:
         ordering = ["realm", "name"]
@@ -568,6 +584,13 @@ class HouseClaim(SharedMemoryModel):
     backstory = models.TextField(
         help_text="The thematic pitch staff reviews — the house as it has always been.",
     )
+    words = models.CharField(max_length=200, default="", help_text="House words / motto (#2079).")
+    colors = models.CharField(max_length=200, default="", help_text="House colors, prose (#2079).")
+    sigil_description = models.TextField(default="", help_text="The sigil, described (#2079).")
+    lands_writeup = models.TextField(
+        blank=True,
+        help_text="The seat domain's lands, described (required for landed titles, #2079).",
+    )
     mercy = models.SmallIntegerField(default=0)
     method = models.SmallIntegerField(default=0)
     status_principle = models.SmallIntegerField(default=0)
@@ -595,3 +618,136 @@ class HouseClaim(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"House {self.house_name} claim ({self.get_status_display()})"
+
+
+class HouseAspectDefinition(SharedMemoryModel):
+    """An authored, required catalog choice for houses of a template (#2079).
+
+    Catalog-only by design: there is no free-text answer path. The normalized
+    option list IS the thematic fence (see ADR-0101). Attach to templates via
+    ``HouseTemplate.aspect_definitions``; a definition shared by two templates
+    shares one catalog — a diverged catalog means a second definition.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    prompt = models.TextField(
+        help_text="Player-facing question the founder answers by picking options."
+    )
+    min_picks = models.PositiveSmallIntegerField(default=1)
+    max_picks = models.PositiveSmallIntegerField(default=1)
+    display_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class HouseAspectOption(SharedMemoryModel):
+    """One authored answer in a definition's catalog (#2079). PLACEHOLDER content."""
+
+    definition = models.ForeignKey(
+        HouseAspectDefinition, on_delete=models.CASCADE, related_name="options"
+    )
+    name = models.CharField(max_length=120)
+    description = models.TextField(
+        blank=True, help_text="Player-facing blurb shown on the option card."
+    )
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["definition", "display_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["definition", "name"], name="unique_option_name_per_definition"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.definition.name}: {self.name}"
+
+
+class HouseFeature(SharedMemoryModel):
+    """A structural cultural fact about houses of a template (#2079).
+
+    No player input — features orient the founder at CG ("this is how a house
+    like yours conducts itself") and anchor future systems: a ledger UI checks
+    the org has the feature slug ``black-ledger``, never a bespoke code path.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    slug = models.SlugField(max_length=60, unique=True, help_text="Stable code anchor.")
+    description = models.TextField(help_text="Player-facing: how this shapes play.")
+    display_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class HouseClaimAspect(SharedMemoryModel):
+    """One picked option on a CG house claim (#2079)."""
+
+    claim = models.ForeignKey(HouseClaim, on_delete=models.CASCADE, related_name="aspects")
+    definition = models.ForeignKey(
+        HouseAspectDefinition, on_delete=models.PROTECT, related_name="+"
+    )
+    option = models.ForeignKey(HouseAspectOption, on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        ordering = ["claim", "definition", "option"]
+        constraints = [
+            models.UniqueConstraint(fields=["claim", "option"], name="unique_claim_option")
+        ]
+
+    def __str__(self) -> str:
+        return f"claim {self.claim_id}: {self.option}"
+
+
+class OrganizationAspect(SharedMemoryModel):
+    """A house's permanent identity facet (#2079).
+
+    Written at claim materialization; also directly authorable so staff-seeded
+    houses carry facets without a claim.
+    """
+
+    organization = models.ForeignKey(
+        "societies.Organization", on_delete=models.CASCADE, related_name="aspects"
+    )
+    definition = models.ForeignKey(
+        HouseAspectDefinition, on_delete=models.PROTECT, related_name="+"
+    )
+    option = models.ForeignKey(HouseAspectOption, on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        ordering = ["organization", "definition", "option"]
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "option"], name="unique_org_option")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization}: {self.option}"
+
+
+class OrganizationFeature(SharedMemoryModel):
+    """A cultural feature stamped on a house org (#2079)."""
+
+    organization = models.ForeignKey(
+        "societies.Organization", on_delete=models.CASCADE, related_name="features"
+    )
+    feature = models.ForeignKey(
+        HouseFeature, on_delete=models.PROTECT, related_name="organization_features"
+    )
+
+    class Meta:
+        ordering = ["organization", "feature"]
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "feature"], name="unique_org_feature")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization}: {self.feature}"
