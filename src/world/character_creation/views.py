@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -42,10 +43,12 @@ from world.character_creation.serializers import (
     CGPointBudgetSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
+    ClaimableTitleSerializer,
     DraftApplicationCommentSerializer,
     DraftApplicationDetailSerializer,
     DraftApplicationSerializer,
     GenderSerializer,
+    HouseClaimStatusSerializer,
     PathSerializer,
     PronounsSerializer,
     SpeciesSerializer,
@@ -560,6 +563,50 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(draft)
         return Response(serializer.data)
 
+    @extend_schema(responses=HouseClaimStatusSerializer)
+    @action(detail=True, methods=[HTTPMethod.GET, HTTPMethod.POST], url_path="house-claim")
+    def house_claim(self, request: Request, pk: int | None = None) -> Response:
+        """GET the draft's house claim; POST to submit one (#1884 Phase D).
+
+        POST body: title (id), template (id), house_name, backstory,
+        principles (mercy/method/status/change/allegiance/power ints).
+        The automated thematic gates run here; staff review follows in admin.
+        """
+        from world.societies.houses.creator import submit_house_claim  # noqa: PLC0415
+        from world.societies.houses.models import HouseClaim, HouseTemplate, Title  # noqa: PLC0415
+        from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+        draft = self.get_object()
+        if request.method == "GET":
+            claim = HouseClaim.objects.filter(draft=draft).first()
+            if claim is None:
+                return Response({"detail": "No house claim."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(HouseClaimStatusSerializer(claim).data)
+
+        title = Title.objects.filter(pk=request.data.get("title")).first()
+        template = HouseTemplate.objects.filter(pk=request.data.get("template")).first()
+        if title is None or template is None:
+            return Response(
+                {"detail": "Unknown title or template."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        principles = {
+            axis: int(request.data.get(axis, 0))
+            for axis in ("mercy", "method", "status", "change", "allegiance", "power")
+        }
+        try:
+            claim = submit_house_claim(
+                draft=draft,
+                title=title,
+                template=template,
+                house_name=str(request.data.get("house_name", "")),
+                backstory=str(request.data.get("backstory", "")),
+                principles=principles,
+            )
+        except HousesServiceError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(HouseClaimStatusSerializer(claim).data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=[HTTPMethod.POST])
     def unsubmit(self, request: Request, pk: int | None = None) -> Response:
         """Un-submit a draft to resume editing."""
@@ -839,3 +886,21 @@ class DraftApplicationViewSet(
         """Get the count of pending applications."""
         count = DraftApplication.objects.filter(status=ApplicationStatus.SUBMITTED).count()
         return Response({"count": count})
+
+
+class ClaimableTitleViewSet(viewsets.ReadOnlyModelViewSet):
+    """Vacant set-aside titles open to CG house definition (#1884 Phase D)."""
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends: list = []
+    serializer_class = ClaimableTitleSerializer
+
+    def get_queryset(self) -> QuerySet:
+        from world.societies.houses.models import Title  # noqa: PLC0415
+
+        return (
+            Title.objects.filter(is_claimable=True, house__isnull=True, holder__isnull=True)
+            .select_related("realm", "seat_domain")
+            .order_by("realm", "tier", "name")
+        )

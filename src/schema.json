@@ -3094,6 +3094,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterDraft'
           description: ''
+  /api/character-creation/drafts/{id}/house-claim/:
+    get:
+      operationId: character_creation_drafts_house_claim_retrieve
+      description: |-
+        GET the draft's house claim; POST to submit one (#1884 Phase D).
+
+        POST body: title (id), template (id), house_name, backstory,
+        principles (mercy/method/status/change/allegiance/power ints).
+        The automated thematic gates run here; staff review follows in admin.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseClaimStatus'
+          description: ''
+    post:
+      operationId: character_creation_drafts_house_claim_create
+      description: |-
+        GET the draft's house claim; POST to submit one (#1884 Phase D).
+
+        POST body: title (id), template (id), house_name, backstory,
+        principles (mercy/method/status/change/allegiance/power ints).
+        The automated thematic gates run here; staff review follows in admin.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterDraftRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseClaimStatus'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -3379,6 +3435,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Gender'
+          description: ''
+  /api/character-creation/house-titles/:
+    get:
+      operationId: character_creation_house_titles_list
+      description: Vacant set-aside titles open to CG house definition (#1884 Phase
+        D).
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClaimableTitle'
+          description: ''
+  /api/character-creation/house-titles/{id}/:
+    get:
+      operationId: character_creation_house_titles_retrieve
+      description: Vacant set-aside titles open to CG house definition (#1884 Phase
+        D).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this title.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimableTitle'
           description: ''
   /api/character-creation/naming-ritual-config/:
     get:
@@ -31309,6 +31406,38 @@ components:
       required:
       - id
       - name
+    ClaimableTitle:
+      type: object
+      description: A vacant set-aside title open to CG house definition (#1884 Phase
+        D).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        tier:
+          $ref: '#/components/schemas/Tier34dEnum'
+        realm_name:
+          type: string
+          readOnly: true
+        seat_domain_name:
+          type: string
+          readOnly: true
+          default: ''
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseTemplateOption'
+          readOnly: true
+      required:
+      - id
+      - name
+      - realm_name
+      - seat_domain_name
+      - templates
+      - tier
     ClockAdjustRequest:
       type: object
       description: Request serializer for staff clock adjustment.
@@ -37406,6 +37535,38 @@ components:
           type: integer
       required:
       - interaction_id
+    HouseClaimStatus:
+      type: object
+      description: The draft's house claim, as CG shows it (#1884 Phase D).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        house_name:
+          type: string
+          description: The family name (org renders "House <name>" for nobles).
+          maxLength: 100
+        title_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/HouseClaimStatusStatusEnum'
+        review_note:
+          type: string
+      required:
+      - house_name
+      - id
+      - title_name
+    HouseClaimStatusStatusEnum:
+      enum:
+      - pending
+      - approved
+      - rejected
+      type: string
+      description: |-
+        * `pending` - Pending Review
+        * `approved` - Approved
+        * `rejected` - Rejected
     HouseDetail:
       type: object
       description: The house block of an org payload (#1884) — null for non-family
@@ -37461,6 +37622,79 @@ components:
       required:
       - holding_names
       - name
+    HouseTemplateOption:
+      type: object
+      description: A realm template a CG house claim may build from.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        family_type:
+          type: string
+          description: roster.Family.FamilyType the defined family gets.
+          maxLength: 20
+        name_pattern:
+          type: string
+          description: Full-match regex the proposed house name must satisfy — the
+            realm's naming conventions as an automated gate. PLACEHOLDER.
+          maxLength: 200
+        mercy_min:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        mercy_max:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        method_min:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        method_max:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        status_min:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        status_max:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        change_min:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        change_max:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        allegiance_min:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        allegiance_max:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        power_min:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+        power_max:
+          type: integer
+          maximum: 32767
+          minimum: -32768
+      required:
+      - family_type
+      - id
+      - name
     HouseTitle:
       type: object
       properties:
@@ -37471,7 +37705,7 @@ components:
           type: string
           maxLength: 120
         tier:
-          $ref: '#/components/schemas/HouseTitleTierEnum'
+          $ref: '#/components/schemas/Tier34dEnum'
         holder_name:
           type: string
           readOnly: true
@@ -37483,18 +37717,6 @@ components:
       - id
       - name
       - tier
-    HouseTitleTierEnum:
-      enum:
-      - crown
-      - duchy
-      - county
-      - barony
-      type: string
-      description: |-
-        * `crown` - Crown
-        * `duchy` - Duchy
-        * `county` - County
-        * `barony` - Barony
     HybridRelationshipType:
       type: object
       description: Serializer for HybridRelationshipType with nested requirements.
@@ -55763,6 +55985,18 @@ components:
       - unlock_display_name
       - unlock_target_kind
       - unlock_xp_cost
+    Tier34dEnum:
+      enum:
+      - crown
+      - duchy
+      - county
+      - barony
+      type: string
+      description: |-
+        * `crown` - Crown
+        * `duchy` - Duchy
+        * `county` - County
+        * `barony` - Barony
     Tier3f5Enum:
       enum:
       - 1

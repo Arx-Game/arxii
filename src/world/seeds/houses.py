@@ -14,6 +14,9 @@ CROWN_ORG_NAME = "The Crown of Arx PLACEHOLDER"
 HOUSE_ORG_NAME = "House Veyrane PLACEHOLDER"
 DUCAL_TITLE_NAME = "Duchy of Veyrane PLACEHOLDER"
 DOMAIN_NAME = "Veyrane Vale PLACEHOLDER"
+CLAIMABLE_TITLE_NAME = "Barony of Thornmere PLACEHOLDER"
+CLAIMABLE_DOMAIN_NAME = "Thornmere Marches PLACEHOLDER"
+TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
 
 
 def seed_houses_demo() -> None:
@@ -80,6 +83,8 @@ def seed_houses_demo() -> None:
             "require_wedlock": True,
         },
     )
+    _seed_house_creator(realm=realm, society=society, crown=crown, law=law)
+
     house, created = Organization.objects.get_or_create(
         name=HOUSE_ORG_NAME,
         defaults={
@@ -127,5 +132,57 @@ def seed_houses_demo() -> None:
             "house": house,
             "holder": duchess,
             "seat_domain": domain,
+        },
+    )
+
+
+def _seed_house_creator(*, realm, society, crown, law) -> None:
+    """Phase D: a set-aside claimable barony + the realm's charter template."""
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.areas.models import Area  # noqa: PLC0415
+    from world.roster.models import Family  # noqa: PLC0415
+    from world.societies.houses.constants import TitleTier  # noqa: PLC0415
+    from world.societies.houses.models import (  # noqa: PLC0415
+        Domain,
+        HoldingKind,
+        HouseTemplate,
+        Title,
+    )
+
+    farmland, _ = HoldingKind.objects.get_or_create(
+        name="Farmland PLACEHOLDER",
+        defaults={
+            "description": "PLACEHOLDER: grain terraces and tenant farms.",
+            "stream_kind": "domain_tax",
+            "base_gross": 1000,
+        },
+    )
+    template, _ = HouseTemplate.objects.get_or_create(
+        name=TEMPLATE_NAME,
+        defaults={
+            "description": "PLACEHOLDER: the standard charter for a landed barony of Arx.",
+            "realm": realm,
+            "family_type": Family.FamilyType.NOBLE,
+            "society": society,
+            "liege": crown,
+            "default_succession_law": law,
+        },
+    )
+    template.holdings.add(farmland)
+
+    seat_area, _ = Area.objects.get_or_create(
+        name=CLAIMABLE_DOMAIN_NAME, defaults={"level": AreaLevel.REGION}
+    )
+    seat, _ = Domain.objects.get_or_create(
+        area=seat_area,
+        defaults={"name": CLAIMABLE_DOMAIN_NAME, "owner_org": crown},
+    )
+    Title.objects.get_or_create(
+        name=CLAIMABLE_TITLE_NAME,
+        defaults={
+            "tier": TitleTier.BARONY,
+            "realm": realm,
+            "seat_domain": seat,
+            "is_claimable": True,
         },
     )

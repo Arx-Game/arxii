@@ -175,6 +175,12 @@ def finalize_character(
 
     # Family is already set on CharacterSheet above
 
+    # House claim materialization (#1884 Phase D): an approved CG-defined
+    # house builds its full package now, BEFORE the kinship bind (the founder
+    # node must land in the new family). Runs before draft deletion (the
+    # claim rides the draft).
+    _bind_house_claim(draft, sheet)
+
     # Kinship graph binding (#2062): claim the chosen slot / mint from the
     # chosen pool, or self-serve a node for the new PC. Runs before draft
     # deletion (the claim FKs live on the draft).
@@ -201,6 +207,39 @@ def finalize_character(
     draft.delete()
 
     return character
+
+
+def _bind_house_claim(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """Materialize an approved CG house claim (#1884 Phase D).
+
+    Pending or rejected claims materialize nothing — the character enters
+    play houseless (the claim dies with the draft). Best-effort like the
+    kinship bind: a refusal must not strand finalization.
+    """
+    from world.societies.houses.constants import HouseClaimStatus  # noqa: PLC0415
+    from world.societies.houses.creator import materialize_house_claim  # noqa: PLC0415
+    from world.societies.houses.models import HouseClaim  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+    claim = HouseClaim.objects.filter(draft=draft).first()
+    if claim is None:
+        return
+    if claim.status != HouseClaimStatus.APPROVED:
+        logger.warning(
+            "Draft %s finalized with un-approved house claim %s (%s); skipping.",
+            draft.pk,
+            claim.pk,
+            claim.status,
+        )
+        return
+    try:
+        materialize_house_claim(claim, sheet=sheet)
+    except HousesServiceError:
+        logger.exception(
+            "House claim %s materialization failed for draft %s; continuing houseless.",
+            claim.pk,
+            draft.pk,
+        )
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:

@@ -767,6 +767,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Key Services:** `full_display_name` (particle naming), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
 - **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
+- **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
 - **Seeds:** cluster `houses` (rides `kinship`)
 - **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area), tidings (house feed), secrets (breach scandal channel)
 - **Source:** `src/world/societies/houses/`

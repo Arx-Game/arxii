@@ -74,3 +74,11 @@ class DomainCrisisSeverity(models.TextChoices):
     TROUBLE = "trouble", "Trouble"
     CRISIS = "crisis", "Crisis"
     CATASTROPHE = "catastrophe", "Catastrophe"
+
+
+class HouseClaimStatus(models.TextChoices):
+    """Lifecycle of a CG house-founding claim (#1884 Phase D)."""
+
+    PENDING = "pending", "Pending Review"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"

@@ -72,8 +72,29 @@ MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
   peer: org, particle, recognition rules, succession law, crown fealty, ducal
   title, domain + farmland holding.
 
-## Not built (deliberate)
+## House creator (Phase D)
 
-Phase D house creator (claimable-title app-in flow + thematic gates) is
-follow-up scope per the approved spec — `Title.is_claimable` is its data
-anchor.
+CG-only (Apostate ruling): a claim defines the house *retroactively* — the
+character has always been its representative. Founding a brand-new house in
+play (ennoblement, new lands) is a separate future loop.
+
+- **`HouseTemplate`** — realm recipe: name-pattern regex (the realm's naming
+  conventions as an automated gate), per-axis principle ranges, society,
+  liege, succession law, holdings package, `starting_kin_slots`.
+- **`HouseClaim`** — rides the `CharacterDraft` (dies with it); automated
+  thematic gates run at `submit_house_claim` (claimable title, realm match,
+  one live claim per title, name pattern + collision, backstory present,
+  principle ranges); staff approve/reject in **Django admin**
+  (`HouseClaimAdmin` actions).
+- **Materialization at CG finalization** (`materialize_house_claim`, called
+  from `_bind_house_claim` before the kinship bind): Family + org (+rank
+  ladder, principle overrides) + fealty to the template liege + title seated
+  on the founder (FOUNDING membership) + seat domain reassigned with the
+  holdings package + a `KinSlotPool` for future kin app-ins + the house
+  channel. Approval alone creates nothing — an abandoned application leaves
+  no ghost house.
+- **Surfaces:** `/api/character-creation/house-titles/` (claimable titles +
+  templates), `GET/POST /api/character-creation/drafts/{id}/house-claim/`;
+  the CG Lineage stage shows the "Define a House" panel to familyless
+  drafts. Seeds: a set-aside claimable barony + charter template ride the
+  `houses` cluster.

@@ -11,6 +11,7 @@ from world.character_creation.views import (
     CGExplanationsView,
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
+    ClaimableTitleViewSet,
     DraftApplicationViewSet,
     FormOptionsView,
     GenderViewSet,
@@ -38,6 +39,7 @@ router.register("paths", PathViewSet, basename="path")
 router.register("traditions", TraditionViewSet, basename="tradition")
 router.register("drafts", CharacterDraftViewSet, basename="draft")
 router.register("applications", DraftApplicationViewSet, basename="application")
+router.register("house-titles", ClaimableTitleViewSet, basename="house-title")
 router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
 router.register("cantrips", CantripViewSet, basename="cantrip")
 

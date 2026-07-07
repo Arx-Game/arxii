@@ -1025,6 +1025,7 @@
   - target_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
   - application <- character_creation.DraftApplication
+  - house_claim <- societies.HouseClaim
 
 ### DraftApplication
 **Foreign Keys:**
@@ -4567,6 +4568,7 @@
   - nobiliary_particles <- societies.NobiliaryParticle
   - recognition_rules <- societies.HouseRecognitionRule
   - titles <- societies.Title
+  - house_templates <- societies.HouseTemplate
   - areas <- areas.Area
   - market_squares <- items.MarketSquare
 
@@ -5436,6 +5438,7 @@
   - ranking_displays <- societies.RankingDisplay
   - ranking_band_labels <- societies.RankingBandLabel
   - fame_reaction_lines <- societies.FameReactionLine
+  - house_templates <- societies.HouseTemplate
   - exposed_secrets <- secrets.Secret
   - dominant_areas <- areas.Area
   - heat_rows <- justice.PersonaHeat
@@ -5472,6 +5475,7 @@
   - domains <- societies.Domain
   - pacts_as_senior <- societies.MarriagePact
   - pacts_as_junior <- societies.MarriagePact
+  - house_templates <- societies.HouseTemplate
   - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
@@ -5672,6 +5676,7 @@
 **Pointed to by:**
   - houses_defaulting <- societies.Organization
   - titles <- societies.Title
+  - house_templates <- societies.HouseTemplate
 
 ### Title
 **Foreign Keys:**
@@ -5680,6 +5685,8 @@
   - holder -> roster.Kinsperson [FK] (nullable)
   - seat_domain -> societies.Domain [FK] (nullable)
   - succession_law -> societies.SuccessionLaw [FK] (nullable)
+**Pointed to by:**
+  - claims <- societies.HouseClaim
 
 ### Domain
 **Foreign Keys:**
@@ -5694,6 +5701,7 @@
 ### HoldingKind
 **Pointed to by:**
   - holdings <- societies.DomainHolding
+  - house_templates <- societies.HouseTemplate
 
 ### DomainHolding
 **Foreign Keys:**
@@ -5726,6 +5734,23 @@
   - pact -> societies.MarriagePact [FK]
   - committed_person -> roster.Kinsperson [FK] (nullable)
   - obligation -> currency.OrgObligation [OneToOne] (nullable)
+
+### HouseTemplate
+**Foreign Keys:**
+  - realm -> realms.Realm [FK]
+  - society -> societies.Society [FK]
+  - liege -> societies.Organization [FK]
+  - default_succession_law -> societies.SuccessionLaw [FK]
+  - holdings -> societies.HoldingKind [M2M]
+**Pointed to by:**
+  - claims <- societies.HouseClaim
+
+### HouseClaim
+**Foreign Keys:**
+  - draft -> character_creation.CharacterDraft [OneToOne]
+  - title -> societies.Title [FK]
+  - template -> societies.HouseTemplate [FK]
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
 
 ### OrganizationCapabilityProjectDetails
 **Foreign Keys:**
