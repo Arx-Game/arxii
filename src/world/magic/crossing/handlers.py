@@ -86,7 +86,37 @@ def _variant_model_for(target_kind: str) -> type[AbstractSpecializedVariant] | N
     return None
 
 
-class GiftCrossingHandler:
+class _VariantDiscoveryHandler:
+    """Shared base for handlers that discover ``AbstractSpecializedVariant`` rows.
+
+    GIFT, ORGANIZATION, and COVENANT_ROLE all use the same execute logic —
+    they differ only in ``target_kind`` (which drives ``_parents_for`` and
+    ``_variant_model_for``).
+    """
+
+    target_kind: str = ""
+
+    def execute(self, *, thread: Thread, starting_level: int, new_level: int) -> None:
+        if new_level <= starting_level:
+            return
+
+        variant_model = _variant_model_for(thread.target_kind)
+        if variant_model is None:
+            return
+
+        sheet: CharacterSheet = thread.owner
+        for parent in _parents_for(thread):
+            newly = variant_model.newly_crossed_variants(
+                parent,
+                resonance_id=thread.resonance_id,
+                starting_level=starting_level,
+                new_level=new_level,
+            )
+            for variant in newly:
+                _execute_variant_beat(sheet, variant)
+
+
+class GiftCrossingHandler(_VariantDiscoveryHandler):
     """GIFT thread crossing handler — discovers technique variants.
 
     Wraps the existing variant-discovery logic for GIFT threads (ADR-0055,
@@ -95,27 +125,8 @@ class GiftCrossingHandler:
 
     target_kind = TargetKind.GIFT
 
-    def execute(self, *, thread: Thread, starting_level: int, new_level: int) -> None:
-        if new_level <= starting_level:
-            return
 
-        variant_model = _variant_model_for(thread.target_kind)
-        if variant_model is None:
-            return
-
-        sheet: CharacterSheet = thread.owner
-        for parent in _parents_for(thread):
-            newly = variant_model.newly_crossed_variants(
-                parent,
-                resonance_id=thread.resonance_id,
-                starting_level=starting_level,
-                new_level=new_level,
-            )
-            for variant in newly:
-                _execute_variant_beat(sheet, variant)
-
-
-class OrganizationCrossingHandler:
+class OrganizationCrossingHandler(_VariantDiscoveryHandler):
     """ORGANIZATION thread crossing handler — discovers technique variants.
 
     Mirrors ``GiftCrossingHandler``: the org's acquired gifts carry techniques,
@@ -124,27 +135,8 @@ class OrganizationCrossingHandler:
 
     target_kind = TargetKind.ORGANIZATION
 
-    def execute(self, *, thread: Thread, starting_level: int, new_level: int) -> None:
-        if new_level <= starting_level:
-            return
 
-        variant_model = _variant_model_for(thread.target_kind)
-        if variant_model is None:
-            return
-
-        sheet: CharacterSheet = thread.owner
-        for parent in _parents_for(thread):
-            newly = variant_model.newly_crossed_variants(
-                parent,
-                resonance_id=thread.resonance_id,
-                starting_level=starting_level,
-                new_level=new_level,
-            )
-            for variant in newly:
-                _execute_variant_beat(sheet, variant)
-
-
-class CovenantRoleCrossingHandler:
+class CovenantRoleCrossingHandler(_VariantDiscoveryHandler):
     """COVENANT_ROLE thread crossing handler — discovers sub-role variants.
 
     Wraps the existing variant-discovery logic for COVENANT_ROLE threads
@@ -152,25 +144,6 @@ class CovenantRoleCrossingHandler:
     """
 
     target_kind = TargetKind.COVENANT_ROLE
-
-    def execute(self, *, thread: Thread, starting_level: int, new_level: int) -> None:
-        if new_level <= starting_level:
-            return
-
-        variant_model = _variant_model_for(thread.target_kind)
-        if variant_model is None:
-            return
-
-        sheet: CharacterSheet = thread.owner
-        for parent in _parents_for(thread):
-            newly = variant_model.newly_crossed_variants(
-                parent,
-                resonance_id=thread.resonance_id,
-                starting_level=starting_level,
-                new_level=new_level,
-            )
-            for variant in newly:
-                _execute_variant_beat(sheet, variant)
 
 
 def _execute_variant_beat(
