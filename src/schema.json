@@ -7128,6 +7128,206 @@ paths:
               schema:
                 $ref: '#/components/schemas/CovenantRole'
           description: ''
+  /api/crossover-invites/:
+    get:
+      operationId: crossover_invites_list
+      description: |-
+        ViewSet for CrossoverInvite — co-GM consent to link stories to a shared event (#2002).
+
+        Read: ReadOnlyModelViewSet (list + retrieve).
+        Create: POST /api/crossover-invites/ — any GM may invite another story.
+        State transitions: custom @action endpoints:
+          POST /api/crossover-invites/{id}/accept/   — invited story's Lead GM
+          POST /api/crossover-invites/{id}/decline/   — invited story's Lead GM
+          POST /api/crossover-invites/{id}/withdraw/  — inviting GM
+
+        Queryset scoping:
+          - Staff: all invites.
+          - GM: invites they sent (from_gm.account == user) or received (to_story.owners == user).
+      parameters:
+      - in: query
+        name: event
+        schema:
+          type: integer
+      - in: query
+        name: from_gm
+        schema:
+          type: integer
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - accepted
+          - declined
+          - pending
+          - withdrawn
+        description: |-
+          * `pending` - Pending
+          * `accepted` - Accepted
+          * `declined` - Declined
+          * `withdrawn` - Withdrawn
+      - in: query
+        name: to_story
+        schema:
+          type: integer
+      tags:
+      - crossover-invites
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCrossoverInviteList'
+          description: ''
+    post:
+      operationId: crossover_invites_create
+      description: |-
+        POST /api/crossover-invites/ — create a PENDING crossover invite.
+
+        Body: { event: int, to_story: int, proposed_episode?: int, message?: string }
+
+        The inviting GM is resolved from request.user.gm_profile.
+      tags:
+      - crossover-invites
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossoverInvite'
+          description: ''
+  /api/crossover-invites/{id}/:
+    get:
+      operationId: crossover_invites_retrieve
+      description: |-
+        ViewSet for CrossoverInvite — co-GM consent to link stories to a shared event (#2002).
+
+        Read: ReadOnlyModelViewSet (list + retrieve).
+        Create: POST /api/crossover-invites/ — any GM may invite another story.
+        State transitions: custom @action endpoints:
+          POST /api/crossover-invites/{id}/accept/   — invited story's Lead GM
+          POST /api/crossover-invites/{id}/decline/   — invited story's Lead GM
+          POST /api/crossover-invites/{id}/withdraw/  — inviting GM
+
+        Queryset scoping:
+          - Staff: all invites.
+          - GM: invites they sent (from_gm.account == user) or received (to_story.owners == user).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this crossover invite.
+        required: true
+      tags:
+      - crossover-invites
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossoverInvite'
+          description: ''
+  /api/crossover-invites/{id}/accept/:
+    post:
+      operationId: crossover_invites_accept_create
+      description: |-
+        POST /api/crossover-invites/{id}/accept/ — invited Lead GM accepts.
+
+        Body: { accepted_episode?: int, response_note?: string }
+
+        Creates the EpisodeScene link (immediately if the event has an active
+        scene, or deferred to scene-spawn). Enrolls the Lead GM as a scene GM.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this crossover invite.
+        required: true
+      tags:
+      - crossover-invites
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossoverInvite'
+          description: ''
+  /api/crossover-invites/{id}/decline/:
+    post:
+      operationId: crossover_invites_decline_create
+      description: |-
+        POST /api/crossover-invites/{id}/decline/ — invited Lead GM declines.
+
+        Body: { response_note?: string }
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this crossover invite.
+        required: true
+      tags:
+      - crossover-invites
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossoverInvite'
+          description: ''
+  /api/crossover-invites/{id}/withdraw/:
+    post:
+      operationId: crossover_invites_withdraw_create
+      description: POST /api/crossover-invites/{id}/withdraw/ — inviting GM rescinds.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this crossover invite.
+        required: true
+      tags:
+      - crossover-invites
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossoverInvite'
+          description: ''
   /api/currency/org-books/:
     get:
       operationId: currency_org_books_list
@@ -32580,6 +32780,75 @@ components:
       - thread_id
       - unlocked_level
       - xp_spent
+    CrossoverInvite:
+      type: object
+      description: Read serializer for CrossoverInvite records (#2002).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        event:
+          type: integer
+          readOnly: true
+        from_gm:
+          type: integer
+          readOnly: true
+          description: The GM inviting another story into this shared event.
+        to_story:
+          type: integer
+          readOnly: true
+          description: The story being invited into this shared event.
+        proposed_episode:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Optional specific episode to link; null lets the Lead GM pick
+            on accept.
+        accepted_episode:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The episode actually linked on accept (proposed_episode or
+            Lead GM's choice).
+        message:
+          type: string
+          readOnly: true
+          description: Optional note from the inviting GM.
+        response_note:
+          type: string
+          readOnly: true
+          description: Optional Lead GM response.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/Status83bEnum'
+          readOnly: true
+          default: pending
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        responded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - accepted_episode
+      - created_at
+      - event
+      - from_gm
+      - id
+      - message
+      - proposed_episode
+      - responded_at
+      - response_note
+      - status
+      - to_story
+      - updated_at
     CurrentStageEnum:
       enum:
       - 1
@@ -41919,6 +42188,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CovenantRite'
+    PaginatedCrossoverInviteList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CrossoverInvite'
     PaginatedCustodyClearanceList:
       type: object
       required:
@@ -53282,6 +53574,18 @@ components:
         * `resolving` - Resolving
         * `between_rounds` - Between Rounds
         * `completed` - Completed
+    Status83bEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      - withdrawn
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `withdrawn` - Withdrawn
     StatusBa4Enum:
       enum:
       - open
@@ -53666,7 +53970,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/StoryGMOfferStatusEnum'
+          - $ref: '#/components/schemas/Status83bEnum'
           readOnly: true
           default: pending
         message:
@@ -53701,18 +54005,6 @@ components:
       - status
       - story
       - updated_at
-    StoryGMOfferStatusEnum:
-      enum:
-      - pending
-      - accepted
-      - declined
-      - withdrawn
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `accepted` - Accepted
-        * `declined` - Declined
-        * `withdrawn` - Withdrawn
     StoryList:
       type: object
       description: Lightweight serializer for story list views
