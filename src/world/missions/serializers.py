@@ -525,6 +525,14 @@ class JournalDeedSerializer(serializers.Serializer):
     applied_at = serializers.DateTimeField()
 
 
+class PendingMissionInviteSerializer(serializers.Serializer):
+    """A pending mission invite addressed to the viewer's persona (#2049)."""
+
+    invite_id = serializers.IntegerField()
+    instance_id = serializers.IntegerField()
+    template_name = serializers.CharField()
+
+
 class JournalEntrySerializer(serializers.Serializer):
     """Read-only mirror of :class:`world.missions.types.JournalEntry`."""
 
@@ -539,6 +547,13 @@ class JournalEntrySerializer(serializers.Serializer):
     current_node_flavor = serializers.CharField(allow_blank=True)
     compass_rooms = serializers.ListField(child=serializers.CharField())
     compass_anywhere = serializers.BooleanField()
+    pending_invites = serializers.SerializerMethodField()
+    participant_count = serializers.IntegerField()
+
+    @extend_schema_field(PendingMissionInviteSerializer(many=True))
+    def get_pending_invites(self, obj: object) -> list[dict]:
+        invites = obj.pending_invites  # type: ignore[attr-defined]
+        return PendingMissionInviteSerializer(invites, many=True).data if invites else []
 
 
 class BeatOptionSerializer(serializers.Serializer):

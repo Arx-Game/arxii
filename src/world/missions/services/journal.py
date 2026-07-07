@@ -33,9 +33,11 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from django.db.models import Count
+
 from world.missions.constants import MissionStatus, NodeLocationMode
 from world.missions.models import MissionDeedRecord, MissionOption, MissionParticipant
-from world.missions.types import JournalDeed, JournalEntry
+from world.missions.types import JournalDeed, JournalEntry, JournalInvite
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -71,8 +73,58 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
     instance_ids = [p.instance_id for p in participations]
     deeds_by_instance = _deeds_by_instance(instance_ids, character)
     options_by_node = _options_by_node(participations)
+    pending_invites = _pending_invites_for(character)
+    participant_counts = _participant_counts(instance_ids)
 
-    return [_journal_entry_for(part, deeds_by_instance, options_by_node) for part in participations]
+    return [
+        _journal_entry_for(
+            part, deeds_by_instance, options_by_node, pending_invites, participant_counts
+        )
+        for part in participations
+    ]
+
+
+def _pending_invites_for(character: ObjectDB) -> tuple[JournalInvite, ...]:
+    """PENDING MissionInvites addressed to this character's primary persona (#2049).
+
+    One query for the whole journal (not per-entry); threaded into every entry
+    since invites are persona-scoped, not instance-scoped. Mirrors the telnet
+    ``_append_pending_invites`` query (commands/missions.py:117).
+    """
+    from world.missions.models import MissionInvite  # noqa: PLC0415
+
+    persona = getattr(character.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+    if persona is None:
+        return ()
+    rows = (
+        MissionInvite.objects.filter(
+            target_persona=persona, response=MissionInvite.Response.PENDING
+        )
+        .select_related("instance__template")
+        .order_by("invited_at")
+    )
+    return tuple(
+        JournalInvite(
+            invite_id=row.pk, instance_id=row.instance_id, template_name=row.instance.template.name
+        )
+        for row in rows
+    )
+
+
+def _participant_counts(instance_ids: list[int]) -> dict[int, int]:
+    """Bulk count participants per instance (one query for the whole journal, #2049).
+
+    Drives the frontend's solo-vs-group card routing — mirrors the telnet
+    ``_is_group_beat`` check (participants.count() > 1).
+    """
+    if not instance_ids:
+        return {}
+    rows = (
+        MissionParticipant.objects.filter(instance_id__in=instance_ids)
+        .values("instance_id")
+        .annotate(count=Count("pk"))
+    )
+    return {row["instance_id"]: row["count"] for row in rows}
 
 
 def _deeds_by_instance(
@@ -126,6 +178,8 @@ def _journal_entry_for(
     part: MissionParticipant,
     deeds_by_instance: dict[int, list[JournalDeed]],
     options_by_node: dict[int, list[MissionOption]],
+    pending_invites: tuple[JournalInvite, ...],
+    participant_counts: dict[int, int],
 ) -> JournalEntry:
     """Build a single :class:`JournalEntry` from a participation row."""
     instance = part.instance
@@ -145,6 +199,8 @@ def _journal_entry_for(
         current_node_flavor=current.flavor_text if current is not None else "",
         compass_rooms=compass_rooms,
         compass_anywhere=compass_anywhere,
+        pending_invites=pending_invites,
+        participant_count=participant_counts.get(instance.pk, 1),
     )
 
 
