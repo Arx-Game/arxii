@@ -3291,9 +3291,42 @@ class CustodyClearanceViewSet(
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = CustodyClearanceFilter
-    pagination_class = StandardResultsSetPagination
     ordering_fields = ["created_at"]
     ordering = ["-created_at", "-pk"]
+
+    @property
+    def pagination_class(self) -> type[StandardResultsSetPagination] | None:
+        """None for create; ``StandardResultsSetPagination`` for list/retrieve.
+
+        ``create``'s response is a bare list (one row per matched protection,
+        Task 6 review Fix 4) — never a paginated page. A class-level
+        ``pagination_class`` here would make drf-spectacular auto-wrap
+        create's ``many=True`` response schema in a ``Paginated...List``
+        envelope (its ``_is_list_view``/pagination heuristic keys off
+        ``getattr(view, "pagination_class")`` alone, not the action), which
+        would not match the actual JSON body create ever returns.
+        """
+        if self.action == "create":
+            return None
+        return StandardResultsSetPagination
+
+    def get_permissions(self) -> list[Any]:
+        """Create additionally requires GM identity (matching the
+        grant/deny/escalate/resolve/revoke actions' own ``IsGMProfile`` gate) — a
+        clearance request can only ever be made on behalf of a GMProfile. Every other
+        action (list/retrieve, and each lifecycle ``@action``) falls back to
+        ``self.permission_classes`` unchanged — the ``@action`` decorator's own
+        ``permission_classes`` kwarg already overrides that attribute per-route before
+        this runs, so this must not shadow it with a hardcoded default."""
+        if self.action == "create":
+            return [permissions.IsAuthenticated(), IsGMProfile()]
+        return [permission() for permission in self.permission_classes]
+
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        """Use the write input serializer for create; the read serializer everywhere else."""
+        if self.action == "create":
+            return CustodyClearanceRequestSerializer
+        return CustodyClearanceSerializer
 
     def get_queryset(self) -> QuerySet[CustodyClearance]:
         """Requester's own requests + requests targeting stories they own/lead; staff all.
@@ -3314,28 +3347,52 @@ class CustodyClearanceViewSet(
             filters_q |= models.Q(protected_subject__story__primary_table__gm=gm_profile)
         return qs.filter(filters_q).distinct()
 
+    @extend_schema(
+        request=CustodyClearanceRequestSerializer, responses=CustodyClearanceSerializer(many=True)
+    )
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """POST /api/custody-clearances/ — request_clearance.
+        """POST /api/custody-clearances/ — request_clearance, one row per matched protection.
 
         Deliberately cross-story: any authenticated GM may request clearance
         for any active protected subject (see
         ``CustodyClearanceRequestSerializer``'s docstring for why the
         ``protected_subject`` queryset is not scoped to the requester's own
         stories). The serializer validates the requester's own GMProfile
-        exists and pre-checks the duplicate-live-request guard.
+        exists and resolves the request to its protection row(s) — either the
+        single ``protected_subject`` pk, or (Task 6 review Fix 4) every active
+        protection matching an identity group
+        (``subject_kind`` + typed pointer/label), for a requester who only
+        knows the custodian's username, never the pk.
+
+        A single ``protected_subject`` submission with a live duplicate is a
+        hard 400 (unchanged). An identity-path submission matching several
+        protections skips any that already have a live request from this
+        requester at this scope (the DB partial-unique constraint would
+        otherwise raise) and reports those pre-existing rows back alongside
+        any newly-created ones — one atomic transaction, one notification per
+        newly-created row (``request_clearance`` notifies each row's own
+        custodian).
         """
         ser = CustodyClearanceRequestSerializer(data=request.data, context={"request": request})
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
-        clearance = request_clearance(
-            protected_subject=data["protected_subject"],
-            requested_by=data["requested_by"],
-            scope=data["scope"],
-            requesting_story=data.get("requesting_story"),
-            requesting_beat=data.get("requesting_beat"),
-            message=data.get("message", ""),
+        with transaction.atomic():
+            created = [
+                request_clearance(
+                    protected_subject=protection,
+                    requested_by=data["requested_by"],
+                    scope=data["scope"],
+                    requesting_story=data.get("requesting_story"),
+                    requesting_beat=data.get("requesting_beat"),
+                    message=data.get("message", ""),
+                )
+                for protection in data["_protections_to_request"]
+            ]
+        clearances = [*created, *data["_already_pending_clearances"]]
+        return Response(
+            CustodyClearanceSerializer(clearances, many=True).data,
+            status=status.HTTP_201_CREATED,
         )
-        return Response(CustodyClearanceSerializer(clearance).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         request=CustodyClearanceDecisionInputSerializer, responses=CustodyClearanceSerializer

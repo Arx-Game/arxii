@@ -25,15 +25,17 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
+from world.narrative.models import NarrativeMessageDelivery
 from world.stories.constants import CustodyClearanceStatus, CustodyScope, StakeSubjectKind
 from world.stories.factories import (
     CustodyClearanceFactory,
     StoryFactory,
     StoryProtectedSubjectFactory,
 )
+from world.stories.models import CustodyClearance
 from world.stories.services.boundaries import _subject_identity
 from world.stories.services.custody import check_subject_custody
 
@@ -206,17 +208,19 @@ class CustodyClearanceCreateTests(APITestCase):
             {"protected_subject": self.subject.pk, "scope": CustodyScope.APPEAR},
         )
         assert resp.status_code == status.HTTP_201_CREATED, resp.data
-        assert resp.data["requested_by"] == self.requester_gm.pk
-        assert resp.data["status"] == CustodyClearanceStatus.PENDING
+        assert len(resp.data) == 1
+        assert resp.data[0]["requested_by"] == self.requester_gm.pk
+        assert resp.data[0]["status"] == CustodyClearanceStatus.PENDING
 
     def test_non_gm_account_rejected(self):
+        """IsGMProfile gates create (Task 6 review Fix 2) — 403, not a 400 serializer error."""
         self.client.force_authenticate(user=self.non_gm_account)
         resp = _post(
             self.client,
             reverse("custodyclearance-list"),
             {"protected_subject": self.subject.pk, "scope": CustodyScope.APPEAR},
         )
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
 
     def test_duplicate_live_request_rejected(self):
         CustodyClearanceFactory(
@@ -259,6 +263,146 @@ class CustodyClearanceCreateTests(APITestCase):
         assert set(resp_inactive.data) == {"protected_subject"}
         assert resp_missing.data["protected_subject"][0].code == "does_not_exist"
         assert resp_inactive.data["protected_subject"][0].code == "does_not_exist"
+
+
+def _gm_with_notification_sheet(gm_profile):
+    """Give gm_profile's account a character with a resolvable primary-persona sheet."""
+    char = CharacterFactory()
+    char.db_account = gm_profile.account
+    char.save()
+    return CharacterSheetFactory(character=char)
+
+
+class CustodyClearanceIdentityRequestTests(APITestCase):
+    """Identity-based clearance requests (#2001 Task 6 review Fix 4).
+
+    A blocked outsider GM only ever learns the custodian's username, never the
+    ``protected_subject`` pk (see ``CustodyVerdict``) — these cover the
+    ``subject_kind`` + typed-pointer/label alternative to the pk path.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.requester_account = AccountFactory()
+        cls.requester_gm = GMProfileFactory(account=cls.requester_account)
+        cls.non_gm_account = AccountFactory()
+
+        cls.custodian_account = AccountFactory()
+        cls.custodian_gm = GMProfileFactory(account=cls.custodian_account)
+        cls.table = GMTableFactory(gm=cls.custodian_gm)
+        cls.protecting_story = StoryFactory(owners=[cls.custodian_account], primary_table=cls.table)
+
+        cls.sheet = CharacterSheetFactory()
+        cls.subject = StoryProtectedSubjectFactory(
+            story=cls.protecting_story, subject_sheet=cls.sheet
+        )
+
+    def _identity_payload(self, **overrides):
+        payload = {
+            "subject_kind": StakeSubjectKind.NPC_FATE,
+            "subject_sheet": self.sheet.pk,
+            "scope": CustodyScope.APPEAR,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_identity_path_happy_single_custodian(self):
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(self.client, reverse("custodyclearance-list"), self._identity_payload())
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert len(resp.data) == 1
+        assert resp.data[0]["protected_subject"] == self.subject.pk
+        assert resp.data[0]["requested_by"] == self.requester_gm.pk
+        assert resp.data[0]["status"] == CustodyClearanceStatus.PENDING
+
+    def test_identity_path_multi_protection_fan_out_notifies_both_custodians(self):
+        """Two stories independently protect the same NPC -> two clearance rows,
+        both custodians notified."""
+        other_custodian_account = AccountFactory()
+        other_custodian_gm = GMProfileFactory(account=other_custodian_account)
+        other_table = GMTableFactory(gm=other_custodian_gm)
+        other_story = StoryFactory(owners=[other_custodian_account], primary_table=other_table)
+        other_subject = StoryProtectedSubjectFactory(story=other_story, subject_sheet=self.sheet)
+
+        custodian_sheet = _gm_with_notification_sheet(self.custodian_gm)
+        other_custodian_sheet = _gm_with_notification_sheet(other_custodian_gm)
+
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(self.client, reverse("custodyclearance-list"), self._identity_payload())
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert len(resp.data) == 2
+        subject_ids = {row["protected_subject"] for row in resp.data}
+        assert subject_ids == {self.subject.pk, other_subject.pk}
+
+        recipient_ids = set(
+            NarrativeMessageDelivery.objects.all().values_list(
+                "recipient_character_sheet_id", flat=True
+            )
+        )
+        assert custodian_sheet.pk in recipient_ids
+        assert other_custodian_sheet.pk in recipient_ids
+
+    def test_identity_no_match_error_shape_identical_to_pk_no_match(self):
+        """No-oracle guarantee extends to the identity path (Fix 4): an identity
+        with no matching active protection gets the exact does_not_exist shape."""
+        unrelated_sheet = CharacterSheetFactory()
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(
+            self.client,
+            reverse("custodyclearance-list"),
+            self._identity_payload(subject_sheet=unrelated_sheet.pk),
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert set(resp.data) == {"protected_subject"}
+        assert resp.data["protected_subject"][0].code == "does_not_exist"
+
+    def test_identity_path_duplicate_request_reported_as_already_pending(self):
+        """A live request for the same (subject, requester, scope) is skipped
+        (not re-created, not a 500) and reported back as-is."""
+        existing = CustodyClearanceFactory(
+            protected_subject=self.subject,
+            requested_by=self.requester_gm,
+            scope=CustodyScope.APPEAR,
+            status=CustodyClearanceStatus.PENDING,
+        )
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(self.client, reverse("custodyclearance-list"), self._identity_payload())
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        assert len(resp.data) == 1
+        assert resp.data[0]["id"] == existing.pk
+        assert CustodyClearance.objects.filter(protected_subject=self.subject).count() == 1
+
+    def test_exactly_one_of_paths_rejects_both_pk_and_identity(self):
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(
+            self.client,
+            reverse("custodyclearance-list"),
+            {**self._identity_payload(), "protected_subject": self.subject.pk},
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "non_field_errors" in resp.data
+
+    def test_exactly_one_of_paths_rejects_neither_pk_nor_identity(self):
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(self.client, reverse("custodyclearance-list"), {"scope": CustodyScope.APPEAR})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "non_field_errors" in resp.data
+
+    def test_identity_path_requires_exactly_one_subject_field(self):
+        """subject_kind alone (no typed pointer/label) is not a valid identity."""
+        self.client.force_authenticate(user=self.requester_account)
+        resp = _post(
+            self.client,
+            reverse("custodyclearance-list"),
+            {"subject_kind": StakeSubjectKind.NPC_FATE, "scope": CustodyScope.APPEAR},
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        assert "non_field_errors" in resp.data
+
+    def test_non_gm_account_rejected_on_identity_path(self):
+        self.client.force_authenticate(user=self.non_gm_account)
+        resp = _post(self.client, reverse("custodyclearance-list"), self._identity_payload())
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
 class CustodyClearanceLifecycleTests(APITestCase):
@@ -556,7 +700,7 @@ class CustodyClearanceE2ETests(APITestCase):
             {"protected_subject": self.subject.pk, "scope": CustodyScope.APPEAR},
         )
         assert create_resp.status_code == status.HTTP_201_CREATED, create_resp.data
-        clearance_id = create_resp.data["id"]
+        clearance_id = create_resp.data[0]["id"]
 
         self.client.force_authenticate(user=self.custodian_account)
         grant_resp = _post(

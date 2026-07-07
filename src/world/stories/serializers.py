@@ -2,13 +2,16 @@ from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework.exceptions import ErrorDetail
 
 from world.character_sheets.models import CharacterSheet
 from world.gm.constants import GMTableStatus
 from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
+from world.items.models import ItemInstance
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
+from world.societies.models import Organization, Society
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
@@ -19,6 +22,7 @@ from world.stories.constants import (
     SessionRequestStatus,
     StakeResolutionColumn,
     StakeRewardSink,
+    StakeSubjectKind,
     StoryGMOfferStatus,
     StoryMaturity,
     StoryScope,
@@ -3386,21 +3390,66 @@ class CustodyClearanceSerializer(serializers.ModelSerializer):
 class CustodyClearanceRequestSerializer(serializers.Serializer):
     """Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
 
-    ``protected_subject`` deliberately uses an UNSCOPED-by-story queryset — a
-    clearance request is inherently cross-story (the point is asking
-    *another* story's custodian for permission), so scoping it to the
-    requester's own stories would both defeat the feature and create a
-    differential-error oracle. Scoping to ``is_active=True`` only still
-    avoids oracling "exists but not requestable" vs. "does not exist": DRF's
-    built-in PrimaryKeyRelatedField error is identical prose either way
-    ("object does not exist"), so an inactive protection and a nonexistent
-    pk are indistinguishable to the caller — no extra generic-message logic
-    needed to enforce that.
+    Accepts EITHER of two mutually-exclusive paths to name the protected
+    subject (Task 6 review Fix 4):
+
+    - **pk path** — ``protected_subject`` directly. Deliberately uses an
+      UNSCOPED-by-story queryset — a clearance request is inherently
+      cross-story (the point is asking *another* story's custodian for
+      permission), so scoping it to the requester's own stories would both
+      defeat the feature and create a differential-error oracle. Scoping to
+      ``is_active=True`` only still avoids oracling "exists but not
+      requestable" vs. "does not exist": DRF's built-in PrimaryKeyRelatedField
+      error is identical prose either way ("object does not exist"), so an
+      inactive protection and a nonexistent pk are indistinguishable to the
+      caller — no extra generic-message logic needed to enforce that.
+    - **identity path** — ``subject_kind`` + exactly one of
+      ``subject_sheet``/``subject_item``/``subject_society``/
+      ``subject_organization``/``subject_label``, mirroring
+      ``StoryProtectedSubjectSerializer``'s exactly-one-subject rule. For a
+      blocked outsider GM who only ever learns the custodian's username (never
+      the ``protected_subject`` pk — see ``CustodyVerdict``), this is the only
+      self-serviceable path: it derives the same ``_subject_identity`` tuple
+      ``world.stories.services.custody`` matches ``Stake`` rows against
+      (``world.stories.services.custody_clearance.matching_active_protected_subjects``)
+      and resolves to every active ``StoryProtectedSubject`` row sharing that
+      identity — a subject can be independently protected by more than one
+      story. No match raises the identical ``does_not_exist``-shaped error the
+      pk path raises for an inactive/missing pk — same no-oracle guarantee,
+      just reached from the identity side.
+
+    On success, ``validated_data["_protections_to_request"]`` holds the
+    protection rows the view should call ``request_clearance`` on, and
+    ``validated_data["_already_pending_clearances"]`` holds pre-existing
+    live (PENDING/ESCALATED) clearances for rows the identity path matched but
+    the requester already has a live request against — skipped rather than
+    re-requested (the partial-unique constraint would otherwise raise) and
+    reported back as-is. The single-pk path never populates the latter list;
+    a duplicate there is still a hard validation error, matching prior
+    behavior exactly.
     """
 
     protected_subject = serializers.PrimaryKeyRelatedField(
-        queryset=StoryProtectedSubject.objects.filter(is_active=True)
+        queryset=StoryProtectedSubject.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
     )
+    subject_kind = serializers.ChoiceField(
+        choices=StakeSubjectKind.choices, required=False, allow_null=True
+    )
+    subject_sheet = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.all(), required=False, allow_null=True
+    )
+    subject_item = serializers.PrimaryKeyRelatedField(
+        queryset=ItemInstance.objects.all(), required=False, allow_null=True
+    )
+    subject_society = serializers.PrimaryKeyRelatedField(
+        queryset=Society.objects.all(), required=False, allow_null=True
+    )
+    subject_organization = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(), required=False, allow_null=True
+    )
+    subject_label = serializers.CharField(required=False, allow_blank=True, default="")
     scope = serializers.ChoiceField(choices=CustodyScope.choices)
     requesting_story = serializers.PrimaryKeyRelatedField(
         queryset=Story.objects.all(), required=False, allow_null=True
@@ -3411,7 +3460,7 @@ class CustodyClearanceRequestSerializer(serializers.Serializer):
     message = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs: Any) -> Any:
-        """GMProfile existence gate + duplicate-live-request pre-check."""
+        """GMProfile gate, exactly-one-of-{pk path, identity path}, resolve to protections."""
         request = self.context["request"]
         try:
             gm_profile = request.user.gm_profile
@@ -3420,13 +3469,48 @@ class CustodyClearanceRequestSerializer(serializers.Serializer):
                 {"non_field_errors": ("You must have a GM profile to request custody clearance.")}
             ) from None
 
-        already_live = CustodyClearance.objects.filter(
-            protected_subject=attrs["protected_subject"],
-            requested_by=gm_profile,
-            scope=attrs["scope"],
-            status__in=(CustodyClearanceStatus.PENDING, CustodyClearanceStatus.ESCALATED),
-        ).exists()
-        if already_live:
+        protected_subject = attrs.get("protected_subject")
+        subject_kind = attrs.get("subject_kind")
+        if (protected_subject is not None) == (subject_kind is not None):
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        "Provide exactly one of protected_subject, or subject_kind plus a "
+                        "subject identity (subject_sheet/subject_item/subject_society/"
+                        "subject_organization/subject_label)."
+                    )
+                }
+            )
+
+        scope = attrs["scope"]
+        if protected_subject is not None:
+            protections = [protected_subject]
+        else:
+            self._validate_identity_group(attrs)
+            protections = self._matching_protections(subject_kind, attrs)
+            if not protections:
+                raise serializers.ValidationError(
+                    {
+                        "protected_subject": [
+                            ErrorDetail(
+                                'Invalid pk "identity" - object does not exist.',
+                                code="does_not_exist",
+                            )
+                        ]
+                    }
+                )
+
+        already_pending_by_subject_id = {
+            clearance.protected_subject_id: clearance
+            for clearance in CustodyClearance.objects.filter(
+                protected_subject_id__in=[protection.pk for protection in protections],
+                requested_by=gm_profile,
+                scope=scope,
+                status__in=(CustodyClearanceStatus.PENDING, CustodyClearanceStatus.ESCALATED),
+            )
+        }
+
+        if protected_subject is not None and protected_subject.pk in already_pending_by_subject_id:
             raise serializers.ValidationError(
                 {
                     "non_field_errors": (
@@ -3434,8 +3518,53 @@ class CustodyClearanceRequestSerializer(serializers.Serializer):
                     )
                 }
             )
+
         attrs["requested_by"] = gm_profile
+        attrs["_protections_to_request"] = [
+            protection
+            for protection in protections
+            if protection.pk not in already_pending_by_subject_id
+        ]
+        attrs["_already_pending_clearances"] = list(already_pending_by_subject_id.values())
         return attrs
+
+    def _validate_identity_group(self, attrs: Any) -> None:
+        """Mirror ``StoryProtectedSubjectSerializer``'s exactly-one-subject rule."""
+        typed_fields = ("subject_sheet", "subject_item", "subject_society", "subject_organization")
+        populated = [name for name in typed_fields if attrs.get(name) is not None]
+        if attrs.get("subject_label"):
+            populated.append("subject_label")
+        if len(populated) != 1:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        "Exactly one of subject_sheet/subject_item/subject_society/"
+                        "subject_organization/subject_label must be set alongside "
+                        f"subject_kind (found: {populated or 'none'})."
+                    )
+                }
+            )
+
+    def _matching_protections(self, subject_kind: str, attrs: Any) -> list[StoryProtectedSubject]:
+        """Resolve the identity-path fields to the matching active protection rows."""
+        from world.stories.services.boundaries import _subject_identity  # noqa: PLC0415
+        from world.stories.services.custody_clearance import (  # noqa: PLC0415
+            matching_active_protected_subjects,
+        )
+
+        subject_sheet = attrs.get("subject_sheet")
+        subject_item = attrs.get("subject_item")
+        subject_society = attrs.get("subject_society")
+        subject_organization = attrs.get("subject_organization")
+        identity = _subject_identity(
+            subject_kind,
+            subject_sheet.pk if subject_sheet is not None else None,
+            subject_item.pk if subject_item is not None else None,
+            subject_society.pk if subject_society is not None else None,
+            subject_organization.pk if subject_organization is not None else None,
+            attrs.get("subject_label", ""),
+        )
+        return matching_active_protected_subjects(identity)
 
 
 class CustodyClearanceDecisionInputSerializer(serializers.Serializer):
@@ -3462,13 +3591,13 @@ class CustodyClearanceEscalateInputSerializer(serializers.Serializer):
 
     def validate(self, attrs: Any) -> Any:
         from world.stories.services.custody_clearance import (  # noqa: PLC0415
-            _clearance_is_stale,
+            clearance_is_stale,
         )
 
         clearance = self.context["clearance"]
         is_denied = clearance.status == CustodyClearanceStatus.DENIED
         is_stale_pending = (
-            clearance.status == CustodyClearanceStatus.PENDING and _clearance_is_stale(clearance)
+            clearance.status == CustodyClearanceStatus.PENDING and clearance_is_stale(clearance)
         )
         if not (is_denied or is_stale_pending):
             raise serializers.ValidationError(

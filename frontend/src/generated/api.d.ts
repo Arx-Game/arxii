@@ -4821,14 +4821,27 @@ export interface paths {
     get: operations['custody_clearances_list'];
     put?: never;
     /**
-     * @description POST /api/custody-clearances/ — request_clearance.
+     * @description POST /api/custody-clearances/ — request_clearance, one row per matched protection.
      *
      *     Deliberately cross-story: any authenticated GM may request clearance
      *     for any active protected subject (see
      *     ``CustodyClearanceRequestSerializer``'s docstring for why the
      *     ``protected_subject`` queryset is not scoped to the requester's own
      *     stories). The serializer validates the requester's own GMProfile
-     *     exists and pre-checks the duplicate-live-request guard.
+     *     exists and resolves the request to its protection row(s) — either the
+     *     single ``protected_subject`` pk, or (Task 6 review Fix 4) every active
+     *     protection matching an identity group
+     *     (``subject_kind`` + typed pointer/label), for a requester who only
+     *     knows the custodian's username, never the pk.
+     *
+     *     A single ``protected_subject`` submission with a live duplicate is a
+     *     hard 400 (unchanged). An identity-path submission matching several
+     *     protections skips any that already have a live request from this
+     *     requester at this scope (the DB partial-unique constraint would
+     *     otherwise raise) and reports those pre-existing rows back alongside
+     *     any newly-created ones — one atomic transaction, one notification per
+     *     newly-created row (``request_clearance`` notifies each row's own
+     *     custodian).
      */
     post: operations['custody_clearances_create'];
     delete?: never;
@@ -18494,7 +18507,7 @@ export interface components {
       readonly requesting_story: number | null;
       /** @description The requester's own beat this clearance is needed for, if any. */
       readonly requesting_beat: number | null;
-      readonly scope: components['schemas']['CustodyClearanceScopeEnum'];
+      readonly scope: components['schemas']['Scope77bEnum'];
       /** @default pending */
       readonly status: components['schemas']['CustodyClearanceStatusEnum'];
       /** @description The custodian GM who directly decided this clearance (GRANTED or DENIED). Null while PENDING/ESCALATED, and null for a staff-resolved escalation (see staff_resolver). */
@@ -18523,19 +18536,71 @@ export interface components {
       /** @default  */
       response_note: string;
     };
+    /**
+     * @description Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
+     *
+     *     Accepts EITHER of two mutually-exclusive paths to name the protected
+     *     subject (Task 6 review Fix 4):
+     *
+     *     - **pk path** — ``protected_subject`` directly. Deliberately uses an
+     *       UNSCOPED-by-story queryset — a clearance request is inherently
+     *       cross-story (the point is asking *another* story's custodian for
+     *       permission), so scoping it to the requester's own stories would both
+     *       defeat the feature and create a differential-error oracle. Scoping to
+     *       ``is_active=True`` only still avoids oracling "exists but not
+     *       requestable" vs. "does not exist": DRF's built-in PrimaryKeyRelatedField
+     *       error is identical prose either way ("object does not exist"), so an
+     *       inactive protection and a nonexistent pk are indistinguishable to the
+     *       caller — no extra generic-message logic needed to enforce that.
+     *     - **identity path** — ``subject_kind`` + exactly one of
+     *       ``subject_sheet``/``subject_item``/``subject_society``/
+     *       ``subject_organization``/``subject_label``, mirroring
+     *       ``StoryProtectedSubjectSerializer``'s exactly-one-subject rule. For a
+     *       blocked outsider GM who only ever learns the custodian's username (never
+     *       the ``protected_subject`` pk — see ``CustodyVerdict``), this is the only
+     *       self-serviceable path: it derives the same ``_subject_identity`` tuple
+     *       ``world.stories.services.custody`` matches ``Stake`` rows against
+     *       (``world.stories.services.custody_clearance.matching_active_protected_subjects``)
+     *       and resolves to every active ``StoryProtectedSubject`` row sharing that
+     *       identity — a subject can be independently protected by more than one
+     *       story. No match raises the identical ``does_not_exist``-shaped error the
+     *       pk path raises for an inactive/missing pk — same no-oracle guarantee,
+     *       just reached from the identity side.
+     *
+     *     On success, ``validated_data["_protections_to_request"]`` holds the
+     *     protection rows the view should call ``request_clearance`` on, and
+     *     ``validated_data["_already_pending_clearances"]`` holds pre-existing
+     *     live (PENDING/ESCALATED) clearances for rows the identity path matched but
+     *     the requester already has a live request against — skipped rather than
+     *     re-requested (the partial-unique constraint would otherwise raise) and
+     *     reported back as-is. The single-pk path never populates the latter list;
+     *     a duplicate there is still a hard validation error, matching prior
+     *     behavior exactly.
+     */
+    CustodyClearanceRequestRequest: {
+      protected_subject?: number | null;
+      subject_kind?:
+        | (components['schemas']['SubjectKindEnum'] | components['schemas']['NullEnum'])
+        | null;
+      /** @description The character this sheet belongs to */
+      subject_sheet?: number | null;
+      subject_item?: number | null;
+      subject_society?: number | null;
+      subject_organization?: number | null;
+      /** @default  */
+      subject_label: string;
+      scope: components['schemas']['Scope77bEnum'];
+      requesting_story?: number | null;
+      requesting_beat?: number | null;
+      /** @default  */
+      message: string;
+    };
     /** @description Input for staff resolve — {grant: bool, response_note} — ESCALATED-only. */
     CustodyClearanceResolveInputRequest: {
       grant: boolean;
       /** @default  */
       response_note: string;
     };
-    /**
-     * @description * `appear` - Guaranteed appearance
-     *     * `harm` - Protected from harm
-     *     * `remove` - Protected from removal
-     * @enum {string}
-     */
-    CustodyClearanceScopeEnum: 'appear' | 'harm' | 'remove';
     /**
      * @description * `pending` - Pending
      *     * `granted` - Granted
@@ -28242,6 +28307,13 @@ export interface components {
       action: components['schemas']['SceneSummaryRevisionActionEnum'];
     };
     /**
+     * @description * `appear` - Guaranteed appearance
+     *     * `harm` - Protected from harm
+     *     * `remove` - Protected from removal
+     * @enum {string}
+     */
+    Scope77bEnum: 'appear' | 'harm' | 'remove';
+    /**
      * @description * `unassigned` - Unassigned
      *     * `character` - Personal
      *     * `group` - Group
@@ -37239,19 +37311,29 @@ export interface operations {
   };
   custody_clearances_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        protected_subject?: number;
+        scope?: string;
+        status?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceRequestRequest'];
+      };
+    };
     responses: {
       201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CustodyClearance'];
+          'application/json': components['schemas']['CustodyClearance'][];
         };
       };
     };

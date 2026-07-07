@@ -11,6 +11,13 @@ escalated, and only staff resolves an ESCALATED tiebreak.
 whether an active, unrevoked clearance covers an actor at a given scope — the
 single source of truth for "does a clearance let this actor through."
 
+``matching_active_protected_subjects`` is the seam
+``CustodyClearanceRequestSerializer`` calls to resolve an identity-based
+clearance request (subject_kind + typed pointer/label, no pk known) to the
+active ``StoryProtectedSubject`` row(s) it protects — reuses the same
+``_subject_identity`` tuple ``world.stories.services.custody`` matches
+``Stake``/``TreasuredSubject`` rows against.
+
 Programmer-error guards only (this app has no API endpoints for these actions
 yet — Task 6 adds permission classes; Task 7 adds telnet). Until then, these
 services enforce authority themselves, mirroring
@@ -47,13 +54,14 @@ from world.stories.constants import (
     custody_scope_index,
 )
 from world.stories.exceptions import CustodyClearanceAuthorityError, CustodyClearanceStateError
-from world.stories.models import CustodyClearance
+from world.stories.models import CustodyClearance, StoryProtectedSubject
+from world.stories.services.boundaries import SubjectIdentity, _subject_identity
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.gm.models import GMProfile
-    from world.stories.models import Beat, Story, StoryProtectedSubject
+    from world.stories.models import Beat, Story
 
 _LIVE_STATUSES = (CustodyClearanceStatus.PENDING, CustodyClearanceStatus.ESCALATED)
 
@@ -265,9 +273,18 @@ def deny_clearance(
     return clearance
 
 
-def _clearance_is_stale(clearance: CustodyClearance) -> bool:
+def clearance_is_stale(clearance: CustodyClearance) -> bool:
+    """Whether ``clearance`` is older than the escalation staleness threshold.
+
+    Public — ``CustodyClearanceEscalateInputSerializer`` needs to pre-validate
+    escalation eligibility without reaching into a private service function
+    (Task 6 review Fix 3).
+    """
     threshold = timedelta(days=CUSTODY_ESCALATION_STALE_DAYS)
     return timezone.now() - clearance.created_at >= threshold
+
+
+_clearance_is_stale = clearance_is_stale  # internal alias; used by escalate_clearance below.
 
 
 @transaction.atomic
@@ -396,3 +413,42 @@ def active_clearance_exists(
         scope__in=qualifying_scopes,
         requested_by__account=account,
     ).exists()
+
+
+def matching_active_protected_subjects(
+    subject_identity: SubjectIdentity,
+) -> list[StoryProtectedSubject]:
+    """Active ``StoryProtectedSubject`` rows matching ``subject_identity`` (Task 6 Fix 4).
+
+    Backs ``CustodyClearanceRequestSerializer``'s identity-based request path
+    (a blocked outsider GM who only knows the custodian's username, never the
+    ``protected_subject`` pk). Deliberately mirrors the pk create-path's own
+    oracle exactly — ``is_active=True`` only, with NO protection-window
+    filtering (unlike ``world.stories.services.custody``'s
+    ``_matching_protections``, which additionally requires the beat/story
+    window to be open): the pk path's ``CustodyClearanceRequestSerializer``
+    queryset never checks the window either, so adding that check here would
+    let identity-path callers distinguish "inactive" from "active but
+    window-closed" — a new oracle the pk path doesn't have.
+
+    Ordered oldest-first (mirrors ``_matching_protections``) so a
+    multi-protection fan-out request routes to (and notifies) the original
+    custodian first.
+    """
+    kind = subject_identity[0]
+    candidates = StoryProtectedSubject.objects.filter(subject_kind=kind, is_active=True).order_by(
+        "created_at", "pk"
+    )
+    return [
+        row
+        for row in candidates
+        if _subject_identity(
+            row.subject_kind,
+            row.subject_sheet_id,
+            row.subject_item_id,
+            row.subject_society_id,
+            row.subject_organization_id,
+            row.subject_label,
+        )
+        == subject_identity
+    ]
