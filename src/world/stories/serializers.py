@@ -13,6 +13,7 @@ from world.stories.constants import (
     AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
+    CustodyClearanceStatus,
     CustodyScope,
     ProgressStatus,
     SessionRequestStatus,
@@ -30,6 +31,7 @@ from world.stories.models import (
     Beat,
     BeatCompletion,
     Chapter,
+    CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
     EpisodeResolution,
@@ -53,6 +55,7 @@ from world.stories.models import (
     StoryNote,
     StoryParticipation,
     StoryProgress,
+    StoryProtectedSubject,
     StoryTrustRequirement,
     TableBulletinPost,
     TableBulletinReply,
@@ -62,6 +65,7 @@ from world.stories.models import (
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
+from world.stories.permissions import user_owns_or_leads_story
 from world.stories.types import (
     AnyStoryProgress,
     ConnectionType,
@@ -3266,3 +3270,251 @@ class PendingTreasuredSignoffsSerializer(serializers.Serializer):
 
     beat_id = serializers.IntegerField(read_only=True)
     treasured_subject_ids = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+
+
+# ---------------------------------------------------------------------------
+# Custody protection + clearance lifecycle (#2001 Task 6)
+# ---------------------------------------------------------------------------
+
+
+class StoryProtectedSubjectSerializer(serializers.ModelSerializer):
+    """Full serializer for StoryProtectedSubject (#2001 Task 6).
+
+    Enforces the model's exactly-one-subject invariant here (DRF serializers
+    never call ``Model.clean()``) and the story-ownership gate on create/update
+    — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+    cannot cover create, since DRF never calls object-level permissions for a
+    row that does not exist yet.
+    """
+
+    class Meta:
+        model = StoryProtectedSubject
+        fields = [
+            "id",
+            "story",
+            "subject_kind",
+            "subject_sheet",
+            "subject_item",
+            "subject_society",
+            "subject_organization",
+            "subject_label",
+            "beat",
+            "is_active",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Story-ownership gate, beat/story consistency, exactly-one-subject."""
+        story = attrs.get("story", self.instance.story if self.instance is not None else None)
+        if story is None:
+            raise serializers.ValidationError({"story": "story is required."})
+
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        is_staff = bool(user is not None and user.is_staff)
+        if not is_staff and not user_owns_or_leads_story(user, story):
+            raise serializers.ValidationError({"story": "You do not own or lead this story."})
+
+        beat = attrs.get("beat", self.instance.beat if self.instance is not None else None)
+        if beat is not None and beat.episode.chapter.story_id != story.pk:
+            raise serializers.ValidationError(
+                {"beat": "This beat does not belong to the same story."}
+            )
+
+        self._validate_exactly_one_subject(attrs)
+        return attrs
+
+    def _validate_exactly_one_subject(self, attrs: Any) -> None:
+        """Mirror StoryProtectedSubject.clean()'s exactly-one-subject rule."""
+
+        def effective(name: str) -> Any:
+            if name in attrs:
+                return attrs[name]
+            return getattr(self.instance, name) if self.instance is not None else None
+
+        typed_fields = ("subject_sheet", "subject_item", "subject_society", "subject_organization")
+        populated = [name for name in typed_fields if effective(name) is not None]
+        if effective("subject_label"):
+            populated.append("subject_label")
+        if len(populated) != 1:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        "Exactly one of subject_sheet/subject_item/subject_society/"
+                        "subject_organization/subject_label must be set "
+                        f"(found: {populated or 'none'})."
+                    )
+                }
+            )
+
+
+class CustodyClearanceSerializer(serializers.ModelSerializer):
+    """Read/response serializer for CustodyClearance (#2001 Task 6).
+
+    Every field is read-only here — writes go through
+    ``CustodyClearanceRequestSerializer`` (create) and the per-action input
+    serializers (grant/deny/escalate/resolve/revoke), all of which route
+    through ``world.stories.services.custody_clearance``. No nested
+    notification/message data is exposed here, so the recipient-scoped
+    ``related_story`` disclosure rule that module documents does not apply
+    to this serializer.
+    """
+
+    class Meta:
+        model = CustodyClearance
+        fields = [
+            "id",
+            "protected_subject",
+            "requested_by",
+            "requesting_story",
+            "requesting_beat",
+            "scope",
+            "status",
+            "granted_by",
+            "staff_resolver",
+            "message",
+            "response_note",
+            "revoked_at",
+            "created_at",
+            "resolved_at",
+        ]
+        read_only_fields = fields
+
+
+class CustodyClearanceRequestSerializer(serializers.Serializer):
+    """Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
+
+    ``protected_subject`` deliberately uses an UNSCOPED-by-story queryset — a
+    clearance request is inherently cross-story (the point is asking
+    *another* story's custodian for permission), so scoping it to the
+    requester's own stories would both defeat the feature and create a
+    differential-error oracle. Scoping to ``is_active=True`` only still
+    avoids oracling "exists but not requestable" vs. "does not exist": DRF's
+    built-in PrimaryKeyRelatedField error is identical prose either way
+    ("object does not exist"), so an inactive protection and a nonexistent
+    pk are indistinguishable to the caller — no extra generic-message logic
+    needed to enforce that.
+    """
+
+    protected_subject = serializers.PrimaryKeyRelatedField(
+        queryset=StoryProtectedSubject.objects.filter(is_active=True)
+    )
+    scope = serializers.ChoiceField(choices=CustodyScope.choices)
+    requesting_story = serializers.PrimaryKeyRelatedField(
+        queryset=Story.objects.all(), required=False, allow_null=True
+    )
+    requesting_beat = serializers.PrimaryKeyRelatedField(
+        queryset=Beat.objects.all(), required=False, allow_null=True
+    )
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:
+        """GMProfile existence gate + duplicate-live-request pre-check."""
+        request = self.context["request"]
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            raise serializers.ValidationError(
+                {"non_field_errors": ("You must have a GM profile to request custody clearance.")}
+            ) from None
+
+        already_live = CustodyClearance.objects.filter(
+            protected_subject=attrs["protected_subject"],
+            requested_by=gm_profile,
+            scope=attrs["scope"],
+            status__in=(CustodyClearanceStatus.PENDING, CustodyClearanceStatus.ESCALATED),
+        ).exists()
+        if already_live:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        "You already have a live clearance request for this subject at this scope."
+                    )
+                }
+            )
+        attrs["requested_by"] = gm_profile
+        return attrs
+
+
+class CustodyClearanceDecisionInputSerializer(serializers.Serializer):
+    """Input for grant/deny — validates the clearance is PENDING before the service call."""
+
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:
+        clearance = self.context["clearance"]
+        if clearance.status != CustodyClearanceStatus.PENDING:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        f"This clearance is not PENDING (status={clearance.status!r}); "
+                        "only a PENDING request can be granted or denied directly."
+                    )
+                }
+            )
+        return attrs
+
+
+class CustodyClearanceEscalateInputSerializer(serializers.Serializer):
+    """Input for escalate — validates DENIED-or-stale-PENDING eligibility up front."""
+
+    def validate(self, attrs: Any) -> Any:
+        from world.stories.services.custody_clearance import (  # noqa: PLC0415
+            _clearance_is_stale,
+        )
+
+        clearance = self.context["clearance"]
+        is_denied = clearance.status == CustodyClearanceStatus.DENIED
+        is_stale_pending = (
+            clearance.status == CustodyClearanceStatus.PENDING and _clearance_is_stale(clearance)
+        )
+        if not (is_denied or is_stale_pending):
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        f"This clearance (status={clearance.status!r}) is not eligible "
+                        "for escalation — it must be DENIED, or PENDING and stale."
+                    )
+                }
+            )
+        return attrs
+
+
+class CustodyClearanceResolveInputSerializer(serializers.Serializer):
+    """Input for staff resolve — {grant: bool, response_note} — ESCALATED-only."""
+
+    grant = serializers.BooleanField()
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:
+        clearance = self.context["clearance"]
+        if clearance.status != CustodyClearanceStatus.ESCALATED:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        f"This clearance is not ESCALATED (status={clearance.status!r}); "
+                        "only an escalated request can be staff-resolved."
+                    )
+                }
+            )
+        return attrs
+
+
+class CustodyClearanceRevokeInputSerializer(serializers.Serializer):
+    """Input for revoke — validates an active GRANTED clearance up front."""
+
+    def validate(self, attrs: Any) -> Any:
+        clearance = self.context["clearance"]
+        if clearance.status != CustodyClearanceStatus.GRANTED or clearance.revoked_at is not None:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        f"This clearance is not an active GRANTED clearance "
+                        f"(status={clearance.status!r}, revoked_at={clearance.revoked_at!r}) "
+                        "and cannot be revoked."
+                    )
+                }
+            )
+        return attrs

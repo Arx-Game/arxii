@@ -7,6 +7,7 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     Chapter,
+    CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
     EpisodeScene,
@@ -26,6 +27,7 @@ from world.stories.models import (
     StoryGMOffer,
     StoryNote,
     StoryParticipation,
+    StoryProtectedSubject,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -590,3 +592,31 @@ class StakeContractActivationFilter(django_filters.FilterSet):
     class Meta:
         model = StakeContractActivation
         fields = ["beat"]
+
+
+class StoryProtectedSubjectFilter(django_filters.FilterSet):
+    """Filter for StoryProtectedSubject — by story, subject_kind, is_active (#2001 Task 6)."""
+
+    story = django_filters.NumberFilter(field_name="story_id")
+    subject_kind = django_filters.CharFilter(field_name="subject_kind")
+    is_active = django_filters.BooleanFilter(field_name="is_active")
+
+    class Meta:
+        model = StoryProtectedSubject
+        fields = ["story", "subject_kind", "is_active"]
+
+
+class CustodyClearanceFilter(django_filters.FilterSet):
+    """Filter for CustodyClearance — by status, scope, protected_subject (#2001 Task 6).
+
+    ``status=escalated`` is the staff escalation-queue read (paired with
+    ``CustodyClearanceViewSet.get_queryset``'s staff-sees-all branch).
+    """
+
+    status = django_filters.CharFilter(field_name="status")
+    scope = django_filters.CharFilter(field_name="scope")
+    protected_subject = django_filters.NumberFilter(field_name="protected_subject_id")
+
+    class Meta:
+        model = CustodyClearance
+        fields = ["status", "scope", "protected_subject"]

@@ -28,12 +28,18 @@ from world.stories.constants import (
     SessionRequestStatus,
     StoryScope,
 )
-from world.stories.exceptions import EraAdvanceError, StoryGMOfferError
+from world.stories.exceptions import (
+    CustodyClearanceAuthorityError,
+    CustodyClearanceStateError,
+    EraAdvanceError,
+    StoryGMOfferError,
+)
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
     BeatFilter,
     ChapterFilter,
+    CustodyClearanceFilter,
     EpisodeFilter,
     EpisodeProgressionRequirementFilter,
     EpisodeSceneFilter,
@@ -52,6 +58,7 @@ from world.stories.filters import (
     StoryGMOfferFilter,
     StoryNoteFilter,
     StoryParticipationFilter,
+    StoryProtectedSubjectFilter,
     TableBulletinPostFilter,
     TableBulletinReplyFilter,
     TransitionFilter,
@@ -62,6 +69,7 @@ from world.stories.models import (
     AssistantGMClaim,
     Beat,
     Chapter,
+    CustodyClearance,
     Episode,
     EpisodeProgressionRequirement,
     EpisodeScene,
@@ -82,6 +90,7 @@ from world.stories.models import (
     StoryNote,
     StoryParticipation,
     StoryProgress,
+    StoryProtectedSubject,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -110,6 +119,9 @@ from world.stories.permissions import (
     IsChapterStoryOwnerOrStaff,
     IsClaimantOrLeadGMOrStaff,
     IsClaimOwnerOrStaff,
+    IsClearanceCustodianGM,
+    IsClearanceCustodianOrStaff,
+    IsClearanceRequesterGM,
     IsContributorOrLeadGMOrStaff,
     IsEpisodeStoryOwnerOrStaff,
     IsGlobalProgressReadableOrStaff,
@@ -124,10 +136,12 @@ from world.stories.permissions import (
     IsOfferRecipientGMOrStaff,
     IsParticipationOwnerOrStoryOwnerOrStaff,
     IsPlayerTrustOwnerOrStaff,
+    IsProtectedSubjectStoryOwnerOrStaff,
     IsReviewerOrStoryOwnerOrStaff,
     IsSessionRequestGMOrStaff,
     IsSessionRequestParticipantOrStaff,
     IsSignoffOwner,
+    IsStaffForCustodyResolution,
     IsStaffOrReadOnly,
     IsStakeBeatStoryOwnerOrStaff,
     IsStakeResolutionBeatStoryOwnerOrStaff,
@@ -156,6 +170,12 @@ from world.stories.serializers import (
     CreateBulletinPostInputSerializer,
     CreateBulletinReplyInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
+    CustodyClearanceDecisionInputSerializer,
+    CustodyClearanceEscalateInputSerializer,
+    CustodyClearanceRequestSerializer,
+    CustodyClearanceResolveInputSerializer,
+    CustodyClearanceRevokeInputSerializer,
+    CustodyClearanceSerializer,
     DeclineOfferInputSerializer,
     EpisodeCreateSerializer,
     EpisodeDetailSerializer,
@@ -197,6 +217,7 @@ from world.stories.serializers import (
     StoryLogSerializer,
     StoryNoteSerializer,
     StoryParticipationSerializer,
+    StoryProtectedSubjectSerializer,
     TableBulletinPostSerializer,
     TableBulletinReplySerializer,
     TransitionRequiredOutcomeSerializer,
@@ -206,6 +227,14 @@ from world.stories.serializers import (
     UpdateBulletinReplyInputSerializer,
     WithdrawOfferInputSerializer,
     stakes_summary_for_beat,
+)
+from world.stories.services.custody_clearance import (
+    deny_clearance,
+    escalate_clearance,
+    grant_clearance,
+    request_clearance,
+    resolve_escalation,
+    revoke_clearance,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS
 from world.stories.services.era import advance_era, archive_era
@@ -3184,6 +3213,264 @@ class TreasuredSignoffViewSet(viewsets.ModelViewSet):
         withdraw_treasured_signoff(signoff)
         signoff.refresh_from_db()
         return Response(self.get_serializer(signoff).data)
+
+
+# ---------------------------------------------------------------------------
+# Custody protection + clearance lifecycle (#2001 Task 6)
+# ---------------------------------------------------------------------------
+
+
+class StoryProtectedSubjectViewSet(viewsets.ModelViewSet):
+    """ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+
+    Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+    posture): ``get_queryset`` excludes every row belonging to a story the
+    requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+    another story's protected subject 404s rather than 403ing or leaking the
+    GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+    carries the identical ownership gate for create (DRF never calls
+    ``has_object_permission`` for a row that doesn't exist yet).
+    """
+
+    queryset = StoryProtectedSubject.objects.select_related(
+        "story",
+        "subject_sheet",
+        "subject_item",
+        "subject_society",
+        "subject_organization",
+        "beat",
+    )
+    serializer_class = StoryProtectedSubjectSerializer
+    permission_classes = [IsProtectedSubjectStoryOwnerOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StoryProtectedSubjectFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at", "-pk"]
+
+    def get_queryset(self) -> QuerySet[StoryProtectedSubject]:
+        """Scope to stories the requester owns/leads (Lead GM); staff sees all."""
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        if user.is_staff:
+            return qs
+        gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        filters_q = models.Q(story__owners=user)
+        if gm_profile is not None:
+            filters_q |= models.Q(story__primary_table__gm=gm_profile)
+        return qs.filter(filters_q).distinct()
+
+
+class CustodyClearanceViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """ViewSet for CustodyClearance lifecycle (#2001 Task 6).
+
+    No update/destroy — every state transition is a dedicated lifecycle
+    action (grant/deny/escalate/resolve/revoke), each mapping 1:1 to
+    ``world.stories.services.custody_clearance`` and gated by its own
+    permission class per the Task 3 review's binding authority split: staff
+    never grants/denies a PENDING request directly, only through
+    escalate -> resolve.
+    """
+
+    queryset = CustodyClearance.objects.select_related(
+        "protected_subject__story__primary_table",
+        "requested_by__account",
+        "requesting_story",
+        "requesting_beat",
+        "granted_by__account",
+        "staff_resolver",
+    )
+    serializer_class = CustodyClearanceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = CustodyClearanceFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at", "-pk"]
+
+    def get_queryset(self) -> QuerySet[CustodyClearance]:
+        """Requester's own requests + requests targeting stories they own/lead; staff all.
+
+        The ``status=escalated`` filter (see ``CustodyClearanceFilter``) paired
+        with the staff-sees-all branch here is the staff escalation-queue read.
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        if user.is_staff:
+            return qs
+        gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        filters_q = models.Q(protected_subject__story__owners=user)
+        if gm_profile is not None:
+            filters_q |= models.Q(requested_by=gm_profile)
+            filters_q |= models.Q(protected_subject__story__primary_table__gm=gm_profile)
+        return qs.filter(filters_q).distinct()
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """POST /api/custody-clearances/ — request_clearance.
+
+        Deliberately cross-story: any authenticated GM may request clearance
+        for any active protected subject (see
+        ``CustodyClearanceRequestSerializer``'s docstring for why the
+        ``protected_subject`` queryset is not scoped to the requester's own
+        stories). The serializer validates the requester's own GMProfile
+        exists and pre-checks the duplicate-live-request guard.
+        """
+        ser = CustodyClearanceRequestSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        clearance = request_clearance(
+            protected_subject=data["protected_subject"],
+            requested_by=data["requested_by"],
+            scope=data["scope"],
+            requesting_story=data.get("requesting_story"),
+            requesting_beat=data.get("requesting_beat"),
+            message=data.get("message", ""),
+        )
+        return Response(CustodyClearanceSerializer(clearance).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=CustodyClearanceDecisionInputSerializer, responses=CustodyClearanceSerializer
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsGMProfile, IsClearanceCustodianGM],
+    )
+    def grant(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/custody-clearances/{id}/grant/ — custodian GM grants a PENDING request.
+
+        ``IsClearanceCustodianGM`` enforces the exact custodian match with no
+        staff bypass — Task 3 review decision: staff act only through
+        escalate/resolve, never by posing as the custodian.
+        """
+        clearance = self.get_object()
+        ser = CustodyClearanceDecisionInputSerializer(
+            data=request.data, context={"clearance": clearance}
+        )
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = grant_clearance(
+                clearance,
+                granted_by=request.user.gm_profile,
+                response_note=ser.validated_data.get("response_note", ""),
+            )
+        except CustodyClearanceStateError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CustodyClearanceSerializer(updated).data)
+
+    @extend_schema(
+        request=CustodyClearanceDecisionInputSerializer, responses=CustodyClearanceSerializer
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsGMProfile, IsClearanceCustodianGM],
+    )
+    def deny(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/custody-clearances/{id}/deny/ — custodian GM denies a PENDING request."""
+        clearance = self.get_object()
+        ser = CustodyClearanceDecisionInputSerializer(
+            data=request.data, context={"clearance": clearance}
+        )
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = deny_clearance(
+                clearance,
+                denied_by=request.user.gm_profile,
+                response_note=ser.validated_data.get("response_note", ""),
+            )
+        except CustodyClearanceStateError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CustodyClearanceSerializer(updated).data)
+
+    @extend_schema(request=None, responses=CustodyClearanceSerializer)
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsGMProfile, IsClearanceRequesterGM],
+    )
+    def escalate(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/custody-clearances/{id}/escalate/ — requester escalates to staff.
+
+        Only the requesting GM may escalate (``IsClearanceRequesterGM``); the
+        service itself takes no actor parameter by design (Task 3 brief).
+        """
+        clearance = self.get_object()
+        ser = CustodyClearanceEscalateInputSerializer(
+            data=request.data, context={"clearance": clearance}
+        )
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = escalate_clearance(clearance)
+        except CustodyClearanceStateError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CustodyClearanceSerializer(updated).data)
+
+    @extend_schema(
+        request=CustodyClearanceResolveInputSerializer, responses=CustodyClearanceSerializer
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsStaffForCustodyResolution],
+    )
+    def resolve(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/custody-clearances/{id}/resolve/ — staff tiebreak on an ESCALATED request.
+
+        Body: ``{grant: bool, response_note}``. Staff-only
+        (``IsStaffForCustodyResolution``) — staff never grant/deny a PENDING
+        request directly; this is the only door in.
+        """
+        clearance = self.get_object()
+        ser = CustodyClearanceResolveInputSerializer(
+            data=request.data, context={"clearance": clearance}
+        )
+        ser.is_valid(raise_exception=True)
+        try:
+            updated = resolve_escalation(
+                clearance,
+                staff_account=cast(AccountDB, request.user),
+                grant=ser.validated_data["grant"],
+                response_note=ser.validated_data.get("response_note", ""),
+            )
+        except (CustodyClearanceStateError, CustodyClearanceAuthorityError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(CustodyClearanceSerializer(updated).data)
+
+    @extend_schema(request=None, responses=CustodyClearanceSerializer)
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        permission_classes=[IsClearanceCustodianOrStaff],
+    )
+    def revoke(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/custody-clearances/{id}/revoke/ — soft-revoke a GRANTED clearance.
+
+        Custodian GM's account, or staff (``IsClearanceCustodianOrStaff`` —
+        the one lifecycle action where staff stands in for the custodian
+        directly, mirroring ``revoke_clearance``'s own
+        ``_is_custodian_account`` check).
+        """
+        clearance = self.get_object()
+        ser = CustodyClearanceRevokeInputSerializer(
+            data=request.data, context={"clearance": clearance}
+        )
+        ser.is_valid(raise_exception=True)
+        try:
+            revoke_clearance(clearance, revoked_by=cast(AccountDB, request.user))
+        except CustodyClearanceStateError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        clearance.refresh_from_db()
+        return Response(CustodyClearanceSerializer(clearance).data)
 
 
 class BeatStakeAvailabilityView(APIView):

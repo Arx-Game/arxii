@@ -4801,6 +4801,177 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/custody-clearances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CustodyClearance lifecycle (#2001 Task 6).
+     *
+     *     No update/destroy — every state transition is a dedicated lifecycle
+     *     action (grant/deny/escalate/resolve/revoke), each mapping 1:1 to
+     *     ``world.stories.services.custody_clearance`` and gated by its own
+     *     permission class per the Task 3 review's binding authority split: staff
+     *     never grants/denies a PENDING request directly, only through
+     *     escalate -> resolve.
+     */
+    get: operations['custody_clearances_list'];
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/ — request_clearance.
+     *
+     *     Deliberately cross-story: any authenticated GM may request clearance
+     *     for any active protected subject (see
+     *     ``CustodyClearanceRequestSerializer``'s docstring for why the
+     *     ``protected_subject`` queryset is not scoped to the requester's own
+     *     stories). The serializer validates the requester's own GMProfile
+     *     exists and pre-checks the duplicate-live-request guard.
+     */
+    post: operations['custody_clearances_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for CustodyClearance lifecycle (#2001 Task 6).
+     *
+     *     No update/destroy — every state transition is a dedicated lifecycle
+     *     action (grant/deny/escalate/resolve/revoke), each mapping 1:1 to
+     *     ``world.stories.services.custody_clearance`` and gated by its own
+     *     permission class per the Task 3 review's binding authority split: staff
+     *     never grants/denies a PENDING request directly, only through
+     *     escalate -> resolve.
+     */
+    get: operations['custody_clearances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/deny/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /api/custody-clearances/{id}/deny/ — custodian GM denies a PENDING request. */
+    post: operations['custody_clearances_deny_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/escalate/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/escalate/ — requester escalates to staff.
+     *
+     *     Only the requesting GM may escalate (``IsClearanceRequesterGM``); the
+     *     service itself takes no actor parameter by design (Task 3 brief).
+     */
+    post: operations['custody_clearances_escalate_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/grant/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/grant/ — custodian GM grants a PENDING request.
+     *
+     *     ``IsClearanceCustodianGM`` enforces the exact custodian match with no
+     *     staff bypass — Task 3 review decision: staff act only through
+     *     escalate/resolve, never by posing as the custodian.
+     */
+    post: operations['custody_clearances_grant_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/resolve/ — staff tiebreak on an ESCALATED request.
+     *
+     *     Body: ``{grant: bool, response_note}``. Staff-only
+     *     (``IsStaffForCustodyResolution``) — staff never grant/deny a PENDING
+     *     request directly; this is the only door in.
+     */
+    post: operations['custody_clearances_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/custody-clearances/{id}/revoke/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/custody-clearances/{id}/revoke/ — soft-revoke a GRANTED clearance.
+     *
+     *     Custodian GM's account, or staff (``IsClearanceCustodianOrStaff`` —
+     *     the one lifecycle action where staff stands in for the custodian
+     *     directly, mirroring ``revoke_clearance``'s own
+     *     ``_is_custodian_account`` check).
+     */
+    post: operations['custody_clearances_revoke_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -12429,6 +12600,104 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/protected-subjects/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     */
+    get: operations['protected_subjects_list'];
+    put?: never;
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     */
+    post: operations['protected_subjects_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/protected-subjects/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     */
+    get: operations['protected_subjects_retrieve'];
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     */
+    put: operations['protected_subjects_update'];
+    post?: never;
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     */
+    delete: operations['protected_subjects_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for StoryProtectedSubject — GM-authored custody protection (#2001 Task 6).
+     *
+     *     Owner-scoped, 404-not-filtered (mirrors ``world.boundaries``'s privacy
+     *     posture): ``get_queryset`` excludes every row belonging to a story the
+     *     requester doesn't own/lead, so a non-owner's GET/PATCH/DELETE against
+     *     another story's protected subject 404s rather than 403ing or leaking the
+     *     GM-only ``notes`` field. ``StoryProtectedSubjectSerializer.validate``
+     *     carries the identical ownership gate for create (DRF never calls
+     *     ``has_object_permission`` for a row that doesn't exist yet).
+     */
+    patch: operations['protected_subjects_partial_update'];
+    trace?: never;
+  };
   '/api/reaction-windows/{id}/react/': {
     parameters: {
       query?: never;
@@ -18205,6 +18474,76 @@ export interface components {
      * @enum {integer}
      */
     CurrentStageEnum: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+    /**
+     * @description Read/response serializer for CustodyClearance (#2001 Task 6).
+     *
+     *     Every field is read-only here — writes go through
+     *     ``CustodyClearanceRequestSerializer`` (create) and the per-action input
+     *     serializers (grant/deny/escalate/resolve/revoke), all of which route
+     *     through ``world.stories.services.custody_clearance``. No nested
+     *     notification/message data is exposed here, so the recipient-scoped
+     *     ``related_story`` disclosure rule that module documents does not apply
+     *     to this serializer.
+     */
+    CustodyClearance: {
+      readonly id: number;
+      readonly protected_subject: number;
+      /** @description The GM requesting permission to act on the protected subject. */
+      readonly requested_by: number;
+      /** @description The requester's own story this clearance is needed for, if any. */
+      readonly requesting_story: number | null;
+      /** @description The requester's own beat this clearance is needed for, if any. */
+      readonly requesting_beat: number | null;
+      readonly scope: components['schemas']['CustodyClearanceScopeEnum'];
+      /** @default pending */
+      readonly status: components['schemas']['CustodyClearanceStatusEnum'];
+      /** @description The custodian GM who directly decided this clearance (GRANTED or DENIED). Null while PENDING/ESCALATED, and null for a staff-resolved escalation (see staff_resolver). */
+      readonly granted_by: number | null;
+      /** @description The staff account that resolved this clearance's ESCALATED tiebreak. */
+      readonly staff_resolver: number | null;
+      /** @description Requester's note explaining the request. */
+      readonly message: string;
+      /** @description Custodian's or staff's response note. */
+      readonly response_note: string;
+      /**
+       * Format: date-time
+       * @description Soft-revoke timestamp for a GRANTED clearance. Never hard-deleted.
+       */
+      readonly revoked_at: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When status left PENDING/ESCALATED for GRANTED/DENIED.
+       */
+      readonly resolved_at: string | null;
+    };
+    /** @description Input for grant/deny — validates the clearance is PENDING before the service call. */
+    CustodyClearanceDecisionInputRequest: {
+      /** @default  */
+      response_note: string;
+    };
+    /** @description Input for staff resolve — {grant: bool, response_note} — ESCALATED-only. */
+    CustodyClearanceResolveInputRequest: {
+      grant: boolean;
+      /** @default  */
+      response_note: string;
+    };
+    /**
+     * @description * `appear` - Guaranteed appearance
+     *     * `harm` - Protected from harm
+     *     * `remove` - Protected from removal
+     * @enum {string}
+     */
+    CustodyClearanceScopeEnum: 'appear' | 'harm' | 'remove';
+    /**
+     * @description * `pending` - Pending
+     *     * `granted` - Granted
+     *     * `denied` - Denied
+     *     * `escalated` - Escalated
+     * @enum {string}
+     */
+    CustodyClearanceStatusEnum: 'pending' | 'granted' | 'denied' | 'escalated';
     /** @description Serializer for damage types. */
     DamageType: {
       readonly id: number;
@@ -22716,6 +23055,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['CovenantRite'][];
     };
+    PaginatedCustodyClearanceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['CustodyClearance'][];
+    };
     PaginatedDecorationTemplateList: {
       /** @example 123 */
       count: number;
@@ -24292,6 +24646,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['StoryParticipation'][];
     };
+    PaginatedStoryProtectedSubjectList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['StoryProtectedSubject'][];
+    };
     PaginatedSystemErrorReportDetailList: {
       /** @example 123 */
       count: number;
@@ -25622,7 +25991,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
       covenant?: number | null;
     };
@@ -25638,6 +26007,34 @@ export interface components {
       /** @description Story owner has explicitly trusted this player for this story */
       trusted_by_owner?: boolean;
       is_active?: boolean;
+    };
+    /**
+     * @description Full serializer for StoryProtectedSubject (#2001 Task 6).
+     *
+     *     Enforces the model's exactly-one-subject invariant here (DRF serializers
+     *     never call ``Model.clean()``) and the story-ownership gate on create/update
+     *     — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+     *     cannot cover create, since DRF never calls object-level permissions for a
+     *     row that does not exist yet.
+     */
+    PatchedStoryProtectedSubjectRequest: {
+      story?: number;
+      subject_kind?: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      subject_label?: string;
+      /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
+      beat?: number | null;
+      is_active?: boolean;
+      /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
+      notes?: string;
     };
     /**
      * @description Staff read + status-update view of an auto-captured error (#1164).
@@ -27851,7 +28248,7 @@ export interface components {
      *     * `global` - Global
      * @enum {string}
      */
-    ScopeEnum: 'unassigned' | 'character' | 'group' | 'global';
+    ScopeA20Enum: 'unassigned' | 'character' | 'group' | 'global';
     /**
      * @description * `spring` - Spring
      *     * `summer` - Summer
@@ -28946,7 +29343,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
     };
     /** @description Serializer for creating stories */
     StoryCreateRequest: {
@@ -28963,7 +29360,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
     };
     /** @description Full serializer for story detail views */
     StoryDetail: {
@@ -28983,7 +29380,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       readonly owners: string[];
       readonly active_gms: components['schemas']['GMProfile'][];
       readonly trust_requirements: string;
@@ -29028,7 +29425,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       /** @description For GROUP-scope stories: the covenant this storyline belongs to. Informational — not a credit gate. SET_NULL on covenant delete so an archived covenant doesn't cascade-delete its stories. */
       covenant?: number | null;
     };
@@ -29112,7 +29509,7 @@ export interface components {
        *     * `group` - Group
        *     * `global` - Global
        */
-      scope?: components['schemas']['ScopeEnum'];
+      scope?: components['schemas']['ScopeA20Enum'];
       readonly owners_count: number;
       readonly active_gms_count: number;
       readonly participants_count: number;
@@ -29163,6 +29560,65 @@ export interface components {
       /** @description Story owner has explicitly trusted this player for this story */
       trusted_by_owner?: boolean;
       is_active?: boolean;
+    };
+    /**
+     * @description Full serializer for StoryProtectedSubject (#2001 Task 6).
+     *
+     *     Enforces the model's exactly-one-subject invariant here (DRF serializers
+     *     never call ``Model.clean()``) and the story-ownership gate on create/update
+     *     — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+     *     cannot cover create, since DRF never calls object-level permissions for a
+     *     row that does not exist yet.
+     */
+    StoryProtectedSubject: {
+      readonly id: number;
+      story: number;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      subject_label?: string;
+      /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
+      beat?: number | null;
+      is_active?: boolean;
+      /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
+      notes?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Full serializer for StoryProtectedSubject (#2001 Task 6).
+     *
+     *     Enforces the model's exactly-one-subject invariant here (DRF serializers
+     *     never call ``Model.clean()``) and the story-ownership gate on create/update
+     *     — ``IsProtectedSubjectStoryOwnerOrStaff.has_object_permission`` alone
+     *     cannot cover create, since DRF never calls object-level permissions for a
+     *     row that does not exist yet.
+     */
+    StoryProtectedSubjectRequest: {
+      story: number;
+      subject_kind: components['schemas']['SubjectKindEnum'];
+      /** @description For NPC_FATE / PERSONAL_JEOPARDY subjects. Nulls if the sheet is deleted. */
+      subject_sheet?: number | null;
+      /** @description For ITEM subjects. Nulls if the item instance is deleted/consumed. */
+      subject_item?: number | null;
+      /** @description For FACTION subjects (society-level). Nulls if the society is deleted. */
+      subject_society?: number | null;
+      /** @description For FACTION subjects (organization-level). Nulls if the org is deleted. */
+      subject_organization?: number | null;
+      /** @description Freeform subject name (CUSTOM / CAMPAIGN_TRACK, or a LOCATION fallback). */
+      subject_label?: string;
+      /** @description For beat-level refinement: protection applies only while this beat is unsatisfied. Null = story-level (whole arc). SET_NULL (not CASCADE) — a deleted beat must not silently erase the protection; it degrades to story-level instead. */
+      beat?: number | null;
+      is_active?: boolean;
+      /** @description GM notes on why this subject is critical. GM-only; never serialized to outsiders. */
+      notes?: string;
     };
     /** @description Read-only serializer for StrainAvailability — per-character strain cap snapshot. */
     StrainAvailability: {
@@ -36748,6 +37204,198 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterPurse'];
+        };
+      };
+    };
+  };
+  custody_clearances_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        protected_subject?: number;
+        scope?: string;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCustodyClearanceList'];
+        };
+      };
+    };
+  };
+  custody_clearances_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_deny_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceDecisionInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_escalate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_grant_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceDecisionInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CustodyClearanceResolveInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
+        };
+      };
+    };
+  };
+  custody_clearances_revoke_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this custody clearance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CustodyClearance'];
         };
       };
     };
@@ -48261,6 +48909,153 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WeeklyVote'];
+        };
+      };
+    };
+  };
+  protected_subjects_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+        subject_kind?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStoryProtectedSubjectList'];
+        };
+      };
+    };
+  };
+  protected_subjects_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryProtectedSubjectRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  protected_subjects_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  protected_subjects_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryProtectedSubjectRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
+        };
+      };
+    };
+  };
+  protected_subjects_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  protected_subjects_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story protected subject. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedStoryProtectedSubjectRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryProtectedSubject'];
         };
       };
     };
