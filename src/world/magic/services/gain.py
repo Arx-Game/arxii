@@ -65,6 +65,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from world.items.models import Style
     from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
     from world.magic.models.endorsement import EntryFlourishRecord, StylePresentationEndorsement
 from django.utils import timezone
@@ -80,6 +81,7 @@ from world.magic.models import (
     PoseEndorsement,
     Resonance,
     ResonanceGainConfig,
+    ResonanceGrant,
     SceneEntryEndorsement,
 )
 from world.magic.types import (
@@ -216,6 +218,25 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     claimed_ids = set(sheet.resonances.values_list("resonance_id", flat=True))
     matched_ids = tagged_ids & claimed_ids
     return set(Resonance.objects.filter(pk__in=matched_ids))
+
+
+def resonance_grant_history_for_sheet(
+    sheet: CharacterSheet,
+    *,
+    resonance: Resonance | None = None,
+    limit: int = 10,
+) -> list[ResonanceGrant]:
+    """Return this character's most recent ``ResonanceGrant`` rows, newest first.
+
+    Mirrors ``ResonanceGrantViewSet``'s ordering (``-granted_at``) and user-scoping
+    shape (`world/magic/views.py`) — the single read path for both the web audit
+    ledger and the telnet ``resonance history`` command. Optionally narrowed to one
+    claimed resonance.
+    """
+    qs = ResonanceGrant.objects.filter(character_sheet=sheet).select_related("resonance")
+    if resonance is not None:
+        qs = qs.filter(resonance=resonance)
+    return list(qs.order_by("-granted_at")[:limit])
 
 
 @transaction.atomic
@@ -557,37 +578,38 @@ def _endorser_can_see_scene(
     return SceneParticipation.objects.filter(scene=scene, account=endorser_account).exists()
 
 
-def _endorsee_wears_bound_style(
+def _endorsee_worn_bound_styles(
     endorsee_sheet: CharacterSheet,
     resonance: Resonance,
-) -> bool:
-    """True if endorsee has a MotifResonance for ``resonance`` with at least
-    one MotifResonanceStyle binding whose style is currently worn.
+) -> list[Style]:
+    """Every worn ``Style`` bound to ``resonance`` via the endorsee's Motif.
 
     Mirrors the ``passive_motif_style_bonuses`` walker logic in
     ``world/mechanics/services.py``: motif → resonances.get(resonance=resonance)
     → style_assignments.all() → binding.style → equipped_items.item_styles_for.
+    Returns [] if there is no binding or no matching worn style.
     """
     from world.magic.models.motifs import Motif, MotifResonance  # noqa: PLC0415
 
     try:
         motif = endorsee_sheet.motif
     except Motif.DoesNotExist:
-        return False
+        return []
 
     try:
         mr = motif.resonances.get(resonance=resonance)
     except MotifResonance.DoesNotExist:
-        return False
+        return []
 
     char = endorsee_sheet.character
     if not hasattr(char, "equipped_items"):
-        return False
+        return []
 
-    for binding in mr.style_assignments.all():
-        if char.equipped_items.item_styles_for(binding.style):
-            return True
-    return False
+    return [
+        binding.style
+        for binding in mr.style_assignments.all()
+        if char.equipped_items.item_styles_for(binding.style)
+    ]
 
 
 @transaction.atomic
@@ -613,6 +635,10 @@ def create_style_presentation_endorsement(
     6. Endorsee has claimed this resonance (CharacterResonance row exists).
     7. Endorsee currently wears an item bound to ``resonance`` via MotifResonanceStyle.
     8. No duplicate (endorser × endorsee × scene) row.
+
+    The base grant (``cfg.style_presentation_grant``) is scaled by the
+    ``AudacityTuning`` multiplier of the matched worn Style's audacity tier — when
+    multiple worn items match the binding, the highest-audacity match wins (#2029).
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.models.endorsement import StylePresentationEndorsement  # noqa: PLC0415
@@ -651,7 +677,8 @@ def create_style_presentation_endorsement(
         msg = _ERR_RESONANCE_UNCLAIMED
         raise EndorsementValidationError(msg)
 
-    if not _endorsee_wears_bound_style(endorsee_sheet, resonance):
+    matched_styles = _endorsee_worn_bound_styles(endorsee_sheet, resonance)
+    if not matched_styles:
         msg = "Endorsee is not wearing an item bound to this resonance via their Motif"
         raise EndorsementValidationError(msg)
 
@@ -663,7 +690,20 @@ def create_style_presentation_endorsement(
         msg = "Already endorsed this style presentation"
         raise EndorsementValidationError(msg)
 
+    from world.items.services.styles import audacity_multiplier_for  # noqa: PLC0415
+
+    # The endorsee may wear multiple items whose styles all bind to this resonance
+    # (e.g. two style-tagged garments). Reward the boldest presented style — scale
+    # the grant by the highest-audacity match rather than the first/only one (#2029).
+    best_style = max(matched_styles, key=lambda s: s.audacity)
+    multiplier = audacity_multiplier_for(best_style)
+
     cfg = get_resonance_gain_config()
+    # Mirrors the truncating int() coercion `grant_resonance` itself uses when
+    # scaling amounts (see the ACCELERATED_GAIN_SOURCES branch); granted_amount is a
+    # PositiveIntegerField, so floor at 1 to guarantee a positive grant even at the
+    # lowest (UNDERSTATED) tier.
+    grant_amount = max(1, int(cfg.style_presentation_grant * multiplier))
     try:
         _persona_snapshot = endorsee_sheet.primary_persona
     except Persona.DoesNotExist:
@@ -674,12 +714,12 @@ def create_style_presentation_endorsement(
         scene=scene,
         resonance=resonance,
         persona_snapshot=_persona_snapshot,
-        granted_amount=cfg.style_presentation_grant,
+        granted_amount=grant_amount,
     )
     grant_resonance(
         endorsee_sheet,
         resonance,
-        cfg.style_presentation_grant,
+        grant_amount,
         source=GainSource.STYLE_PRESENTATION,
         style_presentation_endorsement=endorsement,
     )

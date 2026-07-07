@@ -206,8 +206,8 @@ def commit_to_clash(  # noqa: PLR0913
         )
         raise ValueError(msg)
 
-    # 1. Derive the check type from the technique's action_template (mirrors
-    #    _resolve_pc_action in services.py: ``template.check_type``).
+    # 1. Resolve the check via the shared cast-check rule (ADR-0096): the
+    #    caster's personal magic check when provisioned, else the template's.
     template = technique.action_template
     if template is None:
         msg = (
@@ -216,7 +216,9 @@ def commit_to_clash(  # noqa: PLR0913
             "combat use by assigning an ActionTemplate with a check_type."
         )
         raise ValueError(msg)
-    check_type = template.check_type
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+
+    check_type = resolve_cast_check_type(objectdb, template)
 
     # 2. Convert strain commitment to a power_intensity_bonus (diminishing-returns curve).
     #    Strain no longer modifies the check roll — the check reflects skill + affinity +

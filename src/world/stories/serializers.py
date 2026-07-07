@@ -6,7 +6,7 @@ from rest_framework.exceptions import ErrorDetail
 
 from world.character_sheets.models import CharacterSheet
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMProfile, GMTable
+from world.gm.models import GMLevelCap, GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.items.models import ItemInstance
 from world.scenes.models import Persona
@@ -563,7 +563,6 @@ class PlayerTrustSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "account",
-            "gm_trust_level",
             "total_positive_feedback",
             "total_negative_feedback",
             "created_at",
@@ -950,6 +949,34 @@ class SessionRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "story_id"]
 
 
+def _gm_max_risk(user) -> str:
+    """RenownRisk ceiling for a non-staff author: their GMLevelCap.max_beat_risk.
+
+    No GMProfile or no cap row → RenownRisk.NONE.
+    """
+    try:
+        gm_profile = user.gm_profile
+    except GMProfile.DoesNotExist:
+        return RenownRisk.NONE
+    try:
+        cap = GMLevelCap.objects.get(level=gm_profile.level)
+    except GMLevelCap.DoesNotExist:
+        return RenownRisk.NONE
+    return cap.max_beat_risk
+
+
+def _gm_allows_custom_stakes(user) -> bool:
+    """Whether a non-staff author's GMLevelCap permits custom (template=null) stakes.
+
+    No GMProfile or no cap row → False.
+    """
+    try:
+        cap = GMLevelCap.objects.get(level=user.gm_profile.level)
+    except (GMProfile.DoesNotExist, GMLevelCap.DoesNotExist):
+        return False
+    return cap.allow_custom_stakes
+
+
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
@@ -1112,14 +1139,17 @@ class BeatSerializer(serializers.ModelSerializer):
         self._check_beat_ownership(user, is_staff, merged)
 
         if merged_risk != RenownRisk.NONE and not is_staff:
-            raise serializers.ValidationError(
-                {
-                    "risk": (
-                        "Only staff may author beats above risk NONE. "
-                        "Higher risk tiers unlock with GM trust level."
-                    )
-                }
-            )
+            from world.stories.services.stakes import risk_index  # noqa: PLC0415
+
+            if risk_index(merged_risk) > risk_index(_gm_max_risk(user)):
+                raise serializers.ValidationError(
+                    {
+                        "risk": (
+                            "Your GM level does not permit authoring beats at this risk "
+                            "tier. Higher tiers unlock as staff promote your GM level."
+                        )
+                    }
+                )
         return attrs
 
     def _check_beat_ownership(self, user: Any, is_staff: bool, merged: dict[str, Any]) -> None:
@@ -2613,10 +2643,11 @@ class StakeSerializer(serializers.ModelSerializer):
     Template-set path denormalizes subject_kind/severity from the template
     (so a later template retune never rewrites live contracts) and validates
     the beat's declared risk falls within the template's [min_risk, max_risk]
-    band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-    mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-    Any write (create or update) is rejected while the beat carries an open
-    StakeContractActivation — the lock (#1770 pillar 8).
+    band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+    a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+    `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+    in style. Any write (create or update) is rejected while the beat carries
+    an open StakeContractActivation — the lock (#1770 pillar 8).
     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
     """
 
@@ -2674,7 +2705,7 @@ class StakeSerializer(serializers.ModelSerializer):
         if template is not None:
             self._apply_template_defaults(template, beat, attrs)
         else:
-            self._validate_custom_stake(is_staff, merged)
+            self._validate_custom_stake(is_staff, user, merged)
 
         self._check_boundaries(beat, attrs)
 
@@ -2703,14 +2734,14 @@ class StakeSerializer(serializers.ModelSerializer):
         attrs.setdefault("subject_kind", template.subject_kind)
         attrs.setdefault("severity", template.severity)
 
-    def _validate_custom_stake(self, is_staff: bool, merged: dict[str, Any]) -> None:
-        """Gate custom stakes (template=null) to staff and require subject fields."""
-        if not is_staff:
+    def _validate_custom_stake(self, is_staff: bool, user: Any, merged: dict[str, Any]) -> None:
+        """Gate custom stakes (template=null) to staff or a permitting GMLevelCap (#2000)."""
+        if not is_staff and not _gm_allows_custom_stakes(user):
             raise serializers.ValidationError(
                 {
                     "template": (
-                        "Only staff may author custom stakes (template=null). "
-                        "Use a StakeTemplate instead."
+                        "Only staff or Senior GMs may author custom stakes "
+                        "(template=null). Use a StakeTemplate instead."
                     )
                 }
             )

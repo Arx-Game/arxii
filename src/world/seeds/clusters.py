@@ -131,10 +131,22 @@ def _seed_civic_hubs() -> None:
     ensure_town_crier_kind()
 
 
+def _seed_building_condition() -> None:
+    from world.buildings.seeds import ensure_preparation_contribution_method  # noqa: PLC0415
+
+    ensure_preparation_contribution_method()
+
+
 def _seed_kudos() -> None:
     from world.progression.seeds import seed_kudos_content  # noqa: PLC0415
 
     seed_kudos_content()
+
+
+def _seed_gm() -> None:
+    from world.gm.factories import seed_default_gm_level_caps  # noqa: PLC0415
+
+    seed_default_gm_level_caps()
 
 
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
@@ -192,11 +204,18 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Civic hubs: the Notice Board / Town Crier RoomFeatureKinds + the crier
     # NPCRole (#1450). Instances (which room carries one) are world data.
     "civic_hubs": _seed_civic_hubs,
+    # Building condition: the Grand Preparation AP-check contribution method
+    # (#1930). After "governance" (rides its Household Command CheckType).
+    "building_condition": _seed_building_condition,
     # Kudos: the KudosSourceCategory rows the pose_kudos / spread_assist / social_engagement
     # reaction-kind + weekly-grant paths need, plus the "relationship_writeup" category and the
     # "xp" KudosClaimCategory the claim UI needs to offer anything (#2026). No dependencies on
     # any other cluster.
     "kudos": _seed_kudos,
+    # GM trust ladder: the 5 default GMLevelCap rows (max_beat_risk,
+    # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
+    # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
+    "gm": _seed_gm,
 }
 
 
@@ -205,7 +224,7 @@ def seeded_models() -> list[type[Model]]:
     from world.character_creation.models import Beginnings, StartingArea  # noqa: PLC0415
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
@@ -215,6 +234,7 @@ def seeded_models() -> list[type[Model]]:
         Affinity,
         Resonance,
         ItemTemplate,
+        Style,
         CheckType,
         ResultChart,
         SocialConsentCategory,
@@ -238,10 +258,12 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.checks.models import CheckType  # noqa: PLC0415
     from world.conditions.models import ConditionTemplate  # noqa: PLC0415
     from world.consent.models import SocialConsentCategory  # noqa: PLC0415
-    from world.items.models import ItemTemplate  # noqa: PLC0415
+    from world.gm.models import GMLevelCap  # noqa: PLC0415
+    from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
+    from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
@@ -266,7 +288,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
         "magic": [Affinity, Resonance],
-        "items": [ItemTemplate],
+        # Style also carries the seeded aesthetic vocabulary spread across the four
+        # audacity tiers (#2029).
+        "items": [ItemTemplate, Style],
         # Combat seeds check-types used by the resolution spine, not standalone
         # content rows; it still appears in the inventory as a seeded cluster.
         "combat": [],
@@ -290,8 +314,13 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "perception": [ConditionTemplate],
         # Civic hubs: the two reader RoomFeatureKinds + the crier NPCRole (#1450).
         "civic_hubs": [RoomFeatureKind],
+        # Building condition: the Grand Preparation "Direct the Household"
+        # ContributionMethod (#1930).
+        "building_condition": [ContributionMethod],
         # Kudos: 4 KudosSourceCategory rows (pose_kudos/spread_assist/social_engagement/
         # relationship_writeup) + the "xp" KudosClaimCategory; represented by
         # KudosSourceCategory (#2026).
         "kudos": [KudosSourceCategory],
+        # GM trust ladder: the 5 default GMLevelCap rows, one per GMLevel (#2000).
+        "gm": [GMLevelCap],
     }

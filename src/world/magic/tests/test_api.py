@@ -278,6 +278,123 @@ class ThreadViewSetTests(APITestCase):
         self.assertIn("FACET", str(response.data))
 
     # ------------------------------------------------------------------
+    # RELATIONSHIP_TRACK ownership tests (#2033)
+    # ------------------------------------------------------------------
+
+    def test_create_relationship_track_thread_rejects_foreign_ownership(self) -> None:
+        """The web path must reject weaving a RELATIONSHIP_TRACK thread on a
+        track-progress row belonging to SOMEONE ELSE's relationship, even
+        though the requesting sheet holds a matching RELATIONSHIP_TRACK
+        ThreadWeavingUnlock — ``ThreadSerializer`` previously let this through
+        since only the unlock gate (not ownership) was checked (#2033).
+
+        Closing the oracle means a foreign row must be *indistinguishable* from
+        a nonexistent one: ``ThreadSerializer._resolve_target`` now scopes its
+        lookup to ``relationship__source=<requesting sheet>``, so a foreign pk
+        simply doesn't match the query and 400s with the same "does not exist"
+        message a bogus pk would produce — never the ownership-specific
+        ``RelationshipBondNotOwned`` message, which would leak that the row
+        exists and belongs to someone else. Proven here by requesting the SAME
+        pk twice — once while it's a real foreign row, once after it's deleted
+        (genuinely nonexistent) — and asserting the two 400 bodies are
+        byte-identical. That equality *is* the security property under test,
+        not an incidental assertion.
+        """
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        track = RelationshipTrackFactory()
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        foreign_relationship = CharacterRelationshipFactory(
+            source=self.other_sheet, target=CharacterSheetFactory()
+        )
+        foreign_progress = RelationshipTrackProgressFactory(
+            relationship=foreign_relationship, track=track, developed_points=10
+        )
+        foreign_progress_pk = foreign_progress.pk
+
+        self.client.force_authenticate(user=self.account)
+        post_kwargs = {
+            "resonance": self.resonance.pk,
+            "target_kind": TargetKind.RELATIONSHIP_TRACK,
+            "target_id": foreign_progress_pk,
+            "character_sheet_id": self.sheet.pk,
+        }
+        foreign_response = self.client.post(
+            reverse("magic:thread-list"), post_kwargs, format="json"
+        )
+        self.assertEqual(foreign_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            Thread.objects.filter(
+                owner=self.sheet, target_relationship_track_id=foreign_progress_pk
+            ).exists()
+        )
+        # The ownership-specific message must never reach the API caller — it
+        # would confirm the row exists and belongs to someone else.
+        self.assertNotIn("isn't your own relationship bond", str(foreign_response.data))
+        self.assertIn(
+            f"RELATIONSHIP_TRACK target with id={foreign_progress_pk} does not exist.",
+            str(foreign_response.data),
+        )
+
+        # Same pk, now genuinely nonexistent — must produce the SAME 400 body.
+        foreign_progress.delete()
+        nonexistent_response = self.client.post(
+            reverse("magic:thread-list"), post_kwargs, format="json"
+        )
+        self.assertEqual(nonexistent_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(foreign_response.data, nonexistent_response.data)
+
+    def test_create_relationship_track_thread_succeeds_for_own_row(self) -> None:
+        """Sanity check: weaving the CALLER's own track-progress row still works."""
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        track = RelationshipTrackFactory()
+        unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        own_relationship = CharacterRelationshipFactory(
+            source=self.sheet, target=CharacterSheetFactory()
+        )
+        own_progress = RelationshipTrackProgressFactory(
+            relationship=own_relationship, track=track, developed_points=10
+        )
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.RELATIONSHIP_TRACK,
+                "target_id": own_progress.pk,
+                "character_sheet_id": self.sheet.pk,
+                "name": "Bound to Marcus",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Thread.objects.filter(owner=self.sheet, target_relationship_track=own_progress).exists()
+        )
+
+    # ------------------------------------------------------------------
     # COVENANT_ROLE thread creation tests
     # ------------------------------------------------------------------
 

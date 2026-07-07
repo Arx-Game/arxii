@@ -9,9 +9,10 @@ from rest_framework import serializers
 if TYPE_CHECKING:
     from world.projects.models import Project
 
-from world.gm.constants import GMApplicationStatus, GMTableViewerRole
+from world.gm.constants import GMApplicationStatus, GMLevel, GMTableViewerRole
 from world.gm.models import (
     GMApplication,
+    GMLevelChange,
     GMProfile,
     GMRosterInvite,
     GMTable,
@@ -80,6 +81,7 @@ class GMProfileSerializer(serializers.ModelSerializer):
     """Read-only serializer for GM profiles."""
 
     account_username = serializers.CharField(source="account.username", read_only=True)
+    level_display = serializers.CharField(source="get_level_display", read_only=True)
 
     class Meta:
         model = GMProfile
@@ -88,9 +90,75 @@ class GMProfileSerializer(serializers.ModelSerializer):
             "account",
             "account_username",
             "level",
+            "level_display",
             "approved_at",
         ]
         read_only_fields = fields
+
+
+class GMLevelChangeSerializer(serializers.ModelSerializer):
+    """Read-only audit row for a staff-driven GM trust-level change (#2000)."""
+
+    changed_by_username = serializers.CharField(source="changed_by.username", read_only=True)
+    old_level_display = serializers.CharField(source="get_old_level_display", read_only=True)
+    new_level_display = serializers.CharField(source="get_new_level_display", read_only=True)
+
+    class Meta:
+        model = GMLevelChange
+        fields = [
+            "id",
+            "profile",
+            "old_level",
+            "old_level_display",
+            "new_level",
+            "new_level_display",
+            "changed_by",
+            "changed_by_username",
+            "reason",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class CategoryFeedbackSerializer(serializers.Serializer):
+    """One trust category's aggregated feedback ratings for a GM (read-only)."""
+
+    category_name = serializers.CharField()
+    average_rating = serializers.FloatField()
+    rating_count = serializers.IntegerField()
+
+
+class GMEvidenceSummarySerializer(serializers.Serializer):
+    """Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000)."""
+
+    profile_id = serializers.IntegerField()
+    level = serializers.ChoiceField(choices=GMLevel.choices)
+    approved_at = serializers.DateTimeField()
+    last_active_at = serializers.DateTimeField(allow_null=True)
+    stories_running = serializers.IntegerField()
+    beats_completed_by_risk = serializers.DictField(child=serializers.IntegerField())
+    feedback_by_category = CategoryFeedbackSerializer(many=True)
+    level_changes = GMLevelChangeSerializer(many=True)
+
+
+class PromoteGMInputSerializer(serializers.Serializer):
+    """Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
+
+    ``context["profile"]`` is the ``GMProfile`` being changed — the view passes
+    ``self.get_object()``. Rejecting the same-level case here means
+    ``promote_gm``'s ``ValueError`` guard is a programmer-error backstop only and
+    should never fire from user input.
+    """
+
+    new_level = serializers.ChoiceField(choices=GMLevel.choices)
+    reason = serializers.CharField(required=True, allow_blank=False)
+
+    def validate(self, attrs: dict) -> dict:
+        profile = self.context["profile"]
+        if attrs["new_level"] == profile.level:
+            msg = "This GM is already at that level."
+            raise serializers.ValidationError({"new_level": msg})
+        return attrs
 
 
 class GMTableSerializer(serializers.ModelSerializer):

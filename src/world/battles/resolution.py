@@ -15,8 +15,10 @@ destroyed unit lists, and a casualty list for the caller to display or log.
 This module also provides ``BattleTechniqueResolver`` and
 ``resolve_battle_technique``, which cast a declaration's ``technique`` through
 the real magic envelope (``use_technique``). Routing through ``use_technique``
-(rather than a generic shared check) means the check is sourced from the
-player's actual technique (``technique.action_template.check_type``),
+(rather than a generic shared check) means the check is sourced from
+``resolve_cast_check_type`` — the caster's provisioned personal magic check
+when they have one, falling back to the technique's
+``action_template.check_type`` only for an unprovisioned caster (ADR-0096) —
 anima/Soulfray/mishap apply normally, and Audere/Audere Majora escalation
 fires automatically (it's wired inside ``use_technique`` itself, Step 8c — no
 separate call site is needed here). ``resolve_battle_round`` calls
@@ -346,7 +348,9 @@ class BattleTechniqueResolver:
         ledger: PowerLedger,  # noqa: ARG002 — battle doesn't use the power ledger
         extra_modifiers: int = 0,
     ) -> BattleTechniqueResolution:
-        check_type = self.technique.action_template.check_type
+        from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
+
+        check_type = resolve_cast_check_type(self.character, self.technique.action_template)
         total_modifiers = extra_modifiers + self._battle_modifier_stack()
         check_result = perform_check(self.character, check_type, extra_modifiers=total_modifiers)
         return BattleTechniqueResolution(check_result=check_result)
@@ -1206,7 +1210,9 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     Surrounded participant's peril once via
     ``_advance_surrounded_participants`` (#1733) — gated by declaration
     this round or ``battle.afk_peril_override``. Sets
-    ``battle_round.status = COMPLETED`` at the end.
+    ``battle_round.status = COMPLETED`` at the end, then pings connected
+    participants via ``notify_battle_state_changed`` (#2009), deferred via
+    ``transaction.on_commit`` so it fires only once this transaction commits.
 
     Args:
         battle_round: The ``BattleRound`` in DECLARING or RESOLVING status.
@@ -1290,5 +1296,9 @@ def resolve_battle_round(*, battle_round: BattleRound) -> BattleRoundResult:
     battle_round.status = RoundStatus.COMPLETED
     battle_round.completed_at = timezone.now()
     battle_round.save(update_fields=["status", "completed_at"])
+
+    from world.battles.services import notify_battle_state_changed  # noqa: PLC0415
+
+    transaction.on_commit(lambda: notify_battle_state_changed(battle))
 
     return result

@@ -78,6 +78,7 @@ from commands.form import CmdForm
 from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
 from commands.gm_tables import CmdGMTable
+from commands.gmtrust import CmdGMTrust
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
 from commands.grant_item import CmdGrantItem
 from commands.hire import CmdHire
@@ -91,12 +92,14 @@ from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
 from commands.persona import CmdPersona
 from commands.places import CmdPlaces  # #1866
+from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
 from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
 from commands.projects import CmdProject
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
+from commands.resonance import CmdResonance
 from commands.ritual import CmdRitual
 from commands.sanctum import CmdSanctum
 from commands.scene import CmdScene
@@ -283,6 +286,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #1494/#1495 — GM encounter and story lifecycle telnet namespaces.
             CmdEncounter,
             CmdStory,
+            # #2000 — GM trust-ladder: view/promote a GM's level (staff-gated).
+            CmdGMTrust,
             # #1574 — project status + money donation (project/donate, +project).
             CmdProject,
             # #1500 — staff: demand a crowdfundable ransom for a held captive.
@@ -333,10 +338,14 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdOutfit,
             # #1866 — places join/leave telnet namespace.
             CmdPlaces,
+            # #2005 — tactical position graph: list/take/move telnet namespace.
+            CmdPosition,
             # #1234 — Lab crafting station install/upgrade/repair namespace.
             CmdLabStation,
             # #1832 — ship commission/upgrade/repair/status namespace.
             CmdShip,
+            # #2032 — spendable resonance balances + grant history (bare/history subverbs).
+            CmdResonance,
         )
         for command_cls in command_classes:
             self.add(command_cls())

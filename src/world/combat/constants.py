@@ -12,6 +12,7 @@ from django.db import models
 from actions.constants import (
     ActionCategory as ActionCategory,  # noqa: PLC0414
 )
+from world.gm.constants import GMLevel
 
 # ---------------------------------------------------------------------------
 # Encounter enums
@@ -385,18 +386,31 @@ DEFAULT_RISK_MULTIPLIERS: dict[str, str] = {
     RiskLevel.LETHAL: "2.00",
 }
 
-# Stakes requirements: minimum party level + GM trust to run at that scope.
-# TrustLevel values must be imported at runtime by callers (avoid circular
-# import; world.stories.types is not imported here).
+# Stakes requirements: minimum party level + GM level (world.gm.constants.GMLevel)
+# to run at that scope.
 #
-# Format: stakes_level → {"minimum_party_average_level": int, "minimum_gm_trust_level": int}
-# TrustLevel int values: UNTRUSTED=0, BASIC=1, INTERMEDIATE=2, ADVANCED=3, EXPERT=4
+# Format: stakes_level → {"minimum_party_average_level": int, "minimum_gm_level": GMLevel}
 DEFAULT_STAKES_REQUIREMENTS: dict[str, dict] = {
-    StakesLevel.LOCAL: {"minimum_party_average_level": 0, "minimum_gm_trust_level": 0},
-    StakesLevel.REGIONAL: {"minimum_party_average_level": 5, "minimum_gm_trust_level": 1},
-    StakesLevel.NATIONAL: {"minimum_party_average_level": 10, "minimum_gm_trust_level": 2},
-    StakesLevel.CONTINENTAL: {"minimum_party_average_level": 15, "minimum_gm_trust_level": 3},
-    StakesLevel.WORLD: {"minimum_party_average_level": 20, "minimum_gm_trust_level": 4},
+    StakesLevel.LOCAL: {
+        "minimum_party_average_level": 0,
+        "minimum_gm_level": GMLevel.STARTING,
+    },
+    StakesLevel.REGIONAL: {
+        "minimum_party_average_level": 5,
+        "minimum_gm_level": GMLevel.JUNIOR,
+    },
+    StakesLevel.NATIONAL: {
+        "minimum_party_average_level": 10,
+        "minimum_gm_level": GMLevel.GM,
+    },
+    StakesLevel.CONTINENTAL: {
+        "minimum_party_average_level": 15,
+        "minimum_gm_level": GMLevel.EXPERIENCED,
+    },
+    StakesLevel.WORLD: {
+        "minimum_party_average_level": 20,
+        "minimum_gm_level": GMLevel.SENIOR,
+    },
 }
 
 # EncounterScalingConfig singleton defaults.

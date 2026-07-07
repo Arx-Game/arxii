@@ -843,12 +843,29 @@ class ThreadSerializer(serializers.ModelSerializer):
         target_id = attrs.get("target_id")
         if target_kind is None or target_id is None:
             return attrs
-        attrs["_target"] = self._resolve_target(target_kind, target_id)
+        # ``character_sheet_id`` is already resolved to a CharacterSheet instance by
+        # validate_character_sheet_id (field-level validators run before this
+        # object-level validate()). Required to scope the RELATIONSHIP_TRACK/
+        # RELATIONSHIP_CAPSTONE lookup below to the requester's own rows (#2033).
+        character_sheet = attrs.get("character_sheet_id")
+        attrs["_target"] = self._resolve_target(target_kind, target_id, character_sheet)
         return attrs
 
     @staticmethod
-    def _resolve_target(target_kind: str, target_id: int) -> object:
-        """Look up the target model instance for a given (target_kind, target_id)."""
+    def _resolve_target(
+        target_kind: str, target_id: int, character_sheet: CharacterSheet | None
+    ) -> object:
+        """Look up the target model instance for a given (target_kind, target_id).
+
+        For RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE, the lookup is scoped to rows
+        owned by ``character_sheet`` (mirrors the telnet resolvers
+        ``_resolve_track_anchor``/``_resolve_capstone_anchor`` in ``commands/weave.py``).
+        Without this, any authenticated player could probe foreign relationship rows
+        by id and distinguish "doesn't exist" from "exists but isn't mine" from the
+        error message/status alone — an existence/ownership oracle over other
+        players' secret relationship rows (#2033). Scoping the query means a foreign
+        row now 404s exactly like a nonexistent one.
+        """
         # In-function imports avoid app-boot circular deps (magic ↔ traits ↔ relationships).
         from world.covenants.models import CovenantRole  # noqa: PLC0415
         from world.items.models import Mantle  # noqa: PLC0415
@@ -877,8 +894,11 @@ class ThreadSerializer(serializers.ModelSerializer):
         if model is None:
             msg = f"Unsupported target_kind: {target_kind!r}."
             raise serializers.ValidationError(msg)
+        lookup: dict[str, object] = {"pk": target_id}
+        if target_kind in (TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE):
+            lookup["relationship__source"] = character_sheet
         try:
-            return model.objects.get(pk=target_id)
+            return model.objects.get(**lookup)
         except model.DoesNotExist as exc:
             msg = f"{target_kind} target with id={target_id} does not exist."
             raise serializers.ValidationError(msg) from exc

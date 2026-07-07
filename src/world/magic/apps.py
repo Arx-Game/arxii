@@ -53,6 +53,7 @@ class MagicConfig(AppConfig):
             FacetCrossingHandler,
             GiftCrossingHandler,
             MantleCrossingHandler,
+            OrganizationCrossingHandler,
             RelationshipCapstoneCrossingHandler,
             RelationshipTrackCrossingHandler,
             SanctumCrossingHandler,
@@ -62,6 +63,7 @@ class MagicConfig(AppConfig):
         from world.magic.crossing.registry import register_crossing_handler  # noqa: PLC0415
 
         register_crossing_handler(GiftCrossingHandler())
+        register_crossing_handler(OrganizationCrossingHandler())
         register_crossing_handler(CovenantRoleCrossingHandler())
         register_crossing_handler(TechniqueCrossingHandler())
         register_crossing_handler(TraitCrossingHandler())

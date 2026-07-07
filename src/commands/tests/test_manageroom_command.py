@@ -108,6 +108,28 @@ class RoomCommandParseTests(TestCase):
         key, kwargs = self._dispatch(["renovate"], "")
         assert (key, kwargs) == ("start_building_renovation", {"target_kind": ""})
 
+    def test_condition_family_bare_routes_without_confirm(self) -> None:
+        for switch, action_key in (
+            ("settle", "settle_building_arrears"),
+            ("refurbish", "refurbish_building"),
+            ("prepare", "prepare_building"),
+        ):
+            key, kwargs = self._dispatch([switch], "")
+            assert (key, kwargs) == (action_key, {})
+
+    def test_condition_family_confirm_routes_confirm_kwarg(self) -> None:
+        for switch, action_key in (
+            ("settle", "settle_building_arrears"),
+            ("refurbish", "refurbish_building"),
+            ("prepare", "prepare_building"),
+        ):
+            key, kwargs = self._dispatch([switch], " Confirm ")
+            assert (key, kwargs) == (action_key, {"confirm": True})
+
+    def test_ultraupkeep_switch_routes(self) -> None:
+        key, kwargs = self._dispatch(["ultraupkeep"], "")
+        assert (key, kwargs) == ("toggle_ultra_upkeep", {})
+
     def test_no_switch_raises_usage(self) -> None:
         with self.assertRaises(CommandError):
             self._dispatch([], "anything")

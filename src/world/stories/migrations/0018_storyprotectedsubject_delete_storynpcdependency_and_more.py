@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
         ("character_sheets", "0010_remove_charactersheet_family_and_more"),
         ("items", "0026_iteminstance_access_policy"),
         ("societies", "0022_alter_gangturfreputationaward_outcome_tier"),
-        ("stories", "0016_storynpcdependency"),
+        ("stories", "0017_remove_playertrust_gm_trust_level"),
     ]
 
     operations = [

@@ -132,6 +132,8 @@ from actions.definitions.locations import (
     LinkRoomsAction,
     PlaceFixtureAction,
     PlaceRoomAction,
+    PrepareBuildingAction,
+    RefurbishBuildingAction,
     RemoveFixtureAction,
     RemoveRoomAction,
     RenameExitAction,
@@ -139,8 +141,10 @@ from actions.definitions.locations import (
     RoomEditAction,
     SetBuildingStyleAction,
     SetPrimaryHomeAction,
+    SettleBuildingArrearsAction,
     StartBuildingRenovationAction,
     StartExtensionAction,
+    ToggleUltraUpkeepAction,
     UnlinkRoomsAction,
 )
 from actions.definitions.movement import (
@@ -176,7 +180,12 @@ from actions.definitions.outfits import (
 from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
-from actions.definitions.positioning import MoveToPositionAction, SetTheStageAction
+from actions.definitions.positioning import (
+    GMPlaceInPositionAction,
+    MoveToPositionAction,
+    SetTheStageAction,
+    TakePositionAction,
+)
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from actions.definitions.progression_rewards import (
     CastVoteAction,
@@ -290,6 +299,10 @@ _ALL_ACTIONS: list[Action] = [
     CommissionDecorationAction(),
     StartExtensionAction(),
     StartBuildingRenovationAction(),
+    SettleBuildingArrearsAction(),
+    RefurbishBuildingAction(),
+    PrepareBuildingAction(),
+    ToggleUltraUpkeepAction(),
     DonateToProjectAction(),
     CheckContributeAction(),
     StoryContributeAction(),
@@ -336,6 +349,8 @@ _ALL_ACTIONS: list[Action] = [
     TraverseExitAction(),
     HomeAction(),
     MoveToPositionAction(),
+    TakePositionAction(),
+    GMPlaceInPositionAction(),
     SetTheStageAction(),
     SetSituationAction(),
     PerformRitualAction(),

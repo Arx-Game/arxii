@@ -56,6 +56,32 @@
   scope (Apostate, 2026-07-02): ship styles, caste vernaculars, out-of-place
   social reads.
 
+## Built (2026-07-06, #1930 — condition tiers replace polish decay; ADR-0093)
+
+- `Building.condition_tier` ladder (Decayed…**Excellent**…Immaculate;
+  Immaculate name ratified by Apostate) with per-tier prestige multiplier
+  (5%–200% PLACEHOLDER, tuning ledger §6) — missed upkeep now accrues
+  **capped arrears first**, then slides tiers after a grace window; it never
+  mutates polish/feature rows. The #676 decay curve + never-wired
+  restoration half are deleted.
+- Above-normal shine is a temporary spend, and the Grand Preparation is a
+  **funded cleanup project** (`BUILDING_PREPARATION`): its cost is a
+  proportion of the house's prestige (25%/50% PLACEHOLDER, floored),
+  bankrolled via `project/donate` and sped along with AP Household Command
+  checks ("Direct the Household" ContributionMethod). Completion climbs
+  Excellent → Extravagantly Polished → Immaculate; dwell-decays back in ~a
+  week unless the ultra-upkeep premium holds Immaculate; an underfunded
+  lapse fizzles. Recovery: `settle_upkeep_arrears` + `refurbish_building`
+  (priced restore to Excellent). Owner action family (telnet + web):
+  `settle_building_arrears` / `refurbish_building` / `prepare_building` /
+  `toggle_ultra_upkeep`.
+- Mothballing: 90d-inactive owners' buildings hide from the grid
+  (`is_public` snapshot/restore) and freeze accrual — ghost towns are
+  authored; returning players face a bounded bill and a dulled-but-intact
+  home. "Dormant" retired from buildings vocabulary.
+- Renown payload shows only the qualitative `condition_label` (public
+  fiction); financial state is owner-only.
+
 ## Built (2026-07-02, #1514 close-out — owner build-HUD + fixture verbs)
 
 - `room_exposure_breakdown(room)` — per-axis pressure/mitigation/net (the

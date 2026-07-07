@@ -45,10 +45,10 @@ from world.combat.constants import (
     TargetSelection,
 )
 from world.fatigue.constants import EffortLevel
+from world.gm.constants import GMLevel
 from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.models.commitments import CommittingDeclaration
 from world.scenes.round_models import AbstractRound
-from world.stories.types import TrustLevel
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 ACCOUNT_DB_MODEL = "accounts.AccountDB"
@@ -257,6 +257,17 @@ class ThreatPoolEntry(SharedMemoryModel):
             "lands with damage > 0 surviving Interpose. Distinct from clash_resolution_pool "
             "(clash-specific) — this fires on every successful hit. A MOVE_TO_POSITION/"
             "AWAY_FROM_ACTOR effect here is how a GM authors 'this attack knocks back.'"
+        ),
+    )
+    defense_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="threat_pool_entries",
+        help_text=(
+            "CheckType the targeted PC rolls to evade/mitigate this attack. "
+            "Null = flat base_damage with no defense roll (backward-compatible)."
         ),
     )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
@@ -1742,7 +1753,7 @@ class StakesLevelRequirement(SharedMemoryModel):
     """Authored access requirements per StakesLevel (#566).
 
     One row per stakes level (unique constraint). The minimum_party_average_level
-    and minimum_gm_trust_level gate which GMs can run which stakes-level encounters.
+    and minimum_gm_level gate which GMs can run which stakes-level encounters.
     """
 
     stakes_level = models.CharField(max_length=20, choices=StakesLevel.choices, unique=True)
@@ -1750,10 +1761,11 @@ class StakesLevelRequirement(SharedMemoryModel):
         default=0,
         help_text="Minimum average character level across the party.",
     )
-    minimum_gm_trust_level = models.IntegerField(
-        choices=TrustLevel.choices,
-        default=TrustLevel.UNTRUSTED,
-        help_text="Minimum GM trust level required to run this stakes level.",
+    minimum_gm_level = models.CharField(
+        max_length=20,
+        choices=GMLevel.choices,
+        default=GMLevel.STARTING,
+        help_text="Minimum GMProfile.level required to run this stakes level.",
     )
 
     class Meta:

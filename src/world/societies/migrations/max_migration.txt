@@ -1,1 +1,1 @@
-0022_alter_gangturfreputationaward_outcome_tier
+0023_organization_capability

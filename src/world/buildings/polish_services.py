@@ -34,6 +34,7 @@ import logging
 from django.db import transaction
 from django.db.models import Sum
 
+from world.buildings.constants import CONDITION_PRESTIGE_MULTIPLIER
 from world.buildings.models import (
     Building,
     BuildingPolish,
@@ -96,7 +97,6 @@ def apply_project_completion(
         template=template,
         source_project=source_project,
         weekly_upkeep_cost=template.weekly_upkeep_cost,
-        decay_priority=template.decay_priority,
     )
 
     increments = list(template.polish_increment_rows.select_related("category"))
@@ -186,6 +186,40 @@ def _primary_home_room(persona):
     return tenancy.room_profile if tenancy else None
 
 
+def _building_for_area(area_id) -> Building | None:
+    """The Building decorating ``area_id``, or None (area isn't a building)."""
+    if area_id is None:
+        return None
+    return Building.objects.filter(area_id=area_id).first()
+
+
+def building_prestige_base(building: Building) -> int:
+    """The building-derived prestige component before condition modulation.
+
+    Aggregate ``BuildingPolish`` plus the architectural style's
+    ``prestige_bonus`` (#1469). This is both the owner's dwelling-prestige
+    input (``recompute_persona_prestige_from_dwellings``) and the base a
+    Grand Preparation's cost is proportional to (#1930).
+    """
+    total = (
+        BuildingPolish.objects.filter(building=building).aggregate(total=Sum("value"))["total"] or 0
+    )
+    if building.architectural_style_id is not None:
+        total += building.architectural_style.prestige_bonus
+    return total
+
+
+def _condition_multiplier(building: Building | None) -> int:
+    """Percent multiplier for a building's condition tier (100 when unhoused).
+
+    #1930 — condition step-modulates the prestige readout: a fading manor
+    loses the prestige race, never its walls.
+    """
+    if building is None:
+        return 100
+    return CONDITION_PRESTIGE_MULTIPLIER.get(building.condition_tier, 100)
+
+
 def recompute_persona_prestige_from_dwellings(persona) -> int:
     """Read the persona's PRIMARY-HOME polish into ``persona.prestige_from_dwellings``.
 
@@ -198,30 +232,22 @@ def recompute_persona_prestige_from_dwellings(persona) -> int:
         (``Building.owner_persona``, the polish system's owner notion).
     No primary home designated → 0. Prestige rewards a home, not a
     property portfolio.
+
+    #1930: each component is scaled by its building's condition-tier
+    multiplier — room polish by the home's containing building (whoever
+    owns it), building polish + style bonus by the owned building.
     """
     home = _primary_home_room(persona)
     total = 0
     if home is not None:
-        total += RoomPolish.objects.filter(room=home).aggregate(total=Sum("value"))["total"] or 0
-        if home.area_id is not None:
-            total += (
-                BuildingPolish.objects.filter(
-                    building__area_id=home.area_id,
-                    building__owner_persona=persona,
-                ).aggregate(total=Sum("value"))["total"]
-                or 0
-            )
-            # Throwback-tier style bonus (#1469): the owned home building's
-            # architectural style adds base prestige (PLACEHOLDER magnitudes)
-            # under the same ownership condition as building polish.
-            total += (
-                Building.objects.filter(
-                    area_id=home.area_id,
-                    owner_persona=persona,
-                    architectural_style__isnull=False,
-                ).aggregate(total=Sum("architectural_style__prestige_bonus"))["total"]
-                or 0
-            )
+        containing = _building_for_area(home.area_id)
+        room_total = (
+            RoomPolish.objects.filter(room=home).aggregate(total=Sum("value"))["total"] or 0
+        )
+        total += room_total * _condition_multiplier(containing) // 100
+        if containing is not None and containing.owner_persona_id == persona.pk:
+            # Building polish + throwback-tier style bonus (#1469), owned only.
+            total += building_prestige_base(containing) * _condition_multiplier(containing) // 100
     persona.prestige_from_dwellings = total
     persona.total_prestige = (
         persona.prestige_from_dwellings

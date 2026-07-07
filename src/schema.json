@@ -1017,6 +1017,90 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/battles/:
+    get:
+      operationId: battles_list
+      description: |-
+        Read-only battle aggregate API — list (slim) and detail (full aggregate).
+
+        Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
+        a Battle is a 1:1 extension of scenes.Scene (world/battles/models.py), so
+        scene read-visibility alone decides who may see a battle. No participant
+        union needed — enlisting in a battle has no bearing here independent of
+        scene visibility.
+      parameters:
+      - in: query
+        name: outcome
+        schema:
+          type: string
+          enum:
+          - attacker_decisive
+          - attacker_marginal
+          - defender_decisive
+          - defender_marginal
+          - unresolved
+        description: |-
+          * `unresolved` - Unresolved
+          * `attacker_decisive` - Attacker — decisive
+          * `attacker_marginal` - Attacker — marginal
+          * `defender_marginal` - Defender — marginal
+          * `defender_decisive` - Defender — decisive
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: scene
+        schema:
+          type: integer
+      tags:
+      - battles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBattleListList'
+          description: ''
+  /api/battles/{id}/:
+    get:
+      operationId: battles_retrieve
+      description: |-
+        Read-only battle aggregate API — list (slim) and detail (full aggregate).
+
+        Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
+        a Battle is a 1:1 extension of scenes.Scene (world/battles/models.py), so
+        scene read-visibility alone decides who may see a battle. No participant
+        union needed — enlisting in a battle has no bearing here independent of
+        scene visibility.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this battle.
+        required: true
+      tags:
+      - battles
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattleDetail'
+          description: ''
   /api/beats/:
     get:
       operationId: beats_list
@@ -4353,7 +4437,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EncounterDetailRequest'
+              $ref: '#/components/schemas/AddOpponentRequest'
         required: true
       security:
       - cookieAuth: []
@@ -9916,6 +10000,61 @@ paths:
         required: true
       tags:
       - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMProfile'
+          description: ''
+  /api/gm/profiles/{id}/evidence/:
+    get:
+      operationId: gm_profiles_evidence_retrieve
+      description: Staff-only aggregate track record backing a level-change decision.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Profile.
+        required: true
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GMEvidenceSummary'
+          description: ''
+  /api/gm/profiles/{id}/promote/:
+    post:
+      operationId: gm_profiles_promote_create
+      description: |-
+        Staff changes a GM's trust level (promotion or demotion), with an audit row.
+
+        Same-level and unknown-level input is rejected in
+        ``PromoteGMInputSerializer.validate`` so ``promote_gm``'s ``ValueError``
+        guard never fires from user input.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this GM Profile.
+        required: true
+      tags:
+      - gm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoteGMInputRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -20493,10 +20632,6 @@ paths:
           type: string
         description: Account Username
       - in: query
-        name: gm_trust_level
-        schema:
-          type: integer
-      - in: query
         name: has_negative_feedback
         schema:
           type: boolean
@@ -20540,11 +20675,6 @@ paths:
         Manages player trust levels for content and GM activities.
       tags:
       - player-trust
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlayerTrustRequest'
       security:
       - cookieAuth: []
       responses:
@@ -20592,11 +20722,6 @@ paths:
         required: true
       tags:
       - player-trust
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlayerTrustRequest'
       security:
       - cookieAuth: []
       responses:
@@ -20620,11 +20745,6 @@ paths:
         required: true
       tags:
       - player-trust
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedPlayerTrustRequest'
       security:
       - cookieAuth: []
       responses:
@@ -27624,6 +27744,51 @@ components:
           readOnly: true
       required:
       - active_persona_id
+    AddOpponentRequest:
+      type: object
+      description: |-
+        Write serializer for adding an opponent to an encounter.
+
+        ``tier`` is required.  ``max_health`` is optional — when omitted the scaling
+        formula fills every stat field automatically (Task 5 auto-fill mode).
+        All other stat fields are optional overrides.
+
+        ``position_id`` (#2005) is optional; when supplied it must name a Position
+        in the encounter's own room — validated against the encounter's room here
+        so a mismatched position never reaches the service layer.
+
+        Expects ``encounter`` and ``request`` in serializer context (provided by the
+        view) so that ``validate()`` can run the stakes gate.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        tier:
+          $ref: '#/components/schemas/Tier756Enum'
+        max_health:
+          type: integer
+          minimum: 1
+          nullable: true
+        threat_pool_id:
+          type: integer
+        description:
+          type: string
+          minLength: 1
+          default: ''
+        soak_value:
+          type: integer
+          default: 0
+        probing_threshold:
+          type: integer
+          nullable: true
+        position_id:
+          type: integer
+          nullable: true
+      required:
+      - name
+      - threat_pool_id
+      - tier
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -28121,6 +28286,292 @@ components:
       description: |-
         * `standing` - Standing (unit or banner — can rise again)
         * `campaign` - Campaign (one-time event — dissolves when done)
+    BattleDetail:
+      type: object
+      description: Full battle aggregate — sides, places, units, and participants.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        outcome:
+          $ref: '#/components/schemas/Outcome5d6Enum'
+        risk_level:
+          allOf:
+          - $ref: '#/components/schemas/RiskLevelEnum'
+          description: |-
+            Stakes axis for companion death-gating (#1873). EXTREME/LETHAL make companion death possible on defeat. Mirrors CombatEncounter.risk_level.
+
+            * `low` - Low
+            * `moderate` - Moderate
+            * `high` - High
+            * `extreme` - Extreme
+            * `lethal` - Lethal
+        is_paused:
+          type: boolean
+          description: Set when a participant disconnects (#1899) — see maybe_pause_battle_for_disconnect.
+        round:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: The battle's current (latest non-completed) round, or None.
+          readOnly: true
+        sides:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleSide'
+          readOnly: true
+        places:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattlePlace'
+          readOnly: true
+        units:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleUnit'
+          readOnly: true
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleParticipant'
+          readOnly: true
+      required:
+      - id
+      - name
+      - participants
+      - places
+      - round
+      - sides
+      - units
+    BattleList:
+      type: object
+      description: Slim row for the battle list endpoint.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        scene_id:
+          type: integer
+          readOnly: true
+        outcome:
+          $ref: '#/components/schemas/Outcome5d6Enum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - scene_id
+    BattleParticipant:
+      type: object
+      description: A player character enlisted in the battle, with their public persona
+        face.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/BattleParticipantStatusEnum'
+        side_id:
+          type: integer
+          readOnly: true
+        place_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        persona:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Public persona identity only — id/name/thumbnail(s), never account/username.
+
+            ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
+            ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+            already ``select_related``'d by the view's Prefetch (world/battles/views.py),
+            so this never issues a query. ``thumbnail_url`` is the legacy URLField,
+            kept alongside for callers still on it.
+          readOnly: true
+      required:
+      - id
+      - persona
+      - place_id
+      - side_id
+    BattleParticipantStatusEnum:
+      enum:
+      - active
+      - withdrawn
+      - incapacitated
+      type: string
+      description: |-
+        * `active` - Active
+        * `withdrawn` - Withdrawn
+        * `incapacitated` - Incapacitated
+    BattlePlace:
+      type: object
+      description: A named front/zone, with its battle-map position and embedded structures.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        terrain_type:
+          $ref: '#/components/schemas/TerrainTypeEnum'
+        movement_cost:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: 'Authored cost for a future reposition/movement action — not
+            yet filed as an issue; #1712 explicitly did not build this. Data only.'
+        x:
+          type: number
+          format: double
+        y:
+          type: number
+          format: double
+        footprint_radius:
+          type: number
+          format: double
+        controlled_by_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        encounter_scene_id:
+          type: integer
+          nullable: true
+          description: The scene backing this front's bridged CombatEncounter, if
+            any (#1236).
+          readOnly: true
+        vehicle:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            Read the embedded vehicle, if any, through the battle's state cache.
+
+            Never a fresh query — ``BattleStateCache.vehicle_at_place`` is the
+            single source of truth for which vehicle occupies a place (#1714).
+          readOnly: true
+        fortifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fortification'
+          readOnly: true
+      required:
+      - controlled_by_id
+      - encounter_scene_id
+      - footprint_radius
+      - fortifications
+      - id
+      - name
+      - vehicle
+      - x
+      - y
+    BattleSide:
+      type: object
+      description: One side in the battle, with its victory tally and fielding covenant.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        victory_points:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        victory_threshold:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        posture:
+          $ref: '#/components/schemas/PostureEnum'
+        covenant_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        covenant_name:
+          type: string
+          nullable: true
+          readOnly: true
+      required:
+      - covenant_id
+      - covenant_name
+      - id
+    BattleUnit:
+      type: object
+      description: An abstract typed force at a particular front (or embedded in a
+        vehicle).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        descriptor:
+          type: string
+          description: Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative
+            only — properties/capabilities/quality below drive mechanics.
+          maxLength: 80
+        quality:
+          $ref: '#/components/schemas/QualityEnum'
+        status:
+          $ref: '#/components/schemas/BattleUnitStatusEnum'
+        strength:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        morale:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Second resource alongside strength (#1712). status is always
+            derived from whichever resource crosses its own threshold first — see
+            world.battles.resolution._compute_unit_status. Unlike strength (starts
+            at its ceiling), morale starts well below it — sitting near MAX_MORALE
+            is rare.
+        individual_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: 'Population data point mirroring CombatOpponent.swarm_count''s
+            naming/shape (#1794) — null means ''not a swarm-style unit''. No swarm-math
+            resolution is wired against this field yet; that is left to #1714 (naval/aerial
+            units) or a future issue that needs it.'
+        side_id:
+          type: integer
+          readOnly: true
+        place_id:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - id
+      - name
+      - place_id
+      - side_id
+    BattleUnitStatusEnum:
+      enum:
+      - active
+      - routed
+      - destroyed
+      type: string
+      description: |-
+        * `active` - Active
+        * `routed` - Routed
+        * `destroyed` - Destroyed
     Beat:
       type: object
       description: Full serializer for Beat including all Phase 2 predicate config
@@ -29184,6 +29635,21 @@ components:
       - target_spec
       - target_type
       - tier
+    CategoryFeedback:
+      type: object
+      description: One trust category's aggregated feedback ratings for a GM (read-only).
+      properties:
+        category_name:
+          type: string
+        average_rating:
+          type: number
+          format: double
+        rating_count:
+          type: integer
+      required:
+      - average_rating
+      - category_name
+      - rating_count
     ChallengeApproach:
       type: object
       description: Nested serializer for challenge approaches.
@@ -32383,7 +32849,8 @@ components:
         Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
 
         Accepts EITHER of two mutually-exclusive paths to name the protected
-        subject (Task 6 review Fix 4):
+        subject (Task 6 review Fix 4; ADR-0099 records the identity path as the
+        ratified design, not just a workaround):
 
         - **pk path** — ``protected_subject`` directly. Deliberately uses an
           UNSCOPED-by-story queryset — a clearance request is inherently
@@ -35405,6 +35872,46 @@ components:
         * `true` - True Form
         * `alternate` - Alternate Form
         * `disguise` - Disguise
+    Fortification:
+      type: object
+      description: A defensible structure at a BattlePlace.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/FortificationKindEnum'
+        integrity:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        max_integrity:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Snapshotted once at creation from BASE_INTEGRITY[kind] plus
+            building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS, if
+            building is set (#1713). See world.battles.services.create_fortification.
+        breached:
+          type: boolean
+        defending_side_id:
+          type: integer
+          readOnly: true
+      required:
+      - defending_side_id
+      - id
+    FortificationKindEnum:
+      enum:
+      - wall
+      - gate
+      - battlement
+      - hull
+      type: string
+      description: |-
+        * `wall` - Wall
+        * `gate` - Gate
+        * `battlement` - Battlement
+        * `hull` - Hull
     Friendship:
       type: object
       description: A friend row — the friended character's name + which of your characters
@@ -35619,6 +36126,95 @@ components:
       - character_key
       - id
       - status
+    GMEvidenceSummary:
+      type: object
+      description: Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff
+        review (#2000).
+      properties:
+        profile_id:
+          type: integer
+        level:
+          $ref: '#/components/schemas/NewLevelEnum'
+        approved_at:
+          type: string
+          format: date-time
+        last_active_at:
+          type: string
+          format: date-time
+          nullable: true
+        stories_running:
+          type: integer
+        beats_completed_by_risk:
+          type: object
+          additionalProperties:
+            type: integer
+        feedback_by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryFeedback'
+        level_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GMLevelChange'
+      required:
+      - approved_at
+      - beats_completed_by_risk
+      - feedback_by_category
+      - last_active_at
+      - level
+      - level_changes
+      - profile_id
+      - stories_running
+    GMLevelChange:
+      type: object
+      description: Read-only audit row for a staff-driven GM trust-level change (#2000).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        profile:
+          type: integer
+          readOnly: true
+        old_level:
+          allOf:
+          - $ref: '#/components/schemas/NewLevelEnum'
+          readOnly: true
+        old_level_display:
+          type: string
+          readOnly: true
+        new_level:
+          allOf:
+          - $ref: '#/components/schemas/NewLevelEnum'
+          readOnly: true
+        new_level_display:
+          type: string
+          readOnly: true
+        changed_by:
+          type: integer
+          readOnly: true
+          description: Staff account that made this change.
+        changed_by_username:
+          type: string
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+          description: Why the level changed — shown in the audit trail.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - changed_by
+      - changed_by_username
+      - created_at
+      - id
+      - new_level
+      - new_level_display
+      - old_level
+      - old_level_display
+      - profile
+      - reason
     GMProfile:
       type: object
       description: Read-only serializer for GM profiles.
@@ -35634,7 +36230,10 @@ components:
           readOnly: true
         level:
           allOf:
-          - $ref: '#/components/schemas/GMProfileLevelEnum'
+          - $ref: '#/components/schemas/NewLevelEnum'
+          readOnly: true
+        level_display:
+          type: string
           readOnly: true
         approved_at:
           type: string
@@ -35647,20 +36246,7 @@ components:
       - approved_at
       - id
       - level
-    GMProfileLevelEnum:
-      enum:
-      - starting
-      - junior
-      - gm
-      - experienced
-      - senior
-      type: string
-      description: |-
-        * `starting` - Starting GM
-        * `junior` - Junior GM
-        * `gm` - GM
-        * `experienced` - Experienced GM
-        * `senior` - Senior GM
+      - level_display
     GMRosterInvite:
       type: object
       description: For GM create/list operations on invites for their own characters.
@@ -36264,20 +36850,6 @@ components:
           type: boolean
       required:
       - story
-    GmTrustLevelEnum:
-      enum:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      type: integer
-      description: |-
-        * `0` - Untrusted
-        * `1` - Basic
-        * `2` - Intermediate
-        * `3` - Advanced
-        * `4` - Expert
     GoalDomain:
       type: object
       description: Serializer for goal domains (ModifierTarget with category='goal').
@@ -40297,6 +40869,20 @@ components:
       - delivered_at
       - id
       - message
+    NewLevelEnum:
+      enum:
+      - starting
+      - junior
+      - gm
+      - experienced
+      - senior
+      type: string
+      description: |-
+        * `starting` - Starting GM
+        * `junior` - Junior GM
+        * `gm` - GM
+        * `experienced` - Experienced GM
+        * `senior` - Senior GM
     NotificationLevelEnum:
       enum:
       - personal
@@ -40394,7 +40980,7 @@ components:
         description:
           type: string
         tier:
-          $ref: '#/components/schemas/OpponentTierEnum'
+          $ref: '#/components/schemas/Tier756Enum'
         health:
           type: integer
           maximum: 2147483647
@@ -40543,7 +41129,7 @@ components:
         description:
           type: string
         tier:
-          $ref: '#/components/schemas/OpponentTierEnum'
+          $ref: '#/components/schemas/Tier756Enum'
         health:
           type: integer
           maximum: 2147483647
@@ -40577,20 +41163,6 @@ components:
         * `active` - Active
         * `defeated` - Defeated
         * `fled` - Fled
-    OpponentTierEnum:
-      enum:
-      - swarm
-      - mook
-      - elite
-      - boss
-      - hero_killer
-      type: string
-      description: |-
-        * `swarm` - Swarm
-        * `mook` - Mook
-        * `elite` - Elite
-        * `boss` - Boss
-        * `hero_killer` - Hero Killer
     OptionKindEnum:
       enum:
       - branch
@@ -40870,6 +41442,20 @@ components:
       required:
       - id
       - name
+    Outcome5d6Enum:
+      enum:
+      - unresolved
+      - attacker_decisive
+      - attacker_marginal
+      - defender_marginal
+      - defender_decisive
+      type: string
+      description: |-
+        * `unresolved` - Unresolved
+        * `attacker_decisive` - Attacker — decisive
+        * `attacker_marginal` - Attacker — marginal
+        * `defender_marginal` - Defender — marginal
+        * `defender_decisive` - Defender — decisive
     Outcome88eEnum:
       enum:
       - victory
@@ -41217,6 +41803,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantGMClaim'
+    PaginatedBattleListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleList'
     PaginatedBeatList:
       type: object
       required:
@@ -45891,23 +46500,6 @@ components:
           description: Room the reporter was in when submitting.
         status:
           $ref: '#/components/schemas/StatusD66Enum'
-    PatchedPlayerTrustRequest:
-      type: object
-      description: Serializer for player trust profiles
-      properties:
-        gm_trust_level:
-          allOf:
-          - $ref: '#/components/schemas/GmTrustLevelEnum'
-          description: |-
-            General GM trust level, not category-specific
-
-            * `0` - Untrusted
-            * `1` - Basic
-            * `2` - Intermediate
-            * `3` - Advanced
-            * `4` - Expert
-          minimum: -2147483648
-          maximum: 2147483647
     PatchedRiskCalibrationRequest:
       type: object
       description: |-
@@ -46052,10 +46644,11 @@ components:
         Template-set path denormalizes subject_kind/severity from the template
         (so a later template retune never rewrites live contracts) and validates
         the beat's declared risk falls within the template's [min_risk, max_risk]
-        band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-        mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-        Any write (create or update) is rejected while the beat carries an open
-        StakeContractActivation — the lock (#1770 pillar 8).
+        band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+        a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+        `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+        in style. Any write (create or update) is rejected while the beat carries
+        an open StakeContractActivation — the lock (#1770 pillar 8).
         ``outcomes`` (PR2) exposes the read-only resolution audit rows.
       properties:
         beat:
@@ -46474,6 +47067,7 @@ components:
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
+            * `ORGANIZATION` - Organization
         target_id:
           type: integer
           writeOnly: true
@@ -48083,19 +48677,6 @@ components:
         account:
           type: string
           readOnly: true
-        gm_trust_level:
-          allOf:
-          - $ref: '#/components/schemas/GmTrustLevelEnum'
-          description: |-
-            General GM trust level, not category-specific
-
-            * `0` - Untrusted
-            * `1` - Basic
-            * `2` - Intermediate
-            * `3` - Advanced
-            * `4` - Expert
-          minimum: -2147483648
-          maximum: 2147483647
         total_positive_feedback:
           type: integer
           description: Aggregate positive feedback count from all trust levels
@@ -48119,23 +48700,6 @@ components:
       - total_negative_feedback
       - total_positive_feedback
       - updated_at
-    PlayerTrustRequest:
-      type: object
-      description: Serializer for player trust profiles
-      properties:
-        gm_trust_level:
-          allOf:
-          - $ref: '#/components/schemas/GmTrustLevelEnum'
-          description: |-
-            General GM trust level, not category-specific
-
-            * `0` - Untrusted
-            * `1` - Basic
-            * `2` - Intermediate
-            * `3` - Advanced
-            * `4` - Expert
-          minimum: -2147483648
-          maximum: 2147483647
     PolishIncrement:
       type: object
       description: Per-category polish a decoration template grants on completion.
@@ -48268,6 +48832,16 @@ components:
       required:
       - id
       - name
+    PostureEnum:
+      enum:
+      - balanced
+      - aggressive
+      - defensive
+      type: string
+      description: |-
+        * `balanced` - Balanced
+        * `aggressive` - Aggressive
+        * `defensive` - Defensive
     PowerLedger:
       type: object
       description: Serializes a PowerLedger (entries + total) for the cast result
@@ -48475,6 +49049,24 @@ components:
       - thread_target_kind
       - unlock_type
       - xp_cost
+    PromoteGMInputRequest:
+      type: object
+      description: |-
+        Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
+
+        ``context["profile"]`` is the ``GMProfile`` being changed — the view passes
+        ``self.get_object()``. Rejecting the same-level case here means
+        ``promote_gm``'s ``ValueError`` guard is a programmer-error backstop only and
+        should never fire from user input.
+      properties:
+        new_level:
+          $ref: '#/components/schemas/NewLevelEnum'
+        reason:
+          type: string
+          minLength: 1
+      required:
+      - new_level
+      - reason
     Pronouns:
       type: object
       description: Serializer for pronoun sets.
@@ -48611,6 +49203,20 @@ components:
       required:
       - unlock_id
       - unlock_type
+    QualityEnum:
+      enum:
+      - militia
+      - levy
+      - trained
+      - veteran
+      - elite
+      type: string
+      description: |-
+        * `militia` - Militia
+        * `levy` - Levy
+        * `trained` - Trained
+        * `veteran` - Veteran
+        * `elite` - Elite
     QualityTier:
       type: object
       description: Serializer for QualityTier lookup records.
@@ -49894,6 +50500,14 @@ components:
         * `guard` - Guard
         * `fan` - Fan
         * `minor_ally` - Minor Ally
+    RoleEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
     RoomComfortBreakdown:
       type: object
       description: The owner build-HUD payload for one room (#1514).
@@ -52184,10 +52798,11 @@ components:
         Template-set path denormalizes subject_kind/severity from the template
         (so a later template retune never rewrites live contracts) and validates
         the beat's declared risk falls within the template's [min_risk, max_risk]
-        band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-        mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-        Any write (create or update) is rejected while the beat carries an open
-        StakeContractActivation — the lock (#1770 pillar 8).
+        band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+        a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+        `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+        in style. Any write (create or update) is rejected while the beat carries
+        an open StakeContractActivation — the lock (#1770 pillar 8).
         ``outcomes`` (PR2) exposes the read-only resolution audit rows.
       properties:
         id:
@@ -52375,10 +52990,11 @@ components:
         Template-set path denormalizes subject_kind/severity from the template
         (so a later template retune never rewrites live contracts) and validates
         the beat's declared risk falls within the template's [min_risk, max_risk]
-        band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-        mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-        Any write (create or update) is rejected while the beat carries an open
-        StakeContractActivation — the lock (#1770 pillar 8).
+        band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+        a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+        `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+        in style. Any write (create or update) is rejected while the beat carries
+        an open StakeContractActivation — the lock (#1770 pillar 8).
         ``outcomes`` (PR2) exposes the read-only resolution audit rows.
       properties:
         beat:
@@ -54433,6 +55049,26 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+    TerrainTypeEnum:
+      enum:
+      - open
+      - difficult
+      - fortified
+      - elevated
+      - flooded
+      - urban
+      - water
+      - aerial
+      type: string
+      description: |-
+        * `open` - Open
+        * `difficult` - Difficult
+        * `fortified` - Fortified
+        * `elevated` - Elevated
+        * `flooded` - Flooded
+        * `urban` - Urban
+        * `water` - Open water
+        * `aerial` - Open sky
     Thread:
       type: object
       description: |-
@@ -54478,6 +55114,7 @@ components:
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
+            * `ORGANIZATION` - Organization
         name:
           type: string
           default: ''
@@ -54686,6 +55323,7 @@ components:
             * `MANTLE` - Mantle
             * `SANCTUM` - Sanctum
             * `GIFT` - Gift
+            * `ORGANIZATION` - Organization
         target_id:
           type: integer
           writeOnly: true
@@ -54714,6 +55352,7 @@ components:
       - MANTLE
       - SANCTUM
       - GIFT
+      - ORGANIZATION
       type: string
       description: |-
         * `TRAIT` - Trait
@@ -54725,6 +55364,7 @@ components:
         * `MANTLE` - Mantle
         * `SANCTUM` - Sanctum
         * `GIFT` - Gift
+        * `ORGANIZATION` - Organization
     ThreadWeavingTeachingOffer:
       type: object
       description: Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5).
@@ -54798,6 +55438,20 @@ components:
         * `3` - Touched
         * `4` - Marked Profoundly
         * `5` - Remade
+    Tier756Enum:
+      enum:
+      - swarm
+      - mook
+      - elite
+      - boss
+      - hero_killer
+      type: string
+      description: |-
+        * `swarm` - Swarm
+        * `mook` - Mook
+        * `elite` - Elite
+        * `boss` - Boss
+        * `hero_killer` - Hero Killer
     TimePhaseEnum:
       enum:
       - dawn
@@ -56194,7 +56848,13 @@ components:
       - xp_cost
     _OwnedDwelling:
       type: object
-      description: One building the persona owns, with polish breakdown + upkeep state.
+      description: |-
+        One building the persona owns, with polish breakdown + condition label.
+
+        The renown payload is viewable by any authenticated player, so this
+        carries only the public fiction: the qualitative condition-tier label
+        (#1930, ADR-0031). Arrears / miss counters / mothball state are
+        owner-only and surface through the owner action family instead.
       properties:
         id:
           type: integer
@@ -56204,24 +56864,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/_CategoryPolish'
-        upkeep_warning:
-          type: boolean
-        decayed_features_count:
-          type: integer
-        dormant:
-          type: boolean
-        dormant_since:
+        condition_label:
           type: string
-          format: date-time
-          nullable: true
       required:
-      - decayed_features_count
-      - dormant
-      - dormant_since
+      - condition_label
       - id
       - name
       - polish_by_category
-      - upkeep_warning
     _PrestigeBreakdown:
       type: object
       description: Five-axis breakdown of the persona's total_prestige.

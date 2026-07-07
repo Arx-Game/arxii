@@ -312,18 +312,20 @@ character's ACTIVE `BattleParticipant` whose `battle.scene.is_active=True`, orde
 
 `resolve_battle_technique(*, declaration) -> CheckResult | None` casts `declaration.technique`
 through the real magic envelope (`world.magic.services.use_technique`) rather than a generic
-shared check. Routing through `use_technique` means the check is sourced from the caster's
-actual technique (`technique.action_template.check_type`), anima cost / Soulfray accumulation
-apply normally, and the Audere / Audere Majora escalation hook fires automatically (it's
-wired inside `use_technique` itself — no separate battle-side call site is needed).
-`confirm_soulfray_risk=True` because a batch round-resolve cannot pause mid-batch for one
-participant's consent prompt. Returns `None` (treated as `success_level=0`, a failure) if the
-cast is interrupted before resolution (e.g. a reactive PRE_CAST cancellation).
+shared check. Routing through `use_technique` means the check is sourced from
+`resolve_cast_check_type(character, template)` (`world/magic/services/anima.py`, ADR-0096) —
+the caster's provisioned personal magic check when they have one, falling back to the
+technique's `action_template.check_type` only for an unprovisioned caster — anima cost /
+Soulfray accumulation apply normally, and the Audere / Audere Majora escalation hook fires
+automatically (it's wired inside `use_technique` itself — no separate battle-side call site
+is needed). `confirm_soulfray_risk=True` because a batch round-resolve cannot pause mid-batch
+for one participant's consent prompt. Returns `None` (treated as `success_level=0`, a failure)
+if the cast is interrupted before resolution (e.g. a reactive PRE_CAST cancellation).
 
 `BattleTechniqueResolver` is the `resolve_fn` dataclass passed to `use_technique`; its
-`__call__` rolls the declared technique's own check via `perform_check` — battle applies no
-damage-profile/condition logic of its own, that stays in `resolve_battle_round`'s
-STRIKE/SUPPORT/failure routing below.
+`__call__` resolves the check type via `resolve_cast_check_type` and rolls it via
+`perform_check` — battle applies no damage-profile/condition logic of its own, that stays in
+`resolve_battle_round`'s STRIKE/SUPPORT/failure routing below.
 
 ### `resolve_battle_round` (`src/world/battles/resolution.py`)
 
@@ -853,7 +855,7 @@ declaration. Telnet grammar for all four (`battle declare rout/rally/repel/hold 
 
 | What | Issue |
 |---|---|
-| Battle writeup / React page | #1735 |
+| Battle writeup / React page | partially built — the live strategic battle map (`/scenes/:id/battle`, [Web surface (#2009)](#web-surface-2009) below) shipped; a post-conclusion narrative writeup page is still deferred (#1735), and should reuse `BattleDetailSerializer`'s aggregate shape rather than authoring a second one |
 | Naval / aerial variants | partially built (`BattleVehicle`, `BattleActionKind.REPOSITION` + vehicle-commander gating + movement resolution, hull-breach/living-mount-defeat ejection + drowning/falling hazard, see below); a player-facing embark action and a dedicated telnet `CmdBattle` subcommand for REPOSITION still deferred (#1714) |
 | Siege variants | **built, see [Sieges (#1713)](#sieges-1713) below** |
 
@@ -977,6 +979,68 @@ token since a front may carry more than one structure and a `Fortification` has 
 name of its own (#1713). `open_siege_engine_encounter` remains the one exception:
 it has no `ChallengeChampionDuelAction`-style Action or telnet counterpart yet.
 
+## Web surface (#2009)
+
+The strategic battle map is a web-first read surface layered on top of the round
+flow above — no new mutation path; the GM/player Actions and telnet grammar
+already documented remain the only way to change battle state.
+
+### REST: `BattleViewSet` (`world/battles/views.py`, `world/battles/urls.py`)
+
+`ReadOnlyModelViewSet`, `IsAuthenticated`, `DjangoFilterBackend` on
+`scene`/`outcome`, `StandardResultsSetPagination` (`world.stories.pagination`):
+
+- `GET /api/battles/` — `BattleListSerializer` (id/name/scene_id/outcome/created_at),
+  filterable by `?scene=<id>` (a Scene has at most one Battle, 1:1 extension —
+  the frontend's `useBattleForSceneQuery` lists with `?scene=` and takes
+  `results[0]`) and `?outcome=<BattleOutcome>`.
+- `GET /api/battles/<pk>/` — `BattleDetailSerializer`, the single aggregate the
+  map page consumes: `sides` (`BattleSideSerializer` — role/VP/threshold/posture/
+  covenant) → `places` (`BattlePlaceSerializer` — name/terrain/`x`/`y`/
+  `footprint_radius`/`controlled_by_id`/`encounter_scene_id`/`vehicle`/
+  `fortifications`) → `units` (`BattleUnitSerializer`) and `participants`
+  (`BattleParticipantSerializer` — persona id/name/thumbnail only, never
+  account/username, matching the leak rule #1932 fixed). `encounter_scene_id`
+  surfaces the bridged `CombatEncounter`'s scene (#1236) for the panel's "View
+  encounter" link. `vehicle`/`fortifications` are read through
+  `Battle.state_cache`/the view's `to_attr` prefetches — zero extra queries per
+  place, never a bare related-manager query.
+
+**Visibility:** `_filter_readable` mirrors `CombatEncounterViewSet`'s rule
+exactly — staff see every battle unfiltered; everyone else is scoped to
+`scene__in=Scene.objects.viewable_by(user)`. A battle whose scene the caller
+can't view 404s on both list (simply absent) and detail (`test_non_participant_detail_is_404_not_403`)
+— no separate 403 branch, so a private battle's existence is never leaked to a
+non-viewer.
+
+### WebSocket: `BATTLE_STATE` ping (`world.battles.services.notify_battle_state_changed`)
+
+Battles are location-less (`Battle.scene.location` is `None`), so the existing
+room/scene broadcast paths never reach participants — `BATTLE_STATE` is the
+dedicated seam. The payload (`web.webclient.message_types.BattleStatePayload`)
+carries only `{battle_id, round_number}` — no battle data itself; it is a slim
+"go refetch" ping, not a state push. Sent to every **connected** participant
+(`has_account` = live session), regardless of participant status
+(`character.msg(battle_state=((), payload))`) from three call sites —
+`begin_battle_round`, `resolve_battle_round`, `conclude_battle` — each wrapping
+the send in `transaction.on_commit(lambda: notify_battle_state_changed(battle))`
+so it fires only once the round/conclusion transaction actually commits; a
+client that refetches on receipt always reads committed state. See
+**ADR-0095** for why this is a ping-plus-refetch design rather than a full
+state payload over the socket.
+
+### Frontend: `/scenes/:id/battle` (`frontend/src/battles/`)
+
+`BattleMapPage` (route registered in `App.tsx`) is a read-only React Flow
+canvas: `useBattleForSceneQuery` resolves the scene's one Battle, then
+`useBattleDetailQuery` fetches the aggregate `BattleMapCanvas` (places
+positioned by their `x`/`y`/`footprint_radius`) and `PlaceDetailPanel`
+(selected place's units/participants/fortifications, with a "View encounter"
+link to `/scenes/:id/combat` when `encounter_scene_id` is set) both read from.
+`hooks/handleBattleStatePayload.ts` handles the `BATTLE_STATE` WS message by
+calling `queryClient.invalidateQueries({ queryKey: battleKeys.all })` — no
+payload data is applied directly; invalidation alone triggers the refetch.
+
 ## Test Coverage
 
 - `src/world/battles/tests/test_constants.py` — enum smoke tests
@@ -1068,6 +1132,10 @@ it has no `ChallengeChampionDuelAction`-style Action or telnet counterpart yet.
   `start_fortification_upgrade`/`complete_fortification_upgrade`: target-level
   validation (`FortificationLevelExceedsMaximumError`), monotonic max-set on
   completion, idempotent re-application via the `applied_at` claim
+- `src/world/battles/tests/test_api.py` (#2009) — `BattleApiJourneyTest`: list/
+  detail aggregate shape, `?scene=`/`?outcome=` filters, staff-unfiltered vs.
+  `viewable_by`-scoped visibility, `test_non_participant_detail_is_404_not_403`
+  (no existence oracle), query-count assertions for the `to_attr` prefetches
 
 ## Integrates With
 
@@ -1094,9 +1162,11 @@ it has no `ChallengeChampionDuelAction`-style Action or telnet counterpart yet.
   (#1794), implemented by both `BattleUnit` and `character_sheets.CharacterSheet` — the
   modifier stack's `_property_affinity_modifier`/`_terrain_property_modifier` read either
   kind of holder with no `isinstance` branching.
-- **Checks** — `perform_check`, sourced from the cast technique's
-  `action_template.check_type` (via `use_technique`), not a generic battle-wide `CheckType`;
-  the Surrounded entry roll and per-round resist checks are dispatched through
+- **Checks** — `perform_check`, sourced from `resolve_cast_check_type` (ADR-0096: the
+  caster's provisioned personal magic check, falling back to the cast technique's
+  `action_template.check_type` only when unprovisioned) via `use_technique`, not a generic
+  battle-wide `CheckType`; the Surrounded entry roll and per-round resist checks are
+  dispatched through
   `world.checks.consequence_resolution.select_consequence` against authored
   `ConsequencePool` rows (#1733)
 - **Combat** — `BattlePlace.combat_encounter` bridge seam, now wired for Champion duels

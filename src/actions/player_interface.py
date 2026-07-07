@@ -482,6 +482,7 @@ def _combat_actions(
     # character; fury tiers are a small authored catalog; anchors are the
     # caster's consented relationships with a non-zero bond.
     from world.magic.models import FuryTier  # noqa: PLC0415
+    from world.magic.services.anima import resolve_cast_check_type  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
@@ -524,7 +525,9 @@ def _combat_actions(
         if not technique_performable(character, technique):
             continue
         template = technique.action_template  # guaranteed non-None: queryset filters isnull=False
-        check_type = template.check_type
+        # #2014: the caster's own provisioned magic check wins over the template's
+        # fallback (ADR-0096) — mirrors what the resolver actually rolls at dispatch.
+        check_type = resolve_cast_check_type(character, template)
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
             technique_id=technique.pk,
@@ -904,12 +907,15 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
     handled by the service's ``reachable_positions`` function (BFS), but this
     action picker only offers single-hop moves so the player makes one step at a time.
 
-    If the character is not placed in any position (unplaced or no positioning graph
-    in the room), returns an empty list — no error is raised.
+    If the character is not placed in any position, surfaces a take_position
+    ``PlayerAction`` for each PRIMARY/FEATURE (entry-point) position in the room
+    instead (#2005) — the voluntary entry onto the graph. If the room has no
+    positioning graph at all (unstaged), returns an empty list — no error is raised.
     """
     from django.db.models import Q  # noqa: PLC0415
 
-    from world.areas.positioning.models import PositionEdge  # noqa: PLC0415
+    from world.areas.positioning.constants import PositionKind  # noqa: PLC0415
+    from world.areas.positioning.models import Position, PositionEdge  # noqa: PLC0415
     from world.areas.positioning.services import (  # noqa: PLC0415
         adjacent_open_positions,
         position_of,
@@ -917,7 +923,24 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
 
     current = position_of(character)
     if current is None:
-        return []
+        entry_positions = Position.objects.filter(
+            room=character.location,
+            kind__in=(PositionKind.PRIMARY, PositionKind.FEATURE),
+        )
+        return [
+            PlayerAction(
+                backend=ActionBackend.REGISTRY,
+                display_name=f"Take position: {position.name}",
+                ref=ActionRef(
+                    backend=ActionBackend.REGISTRY,
+                    registry_key="take_position",
+                    position_id=position.pk,
+                ),
+                description=position.description,
+                action_category=ActionCategory.PHYSICAL,
+            )
+            for position in entry_positions
+        ]
 
     result: list[PlayerAction] = []
     for edge in adjacent_open_positions(current):

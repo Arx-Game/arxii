@@ -477,6 +477,8 @@ def _compute_motif_coherence_bonus(sheet: object, resonance_id: int) -> int:
     Computes coverage × quality × full-combo × perception-breadth for ``resonance_id``.
     Returns 0 if no binding or no matching worn styles.
     """
+    from world.items.services.styles import audacity_multiplier_for  # noqa: PLC0415
+
     char = sheet.character
     # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
     # Character typeclass handlers. Skip the walk gracefully.
@@ -499,7 +501,12 @@ def _compute_motif_coherence_bonus(sheet: object, resonance_id: int) -> int:
         worn = char.equipped_items.item_styles_for(binding.style)
         if worn:
             covered += 1
-            quality_aggregate += worn_quality_aggregate(worn)
+            # Daring styles are mechanically, not just narratively, rewarded (#2029):
+            # each matched binding's quality contribution is scaled by its style's
+            # audacity multiplier before being aggregated.
+            quality_aggregate += worn_quality_aggregate(worn) * audacity_multiplier_for(
+                binding.style
+            )
     if not bound or covered == 0:
         return 0
     coverage = Decimal(covered) / Decimal(len(bound))

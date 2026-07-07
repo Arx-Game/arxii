@@ -196,7 +196,13 @@ casting never hard-fails with "no template." The resolution chain:
   (`seeds_checks.py`) synthesizes a `CheckType` named after the character (pattern
   `character_magic_check_type_name(character_sheet)`) that weights the character's
   personal stat + skill. `get_character_cast_check(character)` (`services/anima.py`)
-  resolves this check type for use by the cast pipeline.
+  resolves this check type for use by the cast pipeline. `resolve_cast_check_type(character,
+  template)` (`services/anima.py`) is the single resolver every cast path calls: it
+  returns the personal check when the caster is provisioned, else falls back to
+  `template.check_type` (ADR-0096) — standalone casts, combat round casts, clash
+  contributions, and battle technique resolution (`world/battles/resolution.py`)
+  all go through it, so none of them can silently roll the shared template check
+  for a provisioned caster.
 - **Anima ritual alignment** — `provision_player_anima_ritual` (`services/anima.py`)
   points the anima ritual's `RitualCheckConfig.check_type` at the same per-character
   check type, so the anima ritual and technique casts always roll the same personal check.
@@ -211,8 +217,14 @@ casting never hard-fails with "no template." The resolution chain:
   of the base pool seeded by `seeds_cast.ensure_technique_catalog_content()`. Each
   catalog entry has its own `ActionTemplate` (same `check_type`/`pipeline`/
   `target_type` as the shared template — only `consequence_pool` differs) so
-  combat's direct read of `technique.action_template.check_type` is unaffected by
-  which flavor was picked. Resolution: `technique_builder.resolve_cast_action_template()`.
+  the flavor pick cannot affect the rolled check: **every** cast path (standalone,
+  combat, clash, battle technique resolution in `world/battles/resolution.py`)
+  resolves the check via `resolve_cast_check_type` (personal check first, template
+  fallback — ADR-0096) — as does the combat availability descriptor
+  (`actions/player_interface.py`), so the action-picker UI shows the same check
+  the resolver rolls — and none of them read
+  `technique.action_template.check_type` directly anymore. Resolution:
+  `technique_builder.resolve_cast_action_template()`.
 
 Follow-ups deferred to later issues: the optional resonance→aspect mapping. (The
 targeting model — targeting validity + AoE + per-technique target constraints +
@@ -393,6 +405,17 @@ binding on the character's motif, checks which equipped items carry that style
 `worn_quality_aggregate`, and applies a coherence bonus to the bound resonance's
 `ModifierTarget`. The bonus magnitude and per-resonance cap come from the
 `AestheticAxisConfig` singleton (`world/mechanics`, lazy-created by `get_aesthetic_config()`).
+
+**Audacity axis (#2029):** each matched binding's quality contribution is additionally
+scaled by `world.items.services.styles.audacity_multiplier_for(binding.style)` before being
+aggregated — a daring `Style` (higher `StyleAudacity` tier) contributes more coherence than
+a restrained one wearing identically-tiered items. The multiplier itself comes from the
+staff-tunable `items.AudacityTuning` singleton (defaults 0.75/1.00/1.35/1.75 for
+UNDERSTATED/EXPRESSIVE/BOLD/OUTRAGEOUS). The peer style-presentation endorsement grant
+(`create_style_presentation_endorsement`, `world/magic/services/gain.py`) applies the same
+multiplier to `cfg.style_presentation_grant`, keyed on the *highest*-audacity worn style
+that matches the endorsed resonance binding (an endorsee wearing multiple matching styles
+is rewarded for the boldest one, not the first one found).
 
 The per-resonance computation lives in `motif_coherence_bonus(sheet, resonance_id) -> int`
 (decoupled from `ModifierTarget`); `passive_motif_style_bonuses` is a thin wrapper that

@@ -96,6 +96,7 @@ class ThreatPoolEntryInline(admin.TabularInline):
         "name",
         "attack_category",
         "base_damage",
+        "defense_check_type",
         "weight",
         "targeting_mode",
     ]
@@ -115,10 +116,11 @@ class ThreatPoolEntryAdmin(admin.ModelAdmin):
         "pool",
         "attack_category",
         "base_damage",
+        "defense_check_type",
         "weight",
         "targeting_mode",
     ]
-    list_filter = ["attack_category", "targeting_mode", "target_selection"]
+    list_filter = ["attack_category", "targeting_mode", "target_selection", "defense_check_type"]
 
 
 @admin.register(BossPhase)
@@ -370,9 +372,9 @@ class StakesLevelRequirementAdmin(admin.ModelAdmin):
     list_display = [
         "stakes_level",
         "minimum_party_average_level",
-        "minimum_gm_trust_level",
+        "minimum_gm_level",
     ]
-    list_filter = ["stakes_level"]
+    list_filter = ["stakes_level", "minimum_gm_level"]
 
 
 @admin.register(EncounterScalingConfig)

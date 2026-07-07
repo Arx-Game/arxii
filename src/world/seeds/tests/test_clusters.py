@@ -28,7 +28,9 @@ class TestClusterRegistry(TestCase):
                 "stealth",
                 "perception",
                 "civic_hubs",
+                "building_condition",
                 "kudos",
+                "gm",
             },
         )
 

@@ -990,6 +990,23 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
   (#1834); typed source FK `source_character_distinction`. See "Distinction → Resonance
   (#1834)" in `docs/systems/distinctions.md` for the model + reconcile/accelerator services.
 
+**Telnet visibility (#2032).** Balances were earnable/spendable via telnet (pulls, imbuing,
+sanctum weaving) but had no telnet surface showing `CharacterResonance.balance` at all. Two
+read-only faces now expose it, both reading the same handler/service the web uses (no parallel
+query pipeline):
+- `sheet/magic` (`commands/account/sheet_sections.py`) — a `Resonance:` block listing every
+  claimed resonance's balance + lifetime earned, built by
+  `_build_magic_resonances` (`world/character_sheets/serializers.py`), which reads
+  `character.resonances` (`CharacterResonanceHandler`, the cached identity-mapped accessor —
+  not a fresh query). Folded into `MagicSection.resonances` so telnet and the web Magic tab
+  share one data path.
+- `resonance` (`commands/resonance.py`, key `resonance`) — bare `resonance` reuses
+  `_build_magic_resonances` for the same balance listing; `resonance history [<name>]` shows
+  the caller's last 10 `ResonanceGrant` rows (newest first, source label via
+  `get_source_display()`), optionally narrowed to one claimed resonance, via
+  `resonance_grant_history_for_sheet` (`world/magic/services/gain.py`) — mirrors
+  `ResonanceGrantViewSet`'s `-granted_at` ordering.
+
 `ACCELERATED_GAIN_SOURCES` / `NON_ACCELERATED_GAIN_SOURCES` (`world/magic/constants.py`,
 ADR-0041) partition every `GainSource` member (a total-classification test enforces this):
 perception/presence-driven sources a character actively performs to be seen (`POSE_ENDORSEMENT`,
@@ -1388,8 +1405,24 @@ the legacy ThreadType lookup no longer exists.
   `character_sheet_id` — no implicit first-sheet selection.
 - Service functions raise typed exceptions with `user_message` properties
   (`AnchorCapExceeded`, `InvalidImbueAmount`, `ResonanceInsufficient`,
-  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError`). Views
-  surface those messages as HTTP 400 detail (never raw `str(exc)`).
+  `WeavingUnlockMissing`, `RelationshipBondNotOwned`, `XPInsufficient`,
+  `RitualComponentError`). Views surface those messages as HTTP 400 detail
+  (never raw `str(exc)`).
+- `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
+  RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
+  raising `RelationshipBondNotOwned`, #2033) **after** the `ThreadWeavingUnlock`
+  gate — the unlock gate alone is not sufficient because track-progress/capstone
+  rows can belong to any character's relationship, but ordering the ownership
+  check second means an unlocked-but-unauthorized direct-service caller sees
+  `WeavingUnlockMissing` first, never confirming a foreign row's existence.
+  This assertion is defense-in-depth for direct service callers only:
+  `ThreadSerializer._resolve_target` (web) and the telnet `_resolve_track_anchor`
+  /`_resolve_capstone_anchor` resolvers (`commands/weave.py`) both scope their
+  target lookup to `relationship__source=<requesting character_sheet>`, so
+  neither route can hand `weave_thread` a foreign row in the first place — a
+  foreign id 400s with the same "does not exist" message a bogus id would
+  produce, closing the existence/ownership oracle the unscoped lookup used to
+  expose (#2033 adversarial review fix).
 - `ThreadViewSet` uses `IsThreadOwner` permission plus ownership filtering
   in `get_queryset()`; staff see all.
 

@@ -483,6 +483,8 @@ _ERR_MOVE_UNPLACED = "You are not placed in any position yet."
 _ERR_MOVE_NO_PATH = "There is no path to there."
 _ERR_MOVE_BLOCKED = "The way is blocked."
 _ERR_MOVE_IMMOBILE = "You cannot move."
+_ERR_TAKE_ALREADY_PLACED = "You are already placed somewhere — move instead."
+_ERR_TAKE_NOT_ENTRY = "You cannot enter the position graph there."
 
 
 def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
@@ -498,6 +500,28 @@ def place_in_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
         defaults={"position": position},
     )
     return obj_pos
+
+
+_ENTRY_KINDS = (PositionKind.PRIMARY, PositionKind.FEATURE)
+
+
+def take_position(objectdb: ObjectDB, position: Position) -> ObjectPosition:
+    """Voluntary entry onto the position graph for an UNPLACED actor (#2005).
+
+    Restricted to ground entry-point kinds so voluntary entry can't bypass
+    gating challenges, blocks_flight, or chasm/fall semantics (spec Decision 1);
+    ELEVATED/AERIAL/etc. are reached through move_to_position / enter_aerial.
+    place_in_position stays the unchecked staff/system primitive.
+    """
+    if position.room_id != objectdb.db_location_id:
+        raise PositionError(_ERR_PLACE_CROSS_ROOM)
+    if position_of(objectdb) is not None:
+        raise PositionError(_ERR_TAKE_ALREADY_PLACED)
+    if position.kind not in _ENTRY_KINDS:
+        raise PositionError(_ERR_TAKE_NOT_ENTRY)
+    if not _can_move(objectdb):
+        raise PositionTransitionError(_ERR_MOVE_IMMOBILE)
+    return place_in_position(objectdb, position)
 
 
 def move_to_position(objectdb: ObjectDB, target: Position) -> ObjectPosition:

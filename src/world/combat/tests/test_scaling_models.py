@@ -34,7 +34,7 @@ from world.combat.models import (
     RiskScalingModifier,
     StakesLevelRequirement,
 )
-from world.stories.types import TrustLevel
+from world.gm.constants import GMLevel, gm_level_index
 
 
 class OpponentTierTemplateModelTests(TestCase):
@@ -149,12 +149,12 @@ class StakesLevelRequirementModelTests(TestCase):
         cls.local = StakesLevelRequirementFactory(
             stakes_level=StakesLevel.LOCAL,
             minimum_party_average_level=0,
-            minimum_gm_trust_level=TrustLevel.UNTRUSTED,
+            minimum_gm_level=GMLevel.STARTING,
         )
         cls.world = StakesLevelRequirementFactory(
             stakes_level=StakesLevel.WORLD,
             minimum_party_average_level=20,
-            minimum_gm_trust_level=TrustLevel.EXPERT,
+            minimum_gm_level=GMLevel.SENIOR,
         )
 
     def test_world_requires_higher_level_than_local(self):
@@ -163,21 +163,21 @@ class StakesLevelRequirementModelTests(TestCase):
             self.local.minimum_party_average_level,
         )
 
-    def test_world_requires_higher_trust_than_local(self):
+    def test_world_requires_higher_gm_level_than_local(self):
         self.assertGreater(
-            self.world.minimum_gm_trust_level,
-            self.local.minimum_gm_trust_level,
+            gm_level_index(self.world.minimum_gm_level),
+            gm_level_index(self.local.minimum_gm_level),
         )
 
-    def test_local_trust_is_untrusted(self):
-        self.assertEqual(self.local.minimum_gm_trust_level, TrustLevel.UNTRUSTED)
+    def test_local_gm_level_is_starting(self):
+        self.assertEqual(self.local.minimum_gm_level, GMLevel.STARTING)
 
     def test_stakes_level_unique_constraint(self):
         with self.assertRaises(IntegrityError):
             StakesLevelRequirement.objects.create(
                 stakes_level=StakesLevel.LOCAL,
                 minimum_party_average_level=5,
-                minimum_gm_trust_level=TrustLevel.BASIC,
+                minimum_gm_level=GMLevel.JUNIOR,
             )
 
     def test_str_contains_stakes_level(self):

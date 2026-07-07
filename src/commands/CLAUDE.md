@@ -88,6 +88,14 @@ actions, backends, and service functions.
   (telnet has no pk to reference); `places leave` leaves whichever Place the
   caller's active persona currently occupies. Calls `JoinPlaceAction`/
   `LeavePlaceAction` (`actions/definitions/places.py`) directly.
+- **`positions.py`**: `CmdPosition` (`position`, #2005) — the telnet face of the tactical
+  position graph, mirroring `CmdPlaces`' shape. Bare `position` lists the caller's current
+  room's staged positions with kind, occupants, and ADJACENT-reach adjacency (or
+  `"This room has no positions staged."`); `position <name>` resolves a `Position` by name
+  scoped to the caller's room (case-insensitive exact, then unique-prefix) and dispatches
+  `TakePositionAction` when the caller is unplaced, else `MoveToPositionAction`
+  (`actions/definitions/positioning.py`) — the same seam the web position panel uses.
+  Ineligible/gated/non-adjacent failures surface the action's own error text verbatim.
 - **`door.py`**: `CmdLock`/`CmdUnlock` (`lock`/`unlock`, #1866) — real
   implementation (replacing the former stubs) dispatching to `LockAction`/
   `UnlockAction` (`actions/definitions/doors.py`). Room-owner/tenant gated via the
@@ -156,14 +164,34 @@ actions, backends, and service functions.
     any site. `parse_draft`: no-op (officiant supplies nothing extra at draft time).
   Unregistered rituals use the base `RitualDraftAdapter` (no-op empty parses — the behavior
   before adapters were introduced). `get_adapter(ritual)` is the public entry point.
-- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`;
-  parses `weave resonance=<name> trait=<name or id> [name=<...>]` (TRAIT anchor only — the
-  reference grammar; other anchor kinds are extended by the thread-weaving journey
-  issue). Proves the direct-viewset→Action telnet pattern (#1337)
+- **`weave.py`**: `CmdWeaveThread` (`weave`) — telnet face of `WeaveThreadAction`; parses
+  `weave resonance=<name> <anchor>=<value> [name=<...>]`, one anchor kwarg per call (#2033
+  extends the original TRAIT-only reference grammar to mirror `ThreadSerializer
+  ._resolve_target`'s `TargetKind` coverage): `trait=<name or id>`,
+  `track=<partner>/<track name>` (the caller's OWN developed `RelationshipTrackProgress`
+  toward the named partner — partner name resolves via `search_or_raise`, the same
+  found/not-found/numbered-disambiguation convention every other command uses),
+  `capstone=<id or title>` (one of the caller's OWN recorded `RelationshipCapstone` rows),
+  `facet=<name or id>`, `technique=<name or id>` (signature thread; caller must know it),
+  `role=<name or id>` (covenant role), `mantle=<name or id>`. SANCTUM (own slot grammar,
+  `commands/sanctum.py`) and GIFT (CG/latent-provision only) are not reachable from this
+  generic grammar. `weave_thread` (`world/magic/services/threads.py`) asserts ownership on
+  the RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE anchors (`relationship.source ==
+  character_sheet`, raising `RelationshipBondNotOwned`) — protects the web path too, since
+  both routes converge on the same service call. Proves the direct-viewset→Action telnet
+  pattern (#1337)
 - **`alterations.py`**: `CmdMageScar` (`magescar`) — telnet face of `ResolveAlterationAction` (#1490); lists and resolves pending Mage Scars by library template or scratch-authored fields. Uses namespaced `magescar list` / `magescar resolve <id> ...` subcommands.
 - **`imbue.py`**: `CmdImbue` (`imbue`) — finisher for the Rite of Imbuing CEREMONY;
   parses `imbue thread=<name|id> amount=<n>`. Requires an active `PendingRitualEffect`
   for Rite of Imbuing; calls `spend_resonance_for_imbuing` to advance thread level.
+- **`resonance.py`**: `CmdResonance` (`resonance`, #2032) — read-only spendable-resonance
+  visibility. Bare `resonance` lists claimed resonances (balance + lifetime earned) via
+  `_build_magic_resonances` (`world/character_sheets/serializers.py`, the same builder
+  `sheet/magic` reads — no parallel query pipeline); `resonance history [<name>]` shows the
+  caller's last 10 `ResonanceGrant` rows (newest first, source label), optionally narrowed to
+  one resonance, via `resonance_grant_history_for_sheet`
+  (`world/magic/services/gain.py`) — mirrors `ResonanceGrantViewSet`'s ordering. No business
+  logic in the command.
 - **`combat.py`**: Two commands sharing a `_CombatCommandMixin` (provides
   `_combat_participant_or_none` and `_find_technique_id`). Both subclass `DispatchCommand`
   — business logic lives entirely in the dispatcher and service layer, never in the command.
@@ -340,6 +368,14 @@ actions, backends, and service functions.
   escalate: create/list/members/invite/kick are table-owner (GM) ops gated on
   `account.gm_profile == table.gm`; `archive` + `transfer` are staff-only (the web gates both behind
   `IsAdminUser`). No business logic in the command.
+- **`gmtrust.py`**: `CmdGMTrust` (`gmtrust`, #2000) — the GM trust-ladder namespace. Subverb-dispatched:
+  `gmtrust show [account]` (self-service; naming another account is staff-only), `gmtrust evidence
+  <account>` (staff-only aggregate track record), `gmtrust promote <account>=<level> reason=<why>`
+  (staff-only level change — `reason` is required and may not be blank, mirroring the web
+  `PromoteGMInputSerializer`; the level text may be a multi-word label like `Junior GM`, matched
+  case-insensitively against both `GMLevel` values and labels). Thin over `world.gm.services`
+  (`promote_gm` / `gm_evidence_summary`) — the same functions `GMProfileViewSet.promote` /
+  `GMProfileViewSet.evidence` call. No business logic in the command.
 - **`locations.py`**: `CmdRoom` (`room`, aliases `build` + legacy `manageroom`; #1470 editor +
   #670 Room Builder) — the room family. Switch-routed, one small verb per switch (the ratified
   incremental rhythm): `room/name|desc|public` → `RoomEditAction`; `room/dig <dir>=<name>
@@ -351,7 +387,12 @@ actions, backends, and service functions.
   `room/decorate <template> [here]` → `CommissionDecorationAction`; `room/style <name>` →
   `SetBuildingStyleAction` (#1469, knowledge-gated throwback tier); `room/fixture <kind>` /
   `room/removefixture <kind>` → the #1514 comfort-fixture actions; `room/map [floor]` —
-  read-only ASCII floor map (`world.buildings.map_render`). Permissions by relationship
+  read-only ASCII floor map (`world.buildings.map_render`); the #1930 condition family
+  `room/settle [confirm]` / `room/refurbish [confirm]` / `room/prepare [confirm]` →
+  `SettleBuildingArrearsAction`/`RefurbishBuildingAction`/`PrepareBuildingAction` (bare =
+  owner-only status + cost quote; `confirm` pays — for prepare it commissions the
+  BUILDING_PREPARATION cleanup project, then `project/donate` / `project/check` carry it)
+  and `room/ultraupkeep` → `ToggleUltraUpkeepAction`. Permissions by relationship
   (owner structural / tenant redescribe+home), gated in actions + services. No business
   logic in the command.
 - **`projects.py`**: `CmdProject` (`project`, alias `+project`, #1574) — project status +
@@ -621,9 +662,11 @@ actions, backends, and service functions.
   `achievements.CharacterTitle`; cosmetic, mirrors the web Titles tab); `distinction`
   (`sheet/distinction`, #1446 — your distinctions, secret-badged, over the shared
   `_build_distinctions` builder, mirroring the web Distinctions tab); `magic` (`sheet/magic`,
-  #1446 — gifts/techniques/motif/aura over the shared `_build_magic` builder, mirroring the web
-  Magic tab; describe-only — casting/weaving/rituals stay in-scene, per "the sheet describes; the
-  scene does" in `design-tenets.md`); `status` (`sheet/status`, #1446 — condition, fatigue, and
+  #1446 — gifts/techniques/motif/aura/**resonance balances** (#2032) over the shared
+  `_build_magic` builder, mirroring the web Magic tab; describe-only — casting/weaving/rituals
+  stay in-scene, per "the sheet describes; the scene does" in `design-tenets.md`; resonance
+  *history* is a separate read surface, `resonance history` (`commands/resonance.py`));
+  `status` (`sheet/status`, #1446 — condition, fatigue, and
   anima as qualitative words (wound band, fatigue zones, `anima_band_for`), plus coin
   (`format_coppers`) and weekly AP (current/effective-maximum/banked); self-only, read-only,
   mirroring the web Status tab). Each is thin over its app's data. Add a section: a renderer

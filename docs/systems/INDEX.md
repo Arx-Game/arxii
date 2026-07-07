@@ -332,6 +332,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   cardinality field `Technique.target_type`)
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
   `InvalidImbueAmount`, `ResonanceInsufficient`, `WeavingUnlockMissing`,
+  `RelationshipBondNotOwned` (weaving a RELATIONSHIP_TRACK/RELATIONSHIP_CAPSTONE
+  thread on a track/capstone row whose `relationship.source` isn't the weaver, #2033),
   `XPInsufficient`, `RitualComponentError`,
   `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item),
   `InvalidCastTarget` (`world/magic/services/targeting.py`; raised by `validate_cast_target`
@@ -659,8 +661,14 @@ effects for graph mutation and flight).
 - **Shared serializers** (`positioning/serializers.py`): `PositionSummarySerializer`,
   `PositionAdjacencyItemSerializer`, `PersonaPositionSerializer` (used by both combat
   and scenes layers)
-- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`) + staff-only
-  `SetTheStageAction` (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
+  (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
+  #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
+  unchecked placement, #2005) + staff-only `SetTheStageAction`
+  (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+- **Telnet:** `CmdPosition` (`position` / `position <name>`, #2005) — list/take/move face over
+  `TakePositionAction`/`MoveToPositionAction`, room-scoped name resolution; see
+  [areas.md](areas.md) "Telnet" section
 - **Scene API:** `SceneDetailSerializer` exposes `positions`, `position_adjacency`,
   `persona_positions`
 - **Frontend:** `MovementActions` (shared, in `frontend/src/combat/components/`) +
@@ -673,10 +681,12 @@ effects for graph mutation and flight).
 - **Gated blueprint edges (built — #1216):** `BlueprintEdge.gating_challenge_template` →
   `instantiate_blueprint` mints a live `ChallengeInstance` via `instantiate_challenge`
   (`world.mechanics.challenge_resolution`) on staging.
-- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`),
+- **Integrates with:** combat (`CombatParticipant.current_position` / `CombatOpponent.current_position`;
+  `add_opponent(..., position=...)` spawns an opponent already placed, #2005),
   mechanics (Challenge/gating + `ConsequenceEffect` reshape handlers),
   flows (`EventName.FELL` reactive seam),
-  actions (`MoveToPositionAction` / `SetTheStageAction`)
+  actions (`MoveToPositionAction` / `TakePositionAction` / `GMPlaceInPositionAction` /
+  `SetTheStageAction`), commands (`CmdPosition`, #2005)
 - **Source:** `src/world/areas/positioning/`
 - **Details:** [areas.md](areas.md)
 ### Instances
@@ -1043,6 +1053,65 @@ Character lifecycle management with web-first applications and player anonymity.
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
 - **Details:** [roster.md](roster.md)
+
+### GM
+Player-GM identity, tables, roster recruitment, and the trust ladder that caps what a
+GM at a given level may author (#2000, ADR-0097).
+
+- **Models:** `GMProfile` (OneToOne account, `level: GMLevel`, `approved_at`/`approved_by`,
+  `last_active_at` stub), `GMApplication` (freeform text, staff response, one PENDING
+  per account), `GMTable` (a GM's working group; ACTIVE/ARCHIVED lifecycle),
+  `GMTableMembership` (persona-pinned, soft-leave via `left_at`), `GMRosterInvite`
+  (single-use recruitment code, public or private-with-email-match, 30-day default
+  expiry), `GMLevelCap` (one row per `GMLevel`, staff-tunable: `max_beat_risk`
+  (`RenownRisk`), `allow_custom_stakes`, `allow_global_scope_authoring`; seeded via
+  `factories.seed_default_gm_level_caps`), `GMLevelChange` (audit row: `profile`,
+  `old_level`, `new_level`, `changed_by`, `reason`, `created_at`; written only by
+  `promote_gm`, never edited by hand)
+- **Enums (`constants.py`):** `GMLevel` (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR),
+  `GM_LEVEL_ORDER` + `gm_level_index(level)` (position on the ladder, 0–4),
+  `GMApplicationStatus`, `GMTableStatus`
+- **Types (`types.py`):** `GMEvidenceSummary` (dataclass: `profile_id`, `level`,
+  `approved_at`, `last_active_at`, `stories_running`, `beats_completed_by_risk`,
+  `feedback_by_category`, `level_changes`), `CategoryFeedback` (`category_name`,
+  `average_rating`, `rating_count`)
+- **Key Services (`services.py`):** `create_table`/`archive_table`/`transfer_ownership`,
+  `join_table`/`leave_table` (auto-detaches CHARACTER-scope stories on leave),
+  `gm_application_queue(gm)`/`approve_application_as_gm`/`deny_application_as_gm`,
+  `surrender_character_story`, `create_invite`/`revoke_invite`/`claim_invite`
+  (`select_for_update`-raced), **`promote_gm(profile, new_level, *, changed_by, reason) ->
+  GMLevelChange`** — the only path that writes `GMProfile.level`; raises `ValueError` on
+  same-level or unknown-level input (programmer-error guard, real validation lives in
+  `PromoteGMInputSerializer`), **`gm_evidence_summary(profile) -> GMEvidenceSummary`** —
+  aggregate track record (stories running, beats completed by risk, feedback by trust
+  category, level-change audit trail) backing a staff promotion/demotion decision
+- **Trust-ladder consumers:** `stories.BeatSerializer`'s risk gate and
+  `stories.StakeSerializer`'s custom-stakes gate read the acting GM's `GMLevelCap` via
+  `_gm_max_risk`/`_gm_allows_custom_stakes` (staff bypass unchanged);
+  `combat.StakesLevelRequirement.minimum_gm_level` gates on `gm_account.gm_profile.level`
+  (no profile → STARTING)
+- **API Endpoints:** `GMApplicationViewSet` (`/api/gm/applications/`; create for
+  players, list/review/update for staff — approval auto-creates a `GMProfile`),
+  `GMProfileViewSet` (`/api/gm/profiles/`, read-only list for any authenticated user;
+  `POST /api/gm/profiles/{id}/promote/` and `GET /api/gm/profiles/{id}/evidence/`, both
+  `IsAdminUser`), `GMTableViewSet` (`/api/gm/tables/`; staff sees all, GMs their own,
+  players tables where an active persona holds membership; `archive`/`transfer_ownership`
+  staff-only actions), `GMTableMembershipViewSet`, `GMRosterInviteViewSet`,
+  `GMApplicationQueueView`/`GMApplicationActionView` (a GM's own pending-application
+  queue), `GMInviteClaimView`, `DemandRansomView`
+- **Telnet:** `CmdGMTable` (`gmtable`) — table admin parity. `CmdGMTrust` (`gmtrust`,
+  #2000) — `gmtrust show [account]` (self-service; naming another is staff-only),
+  `gmtrust evidence <account>` (staff-only), `gmtrust promote <account>=<level>
+  reason=<why>` (staff-only; `reason` required) — thin over the same `promote_gm` /
+  `gm_evidence_summary` services the web actions call.
+- **Integrates with:** stories (`GMTable.primary_stories`, risk/custom-stakes gates),
+  combat (`StakesLevelRequirement.minimum_gm_level`), roster (`GMRosterInvite` →
+  `RosterApplication`), scenes (`GMTableMembership` pinned to `Persona`)
+- **Source:** `src/world/gm/`
+- **Glossary:** `src/world/gm/AGENT_GLOSSARY.md`
+- **Details:** [../roadmap/gm-system.md](../roadmap/gm-system.md),
+  [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md)
+
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
 action consent flow, and a three-mode non-combat round framework.
@@ -1703,6 +1772,45 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   `applied_at` marker. Flags stay catalog-level per the glossary — a renovation
   swaps the catalog row, it does not mutate per-building flags. Slice #1 of
   epic #673 (future ProjectKind values).
+- **Condition tiers & upkeep (#1930, ADR-0093):** `Building.condition_tier`
+  (`ConditionTier` IntegerChoices ladder Decayed…**Excellent**…Immaculate) +
+  `condition_since` / `upkeep_arrears` (capped) / `ultra_upkeep` /
+  `mothballed_at` / building-scoped `consecutive_missed_upkeep` +
+  `consecutive_paid_upkeep`. Weekly cron `buildings.weekly_upkeep`
+  (`upkeep_services.apply_weekly_upkeep_all_buildings`, walks ALL buildings):
+  paid weeks hold Excellent (one-tier regain per `REGAIN_WEEKS_PER_TIER` below
+  it); misses accrue arrears capped at `ARREARS_CAP_WEEKS ×` weekly cost, then
+  slide one tier per `SLIP_WEEKS_PER_TIER` past `GRACE_MISSES` (floor DECAYED —
+  **polish/feature rows are never mutated by nonpayment**; the #676 decay +
+  restoration machinery is deleted). Above-Excellent tiers dwell-decay
+  (`ABOVE_NORMAL_DWELL_DAYS`); Immaculate holds only via the ultra-upkeep
+  premium. `set_condition_tier` is the single tier write path (stamps + fires
+  the prestige recompute). Prestige: `recompute_persona_prestige_from_dwellings`
+  step-multiplies each building-derived component by
+  `CONDITION_PRESTIGE_MULTIPLIER[tier]` (5%–200%; home-room polish follows the
+  containing building's tier). Recovery (`condition_services`, purse sinks):
+  `settle_upkeep_arrears`, `refurbish_building` (to Excellent;
+  arrears-settled gate; "refurbish" ≠ the kind-swap "renovation"),
+  `set_ultra_upkeep`; `ConditionServiceError.user_message` on refusals.
+  **Grand Preparation is a project** (Apostate 2026-07-06): the
+  `BUILDING_PREPARATION` kind + `BuildingPreparationDetails`
+  (`start_building_preparation` / `complete_building_preparation`, registered
+  kind handler) — threshold = `PREPARE_COST_PERCENT_OF_PRESTIGE` (25%/50%) ×
+  `building_prestige_base(building)` (BuildingPolish + style bonus; also the
+  recompute input), floored per `PREPARE_COST_FLOOR_COPPERS` × target_size;
+  created ACTIVE (ransom precedent) and funded via `project/donate`
+  (1 progress/100c) or sped by the AP "Direct the Household"
+  `ContributionMethod` (Household Command check; seeded by
+  `ensure_preparation_contribution_method`, cluster `building_condition`);
+  an underfunded time-limit lapse fizzles (tier applied only when the
+  threshold was met).
+  Mothballing (`mothball_services`, weekly cron `buildings.mothball_sweep`):
+  owner decay-tier ≥ LONG_INACTIVE hides the building's rooms
+  (`RoomProfile.is_public` snapshotted per-room in `MothballedRoomState`) and
+  freezes accrual; return restores with zeroed misses, no back-billing. The
+  renown payload's `owned_dwellings` carries only the public
+  `condition_label`; arrears/misses/ultra state are owner-only via the action
+  family.
 - **Space budget (#670, ADR-0075):** `Building.space_budget` snapshots
   `BuildingSizeTier[target_size]` at construction; rooms spend their
   `RoomSizeTier` units (`evennia_extensions`) from it. Replaces the old
@@ -1732,7 +1840,10 @@ unified NPCServiceOffer PERMIT effect handler. Buildings spawn from completed
   the #670 builder family in `src/actions/definitions/locations.py` —
   `dig_room`, `resize_room`, `remove_room`, `link_rooms`, `unlink_rooms`,
   `rename_exit`, `place_room`, `assign_room_tenant`, `end_room_tenancy`,
-  `set_primary_home`, `commission_decoration`, `start_building_extension` —
+  `set_primary_home`, `commission_decoration`, `start_building_extension`,
+  plus the #1930 condition family `settle_building_arrears`,
+  `refurbish_building`, `prepare_building`, `toggle_ultra_upkeep` (bare
+  invocation prints the owner-only condition/arrears status; `confirm` pays) —
   owner-gated (`IsRoomOwnerPrerequisite`) except home
   (`IsRoomTenantPrerequisite`)/tenancy-end. Structural actions accept an
   explicit `room_id` anchor (+ `to_room_id`/`exit_id`) so the web canvas can
@@ -2186,6 +2297,19 @@ crafting framework and check-driven facet/style attachment.
     `attachment_quality_tier`; unique per (item_instance, facet)
   - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
     `attachment_quality_tier`; unique per (item_instance, style)
+  - `Style.audacity` (#2029) — `StyleAudacity` tier (UNDERSTATED/EXPRESSIVE/BOLD/
+    OUTRAGEOUS; default EXPRESSIVE) scaling how much a Style is mechanically rewarded.
+    `AudacityTuning` (singleton, pk=1, mirrors `magic.RelationshipBondPullTuning`) is the
+    staff-tunable per-tier multiplier (defaults 0.75/1.00/1.35/1.75); accessed via
+    `get_audacity_tuning()` / `audacity_multiplier_for(style)`
+    (`world.items.services.styles`). Two consumers: the passive motif-coherence bonus
+    (`_compute_motif_coherence_bonus`, `world/mechanics/services.py`) multiplies each
+    matched binding's quality contribution by its style's audacity multiplier; the peer
+    style-presentation endorsement grant (`create_style_presentation_endorsement`,
+    `world/magic/services/gain.py`) scales the base grant by the *highest*-audacity match
+    when the endorsee wears multiple items whose styles bind to the endorsed resonance.
+    Seeded vocabulary: `seed_style_vocabulary()` (`world/seeds/game_content/items.py`) —
+    16 names, four per tier.
   - **Crafting sub-models** (`world.items.crafting`, registered under the `items` app):
     `CraftingRecipe` (one per `CraftingRecipeKind`; carries check config + AP/anima cost +
     default consumption policy), `CraftingMaterialRequirement` (ingredient rows —
@@ -2211,7 +2335,8 @@ crafting framework and check-driven facet/style attachment.
   provenance used by the lore-critical predicate); `CraftingRecipeKind` (FACET_ATTACH,
   STYLE_ATTACH); `CostConsumption` (NONE, PARTIAL, FULL); `ContainerAccessPolicy` (#1909 —
   `OPEN` / `FRIENDS` / `OWNER_ONLY`, who may take contents out of a container; steal
-  bypasses it with consequences)
+  bypasses it with consequences); `StyleAudacity` (#2029 — UNDERSTATED/EXPRESSIVE/BOLD/
+  OUTRAGEOUS ordinal tier on `Style`)
 - **New field on `ItemInstance` (#1909):** `access_policy` (`ContainerAccessPolicy`, default
   `OPEN`) — container-only; non-containers ignore it. Set via
   `flows.service_functions.inventory.set_container_policy` (owner-only).
@@ -2707,7 +2832,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
 - **Details:** `docs/roadmap/combat.md` · architecture:
   `docs/architecture/combat-magic-integration.md`,
   `docs/architecture/damage-scaling.md`,
-  `docs/architecture/combat-conditions.md`
+  `docs/architecture/combat-conditions.md`,
+  `docs/systems/COMBAT_DEFENSES.md`
 
 ### Battles (#1592)
 Large-scale battle scenes (war covenant engagements, sieges, pitched fields) resolved
@@ -2913,7 +3039,22 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   (the underlying `declare_battle_action`/`DeclareBattleActionAction` already
   supports REPOSITION generically) remain deferred. See
   [battles.md](battles.md#battlevehicle) for the full mechanism.
-- **Deferred follow-ups:** battle writeup page (#1735); naval/aerial embark actions
+- **REST/WS surface (#2009):** `BattleViewSet` (`IsAuthenticated`, scene-gated exactly like
+  `CombatEncounterViewSet` — staff unfiltered, else `scene__in=Scene.objects.viewable_by`,
+  404s a private battle rather than leaking a 403) exposes `GET /api/battles/` (list,
+  `?scene=`/`?outcome=` filters) and `GET /api/battles/<pk>/` (`BattleDetailSerializer` —
+  the single aggregate: sides → places (x/y/footprint/terrain/`controlled_by`/
+  `encounter_scene_id`/`vehicle`/`fortifications`) → units → participants (persona
+  id/name/thumbnail only)). `notify_battle_state_changed` sends a slim `BATTLE_STATE`
+  WS ping (`{battle_id, round_number}`, no battle data) to connected participants from
+  `begin_battle_round`/`resolve_battle_round`/`conclude_battle`, each via
+  `transaction.on_commit` (see ADR-0095: ping-plus-refetch, not a state payload push).
+  Frontend: `/scenes/:id/battle` — a read-only React Flow `BattleMapPage`, refetching
+  the aggregate via React Query on `BATTLE_STATE` receipt. See
+  [battles.md](battles.md#web-surface-2009) for the full contract.
+- **Deferred follow-ups:** battle writeup page (#1735 — should reuse
+  `BattleDetailSerializer`'s aggregate rather than authoring a second one; the live
+  strategic map itself shipped, #2009); naval/aerial embark actions
   and a dedicated REPOSITION telnet subcommand remain deferred (#1714) — the vehicle
   model, REPOSITION declaration and movement resolution, overlap-gated boarding, and
   hull-breach/living-mount-defeat ejection are built (see the Vehicles subsection
@@ -2937,9 +3078,11 @@ through abstract round-based VP mechanics. `Battle` is a 1:1 extension of `scene
   for `SET_ENVIRONMENT` casts, #1715; military-grade
   `summon_ally(payload.military=True)` now reading `payload.properties`/
   `payload.capabilities`, #1711/#1794), mechanics (`Property` via `BattleUnit.properties`;
-  `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from the
-  cast technique's `action_template.check_type`, via `use_technique`; `select_consequence`
-  for the Surrounded entry roll and resist checks, #1733), combat
+  `HasProperties`/`HasCapabilities` `Protocol`s, #1794), checks (`perform_check` sourced from
+  `resolve_cast_check_type` — the caster's provisioned personal magic check, falling back to
+  the cast technique's `action_template.check_type` only when unprovisioned, ADR-0096 — via
+  `use_technique`; `select_consequence` for the Surrounded entry roll and resist checks,
+  #1733), combat
   (`BattlePlace.combat_encounter` bridge, now wired for Champion duels, #1710, and
   siege-engine skirmishes, #1713; shared `RoundStatus` / `AbstractRound`), covenants
   (`BattleSide.covenant`; `CovenantRole.command_tier`/`.is_champion_role`, #1710), stories

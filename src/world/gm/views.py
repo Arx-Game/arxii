@@ -8,6 +8,7 @@ from django.db.models import Count, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -36,18 +37,22 @@ from world.gm.serializers import (
     GMApplicationCreateSerializer,
     GMApplicationDetailSerializer,
     GMApplicationQueueSerializer,
+    GMEvidenceSummarySerializer,
     GMInviteClaimSerializer,
     GMInviteRevokeSerializer,
     GMProfileSerializer,
     GMRosterInviteSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
+    PromoteGMInputSerializer,
 )
 from world.gm.services import (
     archive_table,
     gm_application_queue,
+    gm_evidence_summary,
     join_table,
     leave_table,
+    promote_gm,
     transfer_ownership as transfer_ownership_service,
 )
 from world.roster.models.applications import RosterApplication
@@ -121,6 +126,34 @@ class GMProfileViewSet(
     filter_backends = [DjangoFilterBackend]
     filterset_class = GMProfileFilter
     pagination_class = StandardResultsSetPagination
+
+    @extend_schema(request=PromoteGMInputSerializer, responses=GMProfileSerializer)
+    @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
+    def promote(self, request: Request, pk: str | None = None) -> Response:
+        """Staff changes a GM's trust level (promotion or demotion), with an audit row.
+
+        Same-level and unknown-level input is rejected in
+        ``PromoteGMInputSerializer.validate`` so ``promote_gm``'s ``ValueError``
+        guard never fires from user input.
+        """
+        profile = self.get_object()
+        serializer = PromoteGMInputSerializer(data=request.data, context={"profile": profile})
+        serializer.is_valid(raise_exception=True)
+        promote_gm(
+            profile,
+            serializer.validated_data["new_level"],
+            changed_by=request.user,
+            reason=serializer.validated_data["reason"],
+        )
+        return Response(GMProfileSerializer(profile).data)
+
+    @extend_schema(responses=GMEvidenceSummarySerializer)
+    @action(detail=True, methods=["get"], permission_classes=[IsAdminUser])
+    def evidence(self, request: Request, pk: str | None = None) -> Response:
+        """Staff-only aggregate track record backing a level-change decision."""
+        profile = self.get_object()
+        summary = gm_evidence_summary(profile)
+        return Response(GMEvidenceSummarySerializer(summary).data)
 
 
 class GMTableViewSet(viewsets.ModelViewSet):

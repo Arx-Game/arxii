@@ -741,8 +741,10 @@ class NonAttackPCActionRoutingTests(TestCase):
         from world.combat.types import CombatTechniqueResolution
 
         # Build encounter / participant / technique (no base_power => non-attack)
-        # action_template with check_type is required — _resolve_pc_action now derives
-        # offense_check_type from technique.action_template.check_type.
+        # action_template with check_type is required — _resolve_pc_action derives
+        # offense_check_type via resolve_cast_check_type, which falls back to
+        # technique.action_template.check_type for this unprovisioned caster
+        # (ADR-0096).
         check_type = CheckTypeFactory()
         encounter = CombatEncounterFactory(round_number=1)
         sheet = CharacterSheetFactory()

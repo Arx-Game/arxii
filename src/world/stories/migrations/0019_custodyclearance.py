@@ -8,7 +8,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("gm", "0003_initial"),
-        ("stories", "0017_storyprotectedsubject_delete_storynpcdependency_and_more"),
+        ("stories", "0018_storyprotectedsubject_delete_storynpcdependency_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

@@ -18,6 +18,7 @@ class ProjectKind(models.TextChoices):
 
     BUILDING_CONSTRUCTION = "BUILDING_CONSTRUCTION", "Building Construction"
     BUILDING_EXTENSION = "BUILDING_EXTENSION", "Building Extension"
+    BUILDING_PREPARATION = "BUILDING_PREPARATION", "Building Preparation"
     BUILDING_RENOVATION = "BUILDING_RENOVATION", "Building Renovation"
     BUILDING_UPGRADE = "BUILDING_UPGRADE", "Building Upgrade"
     FORTIFICATION_UPGRADE = "FORTIFICATION_UPGRADE", "Fortification Upgrade"
@@ -30,6 +31,7 @@ class ProjectKind(models.TextChoices):
     SHIP_REPAIR = "SHIP_REPAIR", "Ship Repair"
     TEST_KIND = "TEST_KIND", "Test Kind (framework tests only)"
     GANG_TURF = "GANG_TURF", "Gang Turf"
+    ORGANIZATION_CAPABILITY = "ORGANIZATION_CAPABILITY", "Organization Capability"
 
 
 class ProjectStatus(models.TextChoices):

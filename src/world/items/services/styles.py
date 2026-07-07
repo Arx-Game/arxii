@@ -3,17 +3,31 @@
 from __future__ import annotations
 
 import contextlib
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
 
 from world.items.exceptions import StyleAlreadyAttached, StyleCapacityExceeded
-from world.items.models import EquippedItem, ItemInstance, ItemStyle, QualityTier
+from world.items.models import AudacityTuning, EquippedItem, ItemInstance, ItemStyle, QualityTier
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.items.models import Style
+
+
+def get_audacity_tuning() -> AudacityTuning:
+    """Get-or-create the audacity tuning config singleton (pk=1, #2029)."""
+    cfg = AudacityTuning.objects.cached_singleton()
+    if cfg is None:
+        cfg, _ = AudacityTuning.objects.get_or_create(pk=1)
+    return cfg
+
+
+def audacity_multiplier_for(style: Style) -> Decimal:
+    """Return the tuned reward multiplier for ``style``'s audacity tier (#2029)."""
+    return get_audacity_tuning().multiplier_for(style.audacity)
 
 
 def assert_style_attachable(item_instance: ItemInstance, style: Style) -> None:

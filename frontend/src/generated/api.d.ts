@@ -734,6 +734,56 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/battles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only battle aggregate API — list (slim) and detail (full aggregate).
+     *
+     *     Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
+     *     a Battle is a 1:1 extension of scenes.Scene (world/battles/models.py), so
+     *     scene read-visibility alone decides who may see a battle. No participant
+     *     union needed — enlisting in a battle has no bearing here independent of
+     *     scene visibility.
+     */
+    get: operations['battles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/battles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only battle aggregate API — list (slim) and detail (full aggregate).
+     *
+     *     Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
+     *     a Battle is a 1:1 extension of scenes.Scene (world/battles/models.py), so
+     *     scene read-visibility alone decides who may see a battle. No participant
+     *     union needed — enlisting in a battle has no bearing here independent of
+     *     scene visibility.
+     */
+    get: operations['battles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/beats/': {
     parameters: {
       query?: never;
@@ -6338,6 +6388,46 @@ export interface paths {
     get: operations['gm_profiles_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/profiles/{id}/evidence/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only aggregate track record backing a level-change decision. */
+    get: operations['gm_profiles_evidence_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/profiles/{id}/promote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Staff changes a GM's trust level (promotion or demotion), with an audit row.
+     *
+     *     Same-level and unknown-level input is rejected in
+     *     ``PromoteGMInputSerializer.validate`` so ``promote_gm``'s ``ValueError``
+     *     guard never fires from user input.
+     */
+    post: operations['gm_profiles_promote_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -16374,6 +16464,32 @@ export interface components {
     ActivePersonaResult: {
       readonly active_persona_id: number;
     };
+    /**
+     * @description Write serializer for adding an opponent to an encounter.
+     *
+     *     ``tier`` is required.  ``max_health`` is optional — when omitted the scaling
+     *     formula fills every stat field automatically (Task 5 auto-fill mode).
+     *     All other stat fields are optional overrides.
+     *
+     *     ``position_id`` (#2005) is optional; when supplied it must name a Position
+     *     in the encounter's own room — validated against the encounter's room here
+     *     so a mismatched position never reaches the service layer.
+     *
+     *     Expects ``encounter`` and ``request`` in serializer context (provided by the
+     *     view) so that ``validate()`` can run the stakes gate.
+     */
+    AddOpponentRequest: {
+      name: string;
+      tier: components['schemas']['Tier756Enum'];
+      max_health?: number | null;
+      threat_pool_id: number;
+      /** @default  */
+      description: string;
+      /** @default 0 */
+      soak_value: number;
+      probing_threshold?: number | null;
+      position_id?: number | null;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -16597,6 +16713,127 @@ export interface components {
      * @enum {string}
      */
     BattleBindingEnum: 'standing' | 'campaign';
+    /** @description Full battle aggregate — sides, places, units, and participants. */
+    BattleDetail: {
+      readonly id: number;
+      name: string;
+      outcome?: components['schemas']['Outcome5d6Enum'];
+      /**
+       * @description Stakes axis for companion death-gating (#1873). EXTREME/LETHAL make companion death possible on defeat. Mirrors CombatEncounter.risk_level.
+       *
+       *     * `low` - Low
+       *     * `moderate` - Moderate
+       *     * `high` - High
+       *     * `extreme` - Extreme
+       *     * `lethal` - Lethal
+       */
+      risk_level?: components['schemas']['RiskLevelEnum'];
+      /** @description Set when a participant disconnects (#1899) — see maybe_pause_battle_for_disconnect. */
+      is_paused?: boolean;
+      /** @description The battle's current (latest non-completed) round, or None. */
+      readonly round: {
+        [key: string]: unknown;
+      } | null;
+      readonly sides: components['schemas']['BattleSide'][];
+      readonly places: components['schemas']['BattlePlace'][];
+      readonly units: components['schemas']['BattleUnit'][];
+      readonly participants: components['schemas']['BattleParticipant'][];
+    };
+    /** @description Slim row for the battle list endpoint. */
+    BattleList: {
+      readonly id: number;
+      name: string;
+      readonly scene_id: number;
+      outcome?: components['schemas']['Outcome5d6Enum'];
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description A player character enlisted in the battle, with their public persona face. */
+    BattleParticipant: {
+      readonly id: number;
+      status?: components['schemas']['BattleParticipantStatusEnum'];
+      readonly side_id: number;
+      readonly place_id: number | null;
+      /**
+       * @description Public persona identity only — id/name/thumbnail(s), never account/username.
+       *
+       *     ``thumbnail_media_url`` mirrors ``world/combat/serializers.py``'s
+       *     ``get_thumbnail_media_url`` — the uploaded-portrait ``PlayerMedia`` FK,
+       *     already ``select_related``'d by the view's Prefetch (world/battles/views.py),
+       *     so this never issues a query. ``thumbnail_url`` is the legacy URLField,
+       *     kept alongside for callers still on it.
+       */
+      readonly persona: {
+        [key: string]: unknown;
+      } | null;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `withdrawn` - Withdrawn
+     *     * `incapacitated` - Incapacitated
+     * @enum {string}
+     */
+    BattleParticipantStatusEnum: 'active' | 'withdrawn' | 'incapacitated';
+    /** @description A named front/zone, with its battle-map position and embedded structures. */
+    BattlePlace: {
+      readonly id: number;
+      name: string;
+      terrain_type?: components['schemas']['TerrainTypeEnum'];
+      /** @description Authored cost for a future reposition/movement action — not yet filed as an issue; #1712 explicitly did not build this. Data only. */
+      movement_cost?: number;
+      /** Format: double */
+      x: number;
+      /** Format: double */
+      y: number;
+      /** Format: double */
+      footprint_radius: number;
+      readonly controlled_by_id: number | null;
+      /** @description The scene backing this front's bridged CombatEncounter, if any (#1236). */
+      readonly encounter_scene_id: number | null;
+      /**
+       * @description Read the embedded vehicle, if any, through the battle's state cache.
+       *
+       *     Never a fresh query — ``BattleStateCache.vehicle_at_place`` is the
+       *     single source of truth for which vehicle occupies a place (#1714).
+       */
+      readonly vehicle: {
+        [key: string]: unknown;
+      } | null;
+      readonly fortifications: components['schemas']['Fortification'][];
+    };
+    /** @description One side in the battle, with its victory tally and fielding covenant. */
+    BattleSide: {
+      readonly id: number;
+      role?: components['schemas']['RoleEnum'];
+      victory_points?: number;
+      victory_threshold?: number;
+      posture?: components['schemas']['PostureEnum'];
+      readonly covenant_id: number | null;
+      readonly covenant_name: string | null;
+    };
+    /** @description An abstract typed force at a particular front (or embedded in a vehicle). */
+    BattleUnit: {
+      readonly id: number;
+      name: string;
+      /** @description Optional flavor tag (e.g. 'zombies-on-nightmares'). Narrative only — properties/capabilities/quality below drive mechanics. */
+      descriptor?: string;
+      quality?: components['schemas']['QualityEnum'];
+      status?: components['schemas']['BattleUnitStatusEnum'];
+      strength?: number;
+      /** @description Second resource alongside strength (#1712). status is always derived from whichever resource crosses its own threshold first — see world.battles.resolution._compute_unit_status. Unlike strength (starts at its ceiling), morale starts well below it — sitting near MAX_MORALE is rare. */
+      morale?: number;
+      /** @description Population data point mirroring CombatOpponent.swarm_count's naming/shape (#1794) — null means 'not a swarm-style unit'. No swarm-math resolution is wired against this field yet; that is left to #1714 (naval/aerial units) or a future issue that needs it. */
+      individual_count?: number | null;
+      readonly side_id: number;
+      readonly place_id: number | null;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `routed` - Routed
+     *     * `destroyed` - Destroyed
+     * @enum {string}
+     */
+    BattleUnitStatusEnum: 'active' | 'routed' | 'destroyed';
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -17137,6 +17374,13 @@ export interface components {
       readonly target_spec: {
         [key: string]: unknown;
       } | null;
+    };
+    /** @description One trust category's aggregated feedback ratings for a GM (read-only). */
+    CategoryFeedback: {
+      category_name: string;
+      /** Format: double */
+      average_rating: number;
+      rating_count: number;
     };
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
@@ -18565,7 +18809,8 @@ export interface components {
      * @description Input serializer for ``CustodyClearanceViewSet.create`` -> ``request_clearance``.
      *
      *     Accepts EITHER of two mutually-exclusive paths to name the protected
-     *     subject (Task 6 review Fix 4):
+     *     subject (Task 6 review Fix 4; ADR-0099 records the identity path as the
+     *     ratified design, not just a workaround):
      *
      *     - **pk path** — ``protected_subject`` directly. Deliberately uses an
      *       UNSCOPED-by-story queryset — a clearance request is inherently
@@ -20019,6 +20264,24 @@ export interface components {
      * @enum {string}
      */
     FormTypeEnum: 'true' | 'alternate' | 'disguise';
+    /** @description A defensible structure at a BattlePlace. */
+    Fortification: {
+      readonly id: number;
+      kind?: components['schemas']['FortificationKindEnum'];
+      integrity?: number;
+      /** @description Snapshotted once at creation from BASE_INTEGRITY[kind] plus building.fortification_level * FORTIFICATION_LEVEL_INTEGRITY_BONUS, if building is set (#1713). See world.battles.services.create_fortification. */
+      max_integrity?: number;
+      breached?: boolean;
+      readonly defending_side_id: number;
+    };
+    /**
+     * @description * `wall` - Wall
+     *     * `gate` - Gate
+     *     * `battlement` - Battlement
+     *     * `hull` - Hull
+     * @enum {string}
+     */
+    FortificationKindEnum: 'wall' | 'gate' | 'battlement' | 'hull';
     /** @description A friend row — the friended character's name + which of your characters friended. */
     Friendship: {
       readonly id: number;
@@ -20107,27 +20370,50 @@ export interface components {
       /** @description Why player wants this character */
       readonly application_text: string;
     };
+    /** @description Read-only view of ``world.gm.types.GMEvidenceSummary`` for staff review (#2000). */
+    GMEvidenceSummary: {
+      profile_id: number;
+      level: components['schemas']['NewLevelEnum'];
+      /** Format: date-time */
+      approved_at: string;
+      /** Format: date-time */
+      last_active_at: string | null;
+      stories_running: number;
+      beats_completed_by_risk: {
+        [key: string]: number;
+      };
+      feedback_by_category: components['schemas']['CategoryFeedback'][];
+      level_changes: components['schemas']['GMLevelChange'][];
+    };
+    /** @description Read-only audit row for a staff-driven GM trust-level change (#2000). */
+    GMLevelChange: {
+      readonly id: number;
+      readonly profile: number;
+      readonly old_level: components['schemas']['NewLevelEnum'];
+      readonly old_level_display: string;
+      readonly new_level: components['schemas']['NewLevelEnum'];
+      readonly new_level_display: string;
+      /** @description Staff account that made this change. */
+      readonly changed_by: number;
+      readonly changed_by_username: string;
+      /** @description Why the level changed — shown in the audit trail. */
+      readonly reason: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /** @description Read-only serializer for GM profiles. */
     GMProfile: {
       readonly id: number;
       readonly account: number;
       readonly account_username: string;
-      readonly level: components['schemas']['GMProfileLevelEnum'];
+      readonly level: components['schemas']['NewLevelEnum'];
+      readonly level_display: string;
       /**
        * Format: date-time
        * @description When this account was approved as a GM.
        */
       readonly approved_at: string;
     };
-    /**
-     * @description * `starting` - Starting GM
-     *     * `junior` - Junior GM
-     *     * `gm` - GM
-     *     * `experienced` - Experienced GM
-     *     * `senior` - Senior GM
-     * @enum {string}
-     */
-    GMProfileLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
     /** @description For GM create/list operations on invites for their own characters. */
     GMRosterInvite: {
       readonly id: number;
@@ -20431,15 +20717,6 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
-    /**
-     * @description * `0` - Untrusted
-     *     * `1` - Basic
-     *     * `2` - Intermediate
-     *     * `3` - Advanced
-     *     * `4` - Expert
-     * @enum {integer}
-     */
-    GmTrustLevelEnum: 0 | 1 | 2 | 3 | 4;
     /** @description Serializer for goal domains (ModifierTarget with category='goal'). */
     GoalDomain: {
       readonly id: number;
@@ -22458,6 +22735,15 @@ export interface components {
       readonly acknowledged_at: string | null;
     };
     /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    NewLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+    /**
      * @description * `personal` - Personal
      *     * `room` - Room
      *     * `gamewide` - Gamewide
@@ -22515,7 +22801,7 @@ export interface components {
       readonly objectdb_id: number | null;
       name: string;
       description?: string;
-      tier: components['schemas']['OpponentTierEnum'];
+      tier: components['schemas']['Tier756Enum'];
       health: number;
       max_health: number;
       /** @description Soak value — GM/staff only. */
@@ -22585,7 +22871,7 @@ export interface components {
     OpponentRequest: {
       name: string;
       description?: string;
-      tier: components['schemas']['OpponentTierEnum'];
+      tier: components['schemas']['Tier756Enum'];
       health: number;
       max_health: number;
       probing_current?: number;
@@ -22599,15 +22885,6 @@ export interface components {
      * @enum {string}
      */
     OpponentStatusEnum: 'active' | 'defeated' | 'fled';
-    /**
-     * @description * `swarm` - Swarm
-     *     * `mook` - Mook
-     *     * `elite` - Elite
-     *     * `boss` - Boss
-     *     * `hero_killer` - Hero Killer
-     * @enum {string}
-     */
-    OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /**
      * @description * `branch` - Branch
      *     * `check` - Check
@@ -22725,6 +23002,20 @@ export interface components {
       id: number;
       name: string;
     };
+    /**
+     * @description * `unresolved` - Unresolved
+     *     * `attacker_decisive` - Attacker — decisive
+     *     * `attacker_marginal` - Attacker — marginal
+     *     * `defender_marginal` - Defender — marginal
+     *     * `defender_decisive` - Defender — decisive
+     * @enum {string}
+     */
+    Outcome5d6Enum:
+      | 'unresolved'
+      | 'attacker_decisive'
+      | 'attacker_marginal'
+      | 'defender_marginal'
+      | 'defender_decisive';
     /**
      * @description * `victory` - Victory
      *     * `defeat` - Defeat
@@ -22919,6 +23210,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['AssistantGMClaim'][];
+    };
+    PaginatedBattleListList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['BattleList'][];
     };
     PaginatedBeatList: {
       /** @example 123 */
@@ -25836,19 +26142,6 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description Serializer for player trust profiles */
-    PatchedPlayerTrustRequest: {
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
-    };
     /**
      * @description Full serializer for RiskCalibration (#1770 pillar 5).
      *
@@ -25938,10 +26231,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     PatchedStakeRequest: {
@@ -26206,6 +26500,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind?: components['schemas']['ThreadTargetKindEnum'];
       target_id?: number;
@@ -27022,16 +27317,6 @@ export interface components {
     PlayerTrust: {
       readonly id: number;
       readonly account: string;
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
       /** @description Aggregate positive feedback count from all trust levels */
       readonly total_positive_feedback: number;
       /** @description Aggregate negative feedback count from all trust levels */
@@ -27040,19 +27325,6 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
-    };
-    /** @description Serializer for player trust profiles */
-    PlayerTrustRequest: {
-      /**
-       * @description General GM trust level, not category-specific
-       *
-       *     * `0` - Untrusted
-       *     * `1` - Basic
-       *     * `2` - Intermediate
-       *     * `3` - Advanced
-       *     * `4` - Expert
-       */
-      gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
     /** @description Per-category polish a decoration template grants on completion. */
     PolishIncrement: {
@@ -27126,6 +27398,13 @@ export interface components {
       readonly id: number;
       readonly name: string;
     };
+    /**
+     * @description * `balanced` - Balanced
+     *     * `aggressive` - Aggressive
+     *     * `defensive` - Defensive
+     * @enum {string}
+     */
+    PostureEnum: 'balanced' | 'aggressive' | 'defensive';
     /** @description Serializes a PowerLedger (entries + total) for the cast result payload. */
     PowerLedger: {
       entries: components['schemas']['PowerLedgerEntry'][];
@@ -27221,6 +27500,18 @@ export interface components {
       thread_target_kind: string | null;
       dev_points_to_boundary: number | null;
     };
+    /**
+     * @description Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
+     *
+     *     ``context["profile"]`` is the ``GMProfile`` being changed — the view passes
+     *     ``self.get_object()``. Rejecting the same-level case here means
+     *     ``promote_gm``'s ``ValueError`` guard is a programmer-error backstop only and
+     *     should never fire from user input.
+     */
+    PromoteGMInputRequest: {
+      new_level: components['schemas']['NewLevelEnum'];
+      reason: string;
+    };
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -27291,6 +27582,15 @@ export interface components {
       thread_id?: number | null;
       boundary_level?: number | null;
     };
+    /**
+     * @description * `militia` - Militia
+     *     * `levy` - Levy
+     *     * `trained` - Trained
+     *     * `veteran` - Veteran
+     *     * `elite` - Elite
+     * @enum {string}
+     */
+    QualityEnum: 'militia' | 'levy' | 'trained' | 'veteran' | 'elite';
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
       readonly id: number;
@@ -27885,6 +28185,12 @@ export interface components {
      * @enum {string}
      */
     RoleContextEnum: 'informant' | 'contact' | 'personal_favor' | 'guard' | 'fan' | 'minor_ally';
+    /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    RoleEnum: 'attacker' | 'defender';
     /** @description The owner build-HUD payload for one room (#1514). */
     RoomComfortBreakdown: {
       enclosure: string;
@@ -28959,10 +29265,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     Stake: {
@@ -29042,10 +29349,11 @@ export interface components {
      *     Template-set path denormalizes subject_kind/severity from the template
      *     (so a later template retune never rewrites live contracts) and validates
      *     the beat's declared risk falls within the template's [min_risk, max_risk]
-     *     band (by risk_index). The template-null (CUSTOM) path is staff-gated,
-     *     mirroring BeatSerializer.validate's risk staff gate verbatim in style.
-     *     Any write (create or update) is rejected while the beat carries an open
-     *     StakeContractActivation — the lock (#1770 pillar 8).
+     *     band (by risk_index). The template-null (CUSTOM) path is gated to staff or
+     *     a non-staff GM whose GMLevelCap.allow_custom_stakes is set (see
+     *     `_gm_allows_custom_stakes`), mirroring BeatSerializer.validate's risk gate
+     *     in style. Any write (create or update) is rejected while the beat carries
+     *     an open StakeContractActivation — the lock (#1770 pillar 8).
      *     ``outcomes`` (PR2) exposes the read-only resolution audit rows.
      */
     StakeRequest: {
@@ -30106,6 +30414,26 @@ export interface components {
       sort_order?: number;
     };
     /**
+     * @description * `open` - Open
+     *     * `difficult` - Difficult
+     *     * `fortified` - Fortified
+     *     * `elevated` - Elevated
+     *     * `flooded` - Flooded
+     *     * `urban` - Urban
+     *     * `water` - Open water
+     *     * `aerial` - Open sky
+     * @enum {string}
+     */
+    TerrainTypeEnum:
+      | 'open'
+      | 'difficult'
+      | 'fortified'
+      | 'elevated'
+      | 'flooded'
+      | 'urban'
+      | 'water'
+      | 'aerial';
+    /**
      * @description Serializer for Thread records (Spec A §4.5).
      *
      *     Read: returns level / developed_points / resonance detail for display.
@@ -30139,6 +30467,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       /** @default  */
@@ -30243,6 +30572,7 @@ export interface components {
        *     * `MANTLE` - Mantle
        *     * `SANCTUM` - Sanctum
        *     * `GIFT` - Gift
+       *     * `ORGANIZATION` - Organization
        */
       target_kind: components['schemas']['ThreadTargetKindEnum'];
       target_id: number;
@@ -30262,6 +30592,7 @@ export interface components {
      *     * `MANTLE` - Mantle
      *     * `SANCTUM` - Sanctum
      *     * `GIFT` - Gift
+     *     * `ORGANIZATION` - Organization
      * @enum {string}
      */
     ThreadTargetKindEnum:
@@ -30273,7 +30604,8 @@ export interface components {
       | 'COVENANT_ROLE'
       | 'MANTLE'
       | 'SANCTUM'
-      | 'GIFT';
+      | 'GIFT'
+      | 'ORGANIZATION';
     /** @description Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5). */
     ThreadWeavingTeachingOffer: {
       readonly id: number;
@@ -30310,6 +30642,15 @@ export interface components {
      * @enum {integer}
      */
     Tier3f5Enum: 1 | 2 | 3 | 4 | 5;
+    /**
+     * @description * `swarm` - Swarm
+     *     * `mook` - Mook
+     *     * `elite` - Elite
+     *     * `boss` - Boss
+     *     * `hero_killer` - Hero Killer
+     * @enum {string}
+     */
+    Tier756Enum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
     /**
      * @description * `dawn` - Dawn
      *     * `day` - Day
@@ -31115,16 +31456,19 @@ export interface components {
       xp_cost: number;
       dev_points_to_boundary: number;
     };
-    /** @description One building the persona owns, with polish breakdown + upkeep state. */
+    /**
+     * @description One building the persona owns, with polish breakdown + condition label.
+     *
+     *     The renown payload is viewable by any authenticated player, so this
+     *     carries only the public fiction: the qualitative condition-tier label
+     *     (#1930, ADR-0031). Arrears / miss counters / mothball state are
+     *     owner-only and surface through the owner action family instead.
+     */
     _OwnedDwelling: {
       id: number;
       name: string;
       polish_by_category: components['schemas']['_CategoryPolish'][];
-      upkeep_warning: boolean;
-      decayed_features_count: number;
-      dormant: boolean;
-      /** Format: date-time */
-      dormant_since: string | null;
+      condition_label: string;
     };
     /** @description Five-axis breakdown of the persona's total_prestige. */
     _PrestigeBreakdown: {
@@ -32005,6 +32349,66 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  battles_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `unresolved` - Unresolved
+         *     * `attacker_decisive` - Attacker — decisive
+         *     * `attacker_marginal` - Attacker — marginal
+         *     * `defender_marginal` - Defender — marginal
+         *     * `defender_decisive` - Defender — decisive
+         */
+        outcome?:
+          | 'attacker_decisive'
+          | 'attacker_marginal'
+          | 'defender_decisive'
+          | 'defender_marginal'
+          | 'unresolved';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBattleListList'];
+        };
+      };
+    };
+  };
+  battles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this battle. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BattleDetail'];
+        };
       };
     };
   };
@@ -34964,7 +35368,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['EncounterDetailRequest'];
+        'application/json': components['schemas']['AddOpponentRequest'];
       };
     };
     responses: {
@@ -39610,6 +40014,54 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfile'];
+        };
+      };
+    };
+  };
+  gm_profiles_evidence_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMEvidenceSummary'];
+        };
+      };
+    };
+  };
+  gm_profiles_promote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PromoteGMInputRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -48551,7 +49003,6 @@ export interface operations {
       query?: {
         /** @description Account Username */
         account?: string;
-        gm_trust_level?: number;
         has_negative_feedback?: boolean;
         has_positive_feedback?: boolean;
         /** @description Which field to use when ordering the results. */
@@ -48584,11 +49035,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       201: {
         headers: {
@@ -48632,11 +49079,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {
@@ -48679,11 +49122,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedPlayerTrustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

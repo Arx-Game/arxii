@@ -3,6 +3,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
 from world.societies.constants import RenownRisk
 from world.stories.constants import BeatKind, BeatPredicateType
 from world.stories.factories import ChapterFactory, EpisodeFactory, StoryFactory
@@ -104,3 +106,47 @@ class BeatRiskGateTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["risk"], RenownRisk.HIGH)
+
+
+class BeatRiskGMLevelCapTests(APITestCase):
+    """#2000 Task 3: non-staff risk ceiling reads GMLevelCap, not staff-only."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.caps = seed_default_gm_level_caps()
+        cls.gm_account = AccountFactory(is_staff=False)
+        GMProfileFactory(account=cls.gm_account, level=GMLevel.GM)  # cap: HIGH
+        cls.no_profile_account = AccountFactory(is_staff=False)
+        cls.story = StoryFactory(owners=[cls.gm_account, cls.no_profile_account])
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+
+    def _payload(self, risk):
+        return {
+            "episode": self.episode.pk,
+            "predicate_type": BeatPredicateType.GM_MARKED,
+            "kind": BeatKind.SITUATION,
+            "advances": True,
+            "risk": risk,
+            "internal_description": "x",
+        }
+
+    def test_gm_level_can_author_at_its_cap(self):
+        self.client.force_authenticate(user=self.gm_account)
+        resp = self.client.post(reverse("beat-list"), self._payload(RenownRisk.HIGH), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["risk"], RenownRisk.HIGH)
+
+    def test_gm_level_cannot_author_above_its_cap(self):
+        self.client.force_authenticate(user=self.gm_account)
+        resp = self.client.post(
+            reverse("beat-list"), self._payload(RenownRisk.EXTREME), format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("risk", resp.data)
+
+    def test_no_gm_profile_still_refused_above_none(self):
+        self.client.force_authenticate(user=self.no_profile_account)
+        resp = self.client.post(reverse("beat-list"), self._payload(RenownRisk.LOW), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("risk", resp.data)

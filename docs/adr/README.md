@@ -62,7 +62,7 @@ treat those names as hints to confirm, not gospel.
 - [0014 — No persisted derived data; derive-on-read](0014-no-persisted-derived-data-derive-on-read.md)
 - [0015 — No polymorphic / GenericFK / ContentType models](0015-no-polymorphic-genericfk-models.md)
 - [0016 — One shared base per concept; no parallel implementations](0016-one-shared-base-per-concept.md)
-- [0093 — Service functions read through cached handlers, not bare ORM queries](0093-service-functions-use-cached-handlers-not-queries.md)
+- [0097 — Service functions read through cached handlers, not bare ORM queries](0097-service-functions-use-cached-handlers-not-queries.md)
 - [0017 — New subsystems are submodules of existing apps](0017-new-subsystems-are-submodules.md)
 - [0018 — Range-partition the Interaction table](0018-range-partition-the-interaction-table.md)
 - [0062 — The Secret↔act anchor puts the FK on the Secret, reversing the back-reference pattern](0062-secret-act-anchor-reverses-the-back-reference-fk.md)
@@ -97,6 +97,7 @@ treat those names as hints to confirm, not gospel.
 - [0038 — Asymmetrical PvE; NPCs have no character sheets](0038-asymmetrical-pve-npcs-have-no-sheets.md)
 - [0039 — Bulk resolution uses honest terminal states](0039-bulk-resolution-uses-honest-terminal-states.md)
 - [0066 — Legend is earned only from difficult victories](0066-legend-earned-only-from-difficult-victories.md)
+- [0093 — Housing neglect regresses a condition tier, never structure; above-normal shine is a temporary spend; inactivity mothballs, never ruins](0093-housing-neglect-regresses-a-condition-tier-never-structure.md)
 
 ### Domain architecture
 - [0040 — Incapacitation & dying decoupled from a single vitals enum](0040-incapacitation-and-dying-decoupled-from-vitals.md)
@@ -127,6 +128,8 @@ treat those names as hints to confirm, not gospel.
 - [0085 — BattlePlace gains internal battle-map coordinates, additive to ADR-0081](0085-battleplace-internal-battle-map-coordinates.md)
 - [0085 — NPCStanding carries debt and petition-failure-streak, not CourtPact](0085-npcstanding-debt-and-petition-streak-are-generic.md)
 - [0091 — instantiate_situation mints Challenges via an authored target-object name; GM triggers it with a plain staff Action](0091-instantiate-situation-mints-challenges-gm-trigger.md) (supersedes ADR-0090)
+- [0095 — Battle live updates are a slim BATTLE_STATE ping plus REST refetch, not a full-state WS payload](0095-battle-live-updates-are-ping-plus-refetch.md)
+- [0096 — Casts roll the caster's personal check in every path](0096-casts-roll-the-casters-personal-check-in-every-path.md)
 
 ### Gift & resonance economy
 - [0050 — Gifts are Major or Minor; species abilities are a species-granted Minor Gift](0050-gifts-are-major-or-minor-species-abilities-are-minor-gifts.md)
@@ -159,5 +162,6 @@ treat those names as hints to confirm, not gospel.
 - [0082 — Scandal is a derived per-society judgment; reach forks at act birth](0082-scandal-reach-derived-at-act-birth.md)
 - [0085 — The offer→staked-beat link lives on MissionOfferDetails, not NPCServiceOffer](0085-offer-to-beat-link-on-missionofferdetails.md)
 - [0087 — Building renovation swaps the catalog BuildingKind row, not per-building flags](0087-building-renovation-catalog-kind-reassignment.md)
+- [0097 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`](0097-gm-trust-is-gmprofile-level.md)
 - [0098 — Custody is story-declared narrative-structure protection, distinct from player boundaries](0098-custody-is-story-structure-distinct-from-boundaries.md)
 - [0099 — Custody clearance requests are identity-based, not protected_subject-pk-based](0099-custody-clearance-requests-are-identity-based.md) (supersedes the pk-only Task 6 first pass)

@@ -711,6 +711,7 @@
 - `enlist_participant(*, battle: 'Battle', character_sheet: 'CharacterSheet', side: 'BattleSide', place: 'BattlePlace | None' = None) -> 'BattleParticipant' — Enlist a player character in a battle on one side.`
 - `maybe_conclude_on_timer(*, battle: 'Battle') -> 'BattleOutcome | None' — Conclude the battle when the round limit is exhausted.`
 - `maybe_pause_battle_for_disconnect(character_sheet: 'CharacterSheet') -> 'None' — Pause the character's live Battle on disconnect, unless it's large-scale`
+- `notify_battle_state_changed(battle: 'Battle') -> 'None' — Slim BATTLE_STATE ping -> connected participants; clients refetch the REST aggregate.`
 - `open_champion_duel(*, battle_place: 'BattlePlace', challenger_participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.BOSS) -> 'CombatEncounter' — Bind *battle_place* to a new lethal PC-vs-boss duel (#1710).`
 - `open_siege_engine_encounter(*, battle_place: 'BattlePlace', participant: 'BattleParticipant', opponent_kwargs: 'dict', tier: 'str' = OpponentTier.ELITE) -> 'CombatEncounter' — Bind *battle_place* to a discrete siege-engine skirmish (#1713).`
 - `places_overlap(place_a: 'BattlePlace', place_b: 'BattlePlace') -> 'bool' — Whether two BattlePlaces' footprints intersect on the battle map (#1714).`
@@ -783,10 +784,12 @@
   - extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - renovation_details <- buildings.BuildingRenovationDetails
+  - preparation_details <- buildings.BuildingPreparationDetails
   - upgrade_details <- buildings.BuildingUpgradeDetails
   - design_details <- buildings.InteriorDesignDetails
   - polish_by_category <- buildings.BuildingPolish
   - project_instances <- buildings.BuildingProjectInstance
+  - mothballed_room_states <- buildings.MothballedRoomState
   - ship_details <- ships.ShipDetails
 
 ### BuildingMaterial
@@ -821,6 +824,11 @@
   - project -> projects.Project [OneToOne]
   - building -> buildings.Building [FK]
   - target_kind -> buildings.BuildingKind [FK]
+
+### BuildingPreparationDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - building -> buildings.Building [FK]
 
 ### BuildingUpgradeDetails
 **Foreign Keys:**
@@ -916,6 +924,11 @@
 **Foreign Keys:**
   - room_profile -> evennia_extensions.RoomProfile [FK]
   - kind -> buildings.DecorationKind [FK]
+
+### MothballedRoomState
+**Foreign Keys:**
+  - building -> buildings.Building [FK]
+  - room_profile -> evennia_extensions.RoomProfile [FK]
 
 ### Service Functions
 - `activate_permit(permit_details: 'BuildingPermitDetails', site_room, acting_persona: 'Persona', target_size: 'int', target_grandeur: 'int') -> 'Project' — Consume a permit + spawn a BUILDING_CONSTRUCTION project.`
@@ -1247,6 +1260,7 @@
   - aspects <- checks.CheckTypeAspect
   - specializations <- checks.CheckTypeSpecialization
   - item_check_modifiers <- items.ItemCheckModifier
+  - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
   - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
@@ -2274,6 +2288,83 @@
 - `switch_form(character, target_form: 'CharacterForm') -> 'None' — Switch a character to a different form.`
 
 
+## world.gm
+
+### GMProfile
+**Foreign Keys:**
+  - account -> accounts.AccountDB [OneToOne]
+  - approved_by -> accounts.AccountDB [FK]
+**Pointed to by:**
+  - active_stories <- stories.Story
+  - episode_resolutions <- stories.EpisodeResolution
+  - group_progress_resolved <- stories.GroupStoryProgress
+  - global_progress_resolved <- stories.GlobalStoryProgress
+  - character_progress_resolved <- stories.StoryProgress
+  - assistant_claims_made <- stories.AssistantGMClaim
+  - assistant_claims_approved <- stories.AssistantGMClaim
+  - assigned_session_requests <- stories.SessionRequest
+  - story_offers_received <- stories.StoryGMOffer
+  - stake_outcomes <- stories.StakeOutcome
+  - custody_requests <- stories.CustodyClearance
+  - tables <- gm.GMTable
+  - invites_created <- gm.GMRosterInvite
+  - level_changes <- gm.GMLevelChange
+
+### GMApplication
+**Foreign Keys:**
+  - account -> accounts.AccountDB [FK]
+  - reviewed_by -> accounts.AccountDB [FK] (nullable)
+
+### GMTable
+**Foreign Keys:**
+  - gm -> gm.GMProfile [FK]
+**Pointed to by:**
+  - authored_roster_entries <- roster.RosterEntry
+  - draft_characters <- character_creation.CharacterDraft
+  - primary_stories <- stories.Story
+  - beat_completions <- stories.BeatCompletion
+  - episode_resolutions <- stories.EpisodeResolution
+  - story_progress <- stories.GroupStoryProgress
+  - bulletin_posts <- stories.TableBulletinPost
+  - memberships <- gm.GMTableMembership
+
+### GMTableMembership
+**Foreign Keys:**
+  - table -> gm.GMTable [FK]
+  - persona -> scenes.Persona [FK]
+
+### GMRosterInvite
+**Foreign Keys:**
+  - roster_entry -> roster.RosterEntry [FK]
+  - created_by -> gm.GMProfile [FK]
+  - claimed_by -> accounts.AccountDB [FK] (nullable)
+
+### GMLevelCap
+
+### GMLevelChange
+**Foreign Keys:**
+  - profile -> gm.GMProfile [FK]
+  - changed_by -> accounts.AccountDB [FK]
+
+### Service Functions
+- `approve_application_as_gm(gm: 'GMProfile', application: 'RosterApplication') -> 'None' — Approve a roster application on behalf of the overseeing GM.`
+- `archive_table(table: 'GMTable') -> 'None' — Mark a table archived. Sets archived_at timestamp.`
+- `claim_invite(invite: 'GMRosterInvite', account: 'AccountDB') -> 'RosterApplication' — Mark an invite claimed and create (or reuse) a RosterApplication.`
+- `create_invite(gm: 'GMProfile', roster_entry: 'RosterEntry', is_public: 'bool' = False, invited_email: 'str' = '', expires_at: 'datetime | None' = None) -> 'GMRosterInvite' — Create a GMRosterInvite. Callers must validate GM oversight.`
+- `create_table(gm: 'GMProfile', name: 'str', description: 'str' = '') -> 'GMTable' — Create a new GM table owned by the given GM.`
+- `deny_application_as_gm(gm: 'GMProfile', application: 'RosterApplication', review_notes: 'str' = '') -> 'None' — Deny an application on behalf of the overseeing GM.`
+- `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' — Resolve the CharacterSheet to use as the notification recipient for a GM.`
+- `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' — Pending applications for characters at tables this GM owns.`
+- `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' — Aggregate a GM's track record for staff reviewing a level change.`
+- `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' — Add a persona to a table. Idempotent — returns existing active`
+- `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
+- `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
+- `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
+- `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
+- `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
+- `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' — Reassign a table to a different GM. Staff-only action.`
+
+
 ## world.goals
 
 ### CharacterGoal
@@ -2472,6 +2563,8 @@
 **Foreign Keys:**
   - fashion_style -> items.FashionStyle [FK]
   - target -> mechanics.ModifierTarget [FK]
+
+### AudacityTuning
 
 ### Mantle
 **Foreign Keys:**
@@ -2723,6 +2816,8 @@
   - thread_pull_effects <- magic.ThreadPullEffect
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
+  - organization_grants <- societies.OrganizationGiftGrant
+  - capability_project_details <- societies.OrganizationCapabilityProjectDetails
   - granted_companions <- companions.Companion
 
 ### CharacterGift
@@ -3421,6 +3516,7 @@
   - target_gift -> magic.Gift [FK] (nullable)
   - target_mantle -> items.Mantle [FK] (nullable)
   - target_sanctum_details -> magic.SanctumDetails [FK] (nullable)
+  - target_organization -> societies.Organization [FK] (nullable)
   - signature_bonus -> magic.SignatureMotifBonus [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
@@ -3488,6 +3584,7 @@
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' — Validate and atomically consume ``ritual``'s components from ``components``.`
+- `resolve_cast_check_type(character, template) — The CheckType a technique cast rolls, for EVERY cast path (ADR-0096).`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool', target: 'ObjectDB | None' = None, beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0) -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `seed_thread_survivability_tuning() -> 'None' — Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
@@ -4343,7 +4440,9 @@
   - resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - organization_gift_grants <- societies.OrganizationGiftGrant
   - gang_turf_details <- societies.GangTurfDetails
+  - org_capability_details <- societies.OrganizationCapabilityProjectDetails
   - research_details <- clues.ResearchProjectDetails
   - ransom_captivities <- captivity.Captivity
   - contributions <- projects.Contribution
@@ -4351,6 +4450,7 @@
   - building_extension_details <- buildings.BuildingExtensionDetails
   - fortification_upgrade_details <- buildings.FortificationUpgradeDetails
   - building_renovation_details <- buildings.BuildingRenovationDetails
+  - building_preparation_details <- buildings.BuildingPreparationDetails
   - building_upgrade_details <- buildings.BuildingUpgradeDetails
   - interior_design_details <- buildings.InteriorDesignDetails
   - building_construction_details <- buildings.BuildingConstructionDetails
@@ -5227,11 +5327,14 @@
   - org_type -> societies.OrganizationType [FK]
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
+  - anchored_threads <- magic.Thread
   - ranks <- societies.OrganizationRank
+  - gift_grants <- societies.OrganizationGiftGrant
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
   - gang_turf_projects <- societies.GangTurfDetails
+  - capability_projects <- societies.OrganizationCapabilityProjectDetails
   - treasury <- currency.OrganizationTreasury
   - economics <- currency.OrgEconomicsProfile
   - income_streams <- currency.OrgIncomeStream
@@ -5260,6 +5363,12 @@
   - organization -> societies.Organization [FK]
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
+
+### OrganizationGiftGrant
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - gift -> magic.Gift [FK]
+  - project -> projects.Project [FK] (nullable)
 
 ### OrganizationMembershipOffer
 **Foreign Keys:**
@@ -5404,6 +5513,12 @@
 ### GangTurfReputationAward
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
+
+### OrganizationCapabilityProjectDetails
+**Foreign Keys:**
+  - project -> projects.Project [OneToOne]
+  - gift -> magic.Gift [FK]
+  - organization -> societies.Organization [FK]
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' — Create a shared event and individual deeds for each participant.`
