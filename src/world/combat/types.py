@@ -339,6 +339,22 @@ class EscalationTickResult:
     capped: bool
 
 
+@dataclass(frozen=True)
+class DramaticSurgeBeat:
+    """One dramatic-surge event produced by ``apply_dramatic_surge`` (#2013).
+
+    Returned to the immediate caller for optional inline use (tests, future
+    callers); the durable source of truth for the round-result payload is
+    ``DramaticSurgeRecord`` — this dataclass is not itself persisted.
+    """
+
+    participant: CombatParticipant
+    trigger_kind: str
+    amount: int
+    narration: str
+    round_number: int
+
+
 # ---------------------------------------------------------------------------
 # Equipped-gear combat contribution types (#508, Task 7)
 # ---------------------------------------------------------------------------

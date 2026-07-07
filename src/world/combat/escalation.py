@@ -14,18 +14,21 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.contenttypes.models import ContentType
 
-from world.combat.constants import ParticipantStatus
-from world.combat.types import EscalationTickResult
+from world.combat.constants import ParticipantStatus, SurgeTriggerKind
+from world.combat.types import DramaticSurgeBeat, EscalationTickResult
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.combat.models import CombatEncounter, EscalationCurve
+    from world.character_sheets.models import CharacterSheet
+    from world.combat.models import CombatEncounter, CombatParticipant, EscalationCurve
     from world.combat.types import PerformCheckFn
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_SURGE_NARRATION = "{character}'s power surges with sudden, dramatic force."
 
 
 def _control_step(curve: EscalationCurve, success_level: int) -> int:
@@ -201,6 +204,83 @@ def remove_escalation_room_triggers(encounter: CombatEncounter) -> None:
             handler.on_trigger_removed(pk)
 
 
+def _render_surge_narration(curve: EscalationCurve, character_name: str) -> str:
+    """Render the surge narration line, substituting only '{character}'.
+
+    Deliberate substring replace (not str.format): any OTHER brace token an
+    authored template might contain (e.g. '{subject}') stays inert literal
+    text instead of raising or ever resolving to a real value — the leak
+    guard is structural, not a validation rule.
+    """
+    template = curve.surge_narration or DEFAULT_SURGE_NARRATION
+    return template.replace("{character}", character_name)
+
+
+def apply_dramatic_surge(
+    *,
+    encounter: CombatEncounter,
+    participant: CombatParticipant,
+    amount: int,
+    trigger_kind: str,
+    subject_sheet: CharacterSheet | None = None,
+) -> DramaticSurgeBeat | None:
+    """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
+
+    Guards on the participant's COMBAT engagement being sourced to THIS
+    encounter (mirrors ``apply_escalation_tick``'s guard) — no engagement, no
+    surge, no record. Dedups via ``DramaticSurgeRecord``'s partial unique
+    constraints: a repeat call with the same (encounter, participant,
+    trigger_kind, subject_sheet) is a clean no-op (returns None) — nothing is
+    written twice. On success: adds ``amount`` to
+    ``engagement.intensity_modifier``, broadcasts the generic narration line
+    to the encounter's room (telnet + the room's scene log), and returns a
+    ``DramaticSurgeBeat`` for inline use.
+    """
+    from world.combat.models import (  # noqa: PLC0415
+        CombatEncounter as _CombatEncounter,
+        DramaticSurgeRecord,
+    )
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    encounter_ct = ContentType.objects.get_for_model(_CombatEncounter)
+    engagement = CharacterEngagement.objects.filter(
+        character=participant.character_sheet.character,
+        engagement_type=EngagementType.COMBAT,
+        source_content_type=encounter_ct,
+        source_id=encounter.pk,
+    ).first()
+    if engagement is None:
+        return None
+
+    _record, created = DramaticSurgeRecord.objects.get_or_create(
+        encounter=encounter,
+        participant=participant,
+        trigger_kind=trigger_kind,
+        subject_sheet=subject_sheet,
+        defaults={"amount": amount, "round_number": encounter.round_number},
+    )
+    if not created:
+        return None
+
+    engagement.intensity_modifier += amount
+    engagement.save(update_fields=["intensity_modifier"])
+
+    curve = encounter.escalation_curve
+    character_name = participant.character_sheet.character.db_key
+    narration = _render_surge_narration(curve, character_name) if curve is not None else ""
+    room = encounter.room
+    if room is not None and narration:
+        room.msg_contents(narration)
+
+    return DramaticSurgeBeat(
+        participant=participant,
+        trigger_kind=trigger_kind,
+        amount=amount,
+        narration=narration,
+        round_number=encounter.round_number,
+    )
+
+
 def apply_relationship_escalation_spike(
     *,
     fallen_character: ObjectDB,  # noqa: OBJECTDB_PARAM — payload carries ObjectDB
@@ -218,7 +298,6 @@ def apply_relationship_escalation_spike(
     encounters cannot double-dip a single fall.
     """
     from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
-    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
@@ -230,7 +309,6 @@ def apply_relationship_escalation_spike(
         room=room,
         escalation_curve__isnull=False,
     ).exclude(status=RoundStatus.COMPLETED)
-    encounter_ct = ContentType.objects.get_for_model(CombatEncounter)
 
     for encounter in encounters:
         curve = encounter.escalation_curve
@@ -253,19 +331,13 @@ def apply_relationship_escalation_spike(
             ).exists()
             if not qualifies:
                 continue
-            # Mirror apply_escalation_tick's guard: only the engagement
-            # sourced to THIS encounter spikes, so a survivor active in two
-            # co-located escalating encounters is spiked once, not per row.
-            engagement = CharacterEngagement.objects.filter(
-                character=participant.character_sheet.character,
-                engagement_type=EngagementType.COMBAT,
-                source_content_type=encounter_ct,
-                source_id=encounter.pk,
-            ).first()
-            if engagement is None:
-                continue
-            engagement.intensity_modifier += curve.spike_intensity_amount
-            engagement.save(update_fields=["intensity_modifier"])
+            apply_dramatic_surge(
+                encounter=encounter,
+                participant=participant,
+                amount=curve.spike_intensity_amount,
+                trigger_kind=SurgeTriggerKind.ALLY_FALLEN,
+                subject_sheet=fallen_sheet,
+            )
 
 
 def relationship_spike_handler(*, payload: Any) -> None:
