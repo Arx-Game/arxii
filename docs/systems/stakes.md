@@ -697,7 +697,7 @@ isn't enough on POST):
 - `StakeSerializer` additionally validates the beat's declared risk falls within
   `[template.min_risk, template.max_risk]` (by `risk_index`), and gates the
   template-null (custom) path to staff or a non-staff GM whose
-  `GMLevelCap.allow_custom_stakes` permits it (#2000, ADR-0095), mirroring
+  `GMLevelCap.allow_custom_stakes` permits it (#2000, ADR-0097), mirroring
   `BeatSerializer.validate`'s risk gate (also `GMLevelCap`-driven, via
   `_gm_max_risk`/`_gm_allows_custom_stakes` in `world/stories/serializers.py`);
 - `StakeRewardLineSerializer` additionally refuses non-WIN-column resolutions
