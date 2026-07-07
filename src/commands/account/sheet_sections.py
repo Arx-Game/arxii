@@ -520,6 +520,40 @@ def _render_family_section(command: object) -> list[str]:
 
 # Switch name → renderer. Add a section by writing a renderer and registering it here (and in
 # SECTION_NAMES for the overview footer). Aliases (secret/secrets) map to the same renderer.
+
+
+def _render_house_section(command: object) -> list[str]:
+    """``sheet/house`` (#1884) — the character's house: fealty, titles, tidings."""
+    character = command.caller
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — puppet may be sheetless
+    if sheet is None:
+        return ["No character sheet."]
+    from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.societies.houses.services import (  # noqa: PLC0415
+        full_display_name,
+        house_for_family,
+        liege_chain_of,
+    )
+    from world.tidings.services import house_feed_for  # noqa: PLC0415
+
+    node = Kinsperson.objects.filter(sheet=sheet).select_related("family").first()
+    house = house_for_family(node.family) if node is not None else None
+    if node is None or house is None:
+        return ["  No house."]
+    lines: list[str] = [f"|wHouse|n {house.name}", f"  Name: {full_display_name(node)}"]
+    chain = liege_chain_of(house)
+    if chain:
+        lines.append("  Fealty: " + " -> ".join(liege.name for liege in chain))
+    titles = list(node.titles_held.all())
+    if titles:
+        lines.append("  Titles: " + ", ".join(title.name for title in titles))
+    feed = house_feed_for(house, limit=5)
+    if feed:
+        lines.append("  |wTidings|n")
+        lines.extend(f"    {item.subject}: {item.headline}" for item in feed)
+    return lines
+
+
 SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "secret": _render_secret_section,
     "secrets": _render_secret_section,
@@ -538,6 +572,7 @@ SHEET_SECTIONS: dict[str, Callable[..., list[str]]] = {
     "magic": _render_magic_section,
     "family": _render_family_section,
     "kin": _render_family_section,
+    "house": _render_house_section,
     "status": _render_status_section,
 }
 
@@ -553,5 +588,6 @@ SECTION_NAMES: tuple[str, ...] = (
     "distinction",
     "magic",
     "family",
+    "house",
     "status",
 )

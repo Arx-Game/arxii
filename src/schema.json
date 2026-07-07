@@ -23250,6 +23250,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: ''
+  /api/societies/organizations/{id}/feed/:
+    get:
+      operationId: societies_organizations_feed_list
+      description: 'The house feed (#1884): recent deeds + revealed scandals of the
+        household.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this organization.
+        required: true
+      - in: query
+        name: name
+        schema:
+          type: string
+      - in: query
+        name: org_type
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: society
+        schema:
+          type: string
+      tags:
+      - societies
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPublicFeedItemList'
+          description: ''
   /api/societies/rankings/{id}/:
     get:
       operationId: societies_rankings_retrieve
@@ -36210,6 +36251,95 @@ components:
           type: integer
       required:
       - interaction_id
+    HouseDetail:
+      type: object
+      description: The house block of an org payload (#1884) — null for non-family
+        orgs.
+      properties:
+        family_name:
+          type: string
+        liege_name:
+          type: string
+        vassal_names:
+          type: array
+          items:
+            type: string
+        titles:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseTitle'
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseDomain'
+      required:
+      - domains
+      - family_name
+      - liege_name
+      - titles
+      - vassal_names
+    HouseDomain:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        population:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        prosperity:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: 0-100 PLACEHOLDER.
+        unrest:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: 0-100 PLACEHOLDER.
+        holding_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - holding_names
+      - name
+    HouseTitle:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        tier:
+          $ref: '#/components/schemas/HouseTitleTierEnum'
+        holder_name:
+          type: string
+          readOnly: true
+        is_claimable:
+          type: boolean
+          description: Vacant slot set aside for the Phase D house creator.
+      required:
+      - holder_name
+      - id
+      - name
+      - tier
+    HouseTitleTierEnum:
+      enum:
+      - crown
+      - duchy
+      - county
+      - barony
+      type: string
+      description: |-
+        * `crown` - Crown
+        * `duchy` - Duchy
+        * `county` - County
+        * `barony` - Barony
     HybridRelationshipType:
       type: object
       description: Serializer for HybridRelationshipType with nested requirements.
@@ -40213,7 +40343,13 @@ components:
           items:
             $ref: '#/components/schemas/OrganizationRank'
           readOnly: true
+        house:
+          allOf:
+          - $ref: '#/components/schemas/HouseDetail'
+          nullable: true
+          readOnly: true
       required:
+      - house
       - id
       - name
       - org_type_name
@@ -42852,6 +42988,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProgressionUnlockItem'
+    PaginatedPublicFeedItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicFeedItem'
     PaginatedRelationshipCapstoneList:
       type: object
       required:

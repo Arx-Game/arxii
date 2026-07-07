@@ -1,0 +1,79 @@
+# Houses (#1884)
+
+Noble/merchant/crime houses as first-class play. A house **is** an
+`Organization` (`family` FK → `roster.Family`; ADR-0098) sitting on the kinship
+graph (#2062): recognition and succession are derivations over public-record
+parentage, fealty is an org→org tree, domains feed the existing
+streams→treasury spine, and marriage pacts fire coded commitments. Lives in
+`world/societies/houses/` (submodule of societies).
+
+## Models (`world/societies/houses/models.py`)
+
+- **`NobiliaryParticle`** — realm × family-type → particle ("du"); names render
+  `First particle House`.
+- **`HouseRecognitionRule`** — a realm's birth-recognition law
+  (`MATRILINEAL_AUTO_WEDLOCK`, `MOTHER_OPTION_OUT_OF_WEDLOCK`,
+  `CONSORT_CHILDREN_ENNOBLED`, `PATRILINEAL_AUTO_WEDLOCK`).
+- **`FealtyEdge`** — vassal (OneToOne) → liege; the realm tree.
+- **`SuccessionLaw`** — derivation (`PRIMOGENITURE_WEDLOCK`,
+  `MATRILINEAL_RECOGNITION`, `FEMALE_LINE_CONSORTS_ENNOBLED`, `CHOSEN_HEIR`,
+  `TANISTRY_ELECTION`) + ordering (`ELDEST`, `MOST_POWERFUL_GIFTED` — pluggable
+  rater, PLACEHOLDER falls back to eldest) + `require_wedlock`/`enatic_tiebreak`.
+  House default on `Organization.default_succession_law`; per-title override on
+  `Title.succession_law` (Imperial Tanistry).
+- **`Title`** — first-class: name, tier (crown/duchy/county/barony), realm,
+  house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots).
+- **`Domain`** — decorates a DOMAIN-level `Area` (OneToOne PK): owner org +
+  PLACEHOLDER civ stats (population/prosperity/unrest). Abstract — no room
+  grids yet.
+- **`HoldingKind`** / **`DomainHolding`** — authored holding vocabulary; each
+  holding materializes an `OrgIncomeStream` (OneToOne) so collection, graft,
+  and settlement reuse the audited currency pipeline unchanged.
+- **`DomainImprovementDetails`** — per-kind details for `DOMAIN_IMPROVEMENT`
+  projects; **`DomainCrisis`** — opened when an improvement resolves badly.
+- **`MarriagePact`** — OneToOne → `roster.Union`; senior/junior house;
+  dissolved with reason (DEATH/ANNULMENT/BREACH). **`PactCommitment`** — coded
+  kind (DOWRY/SUBSIDY/CRISIS_RESPONSE/RESIDENCY/CUSTOM), amount/percent,
+  optional `OrgObligation`, `breached_at`.
+
+## Services (`world/societies/houses/services.py`)
+
+`full_display_name` (particle naming), `recognize_birth` (realm rules over
+public-record edges; mother's-option returns None — `acknowledge_into_family`
+is the explicit seam), `derive_succession_candidates` (omniscient public
+record; tanistry returns the unordered eligible pool; empty list = succession
+crisis, deliberately unresolved), `pass_title`, `swear_fealty` (cycle-refusing)
+/ `vassals_of` / `liege_chain_of`, `sign_marriage_pact` (executes DOWRY
+transfer, SUBSIDY → `OrgObligation`, RESIDENCY → `MARRIED_IN` membership),
+`dissolve_pact`, `handle_death_for_pacts` (call seam for the death flow — the
+CK2 instant-death rule), `breach_commitment` (stops machinery; scandal fires
+through the normal Secrets → tidings channel, staff-authored),
+`create_domain` / `add_holding`, `start_domain_improvement` /
+`complete_domain_improvement` (projects framework; kind handler registered in
+societies `apps.ready()`). `register_gifted_power_rater` is the
+MOST_POWERFUL_GIFTED plug. `HousesServiceError.user_message` on refusals.
+
+## Surfaces
+
+- **REST:** `OrganizationSerializer.house` block (family, liege, vassals,
+  titles, domains; null for non-family orgs) +
+  `/api/societies/organizations/{id}/feed/` (house feed).
+- **House feed:** `world/tidings/services.house_feed_for(org)` — member deeds +
+  revealed scandals, query-and-merge, no feed model (replaces Arx 1 informs).
+- **Web:** `/orgs/:id` renders the house block + House Tidings (extends the
+  #1446 stub OrgPage).
+- **Telnet:** `sheet/house` (house, particle name, fealty chain, titles,
+  tidings).
+- **Channel:** `sync_house_channel(org)` — Evennia channel `house_<pk>`
+  (aliased to the house name); audience = accounts currently playing active
+  members, vassal houses cascaded. Idempotent explicit call (no signals) —
+  run it after membership or fealty changes.
+- **Seeds:** cluster `houses` (rides `kinship`) — the demo house made a landed
+  peer: org, particle, recognition rules, succession law, crown fealty, ducal
+  title, domain + farmland holding.
+
+## Not built (deliberate)
+
+Phase D house creator (claimable-title app-in flow + thematic gates) is
+follow-up scope per the approved spec — `Title.is_claimable` is its data
+anchor.

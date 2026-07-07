@@ -14099,6 +14099,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/societies/organizations/{id}/feed/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The house feed (#1884): recent deeds + revealed scandals of the household. */
+    get: operations['societies_organizations_feed_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/societies/rankings/{id}/': {
     parameters: {
       query?: never;
@@ -20311,6 +20328,39 @@ export interface components {
     HighlightReelFeatured: {
       interaction_id: number;
     };
+    /** @description The house block of an org payload (#1884) — null for non-family orgs. */
+    HouseDetail: {
+      family_name: string;
+      liege_name: string;
+      vassal_names: string[];
+      titles: components['schemas']['HouseTitle'][];
+      domains: components['schemas']['HouseDomain'][];
+    };
+    HouseDomain: {
+      name: string;
+      population?: number;
+      /** @description 0-100 PLACEHOLDER. */
+      prosperity?: number;
+      /** @description 0-100 PLACEHOLDER. */
+      unrest?: number;
+      readonly holding_names: string[];
+    };
+    HouseTitle: {
+      readonly id: number;
+      name: string;
+      tier: components['schemas']['HouseTitleTierEnum'];
+      readonly holder_name: string;
+      /** @description Vacant slot set aside for the Phase D house creator. */
+      is_claimable?: boolean;
+    };
+    /**
+     * @description * `crown` - Crown
+     *     * `duchy` - Duchy
+     *     * `county` - County
+     *     * `barony` - Barony
+     * @enum {string}
+     */
+    HouseTitleTierEnum: 'crown' | 'duchy' | 'county' | 'barony';
     /** @description Serializer for HybridRelationshipType with nested requirements. */
     HybridRelationshipType: {
       readonly id: number;
@@ -22344,6 +22394,7 @@ export interface components {
       readonly society_name: string;
       readonly org_type_name: string;
       readonly ranks: components['schemas']['OrganizationRank'][];
+      readonly house: components['schemas']['HouseDetail'] | null;
     };
     OrganizationMembership: {
       readonly id: number;
@@ -23960,6 +24011,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ProgressionUnlockItem'][];
+    };
+    PaginatedPublicFeedItemList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PublicFeedItem'][];
     };
     PaginatedRelationshipCapstoneList: {
       /** @example 123 */
@@ -50832,6 +50898,34 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Organization'];
+        };
+      };
+    };
+  };
+  societies_organizations_feed_list: {
+    parameters: {
+      query?: {
+        name?: string;
+        org_type?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        society?: string;
+      };
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this organization. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPublicFeedItemList'];
         };
       };
     };

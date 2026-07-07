@@ -37,3 +37,8 @@ class SocietiesConfig(AppConfig):
 
         register_kind_handler(ProjectKind.GANG_TURF, complete_gang_turf)
         register_tiered_resolver(ProjectKind.GANG_TURF, resolve_gang_turf)
+
+        # #1884 — register the DOMAIN_IMPROVEMENT kind handler.
+        from world.societies.houses.services import complete_domain_improvement  # noqa: PLC0415
+
+        register_kind_handler(ProjectKind.DOMAIN_IMPROVEMENT, complete_domain_improvement)

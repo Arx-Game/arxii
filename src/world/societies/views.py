@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from http import HTTPMethod
+
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from world.societies.filters import (
     OrganizationFilter,
@@ -28,6 +33,7 @@ from world.societies.serializers import (
     OrganizationReputationSerializer,
     OrganizationSerializer,
 )
+from world.tidings.serializers import PublicFeedItemSerializer
 
 
 class SocietiesPagination(PageNumberPagination):
@@ -59,6 +65,16 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             memberships__left_at__isnull=True,
             memberships__exiled_at__isnull=True,
         ).distinct()
+
+    @extend_schema(responses=PublicFeedItemSerializer(many=True))
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def feed(self, request, pk=None):
+        """The house feed (#1884): recent deeds + revealed scandals of the household."""
+        from world.tidings.services import house_feed_for  # noqa: PLC0415
+
+        organization = self.get_object()
+        items = house_feed_for(organization)
+        return Response(PublicFeedItemSerializer(items, many=True).data)
 
 
 class OrganizationMembershipViewSet(viewsets.ReadOnlyModelViewSet):
