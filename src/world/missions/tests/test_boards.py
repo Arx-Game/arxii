@@ -149,3 +149,46 @@ class TakeFromBoardTests(TestCase):
         giver.templates.add(self.template_open)
         with self.assertRaises(BoardTakeError):
             take_from_board(giver, self.character, self.template_open.pk)
+
+
+class BoardExamineTests(TestCase):
+    """BOARD givers render postings on examine, never auto-grant."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.board_obj = ObjectDBFactory()  # plain Object typeclass
+        cls.template_open = _template_with_entry("board-examine-open")
+
+    def test_examine_does_not_auto_grant_for_board(self) -> None:
+        from world.missions.services.trigger_dispatch import maybe_dispatch_on_examine
+
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+        maybe_dispatch_on_examine(self.character, self.board_obj)
+        self.assertFalse(
+            MissionInstance.objects.filter(participants__character=self.character).exists()
+        )
+
+    def test_examine_renders_postings_section(self) -> None:
+        from typeclasses.mixins import _maybe_render_board_postings
+
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        giver.templates.add(self.template_open)
+        section = _maybe_render_board_postings(self.board_obj, self.character)
+        self.assertIsNotNone(section)
+        self.assertIn(self.template_open.name, section)
+
+    def test_examine_no_section_for_non_board(self) -> None:
+        from typeclasses.mixins import _maybe_render_board_postings
+
+        section = _maybe_render_board_postings(self.board_obj, self.character)
+        self.assertIsNone(section)
+
+    def test_examine_no_section_when_no_eligible_postings(self) -> None:
+        from typeclasses.mixins import _maybe_render_board_postings
+
+        # A board with no templates — no postings to render
+        MissionGiverFactory(giver_kind=GiverKind.BOARD, target=self.board_obj)
+        section = _maybe_render_board_postings(self.board_obj, self.character)
+        self.assertIsNone(section)

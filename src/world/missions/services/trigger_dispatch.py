@@ -56,7 +56,12 @@ def maybe_dispatch_on_examine(character: ObjectDB, obj: ObjectDB) -> MissionInst
 def _dispatch_for_target(
     character: ObjectDB, target: ObjectDB, giver_kind: str
 ) -> MissionInstance | None:
-    """Fast path: is ``target`` an active giver of this kind? If so, dispatch."""
+    """Fast path: is ``target`` an active giver of this kind? If so, dispatch.
+
+    BOARD givers are handled separately (examine renders postings, not
+    auto-grant) — return None here so the examine hook falls through to
+    the board-rendering path in the typeclass mixin (#2044).
+    """
     if character is None or target is None:
         return None
     giver = (
@@ -65,6 +70,10 @@ def _dispatch_for_target(
         .first()
     )
     if giver is None:
+        return None
+    if giver.giver_kind == GiverKind.BOARD:
+        # Boards don't auto-grant on examine — postings render via
+        # _maybe_render_board_postings in the typeclass mixin (#2044).
         return None
     return _dispatch_from_giver(giver, character)
 
