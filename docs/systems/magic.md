@@ -1410,10 +1410,19 @@ the legacy ThreadType lookup no longer exists.
   (never raw `str(exc)`).
 - `weave_thread` asserts relationship-bond ownership for RELATIONSHIP_TRACK /
   RELATIONSHIP_CAPSTONE anchors (`target.relationship.source == character_sheet`,
-  raising `RelationshipBondNotOwned`, #2033) — the unlock gate alone is not
-  sufficient because track-progress/capstone rows can belong to any
-  character's relationship. Guards both the web serializer path and the
-  telnet `weave` command, which converge on the same service.
+  raising `RelationshipBondNotOwned`, #2033) **after** the `ThreadWeavingUnlock`
+  gate — the unlock gate alone is not sufficient because track-progress/capstone
+  rows can belong to any character's relationship, but ordering the ownership
+  check second means an unlocked-but-unauthorized direct-service caller sees
+  `WeavingUnlockMissing` first, never confirming a foreign row's existence.
+  This assertion is defense-in-depth for direct service callers only:
+  `ThreadSerializer._resolve_target` (web) and the telnet `_resolve_track_anchor`
+  /`_resolve_capstone_anchor` resolvers (`commands/weave.py`) both scope their
+  target lookup to `relationship__source=<requesting character_sheet>`, so
+  neither route can hand `weave_thread` a foreign row in the first place — a
+  foreign id 400s with the same "does not exist" message a bogus id would
+  produce, closing the existence/ownership oracle the unscoped lookup used to
+  expose (#2033 adversarial review fix).
 - `ThreadViewSet` uses `IsThreadOwner` permission plus ownership filtering
   in `get_queryset()`; staff see all.
 

@@ -94,7 +94,9 @@ class CmdWeaveThread(ArxCommand):
         from world.magic.models import Resonance  # noqa: PLC0415
 
         args = self.require_args(
-            "Weave what? (weave resonance=<name> trait=<id> [name=<thread name>])"
+            "Weave what? (weave resonance=<name> "
+            "trait=|track=|capstone=|facet=|technique=|role=|mantle=<value> "
+            "[name=<thread name>])"
         )
         parsed = self._parse_kwargs(args)
 
