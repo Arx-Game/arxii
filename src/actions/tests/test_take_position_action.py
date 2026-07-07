@@ -125,7 +125,8 @@ class TestTakePositionActionDispatch(django.test.TestCase):
         result = dispatch_player_action(self.actor, ref, kwargs={})
 
         self.assertFalse(result.deferred)
-        self.assertTrue(result.detail.success, f"Take position failed: {result.detail.message}")  # type: ignore[union-attr]
+        detail = result.detail
+        self.assertTrue(detail.success, f"Take position failed: {detail.message}")  # type: ignore[union-attr]
         current = position_of(self.actor)
         self.assertIsNotNone(current)
         self.assertEqual(current.pk, self.throne.pk)  # type: ignore[union-attr]

@@ -177,6 +177,7 @@ from actions.definitions.perception import InventoryAction, LookAction, LookAtIt
 from actions.definitions.personas import SetActivePersonaAction
 from actions.definitions.places import JoinPlaceAction, LeavePlaceAction
 from actions.definitions.positioning import (
+    GMPlaceInPositionAction,
     MoveToPositionAction,
     SetTheStageAction,
     TakePositionAction,
@@ -341,6 +342,7 @@ _ALL_ACTIONS: list[Action] = [
     HomeAction(),
     MoveToPositionAction(),
     TakePositionAction(),
+    GMPlaceInPositionAction(),
     SetTheStageAction(),
     SetSituationAction(),
     PerformRitualAction(),
