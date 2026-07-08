@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.player_submissions.constants import SubmissionStatus
+from world.player_submissions.constants import ReportCategory, SubmissionStatus
 
 
 class PlayerFeedback(SharedMemoryModel):
@@ -139,6 +139,12 @@ class PlayerReport(SharedMemoryModel):
     )
     behavior_description = models.TextField(
         help_text="What the reported persona did. Stub — wording needs design pass.",
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=ReportCategory.choices,
+        default=ReportCategory.HARASSMENT,
+        help_text="Report category (#1279) — placeholder set, TBD.",
     )
     asked_to_stop = models.BooleanField(
         default=False,

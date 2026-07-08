@@ -163,18 +163,25 @@ class BugReportDetailSerializer(serializers.ModelSerializer):
 
 
 class PlayerReportCreateSerializer(serializers.ModelSerializer):
-    """Frontend supplies both reporter and reported personas.
+    """Frontend supplies reporter persona + reported persona name (#1279).
 
-    The reported_account is derived from the reported persona's current
-    active tenure. If the reported persona has no current player, the
-    submission is rejected.
+    The reporter_persona is a PK (the player's own face). The reported persona is
+    resolved by name — players don't know persona PKs. The reported_account is
+    derived from the reported persona's current active tenure. If the reported
+    persona has no current player, the submission is rejected.
     """
+
+    reported_persona_name = serializers.CharField(
+        write_only=True,
+        help_text="The name of the character/persona being reported.",
+    )
 
     class Meta:
         model = PlayerReport
         fields = [
             "reporter_persona",
-            "reported_persona",
+            "reported_persona_name",
+            "category",
             "behavior_description",
             "asked_to_stop",
             "blocked_or_muted",
@@ -187,14 +194,42 @@ class PlayerReportCreateSerializer(serializers.ModelSerializer):
         return _validate_owned_persona(value, account.pk)
 
     def validate(self, attrs: dict) -> dict:
-        reported = attrs.get("reported_persona")
+        reported_name = attrs.pop("reported_persona_name", "").strip()
         reporter = attrs.get("reporter_persona")
-        if reported is not None and reporter is not None and reported == reporter:
+        if not reported_name:
             raise serializers.ValidationError(
-                {"reported_persona": _CANNOT_REPORT_SELF},
+                {"reported_persona_name": "Please name the player you are reporting."}
             )
-        if reported is not None:
-            attrs["reported_account_id"] = _account_for_persona(reported)
+        # Resolve by persona name first, then by character name (the persona's
+        # character sheet's character db_key). Case-insensitive exact match.
+        reported = (
+            Persona.objects.select_related(
+                "character_sheet__character", "character_sheet__roster_entry"
+            )
+            .filter(name__iexact=reported_name)
+            .first()
+        )
+        if reported is None:
+            # Fall back to character name.
+            from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+            char = ObjectDB.objects.filter(db_key__iexact=reported_name).first()
+            if char is not None:
+                from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+                sheet = CharacterSheet.objects.filter(character=char).first()
+                if sheet is not None:
+                    reported = sheet.primary_persona
+        if reported is None:
+            raise serializers.ValidationError(
+                {"reported_persona_name": f"No persona or character named '{reported_name}' found."}
+            )
+        if reporter is not None and reported == reporter:
+            raise serializers.ValidationError(
+                {"reported_persona_name": _CANNOT_REPORT_SELF},
+            )
+        attrs["reported_persona"] = reported
+        attrs["reported_account_id"] = _account_for_persona(reported)
         return attrs
 
 
@@ -230,6 +265,7 @@ class PlayerReportDetailSerializer(serializers.ModelSerializer):
             "reported_account_username",
             "reported_persona",
             "reported_persona_name",
+            "category",
             "behavior_description",
             "asked_to_stop",
             "blocked_or_muted",

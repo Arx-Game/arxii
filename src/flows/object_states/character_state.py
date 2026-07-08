@@ -60,10 +60,16 @@ class CharacterState(BaseState):
             if isinstance(looker_state, CharacterState)
             else (set(), set())
         )
+        is_staff = bool(
+            looker_state is not None
+            and isinstance(looker_state, CharacterState)
+            and looker_state._viewer_is_staff()  # noqa: SLF001
+        )
         name, _is_discovered = resolve_display_for_viewer(
             persona,
             viewer_persona_ids=viewer_persona_ids,
             viewer_sheet_ids=viewer_sheet_ids,
+            is_staff=is_staff,
         )
         return name
 
@@ -81,6 +87,11 @@ class CharacterState(BaseState):
                 viewer_context_for_account(account) if account is not None else (set(), set())
             )
         return self._viewer_persona_ctx
+
+    def _viewer_is_staff(self) -> bool:
+        """Whether the looker's account is staff (#1279 — universal identity-sight)."""
+        account = self.obj.db_account
+        return bool(account and account.is_staff)
 
     # ------------------------------------------------------------------
     # Permission helpers

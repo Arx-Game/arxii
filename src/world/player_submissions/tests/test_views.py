@@ -254,7 +254,7 @@ class PlayerReportCreateTest(TestCase):
             "/api/player-submissions/player-reports/",
             {
                 "reporter_persona": self.reporter_persona.pk,
-                "reported_persona": self.target_persona.pk,
+                "reported_persona_name": self.target_persona.name,
                 "behavior_description": "harassing behavior",
                 "asked_to_stop": True,
                 "blocked_or_muted": True,
@@ -277,7 +277,7 @@ class PlayerReportCreateTest(TestCase):
             "/api/player-submissions/player-reports/",
             {
                 "reporter_persona": self.reporter_persona.pk,
-                "reported_persona": orphan_persona.pk,
+                "reported_persona_name": orphan_persona.name,
                 "behavior_description": "no tenure target",
             },
             format="json",
@@ -291,7 +291,7 @@ class PlayerReportCreateTest(TestCase):
             "/api/player-submissions/player-reports/",
             {
                 "reporter_persona": self.reporter_persona.pk,
-                "reported_persona": self.reporter_persona.pk,
+                "reported_persona_name": self.reporter_persona.name,
                 "behavior_description": "self",
             },
             format="json",
