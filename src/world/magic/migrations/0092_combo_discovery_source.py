@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("magic", "0090_organization_thread_anchor"),
+        ("magic", "0091_signature_crossing_gate"),
     ]
 
     operations = [
