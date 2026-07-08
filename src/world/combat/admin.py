@@ -18,6 +18,7 @@ from world.combat.models import (
     CombatRoundAction,
     ComboDefinition,
     ComboLearning,
+    ComboSignature,
     ComboSlot,
     CreaturePhaseTemplate,
     CreatureTemplate,
@@ -170,6 +171,7 @@ class ComboDefinitionAdmin(admin.ModelAdmin):
         "bypass_soak",
         "bonus_damage",
         "minimum_probing",
+        "discovery_achievement",
     ]
     list_filter = ["hidden", "bypass_soak"]
     search_fields = ["name", "slug"]
@@ -185,8 +187,15 @@ class ComboSlotAdmin(admin.ModelAdmin):
 
 @admin.register(ComboLearning)
 class ComboLearningAdmin(admin.ModelAdmin):
-    list_display = ["character_sheet", "combo", "learned_via", "learned_at"]
+    list_display = ["character_sheet", "combo", "learned_via", "learned_at", "use_count"]
     list_filter = ["learned_via"]
+
+
+@admin.register(ComboSignature)
+class ComboSignatureAdmin(admin.ModelAdmin):
+    list_display = ["covenant", "combo", "signature_name", "unlock_threshold"]
+    list_filter = ["covenant"]
+    search_fields = ["signature_name", "combo__name"]
 
 
 class CombatPullResolvedEffectInline(admin.TabularInline):
