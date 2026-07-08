@@ -8,9 +8,9 @@ Each handler is registered against a ``TargetKind`` in ``MagicConfig.ready()``.
 - ``TechniqueCrossingHandler`` (TECHNIQUE) executes a ceremony beat at
   crossings. The signature-bonus gating itself is subissue #1988; this
   handler just ensures the crossing isn't silent.
-- The remaining six kinds (TRAIT, FACET, RELATIONSHIP_TRACK,
+- The remaining five kinds (FACET, RELATIONSHIP_TRACK,
   RELATIONSHIP_CAPSTONE, MANTLE, SANCTUM) are stubs that log a debug no-op.
-  Each is replaced with real logic in its subissue (#1989–#1993).
+  Each is replaced with real logic in its subissue (#1990–#1993).
 """
 
 from __future__ import annotations
@@ -254,11 +254,99 @@ class _StubCrossingHandler:
         )
 
 
-class TraitCrossingHandler(_StubCrossingHandler):
-    """TRAIT thread crossing — stub (#1989)."""
+class TraitCrossingHandler:
+    """TRAIT thread crossing handler — player-chosen resonance expression.
+
+    At each crossing level (3, 6, 11, 16, 21), creates a PendingTraitCrossingOffer
+    for the player to choose a resonance-flavored expression of their stat.
+    Skipped lower crossings (multi-crossing imbue) are auto-resolved with the
+    is_default option. Fires ceremony beat #1 (narrative-only) at crossing time;
+    beat #2 (achievement/codex) fires at resolution time.
+    """
 
     target_kind = TargetKind.TRAIT
-    _subissue = "#1989"
+
+    def execute(self, *, thread: Thread, starting_level: int, new_level: int) -> None:
+        if new_level <= starting_level:
+            return
+
+        # Find crossing levels in (starting_level, new_level]
+        crossing_levels = [
+            level for level in (3, 6, 11, 16, 21) if starting_level < level <= new_level
+        ]
+        if not crossing_levels:
+            return
+
+        highest = max(crossing_levels)
+
+        # Auto-resolve skipped lower crossings with the is_default option
+        for level in crossing_levels:
+            if level == highest:
+                continue
+            _auto_resolve_crossing(thread, level)
+
+        # Create pending offer for the highest crossing (if not already chosen)
+        from world.magic.models.trait_crossing import (  # noqa: PLC0415
+            PendingTraitCrossingOffer,
+            TraitCrossingChoice,
+        )
+
+        if not TraitCrossingChoice.objects.filter(thread=thread, crossing_level=highest).exists():
+            PendingTraitCrossingOffer.objects.update_or_create(
+                thread=thread,
+                defaults={"crossing_level": highest},
+            )
+
+        # Fire ceremony beat #1 — narrative-only announcement
+        execute_ceremony_beat(
+            sheet=thread.owner,
+            narrative=CeremonyNarrative(
+                personal_body=_compose_crossing_message(thread, highest),
+            ),
+        )
+
+
+def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:
+    """Build a resonance-flavored crossing announcement."""
+    resonance_name = thread.resonance.name if thread.resonance else "your resonance"
+    trait_name = ""
+    if thread.target_trait is not None:
+        trait_name = thread.target_trait.name
+    return (
+        f"Your {resonance_name}-resonant {trait_name or 'trait'} thread "
+        f"has crossed a threshold (level {crossing_level}). "
+        f"Use 'traitcross list' to choose how it manifests."
+    )
+
+
+def _auto_resolve_crossing(thread: Thread, crossing_level: int) -> None:
+    """Auto-resolve a skipped crossing with the is_default option.
+
+    Fail-open: if no is_default option exists for (resonance, level), the
+    crossing is silently skipped (staff haven't authored content yet).
+    """
+    from world.magic.models.trait_crossing import (  # noqa: PLC0415
+        TraitCrossingChoice,
+        TraitCrossingOption,
+    )
+
+    if TraitCrossingChoice.objects.filter(thread=thread, crossing_level=crossing_level).exists():
+        return  # already chosen
+
+    default_option = TraitCrossingOption.objects.filter(
+        resonance=thread.resonance,
+        crossing_level=crossing_level,
+        is_default=True,
+    ).first()
+
+    if default_option is None:
+        return  # fail-open: no content authored
+
+    TraitCrossingChoice.objects.create(
+        thread=thread,
+        crossing_level=crossing_level,
+        option=default_option,
+    )
 
 
 class FacetCrossingHandler(_StubCrossingHandler):

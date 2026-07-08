@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
@@ -201,3 +203,93 @@ class PendingTraitCrossingOfferModelTests(TestCase):
                 thread=self.thread,
                 crossing_level=6,
             )
+
+
+class TraitCrossingHandlerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.traits.factories import TraitFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.trait = TraitFactory()
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="TRAIT",
+            target_trait=cls.trait,
+            level=2,
+        )
+        cls.option = TraitCrossingOption.objects.create(
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Burning vigor",
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+            is_default=True,
+        )
+
+    def test_crossing_creates_pending_offer(self) -> None:
+        from world.magic.crossing.handlers import TraitCrossingHandler
+
+        self.thread.level = 3
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+            handler = TraitCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            mock_beat.assert_called_once()
+        self.assertTrue(PendingTraitCrossingOffer.objects.filter(thread=self.thread).exists())
+
+    def test_non_crossing_level_no_offer(self) -> None:
+        from world.magic.crossing.handlers import TraitCrossingHandler
+
+        self.thread.level = 4
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+            handler = TraitCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=3, new_level=4)
+            mock_beat.assert_not_called()
+        self.assertFalse(PendingTraitCrossingOffer.objects.filter(thread=self.thread).exists())
+
+    def test_multi_crossing_auto_resolves_lower(self) -> None:
+        """Crossing from 2->11 auto-resolves 3 and 6, offers 11."""
+        from world.magic.crossing.handlers import TraitCrossingHandler
+
+        TraitCrossingOption.objects.create(
+            resonance=self.resonance,
+            crossing_level=6,
+            name="Greater vigor",
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=10,
+            is_default=True,
+        )
+        TraitCrossingOption.objects.create(
+            resonance=self.resonance,
+            crossing_level=11,
+            name="Master vigor",
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=15,
+            is_default=True,
+        )
+        self.thread.level = 11
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
+            handler = TraitCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+        self.assertTrue(
+            TraitCrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+        self.assertTrue(
+            TraitCrossingChoice.objects.filter(thread=self.thread, crossing_level=6).exists()
+        )
+        self.assertTrue(
+            PendingTraitCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+        )
+
+    def test_no_crossing_in_range_noop(self) -> None:
+        from world.magic.crossing.handlers import TraitCrossingHandler
+
+        self.thread.level = 5
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+            handler = TraitCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=3, new_level=5)
+            mock_beat.assert_not_called()
