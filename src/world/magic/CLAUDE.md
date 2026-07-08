@@ -324,9 +324,20 @@ bonus. It is NOT a `TechniqueVariant`, does NOT inherit `AbstractSpecializedVari
 does NOT participate in `execute_crossing_ceremonies` (the crossing ceremony). Invariant: this
 boundary must be preserved.
 
-- **Catalog model:** `SignatureMotifBonus` — `name`, `narrative_snippet`,
-  `required_facet` FK (Facet, nullable), `required_resonance` FK (Resonance, nullable),
-  `flat_intensity_delta`. At least one gate required (`clean()`). AND semantics.
+**Crossing gate (#1988):** signature selection requires `thread.level >= 3` (the first
+PathStage crossing). `SignatureMotifBonus.min_crossing_level` (default 3, display-level
+scale) gates which bonuses unlock at which thresholds — staff author higher-value bonuses
+with `min_crossing_level=6` (or 11, 16, 21). `available_signature_bonuses` accepts an
+optional `thread=` to filter by crossing level + resonance match. When a bonus with a
+`discovery_achievement` is selected, `set_signature_bonus` fires `execute_ceremony_beat`
+(gamewide first-ever or personal narrative). The `TechniqueCrossingHandler` fires a
+narrative-only "you may now sign" beat at level 3; higher crossings produce no beat.
+
+- **Catalog model:** `SignatureMotifBonus` (inherits `DiscoverableContent`) — `name`,
+  `narrative_snippet`, `required_facet` FK (Facet, nullable), `required_resonance` FK
+  (Resonance, nullable), `flat_intensity_delta`, `min_crossing_level` (default 3),
+  `discovery_achievement` (nullable FK → `Achievement`, from `DiscoverableContent`).
+  At least one gate required (`clean()`). AND semantics.
 - **Payload child rows:** `SignatureMotifBonusCapabilityGrant` /
   `SignatureMotifBonusDamageProfile` / `SignatureMotifBonusAppliedCondition` — inherit the
   shared `Abstract*` bases from `models/techniques.py`.
