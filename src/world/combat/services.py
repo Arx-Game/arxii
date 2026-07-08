@@ -96,6 +96,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    CreatureTemplate,
     EncounterAftermathRule,
     EncounterRiskAcknowledgement,
     EngagementLock,
@@ -2070,6 +2071,95 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     from world.combat.escalation import check_hated_foe_surges_for_new_opponent  # noqa: PLC0415
 
     check_hated_foe_surges_for_new_opponent(opp)
+
+    return opp
+
+
+def spawn_from_creature_template(
+    encounter: CombatEncounter,
+    template: CreatureTemplate,
+    *,
+    position: Position | None = None,
+    acting_account: AccountDB | None = None,
+) -> CombatOpponent:
+    """Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).
+
+    Thin wrapper over add_opponent. Clones CreaturePhaseTemplate rows into
+    BossPhase rows on the spawned opponent if present. Stamps break-bar
+    config and vulnerability fields from BreakBarConfig.
+    """
+    from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
+    from world.combat.scaling import (  # noqa: PLC0415
+        compute_party_multiplier,
+        compute_party_profile,
+    )
+
+    has_authored_phases = CreaturePhaseTemplate.objects.filter(creature_template=template).exists()
+
+    opp = add_opponent(
+        encounter,
+        name=template.name,
+        tier=template.tier,
+        threat_pool=template.threat_pool,
+        soak_value=template.soak_override,
+        probing_threshold=template.probing_override,
+        auto_phases=not has_authored_phases,
+        position=position,
+        acting_account=acting_account,
+    )
+
+    if has_authored_phases:
+        # Clone authored phases into BossPhase rows
+        phase_templates = CreaturePhaseTemplate.objects.filter(creature_template=template).order_by(
+            "phase_number"
+        )
+        # Clear auto-generated phases
+        BossPhase.objects.filter(opponent=opp).delete()
+        for pt in phase_templates:
+            phase = BossPhase.objects.create(
+                opponent=opp,
+                phase_number=pt.phase_number,
+                threat_pool=pt.threat_pool,
+                soak_value=pt.soak_value,
+                probing_threshold=pt.probing_threshold,
+                health_trigger_percentage=pt.health_trigger_percentage,
+                description=pt.description,
+                actions_per_round=pt.actions_per_round,
+                damage_multiplier=pt.damage_multiplier,
+                extra_actions=pt.extra_actions,
+                reinforcement_template=pt.reinforcement_template,
+                reinforcement_count=pt.reinforcement_count,
+            )
+            # Stamp break-bar config from BreakBarConfig if present
+            if hasattr(pt, "break_bar"):
+                config = pt.break_bar
+                profile = compute_party_profile(encounter)
+                party_mult = compute_party_multiplier(profile.party_size, profile.avg_level)
+                threshold = round(Decimal(config.max_threshold) * party_mult)
+                phase.break_bar_threshold = threshold
+                phase.vulnerability_rounds = config.vulnerability_rounds
+                phase.vulnerability_intensity_bonus = config.intensity_bonus
+                phase.save(
+                    update_fields=[
+                        "break_bar_threshold",
+                        "vulnerability_rounds",
+                        "vulnerability_intensity_bonus",
+                    ]
+                )
+                # Stamp onto the opponent for phase 1
+                if pt.phase_number == 1:
+                    opp.break_bar_threshold = threshold
+                    opp.break_bar_current = threshold
+                    opp.vulnerability_rounds = config.vulnerability_rounds
+                    opp.vulnerability_intensity_bonus = config.intensity_bonus
+                    opp.save(
+                        update_fields=[
+                            "break_bar_threshold",
+                            "break_bar_current",
+                            "vulnerability_rounds",
+                            "vulnerability_intensity_bonus",
+                        ]
+                    )
 
     return opp
 

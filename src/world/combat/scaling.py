@@ -299,6 +299,21 @@ def validate_stakes_requirement(encounter: CombatEncounter, gm_account: AccountD
         raise StakesRequirementError(msg, user_message=msg)
 
 
+def compute_party_multiplier(party_size: int, avg_level: float) -> Decimal:
+    """Compute the party-size + level multiplier (ADR-0037).
+
+    Shared by ``compute_opponent_stat_block`` and ``check_and_advance_boss_phase``
+    (for break-bar threshold re-scaling at phase transition).
+    """
+    cfg = get_encounter_scaling_config()
+    extra_members = max(0, party_size - cfg.baseline_party_size)
+    return (
+        Decimal(1)
+        + cfg.per_extra_member_pct * Decimal(str(extra_members))
+        + cfg.per_avg_level_pct * Decimal(str(avg_level))
+    )
+
+
 def compute_opponent_stat_block(
     tier: str,
     encounter: CombatEncounter,
@@ -341,12 +356,14 @@ def compute_opponent_stat_block(
             (programmer/seed error — let it propagate).
     """
     # Resolve party profile (two queries at most, or zero if overrides are provided).
+    resolved_party_size: int = party_size if party_size is not None else 0
+    resolved_avg_level: float = avg_level if avg_level is not None else 0.0
     if party_size is None or avg_level is None:
         profile = compute_party_profile(encounter)
         if party_size is None:
-            party_size = profile.party_size
+            resolved_party_size = profile.party_size
         if avg_level is None:
-            avg_level = profile.avg_level
+            resolved_avg_level = profile.avg_level
 
     # Fetch authored template — DoesNotExist is a programmer/seed error; propagate.
     tpl: OpponentTierTemplate = OpponentTierTemplate.objects.get(tier=tier)
@@ -373,15 +390,7 @@ def compute_opponent_stat_block(
     except RiskScalingModifier.DoesNotExist:
         risk_mult = Decimal("1.0")
 
-    cfg = get_encounter_scaling_config()
-
-    # Party multiplier (Decimal arithmetic throughout; convert to int once via round).
-    extra_members = max(0, party_size - cfg.baseline_party_size)
-    party_mult: Decimal = (
-        Decimal(1)
-        + cfg.per_extra_member_pct * Decimal(str(extra_members))
-        + cfg.per_avg_level_pct * Decimal(str(avg_level))
-    )
+    party_mult = compute_party_multiplier(resolved_party_size, resolved_avg_level)
 
     max_health = round(Decimal(tpl.base_health) * risk_mult * party_mult)
     soak_value = round(Decimal(tpl.base_soak) * risk_mult)
