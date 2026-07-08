@@ -21758,8 +21758,13 @@ export interface components {
       scene?: number | null;
       /** @description Sub-location where this interaction occurred */
       place?: number | null;
-      /** @description The actual written text of the interaction */
-      content: string;
+      /**
+       * @description Detail endpoint always returns full content (#2087 — opt-in backfill).
+       *
+       *     The list endpoint blanks content for muted personas; the detail endpoint
+       *     is the reveal path — a viewer who clicks 'expand' fetches the full content here.
+       */
+      readonly content: string;
       /**
        * @description The type of IC interaction
        *
@@ -21790,6 +21795,14 @@ export interface components {
        *     * `departure` - Departure
        */
       pose_kind?: components['schemas']['PoseKindEnum'];
+      /**
+       * @description True when this interaction's persona is muted by the viewer (#2087).
+       *
+       *     Muted interactions stay in the feed with content blanked — the action
+       *     still shows, just without the text. The frontend renders a "N hidden"
+       *     divider for consecutive muted rows.
+       */
+      readonly is_muted: boolean;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
@@ -21880,8 +21893,14 @@ export interface components {
       scene?: number | null;
       /** @description Sub-location where this interaction occurred */
       place?: number | null;
-      /** @description The actual written text of the interaction */
-      content: string;
+      /**
+       * @description The interaction's content, blanked when the persona is muted (#2087).
+       *
+       *     Muted personas' interactions stay visible (so the scene stays coherent)
+       *     but their text is redacted. The viewer can click-to-expand to fetch the
+       *     full content via the detail endpoint.
+       */
+      readonly content: string;
       /**
        * @description The type of IC interaction
        *
@@ -21912,6 +21931,14 @@ export interface components {
        *     * `departure` - Departure
        */
       pose_kind?: components['schemas']['PoseKindEnum'];
+      /**
+       * @description True when this interaction's persona is muted by the viewer (#2087).
+       *
+       *     Muted interactions stay in the feed with content blanked — the action
+       *     still shows, just without the text. The frontend renders a "N hidden"
+       *     divider for consecutive muted rows.
+       */
+      readonly is_muted: boolean;
       readonly endorsee_sheet_id: number;
       readonly is_favorited: boolean;
       /** @description Aggregate emoji counts with reacted-by-current-user flag. */
@@ -21983,8 +22010,6 @@ export interface components {
       scene?: number | null;
       /** @description Sub-location where this interaction occurred */
       place?: number | null;
-      /** @description The actual written text of the interaction */
-      content: string;
       /**
        * @description The type of IC interaction
        *
@@ -42488,7 +42513,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
         'application/json': components['schemas']['InteractionListRequest'];
       };
@@ -42511,7 +42536,7 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody: {
+    requestBody?: {
       content: {
         'application/json': components['schemas']['InteractionListRequest'];
       };

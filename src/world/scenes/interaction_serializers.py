@@ -102,6 +102,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
     my_pose_endorsement = serializers.SerializerMethodField()
     entry_endorsers = serializers.SerializerMethodField()
     entry_endorsed_by_me = serializers.SerializerMethodField()
+    content = serializers.SerializerMethodField()
+    is_muted = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
@@ -115,6 +117,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "visibility",
             "timestamp",
             "pose_kind",
+            "is_muted",
             "endorsee_sheet_id",
             "is_favorited",
             "reactions",
@@ -174,6 +177,40 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
     def get_target_persona_ids(self, obj: Interaction) -> list[int]:
         return [p.pk for p in obj.cached_target_personas]
+
+    def _muted_persona_ids(self) -> set[int]:
+        """Lazily compute muted persona IDs, cached on the serializer context (#2087)."""
+        cache_key = "_muted_persona_ids_cache"
+        if cache_key not in self.context:
+            from world.scenes.mute_services import muted_persona_ids_for_viewer  # noqa: PLC0415
+
+            request = self.context.get("request")
+            user = request.user if request is not None else None
+            if user and getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+                self.context[cache_key] = muted_persona_ids_for_viewer(viewer_account=user)
+            else:
+                self.context[cache_key] = set()
+        return self.context[cache_key]
+
+    def get_is_muted(self, obj: Interaction) -> bool:
+        """True when this interaction's persona is muted by the viewer (#2087).
+
+        Muted interactions stay in the feed with content blanked — the action
+        still shows, just without the text. The frontend renders a "N hidden"
+        divider for consecutive muted rows.
+        """
+        return obj.persona_id in self._muted_persona_ids()
+
+    def get_content(self, obj: Interaction) -> str:
+        """The interaction's content, blanked when the persona is muted (#2087).
+
+        Muted personas' interactions stay visible (so the scene stays coherent)
+        but their text is redacted. The viewer can click-to-expand to fetch the
+        full content via the detail endpoint.
+        """
+        if obj.persona_id in self._muted_persona_ids():
+            return ""
+        return obj.content
 
     def get_is_favorited(self, obj: Interaction) -> bool:
         roster_entry_ids: set[int] = self.context.get("roster_entry_ids", set())
@@ -368,6 +405,14 @@ class InteractionDetailSerializer(InteractionListSerializer):
             *InteractionListSerializer.Meta.fields,
             "receivers",
         ]
+
+    def get_content(self, obj: Interaction) -> str:
+        """Detail endpoint always returns full content (#2087 — opt-in backfill).
+
+        The list endpoint blanks content for muted personas; the detail endpoint
+        is the reveal path — a viewer who clicks 'expand' fetches the full content here.
+        """
+        return obj.content
 
 
 class InteractionFavoriteSerializer(serializers.ModelSerializer):

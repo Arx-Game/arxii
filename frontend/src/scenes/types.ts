@@ -200,6 +200,8 @@ export interface Interaction {
   my_pose_endorsement: { id: number; resonance_id: number; settled: boolean } | null;
   entry_endorsers: EndorserBadge[];
   entry_endorsed_by_me: boolean;
+  /** True when this interaction's persona is muted by the viewer — content is blanked (#2087). */
+  is_muted?: boolean;
 }
 
 /** The single featured (fully sealed) moment of a scene's highlight reel (#1241). */

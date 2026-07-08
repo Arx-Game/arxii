@@ -47,6 +47,24 @@ def _flag_page_contact(sender_char: object, target_char: object) -> None:
     )
 
 
+def _ooc_muted_by(*, receiver_account: object, sender_char: object) -> bool:
+    """True if the receiver has OOC-muted the sender's active persona (#2087).
+
+    Page delivery check: if the receiver muted the sender's OOC, the page is
+    silently dropped (the muter chose not to see this persona's OOC content).
+    """
+    try:
+        sender_persona = sender_char.sheet_data.primary_persona
+    except (AttributeError, ObjectDoesNotExist):
+        return False
+    if sender_persona is None:
+        return False
+    from world.scenes.mute_services import ooc_muted_persona_ids_for_viewer  # noqa: PLC0415
+
+    muted_ids = ooc_muted_persona_ids_for_viewer(viewer_account=receiver_account)
+    return sender_persona.pk in muted_ids
+
+
 class CmdSay(ArxCommand):
     """Speak aloud to the room."""
 
@@ -175,6 +193,14 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
             owner_account=account, viewer_account=self.caller
         ):
             self.caller.msg(f"Character '{charname}' is not online.")
+            return
+
+        # #2087 — OOC mute: if the receiving account has OOC-muted the sender's persona,
+        # silently drop the page (the muter chose not to see this persona's OOC content).
+        if sender_char is not None and _ooc_muted_by(
+            receiver_account=account, sender_char=sender_char
+        ):
+            self.caller.msg(f"You page {character.key}: {text}")
             return
 
         character.msg(f"{self.caller.key} pages: {text}")

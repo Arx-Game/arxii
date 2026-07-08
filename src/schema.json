@@ -11757,7 +11757,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InteractionListRequest'
-        required: true
       security:
       - cookieAuth: []
       responses:
@@ -11783,7 +11782,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/InteractionListRequest'
-        required: true
       security:
       - cookieAuth: []
       responses:
@@ -38796,7 +38794,12 @@ components:
           description: Sub-location where this interaction occurred
         content:
           type: string
-          description: The actual written text of the interaction
+          description: |-
+            Detail endpoint always returns full content (#2087 — opt-in backfill).
+
+            The list endpoint blanks content for muted personas; the detail endpoint
+            is the reveal path — a viewer who clicks 'expand' fetches the full content here.
+          readOnly: true
         mode:
           allOf:
           - $ref: '#/components/schemas/Mode8baEnum'
@@ -38832,6 +38835,15 @@ components:
             * `standard` - Standard
             * `entry` - Entry
             * `departure` - Departure
+        is_muted:
+          type: boolean
+          description: |-
+            True when this interaction's persona is muted by the viewer (#2087).
+
+            Muted interactions stay in the feed with content blanked — the action
+            still shows, just without the text. The frontend renders a "N hidden"
+            divider for consecutive muted rows.
+          readOnly: true
         endorsee_sheet_id:
           type: integer
           readOnly: true
@@ -38958,6 +38970,7 @@ components:
       - entry_endorsers
       - id
       - is_favorited
+      - is_muted
       - my_pose_endorsement
       - persona
       - place_name
@@ -39024,7 +39037,13 @@ components:
           description: Sub-location where this interaction occurred
         content:
           type: string
-          description: The actual written text of the interaction
+          description: |-
+            The interaction's content, blanked when the persona is muted (#2087).
+
+            Muted personas' interactions stay visible (so the scene stays coherent)
+            but their text is redacted. The viewer can click-to-expand to fetch the
+            full content via the detail endpoint.
+          readOnly: true
         mode:
           allOf:
           - $ref: '#/components/schemas/Mode8baEnum'
@@ -39060,6 +39079,15 @@ components:
             * `standard` - Standard
             * `entry` - Entry
             * `departure` - Departure
+        is_muted:
+          type: boolean
+          description: |-
+            True when this interaction's persona is muted by the viewer (#2087).
+
+            Muted interactions stay in the feed with content blanked — the action
+            still shows, just without the text. The frontend renders a "N hidden"
+            divider for consecutive muted rows.
+          readOnly: true
         endorsee_sheet_id:
           type: integer
           readOnly: true
@@ -39181,6 +39209,7 @@ components:
       - entry_endorsers
       - id
       - is_favorited
+      - is_muted
       - my_pose_endorsement
       - persona
       - place_name
@@ -39201,10 +39230,6 @@ components:
           type: integer
           nullable: true
           description: Sub-location where this interaction occurred
-        content:
-          type: string
-          minLength: 1
-          description: The actual written text of the interaction
         mode:
           allOf:
           - $ref: '#/components/schemas/Mode8baEnum'
@@ -39236,8 +39261,6 @@ components:
             * `standard` - Standard
             * `entry` - Entry
             * `departure` - Departure
-      required:
-      - content
     InteractionOffer:
       type: object
       description: One eligible offer in the interaction state response.
