@@ -37,6 +37,7 @@ import random
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Sum
 
 from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
@@ -72,6 +73,18 @@ if TYPE_CHECKING:
 # resolved outcome is at this success tier. A BRANCH attempt (deed.outcome
 # is None — no dice) is NOT a dice success.
 _SUCCESS_LEVEL = 1
+
+
+def _banked_easing_for_node(instance: MissionInstance, node: MissionNode) -> int:
+    """Sum all banked easing declarations for this node entry (#2046)."""
+    from world.missions.models import MissionSupportDeclaration  # noqa: PLC0415
+
+    return (
+        MissionSupportDeclaration.objects.filter(instance=instance, snapshot__node=node).aggregate(
+            total=Sum("easing_banked")
+        )["total"]
+        or 0
+    )
 
 
 def contract_holder(instance: MissionInstance) -> MissionParticipant:
@@ -168,13 +181,16 @@ def resolve_group_node(
     # that a retry would double-resolve.
     with transaction.atomic():
         presented = build_group_option_list(instance, node)
+        easing = _banked_easing_for_node(instance, node)
         if node.conflict_mode == ConflictMode.JOINT:
             picks = {ballot.participant: ballot.picked_option for ballot in ballots}
             attempts = tuple(sorted(picks.items(), key=lambda item: item[0].pk))
-            deeds = _resolve_joint(instance, node, presented, attempts)
+            deeds = _resolve_joint(instance, node, presented, attempts, extra_modifiers=easing)
         else:
             option, actor = _tally_group_winner(ballots)
-            deeds = _resolve_single_winner(instance, node, presented, option, actor)
+            deeds = _resolve_single_winner(
+                instance, node, presented, option, actor, extra_modifiers=easing
+            )
         MissionGroupBallot.objects.filter(instance=instance, node=node).delete()
     # Per-actor STORY + ambient stir (#887). Emitted OUTSIDE the atomic block
     # so narrative side-effects don't roll back with a partial-resolution retry;
@@ -362,12 +378,14 @@ def _combined_route(
     return pool[0]
 
 
-def _resolve_single_winner(
+def _resolve_single_winner(  # noqa: PLR0913
     instance: MissionInstance,
     node: MissionNode,
     presented: list[PresentedOption],
     option: MissionOption,
     actor: MissionParticipant,
+    *,
+    extra_modifiers: int = 0,
 ) -> list[MissionDeedRecord]:
     """Resolve ONE winning option once, as ``actor`` (the GROUP_VOTE path).
 
@@ -376,7 +394,9 @@ def _resolve_single_winner(
     Moral consequence follows ``actor`` (a picker of the winning option).
     """
     approach = _approach_for_pick(presented, actor, option)
-    deed = resolve_option(instance, node, option, actor, chosen_approach=approach)
+    deed = resolve_option(
+        instance, node, option, actor, chosen_approach=approach, extra_modifiers=extra_modifiers
+    )
     return [deed]
 
 
@@ -385,6 +405,8 @@ def _resolve_joint(
     node: MissionNode,
     presented: list[PresentedOption],
     attempts: tuple[tuple[MissionParticipant, MissionOption], ...],
+    *,
+    extra_modifiers: int = 0,
 ) -> list[MissionDeedRecord]:
     """JOINT: every participant runs their OWN pick; combined result routes once.
 
@@ -422,6 +444,7 @@ def _resolve_joint(
                 participant,
                 chosen_approach=approach,
                 advance=False,
+                extra_modifiers=extra_modifiers,
             )
         )
 

@@ -313,6 +313,8 @@ def _resolve_challenge_check(
     option: MissionOption,
     character: ObjectDB,
     chosen_approach: ChallengeApproach | None,
+    *,
+    extra_modifiers: int = 0,
 ) -> CheckResult:
     """Resolve a CHALLENGE option's check via the player's chosen approach.
 
@@ -340,6 +342,7 @@ def _resolve_challenge_check(
         character,
         chosen_approach.check_type,
         target_difficulty=challenge.severity,
+        extra_modifiers=extra_modifiers,
     )
 
 
@@ -512,6 +515,7 @@ def resolve_option(  # noqa: PLR0913
     *,
     chosen_approach: ChallengeApproach | None = None,
     advance: bool = True,
+    extra_modifiers: int = 0,
 ) -> MissionDeedRecord:
     """Resolve ``actor`` taking ``option`` at ``node``; return its deed.
 
@@ -553,13 +557,16 @@ def resolve_option(  # noqa: PLR0913
         # The chosen ChallengeApproach supplies the check; the challenge's
         # severity is the difficulty. Routing below is unchanged — it keys
         # on the resulting CheckOutcome exactly like an AUTHORED CHECK.
-        result = _resolve_challenge_check(option, character, chosen_approach)
+        result = _resolve_challenge_check(
+            option, character, chosen_approach, extra_modifiers=extra_modifiers
+        )
     else:
         check_type = _resolve_check_type(option)
         result = perform_check(
             character,
             check_type,
             target_difficulty=instance.template.risk_tier,
+            extra_modifiers=extra_modifiers,
         )
 
     route = MissionOptionRoute.objects.filter(

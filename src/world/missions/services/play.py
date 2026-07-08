@@ -414,10 +414,15 @@ def _group_window_deadline(instance: MissionInstance, node: MissionNode) -> date
 
 
 def _all_picked(instance: MissionInstance, node: MissionNode) -> bool:
-    """True once every participant has a ballot (a stage-1 pick)."""
+    """True once every participant has a ballot (a stage-1 pick) OR a support declaration."""
+    from world.missions.models import MissionSupportDeclaration  # noqa: PLC0415
+
     n_active = instance.participants.count()
     n_picked = MissionGroupBallot.objects.filter(instance=instance, node=node).count()
-    return n_active > 0 and n_picked >= n_active
+    n_supported = MissionSupportDeclaration.objects.filter(
+        instance=instance, snapshot__node=node
+    ).count()
+    return n_active > 0 and (n_picked + n_supported) >= n_active
 
 
 def _resolve_group_if_ready(
@@ -451,7 +456,13 @@ def _resolve_group_if_ready(
     if n_active <= 0:
         return None
     if node.conflict_mode == ConflictMode.JOINT:
-        done = ballots.count() >= n_active
+        from world.missions.models import MissionSupportDeclaration  # noqa: PLC0415
+
+        n_ballots = ballots.count()
+        n_supports = MissionSupportDeclaration.objects.filter(
+            instance=instance, snapshot__node=node
+        ).count()
+        done = (n_ballots + n_supports) >= n_active
     else:
         done = ballots.filter(voted_option__isnull=False).count() >= n_active
     if done:
