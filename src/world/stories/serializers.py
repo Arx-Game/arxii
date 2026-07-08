@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail
 
@@ -10,6 +11,7 @@ from world.gm.constants import GMTableStatus
 from world.gm.models import GMLevelCap, GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.items.models import ItemInstance
+from world.missions.models import MissionTemplate
 from world.scenes.models import Persona
 from world.societies.constants import RenownRisk
 from world.societies.models import Organization, Society
@@ -1039,6 +1041,7 @@ class BeatSerializer(serializers.ModelSerializer):
             "success_consequences",
             "failure_consequences",
             "expired_consequences",
+            "required_mission",
             # Timestamps
             "created_at",
             "updated_at",
@@ -1127,6 +1130,7 @@ class BeatSerializer(serializers.ModelSerializer):
                 "target_level",
                 "agm_eligible",
                 "deadline",
+                "required_mission",
             ]:
                 existing[field_name] = getattr(self.instance, field_name)
         merged = {**existing, **attrs}
@@ -3852,3 +3856,33 @@ class CanonReviewChangesInputSerializer(serializers.Serializer):
             msg = "Notes may not be blank when requesting changes."
             raise serializers.ValidationError(msg)
         return notes
+
+
+class AssignMissionInputSerializer(serializers.Serializer):
+    """POST /api/beats/{id}/assign-mission/ body (#2048).
+
+    Defaults ``template`` from the beat's ``required_mission`` when not
+    explicitly provided. Validates that a template is resolvable.
+    """
+
+    character = serializers.PrimaryKeyRelatedField(
+        queryset=ObjectDB.objects.all(),
+        help_text="The character to assign the mission to.",
+    )
+    template = serializers.PrimaryKeyRelatedField(
+        queryset=MissionTemplate.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="Optional: override the beat's required_mission template.",
+    )
+
+    _ERR_NO_TEMPLATE = "No template specified and the beat has no required_mission."
+
+    def validate(self, attrs: dict) -> dict:
+        beat = self.context.get("beat")
+        if beat is not None:
+            template = attrs.get("template") or beat.required_mission
+            if template is None:
+                raise serializers.ValidationError({"template": self._ERR_NO_TEMPLATE})
+            attrs["template"] = template
+        return attrs
