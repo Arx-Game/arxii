@@ -14,6 +14,7 @@ from world.forms.models import (
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
+    ConcealmentLevel,
     DisguiseKind,
     FormCombatProfile,
     FormTrait,
@@ -636,13 +637,16 @@ def apply_disguise(
     disguise_form: CharacterForm,
     *,
     kind: DisguiseKind = DisguiseKind.MUNDANE,
+    concealment_level: ConcealmentLevel = ConcealmentLevel.NONE,
 ) -> CharacterFormState:
     """Paint a fake overlay over the character's real form (#1110).
 
     The real form is preserved beneath; presentation swaps in the overlay's traits for viewers
     who haven't pierced it (the pierce *contest* is the senior dev's domain). ``kind`` records how
-    it's pierced (mundane → perception, magical → dispel). Single-slot: applying a new overlay
-    replaces any current one. The disguise form must belong to ``character`` and be a DISGUISE.
+    it's pierced (mundane → perception, magical → dispel). ``concealment_level`` controls what an
+    unpierced viewer sees (#1272): NONE = full trait + descriptor, DESCRIPTOR = value only,
+    FULL = nothing. Single-slot: applying a new overlay replaces any current one. The disguise
+    form must belong to ``character`` and be a DISGUISE.
     """
     if disguise_form.character_id != character.id:
         msg = "Cannot wear a disguise belonging to another character"
@@ -650,6 +654,8 @@ def apply_disguise(
     if disguise_form.form_type != FormType.DISGUISE:
         raise NotADisguiseError
 
+    disguise_form.concealment_level = concealment_level
+    disguise_form.save(update_fields=["concealment_level"])
     form_state, _ = CharacterFormState.objects.get_or_create(character=character)
     form_state.active_fake_overlay = disguise_form
     form_state.overlay_kind = kind
@@ -695,6 +701,11 @@ def get_presented_appearance(character, *, pierced: bool = False) -> list[Presen
     overlay's traits are presented over the preserved real form. The owner/staff ground-truth read
     passes ``pierced=True`` to ignore overlays. The pierce *contest* (perception/dispel) lives in
     the senior dev's domain; this read just takes its outcome.
+
+    The overlay's ``concealment_level`` (#1272) controls what an unpierced viewer sees:
+    - ``NONE``: full trait + descriptor (the existing behavior).
+    - ``DESCRIPTOR``: normalized value visible, player-authored descriptor hidden.
+    - ``FULL``: traits hidden entirely — an empty list is returned.
     """
     # Lazy imports avoid a forms<->scenes import cycle at module load.
     from world.scenes.models import Persona  # noqa: PLC0415
@@ -704,9 +715,27 @@ def get_presented_appearance(character, *, pierced: bool = False) -> list[Presen
     if form is None:
         return []
 
+    # Full concealment: an unpierced viewer sees nothing (#1272).
+    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    if (
+        not pierced
+        and form_state is not None
+        and form_state.active_fake_overlay_id is not None
+        and form_state.active_fake_overlay.concealment_level == ConcealmentLevel.FULL
+    ):
+        return []
+
+    # Descriptor concealment: blank the descriptor so only the normalized value shows (#1272).
+    hide_descriptors = (
+        not pierced
+        and form_state is not None
+        and form_state.active_fake_overlay_id is not None
+        and form_state.active_fake_overlay.concealment_level == ConcealmentLevel.DESCRIPTOR
+    )
+
     descriptors: dict[int, str] = {}
     sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
-    if sheet is not None:
+    if sheet is not None and not hide_descriptors:
         try:
             persona = active_persona_for_sheet(sheet)
         except Persona.DoesNotExist:
