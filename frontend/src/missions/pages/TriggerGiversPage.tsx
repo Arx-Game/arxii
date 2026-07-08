@@ -47,6 +47,7 @@ import type { MissionGiver } from '../types';
 const KINDS = [
   { value: 'room_trigger', label: 'Room trigger (on enter)' },
   { value: 'environmental_detail', label: 'Environmental detail (on examine)' },
+  { value: 'board', label: 'Notice board (examine + take)' },
 ];
 
 function errText(err: unknown, fallback: string): string {

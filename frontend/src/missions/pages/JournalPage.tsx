@@ -11,6 +11,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+import { OpportunitiesTab } from '../components/OpportunitiesTab';
 import { PendingInvitesSection } from '../components/PendingInvitesSection';
 import { useJournal } from '../queries';
 import type { JournalEntry } from '../types';
@@ -32,6 +33,7 @@ export function JournalPage() {
         <p className="text-sm text-muted-foreground">…</p>
       ) : (
         <div className="space-y-6">
+          <OpportunitiesTab />
           <PendingInvitesSection invites={pendingInvites} />
           <section className="space-y-3">
             <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
