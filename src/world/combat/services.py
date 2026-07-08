@@ -12,7 +12,7 @@ import random
 from typing import TYPE_CHECKING, TypeVar
 
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -1030,6 +1030,16 @@ def _build_combat_result(
     )
 
 
+def _vulnerability_intensity_bonus(action: CombatRoundAction) -> int:
+    """Return the break-bar vulnerability intensity bonus if the action's
+    target opponent is currently vulnerable, else 0.
+    """
+    target = action.focused_opponent_target
+    if target is None or target.vulnerability_rounds_remaining <= 0:
+        return 0
+    return target.vulnerability_intensity_bonus
+
+
 def resolve_combat_technique(
     *,
     participant: CombatParticipant,
@@ -1102,7 +1112,11 @@ def resolve_combat_technique(
         targets=targets,
         lethal=encounter.is_lethal,
         control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
+        power_intensity_bonus=(
+            (fury_res.intensity_bonus if fury_res else 0)
+            + sig_intensity_delta
+            + _vulnerability_intensity_bonus(action)
+        ),
     )
 
     return _build_combat_result(
@@ -3222,6 +3236,27 @@ def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSh
     return True
 
 
+def _is_vulnerable(opponent: CombatOpponent) -> bool:
+    """Return True if the opponent's break-bar vulnerability window is active."""
+    return opponent.vulnerability_rounds_remaining > 0
+
+
+def _effective_soak_for_opponent(opponent: CombatOpponent, bypass_soak: bool) -> int:
+    """Return the effective soak value, bypassed by bypass_soak or vulnerability."""
+    if bypass_soak or _is_vulnerable(opponent):
+        return 0
+    return opponent.soak_value
+
+
+def _effective_resistance_for_opponent(
+    opponent: CombatOpponent, damage_type: DamageType | None
+) -> int:
+    """Return damage-type resistance, bypassed during vulnerability window."""
+    if damage_type is None or opponent.objectdb is None or _is_vulnerable(opponent):
+        return 0
+    return opponent.objectdb.conditions.resistance_modifier(damage_type)
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -3256,11 +3291,9 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         if dropped:
             return _zero_opponent_damage_result(opponent)
 
-    effective_soak = 0 if bypass_soak else opponent.soak_value
+    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak)
 
-    resistance = 0
-    if damage_type is not None and opponent.objectdb is not None:
-        resistance = opponent.objectdb.conditions.resistance_modifier(damage_type)
+    resistance = _effective_resistance_for_opponent(opponent, damage_type)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
     # Combo damage that bypasses soak should not also probe — the combo
@@ -6488,6 +6521,12 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
 
     # --- Round-start lifecycle: emit event, drain upkeep, detect combos ---
     result.available_combos = _fire_round_start(enc, round_number)
+
+    # --- Vulnerability window countdown (#2016) ---
+    CombatOpponent.objects.filter(
+        encounter=encounter,
+        vulnerability_rounds_remaining__gt=0,
+    ).update(vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1)
 
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
