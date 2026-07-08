@@ -21759,11 +21759,10 @@ export interface components {
       /** @description Sub-location where this interaction occurred */
       place?: number | null;
       /**
-       * @description The interaction's content, blanked when the persona is muted (#2087).
+       * @description Detail endpoint always returns full content (#2087 — opt-in backfill).
        *
-       *     Muted personas' interactions stay visible (so the scene stays coherent)
-       *     but their text is redacted. The viewer can click-to-expand to fetch the
-       *     full content via the detail endpoint.
+       *     The list endpoint blanks content for muted personas; the detail endpoint
+       *     is the reveal path — a viewer who clicks 'expand' fetches the full content here.
        */
       readonly content: string;
       /**
