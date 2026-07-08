@@ -16,6 +16,7 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.achievements.models import DiscoverableContent
 from world.magic.models.motifs import Facet, Motif, MotifResonanceAssociation
 from world.magic.models.techniques import (
     AbstractAppliedCondition,
@@ -24,7 +25,7 @@ from world.magic.models.techniques import (
 )
 
 
-class SignatureMotifBonus(SharedMemoryModel):
+class SignatureMotifBonus(DiscoverableContent, SharedMemoryModel):
     """Staff-authored bonus available to a signed technique when the character's
     Motif satisfies the required facet and/or resonance gate.
 
@@ -71,6 +72,14 @@ class SignatureMotifBonus(SharedMemoryModel):
     flat_intensity_delta = models.SmallIntegerField(
         default=0,
         help_text="Flat modifier added to the signed technique's effective intensity.",
+    )
+    min_crossing_level = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Minimum thread display level (3, 6, 11, 16, 21) at which this bonus "
+            "becomes selectable. Default 3 = first crossing. Uses the display-level "
+            "scale (same as ThreadPullEffect.min_thread_level)."
+        ),
     )
 
     class Meta:
