@@ -29019,6 +29019,7 @@ export interface components {
        *     * `MISSION_REPORT` - Mission report style
        *     * `STAKE_REWARD` - Stake reward
        *     * `DISTINCTION` - Distinction
+       *     * `COMBO_DISCOVERY` - Combo discovery
        */
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
@@ -30250,6 +30251,7 @@ export interface components {
      *     * `MISSION_REPORT` - Mission report style
      *     * `STAKE_REWARD` - Stake reward
      *     * `DISTINCTION` - Distinction
+     *     * `COMBO_DISCOVERY` - Combo discovery
      * @enum {string}
      */
     SourceEnum:
@@ -30268,7 +30270,8 @@ export interface components {
       | 'MISSION_REWARD'
       | 'MISSION_REPORT'
       | 'STAKE_REWARD'
-      | 'DISTINCTION';
+      | 'DISTINCTION'
+      | 'COMBO_DISCOVERY';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -45089,8 +45092,10 @@ export interface operations {
          *     * `MISSION_REPORT` - Mission report style
          *     * `STAKE_REWARD` - Stake reward
          *     * `DISTINCTION` - Distinction
+         *     * `COMBO_DISCOVERY` - Combo discovery
          */
         source?:
+          | 'COMBO_DISCOVERY'
           | 'DISTINCTION'
           | 'DRAMATIC_MOMENT'
           | 'ENTRY_FLOURISH'
