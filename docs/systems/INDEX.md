@@ -2787,6 +2787,12 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `CombatOpponent.summoned_by` (FK → `CharacterSheet`, nullable) — conjurer bond; set on
     summoned ALLY opponents.
   - `CombatOpponent.bond_expires_round` (int, nullable) — round at which the summon expires.
+  - `CombatOpponent.morale` / `max_morale` (PositiveSmallIntegerField, #2015) — first-class
+    depletable resolve pool mirroring war-scale `BattleUnit.morale`. Derived state via
+    `morale_state_for` (STEADY/FALTER/BREAK) drives `select_npc_actions` (falter weakens,
+    break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
+  - `ThreatPoolEntry.requires_steady` (bool, default False, #2015) — skipped when the
+    opponent is faltering; lets designers author "weakened" entries.
   - `CombatOpponentAction.opponent_targets` (M2M → `CombatOpponent`) — populated by
     `select_npc_actions` for ALLY summons so they attack ENEMY opponents. Exactly one of
     `targets` (M2M → `CombatParticipant`) or `opponent_targets` is populated per action.
@@ -2866,6 +2872,20 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   - `_refresh_participant_trigger_handlers(encounter)` — after passives, calls
     `TriggerHandler.refresh()` on each active participant so passive-installed reactive
     triggers (e.g. Shielded) fire in the same round
+- **Key Services — social/mental combat (#2015):**
+  - `morale_state_for(opponent)` / `apply_morale_damage(opponent, amount)` /
+    `tier_has_morale(opponent)` (`world/combat/morale.py`) — derived state + mutation
+  - `declare_rally` / `declare_demoralize` / `declare_taunt` / `declare_parley`
+    (`world/combat/services.py`) — arm the four social-combat `CombatRoundAction`s
+  - `_resolve_rally` / `_resolve_demoralize` / `_resolve_taunt` / `_resolve_parley` —
+    round-tick resolution in `_resolve_pc_action`; roll stat+skill(+spec) checks via
+    `collect_check_modifiers` + `perform_check`, with Composure defense
+    (`compute_resist_increment`) and mindless resistance (`MINDLESS_MORALE_RESISTANCE`).
+    Taunt reuses `accumulate_threat`; parley reuses `apply_social_disposition_delta`
+    + the seeded Calm condition; demoralize depletes morale via `apply_morale_damage`.
+  - `ensure_social_combat_content()` (`src/world/combat/social_combat_content.py`) —
+    idempotent seed for the 4 social-combat CheckTypes (Rally/Demoralize/Taunt/Parley
+    with stat+skill+spec), the Inspired condition, and a Charming Word technique.
 - **Key Services (`world/mechanics/reactions.py`):**
   - `dispatch_capability_reaction(character, protected, challenge_name, approach, outcome_fn)`
     — shared reactive spine; used by INTERPOSE and the catch-faller seam
@@ -2881,12 +2901,13 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     the "Shielded" `ConditionTemplate` + its `DAMAGE_PRE_APPLY` `TriggerDefinition` (SELF
     filter) + `FlowDefinition` (`MODIFY_PAYLOAD multiply 0.5`) + DEFEND passive `Technique`
     with `TechniqueAppliedCondition(target_kind=ALLY)`
-- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR), `RoundStatus` (shared with
+- **Enums:** `CombatManeuver` (FLEE / COVER / YIELD / INTERPOSE / SUCCOR / ENGAGE / DISENGAGE / RALLY / DEMORALIZE / TAUNT / PARLEY), `OpponentMoraleState` (STEADY / FALTER / BREAK — derived, `world.combat.morale`), `RoundStatus` (shared with
   `world.scenes.constants`; combat uses the same enum — DECLARING / RESOLVING / BETWEEN_ROUNDS /
   COMPLETED), `OpponentTier`, `ClashFlavor`, `EncounterOutcome`
 - **API:** `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove
   participant, add opponent, pause), player actions (declare, ready, interpose, cover,
-  yield, flee, my_action, available_combos), duel challenge endpoints
+  yield, flee, my_action, available_combos, rally, demoralize, taunt, parley),
+  duel challenge endpoints
 - **Integrates with:** scenes (`ensure_scene_for_location`, `ensure_scene_participation`),
   vitals (`apply_damage_to_participant`, `process_damage_consequences`),
   conditions (`bulk_apply_conditions` — now installs reactive side-effects;
