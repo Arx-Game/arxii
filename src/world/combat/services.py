@@ -1982,6 +1982,10 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         barrier_strength=barrier_strength,
     )
 
+    # Action economy: auto-scaling stamps from the tier template; manual mode
+    # defaults to 1 (the legacy behavior for hand-built opponents).
+    resolved_actions_per_round: int = block.actions_per_round if block is not None else 1
+
     objectdb, is_ephemeral = _resolve_objectdb_for_opponent(
         encounter, name, persona, existing_objectdb
     )
@@ -2016,6 +2020,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         body_toughness=resolved_body_toughness,
         bodies_per_attack=resolved_bodies_per_attack,
         barrier_strength=resolved_barrier_strength,
+        actions_per_round=resolved_actions_per_round,
         persona=persona,
         objectdb=objectdb,
         objectdb_is_ephemeral=is_ephemeral,
@@ -3004,7 +3009,7 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0913
             len(target_pool),
         )
     else:
-        n_attacks = 1
+        n_attacks = opponent.actions_per_round
 
     actions: list[CombatOpponentAction] = []
     for attack_index in range(n_attacks):

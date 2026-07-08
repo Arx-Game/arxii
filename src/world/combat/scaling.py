@@ -135,6 +135,7 @@ class OpponentStatBlock:
     bodies_per_attack: int | None
     barrier_strength: int | None
     phases: tuple[PhaseSpec, ...]
+    actions_per_round: int = 1
 
 
 def get_encounter_scaling_config() -> EncounterScalingConfig:
@@ -361,6 +362,7 @@ def compute_opponent_stat_block(
             body_toughness=tpl.body_toughness,
             bodies_per_attack=tpl.bodies_per_attack,
             barrier_strength=tpl.barrier_strength,
+            actions_per_round=tpl.base_actions_per_round,
             phases=(),
         )
 
@@ -395,5 +397,6 @@ def compute_opponent_stat_block(
         body_toughness=tpl.body_toughness,
         bodies_per_attack=tpl.bodies_per_attack,
         barrier_strength=barrier_strength,
+        actions_per_round=tpl.base_actions_per_round,
         phases=_build_boss_phases(tier, tpl.boss_phase_count, soak_value, probing_threshold),
     )
