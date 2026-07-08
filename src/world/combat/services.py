@@ -1500,6 +1500,271 @@ def declare_succor(
     return action
 
 
+def declare_rally(
+    participant: CombatParticipant,
+    ally: CombatParticipant,
+) -> CombatRoundAction:
+    """Declare a rallying maneuver — inspire an ally, auto-ready (#2015).
+
+    RALLY rolls a presence/Performance check at round-tick; on success it applies
+    a short-lived ``Inspired`` condition to the ally (a damage-multiplier buff) and,
+    on a great success, restores morale to ally-side summon opponents. This
+    function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot rally: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot rally: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot rally: character is dead."
+        raise ValueError(msg)
+
+    if ally.pk == participant.pk:
+        msg = "Cannot rally yourself."
+        raise ValueError(msg)
+    if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+        msg = "Rally target must be an active participant in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.RALLY,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def declare_demoralize(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).
+
+    DEMORALIZE rolls a presence/Persuasion(Intimidation) check at round-tick against
+    the target's Composure; on success it depletes the target's morale. Mindless
+    opponents resist (not immune). This function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot demoralize: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot demoralize: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot demoralize: character is dead."
+        raise ValueError(msg)
+
+    if opponent.encounter_id != encounter.pk or opponent.status != OpponentStatus.ACTIVE:
+        msg = "Demoralize target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.DEMORALIZE,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def declare_taunt(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).
+
+    TAUNT rolls a wits/Persuasion(Intimidation) check at round-tick against the
+    target's Composure; on success it accumulates threat on the existing
+    ``ThreatRecord`` seam, biasing the NPC's target selection toward the taunter.
+    This function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot taunt: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot taunt: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot taunt: character is dead."
+        raise ValueError(msg)
+
+    if opponent.encounter_id != encounter.pk or opponent.status != OpponentStatus.ACTIVE:
+        msg = "Taunt target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.LOW,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.TAUNT,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def _parley_gate_met(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> bool:
+    """Return whether parley's precondition is met (#2015).
+
+    Parley is gated: the opponent must be faltering or broken (morale below
+    ``FALTER_MORALE_THRESHOLD``), OR the participant's persona must hold an
+    ``NPCStanding`` with ``affection >= PARLEY_DISPOSITION_FLOOR`` toward the
+    opponent's persona. A steady, unknown opponent cannot be parleyed with —
+    but mindless targets are not rejected here (they roll with resistance at
+    resolve time; a breakthrough grants a fleeting mind).
+    """
+    from world.combat.constants import PARLEY_DISPOSITION_FLOOR  # noqa: PLC0415
+    from world.combat.morale import OpponentMoraleState, morale_state_for  # noqa: PLC0415
+
+    if morale_state_for(opponent) != OpponentMoraleState.STEADY:
+        return True
+
+    # Steady opponent: check durable standing toward the opponent's persona.
+    if opponent.persona_id is None:
+        return False
+
+    from world.npc_services.models import NPCStanding  # noqa: PLC0415
+    from world.scenes.services import (  # noqa: PLC0415
+        MissingPrimaryPersonaError,
+        persona_for_character,
+    )
+
+    try:
+        pc_persona = persona_for_character(participant.character_sheet.character)
+    except MissingPrimaryPersonaError:
+        # Half-set-up actor with no primary persona — no standing to check.
+        return False
+
+    return NPCStanding.objects.filter(
+        persona=pc_persona,
+        npc_persona_id=opponent.persona_id,
+        affection__gte=PARLEY_DISPOSITION_FLOOR,
+    ).exists()
+
+
+def declare_parley(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).
+
+    PARLEY is gated (see ``_parley_gate_met``): the opponent must be faltering/
+    broken or the participant must hold sufficient standing. At round-tick it
+    rolls a charm/Persuasion(Seduction) check against the target's Composure; on
+    success it routes through ``apply_social_disposition_delta`` and, on a
+    decisive success, calms the opponent (Calm condition → NEUTRAL allegiance).
+    This function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot parley: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot parley: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot parley: character is dead."
+        raise ValueError(msg)
+
+    if opponent.encounter_id != encounter.pk or opponent.status != OpponentStatus.ACTIVE:
+        msg = "Parley target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    if not _parley_gate_met(participant, opponent):
+        msg = (
+            "Cannot parley: the opponent's nerve is steady and you hold no "
+            "standing with them. Break their resolve first, or build rapport."
+        )
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.PARLEY,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
 def _resolve_opponent_stat_fields(  # noqa: PLR0913
     block: object | None,
     *,
