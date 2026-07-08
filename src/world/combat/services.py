@@ -4321,6 +4321,18 @@ def check_and_advance_boss_phase(
                 opponent.actions_per_round = phase.actions_per_round + phase.extra_actions
             else:
                 opponent.actions_per_round = opponent.actions_per_round + phase.extra_actions
+            # Break-bar reset: recharge from new phase config (#2016).
+            if phase.break_bar_threshold > 0:
+                opponent.break_bar_threshold = phase.break_bar_threshold
+                opponent.break_bar_current = phase.break_bar_threshold
+                opponent.vulnerability_rounds = phase.vulnerability_rounds
+                opponent.vulnerability_intensity_bonus = phase.vulnerability_intensity_bonus
+                opponent.vulnerability_rounds_remaining = 0
+            else:
+                opponent.break_bar_threshold = 0
+                opponent.break_bar_current = 0
+                opponent.vulnerability_rounds_remaining = 0
+
             opponent.save(
                 update_fields=[
                     "current_phase",
@@ -4330,8 +4342,26 @@ def check_and_advance_boss_phase(
                     "probing_threshold",
                     "damage_multiplier",
                     "actions_per_round",
+                    "break_bar_threshold",
+                    "break_bar_current",
+                    "vulnerability_rounds",
+                    "vulnerability_intensity_bonus",
+                    "vulnerability_rounds_remaining",
                 ],
             )
+
+            # NPC reinforcements: spawn adds on phase entry (#2016).
+            if phase.reinforcement_template_id is not None and phase.reinforcement_count > 0:
+                for _ in range(phase.reinforcement_count):
+                    add_opponent(
+                        opponent.encounter,
+                        name=phase.reinforcement_template.name,
+                        tier=phase.reinforcement_template.tier,
+                        threat_pool=phase.reinforcement_template.threat_pool,
+                        max_health=20,
+                        auto_phases=False,
+                    )
+
             return phase
 
     return None
