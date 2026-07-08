@@ -6527,6 +6527,23 @@ export interface paths {
     patch: operations['gm_applications_partial_update'];
     trace?: never;
   };
+  '/api/gm/dashboard/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the GM's dashboard aggregation. */
+    get: operations['gm_dashboard_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/demand-ransom/': {
     parameters: {
       query?: never;
@@ -15691,6 +15708,29 @@ export interface paths {
      *     Returns 201 with the created NarrativeMessage.
      */
     post: operations['stories_send_ooc_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stories/{id}/surrender/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/surrender/ — GM surrenders oversight (#2004).
+     *
+     *     Lead GM or staff only. Clears ``primary_table`` so the story enters
+     *     "seeking GM" state; notifies the affected player via a narrative
+     *     SYSTEM message. Returns 200 with the updated Story.
+     */
+    post: operations['stories_surrender_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -40852,6 +40892,24 @@ export interface operations {
       };
     };
   };
+  gm_dashboard_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   gm_demand_ransom_create: {
     parameters: {
       query?: never;
@@ -54340,6 +54398,32 @@ export interface operations {
     };
   };
   stories_send_ooc_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_surrender_create: {
     parameters: {
       query?: never;
       header?: never;
