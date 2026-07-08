@@ -34,7 +34,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
-- Enemy-NPC condition application · combo full journey · thread-pull final outcome.
+- Enemy-NPC condition application · thread-pull final outcome. (Combo full journey proven in #2017.)
 
 ## The combat gaps that define MVP (see the ledger's DO pillar)
 

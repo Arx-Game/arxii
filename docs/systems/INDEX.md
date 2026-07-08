@@ -2797,7 +2797,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   player-decision fields `confirm_soulfray_risk` + the `CommittingDeclaration` fury mixin
   `fury_commitment` / `fury_anchor`, #1454),
   `CombatOpponentAction`, `ThreatPool`, `ThreatPoolEntry`, `BossPhase`,
-  `ComboDefinition`, `Clash`, `ClashRound`, `ClashContribution`
+  `ComboDefinition`, `ComboSlot`, `ComboLearning` (use_count tracks repeat
+  use; written by `fire_combo_discovery` on first combat trigger, #2017),
+  `ComboSignature` (covenant+combo narrative flourish, #2017), `Clash`,
+  `ClashRound`, `ClashContribution`
 - **Effect-palette / summon / allegiance additions (#1584):**
   - `CombatOpponent.allegiance` (`CombatAllegiance`: ENEMY default / ALLY) — mutable
     side-field; ALLY opponents fight *for* the party (summons, and future charm/
