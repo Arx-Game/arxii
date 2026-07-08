@@ -1,1 +1,1 @@
-0036_combatopponent_auto_lock_threshold_and_more
+0037_morale_social_combat

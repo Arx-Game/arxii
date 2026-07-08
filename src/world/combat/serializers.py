@@ -1125,6 +1125,17 @@ class InterposeSerializer(serializers.Serializer):
     ally_participant_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
 
 
+class OpponentTargetSerializer(serializers.Serializer):
+    """Write serializer for social-combat verbs that target an NPC opponent (#2015).
+
+    Requires ``opponent_id`` — the PK of the ``CombatOpponent`` this character
+    intends to demoralize/taunt/parley. Encounter-membership validation happens
+    in the view (``get_object_or_404``) and service (``declare_<verb>``).
+    """
+
+    opponent_id = serializers.IntegerField(min_value=1)
+
+
 class PhaseSpecSerializer(serializers.Serializer):
     """Read-only serializer for a single PhaseSpec dataclass (boss phase budget)."""
 

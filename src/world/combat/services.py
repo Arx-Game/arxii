@@ -1500,6 +1500,271 @@ def declare_succor(
     return action
 
 
+def declare_rally(
+    participant: CombatParticipant,
+    ally: CombatParticipant,
+) -> CombatRoundAction:
+    """Declare a rallying maneuver — inspire an ally, auto-ready (#2015).
+
+    RALLY rolls a presence/Performance check at round-tick; on success it applies
+    a short-lived ``Inspired`` condition to the ally (a damage-multiplier buff) and,
+    on a great success, restores morale to ally-side summon opponents. This
+    function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot rally: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot rally: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot rally: character is dead."
+        raise ValueError(msg)
+
+    if ally.pk == participant.pk:
+        msg = "Cannot rally yourself."
+        raise ValueError(msg)
+    if ally.encounter_id != encounter.pk or ally.status != ParticipantStatus.ACTIVE:
+        msg = "Rally target must be an active participant in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.LOW,
+            "focused_opponent_target": None,
+            "focused_ally_target": ally,
+            "maneuver": CombatManeuver.RALLY,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def declare_demoralize(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a demoralizing maneuver — break an opponent's nerve, auto-ready (#2015).
+
+    DEMORALIZE rolls a presence/Persuasion(Intimidation) check at round-tick against
+    the target's Composure; on success it depletes the target's morale. Mindless
+    opponents resist (not immune). This function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot demoralize: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot demoralize: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot demoralize: character is dead."
+        raise ValueError(msg)
+
+    if opponent.encounter_id != encounter.pk or opponent.status != OpponentStatus.ACTIVE:
+        msg = "Demoralize target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.DEMORALIZE,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def declare_taunt(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a taunting maneuver — draw an NPC's aggro, auto-ready (#2015).
+
+    TAUNT rolls a wits/Persuasion(Intimidation) check at round-tick against the
+    target's Composure; on success it accumulates threat on the existing
+    ``ThreatRecord`` seam, biasing the NPC's target selection toward the taunter.
+    This function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot taunt: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot taunt: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot taunt: character is dead."
+        raise ValueError(msg)
+
+    if opponent.encounter_id != encounter.pk or opponent.status != OpponentStatus.ACTIVE:
+        msg = "Taunt target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.LOW,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.TAUNT,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
+def _parley_gate_met(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> bool:
+    """Return whether parley's precondition is met (#2015).
+
+    Parley is gated: the opponent must be faltering or broken (morale below
+    ``FALTER_MORALE_THRESHOLD``), OR the participant's persona must hold an
+    ``NPCStanding`` with ``affection >= PARLEY_DISPOSITION_FLOOR`` toward the
+    opponent's persona. A steady, unknown opponent cannot be parleyed with —
+    but mindless targets are not rejected here (they roll with resistance at
+    resolve time; a breakthrough grants a fleeting mind).
+    """
+    from world.combat.constants import PARLEY_DISPOSITION_FLOOR  # noqa: PLC0415
+    from world.combat.morale import OpponentMoraleState, morale_state_for  # noqa: PLC0415
+
+    if morale_state_for(opponent) != OpponentMoraleState.STEADY:
+        return True
+
+    # Steady opponent: check durable standing toward the opponent's persona.
+    if opponent.persona_id is None:
+        return False
+
+    from world.npc_services.models import NPCStanding  # noqa: PLC0415
+    from world.scenes.services import (  # noqa: PLC0415
+        MissingPrimaryPersonaError,
+        persona_for_character,
+    )
+
+    try:
+        pc_persona = persona_for_character(participant.character_sheet.character)
+    except MissingPrimaryPersonaError:
+        # Half-set-up actor with no primary persona — no standing to check.
+        return False
+
+    return NPCStanding.objects.filter(
+        persona=pc_persona,
+        npc_persona_id=opponent.persona_id,
+        affection__gte=PARLEY_DISPOSITION_FLOOR,
+    ).exists()
+
+
+def declare_parley(
+    participant: CombatParticipant,
+    opponent: CombatOpponent,
+) -> CombatRoundAction:
+    """Declare a parley maneuver — talk a foe down mid-fight, auto-ready (#2015).
+
+    PARLEY is gated (see ``_parley_gate_met``): the opponent must be faltering/
+    broken or the participant must hold sufficient standing. At round-tick it
+    rolls a charm/Persuasion(Seduction) check against the target's Composure; on
+    success it routes through ``apply_social_disposition_delta`` and, on a
+    decisive success, calms the opponent (Calm condition → NEUTRAL allegiance).
+    This function only records the declaration.
+    """
+    from world.vitals.services import is_dead  # noqa: PLC0415
+
+    encounter = participant.encounter
+    if encounter.status != RoundStatus.DECLARING:
+        msg = (
+            f"Cannot parley: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    if participant.status != ParticipantStatus.ACTIVE:
+        msg = "Cannot parley: participant is no longer active in this encounter."
+        raise ValueError(msg)
+
+    if is_dead(participant.character_sheet):
+        msg = "Cannot parley: character is dead."
+        raise ValueError(msg)
+
+    if opponent.encounter_id != encounter.pk or opponent.status != OpponentStatus.ACTIVE:
+        msg = "Parley target must be an active opponent in this encounter."
+        raise ValueError(msg)
+
+    if not _parley_gate_met(participant, opponent):
+        msg = (
+            "Cannot parley: the opponent's nerve is steady and you hold no "
+            "standing with them. Break their resolve first, or build rapport."
+        )
+        raise ValueError(msg)
+
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.MEDIUM,
+            "focused_opponent_target": opponent,
+            "focused_ally_target": None,
+            "maneuver": CombatManeuver.PARLEY,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    return action
+
+
 def _resolve_opponent_stat_fields(  # noqa: PLR0913
     block: object | None,
     *,
@@ -2255,7 +2520,19 @@ def _get_eligible_entries(
             by this opponent. Pre-fetched in batch by the caller.
     """
     eligible: list[ThreatPoolEntry] = []
+    # Falter: skip entries that require a steady nerve (#2015).
+    from world.combat.morale import (  # noqa: PLC0415
+        OpponentMoraleState,
+        morale_state_for,
+    )
+
+    faltering = morale_state_for(opponent) == OpponentMoraleState.FALTER
+
     for entry in entries:
+        # Falter: skip requires_steady entries (designers author "weakened" entries).
+        if faltering and entry.requires_steady:
+            continue
+
         # Filter by minimum_phase
         if entry.minimum_phase is not None and entry.minimum_phase > opponent.current_phase:
             continue
@@ -2674,6 +2951,17 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0913
     no valid target (a #1584 ALLY summon with no live enemy, or a #1590
     calmed/neutral opponent whose threat-read yielded no PCs).
     """
+    from world.combat.morale import (  # noqa: PLC0415
+        OpponentMoraleState,
+        morale_state_for,
+    )
+
+    # Break: a broken opponent flees — set FLED and skip the round (#2015).
+    if morale_state_for(opponent) == OpponentMoraleState.BREAK:
+        opponent.status = OpponentStatus.FLED
+        opponent.save(update_fields=["status"])
+        return []
+
     eligible = _get_eligible_entries(opponent, pool_entries, cooldown_used)
     if not eligible:
         return []
@@ -4041,6 +4329,285 @@ def _record_combat_consequence(  # noqa: PLR0913 - mirrors record_consequence_ou
     )
 
 
+# ---------------------------------------------------------------------------
+# Social/mental combat verb resolution (#2015)
+# ---------------------------------------------------------------------------
+
+
+def _social_combat_difficulty(
+    target: CombatOpponent | None,
+    *,
+    effort_level: str = "medium",
+) -> int:
+    """Compute the target_difficulty for a social-combat check (#2015).
+
+    Composure defense: ``compute_resist_increment`` (the same path scenes use,
+    now wired into combat for the first time). Mindless resistance: a mindless
+    target adds ``MINDLESS_MORALE_RESISTANCE`` — a high resistance tier, not a
+    wall. Returns 0 when there is no target (rally targets an ally).
+    """
+    if target is None:
+        return 0
+
+    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+    from world.combat.constants import MINDLESS_MORALE_RESISTANCE  # noqa: PLC0415
+    from world.combat.morale import tier_has_morale  # noqa: PLC0415
+
+    difficulty = 0
+    if target.objectdb is not None:
+        difficulty = compute_resist_increment(target.objectdb, effort_level)
+    if not tier_has_morale(target):
+        difficulty += MINDLESS_MORALE_RESISTANCE
+    return difficulty
+
+
+def _resolve_social_check(
+    participant: CombatParticipant,
+    check_type_name: str,
+    target_difficulty: int,
+) -> int:
+    """Roll a social-combat check and return the success_level (#2015).
+
+    Resolves the CheckType by name (seeded by social_combat_content). Routes
+    modifiers through ``collect_check_modifiers`` (the same seam combat uses),
+    then ``perform_check``. Returns ``check_result.success_level``.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
+    if check_type is None:
+        return 0
+
+    character = participant.character_sheet.character
+    breakdown = collect_check_modifiers(
+        participant.character_sheet, check_type, scene=participant.encounter.scene
+    )
+    result = perform_check(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=breakdown.total,
+    )
+    return result.success_level or 0
+
+
+def _resolve_rally(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared rally — inspire an ally (#2015).
+
+    Rolls the Rally check (presence + Performance + Oratory). On success, applies
+    a short-lived ``Inspired`` condition to the ally. On a great success (SL>=3),
+    also restores morale to ally-side summon opponents.
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        RALLY_BASE_DIFFICULTY,
+        RALLY_GREAT_SUCCESS_LEVEL,
+        RALLY_MORALE_PER_LEVEL,
+    )
+    from world.combat.social_combat_content import INSPIRED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    success_level = _resolve_social_check(participant, "Rally", RALLY_BASE_DIFFICULTY)
+    if success_level < 1:
+        return outcome
+
+    ally = action.focused_ally_target
+    if ally is None:
+        return outcome
+
+    # Apply Inspired condition to the ally.
+    inspired = ConditionTemplate.objects.filter(name=INSPIRED_CONDITION_NAME).first()
+    if inspired is not None:
+        apply_condition(
+            ally.character_sheet.character,
+            inspired,
+            source_character=participant.character_sheet.character,
+            source_description="Rallied in combat.",
+        )
+
+    # Great success: restore morale to ally-side summon opponents.
+    if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
+        restore = success_level * RALLY_MORALE_PER_LEVEL
+        ally_summons = CombatOpponent.objects.filter(
+            encounter=participant.encounter,
+            status=OpponentStatus.ACTIVE,
+            allegiance=CombatAllegiance.ALLY,
+        )
+        for opp in ally_summons:
+            opp.morale = min(opp.max_morale, opp.morale + restore)
+            opp.save(update_fields=["morale"])
+
+    return outcome
+
+
+def _resolve_demoralize(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared demoralize — break an opponent's nerve (#2015).
+
+    Rolls the Demoralize check (presence + Persuasion + Intimidation) against the
+    target's Composure (+ mindless resistance). On success, depletes morale.
+    """
+    from world.combat.constants import DEMORALIZE_MORALE_PER_LEVEL  # noqa: PLC0415
+    from world.combat.morale import apply_morale_damage, tier_has_morale  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_opponent_target
+    if target is None:
+        return outcome
+
+    target_difficulty = _social_combat_difficulty(target)
+    success_level = _resolve_social_check(participant, "Demoralize", target_difficulty)
+
+    if success_level < 1:
+        # Failed: mindless targets narrate "the construct is unmoved."
+        if not tier_has_morale(target):
+            outcome.summary = "The construct is unmoved."
+        return outcome
+
+    apply_morale_damage(target, success_level * DEMORALIZE_MORALE_PER_LEVEL)
+    return outcome
+
+
+def _resolve_taunt(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared taunt — draw an NPC's aggro (#2015).
+
+    Rolls the Taunt check (wits + Persuasion + Intimidation) against the target's
+    Composure. On success, accumulates threat on the existing ThreatRecord seam.
+    """
+    from world.combat.constants import TAUNT_THREAT_PER_LEVEL  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_opponent_target
+    if target is None:
+        return outcome
+
+    target_difficulty = _social_combat_difficulty(target)
+    success_level = _resolve_social_check(participant, "Taunt", target_difficulty)
+
+    if success_level < 1:
+        return outcome
+
+    accumulate_threat(
+        participant.encounter,
+        target,
+        participant,
+        success_level * TAUNT_THREAT_PER_LEVEL,
+    )
+    return outcome
+
+
+def _resolve_parley(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared parley — talk a foe down mid-fight (#2015).
+
+    Rolls the Parley check (charm + Persuasion + Seduction) against the target's
+    Composure (+ mindless resistance — a breakthrough grants a fleeting mind). On
+    success, routes through ``apply_social_disposition_delta``. On a decisive
+    success (SL>=3), calms the opponent. On a critical success (SL>=5) against a
+    broken opponent, the NPC yields (FLED).
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        PARLEY_CRITICAL_SUCCESS_LEVEL,
+        PARLEY_DECISIVE_SUCCESS_LEVEL,
+        OpponentStatus,
+    )
+    from world.combat.morale import (  # noqa: PLC0415
+        OpponentMoraleState,
+        morale_state_for,
+        tier_has_morale,
+    )
+    from world.conditions.constants import CALM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.npc_services.social_disposition import (  # noqa: PLC0415
+        apply_social_disposition_delta,
+    )
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_opponent_target
+    if target is None:
+        return outcome
+
+    target_difficulty = _social_combat_difficulty(target)
+    success_level = _resolve_social_check(participant, "Parley", target_difficulty)
+
+    if success_level < 1:
+        # Failed: mindless targets narrate "it has no mind to reach."
+        if not tier_has_morale(target):
+            outcome.summary = "It has no mind to reach."
+        return outcome
+
+    # Success: apply the disposition delta (the built path, now reachable in combat).
+    actor = participant.character_sheet.character
+    target_persona_id = target.persona_id
+    if target_persona_id is not None:
+        apply_social_disposition_delta(actor, target_persona_id, _ParleyResult(success_level))
+
+    # Decisive success: calm the opponent (Calm condition -> NEUTRAL allegiance).
+    if success_level >= PARLEY_DECISIVE_SUCCESS_LEVEL and target.objectdb is not None:
+        calm = ConditionTemplate.objects.filter(name=CALM_CONDITION_NAME).first()
+        if calm is not None:
+            apply_condition(
+                target.objectdb,
+                calm,
+                source_character=actor,
+                source_description="Parleyed into calm.",
+            )
+
+    # Critical success against a broken opponent: the NPC yields (FLED, alive).
+    if (
+        success_level >= PARLEY_CRITICAL_SUCCESS_LEVEL
+        and morale_state_for(target) == OpponentMoraleState.BREAK
+    ):
+        target.status = OpponentStatus.FLED
+        target.save(update_fields=["status"])
+
+    return outcome
+
+
+@dataclass
+class _ParleyResult:
+    """Minimal result shim so apply_social_disposition_delta can read success_level.
+
+    The disposition service reads ``result.main_result.check_result.success_level``;
+    this shim provides that shape without constructing a full PendingResolution.
+    """
+
+    main_result: _ParleyMainResult
+
+    def __init__(self, success_level: int) -> None:
+        self.main_result = _ParleyMainResult(success_level)
+
+
+@dataclass
+class _ParleyMainResult:
+    check_result: _ParleyCheckResult
+
+    def __init__(self, success_level: int) -> None:
+        self.check_result = _ParleyCheckResult(success_level)
+
+
+@dataclass
+class _ParleyCheckResult:
+    success_level: int
+
+
 def _resolve_flee(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -4240,7 +4807,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
 
-def _resolve_pc_action(
+def _resolve_pc_action(  # noqa: C901, PLR0911
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
@@ -4263,6 +4830,16 @@ def _resolve_pc_action(
     # cover_bonus it contributes to the ally's flee check.
     if action.maneuver == CombatManeuver.FLEE:
         return _resolve_flee(participant, action)
+
+    # Social/mental combat verbs (#2015): resolve as checks at round-tick.
+    if action.maneuver == CombatManeuver.RALLY:
+        return _resolve_rally(participant, action)
+    if action.maneuver == CombatManeuver.DEMORALIZE:
+        return _resolve_demoralize(participant, action)
+    if action.maneuver == CombatManeuver.TAUNT:
+        return _resolve_taunt(participant, action)
+    if action.maneuver == CombatManeuver.PARLEY:
+        return _resolve_parley(participant, action)
 
     # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
     # _resolve_duel_completion is a no-op afterwards because the encounter is now

@@ -75,6 +75,12 @@ def _seed_social_actions() -> None:
     seed_social_action_content()
 
 
+def _seed_social_combat() -> None:
+    from world.combat.social_combat_content import ensure_social_combat_content  # noqa: PLC0415
+
+    ensure_social_combat_content()
+
+
 def _seed_consent() -> None:
     from world.seeds.consent import seed_social_consent_categories  # noqa: PLC0415
 
@@ -192,6 +198,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Social actions: authoritative social ActionTemplates + pools + Flirt/Seduce attraction
     # effects. After social_relationships (its conditions) + checks (its CheckTypes) (#1697).
     "social_actions": _seed_social_actions,
+    # Social combat: the rally/demoralize/taunt/parley CheckTypes + Inspired
+    # condition + charm technique (#2015). After social_actions (its skills/specs)
+    # + magic (the Charmed condition).
+    "social_combat": _seed_social_combat,
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
@@ -291,6 +301,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
     from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
@@ -318,6 +329,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "social_relationships": [RelationshipCondition],
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
+        # Social combat: 4 CheckTypes + Inspired condition + Charming Word
+        # technique (#2015). Represented by Technique (the charm technique).
+        "social_combat": [Technique],
         "magic": [Affinity, Resonance],
         # Style also carries the seeded aesthetic vocabulary spread across the four
         # audacity tiers (#2029).

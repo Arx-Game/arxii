@@ -35,10 +35,15 @@ _SUBVERBS: dict[str, str] = {
     "combo": "combat_combo",
     "revert": "combat_revert",
     "yield": "yield",
+    "rally": "combat_rally",
+    "demoralize": "combat_demoralize",
+    "taunt": "combat_taunt",
+    "parley": "combat_parley",
 }
 
 # subverbs that take a single name argument.
-_ALLY_SUBVERBS = {"cover", "interpose", "succor"}
+_ALLY_SUBVERBS = {"cover", "interpose", "succor", "rally"}
+_OPPONENT_SUBVERBS = {"demoralize", "taunt", "parley"}
 
 
 class CmdCombat(_CombatCommandMixin, DispatchCommand):
@@ -50,6 +55,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         combat cover <ally>         — cover an ally's escape
         combat interpose [ally]     — guard an ally (or any ally) from harm
         combat succor <ally>        — shelter an ally from environmental hazards
+        combat rally <ally>         — inspire an ally, bolstering their next action
+        combat demoralize <opp>     — break an opponent's nerve (morale damage)
+        combat taunt <opp>          — draw an NPC's aggro toward you
+        combat parley <opp>          — talk a wavering foe down mid-fight
         combat join                 — join the fight in your room
         combat leave                — leave an open encounter between rounds
         combat ready                — toggle your declared action as ready
@@ -85,8 +94,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
 
         return ActionRef(backend=ActionBackend.REGISTRY, registry_key=_SUBVERBS[self._subverb])
 
-    def resolve_action_args(self) -> dict[str, Any]:
-        """Resolve name arguments (ally / combo) into dispatch kwargs."""
+    def resolve_action_args(self) -> dict[str, Any]:  # noqa: PLR0911
+        """Resolve name arguments (ally / opponent / combo) into dispatch kwargs."""
         if self._subverb == "cover":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
         if self._subverb == "interpose":  # noqa: STRING_LITERAL
@@ -94,6 +103,10 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             return {"ally_participant_id": ally}
         if self._subverb == "succor":  # noqa: STRING_LITERAL
             return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
+        if self._subverb == "rally":  # noqa: STRING_LITERAL
+            return {"ally_participant_id": self._resolve_ally_pk(self._require_rest("an ally"))}
+        if self._subverb in _OPPONENT_SUBVERBS:
+            return {"opponent_id": self._resolve_opponent_pk(self._require_rest("an opponent"))}
         if self._subverb == "combo":  # noqa: STRING_LITERAL
             return {"combo_id": self._resolve_combo_pk(self._require_rest("a combo name"))}
         return {}
@@ -127,6 +140,30 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
             raise CommandError(msg)
         if len(matches) > 1:
             msg = f"More than one ally named '{name}' — be more specific."
+            raise CommandError(msg)
+        return matches[0].pk
+
+    def _resolve_opponent_pk(self, name: str) -> int:
+        """Return the pk of the active opponent named *name* in the caller's encounter."""
+        from world.combat.constants import OpponentStatus  # noqa: PLC0415
+        from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+        participant = self._combat_participant_or_none()
+        if participant is None:
+            msg = "You are not in an active combat round."
+            raise CommandError(msg)
+        matches = list(
+            CombatOpponent.objects.filter(
+                encounter=participant.encounter,
+                status=OpponentStatus.ACTIVE,
+                name__iexact=name,
+            )
+        )
+        if not matches:
+            msg = f"No active opponent named '{name}' in this encounter."
+            raise CommandError(msg)
+        if len(matches) > 1:
+            msg = f"More than one opponent named '{name}' — be more specific."
             raise CommandError(msg)
         return matches[0].pk
 
@@ -221,7 +258,8 @@ class CmdCombat(_CombatCommandMixin, DispatchCommand):
         """Print resource/risk state + the declared action + available subverbs."""
         lines = [
             "|wCombat actions|n: "
-            "flee, cover <ally>, interpose [ally], succor <ally>, join, leave, ready, "
+            "flee, cover <ally>, interpose [ally], succor <ally>, rally <ally>, "
+            "demoralize <opp>, taunt <opp>, parley <opp>, join, leave, ready, "
             "combo <name>, revert, yield"
         ]
         participant = self._combat_participant_or_none()

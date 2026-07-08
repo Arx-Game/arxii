@@ -100,6 +100,10 @@ class CombatManeuver(models.TextChoices):
     SUCCOR = "succor", "Succor"
     ENGAGE = "engage", "Engage"
     DISENGAGE = "disengage", "Disengage"
+    RALLY = "rally", "Rally"
+    DEMORALIZE = "demoralize", "Demoralize"
+    TAUNT = "taunt", "Taunt"
+    PARLEY = "parley", "Parley"
 
 
 class EngagementLockStatus(models.TextChoices):
@@ -299,6 +303,36 @@ INTERPOSE_BASE_FATIGUE_COST: int = 3
 # Succor declaration protects the target against every round-ticked hazard that
 # round, per the approved spec's Decision 8). Mirrors INTERPOSE_BASE_FATIGUE_COST.
 SUCCOR_BASE_FATIGUE_COST: int = 3
+
+# ---------------------------------------------------------------------------
+# Party-NPC morale (#2015)
+#
+# A first-class depletable resource on CombatOpponent, mirroring war-scale
+# BattleUnit.morale (battles/constants.py:119). status is DERIVED via
+# morale_state_for (world.combat.morale) — never stored. Mindless opponents
+# (OpponentTierTemplate.has_morale=False) impose MINDLESS_MORALE_RESISTANCE on
+# morale checks, not an immunity — a powerful enough roll breaks through (Arx's
+# "power can do the impossible" tenet).
+# ---------------------------------------------------------------------------
+DEFAULT_OPPONENT_MORALE: int = 70
+MAX_OPPONENT_MORALE: int = 100
+FALTER_MORALE_THRESHOLD: int = 50  # at/below: faltering
+BREAK_MORALE_THRESHOLD: int = 25  # at/below: broken -> FLED
+
+# Party-scale social-combat tuning (#2015). Values mirror the war-scale
+# ROUT/RALLY per-level magnitudes (battles/constants.py:131); adjust freely
+# during playtesting.
+DEMORALIZE_MORALE_PER_LEVEL: int = 15
+RALLY_MORALE_PER_LEVEL: int = 15
+TAUNT_THREAT_PER_LEVEL: int = 25
+RALLY_BASE_DIFFICULTY: int = 10
+PARLEY_DISPOSITION_FLOOR: int = 20
+MINDLESS_MORALE_RESISTANCE: int = 30
+
+# Success-level thresholds for social-combat verb outcomes (#2015).
+RALLY_GREAT_SUCCESS_LEVEL: int = 3  # great success: restore ally morale
+PARLEY_DECISIVE_SUCCESS_LEVEL: int = 3  # decisive: calm the opponent
+PARLEY_CRITICAL_SUCCESS_LEVEL: int = 5  # critical + broken: NPC yields
 
 # ---------------------------------------------------------------------------
 # Clash enums

@@ -13,8 +13,28 @@ An NPC entity in a `CombatEncounter`, defined by its `OpponentTier`, health/soak
 _Avoid_: enemy, monster, mob, NPC participant
 
 **Maneuver**:
-A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
+A special non-technique declaration a PC can make for a round (`CombatManeuver`: FLEE, COVER, YIELD, INTERPOSE, SUCCOR, RALLY, DEMORALIZE, TAUNT, PARLEY) — a verb that is neither a technique cast nor a clash commit. Each is a real Action on the shared dispatch seam.
 _Avoid_: special move, stance, command
+
+**Morale**:
+A first-class depletable resolve pool on `CombatOpponent` (#2015), mirroring war-scale `BattleUnit.morale`. The derived state (STEADY/FALTER/BREAK) is read via `morale_state_for` — never stored. Falter weakens NPC output in `select_npc_actions`; Break sets `OpponentStatus.FLED`. Mindless opponents (`OpponentTierTemplate.has_morale=False`) resist morale checks with a flat difficulty modifier — not an immunity; a powerful enough roll breaks through (Arx's "power can do the impossible" tenet).
+_Avoid_: willpower, resolve (as a field name — `morale` is the canonical column)
+
+**Rally**:
+The social-combat maneuver by which a PC inspires an ally — rolling presence + Performance + Oratory to apply a short-lived `Inspired` buff, and on a great success restoring morale to ally-side summon opponents. A benefit, so consent-free (ADR-0024).
+_Avoid_: inspire (as the maneuver name), buff, motivate
+
+**Demoralize**:
+The social-combat maneuver by which a PC breaks an opponent's nerve — rolling presence + Persuasion + Intimidation against the target's Composure to deplete morale. Mindless foes resist but are not immune. Targets NPCs only.
+_Avoid_: intimidate (that name is the CheckType), frighten, cow
+
+**Taunt**:
+The social-combat maneuver by which a PC draws an NPC's aggro — rolling wits + Persuasion + Intimidation to accumulate threat on the existing `ThreatRecord` seam, biasing the NPC's target selection toward the taunter next round.
+_Avoid_: provoke, mock, aggro (colloquial)
+
+**Parley**:
+The social-combat maneuver by which a PC talks a foe down mid-fight — rolling charm + Persuasion + Seduction against the target's Composure to apply a disposition delta (via `apply_social_disposition_delta`), calm the opponent on a decisive success, or yield a broken foe on a critical success. Gated: the opponent must be faltering/broken or the PC must hold sufficient standing. Even mindless targets can be parleyed with — a breakthrough grants a fleeting mind (Sharlotte charming a lake).
+_Avoid_: negotiate, bargain, persuade (that name is the CheckType)
 
 **Yield**:
 The maneuver by which a PC concedes — in a duel the yielding PC loses immediately. PvP is structurally non-lethal (yield / knockout), so yielding ends the contest without injury or death.

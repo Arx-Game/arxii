@@ -17,9 +17,11 @@ if TYPE_CHECKING:
     from world.combat.handlers import EncounterCombatHandler
 
 from world.combat.constants import (
+    DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
     FLEE_BASE_DIFFICULTY,
     FLEE_COVER_BONUS,
+    MAX_OPPONENT_MORALE,
     SCALING_CONFIG_BASELINE_PARTY_SIZE,
     SCALING_CONFIG_PER_AVG_LEVEL_PCT,
     SCALING_CONFIG_PER_EXTRA_MEMBER_PCT,
@@ -276,6 +278,11 @@ class ThreatPoolEntry(SharedMemoryModel):
     )
     minimum_phase = models.PositiveIntegerField(null=True, blank=True)
     cooldown_rounds = models.PositiveIntegerField(null=True, blank=True)
+    requires_steady = models.BooleanField(
+        default=False,
+        help_text="If True, this entry is skipped when the opponent is faltering "
+        "(morale_state FALTER). Lets designers author 'weakened' entries (#2015).",
+    )
 
     # === Clash fields (Task 1.5) ===
     clash_capable = models.BooleanField(
@@ -519,6 +526,18 @@ class CombatOpponent(SharedMemoryModel):
             "Fired deterministically when the encounter completes in PC victory and "
             "this opponent is DEFEATED (#876). Author non-character-targeted effects."
         ),
+    )
+
+    # === Morale fields (#2015) ===
+    morale = models.PositiveSmallIntegerField(
+        default=DEFAULT_OPPONENT_MORALE,
+        help_text="Depletable resolve pool (#2015). Falter/break thresholds drive "
+        "select_npc_actions; mindless opponents (tier template has_morale=False) "
+        "resist morale checks, not immune to them.",
+    )
+    max_morale = models.PositiveSmallIntegerField(
+        default=MAX_OPPONENT_MORALE,
+        help_text="Ceiling for morale; RALLY restores toward it.",
     )
 
     class Meta:
@@ -1734,6 +1753,12 @@ class OpponentTierTemplate(SharedMemoryModel):
     boss_phase_count = models.PositiveIntegerField(
         default=1,
         help_text="Number of boss phases; 1 = single-phase (non-boss tiers).",
+    )
+    has_morale = models.BooleanField(
+        default=True,
+        help_text="False for mindless tiers (constructs). Adds "
+        "MINDLESS_MORALE_RESISTANCE to morale checks against this opponent — "
+        "not an immunity; a powerful enough roll breaks through.",
     )
 
     class Meta:
