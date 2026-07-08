@@ -121,6 +121,7 @@ class CmdMission(ArxCommand):
                     f"  [#{entry.instance_id}] {entry.template_name} ({entry.status}){node}"
                 )
         self._append_pending_invites(lines)
+        self._append_pending_summonses(lines)
         self.msg("\n".join(lines))
 
     def _append_pending_invites(self, lines: list[str]) -> None:
@@ -141,6 +142,26 @@ class CmdMission(ArxCommand):
             f"  [invite #{pk}] {name} — 'mission accept {pk}' / 'mission decline {pk}'"
             for pk, name in pending
         )
+
+    def _append_pending_summonses(self, lines: list[str]) -> None:
+        """Append pending summonses directed at the caller's persona (#2050)."""
+        from world.npc_services.constants import SummonsStatus  # noqa: PLC0415
+        from world.npc_services.models import OfferSummons  # noqa: PLC0415
+
+        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        if persona is None:
+            return
+        pending = (
+            OfferSummons.objects.filter(target_persona=persona, status=SummonsStatus.PENDING)
+            .select_related("offer__role")
+            .order_by("created_at")
+        )
+        for row in pending:
+            deadline = f" (expires {row.expires_at:%Y-%m-%d %H:%M})" if row.expires_at else ""
+            lines.append(
+                f"  [summons #{row.pk}] {row.offer.role.name}: {row.message}{deadline}\n"
+                f"    — 'hire accept {row.pk}' / 'hire decline {row.pk}'"
+            )
 
     def _handle_beat(self, rest: str) -> None:
         from world.missions.services.play import (  # noqa: PLC0415
