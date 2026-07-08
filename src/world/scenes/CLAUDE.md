@@ -15,20 +15,21 @@ the unified Persona identity system, and non-combat scene rounds.
   `blocked_persona`) with an `account_level` opt-in; keyed on `PlayerData` so it follows the person
   across re-rosters. Resolution + lifecycle in `block_services.py` (`coded_block_active`,
   `sheet_blocked_for_viewer`, `hidden_persona_ids_for_viewer`, `lift_block`, `finalize_expired_blocks`).
-  Wired into the profile gate (404), the scene target picker, and feed visibility. Supersedes the removed
-  `evennia_extensions.PlayerBlockList`. Remaining: the awareness/"Character Has You Blocked" surface +
-  the cron job.
+  Wired into the profile gate (404), the scene target picker, and feed visibility. The cron-clear
+  (`finalize_expired_blocks`, wired into `game_clock` via `scenes.block_finalize`) is done.
+  Supersedes the removed `evennia_extensions.PlayerBlockList`. Remaining: the awareness/"Character Has
+  You Blocked" surface (#2086).
 - **`Mute`** (#1278): the lighter, **one-way** sibling of Block — a player filters a persona out of
   their own view (IC and/or OOC), reversible, no enforcement, the muted party never aware.
   `mute_services.py` (`muted_persona_ids_for_viewer`, `set_mute`, `unmute`); the IC side is wired into
   the scene feed (muted personas skipped). The OOC channel, the "actions still show without text"
-  refinement, the opt-in reveal, and the toggle UI are follow-ups.
+  refinement, the opt-in reveal, and the "N hidden" feed divider are follow-ups (#2087).
 - **`BlockContactFlag`** (#1278): the anti-derivation awareness layer. When a *blocked* player reaches the
   blocker via another identity (circumvention the coded block can't prevent without leaking the alt),
   `block_services.flag_blocked_contact_attempt` records it for staff (anchored on accounts + personas;
-  zero signal to either player). Hooked into `action_services.create_action_request`. Staff triage via
-  admin. Remaining contact vectors (targeted poses/whispers) + the player-facing generic "Character Has
-  You Blocked" warning are follow-ups.
+  zero signal to either player). Hooked into `action_services.create_action_request` and the direct
+  communication actions (`WhisperAction`, directed `SayAction`/`PoseAction`, `CmdPage`). Staff triage
+  via admin. Remaining: the player-facing generic "Character Has You Blocked" warning (#2086).
 - **`Interaction`**: Atomic IC interaction record (pose, say, whisper, etc.) with privacy controls
 - **`InteractionFavorite`**: Private bookmarks for cherished RP moments
 - **`InteractionReaction`**: Emoji reactions on interactions

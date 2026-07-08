@@ -19,7 +19,7 @@ from world.scenes.interaction_services import record_interaction, record_whisper
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.scenes.models import Persona
+    from world.scenes.models import Persona, Scene
 
 
 # Module-level filter constants used as dataclass defaults (RUF009: no calls in defaults).
@@ -43,6 +43,47 @@ def _characters_to_active_personas(characters: list[ObjectDB]) -> list[Persona] 
         if primary is not None:
             personas.append(primary)
     return personas or None
+
+
+def _flag_blocked_contact_for_targets(
+    actor: ObjectDB,
+    targets: list[ObjectDB],
+    *,
+    scene: Scene | None = None,
+) -> None:
+    """Fire BlockContactFlag for any blocked-pair contact in a communication action (#1278).
+
+    Resolves the actor's and each target's active persona, then calls
+    ``flag_blocked_contact_attempt``. The service is a no-op when no active block
+    exists (target did not block the initiator), and dedupes per (blocker, blocked,
+    scene) — so calling it unconditionally is safe. Zero signal to either player.
+    """
+    try:
+        initiator_persona = actor.sheet_data.primary_persona
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    if initiator_persona is None:
+        return
+    from world.scenes.block_services import flag_blocked_contact_attempt  # noqa: PLC0415
+
+    for target in targets:
+        try:
+            target_persona = target.sheet_data.primary_persona
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        if target_persona is not None:
+            flag_blocked_contact_attempt(
+                initiator_persona=initiator_persona,
+                target_persona=target_persona,
+                scene=scene,
+            )
+
+
+def _active_scene_for(actor: ObjectDB) -> Scene | None:
+    """Resolve the active scene at the actor's location, if any."""
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    return get_active_scene(actor.location)
 
 
 @dataclass
@@ -91,6 +132,12 @@ class SayAction(Action):
             target_personas=target_personas,
         )
 
+        # #1278/#2088 — flag circumvention: a blocked player directing a say at the
+        # blocker via another identity. Room-wide says (no targets) are already
+        # handled by the visibility filter; only directed says are contact attempts.
+        if targets:
+            _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
+
         return ActionResult(success=True)
 
 
@@ -138,6 +185,12 @@ class PoseAction(Action):
             target_personas=target_personas,
             place=place,
         )
+
+        # #1278/#2088 — flag circumvention: a blocked player directing a pose at the
+        # blocker via another identity. Room-wide poses (no targets) are already
+        # handled by the visibility filter; only directed poses are contact attempts.
+        if targets:
+            _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
 
         return ActionResult(success=True)
 
@@ -355,5 +408,9 @@ class WhisperAction(Action):
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
         record_whisper_interaction(character=actor, target=target, content=text)
+
+        # #1278/#2088 — flag circumvention attempts: a blocked player whispering the
+        # blocker via another identity. No-op when no active block exists.
+        _flag_blocked_contact_for_targets(actor, [target], scene=_active_scene_for(actor))
 
         return ActionResult(success=True)
