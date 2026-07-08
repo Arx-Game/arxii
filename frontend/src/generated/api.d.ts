@@ -871,6 +871,30 @@ export interface paths {
     patch: operations['beats_partial_update'];
     trace?: never;
   };
+  '/api/beats/{id}/assign-mission/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM-tier: assign this beat's required mission to a player (#2048).
+     *
+     *     POST body: ``{"character": <pk>, "template"?: <pk>}``. Defaults
+     *     template from the beat's ``required_mission``. Creates a
+     *     ``MissionInstance`` with ``source_beat`` set — stakes arm on the
+     *     player's first action, not at assignment.
+     */
+    post: operations['beats_assign_mission_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/beats/{id}/contribute/': {
     parameters: {
       query?: never;
@@ -17500,6 +17524,8 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
+      /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
+      required_mission?: number | null;
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -17616,6 +17642,8 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
+      /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
+      required_mission?: number | null;
     };
     /** @description POST body for the #885 resolve endpoint. */
     BeatResolveRequestRequest: {
@@ -26417,6 +26445,8 @@ export interface components {
       failure_consequences?: number | null;
       /** @description ConsequencePool to fire when this beat resolves EXPIRED. */
       expired_consequences?: number | null;
+      /** @description Optional: a MissionTemplate this beat requires (Phase 5b.3 data shape only; engine deferred). SET_NULL on template delete. */
+      required_mission?: number | null;
     };
     PatchedBugReportDetailRequest: {
       reporter_persona?: number;
@@ -33673,6 +33703,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedBeatRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_assign_mission_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatRequest'];
       };
     };
     responses: {

@@ -744,6 +744,32 @@ class CanMarkBeat(permissions.BasePermission):
         )
 
 
+class CanAssignMissionToBeat(permissions.BasePermission):
+    """Who can POST /api/beats/{id}/assign-mission/: Lead GM or staff (#2048).
+
+    Object-level only: the beat PK is in the URL. Walks beat → episode →
+    chapter → story to find the Lead GM (mirrors CanMarkBeat's path, but
+    without the AGM claim path — mission assignment is a Lead GM gesture).
+    """
+
+    message = "Only the Lead GM of this story or staff may assign missions."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        story = obj.episode.chapter.story
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return bool(story.primary_table_id and story.primary_table.gm_id == gm_profile.pk)
+
+
 class CanResolveStake(permissions.BasePermission):
     """Who can POST /api/stakes/{id}/resolve/ (#1770 PR2 — GM constrained pick).
 

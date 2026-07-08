@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from world.missions.models import MissionInvite, MissionTemplate
     from world.projects.models import Project
     from world.scenes.models import Persona
+    from world.stories.models import Beat
 
 
 def _entry_node(template: MissionTemplate) -> MissionNode:
@@ -109,6 +110,47 @@ def staff_assign_mission(
         template=template,
         anchor_room=anchor_room_for(character),
         target_project=project,
+    )
+    MissionParticipant.objects.create(
+        instance=instance,
+        character=character,
+        is_contract_holder=True,
+    )
+    enter_node(instance, _entry_node(template))
+    return instance
+
+
+@transaction.atomic
+def gm_assign_mission(
+    template: MissionTemplate,
+    character: ObjectDB,
+    *,
+    beat: Beat | None = None,
+    project: Project | None = None,
+) -> MissionInstance:
+    """GM-tier: drop a mission on a character, optionally bound to a story beat (#2048).
+
+    Unlike ``staff_assign_mission`` (which bypasses all filters), this is the
+    GM-facing assignment path: it creates a ``MissionInstance`` with
+    ``source_beat`` set (so the beat completes when the run terminates),
+    but does NOT activate stakes at assignment time — stakes arm on the
+    player's first beat action (engagement-armed stakes). The player consents
+    by pursuing; abandoning before engagement leaves no contract.
+
+    Wrapped in ``@transaction.atomic`` so a failure in ``enter_node`` rolls
+    back the half-created MissionInstance + MissionParticipant.
+    """
+    if project is None and beat is not None and _template_has_project_lines(template):
+        msg = (
+            f"Template '{template.name}' has PROJECT reward lines but no project "
+            "is bound — refusing to issue an unbound instance (#2045)."
+        )
+        raise ValueError(msg)
+    instance = MissionInstance.objects.create(
+        template=template,
+        anchor_room=anchor_room_for(character),
+        target_project=project,
+        source_beat=beat,
     )
     MissionParticipant.objects.create(
         instance=instance,

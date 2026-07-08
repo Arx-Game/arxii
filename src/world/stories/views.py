@@ -107,6 +107,7 @@ from world.stories.pagination import (
 from world.stories.permissions import (
     VIEWER_ROLE_NO_ACCESS,
     CanAccessStoryNotes,
+    CanAssignMissionToBeat,
     CanAuthorBulletinPost,
     CanDetachStoryFromTable,
     CanMarkBeat,
@@ -160,6 +161,7 @@ from world.stories.serializers import (
     AcceptOfferInputSerializer,
     AggregateBeatContributionSerializer,
     ApproveClaimInputSerializer,
+    AssignMissionInputSerializer,
     AssignStoryInputSerializer,
     AssignStoryToTableInputSerializer,
     AssistantGMClaimSerializer,
@@ -1608,6 +1610,37 @@ class BeatViewSet(viewsets.ModelViewSet):
             AggregateBeatContributionSerializer(contribution).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="assign-mission",
+        permission_classes=[CanAssignMissionToBeat],
+    )
+    def assign_mission(self, request: Request, pk: int | None = None) -> Response:
+        """GM-tier: assign this beat's required mission to a player (#2048).
+
+        POST body: ``{"character": <pk>, "template"?: <pk>}``. Defaults
+        template from the beat's ``required_mission``. Creates a
+        ``MissionInstance`` with ``source_beat`` set — stakes arm on the
+        player's first action, not at assignment.
+        """
+        from world.missions.serializers import MissionInstanceSerializer  # noqa: PLC0415
+        from world.missions.services.run import gm_assign_mission  # noqa: PLC0415
+
+        beat = self.get_object()
+        serializer = AssignMissionInputSerializer(
+            data=request.data,
+            context={"beat": beat, "request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        instance = gm_assign_mission(
+            template=serializer.validated_data["template"],
+            character=serializer.validated_data["character"],
+            beat=beat,
+        )
+        output = MissionInstanceSerializer(instance, context={"request": request})
+        return Response(output.data, status=status.HTTP_201_CREATED)
 
 
 # ---------------------------------------------------------------------------
