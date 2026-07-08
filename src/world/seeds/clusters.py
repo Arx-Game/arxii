@@ -75,6 +75,12 @@ def _seed_social_actions() -> None:
     seed_social_action_content()
 
 
+def _seed_social_combat() -> None:
+    from world.combat.social_combat_content import ensure_social_combat_content  # noqa: PLC0415
+
+    ensure_social_combat_content()
+
+
 def _seed_consent() -> None:
     from world.seeds.consent import seed_social_consent_categories  # noqa: PLC0415
 
@@ -192,6 +198,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Social actions: authoritative social ActionTemplates + pools + Flirt/Seduce attraction
     # effects. After social_relationships (its conditions) + checks (its CheckTypes) (#1697).
     "social_actions": _seed_social_actions,
+    # Social combat: the rally/demoralize/taunt/parley CheckTypes + Inspired
+    # condition + charm technique (#2015). After social_actions (its skills/specs)
+    # + magic (the Charmed condition).
+    "social_combat": _seed_social_combat,
     "magic": _seed_magic,
     "items": _seed_items,
     "combat": _seed_combat,
