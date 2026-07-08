@@ -1,5 +1,6 @@
 """DRF serializers for covenants API."""
 
+from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -232,8 +233,11 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:
             return f"Character #{obj.character_sheet_id}"
-        if member_blocked_viewer(viewer_account=request.user, member_sheet=obj.character_sheet):
-            return "a member has blocked you"
+        try:
+            if member_blocked_viewer(viewer_account=request.user, member_sheet=obj.character_sheet):
+                return "a member has blocked you"
+        except ObjectDoesNotExist:
+            pass  # No roster entry on this sheet — show the normal name.
         return f"Character #{obj.character_sheet_id}"
 
 
