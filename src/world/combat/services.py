@@ -2255,7 +2255,19 @@ def _get_eligible_entries(
             by this opponent. Pre-fetched in batch by the caller.
     """
     eligible: list[ThreatPoolEntry] = []
+    # Falter: skip entries that require a steady nerve (#2015).
+    from world.combat.morale import (  # noqa: PLC0415
+        OpponentMoraleState,
+        morale_state_for,
+    )
+
+    faltering = morale_state_for(opponent) == OpponentMoraleState.FALTER
+
     for entry in entries:
+        # Falter: skip requires_steady entries (designers author "weakened" entries).
+        if faltering and entry.requires_steady:
+            continue
+
         # Filter by minimum_phase
         if entry.minimum_phase is not None and entry.minimum_phase > opponent.current_phase:
             continue
@@ -2674,6 +2686,17 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0913
     no valid target (a #1584 ALLY summon with no live enemy, or a #1590
     calmed/neutral opponent whose threat-read yielded no PCs).
     """
+    from world.combat.morale import (  # noqa: PLC0415
+        OpponentMoraleState,
+        morale_state_for,
+    )
+
+    # Break: a broken opponent flees — set FLED and skip the round (#2015).
+    if morale_state_for(opponent) == OpponentMoraleState.BREAK:
+        opponent.status = OpponentStatus.FLED
+        opponent.save(update_fields=["status"])
+        return []
+
     eligible = _get_eligible_entries(opponent, pool_entries, cooldown_used)
     if not eligible:
         return []

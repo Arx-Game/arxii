@@ -13,8 +13,17 @@ from world.combat.constants import (
     RALLY_MORALE_PER_LEVEL,
     TAUNT_THREAT_PER_LEVEL,
     CombatManeuver,
+    TargetingMode,
+    TargetSelection,
 )
-from world.combat.factories import CombatOpponentFactory, OpponentTierTemplateFactory
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+    OpponentTierTemplateFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
+)
 
 
 class MoraleConstantsTests(TestCase):
@@ -140,3 +149,61 @@ class ApplyMoraleDamageTests(TestCase):
         apply_morale_damage(opp, 15)
         opp.refresh_from_db()
         self.assertEqual(opp.morale, 55)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: falter/break wiring in select_npc_actions
+# ---------------------------------------------------------------------------
+
+from world.combat.constants import (  # noqa: E402
+    OpponentStatus,
+)
+from world.combat.services import select_npc_actions  # noqa: E402
+from world.scenes.constants import RoundStatus  # noqa: E402
+from world.vitals.models import CharacterVitals  # noqa: E402
+
+
+class SelectNpcActionsMoraleTests(TestCase):
+    """Morale-state-driven NPC behavior in select_npc_actions (#2015)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(round_number=1, status=RoundStatus.DECLARING)
+        self.pool = ThreatPoolFactory()
+        self.entry = ThreatPoolEntryFactory(
+            pool=self.pool,
+            targeting_mode=TargetingMode.SINGLE,
+            target_selection=TargetSelection.RANDOM,
+        )
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        CharacterVitals.objects.create(
+            character_sheet=self.participant.character_sheet,
+            health=100,
+            max_health=100,
+        )
+
+    def test_broken_opponent_flees_and_skips_round(self) -> None:
+        opp = CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.pool,
+            morale=BREAK_MORALE_THRESHOLD,
+        )
+        actions = select_npc_actions(self.encounter)
+        self.assertEqual(actions, [])
+        opp.refresh_from_db()
+        self.assertEqual(opp.status, OpponentStatus.FLED)
+
+    def test_faltering_opponent_skips_requires_steady_entries(self) -> None:
+        # Two entries: one requires_steady (skipped when faltering), one normal.
+        # The setUp self.entry also exists (non-steady); assert the steady one
+        # is never selected when faltering, despite its high weight.
+        ThreatPoolEntryFactory(pool=self.pool, requires_steady=True, weight=1000)
+        CombatOpponentFactory(
+            encounter=self.encounter,
+            threat_pool=self.pool,
+            morale=FALTER_MORALE_THRESHOLD,
+        )
+        actions = select_npc_actions(self.encounter)
+        self.assertEqual(len(actions), 1)
+        # The requires_steady entry must NOT have been selected despite weight=1000.
+        self.assertFalse(actions[0].threat_entry.requires_steady)
