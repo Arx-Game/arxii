@@ -199,6 +199,11 @@ from world.magic.models.threads import (
     ThreadSurvivabilityTuning,
     ThreadXPLockedLevel,
 )
+from world.magic.models.trait_crossing import (
+    PendingTraitCrossingOffer,
+    TraitCrossingChoice,
+    TraitCrossingOption,
+)
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
     ThreadWeavingTeachingOffer,
@@ -301,6 +306,8 @@ __all__ = [
     "PendingRitualEffect",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
+    # trait crossing offer (#1989)
+    "PendingTraitCrossingOffer",
     # endorsement (Spec C §2.2)
     "PoseEndorsement",
     # endorsement (Outfits Phase C §2.2 — #514)
@@ -393,4 +400,6 @@ __all__ = [
     "Tradition",
     "TraditionManager",
     "TraditionRitualGrant",
+    "TraitCrossingChoice",
+    "TraitCrossingOption",
 ]
