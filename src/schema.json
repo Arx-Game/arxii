@@ -1301,6 +1301,40 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/beats/{id}/assign-mission/:
+    post:
+      operationId: beats_assign_mission_create
+      description: |-
+        GM-tier: assign this beat's required mission to a player (#2048).
+
+        POST body: ``{"character": <pk>, "template"?: <pk>}``. Defaults
+        template from the beat's ``required_mission``. Creates a
+        ``MissionInstance`` with ``source_beat`` set — stakes arm on the
+        player's first action, not at assignment.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this beat.
+        required: true
+      tags:
+      - beats
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeatRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beat'
+          description: ''
   /api/beats/{id}/contribute/:
     post:
       operationId: beats_contribute_create
@@ -29586,6 +29620,11 @@ components:
           type: integer
           nullable: true
           description: ConsequencePool to fire when this beat resolves EXPIRED.
+        required_mission:
+          type: integer
+          nullable: true
+          description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
+            data shape only; engine deferred). SET_NULL on template delete.'
         created_at:
           type: string
           format: date-time
@@ -29800,6 +29839,11 @@ components:
           type: integer
           nullable: true
           description: ConsequencePool to fire when this beat resolves EXPIRED.
+        required_mission:
+          type: integer
+          nullable: true
+          description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
+            data shape only; engine deferred). SET_NULL on template delete.'
       required:
       - episode
       - internal_description
@@ -47049,6 +47093,11 @@ components:
           type: integer
           nullable: true
           description: ConsequencePool to fire when this beat resolves EXPIRED.
+        required_mission:
+          type: integer
+          nullable: true
+          description: 'Optional: a MissionTemplate this beat requires (Phase 5b.3
+            data shape only; engine deferred). SET_NULL on template delete.'
     PatchedBugReportDetailRequest:
       type: object
       properties:

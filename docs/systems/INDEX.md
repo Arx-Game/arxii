@@ -1422,6 +1422,13 @@ and paying authored win-reward lines through an anti-farming activation gate
   `maybe_complete_immediately`. Loud refusal at issuance when PROJECT lines
   exist but no project is bound; soft-skip-with-notice at payout when the
   project is non-ACTIVE or null. ADR-0103.
+  GM-tier mission assignment (#2048): `gm_assign_mission` creates a
+  `MissionInstance` with `source_beat` set (direct drop, no accept gate).
+  `Beat.required_mission` is wired as the beat's authoring pointer
+  (writable on `BeatSerializer`). Stakes arm lazily on the player's first
+  beat action (engagement-armed stakes), not at assignment time.
+  `BeatViewSet.assign_mission` action (`POST /api/beats/{id}/assign-mission/`,
+  `CanAssignMissionToBeat` — Lead GM or staff). ADR-0104.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
