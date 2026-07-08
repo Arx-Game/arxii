@@ -205,6 +205,16 @@ def resolve_beat_option(
         chosen_approach=presented.approach,
     )
 
+    # #2048: engagement-armed stakes — arm on the first player action, not
+    # at assignment time. activate_stakes_for_instance is a no-op for free
+    # runs (source_beat null) and unstaked beats, and is idempotent while
+    # an activation is open — safe to call on every action.
+    from world.missions.services.beat import activate_stakes_for_instance  # noqa: PLC0415
+
+    stake_sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if stake_sheet is not None:
+        activate_stakes_for_instance(instance, [stake_sheet])
+
     outcome_name = deed.outcome.name if deed.outcome_id else None
     story_text = _story_text_for(presented, deed, instance.template.name)
     is_terminal = instance.current_node_id is None
