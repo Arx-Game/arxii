@@ -876,6 +876,34 @@ class MissionOptionRouteReward(SharedMemoryModel):
         related_name="+",
         help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
     )
+    followon_offer = models.ForeignKey(
+        "npc_services.NPCServiceOffer",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer whose "
+            "summons fires as the follow-on reward."
+        ),
+    )
+    followon_message = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS. "
+            "Empty = the summons shows the offer's default text."
+        ),
+    )
+    followon_expiry_hours = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When sink=FOLLOW_ON_SUMMONS: the summons lapses after this many "
+            "hours if unanswered (triggering the refusal/escalation path). "
+            "Null = no expiry (the summons persists until accepted or declined)."
+        ),
+    )
     contract_holder_only = models.BooleanField(
         default=False,
         help_text=(
@@ -900,7 +928,7 @@ class MissionOptionRouteReward(SharedMemoryModel):
             ),
         ]
 
-    def clean(self) -> None:
+    def clean(self) -> None:  # noqa: C901 — one branch per sink, grows with the enum
         super().clean()
         set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
         if set_count == 0:
@@ -921,6 +949,21 @@ class MissionOptionRouteReward(SharedMemoryModel):
             raise ValidationError(msg)
         if self.sink != DeedRewardSink.ITEM and self.item_template_id is not None:
             msg = "item_template may only be set when sink=ITEM."
+            raise ValidationError(msg)
+        if self.sink == DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_offer_id is None:
+            msg = "sink=FOLLOW_ON_SUMMONS requires followon_offer to be set."
+            raise ValidationError(msg)
+        if self.sink != DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_offer_id is not None:
+            msg = "followon_offer may only be set when sink=FOLLOW_ON_SUMMONS."
+            raise ValidationError(msg)
+        if self.sink == DeedRewardSink.FOLLOW_ON_SUMMONS and not self.contract_holder_only:
+            msg = "FOLLOW_ON_SUMMONS requires contract_holder_only=True (targets one actor)."
+            raise ValidationError(msg)
+        if self.sink != DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_message:
+            msg = "followon_message may only be set when sink=FOLLOW_ON_SUMMONS."
+            raise ValidationError(msg)
+        if self.sink != DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_expiry_hours is not None:
+            msg = "followon_expiry_hours may only be set when sink=FOLLOW_ON_SUMMONS."
             raise ValidationError(msg)
 
     def save(self, *args: object, **kwargs: object) -> None:
@@ -1640,6 +1683,24 @@ class MissionDeedRewardLine(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="+",
         help_text="Required when sink=ITEM: which ItemTemplate this reward grants.",
+    )
+    followon_offer = models.ForeignKey(
+        "npc_services.NPCServiceOffer",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Mirrors the template's followon_offer (set when sink=FOLLOW_ON_SUMMONS).",
+    )
+    followon_message = models.TextField(
+        blank=True,
+        default="",
+        help_text="Mirrors the template's followon_message.",
+    )
+    followon_expiry_hours = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Mirrors the template's followon_expiry_hours.",
     )
     ref = models.CharField(
         max_length=200,

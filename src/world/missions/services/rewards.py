@@ -140,6 +140,9 @@ def _line_for(
         amount=template.amount,
         resonance=template.resonance,
         item_template=template.item_template,
+        followon_offer=template.followon_offer,
+        followon_message=template.followon_message,
+        followon_expiry_hours=template.followon_expiry_hours,
         ref=template.ref,
     )
 
@@ -326,7 +329,7 @@ def _route_unbuilt_propagation(
     rumor_stub.propagate_rumor(line)  # always raises in 5b.1
 
 
-def _route_line(  # noqa: PLR0913 — one early-return branch per (kind, sink) pair
+def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind, sink) pair
     deed: MissionDeedRecord,
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],
@@ -393,9 +396,85 @@ def _route_line(  # noqa: PLR0913 — one early-return branch per (kind, sink) p
         _route_unbuilt_propagation(line, sink=sink, skip_unbuilt=skip_unbuilt)
         return
 
+    if kind == DeedRewardKind.IMMEDIATE and sink == DeedRewardSink.FOLLOW_ON_SUMMONS:
+        _route_follow_on_summons(line)
+        return
+
     # Anything else is an author error — the (kind, sink) pair has no
     # routing target. Raise loudly so authoring tools can surface it.
     raise MissionRewardRoutingError(kind=kind, sink=sink, line_pk=line.pk)
+
+
+def _route_follow_on_summons(line: MissionDeedRewardLine) -> None:
+    """Fire a directed-offer summons for a FOLLOW_ON_SUMMONS reward line.
+
+    The automated path: created_by=None (no GM). The summons targets the
+    persona the contract holder presented when accepting the mission —
+    ``line.deed.instance.accepted_as_persona``. PENDING-uniqueness is
+    inherited from OfferSummons — a duplicate PENDING raises
+    IntegrityError, which we catch and log as a no-op.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.core.exceptions import ValidationError as DjangoValidationError  # noqa: PLC0415
+    from django.db import IntegrityError, transaction  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.npc_services.constants import SummonsStatus  # noqa: PLC0415
+    from world.npc_services.models import OfferSummons  # noqa: PLC0415
+    from world.npc_services.summons import create_summons  # noqa: PLC0415
+
+    persona = line.deed.instance.accepted_as_persona
+    if persona is None:
+        logger.warning(
+            "apply_deed_rewards: FOLLOW_ON_SUMMONS line pk=%d has no "
+            "accepted_as_persona on its instance — skipping (no target).",
+            line.pk,
+        )
+        return
+
+    # PENDING-uniqueness dedup: if a PENDING summons already exists for this
+    # (offer, persona), skip silently — the offer is already pending. This
+    # avoids the ValidationError/IntegrityError path entirely and lets
+    # create_summons' MISSION-kind gate surface loudly for real authoring errors.
+    already_pending = OfferSummons.objects.filter(
+        offer=line.followon_offer,
+        target_persona=persona,
+        status=SummonsStatus.PENDING,
+    ).exists()
+    if already_pending:
+        logger.info(
+            "apply_deed_rewards: follow-on summons already PENDING for "
+            "offer pk=%d, persona pk=%d — skipping (dedup).",
+            line.followon_offer_id,
+            persona.pk,
+        )
+        return
+
+    expires_at = None
+    if line.followon_expiry_hours is not None:
+        expires_at = timezone.now() + timedelta(hours=line.followon_expiry_hours)
+
+    # Wrap in a savepoint so a race-condition IntegrityError (another process
+    # created the PENDING summons between our check and create_summons' save)
+    # doesn't poison the outer apply_deed_rewards transaction.
+    sid = transaction.savepoint()
+    try:
+        create_summons(
+            offer=line.followon_offer,
+            target_persona=persona,
+            message=line.followon_message,
+            expires_at=expires_at,
+            created_by=None,
+        )
+    except (IntegrityError, DjangoValidationError):
+        transaction.savepoint_rollback(sid)
+        logger.info(
+            "apply_deed_rewards: follow-on summons race-lost PENDING for "
+            "offer pk=%d, persona pk=%d — skipping (dedup).",
+            line.followon_offer_id,
+            persona.pk,
+        )
 
 
 def apply_deed_rewards(

@@ -34,6 +34,11 @@ from world.missions.models import (
     MissionOptionRoute,
     MissionOptionRouteReward,
 )
+from world.npc_services.constants import OfferKind
+from world.npc_services.factories import (
+    MissionOfferDetailsFactory,
+    NPCServiceOfferFactory,
+)
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -276,6 +281,95 @@ class MissionOptionRouteRewardItemTemplateTests(TestCase):
             sink=DeedRewardSink.MONEY,
             amount=10,
             item_template=self.item_template,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+
+class MissionOptionRouteRewardFollowOnSummonsTests(TestCase):
+    """Tests for the #2082 follow-on-summons fields on MissionOptionRouteReward.
+
+    Mirrors the resonance/ITEM validation shape: followon_offer is required
+    when sink=FOLLOW_ON_SUMMONS, forbidden otherwise. contract_holder_only
+    must be True for FOLLOW_ON_SUMMONS (targets one actor). The authoring
+    fields (followon_message, followon_expiry_hours) are sink-gated too.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.route = MissionOptionRouteFactory()
+        cls.offer = NPCServiceOfferFactory(kind=OfferKind.MISSION)
+        MissionOfferDetailsFactory(offer=cls.offer)
+
+    def test_summons_sink_requires_followon_offer(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            contract_holder_only=True,
+            followon_offer=None,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_summons_sink_with_offer_is_valid(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            contract_holder_only=True,
+            followon_offer=self.offer,
+            followon_message="Come at once.",
+            followon_expiry_hours=24,
+        )
+        reward.clean()  # must not raise
+
+    def test_summons_sink_requires_contract_holder_only(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            contract_holder_only=False,
+            followon_offer=self.offer,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_non_summons_sink_forbids_followon_offer(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+            followon_offer=self.offer,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_non_summons_sink_forbids_followon_message(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+            followon_message="Come at once.",
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_non_summons_sink_forbids_followon_expiry_hours(self):
+        reward = MissionOptionRouteRewardFactory.build(
+            route=self.route,
+            candidate=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=10,
+            followon_expiry_hours=24,
         )
         with self.assertRaises(ValidationError):
             reward.clean()

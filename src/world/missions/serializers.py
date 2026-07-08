@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.missions.constants import MissionStatus
+from world.missions.constants import DeedRewardSink, MissionStatus
 from world.missions.models import (
     MissionCategory,
     MissionGiver,
@@ -387,13 +387,26 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MissionOptionRouteReward
-        fields = ["id", "route", "candidate", "kind", "sink", "amount"]
+        fields = [
+            "id",
+            "route",
+            "candidate",
+            "kind",
+            "sink",
+            "amount",
+            "followon_offer",
+            "followon_message",
+            "followon_expiry_hours",
+            "contract_holder_only",
+        ]
         read_only_fields = ["id"]
 
     # Module-level constants for the XOR validation messages — avoid
     # inline string literals in raise statements (TRY003/EM101).
     _ERR_BOTH_NULL = "Exactly one of route or candidate must be set; both are null."
     _ERR_BOTH_SET = "Cannot set both route and candidate — pick one."
+    _ERR_SUMMONS_NO_OFFER = "Required when sink=FOLLOW_ON_SUMMONS."
+    _ERR_OFFER_WRONG_SINK = "May only be set when sink=FOLLOW_ON_SUMMONS."
 
     def validate(self, attrs: dict) -> dict:
         # Honor partial updates: fall back to instance values for fields
@@ -409,6 +422,15 @@ class MissionOptionRouteRewardSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(self._ERR_BOTH_NULL)
         if route is not None and candidate is not None:
             raise serializers.ValidationError(self._ERR_BOTH_SET)
+        # Mirror the model's clean() sink↔FK check (DRF skips clean()).
+        sink = attrs.get("sink", instance.sink if instance else None)
+        followon_offer = attrs.get(
+            "followon_offer", instance.followon_offer_id if instance else None
+        )
+        if sink == DeedRewardSink.FOLLOW_ON_SUMMONS.value and followon_offer is None:
+            raise serializers.ValidationError({"followon_offer": self._ERR_SUMMONS_NO_OFFER})
+        if sink != DeedRewardSink.FOLLOW_ON_SUMMONS.value and followon_offer is not None:
+            raise serializers.ValidationError({"followon_offer": self._ERR_OFFER_WRONG_SINK})
         return attrs
 
 

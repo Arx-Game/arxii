@@ -220,3 +220,4 @@ class DeedRewardSink(models.TextChoices):
     CRIME_WATCH = "crime_watch", "Crime Watch"
     BEAT = "beat", "Beat"
     ITEM = "item", "Item"
+    FOLLOW_ON_SUMMONS = "summons", "Follow-On Summons"
