@@ -222,6 +222,19 @@ class DisguiseKind(models.TextChoices):
     MAGICAL = "magical", "Magical Illusion"  # defeated by dispel / see-magic
 
 
+class ConcealmentLevel(models.TextChoices):
+    """What a disguise overlay conceals from an unpierced viewer (#1272).
+
+    The control lives on the disguise form, not on the traits themselves — a given
+    disguise declares what it hides. The pierce *contest* (perception/dispel) is the
+    senior dev's domain; this just records the level its outcome reads through.
+    """
+
+    NONE = "none", "No Concealment"  # full trait + descriptor visible (default)
+    DESCRIPTOR = "descriptor", "Descriptor Only"  # normalized value visible, descriptor hidden
+    FULL = "full", "Full Concealment"  # traits hidden entirely
+
+
 class SourceType(models.TextChoices):
     EQUIPPED_ITEM = "equipped_item", "Equipped Item"
     APPLIED_ITEM = "applied_item", "Applied Item"
@@ -249,6 +262,15 @@ class CharacterForm(SharedMemoryModel):
     form_type = models.CharField(max_length=20, choices=FormType.choices, default=FormType.TRUE)
     is_player_created = models.BooleanField(
         default=False, help_text="True for player-created disguises"
+    )
+    concealment_level = models.CharField(
+        max_length=20,
+        choices=ConcealmentLevel.choices,
+        default=ConcealmentLevel.NONE,
+        help_text=(
+            "What this disguise conceals from an unpierced viewer (#1272): "
+            "NONE = full trait + descriptor, DESCRIPTOR = value only, FULL = nothing."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
