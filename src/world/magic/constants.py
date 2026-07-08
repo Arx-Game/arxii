@@ -223,6 +223,8 @@ class GainSource(models.TextChoices):
     STAKE_REWARD = "STAKE_REWARD", "Stake reward"
     # #1834 — distinctions grant resonance
     DISTINCTION = "DISTINCTION", "Distinction"
+    # #2017 — combo discovery reward
+    COMBO_DISCOVERY = "COMBO_DISCOVERY", "Combo discovery"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -255,6 +257,7 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SANCTUM_WEAVING,
         GainSource.SANCTUM_OWNER_BONUS,
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
+        GainSource.COMBO_DISCOVERY,
     }
 )
 

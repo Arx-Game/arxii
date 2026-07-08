@@ -227,6 +227,10 @@ class ComboLearningMethod(models.TextChoices):
     RESEARCH = "research", "Research"
 
 
+# Flat resonance amount granted per participant on first-ever combo discovery (#2017).
+COMBO_DISCOVERY_GRANT: int = 10
+
+
 # ---------------------------------------------------------------------------
 # Defensive check damage multipliers
 #

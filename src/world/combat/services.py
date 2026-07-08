@@ -5070,27 +5070,16 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL
 
-    # combat_result is only set on non-combo magic-pipeline paths; all other
-    # branches (combos, passives-only) produce no CombatTechniqueResult.
+    # combat_result is only set on magic-pipeline paths; the combo rider
+    # path produces no CombatTechniqueResult.
     combat_result: CombatTechniqueResult | None = None
 
-    # Combo upgrades require an active opponent target — bail out early if defeated.
-    if target is not None and action.combo_upgrade:
-        target.refresh_from_db()
-        if target.status != OpponentStatus.DEFEATED:
-            combo = action.combo_upgrade
-            dmg_result = apply_damage_to_opponent(
-                target,
-                combo.bonus_damage,
-                bypass_soak=combo.bypass_soak,
-                source_sheet=participant.character_sheet,
-            )
-            outcome.combo_used = combo
-            outcome.damage_results.append(dmg_result)
-    elif not action.combo_upgrade:
-        # All non-combo techniques (damage AND non-attack) route through the magic
-        # pipeline. The resolver internally handles damage (if base_power) and
-        # conditions (if condition_applications rows exist).
+    # Combo-upgraded actions still run the magic pipeline (the contributor's
+    # own technique resolves normally), AND get the combo rider appended.
+    # Non-combo actions run the pipeline as before. The only case where the
+    # pipeline is skipped: combo-upgraded with no target (defeated opponent).
+    run_pipeline = not action.combo_upgrade or target is not None
+    if run_pipeline:
         template = technique.action_template
         if template is None:
             raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
@@ -5106,6 +5095,21 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
             offense_check_fn=offense_check_fn,
         )
         outcome.damage_results.extend(combat_result.damage_results)
+
+    # Combo rider: appended in addition to the pipeline result when the
+    # action is combo-upgraded and the target is alive.
+    if action.combo_upgrade and target is not None:
+        target.refresh_from_db()
+        if target.status != OpponentStatus.DEFEATED:
+            combo = action.combo_upgrade
+            dmg_result = apply_damage_to_opponent(
+                target,
+                combo.bonus_damage,
+                bypass_soak=combo.bypass_soak,
+                source_sheet=participant.character_sheet,
+            )
+            outcome.combo_used = combo
+            outcome.damage_results.append(dmg_result)
 
     # Apply fatigue after action resolves
     apply_fatigue(

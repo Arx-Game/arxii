@@ -292,9 +292,11 @@ class ResolveRoundComboTests(TestCase):
             covenant_role=CovenantRoleFactory(speed_rank=5),
         )
         CharacterVitals.objects.create(character_sheet=sheet, health=100, max_health=100)
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         technique = TechniqueFactory(
             gift=self.gift,
-            effect_type=self.effect_attack,
+            effect_type=EffectTypeFactory(name="Utility (Combo Test)", base_power=None),
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
         combo = ComboDefinitionFactory(
             bypass_soak=True,

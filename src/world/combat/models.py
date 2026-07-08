@@ -11,6 +11,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from world.achievements.models import DiscoverableContent
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
@@ -727,7 +728,7 @@ class BossPhase(AbstractPhaseConfig):
         return f"{self.opponent.name} Phase {self.phase_number}"
 
 
-class ComboDefinition(SharedMemoryModel):
+class ComboDefinition(DiscoverableContent, SharedMemoryModel):
     """Staff-authored combo that multiple PCs can trigger together."""
 
     name = models.CharField(max_length=200)
@@ -752,6 +753,21 @@ class ComboDefinition(SharedMemoryModel):
     bonus_damage = models.PositiveIntegerField(
         default=0,
         help_text="Flat bonus damage added when the combo fires.",
+    )
+    discovery_first_body = models.TextField(
+        blank=True,
+        help_text=(
+            "Gamewide announcement body for first-ever discovery. Must NOT name the "
+            "discoverer. Example: 'For the first time, a covenant has unleashed "
+            "Firestorm Fusion in battle.'"
+        ),
+    )
+    discovery_personal_body = models.TextField(
+        blank=True,
+        help_text=(
+            "Personal announcement body for repeat discovery. Example: "
+            "'Your covenant has discovered Firestorm Fusion.'"
+        ),
     )
 
     # === Clash fields (Task 1.5) ===
@@ -835,6 +851,10 @@ class ComboLearning(SharedMemoryModel):
         choices=ComboLearningMethod.choices,
     )
     learned_at = models.DateTimeField(auto_now_add=True)
+    use_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Times this combo has fired for this character.",
+    )
 
     class Meta:
         constraints = [
@@ -846,6 +866,45 @@ class ComboLearning(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character_sheet} knows {self.combo.name}"
+
+
+class ComboSignature(SharedMemoryModel):
+    """Authored narrative flourish for a covenant's repeated use of a combo.
+
+    One row per (covenant, combo). Unlocks when the covenant's total member
+    use_count meets unlock_threshold. Pure narrative — no mechanical rider.
+    """
+
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.CASCADE,
+        related_name="combo_signatures",
+    )
+    combo = models.ForeignKey(
+        ComboDefinition,
+        on_delete=models.CASCADE,
+        related_name="signatures",
+    )
+    signature_name = models.CharField(max_length=200)
+    flourish_narrative = models.TextField(
+        blank=True,
+        help_text="Cosmetic clause appended to the finisher beat.",
+    )
+    unlock_threshold = models.PositiveIntegerField(
+        default=3,
+        help_text="Total covenant-member use_count required to unlock.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant", "combo"],
+                name="unique_signature_per_covenant_combo",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.signature_name} ({self.covenant} / {self.combo})"
 
 
 class CombatParticipant(SharedMemoryModel):
