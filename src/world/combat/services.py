@@ -4212,7 +4212,9 @@ def resolve_npc_attack(
     )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
-    base_damage = opponent_action.threat_entry.base_damage
+    base_damage = int(
+        opponent_action.threat_entry.base_damage * opponent_action.opponent.damage_multiplier
+    )
     final_damage = math.floor(base_damage * multiplier)
 
     damage_result = apply_damage_to_participant(
@@ -4279,6 +4281,13 @@ def check_and_advance_boss_phase(
             opponent.probing_current = 0
             if phase.probing_threshold is not None:
                 opponent.probing_threshold = phase.probing_threshold
+            # Enrage: stamp damage multiplier from phase config.
+            opponent.damage_multiplier = phase.damage_multiplier
+            # Action economy: phase override or keep current + extra_actions.
+            if phase.actions_per_round is not None:
+                opponent.actions_per_round = phase.actions_per_round + phase.extra_actions
+            else:
+                opponent.actions_per_round = opponent.actions_per_round + phase.extra_actions
             opponent.save(
                 update_fields=[
                     "current_phase",
@@ -4286,6 +4295,8 @@ def check_and_advance_boss_phase(
                     "soak_value",
                     "probing_current",
                     "probing_threshold",
+                    "damage_multiplier",
+                    "actions_per_round",
                 ],
             )
             return phase
