@@ -1984,9 +1984,12 @@ class TestCharacterSheetQueryCount(TestCase):
                _build_magic_resonances reads character.resonances for the sheet's
                new resonance-balance sub-section, #2032; the handler's one cached
                query, not a fresh SELECT per resonance)
+         29.    form_state + active_fake_overlay (#1272 — the disguise concealment
+                prefetch; one select_related join, no extra round-trip when no
+                overlay is set)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(28):
+        with self.assertNumQueries(29):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

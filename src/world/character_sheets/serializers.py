@@ -202,6 +202,7 @@ _APPEARANCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         ),
         to_attr="cached_true_forms",
     ),
+    "character__form_state__active_fake_overlay",
 )
 
 
@@ -356,8 +357,15 @@ def _build_appearance(
       persona supplies a descriptor (a base mask shows "red", not "flowing crimson"); a
       richer disguise overlay supplying its own descriptors is the disguise system's job.
 
+    Disguise concealment (#1272): when a non-privileged viewer sees a face wearing a
+    disguise overlay, the overlay's ``concealment_level`` controls what shows:
+    - ``NONE``: the overlay's traits + descriptors (the existing overlay behavior).
+    - ``DESCRIPTOR``: the overlay's normalized values, descriptors hidden.
+    - ``FULL``: no traits at all — an empty list.
+
     One query (the ``HeightBand`` range lookup); otherwise reads prefetched forms + personas.
     """
+    from world.forms.models import ConcealmentLevel  # noqa: PLC0415
     from world.forms.services import get_height_band  # noqa: PLC0415
 
     character = sheet.character
@@ -378,6 +386,34 @@ def _build_appearance(
         ]
     else:
         form_traits = []
+
+    # Disguise concealment (#1272): a non-privileged viewer of a disguised face sees
+    # the overlay's traits (not the real form's), filtered by the overlay's level.
+    # Gated on ``privileged`` only — a disguise overlay can be active even when the
+    # presented face is the primary persona (reveal_identity=True for a public face).
+    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    if not privileged and form_state is not None and form_state.active_fake_overlay_id is not None:
+        overlay = form_state.active_fake_overlay
+        if overlay.concealment_level == ConcealmentLevel.FULL:
+            form_traits = []
+        else:
+            # DESCRIPTOR and NONE both show the overlay's traits; DESCRIPTOR hides
+            # the descriptor (shows only the normalized value).
+            show_descriptors = overlay.concealment_level == ConcealmentLevel.NONE
+            overlay_values = overlay.values.select_related("trait", "option").order_by(
+                "trait__sort_order"
+            )
+            form_traits = [
+                FormTraitEntry(
+                    trait=v.trait.display_name,
+                    value=(
+                        descriptors.get(v.trait_id) or v.option.display_name
+                        if show_descriptors
+                        else v.option.display_name
+                    ),
+                )
+                for v in overlay_values
+            ]
 
     true_height = sheet.true_height_inches
     band = get_height_band(true_height) if true_height is not None else None
