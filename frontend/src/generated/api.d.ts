@@ -3229,6 +3229,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/demoralize/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare a demoralizing maneuver against an opponent (#2015).
+     *
+     *     Requires ``opponent_id`` — the PK of the active opponent to demoralize.
+     */
+    post: operations['combat_demoralize_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/end/': {
     parameters: {
       query?: never;
@@ -3392,6 +3413,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/{id}/parley/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare a parley attempt against an opponent (#2015).
+     *
+     *     Requires ``opponent_id`` — the PK of the active opponent to parley with.
+     */
+    post: operations['combat_parley_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/combat/{id}/pause/': {
     parameters: {
       query?: never;
@@ -3403,6 +3445,27 @@ export interface paths {
     put?: never;
     /** @description Pause or unpause the encounter timer. */
     post: operations['combat_pause_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/rally/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare a rallying maneuver to inspire an ally (#2015).
+     *
+     *     Requires ``ally_participant_id`` — the PK of the active ally to inspire.
+     */
+    post: operations['combat_rally_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3477,6 +3540,27 @@ export interface paths {
     put?: never;
     /** @description Revert combo upgrade on own action. */
     post: operations['combat_revert_combo_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/taunt/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Declare a taunting maneuver against an opponent (#2015).
+     *
+     *     Requires ``opponent_id`` — the PK of the active opponent to taunt.
+     */
+    post: operations['combat_taunt_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -36378,6 +36462,32 @@ export interface operations {
       };
     };
   };
+  combat_demoralize_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
   combat_end_create: {
     parameters: {
       query?: never;
@@ -36554,7 +36664,59 @@ export interface operations {
       };
     };
   };
+  combat_parley_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
   combat_pause_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_rally_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -36659,6 +36821,32 @@ export interface operations {
     };
   };
   combat_revert_combo_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_taunt_create: {
     parameters: {
       query?: never;
       header?: never;

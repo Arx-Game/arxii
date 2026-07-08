@@ -4796,6 +4796,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/EncounterDetail'
           description: ''
+  /api/combat/{id}/demoralize/:
+    post:
+      operationId: combat_demoralize_create
+      description: |-
+        Declare a demoralizing maneuver against an opponent (#2015).
+
+        Requires ``opponent_id`` — the PK of the active opponent to demoralize.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/end/:
     post:
       operationId: combat_end_create
@@ -5024,10 +5055,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/OpponentDefaultsResponse'
           description: ''
+  /api/combat/{id}/parley/:
+    post:
+      operationId: combat_parley_create
+      description: |-
+        Declare a parley attempt against an opponent (#2015).
+
+        Requires ``opponent_id`` — the PK of the active opponent to parley with.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
   /api/combat/{id}/pause/:
     post:
       operationId: combat_pause_create
       description: Pause or unpause the encounter timer.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
+  /api/combat/{id}/rally/:
+    post:
+      operationId: combat_rally_create
+      description: |-
+        Declare a rallying maneuver to inspire an ally (#2015).
+
+        Requires ``ally_participant_id`` — the PK of the active ally to inspire.
       parameters:
       - in: path
         name: id
@@ -5145,6 +5238,37 @@ paths:
     post:
       operationId: combat_revert_combo_create
       description: Revert combo upgrade on own action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this combat encounter.
+        required: true
+      tags:
+      - combat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterDetail'
+          description: ''
+  /api/combat/{id}/taunt/:
+    post:
+      operationId: combat_taunt_create
+      description: |-
+        Declare a taunting maneuver against an opponent (#2015).
+
+        Requires ``opponent_id`` — the PK of the active opponent to taunt.
       parameters:
       - in: path
         name: id
