@@ -28,6 +28,17 @@ if TYPE_CHECKING:
 DEFAULT_INVITE_DURATION_DAYS = 30
 
 
+def touch_gm_activity(gm_profile: GMProfile) -> None:
+    """Stamp ``GMProfile.last_active_at`` to now (#2004).
+
+    Single seam (no signal, ADR-0009) called from every GM-verb service so a
+    GM's activity is tracked for idle-table detection. Idempotent and cheap
+    (one ``update_fields`` write); safe to call repeatedly.
+    """
+    gm_profile.last_active_at = timezone.now()
+    gm_profile.save(update_fields=["last_active_at"])
+
+
 def get_notification_target_for_gm(gm_profile: GMProfile) -> CharacterSheet | None:
     """Resolve the CharacterSheet to use as the notification recipient for a GM.
 
@@ -223,6 +234,7 @@ def surrender_character_story(gm: GMProfile, story: Story) -> None:
     if story.primary_table is None or story.primary_table.gm != gm:
         msg = "You do not oversee this story."
         raise ValidationError(msg)
+    touch_gm_activity(gm)
     story.primary_table = None
     story.save(update_fields=["primary_table"])
 
