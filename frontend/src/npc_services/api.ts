@@ -129,3 +129,18 @@ export function patchMissionDetails(
 ): Promise<MissionOfferDetails> {
   return writeJson(`${BASE_URL}/mission-details/${id}/`, 'PATCH', body);
 }
+
+// ---------------------------------------------------------------------------
+// OfferSummons (#2050 — directed-offer summonses)
+// ---------------------------------------------------------------------------
+
+export interface SummonsCreateRequest {
+  offer_id: number;
+  target_persona_id: number;
+  message?: string;
+  expires_at?: string | null;
+}
+
+export async function createSummons(body: SummonsCreateRequest): Promise<unknown> {
+  return writeJson(`${BASE_URL}/summons/`, 'POST', body);
+}
