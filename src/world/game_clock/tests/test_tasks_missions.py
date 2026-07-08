@@ -44,3 +44,27 @@ class MissionsRewardBatchRegistrationTests(TestCase):
         register_all_tasks()
         task = next(t for t in get_registered_tasks() if t.task_key == "missions.reward_batch")
         self.assertIs(task.callable, apply_mission_reward_batch)
+
+
+class SummonsExpiryRegistrationTests(TestCase):
+    """``npc_services.summons_expiry`` is registered after register_all_tasks() runs (#2050)."""
+
+    def setUp(self) -> None:
+        clear_registry()
+
+    def tearDown(self) -> None:
+        clear_registry()
+
+    def test_summons_expiry_is_registered(self) -> None:
+        register_all_tasks()
+        keys = {t.task_key for t in get_registered_tasks()}
+        self.assertIn("npc_services.summons_expiry", keys)
+
+    def test_summons_expiry_callable_is_expire_summonses(self) -> None:
+        from world.npc_services.summons import expire_summonses
+
+        register_all_tasks()
+        task = next(
+            t for t in get_registered_tasks() if t.task_key == "npc_services.summons_expiry"
+        )
+        self.assertIs(task.callable, expire_summonses)

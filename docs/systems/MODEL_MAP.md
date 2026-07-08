@@ -1987,6 +1987,7 @@
 
 ### CourtGrantConfig
 **Foreign Keys:**
+  - summons_refusal_escalation_pool -> actions.ConsequencePool [FK] (nullable)
   - petition_check_type -> checks.CheckType [FK] (nullable)
   - escalation_consequence_pool -> actions.ConsequencePool [FK] (nullable)
 
@@ -2322,6 +2323,7 @@
   - tables <- gm.GMTable
   - invites_created <- gm.GMRosterInvite
   - level_changes <- gm.GMLevelChange
+  - summonses_created <- npc_services.OfferSummons
 
 ### GMApplication
 **Foreign Keys:**
@@ -4185,6 +4187,7 @@
   - permit_offer_details <- npc_services.PermitOfferDetails
   - loan_offer_details <- npc_services.LoanOfferDetails
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
+  - summonses <- npc_services.OfferSummons
 
 ### OfferCooldown
 **Foreign Keys:**
@@ -4225,6 +4228,12 @@
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [OneToOne]
   - covenant -> covenants.Covenant [FK]
+
+### OfferSummons
+**Foreign Keys:**
+  - offer -> npc_services.NPCServiceOffer [FK]
+  - target_persona -> scenes.Persona [FK]
+  - created_by -> gm.GMProfile [FK] (nullable)
 
 ### Service Functions
 - `adjust_npc_affection(pc_persona, npc_persona, *, delta: 'int') -> 'int' — Apply a disposition ``delta`` to the (pc_persona, npc_persona) standing.`
@@ -5032,6 +5041,7 @@
   - role_cooldowns <- npc_services.NPCRoleCooldown
   - regards_held <- npc_services.NpcRegard
   - regards_as_target <- npc_services.NpcRegard
+  - summonses_received <- npc_services.OfferSummons
   - owned_buildings <- buildings.Building
   - buildings_constructed <- buildings.Building
   - materials_contributed <- buildings.BuildingMaterial

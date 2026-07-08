@@ -11,7 +11,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Ban, HeartPulse, Swords, VolumeX, Zap } from 'lucide-react';
+import { Ban, HeartPulse, Swords, VolumeX, Zap, ScrollText } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useDispatchPlayerAction, combatKeys } from '@/combat/queries';
@@ -31,6 +31,7 @@ import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '
 import type { SceneDetail } from '../types';
 import { WhisperReceiverPicker } from './WhisperReceiverPicker';
 import { TreatActionPanel } from '@/conditions/components/TreatActionPanel';
+import { GiveMissionDialog } from './GiveMissionDialog';
 
 /** The whisper action awaiting a recipient choice (#907). */
 interface PendingWhisper {
@@ -112,6 +113,10 @@ export function PersonaContextMenu({
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [blockReason, setBlockReason] = useState('');
   const [treatDialogOpen, setTreatDialogOpen] = useState(false);
+  const [giveMissionOpen, setGiveMissionOpen] = useState(false);
+
+  // Reuse the already-loaded scene data for the GM check (#2050).
+  const canGiveMission = scene?.viewer_can_gm ?? false;
 
   function submitBlock() {
     if (blockerPersonaId === null || blockReason.trim() === '') {
@@ -313,6 +318,18 @@ export function PersonaContextMenu({
               </DropdownMenuItem>
             </>
           )}
+          {canGiveMission && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="give-mission-item"
+                onClick={() => setGiveMissionOpen(true)}
+              >
+                <ScrollText className="mr-2 h-4 w-4" />
+                Give mission…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
@@ -380,6 +397,12 @@ export function PersonaContextMenu({
           }
           setPendingWhisper(null);
         }}
+      />
+      <GiveMissionDialog
+        open={giveMissionOpen}
+        onOpenChange={setGiveMissionOpen}
+        targetPersonaId={personaId}
+        targetPersonaName={personaName}
       />
     </>
   );

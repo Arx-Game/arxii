@@ -12278,6 +12278,103 @@ export interface paths {
     patch: operations['npc_services_standings_partial_update'];
     trace?: never;
   };
+  '/api/npc-services/summons/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    get: operations['npc_services_summons_list'];
+    put?: never;
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    post: operations['npc_services_summons_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/npc-services/summons/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    get: operations['npc_services_summons_retrieve'];
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    put: operations['npc_services_summons_update'];
+    post?: never;
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    delete: operations['npc_services_summons_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    patch: operations['npc_services_summons_partial_update'];
+    trace?: never;
+  };
+  '/api/npc-services/summons/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Directed-offer summonses (#2050).
+     *
+     *     - GM/staff: create + list all summonses.
+     *     - Players: list summonses directed at their active persona; respond via
+     *       the ``respond`` action.
+     */
+    post: operations['npc_services_summons_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/': {
     parameters: {
       query?: never;
@@ -23462,6 +23559,81 @@ export interface components {
        */
       available_at: string;
     };
+    /** @description Serializer for a directed-offer summons (#2050). */
+    OfferSummons: {
+      readonly id: number;
+      /** @description The offer this summons directs at a target. */
+      offer: number;
+      readonly offer_label: string;
+      readonly role_name: string;
+      /** @description The persona this summons is directed at. */
+      target_persona: number;
+      /** @description IC text — what the servant learns of the master's wish. */
+      message?: string;
+      /**
+       * @description Lifecycle state of this summons.
+       *
+       *     * `pending` - Pending
+       *     * `accepted` - Accepted
+       *     * `declined` - Declined
+       *     * `expired` - Expired
+       * @default pending
+       */
+      readonly status: components['schemas']['OfferSummonsStatusEnum'];
+      /**
+       * Format: date-time
+       * @description When this summons lapses if unanswered. Null = no expiry.
+       */
+      expires_at?: string | null;
+      /** @description The GM who created this summons. Null for staff-created. */
+      created_by?: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When the summons was accepted, declined, or expired.
+       */
+      readonly resolved_at: string | null;
+    };
+    /**
+     * @description POST body for creating a summons (GM/staff only).
+     *
+     *     Validates that the offer and target persona exist and that the offer is
+     *     MISSION-kind. Object-level validation lives here so the view stays thin
+     *     and the serializer is the single authority on input correctness.
+     */
+    OfferSummonsCreateRequest: {
+      offer_id: number;
+      target_persona_id: number;
+      /** @default  */
+      message: string;
+      /** Format: date-time */
+      expires_at?: string | null;
+    };
+    /** @description Serializer for a directed-offer summons (#2050). */
+    OfferSummonsRequest: {
+      /** @description The offer this summons directs at a target. */
+      offer: number;
+      /** @description The persona this summons is directed at. */
+      target_persona: number;
+      /** @description IC text — what the servant learns of the master's wish. */
+      message?: string;
+      /**
+       * Format: date-time
+       * @description When this summons lapses if unanswered. Null = no expiry.
+       */
+      expires_at?: string | null;
+      /** @description The GM who created this summons. Null for staff-created. */
+      created_by?: number | null;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    OfferSummonsStatusEnum: 'pending' | 'accepted' | 'declined' | 'expired';
     /**
      * @description Read serializer for combat opponents.
      *
@@ -24911,6 +25083,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['OfferCooldown'][];
+    };
+    PaginatedOfferSummonsList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OfferSummons'][];
     };
     PaginatedOrganizationList: {
       /** @example 123 */
@@ -26769,6 +26956,22 @@ export interface components {
        * @description Earliest time `persona` can select this offer again.
        */
       available_at?: string;
+    };
+    /** @description Serializer for a directed-offer summons (#2050). */
+    PatchedOfferSummonsRequest: {
+      /** @description The offer this summons directs at a target. */
+      offer?: number;
+      /** @description The persona this summons is directed at. */
+      target_persona?: number;
+      /** @description IC text — what the servant learns of the master's wish. */
+      message?: string;
+      /**
+       * Format: date-time
+       * @description When this summons lapses if unanswered. Null = no expiry.
+       */
+      expires_at?: string | null;
+      /** @description The GM who created this summons. Null for staff-created. */
+      created_by?: number | null;
     };
     /**
      * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
@@ -30867,6 +31070,12 @@ export interface components {
      * @enum {string}
      */
     SuitEnum: 'swords' | 'cups' | 'wands' | 'coins';
+    /** @description POST body for responding to a summons. */
+    SummonsRespondRequest: {
+      accept: boolean;
+      /** @default false */
+      acknowledge_risk: boolean;
+    };
     /**
      * @description Staff read + status-update view of an auto-captured error (#1164).
      *
@@ -49428,6 +49637,201 @@ export interface operations {
         content: {
           'application/json': components['schemas']['NPCStanding'];
         };
+      };
+    };
+  };
+  npc_services_summons_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOfferSummonsList'];
+        };
+      };
+    };
+  };
+  npc_services_summons_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OfferSummonsCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferSummons'];
+        };
+      };
+      /** @description Validation error. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a GM or staff. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_summons_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer summons. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferSummons'];
+        };
+      };
+    };
+  };
+  npc_services_summons_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer summons. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OfferSummonsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferSummons'];
+        };
+      };
+    };
+  };
+  npc_services_summons_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer summons. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  npc_services_summons_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer summons. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedOfferSummonsRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OfferSummons'];
+        };
+      };
+    };
+  };
+  npc_services_summons_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this offer summons. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SummonsRespondRequest'];
+      };
+    };
+    responses: {
+      /** @description Summons responded to. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Summons is not pending or risk acknowledgement required. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Summons not found. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

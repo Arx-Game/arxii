@@ -58,3 +58,23 @@ petition-style check against this NPC, resets on success
 (`record_petition_outcome`). Mirrors `Contract.consecutive_missed`
 (`world.currency`). Crossing an authored threshold is the caller's cue to fire
 its own escalation consequence — this field only tracks the count.
+
+**Summons**:
+An `OfferSummons` (#2050) — a directed-offer primitive that targets a specific
+persona with a mission offer. The servant sees it in their journal and can
+accept (delegates to `resolve_offer` → `issue_mission`) or decline. Any
+`NPCRole` can direct an offer; the Court layer adds its escalation config.
+_Avoid_: wish, demand, boon (informal narration only; the model is "summons").
+
+**Refusal streak**:
+`NPCStanding.consecutive_refused_summons` (#2050) — increments on decline/expire,
+resets on acceptance (`record_summons_refusal`). Mirrors
+`consecutive_failed_petitions` — generic per ADR-0085. Crossing
+`CourtGrantConfig.summons_refusal_escalation_threshold` fires the master's
+escalation pool.
+
+**The master remembers**:
+The refusal mechanism (#2050) — declining or letting a summons lapse drops
+affection (auto-lowering the Court grant ceiling) and bumps the refusal streak.
+Three refusals later, the master's displeasure arrives as authored consequences,
+not GM improvisation. Debt is never the price of disobedience.

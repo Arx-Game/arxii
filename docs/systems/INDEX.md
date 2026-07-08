@@ -1637,9 +1637,12 @@ register as additional kinds.
   `/api/npc-services/cooldowns/`, `/api/npc-services/permit-details/` — staff CRUD.
   `/api/npc-services/interactions/{start,resolve,end}/` — player-facing interaction state machine
   (session-backed; one active interaction per Django session).
+  `/api/npc-services/summons/` — directed-offer summonses (#2050): GM/staff create + list; players
+  list their own + respond via `/api/npc-services/summons/{id}/respond/`.
 - **Cross-app dependencies:** `world.predicates` (engine), `world.scenes.Persona`,
   `world.items.ItemInstance`, `world.societies.Organization`, `world.checks` (perform_check
-  for non-final check-based actions), `core.mixins`.
+  for non-final check-based actions), `world.covenants` (Court grant config for summons
+  escalation), `core.mixins`.
 - **Source:** `src/world/npc_services/`
 
 ### Currency & Org Economy (#923–#932, #930 active collection)

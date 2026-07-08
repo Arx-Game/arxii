@@ -18,6 +18,16 @@ _Avoid_: retinue covenant (descriptive only), guild, household, mentor bond.
 
 **Court Pact**:
 The per-(Court covenant, servant) sworn-fealty bond (`CourtPact` in `world/covenants/models.py`).
+
+**Court summons**:
+A directed-offer summons from a Court master's role targeting a specific
+servant (#2050). The servant accepts (starting the mission run with court
+engagement + grant-ceiling credit) or declines (dropping affection + bumping
+the refusal streak). Three refusals fire the master's escalation pool. The
+primitive is generic on `npc_services` — any `NPCRole` can direct an offer; the
+Court layer contributes its escalation config (`CourtGrantConfig
+.summons_refusal_escalation_threshold` / `.summons_refusal_escalation_pool`).
+See ADR-0102.
 Active while `released_at IS NULL`; at most one active pact per `(covenant, servant_sheet)`
 (partial-unique constraint). Carries `granted_pull_cap` — the master-set ceiling on the servant's
 Court-role thread pull level. A servant with no active pact has an effective cap of 0 and cannot

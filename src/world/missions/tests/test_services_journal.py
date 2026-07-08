@@ -146,13 +146,13 @@ class JournalForTests(TestCase):
         # Constant query budget: participations + deeds + the three #885
         # compass prefetches (current-node locations M2M, current-node
         # options, option-locations M2M) + the two #2049 additions
-        # (pending invites + participant counts). The ceiling tolerates one
-        # extra lookup but rules out the N+1 shape — with N=3 a
-        # per-participation regression would blow past it (e.g. 5 + 3
-        # per-row lookups).
+        # (pending invites + participant counts) + the #2050 summons query.
+        # The ceiling tolerates one extra lookup but rules out the N+1 shape
+        # — with N=3 a per-participation regression would blow past it
+        # (e.g. 5 + 3 per-row lookups).
         self.assertLessEqual(
             len(ctx.captured_queries),
-            8,
+            9,
             f"journal_for issued {len(ctx.captured_queries)} queries for 3 "
             "participations — expected O(1), got O(N).",
         )

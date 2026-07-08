@@ -22,7 +22,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType
+from world.npc_services.constants import DrawMode, OfferKind, RegardTargetType, SummonsStatus
 
 # Cross-app FK string for the Persona model, referenced by several fields below.
 # Centralized to avoid the duplicated-literal SonarCloud smell (python:S1192).
@@ -98,6 +98,14 @@ class NPCStanding(SharedMemoryModel):
             "Consecutive failed/botched petition-style checks against this NPC "
             "(#1718). Increments on failure, resets to 0 on success. Mirrors "
             "`Contract.consecutive_missed` (world.currency)."
+        ),
+    )
+    consecutive_refused_summons = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Consecutive refused/expired summonses from this NPC (#2050). "
+            "Increments on decline/expire, resets to 0 on acceptance. Mirrors "
+            "`consecutive_failed_petitions` — generic per ADR-0085."
         ),
     )
     last_changed_at = models.DateTimeField(auto_now=True)
@@ -784,3 +792,79 @@ class CourtGrantOfferDetails(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"CourtGrantOfferDetails for {self.offer} ({self.covenant})"
+
+
+class OfferSummons(SharedMemoryModel):
+    """A directed offer — a master's wish aimed at a specific servant (#2050).
+
+    Rides the existing offer rails: accepting delegates to ``resolve_offer``
+    → ``issue_mission`` (eligibility + risk-ack intact). Declining or letting
+    it lapse is an explicit, recorded act the master remembers: affection
+    drops, a refusal streak climbs, and past the threshold the master's
+    escalation pool fires.
+
+    Generic per ADR-0010/ADR-0085 — any ``NPCRole`` can direct an offer at a
+    persona. The Court layer contributes its escalation config on top.
+    """
+
+    offer = models.ForeignKey(
+        NPCServiceOffer,
+        on_delete=models.CASCADE,
+        related_name="summonses",
+        help_text="The offer this summons directs at a target.",
+    )
+    target_persona = models.ForeignKey(
+        _PERSONA_FK,
+        on_delete=models.CASCADE,
+        related_name="summonses_received",
+        help_text="The persona this summons is directed at.",
+    )
+    message = models.TextField(
+        blank=True,
+        help_text="IC text — what the servant learns of the master's wish.",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=SummonsStatus.choices,
+        default=SummonsStatus.PENDING,
+        db_index=True,
+        help_text="Lifecycle state of this summons.",
+    )
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this summons lapses if unanswered. Null = no expiry.",
+    )
+    created_by = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="summonses_created",
+        help_text="The GM who created this summons. Null for staff-created.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the summons was accepted, declined, or expired.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["offer", "target_persona"],
+                condition=models.Q(status="pending"),
+                name="unique_pending_summons_per_offer_persona",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def clean(self) -> None:
+        """Validate that the offer is MISSION-kind (v1 scope)."""
+        if self.offer_id is not None and self.offer.kind != OfferKind.MISSION:
+            msg = "Summonses are limited to MISSION-kind offers in v1 (#2050)."
+            raise ValidationError({"offer": msg})
+
+    def __str__(self) -> str:
+        return f"Summons: {self.target_persona} ← {self.offer} ({self.status})"

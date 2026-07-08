@@ -1,1 +1,1 @@
-0022_covenantrank_can_lead_rituals
+0023_courtgrantconfig_summons_refusal_escalation_pool_and_more

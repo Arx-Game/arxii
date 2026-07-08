@@ -9,6 +9,7 @@ from world.npc_services.views import (
     NPCServiceOfferViewSet,
     NPCStandingViewSet,
     OfferCooldownViewSet,
+    OfferSummonsViewSet,
     PermitOfferDetailsViewSet,
 )
 
@@ -20,5 +21,6 @@ router.register(r"cooldowns", OfferCooldownViewSet, basename="npc-offer-cooldown
 router.register(r"permit-details", PermitOfferDetailsViewSet, basename="npc-permit-details")
 router.register(r"mission-details", MissionOfferDetailsViewSet, basename="npc-mission-details")
 router.register(r"interactions", InteractionViewSet, basename="npc-interaction")
+router.register(r"summons", OfferSummonsViewSet, basename="npc-summons")
 
 urlpatterns = router.urls

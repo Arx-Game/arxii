@@ -17,7 +17,7 @@ from actions.definitions.npc_services import (
 )
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
-from world.npc_services.models import NPCRole
+from world.npc_services.models import NPCRole, OfferSummons
 from world.npc_services.services import serialize_npc_session_state
 from world.scenes.models import Persona
 
@@ -50,6 +50,8 @@ class CmdHire(ArxCommand):
 
     _SUBVERB_END = "end"
     _SUBVERB_OFFER = "offer"
+    _SUBVERB_ACCEPT = "accept"
+    _SUBVERB_DECLINE = "decline"
 
     def func(self) -> None:
         """Route subverbs; bare ``hire`` shows the status hub."""
@@ -67,6 +69,10 @@ class CmdHire(ArxCommand):
                 self._do_end()
             elif first == self._SUBVERB_OFFER:
                 self._do_offer(rest)
+            elif first == self._SUBVERB_ACCEPT:
+                self._do_accept(rest)
+            elif first == self._SUBVERB_DECLINE:
+                self._do_decline(rest)
             else:
                 self._do_start(raw)
         except CommandError as err:
@@ -222,3 +228,73 @@ class CmdHire(ArxCommand):
 
     def _role_model(self) -> type[NPCRole]:
         return NPCRole
+
+    # ------------------------------------------------------------------
+    # Summons accept/decline (#2050) — standalone entry points that build
+    # the interaction session internally (no prior ``hire <role>`` needed).
+    # ------------------------------------------------------------------
+
+    def _resolve_summons(self, summons_id: str) -> OfferSummons:
+        """Resolve a summons by id; raise CommandError if not found."""
+        from world.npc_services.constants import SummonsStatus  # noqa: PLC0415
+        from world.npc_services.models import OfferSummons  # noqa: PLC0415
+
+        if not summons_id.isdigit():
+            msg = "Usage: hire accept <summons-id> [confirm] / hire decline <summons-id>"
+            raise CommandError(msg)
+        summons = OfferSummons.objects.filter(pk=int(summons_id)).first()
+        if summons is None:
+            msg = f"No summons #{summons_id} found."
+            raise CommandError(msg)
+        if summons.status != SummonsStatus.PENDING:
+            msg = f"Summons #{summons_id} is already {summons.status}."
+            raise CommandError(msg)
+        # Verify the summons targets the caller's persona.
+        persona = getattr(self.caller.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        if persona is None or summons.target_persona_id != persona.pk:
+            msg = f"Summons #{summons_id} is not directed at you."
+            raise CommandError(msg)
+        return summons
+
+    def _do_accept(self, args: str) -> None:
+        """Accept a summons — starts the mission run."""
+        from world.npc_services.summons import respond_to_summons  # noqa: PLC0415
+
+        parts = args.split()
+        if not parts:
+            msg = "Usage: hire accept <summons-id> [confirm]"
+            raise CommandError(msg)
+        summons_id = parts[0]
+        _CONFIRM_TOKEN = "confirm"  # noqa: S105
+        confirm = len(parts) > 1 and parts[1].lower() == _CONFIRM_TOKEN
+        summons = self._resolve_summons(summons_id)
+        result = respond_to_summons(
+            summons,
+            self.caller,
+            accept=True,
+            acknowledge_risk=confirm,
+        )
+        if not result.success:
+            if result.risk_tier is not None:
+                lines = [result.message]
+                lines.append("Re-run with 'hire accept <summons-id> confirm' to acknowledge.")
+                self.msg("\n".join(lines))
+            else:
+                self.msg(result.message)
+            return
+        msg = f"Mission accepted (instance #{result.instance_pk})."
+        self.msg(msg)
+
+    def _do_decline(self, args: str) -> None:
+        """Decline a summons — drops affection + bumps refusal streak."""
+        from world.npc_services.summons import respond_to_summons  # noqa: PLC0415
+
+        if not args.strip():
+            msg = "Usage: hire decline <summons-id>"
+            raise CommandError(msg)
+        summons = self._resolve_summons(args.strip())
+        result = respond_to_summons(summons, self.caller, accept=False)
+        if not result.success:
+            self.msg(result.message)
+            return
+        self.msg(result.message)
