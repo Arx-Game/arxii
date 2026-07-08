@@ -661,6 +661,29 @@ def register_all_tasks() -> None:
     # than at module top to avoid an import cycle at registration time.
     from world.weather.tasks import roll_and_echo_weather
 
+    _register_late_tasks(roll_and_echo_weather)
+
+
+def _register_late_tasks(roll_and_echo_weather: object) -> None:
+    """Register summons expiry + weather cron tasks (#2050).
+
+    Extracted from ``register_all_tasks`` to keep that function under the
+    ruff PLR0915 statement limit.
+    """
+    from world.npc_services.summons import expire_summonses
+
+    register_task(
+        CronDefinition(
+            task_key="npc_services.summons_expiry",
+            callable=expire_summonses,
+            interval=timedelta(minutes=5),
+            description=(
+                "#2050: expire past-due PENDING summonses. Each expiry counts "
+                "as a refusal (affection drop + streak bump). Cheap when nothing "
+                "is past due."
+            ),
+        )
+    )
     register_task(
         CronDefinition(
             task_key="weather.roll",
