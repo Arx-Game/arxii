@@ -366,3 +366,70 @@ class ResolveTraitCrossingOfferTests(TestCase):
         )
         with self.assertRaises(TraitCrossingOfferStaleError):
             resolve_trait_crossing_offer(self.offer, option=wrong_level_option)
+
+
+class TraitCrossingReadPathTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.traits.factories import TraitFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.trait = TraitFactory()
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="TRAIT",
+            target_trait=cls.trait,
+            level=10,
+        )
+
+    def test_vital_bonus_from_choice(self) -> None:
+        from typeclasses.characters import Character
+
+        option = TraitCrossingOption.objects.create(
+            resonance=self.resonance,
+            crossing_level=3,
+            name="Inner Flame",
+            effect_kind=EffectKind.VITAL_BONUS,
+            vital_bonus_amount=10,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+        )
+        TraitCrossingChoice.objects.create(thread=self.thread, crossing_level=3, option=option)
+        char = Character.objects.get(pk=self.sheet.pk)
+        total = char.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
+        self.assertEqual(total, 10)
+
+    def test_capability_grant_from_choice(self) -> None:
+        from typeclasses.characters import Character
+        from world.conditions.factories import CapabilityTypeFactory
+
+        cap = CapabilityTypeFactory()
+        option = TraitCrossingOption.objects.create(
+            resonance=self.resonance,
+            crossing_level=3,
+            name="Feverish Insight",
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            capability_grant=cap,
+        )
+        TraitCrossingChoice.objects.create(thread=self.thread, crossing_level=3, option=option)
+        char = Character.objects.get(pk=self.sheet.pk)
+        granted = char.threads.passive_capability_grants()
+        self.assertIn(cap.pk, granted)
+
+    def test_flat_bonus_from_choice(self) -> None:
+        from typeclasses.characters import Character
+
+        option = TraitCrossingOption.objects.create(
+            resonance=self.resonance,
+            crossing_level=3,
+            name="Burning vigor",
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+        TraitCrossingChoice.objects.create(thread=self.thread, crossing_level=3, option=option)
+        char = Character.objects.get(pk=self.sheet.pk)
+        total = char.threads.passive_flat_bonus_for_resonance(self.resonance.pk)
+        self.assertEqual(total, 5)

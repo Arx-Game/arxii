@@ -182,7 +182,19 @@ class CharacterThreadHandler:
         # fractional Decimal for levels 1-9, so `total` may now be a Decimal;
         # rounding to the nearest int is fairer to the player than flooring, and
         # this method's return type is `int`.
+        total += self._trait_crossing_vital_bonus(vital_target)
         return round(total)
+
+    def _trait_crossing_vital_bonus(self, vital_target: str) -> int:
+        """Sum VITAL_BONUS from TraitCrossingChoice rows (#1989)."""
+        total = 0
+        for choice in self._trait_crossing_choices:
+            opt = choice.option
+            if opt.effect_kind == EffectKind.VITAL_BONUS and opt.vital_target == vital_target:
+                thread = next((t for t in self._all if t.pk == choice.thread_id), None)
+                if thread is not None:
+                    total += opt.vital_bonus_amount * thread_level_multiplier(thread.level)
+        return total
 
     def passive_damage_type_resistance(self, damage_type: DamageType) -> int:
         """Sum flat tier-0 RESISTANCE for one damage type across owned threads (#1580).
@@ -337,6 +349,19 @@ class CharacterThreadHandler:
 
         # GIFT threads: prefer gift-specific, fall back to null (per-thread)
         granted.update(self._gift_capability_grant_ids(gift_threads))
+        granted.update(self._trait_crossing_capability_grants())
+        return granted
+
+    def _trait_crossing_capability_grants(self) -> set[int]:
+        """Return CapabilityType PKs from TraitCrossingChoice rows (#1989)."""
+        granted: set[int] = set()
+        for choice in self._trait_crossing_choices:
+            opt = choice.option
+            if (
+                opt.effect_kind == EffectKind.CAPABILITY_GRANT
+                and opt.capability_grant_id is not None
+            ):
+                granted.add(opt.capability_grant_id)
         return granted
 
     def _gift_capability_grant_ids(self, gift_threads: list[Thread]) -> set[int]:
@@ -360,6 +385,43 @@ class CharacterThreadHandler:
                     granted.add(row.capability_grant_id)
         return granted
 
+    @cached_property
+    def _trait_crossing_choices(self) -> list:
+        """Batch-fetch all TraitCrossingChoice rows for the character's TRAIT threads.
+
+        Returns a list of TraitCrossingChoice instances with select_related on
+        ``option`` and ``option__capability_grant`` so the read paths don't
+        fire follow-up queries.
+        """
+        from world.magic.models.trait_crossing import TraitCrossingChoice  # noqa: PLC0415
+
+        trait_thread_ids = [t.pk for t in self._all if t.target_kind == TargetKind.TRAIT]
+        if not trait_thread_ids:
+            return []
+        return list(
+            TraitCrossingChoice.objects.filter(thread_id__in=trait_thread_ids).select_related(
+                "option", "option__capability_grant", "thread__resonance"
+            )
+        )
+
+    def passive_flat_bonus_for_resonance(self, resonance_id: int) -> int:
+        """Sum FLAT_BONUS trait crossing choices for a specific resonance.
+
+        New read path (#1989) — no existing flat-bonus passive for TRAIT threads.
+        Read by the cast power pipeline alongside the existing distinction-power
+        flat bonus.
+        """
+        total = 0
+        for choice in self._trait_crossing_choices:
+            opt = choice.option
+            if opt.effect_kind != EffectKind.FLAT_BONUS:
+                continue
+            thread = next((t for t in self._all if t.pk == choice.thread_id), None)
+            if thread is None or thread.resonance_id != resonance_id:
+                continue
+            total += int(opt.flat_bonus_amount * thread_level_multiplier(thread.level))
+        return total
+
     def invalidate(self) -> None:
         """Clear the cached thread list and any pull-side cache derived from threads.
 
@@ -370,6 +432,7 @@ class CharacterThreadHandler:
         """
         self.__dict__.pop("_all", None)
         self.__dict__.pop("_passive_capability_grants_cache", None)
+        self.__dict__.pop("_trait_crossing_choices", None)
         # Clear the pull-side cached_property only if the combat_pulls handler is
         # already instantiated (avoids triggering an import cycle on cold access).
         combat_pulls_handler = self.character.__dict__.get("combat_pulls")
