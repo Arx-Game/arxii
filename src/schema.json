@@ -41131,12 +41131,35 @@ components:
             * `crime_watch` - Crime Watch
             * `beat` - Beat
             * `item` - Item
+            * `summons` - Follow-On Summons
         amount:
           type: integer
           maximum: 2147483647
           minimum: 0
           nullable: true
           description: Numeric magnitude of the broadcast reward, when applicable.
+        followon_offer:
+          type: integer
+          nullable: true
+          description: 'Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer
+            whose summons fires as the follow-on reward.'
+        followon_message:
+          type: string
+          description: IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS.
+            Empty = the summons shows the offer's default text.
+        followon_expiry_hours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: 'When sink=FOLLOW_ON_SUMMONS: the summons lapses after this
+            many hours if unanswered (triggering the refusal/escalation path). Null
+            = no expiry (the summons persists until accepted or declined).'
+        contract_holder_only:
+          type: boolean
+          description: True → emit exactly one line to the instance's contract holder,
+            regardless of how many participants ran the mission. False → distribute
+            per the template's reward_group_rule.
       required:
       - id
       - kind
@@ -41194,12 +41217,35 @@ components:
             * `crime_watch` - Crime Watch
             * `beat` - Beat
             * `item` - Item
+            * `summons` - Follow-On Summons
         amount:
           type: integer
           maximum: 2147483647
           minimum: 0
           nullable: true
           description: Numeric magnitude of the broadcast reward, when applicable.
+        followon_offer:
+          type: integer
+          nullable: true
+          description: 'Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer
+            whose summons fires as the follow-on reward.'
+        followon_message:
+          type: string
+          description: IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS.
+            Empty = the summons shows the offer's default text.
+        followon_expiry_hours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: 'When sink=FOLLOW_ON_SUMMONS: the summons lapses after this
+            many hours if unanswered (triggering the refusal/escalation path). Null
+            = no expiry (the summons persists until accepted or declined).'
+        contract_holder_only:
+          type: boolean
+          description: True → emit exactly one line to the instance's contract holder,
+            regardless of how many participants ran the mission. False → distribute
+            per the template's reward_group_rule.
       required:
       - kind
       - sink
@@ -41212,6 +41258,7 @@ components:
       - crime_watch
       - beat
       - item
+      - summons
       type: string
       description: |-
         * `money` - Money
@@ -41221,6 +41268,7 @@ components:
         * `crime_watch` - Crime Watch
         * `beat` - Beat
         * `item` - Item
+        * `summons` - Follow-On Summons
     MissionOptionSourceKindEnum:
       enum:
       - authored
@@ -47777,12 +47825,35 @@ components:
             * `crime_watch` - Crime Watch
             * `beat` - Beat
             * `item` - Item
+            * `summons` - Follow-On Summons
         amount:
           type: integer
           maximum: 2147483647
           minimum: 0
           nullable: true
           description: Numeric magnitude of the broadcast reward, when applicable.
+        followon_offer:
+          type: integer
+          nullable: true
+          description: 'Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer
+            whose summons fires as the follow-on reward.'
+        followon_message:
+          type: string
+          description: IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS.
+            Empty = the summons shows the offer's default text.
+        followon_expiry_hours:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          description: 'When sink=FOLLOW_ON_SUMMONS: the summons lapses after this
+            many hours if unanswered (triggering the refusal/escalation path). Null
+            = no expiry (the summons persists until accepted or declined).'
+        contract_holder_only:
+          type: boolean
+          description: True → emit exactly one line to the instance's contract holder,
+            regardless of how many participants ran the mission. False → distribute
+            per the template's reward_group_rule.
     PatchedMissionTemplateRequest:
       type: object
       description: |-

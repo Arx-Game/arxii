@@ -34,14 +34,18 @@ class OpportunitiesAPITests(TestCase):
         cls.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         cls.character = CharacterFactory()
         CharacterSheetFactory(character=cls.character)
-        cls.character.db_location = cls.room
-        cls.character.save(update_fields=["db_location"])
         cls.template_open = _template_with_entry("opp-api-open")
         cls.account = AccountFactory()
 
     def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(self.account)
+        # Set db_location in setUp (not setUpTestData) to avoid the Evennia
+        # DbHolder deepcopy error on Postgres (#2082 CI fix).
+        from evennia.objects.models import ObjectDB
+
+        ObjectDB.objects.filter(pk=self.character.pk).update(db_location=self.room)
+        self.character.db_location = self.room
         self._patch = mock.patch(
             "world.missions.views._puppet_character", return_value=self.character
         )

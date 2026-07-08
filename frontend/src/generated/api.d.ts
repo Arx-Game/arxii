@@ -22900,10 +22900,19 @@ export interface components {
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
        *     * `item` - Item
+       *     * `summons` - Follow-On Summons
        */
       sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
+      /** @description Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer whose summons fires as the follow-on reward. */
+      followon_offer?: number | null;
+      /** @description IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS. Empty = the summons shows the offer's default text. */
+      followon_message?: string;
+      /** @description When sink=FOLLOW_ON_SUMMONS: the summons lapses after this many hours if unanswered (triggering the refusal/escalation path). Null = no expiry (the summons persists until accepted or declined). */
+      followon_expiry_hours?: number | null;
+      /** @description True → emit exactly one line to the instance's contract holder, regardless of how many participants ran the mission. False → distribute per the template's reward_group_rule. */
+      contract_holder_only?: boolean;
     };
     /**
      * @description * `immediate` - Immediate
@@ -22943,10 +22952,19 @@ export interface components {
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
        *     * `item` - Item
+       *     * `summons` - Follow-On Summons
        */
       sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
+      /** @description Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer whose summons fires as the follow-on reward. */
+      followon_offer?: number | null;
+      /** @description IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS. Empty = the summons shows the offer's default text. */
+      followon_message?: string;
+      /** @description When sink=FOLLOW_ON_SUMMONS: the summons lapses after this many hours if unanswered (triggering the refusal/escalation path). Null = no expiry (the summons persists until accepted or declined). */
+      followon_expiry_hours?: number | null;
+      /** @description True → emit exactly one line to the instance's contract holder, regardless of how many participants ran the mission. False → distribute per the template's reward_group_rule. */
+      contract_holder_only?: boolean;
     };
     /**
      * @description * `money` - Money
@@ -22956,6 +22974,7 @@ export interface components {
      *     * `crime_watch` - Crime Watch
      *     * `beat` - Beat
      *     * `item` - Item
+     *     * `summons` - Follow-On Summons
      * @enum {string}
      */
     MissionOptionRouteRewardSinkEnum:
@@ -22965,7 +22984,8 @@ export interface components {
       | 'rumor'
       | 'crime_watch'
       | 'beat'
-      | 'item';
+      | 'item'
+      | 'summons';
     /**
      * @description * `authored` - Authored
      *     * `challenge` - Challenge
@@ -26842,10 +26862,19 @@ export interface components {
        *     * `crime_watch` - Crime Watch
        *     * `beat` - Beat
        *     * `item` - Item
+       *     * `summons` - Follow-On Summons
        */
       sink?: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
       amount?: number | null;
+      /** @description Required when sink=FOLLOW_ON_SUMMONS: the MISSION-kind offer whose summons fires as the follow-on reward. */
+      followon_offer?: number | null;
+      /** @description IC text for the follow-on summons when sink=FOLLOW_ON_SUMMONS. Empty = the summons shows the offer's default text. */
+      followon_message?: string;
+      /** @description When sink=FOLLOW_ON_SUMMONS: the summons lapses after this many hours if unanswered (triggering the refusal/escalation path). Null = no expiry (the summons persists until accepted or declined). */
+      followon_expiry_hours?: number | null;
+      /** @description True → emit exactly one line to the instance's contract holder, regardless of how many participants ran the mission. False → distribute per the template's reward_group_rule. */
+      contract_holder_only?: boolean;
     };
     /**
      * @description List + detail serializer for MissionTemplate browse.

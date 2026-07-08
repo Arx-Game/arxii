@@ -26,11 +26,13 @@ from world.missions.constants import DeedRewardKind, DeedRewardSink
 from world.missions.factories import (
     MissionDeedRecordFactory,
     MissionDeedRewardLineFactory,
+    MissionInstanceFactory,
 )
 from world.missions.integrations import beat_stub, money_stub
 from world.missions.models import MissionRewardQueue
 from world.missions.services import apply_deed_rewards
 from world.missions.services.rewards import MissionRewardRoutingError
+from world.npc_services.constants import OfferKind, SummonsStatus
 
 
 class ApplyDeedRewardsQueueingTests(TestCase):
@@ -291,3 +293,115 @@ class ApplyDeedRewardsResultShapeTests(TestCase):
         # And the dataclass is frozen.
         with self.assertRaises(FrozenInstanceError):
             result.enqueued = ()  # type: ignore[misc]
+
+
+class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
+    """apply_deed_rewards FOLLOW_ON_SUMMONS routing (#2082).
+
+    A (IMMEDIATE, FOLLOW_ON_SUMMONS) reward line fires create_summons at
+    the deed actor's accepted_as_persona with created_by=None. PENDING-
+    uniqueness is inherited from OfferSummons (dedup via savepoint + catch).
+    """
+
+    def setUp(self) -> None:
+        money_stub.clear_calls()
+        beat_stub.clear_calls()
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.npc_services.factories import (
+            MissionOfferDetailsFactory,
+            NPCServiceOfferFactory,
+        )
+        from world.npc_services.models import OfferSummons
+
+        cls.OfferSummons = OfferSummons
+        cls.actor = CharacterFactory(db_key="FollowOnSummonsActor")
+        cls.sheet = CharacterSheetFactory(character=cls.actor)
+        cls.persona = cls.sheet.primary_persona
+
+        cls.offer = NPCServiceOfferFactory(kind=OfferKind.MISSION)
+        cls.details = MissionOfferDetailsFactory(offer=cls.offer)
+
+        cls.instance = MissionInstanceFactory()
+        cls.instance.accepted_as_persona = cls.persona
+        cls.instance.save(update_fields=["accepted_as_persona"])
+        cls.deed = MissionDeedRecordFactory(instance=cls.instance, actor=cls.actor)
+
+    def test_creates_pending_summons_with_created_by_none(self):
+        """A (IMMEDIATE, FOLLOW_ON_SUMMONS) line fires create_summons."""
+        MissionDeedRewardLineFactory(
+            deed=self.deed,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            followon_offer=self.offer,
+            followon_message="Come at once.",
+            recipient=self.actor,
+        )
+        apply_deed_rewards(self.deed)
+
+        summons = self.OfferSummons.objects.get(offer=self.offer)
+        self.assertEqual(summons.status, SummonsStatus.PENDING)
+        self.assertEqual(summons.target_persona, self.persona)
+        self.assertEqual(summons.message, "Come at once.")
+        self.assertIsNone(summons.created_by)
+        self.assertIsNone(summons.expires_at)
+
+    def test_dedup_when_already_pending(self):
+        """Pre-existing PENDING summons → no-op, no crash."""
+        from world.npc_services.summons import create_summons
+
+        # Pre-create a PENDING summons for the same (offer, persona).
+        create_summons(self.offer, self.persona, message="First.")
+
+        MissionDeedRewardLineFactory(
+            deed=self.deed,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            followon_offer=self.offer,
+            recipient=self.actor,
+        )
+        # Must not raise — the dedup path catches IntegrityError.
+        apply_deed_rewards(self.deed)
+        self.assertEqual(self.OfferSummons.objects.filter(offer=self.offer).count(), 1)
+
+    def test_skips_when_no_accepted_as_persona(self):
+        """Instance with accepted_as_persona=None → skip + warn."""
+        instance = MissionInstanceFactory()  # accepted_as_persona defaults to None
+        deed = MissionDeedRecordFactory(instance=instance, actor=self.actor)
+        MissionDeedRewardLineFactory(
+            deed=deed,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            followon_offer=self.offer,
+            recipient=self.actor,
+        )
+        apply_deed_rewards(deed)
+        self.assertEqual(self.OfferSummons.objects.filter(offer=self.offer).count(), 0)
+
+    def test_summons_has_expiry_when_set(self):
+        """followon_expiry_hours → expires_at is set on the summons."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        MissionDeedRewardLineFactory(
+            deed=self.deed,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.FOLLOW_ON_SUMMONS,
+            followon_offer=self.offer,
+            followon_expiry_hours=24,
+            recipient=self.actor,
+        )
+        before = timezone.now()
+        apply_deed_rewards(self.deed)
+        after = timezone.now()
+
+        summons = self.OfferSummons.objects.get(offer=self.offer)
+        self.assertIsNotNone(summons.expires_at)
+        # expires_at should be ~now + 24h
+        lower = before + timedelta(hours=23, minutes=59)
+        upper = after + timedelta(hours=24, minutes=1)
+        self.assertGreaterEqual(summons.expires_at, lower)
+        self.assertLessEqual(summons.expires_at, upper)
