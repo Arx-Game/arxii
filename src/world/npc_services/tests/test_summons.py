@@ -115,7 +115,7 @@ class RespondSummonsDeclineTests(TestCase):
     def test_decline_sets_declined_and_drops_affection(self):
         """Declining sets DECLINED + drops affection + bumps streak."""
         offer = _mission_offer()
-        _, _, persona = _pc()
+        character, _, persona = _pc()
         npc_persona = PersonaFactory()
         NPCStandingFactory(persona=persona, npc_persona=npc_persona, affection=20)
         # Wire the role to the NPC persona via a covenant leader.
