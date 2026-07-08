@@ -62,6 +62,7 @@ from world.combat.serializers import (
     JoinEncounterSerializer,
     OpponentDefaultsResponseSerializer,
     OpponentStatBlockSerializer,
+    OpponentTargetSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
     UpgradeComboSerializer,
@@ -149,6 +150,10 @@ class CombatEncounterViewSet(ModelViewSet):
             "cover",
             "interpose",
             "leave",
+            "rally",
+            "demoralize",
+            "taunt",
+            "parley",
         ):
             return [IsAuthenticated(), IsEncounterParticipant()]
         if self.action == "join":
@@ -781,6 +786,122 @@ class CombatEncounterViewSet(ModelViewSet):
             participant.character_sheet.character,
             "combat_interpose",
             {"ally_participant_id": ally.pk if ally is not None else None},
+        )
+        if not self._action_succeeded(result):
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def rally(self, request: Request, pk: int | None = None) -> Response:
+        """Declare a rallying maneuver to inspire an ally (#2015).
+
+        Requires ``ally_participant_id`` — the PK of the active ally to inspire.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = CoverSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ally_id = serializer.validated_data.get("ally_participant_id")
+        ally = get_object_or_404(CombatParticipant, pk=ally_id, encounter=encounter)
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_rally",
+            {"ally_participant_id": ally.pk},
+        )
+        if not self._action_succeeded(result):
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def demoralize(self, request: Request, pk: int | None = None) -> Response:
+        """Declare a demoralizing maneuver against an opponent (#2015).
+
+        Requires ``opponent_id`` — the PK of the active opponent to demoralize.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = OpponentTargetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        opponent_id = serializer.validated_data.get("opponent_id")
+        get_object_or_404(CombatOpponent, pk=opponent_id, encounter=encounter)
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_demoralize",
+            {"opponent_id": opponent_id},
+        )
+        if not self._action_succeeded(result):
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def taunt(self, request: Request, pk: int | None = None) -> Response:
+        """Declare a taunting maneuver against an opponent (#2015).
+
+        Requires ``opponent_id`` — the PK of the active opponent to taunt.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = OpponentTargetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        opponent_id = serializer.validated_data.get("opponent_id")
+        get_object_or_404(CombatOpponent, pk=opponent_id, encounter=encounter)
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_taunt",
+            {"opponent_id": opponent_id},
+        )
+        if not self._action_succeeded(result):
+            return Response(
+                {"detail": _ERR_DECLARE_FAILED},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return self._serialize_encounter(request, encounter)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def parley(self, request: Request, pk: int | None = None) -> Response:
+        """Declare a parley attempt against an opponent (#2015).
+
+        Requires ``opponent_id`` — the PK of the active opponent to parley with.
+        """
+        encounter = self.get_object()
+        participant = self._get_participant(request, encounter)
+        if not participant:
+            return Response(
+                {"detail": _ERR_NOT_PARTICIPANT},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = OpponentTargetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        opponent_id = serializer.validated_data.get("opponent_id")
+        get_object_or_404(CombatOpponent, pk=opponent_id, encounter=encounter)
+        result = self._dispatch_combat_action(
+            participant.character_sheet.character,
+            "combat_parley",
+            {"opponent_id": opponent_id},
         )
         if not self._action_succeeded(result):
             return Response(
