@@ -51,6 +51,7 @@ def weekly_rollover_task() -> None:
         ("AP weekly regen", batch_ap_weekly_regen),
         ("weekly economy", _run_weekly_economy),
         ("social engagement kudos grant", _run_social_engagement_grant),
+        ("idle table summary", _run_idle_table_summary),
     ]
 
     for name, processor in processors:
@@ -65,6 +66,17 @@ def _run_weekly_economy() -> None:
     from world.currency.services import run_weekly_economy
 
     run_weekly_economy()
+
+
+def _run_idle_table_summary() -> None:
+    """Log a summary of idle GM tables for staff awareness (#2004)."""
+    from world.gm.services import idle_tables
+
+    tables = list(idle_tables())
+    if not tables:
+        return
+    names = ", ".join(f"{t.name} (GM: {t.gm.account.username})" for t in tables)
+    logger.info("Idle table summary: %d idle table(s): %s", len(tables), names)
 
 
 def _run_social_engagement_grant() -> None:

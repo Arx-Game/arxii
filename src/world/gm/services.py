@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from world.gm.constants import GMLevel, GMTableStatus
@@ -95,6 +96,26 @@ def transfer_ownership(table: GMTable, new_gm: GMProfile) -> None:
     """Reassign a table to a different GM. Staff-only action."""
     table.gm = new_gm
     table.save(update_fields=["gm"])
+
+
+# Staff-tunable threshold (days) for idle-table detection (#2004).
+# A GMTable whose GM's last_active_at is older than this is "idle".
+IDLE_TABLE_THRESHOLD_DAYS = 14
+
+
+def idle_tables(threshold_days: int = IDLE_TABLE_THRESHOLD_DAYS) -> QuerySet[GMTable]:
+    """ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).
+
+    Returns tables whose GM has never been active (``last_active_at IS NULL``)
+    or whose last activity predates the cutoff. Used by the StaffWorkloadView
+    idle-tables section and the weekly cron summary.
+    """
+    cutoff = timezone.now() - timedelta(days=threshold_days)
+    return (
+        GMTable.objects.filter(status=GMTableStatus.ACTIVE)
+        .select_related("gm__account")
+        .filter(Q(gm__last_active_at__lt=cutoff) | Q(gm__last_active_at__isnull=True))
+    )
 
 
 @transaction.atomic
@@ -237,6 +258,37 @@ def surrender_character_story(gm: GMProfile, story: Story) -> None:
     touch_gm_activity(gm)
     story.primary_table = None
     story.save(update_fields=["primary_table"])
+    _notify_surrender(story, gm)
+
+
+def _notify_surrender(story: Story, gm: GMProfile) -> None:
+    """Best-effort narrative SYSTEM message to the affected player (#2004).
+
+    Notifies the story's character_sheet owner that their GM has surrendered
+    oversight. Skips gracefully when no character_sheet is resolvable (GROUP/
+    GLOBAL stories have no single affected player).
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    character_sheet = story.character_sheet
+    if character_sheet is None:
+        return
+    try:
+        send_narrative_message(
+            recipients=[character_sheet],
+            body=(
+                f"Your GM has surrendered oversight of your story "
+                f"'{story.title}'. It is now seeking a new GM."
+            ),
+            category=NarrativeCategory.SYSTEM,
+            sender_account=gm.account,
+            related_story=story,
+        )
+    except Exception:
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).exception("surrender notification failed")
 
 
 @transaction.atomic

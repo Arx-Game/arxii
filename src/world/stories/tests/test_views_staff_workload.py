@@ -51,7 +51,7 @@ STAFF_WORKLOAD_URL = reverse("stories-staff-workload")
 # N=12 with episode-bearing rows that exercise the eligibility batch path.
 # +1 for the pending_canon_reviews section (#2003) — a single select_related
 # scan independent of N.
-BOUNDED_QUERY_COUNT = 27
+BOUNDED_QUERY_COUNT = 28
 
 
 class StaffWorkloadAuthTest(APITestCase):
@@ -99,6 +99,7 @@ class StaffWorkloadResponseShapeTest(APITestCase):
             "open_session_requests_count",
             "counts_by_scope",
             "pending_canon_reviews",
+            "idle_tables",
         ]:
             assert key in response.data, f"Missing key: {key}"
 
