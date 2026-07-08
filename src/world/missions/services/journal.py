@@ -64,6 +64,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
             "instance__current_node",
             "instance__anchor_room__objectdb",
             "instance__target_project",
+            "instance__source_beat__episode__chapter__story",
         )
         .prefetch_related("instance__current_node__locations__objectdb")  # noqa: PREFETCH_STRING
         .order_by("instance_id", "pk")
@@ -233,6 +234,23 @@ def _options_by_node(
     return options_by_node
 
 
+def _source_beat_story_title(instance: MissionInstance) -> str | None:
+    """The story title for the instance's source_beat, or None (#2048)."""
+    beat = instance.source_beat
+    if beat is None:
+        return None
+    story = beat.episode.chapter.story
+    return story.title if story else None
+
+
+def _source_beat_hint(instance: MissionInstance) -> str | None:
+    """The player_hint for the instance's source_beat, or None (#2048)."""
+    beat = instance.source_beat
+    if beat is None:
+        return None
+    return beat.player_hint or None
+
+
 def _journal_entry_for(  # noqa: PLR0913
     part: MissionParticipant,
     deeds_by_instance: dict[int, list[JournalDeed]],
@@ -275,6 +293,8 @@ def _journal_entry_for(  # noqa: PLR0913
         target_project_progress=target_project_progress,
         target_project_threshold=target_project_threshold,
         target_project_granted=project_grants.get(instance.pk, 0),
+        source_beat_story_title=_source_beat_story_title(instance),
+        source_beat_hint=_source_beat_hint(instance),
     )
 
 

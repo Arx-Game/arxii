@@ -128,6 +128,9 @@ class CmdMission(ArxCommand):
                         f"    Advances: {entry.target_project_name} "
                         f"({progress}/{threshold}, +{granted} this run)"
                     )
+                if entry.source_beat_story_title is not None:
+                    hint = f" — {entry.source_beat_hint}" if entry.source_beat_hint else ""
+                    lines.append(f"    Story: {entry.source_beat_story_title}{hint}")
         self._append_pending_invites(lines)
         self._append_pending_summonses(lines)
         self.msg("\n".join(lines))

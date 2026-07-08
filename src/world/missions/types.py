@@ -154,6 +154,8 @@ class JournalEntry:
     target_project_progress: int | None = None
     target_project_threshold: int | None = None
     target_project_granted: int = 0
+    source_beat_story_title: str | None = None
+    source_beat_hint: str | None = None
 
 
 @dataclass(frozen=True)
