@@ -1415,6 +1415,13 @@ and paying authored win-reward lines through an anti-farming activation gate
   beat's `player_summary` stake lines — whenever that beat is staked
   (`risk != NONE`), independent of the template's own `risk_tier`; ADR-0085
   puts the FK on `MissionOfferDetails`, not the unified `NPCServiceOffer`.
+  `MissionOfferDetails.target_project` (#2045) copies onto
+  `MissionInstance.target_project` at `issue_mission` — same instance-binding
+  shape as `source_beat`. A PROJECT reward sink (`DeedRewardSink.PROJECT`)
+  routes through `apply_deed_rewards` → `add_contribution(kind=MISSION)` →
+  `maybe_complete_immediately`. Loud refusal at issuance when PROJECT lines
+  exist but no project is bound; soft-skip-with-notice at payout when the
+  project is non-ACTIVE or null. ADR-0103.
 - **Three-concepts disambiguation:** `Beat.risk`+contract (stakes/reward) is
   distinct from `combat.RiskLevel` (cast-pull acknowledgement gate) and
   `combat.StakesLevel` (GM access scope) — see stakes.md.
@@ -1730,7 +1737,8 @@ RANSOM (#1500).
   CHECK rows), `ContributionMethod` (#1574 — admin-authorable, per-`ProjectKind`
   check-based method: `check_type` + `ap_cost` + `progress_on_success`), per-kind details
   models (`BuildingConstructionDetails`, `RoomFeatureProgressionDetails`)
-- **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`,
+- **Constants:** `ProjectKind`, `ProjectStatus`, `CompletionMode`, `ContributionKind`
+  (AP/MONEY/ITEM/CHECK/**MISSION** — #2045 adds MISSION for mission→project payouts),
   `ContributionPrivacy`
 - **Contribution surface (#1574):** `donate_to_project` (money → progress at 1/100c),
   `contribute_check_to_project` (spends a method's AP, rolls its check, advances on

@@ -221,3 +221,4 @@ class DeedRewardSink(models.TextChoices):
     BEAT = "beat", "Beat"
     ITEM = "item", "Item"
     FOLLOW_ON_SUMMONS = "summons", "Follow-On Summons"
+    PROJECT = "project", "Project"

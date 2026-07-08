@@ -150,6 +150,10 @@ class JournalEntry:
     pending_invites: tuple[JournalInvite, ...] = ()
     pending_summons: tuple[JournalSummons, ...] = ()
     participant_count: int = 1
+    target_project_name: str | None = None
+    target_project_progress: int | None = None
+    target_project_threshold: int | None = None
+    target_project_granted: int = 0
 
 
 @dataclass(frozen=True)
@@ -274,6 +278,21 @@ class StubError:
 
 
 @dataclass(frozen=True)
+class ProjectSkipRecord:
+    """A PROJECT reward line that was soft-skipped at payout (#2045).
+
+    The project was non-ACTIVE or the FK had gone null (SET_NULL) by report
+    time. The player already did the work; no-silent-drop is satisfied by
+    the explicit notice text carried here.
+    """
+
+    line_id: int
+    amount: int
+    project_name: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
 class ApplyDeedRewardsResult:
     """Typed return of :func:`world.missions.services.rewards.apply_deed_rewards`.
 
@@ -281,12 +300,14 @@ class ApplyDeedRewardsResult:
     created/refreshed by the call; ``stub_calls`` summarises each stub-seam
     invocation; ``errors`` is reserved for aggregated stub failures and is
     always empty in Phase 5b.1 (the function raises on the first stub
-    failure today).
+    failure today). ``project_skips`` carries PROJECT lines that were
+    soft-skipped because the bound project was non-ACTIVE or null (#2045).
     """
 
     enqueued: tuple[MissionRewardQueue, ...] = ()
     stub_calls: tuple[StubCallRecord, ...] = ()
     errors: tuple[StubError, ...] = ()
+    project_skips: tuple[ProjectSkipRecord, ...] = ()
 
 
 @dataclass(frozen=True)

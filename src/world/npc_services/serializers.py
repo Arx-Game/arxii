@@ -106,6 +106,7 @@ class MissionOfferDetailsSerializer(serializers.ModelSerializer):
             "role",
             "mission_template",
             "source_beat",
+            "target_project",
             "weight",
             "requirements_override",
             "role_cooldown_duration",

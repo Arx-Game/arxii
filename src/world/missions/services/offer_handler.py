@@ -29,7 +29,7 @@ from django.utils import timezone
 from world.missions.constants import MISSION_RISK_ACK_TIER, MissionStatus
 from world.missions.models import MissionInstance, MissionParticipant, MissionRiskAcknowledgement
 from world.missions.services.resolution import enter_node
-from world.missions.services.run import anchor_room_for
+from world.missions.services.run import _template_has_project_lines, anchor_room_for
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import EffectResult
 from world.npc_services.services import ResolveOfferError
@@ -159,11 +159,22 @@ def issue_mission(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
     # keeps the state machine honest).
     _require_risk_acknowledgement(offer, persona, details)
 
+    # #2045: no-silent-drop — refuse to issue an instance whose template carries
+    # PROJECT reward lines when no project is bound to this offer.
+    if details.target_project is None and _template_has_project_lines(template):
+        msg = (
+            f"Offer {offer.pk} wraps template '{template.name}' with PROJECT reward "
+            "lines but MissionOfferDetails.target_project is not set — refusing "
+            "issuance (#2045)."
+        )
+        raise ResolveOfferError(msg)
+
     instance = MissionInstance.objects.create(
         template=template,
         source_offer=offer,
         accepted_as_persona=persona,
         source_beat=details.source_beat,
+        target_project=details.target_project,
         # #885: the NPC interaction happens where the character stands —
         # that room is the run's anchor for ANCHOR-mode nodes.
         anchor_room=anchor_room_for(character),

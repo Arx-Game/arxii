@@ -31,7 +31,8 @@ class ItemRewardSinkTests(TestCase):
         )
         enqueued: list = []
         stub_calls: list = []
-        _route_line(deed, line, enqueued, stub_calls)
+        project_skips: list = []
+        _route_line(deed, line, enqueued, stub_calls, project_skips)
         assert ItemInstance.objects.filter(
             template=template, holder_character_sheet=recipient.sheet_data
         ).exists()

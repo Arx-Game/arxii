@@ -68,6 +68,7 @@ class ContributionKind(models.TextChoices):
     MONEY = "MONEY", "Money"
     ITEM = "ITEM", "Item"
     CHECK = "CHECK", "Skill Check"
+    MISSION = "MISSION", "Mission"
 
 
 class ContributionPrivacy(models.TextChoices):
