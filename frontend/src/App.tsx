@@ -105,6 +105,9 @@ const StoryDetailPage = lazy(() =>
 const GMQueuePage = lazy(() =>
   import('@/stories/pages/GMQueuePage').then((m) => ({ default: m.GMQueuePage }))
 );
+const GMDashboardPage = lazy(() =>
+  import('@/stories/pages/GMDashboardPage').then((m) => ({ default: m.GMDashboardPage }))
+);
 const AGMOpportunitiesPage = lazy(() =>
   import('@/stories/pages/AGMOpportunitiesPage').then((m) => ({
     default: m.AGMOpportunitiesPage,
@@ -614,6 +617,16 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <GMQueuePage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/gm/dashboard"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <GMDashboardPage />
               </ProtectedRoute>
             </Suspense>
           }
