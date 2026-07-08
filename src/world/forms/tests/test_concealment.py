@@ -128,3 +128,43 @@ class ConcealmentWebTests(APITestCase):
         appearance = self._appearance(self.owner)
         traits = {t["trait"]: t for t in appearance["form_traits"]}
         assert traits["Hair Color"]["value"] == "Red"
+
+
+class ConcealmentSdescTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import GenderFactory
+
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        # Set a gender so compose_sdesc would normally use "man"/"woman" —
+        # full concealment must override it to "person" (#1272).
+        cls.sheet.gender = GenderFactory(key="female")
+        cls.sheet.save()
+        cls.hair = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        cls.red = FormTraitOptionFactory(trait=cls.hair, name="red", display_name="Red")
+
+    def setUp(self):
+        self.true_form = CharacterFormFactory(character=self.character, form_type=FormType.TRUE)
+        CharacterFormValueFactory(form=self.true_form, trait=self.hair, option=self.red)
+        CharacterFormState.objects.create(character=self.character, active_form=self.true_form)
+        self.disguise = CharacterFormFactory(
+            character=self.character, form_type=FormType.DISGUISE, is_player_created=True
+        )
+        from world.scenes.factories import PersonaFactory
+
+        self.persona = PersonaFactory(character_sheet=self.sheet, is_fake_name=True)
+
+    def test_full_concealment_forces_person_in_sdesc(self):
+        apply_disguise(self.character, self.disguise, concealment_level=ConcealmentLevel.FULL)
+        from world.scenes.persona_display import compose_sdesc
+
+        sdesc = compose_sdesc(self.persona)
+        assert sdesc == f"a person wearing a {self.persona.name}"
+
+    def test_no_overlay_uses_gender_noun(self):
+        from world.scenes.persona_display import compose_sdesc
+
+        sdesc = compose_sdesc(self.persona)
+        # Gender is female → "a woman wearing a ..."
+        assert sdesc == f"a woman wearing a {self.persona.name}"
