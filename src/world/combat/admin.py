@@ -4,6 +4,7 @@ from django.contrib import admin
 
 from world.combat.models import (
     BossPhase,
+    BreakBarConfig,
     Clash,
     ClashConfig,
     ClashContribution,
@@ -18,6 +19,8 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    CreaturePhaseTemplate,
+    CreatureTemplate,
     EncounterScalingConfig,
     EngagementLock,
     EscalationCurve,
@@ -359,8 +362,41 @@ class OpponentTierTemplateAdmin(admin.ModelAdmin):
         "base_probing_threshold",
         "base_swarm_count",
         "boss_phase_count",
+        "base_actions_per_round",
     ]
     list_filter = ["tier"]
+
+
+class BreakBarConfigInline(admin.TabularInline):
+    model = BreakBarConfig
+    extra = 0
+
+
+class CreaturePhaseTemplateInline(admin.TabularInline):
+    model = CreaturePhaseTemplate
+    extra = 0
+    fk_name = "creature_template"
+    inlines = [BreakBarConfigInline]
+
+
+@admin.register(CreatureTemplate)
+class CreatureTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "tier", "threat_pool")
+    list_filter = ("tier",)
+    search_fields = ("name",)
+    inlines = [CreaturePhaseTemplateInline]
+
+
+@admin.register(CreaturePhaseTemplate)
+class CreaturePhaseTemplateAdmin(admin.ModelAdmin):
+    list_display = ("creature_template", "phase_number", "soak_value", "damage_multiplier")
+    list_filter = ("creature_template__tier",)
+    inlines = [BreakBarConfigInline]
+
+
+@admin.register(BreakBarConfig)
+class BreakBarConfigAdmin(admin.ModelAdmin):
+    list_display = ("boss_phase", "max_threshold", "vulnerability_rounds", "intensity_bonus")
 
 
 @admin.register(RiskScalingModifier)

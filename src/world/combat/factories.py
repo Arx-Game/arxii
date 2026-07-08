@@ -33,6 +33,7 @@ from world.combat.constants import (
 )
 from world.combat.models import (
     BossPhase,
+    BreakBarConfig,
     Clash,
     ClashConfig,
     ClashContribution,
@@ -46,6 +47,8 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    CreaturePhaseTemplate,
+    CreatureTemplate,
     DuelChallenge,
     EncounterAftermathRule,
     EncounterScalingConfig,
@@ -486,6 +489,41 @@ class OpponentTierTemplateFactory(factory_django.DjangoModelFactory):
     bodies_per_attack = None
     barrier_strength = None
     boss_phase_count = 1
+    base_actions_per_round = 1
+
+
+class CreatureTemplateFactory(factory_django.DjangoModelFactory):
+    """Factory for CreatureTemplate."""
+
+    class Meta:
+        model = CreatureTemplate
+
+    name = factory.Sequence(lambda n: f"Creature {n}")
+    tier = OpponentTier.BOSS
+
+
+class CreaturePhaseTemplateFactory(factory_django.DjangoModelFactory):
+    """Factory for CreaturePhaseTemplate."""
+
+    class Meta:
+        model = CreaturePhaseTemplate
+
+    creature_template = factory.SubFactory(CreatureTemplateFactory)
+    phase_number = 1
+    soak_value = 5
+    health_trigger_percentage = 1.0
+
+
+class BreakBarConfigFactory(factory_django.DjangoModelFactory):
+    """Factory for BreakBarConfig."""
+
+    class Meta:
+        model = BreakBarConfig
+
+    boss_phase = factory.SubFactory(CreaturePhaseTemplateFactory)
+    max_threshold = 30
+    vulnerability_rounds = 2
+    intensity_bonus = 2
 
 
 class RiskScalingModifierFactory(factory_django.DjangoModelFactory):

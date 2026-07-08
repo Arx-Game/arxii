@@ -98,6 +98,8 @@ class ActionOutcome:
     )
     combo_used: ComboDefinition | None = None
     damage_consequences: list[DamageConsequenceResult] = field(default_factory=list)
+    participant_id: int | None = None
+    effect_type_id: int | None = None
 
 
 @dataclass

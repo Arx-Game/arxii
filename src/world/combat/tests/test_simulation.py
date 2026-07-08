@@ -133,3 +133,29 @@ class OpponentStatBlockScalingTests(TestCase):
         )
 
         self.assertGreaterEqual(large_party.max_health, small_party.max_health)
+
+
+class SimulationComboRateTests(TestCase):
+    """Tests for the combo_rate simulation parameter."""
+
+    def test_combo_rate_zero_default(self) -> None:
+        params = SimulationParams()
+        self.assertEqual(params.combo_rate, 0.0)
+
+    def test_combo_rate_one(self) -> None:
+        params = SimulationParams(combo_rate=1.0)
+        self.assertEqual(params.combo_rate, 1.0)
+
+    def test_simulation_runs_with_combo_rate(self) -> None:
+        """A simulation with combo_rate > 0 should complete without errors."""
+        seed_scaling_defaults()
+        report = run_party_vs_boss_simulation(
+            SimulationParams(
+                party_size=2,
+                tier=OpponentTier.MOOK,
+                iterations=1,
+                round_cap=5,
+                combo_rate=0.5,
+            )
+        )
+        self.assertEqual(report.iterations_run, 1)

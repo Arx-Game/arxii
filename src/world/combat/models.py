@@ -540,6 +540,38 @@ class CombatOpponent(SharedMemoryModel):
         help_text="Ceiling for morale; RALLY restores toward it.",
     )
 
+    # === Boss anatomy fields (#2016) ===
+    actions_per_round = models.PositiveIntegerField(
+        default=1,
+        help_text="Runtime: stamped from tier template, updated on phase transition.",
+    )
+    damage_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.0"),
+        help_text="Runtime: stamped from phase template at transition.",
+    )
+    break_bar_threshold = models.PositiveIntegerField(
+        default=0,
+        help_text="0 = no break bar; scaled by party_mult at spawn time.",
+    )
+    break_bar_current = models.PositiveIntegerField(
+        default=0,
+        help_text="Current bar progress (counts down toward 0 = broken).",
+    )
+    vulnerability_rounds_remaining = models.PositiveIntegerField(
+        default=0,
+        help_text="0 = not vulnerable; >0 = vulnerability window active.",
+    )
+    vulnerability_rounds = models.PositiveIntegerField(
+        default=0,
+        help_text="Authored window duration; stamped from BreakBarConfig at spawn.",
+    )
+    vulnerability_intensity_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text="Intensity bonus during vulnerability window; from BreakBarConfig.",
+    )
+
     class Meta:
         constraints = [
             models.CheckConstraint(
@@ -614,26 +646,74 @@ class CombatOpponent(SharedMemoryModel):
         return f"{self.name} ({self.get_tier_display()})"
 
 
-class BossPhase(SharedMemoryModel):
-    """One stage of a boss fight."""
+class AbstractPhaseConfig(SharedMemoryModel):
+    """Shared phase fields used by both BossPhase (runtime) and
+    CreaturePhaseTemplate (authored bestiary).
 
-    opponent = models.ForeignKey(
-        CombatOpponent,
-        on_delete=models.CASCADE,
-        related_name="phases",
-    )
+    Concrete subclasses add their own owner FK (opponent or creature_template)
+    and any runtime-only fields.
+    """
+
+    class Meta:
+        abstract = True
+
     phase_number = models.PositiveIntegerField()
     threat_pool = models.ForeignKey(
         ThreatPool,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="boss_phases",
     )
     soak_value = models.PositiveIntegerField(default=0)
     probing_threshold = models.PositiveIntegerField(null=True, blank=True)
     health_trigger_percentage = models.FloatField(null=True, blank=True)
     description = models.TextField(blank=True)
+    actions_per_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Phase override; null = inherit tier template default.",
+    )
+    damage_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("1.0"),
+        help_text="Enrage damage multiplier for this phase.",
+    )
+    extra_actions = models.PositiveIntegerField(
+        default=0,
+        help_text="Additional actions beyond actions_per_round.",
+    )
+    reinforcement_template = models.ForeignKey(
+        "CreatureTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="CreatureTemplate to spawn as adds on phase entry.",
+    )
+    reinforcement_count = models.PositiveIntegerField(default=0)
+
+
+class BossPhase(AbstractPhaseConfig):
+    """One stage of a boss fight (runtime row on a CombatOpponent)."""
+
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="phases",
+    )
+    # Runtime break-bar fields — stamped from BreakBarConfig at spawn time.
+    break_bar_threshold = models.PositiveIntegerField(
+        default=0,
+        help_text="Break-bar threshold; 0 = no bar for this phase.",
+    )
+    vulnerability_rounds = models.PositiveIntegerField(
+        default=0,
+        help_text="Window duration; stamped from BreakBarConfig at spawn.",
+    )
+    vulnerability_intensity_bonus = models.PositiveIntegerField(
+        default=0,
+        help_text="Intensity bonus during window; from BreakBarConfig.",
+    )
 
     class Meta:
         constraints = [
@@ -1760,12 +1840,102 @@ class OpponentTierTemplate(SharedMemoryModel):
         "MINDLESS_MORALE_RESISTANCE to morale checks against this opponent — "
         "not an immunity; a powerful enough roll breaks through.",
     )
+    base_actions_per_round = models.PositiveIntegerField(
+        default=1,
+        help_text="Tier-level action economy. MOOK/ELITE=1; BOSS=2 or 3.",
+    )
 
     class Meta:
         ordering = ["tier"]
 
     def __str__(self) -> str:
         return f"OpponentTierTemplate({self.tier})"
+
+
+class CreatureTemplate(SharedMemoryModel):
+    """Bestiary entry for a spawnable creature (#2016).
+
+    Thin — does not duplicate stat blocks (those come from OpponentTierTemplate
+    via the scaling formula). Authored phase data lives on CreaturePhaseTemplate.
+    """
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    tier = models.CharField(max_length=20, choices=OpponentTier.choices)
+    threat_pool = models.ForeignKey(
+        ThreatPool,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="creature_templates",
+    )
+    soak_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Override soak; null = use tier template scaling.",
+    )
+    probing_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Override probing threshold; null = use tier template scaling.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CreaturePhaseTemplate(AbstractPhaseConfig):
+    """Authored phase specification for a CreatureTemplate (#2016).
+
+    Inherits shared phase fields from AbstractPhaseConfig. Adds
+    creature_template FK instead of opponent. Cloned into BossPhase rows
+    at spawn time via spawn_from_creature_template.
+    """
+
+    creature_template = models.ForeignKey(
+        CreatureTemplate,
+        on_delete=models.CASCADE,
+        related_name="phase_templates",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["creature_template", "phase_number"],
+                name="unique_phase_per_creature_template",
+            ),
+        ]
+        ordering = ["creature_template", "phase_number"]
+
+    def __str__(self) -> str:
+        return f"{self.creature_template.name} Phase {self.phase_number}"
+
+
+class BreakBarConfig(SharedMemoryModel):
+    """Authored break-bar configuration for a CreaturePhaseTemplate (#2016).
+
+    When present, the boss has a break bar. When absent, no bar (MOOK/ELITE).
+    """
+
+    boss_phase = models.OneToOneField(
+        CreaturePhaseTemplate,
+        on_delete=models.CASCADE,
+        related_name="break_bar",
+    )
+    max_threshold = models.PositiveIntegerField(
+        help_text="Bar capacity; scaled by party_mult at spawn time.",
+    )
+    vulnerability_rounds = models.PositiveIntegerField(default=2)
+    intensity_bonus = models.PositiveIntegerField(
+        default=2,
+        help_text="Flat intensity bonus to PC techniques during the window.",
+    )
+
+    def __str__(self) -> str:
+        return f"BreakBar({self.boss_phase})"
 
 
 class RiskScalingModifier(SharedMemoryModel):

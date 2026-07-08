@@ -12,7 +12,7 @@ import random
 from typing import TYPE_CHECKING, TypeVar
 
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import F, Prefetch, Q
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -96,6 +96,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    CreatureTemplate,
     EncounterAftermathRule,
     EncounterRiskAcknowledgement,
     EngagementLock,
@@ -1030,6 +1031,16 @@ def _build_combat_result(
     )
 
 
+def _vulnerability_intensity_bonus(action: CombatRoundAction) -> int:
+    """Return the break-bar vulnerability intensity bonus if the action's
+    target opponent is currently vulnerable, else 0.
+    """
+    target = action.focused_opponent_target
+    if target is None or target.vulnerability_rounds_remaining <= 0:
+        return 0
+    return target.vulnerability_intensity_bonus
+
+
 def resolve_combat_technique(
     *,
     participant: CombatParticipant,
@@ -1102,7 +1113,11 @@ def resolve_combat_technique(
         targets=targets,
         lethal=encounter.is_lethal,
         control_penalty=fury_res.control_penalty if fury_res else 0,
-        power_intensity_bonus=(fury_res.intensity_bonus if fury_res else 0) + sig_intensity_delta,
+        power_intensity_bonus=(
+            (fury_res.intensity_bonus if fury_res else 0)
+            + sig_intensity_delta
+            + _vulnerability_intensity_bonus(action)
+        ),
     )
 
     return _build_combat_result(
@@ -1982,6 +1997,10 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         barrier_strength=barrier_strength,
     )
 
+    # Action economy: auto-scaling stamps from the tier template; manual mode
+    # defaults to 1 (the legacy behavior for hand-built opponents).
+    resolved_actions_per_round: int = block.actions_per_round if block is not None else 1
+
     objectdb, is_ephemeral = _resolve_objectdb_for_opponent(
         encounter, name, persona, existing_objectdb
     )
@@ -2016,6 +2035,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         body_toughness=resolved_body_toughness,
         bodies_per_attack=resolved_bodies_per_attack,
         barrier_strength=resolved_barrier_strength,
+        actions_per_round=resolved_actions_per_round,
         persona=persona,
         objectdb=objectdb,
         objectdb_is_ephemeral=is_ephemeral,
@@ -2053,6 +2073,114 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     check_hated_foe_surges_for_new_opponent(opp)
 
     return opp
+
+
+def spawn_from_creature_template(
+    encounter: CombatEncounter,
+    template: CreatureTemplate,
+    *,
+    position: Position | None = None,
+    acting_account: AccountDB | None = None,
+) -> CombatOpponent:
+    """Spawn a CombatOpponent from a CreatureTemplate bestiary entry (#2016).
+
+    Thin wrapper over add_opponent. Clones CreaturePhaseTemplate rows into
+    BossPhase rows on the spawned opponent if present. Stamps break-bar
+    config and vulnerability fields from BreakBarConfig.
+    """
+    from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
+
+    has_authored_phases = CreaturePhaseTemplate.objects.filter(creature_template=template).exists()
+
+    opp = add_opponent(
+        encounter,
+        name=template.name,
+        tier=template.tier,
+        threat_pool=template.threat_pool,
+        soak_value=template.soak_override,
+        probing_threshold=template.probing_override,
+        auto_phases=not has_authored_phases,
+        position=position,
+        acting_account=acting_account,
+    )
+
+    if has_authored_phases:
+        _clone_authored_phases(encounter, opp, template)
+
+    return opp
+
+
+def _clone_authored_phases(
+    encounter: CombatEncounter,
+    opp: CombatOpponent,
+    template: CreatureTemplate,
+) -> None:
+    """Clone CreaturePhaseTemplate rows into BossPhase rows and stamp break-bar config."""
+    from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
+    from world.combat.scaling import (  # noqa: PLC0415
+        compute_party_multiplier,
+        compute_party_profile,
+    )
+
+    phase_templates = CreaturePhaseTemplate.objects.filter(creature_template=template).order_by(
+        "phase_number"
+    )
+    BossPhase.objects.filter(opponent=opp).delete()
+
+    profile = compute_party_profile(encounter)
+    party_mult = compute_party_multiplier(profile.party_size, profile.avg_level)
+
+    for pt in phase_templates:
+        phase = BossPhase.objects.create(
+            opponent=opp,
+            phase_number=pt.phase_number,
+            threat_pool=pt.threat_pool,
+            soak_value=pt.soak_value,
+            probing_threshold=pt.probing_threshold,
+            health_trigger_percentage=pt.health_trigger_percentage,
+            description=pt.description,
+            actions_per_round=pt.actions_per_round,
+            damage_multiplier=pt.damage_multiplier,
+            extra_actions=pt.extra_actions,
+            reinforcement_template=pt.reinforcement_template,
+            reinforcement_count=pt.reinforcement_count,
+        )
+        if hasattr(pt, "break_bar"):
+            _stamp_phase_break_bar_config(phase, pt.break_bar, party_mult, opp, pt.phase_number)
+
+
+def _stamp_phase_break_bar_config(
+    phase: BossPhase,
+    config: object,
+    party_mult: Decimal,
+    opp: CombatOpponent,
+    phase_number: int,
+) -> None:
+    """Stamp BreakBarConfig values onto a BossPhase (and onto the opponent for phase 1)."""
+    threshold = round(Decimal(config.max_threshold) * party_mult)
+    phase.break_bar_threshold = threshold
+    phase.vulnerability_rounds = config.vulnerability_rounds
+    phase.vulnerability_intensity_bonus = config.intensity_bonus
+    phase.save(
+        update_fields=[
+            "break_bar_threshold",
+            "vulnerability_rounds",
+            "vulnerability_intensity_bonus",
+        ]
+    )
+    if phase_number == 1:
+        opp.break_bar_threshold = threshold
+        opp.break_bar_current = threshold
+        opp.vulnerability_rounds = config.vulnerability_rounds
+        opp.vulnerability_intensity_bonus = config.intensity_bonus
+        opp.save(
+            update_fields=[
+                "break_bar_threshold",
+                "break_bar_current",
+                "vulnerability_rounds",
+                "vulnerability_intensity_bonus",
+            ]
+        )
 
 
 def _bulk_primary_levels(char_ids: list[int]) -> dict[int, int]:
@@ -3004,7 +3132,7 @@ def _build_opponent_round_actions(  # noqa: C901, PLR0913
             len(target_pool),
         )
     else:
-        n_attacks = 1
+        n_attacks = opponent.actions_per_round
 
     actions: list[CombatOpponentAction] = []
     for attack_index in range(n_attacks):
@@ -3217,6 +3345,27 @@ def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSh
     return True
 
 
+def _is_vulnerable(opponent: CombatOpponent) -> bool:
+    """Return True if the opponent's break-bar vulnerability window is active."""
+    return opponent.vulnerability_rounds_remaining > 0
+
+
+def _effective_soak_for_opponent(opponent: CombatOpponent, bypass_soak: bool) -> int:
+    """Return the effective soak value, bypassed by bypass_soak or vulnerability."""
+    if bypass_soak or _is_vulnerable(opponent):
+        return 0
+    return opponent.soak_value
+
+
+def _effective_resistance_for_opponent(
+    opponent: CombatOpponent, damage_type: DamageType | None
+) -> int:
+    """Return damage-type resistance, bypassed during vulnerability window."""
+    if damage_type is None or opponent.objectdb is None or _is_vulnerable(opponent):
+        return 0
+    return opponent.objectdb.conditions.resistance_modifier(damage_type)
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -3251,11 +3400,9 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         if dropped:
             return _zero_opponent_damage_result(opponent)
 
-    effective_soak = 0 if bypass_soak else opponent.soak_value
+    effective_soak = _effective_soak_for_opponent(opponent, bypass_soak)
 
-    resistance = 0
-    if damage_type is not None and opponent.objectdb is not None:
-        resistance = opponent.objectdb.conditions.resistance_modifier(damage_type)
+    resistance = _effective_resistance_for_opponent(opponent, damage_type)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
     # Combo damage that bypasses soak should not also probe — the combo
@@ -4207,7 +4354,9 @@ def resolve_npc_attack(
     )
 
     multiplier = _damage_multiplier_for_success(result.success_level)
-    base_damage = opponent_action.threat_entry.base_damage
+    base_damage = int(
+        opponent_action.threat_entry.base_damage * opponent_action.opponent.damage_multiplier
+    )
     final_damage = math.floor(base_damage * multiplier)
 
     damage_result = apply_damage_to_participant(
@@ -4267,25 +4416,78 @@ def check_and_advance_boss_phase(
         if phase.health_trigger_percentage is None:
             continue
         if health_pct <= phase.health_trigger_percentage:
-            opponent.current_phase = phase.phase_number
-            if phase.threat_pool_id:
-                opponent.threat_pool = phase.threat_pool
-            opponent.soak_value = phase.soak_value
-            opponent.probing_current = 0
-            if phase.probing_threshold is not None:
-                opponent.probing_threshold = phase.probing_threshold
-            opponent.save(
-                update_fields=[
-                    "current_phase",
-                    "threat_pool_id",
-                    "soak_value",
-                    "probing_current",
-                    "probing_threshold",
-                ],
-            )
+            _apply_phase_transition(opponent, phase)
+            _spawn_reinforcements(opponent.encounter, phase)
             return phase
 
     return None
+
+
+def _apply_phase_transition(opponent: CombatOpponent, phase: BossPhase) -> None:
+    """Stamp all phase-sourced fields onto the opponent and save."""
+    opponent.current_phase = phase.phase_number
+    if phase.threat_pool_id:
+        opponent.threat_pool = phase.threat_pool
+    opponent.soak_value = phase.soak_value
+    opponent.probing_current = 0
+    if phase.probing_threshold is not None:
+        opponent.probing_threshold = phase.probing_threshold
+    _stamp_enrage(opponent, phase)
+    _stamp_break_bar(opponent, phase)
+    opponent.save(
+        update_fields=[
+            "current_phase",
+            "threat_pool_id",
+            "soak_value",
+            "probing_current",
+            "probing_threshold",
+            "damage_multiplier",
+            "actions_per_round",
+            "break_bar_threshold",
+            "break_bar_current",
+            "vulnerability_rounds",
+            "vulnerability_intensity_bonus",
+            "vulnerability_rounds_remaining",
+        ],
+    )
+
+
+def _stamp_enrage(opponent: CombatOpponent, phase: BossPhase) -> None:
+    """Stamp damage multiplier and actions_per_round from phase config."""
+    opponent.damage_multiplier = phase.damage_multiplier
+    if phase.actions_per_round is not None:
+        opponent.actions_per_round = phase.actions_per_round + phase.extra_actions
+    else:
+        opponent.actions_per_round = opponent.actions_per_round + phase.extra_actions
+
+
+def _stamp_break_bar(opponent: CombatOpponent, phase: BossPhase) -> None:
+    """Reset the break bar from the new phase's break-bar config."""
+    if phase.break_bar_threshold > 0:
+        opponent.break_bar_threshold = phase.break_bar_threshold
+        opponent.break_bar_current = phase.break_bar_threshold
+        opponent.vulnerability_rounds = phase.vulnerability_rounds
+        opponent.vulnerability_intensity_bonus = phase.vulnerability_intensity_bonus
+        opponent.vulnerability_rounds_remaining = 0
+    else:
+        opponent.break_bar_threshold = 0
+        opponent.break_bar_current = 0
+        opponent.vulnerability_rounds_remaining = 0
+
+
+def _spawn_reinforcements(encounter: CombatEncounter, phase: BossPhase) -> None:
+    """Spawn reinforcement adds on phase entry."""
+    if phase.reinforcement_template_id is None or phase.reinforcement_count <= 0:
+        return
+    for _ in range(phase.reinforcement_count):
+        add_opponent(
+            encounter,
+            name=phase.reinforcement_template.name,
+            tier=phase.reinforcement_template.tier,
+            threat_pool=phase.reinforcement_template.threat_pool,
+            max_health=20,
+            auto_phases=False,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -4856,11 +5058,14 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
         return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+    outcome.participant_id = participant.pk
 
     technique = action.focused_action
     if technique is None:
         # Passives-only round (e.g. flee) — no focused action to resolve.
         return outcome
+
+    outcome.effect_type_id = technique.effect_type_id
 
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL
@@ -6397,6 +6602,79 @@ def _block_if_participant_mid_audere_majora_crossing(encounter: CombatEncounter)
         raise ActionDispatchError(ActionDispatchError.PARTICIPANT_MID_CROSSING)
 
 
+def assess_break_bar(
+    encounter: CombatEncounter,
+    action_outcomes: list[ActionOutcome],
+) -> None:
+    """Assess break-bar damage for all boss opponents with a break bar.
+
+    Called from resolve_round after all actions resolve, before phase
+    transitions. Two damage paths:
+
+    1. Combo path: a landed combo deals break-bar damage equal to
+       ``combo.bonus_damage``. One combo per round counts.
+    2. Distinct-PC distinct-effect-type path: if >=2 distinct PCs dealt
+       damage with >=2 distinct effect_types, deal a flat chip of 1.
+
+    When the bar reaches 0, the vulnerability window opens.
+    """
+    bosses = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+            tier=OpponentTier.BOSS,
+            break_bar_threshold__gt=0,
+            vulnerability_rounds_remaining=0,
+        )
+    )
+    if not bosses:
+        return
+
+    # Minimum distinct PCs and distinct effect types required to chip the bar.
+    _MIN_DISTINCT_FOR_CHIP = 2
+
+    for boss in bosses:
+        bar_damage = 0
+
+        # Combo path: first landed combo this round.
+        for outcome in action_outcomes:
+            if outcome.combo_used is not None and _outcome_damaged_boss(outcome, boss.pk):
+                bar_damage += outcome.combo_used.bonus_damage
+                break
+
+        # Distinct-PC distinct-effect-type path.
+        participant_ids: set[int] = set()
+        effect_type_ids: set[int] = set()
+        for outcome in action_outcomes:
+            if (
+                outcome.entity_type == ENTITY_TYPE_PC
+                and outcome.participant_id is not None
+                and outcome.effect_type_id is not None
+                and _outcome_damaged_boss(outcome, boss.pk)
+            ):
+                participant_ids.add(outcome.participant_id)
+                effect_type_ids.add(outcome.effect_type_id)
+
+        if (
+            len(participant_ids) >= _MIN_DISTINCT_FOR_CHIP
+            and len(effect_type_ids) >= _MIN_DISTINCT_FOR_CHIP
+        ):
+            bar_damage += 1
+
+        if bar_damage > 0:
+            boss.break_bar_current = max(0, boss.break_bar_current - bar_damage)
+            if boss.break_bar_current == 0:
+                boss.vulnerability_rounds_remaining = boss.vulnerability_rounds
+            boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
+
+
+def _outcome_damaged_boss(outcome: ActionOutcome, boss_pk: int) -> bool:
+    """Return True if the outcome's damage results include damage to the given boss."""
+    return any(
+        hasattr(r, "opponent_id") and r.opponent_id == boss_pk for r in outcome.damage_results
+    )
+
+
 @transaction.atomic
 def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     # single-helper-call budget (see _fire_round_start), and the #1899
@@ -6473,6 +6751,12 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     # --- Round-start lifecycle: emit event, drain upkeep, detect combos ---
     result.available_combos = _fire_round_start(enc, round_number)
 
+    # --- Vulnerability window countdown (#2016) ---
+    CombatOpponent.objects.filter(
+        encounter=encounter,
+        vulnerability_rounds_remaining__gt=0,
+    ).update(vulnerability_rounds_remaining=F("vulnerability_rounds_remaining") - 1)
+
     # --- Build action lookups ---
     pc_actions: dict[int, CombatRoundAction] = {}
     for action in (
@@ -6543,6 +6827,9 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_fn,
         offense_check_fn,
     )
+
+    # --- Break-bar assessment (#2016) ---
+    assess_break_bar(encounter, result.action_outcomes)
 
     # --- Post-pass: deferred challenge declarations (in initiative order) ---
     result.challenge_outcomes = _resolve_declared_challenges(

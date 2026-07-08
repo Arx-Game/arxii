@@ -85,7 +85,8 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
 - One round framework, three modes (ADR-0002); one focused + up to two secondary actions (ADR-0003);
   tempo is action-driven, AFK-safe (ADR-0004).
 - Intentionally impossible to solo — combos and covenant roles are fundamental; built for heroic team-up
-  arcs that climax in Audere Majora.
+  arcs that climax in Audere Majora. Enforced by the boss break bar (#2016, ADR-0102): a secondary
+  health pool damaged only by team play (combos + distinct-PC distinct-effect-type hits).
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 

@@ -41,6 +41,7 @@ Isolation contract (the entire point of this module):
 from __future__ import annotations
 
 from dataclasses import dataclass
+import random
 from typing import cast
 
 from django.db import transaction
@@ -113,6 +114,7 @@ class SimulationParams:
     risk_level: str = RiskLevel.MODERATE
     iterations: int = 50
     round_cap: int = 20
+    combo_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -263,6 +265,25 @@ def _run_one_iteration(params: SimulationParams) -> tuple[str | None, int, int]:
         services.select_npc_actions(encounter)
 
         services.resolve_round(encounter)
+
+        # Break-bar simulation: if combo_rate > 0, model a landed combo
+        # by directly damaging the bar (the synthetic party can't actually
+        # combo — it uses a single basic attack technique).
+        if (
+            hasattr(opponent, "break_bar_threshold")
+            and opponent.break_bar_threshold > 0
+            and opponent.vulnerability_rounds_remaining == 0
+            and random.random() < params.combo_rate  # noqa: S311
+        ):
+            opponent.break_bar_current = max(0, opponent.break_bar_current - 10)
+            if opponent.break_bar_current == 0:
+                opponent.vulnerability_rounds_remaining = opponent.vulnerability_rounds
+            opponent.save(
+                update_fields=[
+                    "break_bar_current",
+                    "vulnerability_rounds_remaining",
+                ]
+            )
 
         if services._check_encounter_completion(encounter):  # noqa: SLF001
             outcome = services._classify_encounter_outcome(encounter)  # noqa: SLF001
