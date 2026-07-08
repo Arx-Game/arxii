@@ -14,15 +14,19 @@ from actions.definitions.battles import (
 from actions.definitions.cast import CastTechniqueAction
 from actions.definitions.combat_maneuvers import (
     CoverAction,
+    DemoralizeAction,
     DisengageAction,
     EngageAction,
     FleeAction,
     InterposeAction,
     JoinEncounterAction,
     LeaveEncounterAction,
+    ParleyAction,
+    RallyAction,
     ReadyAction,
     RevertComboAction,
     SuccorAction,
+    TauntAction,
     UpgradeComboAction,
 )
 from actions.definitions.communication import (
@@ -383,6 +387,10 @@ _ALL_ACTIONS: list[Action] = [
     SuccorAction(),
     EngageAction(),
     DisengageAction(),
+    RallyAction(),
+    DemoralizeAction(),
+    TauntAction(),
+    ParleyAction(),
     ReadyAction(),
     UpgradeComboAction(),
     RevertComboAction(),

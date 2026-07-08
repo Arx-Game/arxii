@@ -79,6 +79,21 @@ def _resolve_ally(
     ).first()
 
 
+def _resolve_opponent(
+    participant: CombatParticipant,
+    opponent_id: int | None,
+) -> object | None:
+    """Resolve an opponent pk to a CombatOpponent scoped to *participant*'s encounter."""
+    if opponent_id is None:
+        return None
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+
+    return CombatOpponent.objects.filter(
+        pk=opponent_id,
+        encounter=participant.encounter,
+    ).first()
+
+
 def _current_round_action(participant: CombatParticipant) -> CombatRoundAction | None:
     """Return *participant*'s CombatRoundAction for its encounter's current round, or None."""
     from world.combat.models import CombatRoundAction  # noqa: PLC0415
@@ -507,3 +522,141 @@ class DisengageAction(Action):
             return ActionResult(success=False, message="You are not engaged in a duel.")
         break_engagement_lock(active_lock, reason=LockBreakReason.DISENGAGE)
         return ActionResult(success=True, message="You disengage from the duel.")
+
+
+@dataclass
+class RallyAction(Action):
+    """Rally an ally — inspire them for the round (wraps ``declare_rally``)."""
+
+    key: str = "combat_rally"
+    name: str = "Rally"
+    icon: str = "megaphone"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        ally_participant_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_rally  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        if ally_participant_id is None:
+            return ActionResult(success=False, message="Rally requires an ally to inspire.")
+        ally = _resolve_ally(participant, ally_participant_id)
+        if ally is None:
+            return ActionResult(success=False, message="No such ally in this encounter.")
+        try:
+            declare_rally(participant, ally)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You rally your ally.")
+
+
+@dataclass
+class DemoralizeAction(Action):
+    """Demoralize an opponent — break their nerve (wraps ``declare_demoralize``)."""
+
+    key: str = "combat_demoralize"
+    name: str = "Demoralize"
+    icon: str = "frown"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_demoralize  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message="No such opponent in this encounter.")
+        try:
+            declare_demoralize(participant, opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You move to demoralize your foe.")
+
+
+@dataclass
+class TauntAction(Action):
+    """Taunt an opponent — draw their aggro (wraps ``declare_taunt``)."""
+
+    key: str = "combat_taunt"
+    name: str = "Taunt"
+    icon: str = "target"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_taunt  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message="No such opponent in this encounter.")
+        try:
+            declare_taunt(participant, opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You taunt your foe.")
+
+
+@dataclass
+class ParleyAction(Action):
+    """Parley with an opponent — talk them down (wraps ``declare_parley``)."""
+
+    key: str = "combat_parley"
+    name: str = "Parley"
+    icon: str = "comments"
+    category: str = "combat"
+    action_category: ActionCategory = ActionCategory.SOCIAL
+    target_type: TargetType = TargetType.SINGLE
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        opponent_id: int | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.combat.services import declare_parley  # noqa: PLC0415
+        from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+        participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
+        if participant is None:
+            return ActionResult(success=False, message=NOT_IN_ACTIVE_ROUND_MESSAGE)
+        opponent = _resolve_opponent(participant, opponent_id)
+        if opponent is None:
+            return ActionResult(success=False, message="No such opponent in this encounter.")
+        try:
+            declare_parley(participant, opponent)
+        except ValueError as err:
+            return ActionResult(success=False, message=str(err))
+        return ActionResult(success=True, message="You attempt to parley with your foe.")
