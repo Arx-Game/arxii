@@ -84,6 +84,7 @@ class SignatureCombatDamageE2ETests(TestCase):
                 resonance=resonance,
                 target_kind=TargetKind.TECHNIQUE,
                 target_technique=technique,
+                level=3,
             )
             sheet.character.threads.invalidate()
             set_signature_bonus(thread, bonus)
@@ -160,6 +161,7 @@ class SignatureCombatNarrationE2ETests(TestCase):
             resonance=resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=technique,
+            level=3,
         )
         sheet.character.threads.invalidate()
         set_signature_bonus(thread, bonus)

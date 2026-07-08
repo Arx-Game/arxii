@@ -26,22 +26,44 @@ if TYPE_CHECKING:
     from world.magic.models.threads import Thread
 
 
-def available_signature_bonuses(character_sheet) -> list[SignatureMotifBonus]:
+def available_signature_bonuses(character_sheet, *, thread=None) -> list[SignatureMotifBonus]:
     """Return every SignatureMotifBonus the character currently qualifies for.
 
     Iterates the full catalog and delegates gate evaluation to
-    ``SignatureMotifBonus.qualifies_for(character_sheet)`` (Task 2).
+    ``SignatureMotifBonus.qualifies_for(character_sheet)``.
+
+    When ``thread`` is provided (a TECHNIQUE-kind Thread), the list is further
+    filtered by:
+    - ``min_crossing_level <= thread.level`` (only bonuses the thread has unlocked).
+    - Resonance match: a bonus with ``required_resonance`` set must match
+      ``thread.resonance``; a bonus with ``required_resonance=None`` (facet-only
+      gate) is universally available.
+
+    When ``thread`` is None, returns all Motif-qualifying bonuses (backward
+    compatible with the pre-filtering call path).
 
     Args:
         character_sheet: The ``CharacterSheet`` whose Motif gates are evaluated.
+        thread: Optional ``Thread`` to filter by crossing level + resonance.
 
     Returns:
         A list of qualifying ``SignatureMotifBonus`` catalog rows (may be empty).
     """
     from world.magic.models.signature import SignatureMotifBonus  # noqa: PLC0415
 
-    return [
+    bonuses = [
         bonus for bonus in SignatureMotifBonus.objects.all() if bonus.qualifies_for(character_sheet)
+    ]
+    if thread is None:
+        return bonuses
+    return [
+        bonus
+        for bonus in bonuses
+        if bonus.min_crossing_level <= thread.level
+        and (
+            bonus.required_resonance_id is None
+            or bonus.required_resonance_id == thread.resonance_id
+        )
     ]
 
 
@@ -50,12 +72,16 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
 
     Guards (in order):
     1. ``thread.target_kind == TECHNIQUE`` — else ``NotATechniqueThread``.
-    2. ``bonus.qualifies_for(thread.owner)`` — else ``SignatureBonusNotAvailable``.
-    3. The owner knows the technique (``CharacterTechnique`` row exists) — else
+    2. ``thread.level >= 3`` (first crossing) — else ``SignatureBelowCrossing``.
+    3. ``bonus.min_crossing_level <= thread.level`` — else ``SignatureBonusLocked``.
+    4. ``bonus.qualifies_for(thread.owner)`` — else ``SignatureBonusNotAvailable``.
+    5. The owner knows the technique (``CharacterTechnique`` row exists) — else
        ``TechniqueNotOwned``.
 
     After saving, invalidates ``character.threads`` so the change is immediately
-    visible through the cached handler.
+    visible through the cached handler. If the bonus has a
+    ``discovery_achievement``, fires ``execute_ceremony_beat`` (idempotent
+    achievement grant + gamewide-first-vs-personal narrative).
 
     Args:
         thread: The Thread that will carry the bonus (must be TECHNIQUE-kind).
@@ -66,11 +92,15 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
 
     Raises:
         NotATechniqueThread: ``thread.target_kind != TECHNIQUE``.
+        SignatureBelowCrossing: ``thread.level < 3`` (first crossing not reached).
+        SignatureBonusLocked: ``bonus.min_crossing_level > thread.level``.
         SignatureBonusNotAvailable: The bonus gate is not satisfied by the owner's Motif.
         TechniqueNotOwned: The owner has no CharacterTechnique for this thread's technique.
     """
     from world.magic.exceptions import (  # noqa: PLC0415
         NotATechniqueThread,
+        SignatureBelowCrossing,
+        SignatureBonusLocked,
         SignatureBonusNotAvailable,
         TechniqueNotOwned,
     )
@@ -78,6 +108,12 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
 
     if thread.target_kind != TargetKind.TECHNIQUE:
         raise NotATechniqueThread
+
+    if thread.level < 3:  # noqa: PLR2004 — first crossing level (3, 6, 11, 16, 21)
+        raise SignatureBelowCrossing
+
+    if bonus.min_crossing_level > thread.level:
+        raise SignatureBonusLocked
 
     if not bonus.qualifies_for(thread.owner):
         raise SignatureBonusNotAvailable
@@ -92,6 +128,28 @@ def set_signature_bonus(thread: Thread, bonus: SignatureMotifBonus) -> Thread:
         thread.save(update_fields=["signature_bonus", "updated_at"])
 
     thread.owner.character.threads.invalidate()
+
+    if bonus.discovery_achievement_id is not None:
+        from world.magic.crossing.ceremony import (  # noqa: PLC0415
+            CeremonyNarrative,
+            execute_ceremony_beat,
+        )
+
+        execute_ceremony_beat(
+            sheet=thread.owner,
+            narrative=CeremonyNarrative(
+                first_body=(
+                    f"For the first time, a character has signed a technique with "
+                    f"'{bonus.name}' — a resonance-matched signature manifestation."
+                ),
+                personal_body=(
+                    f"You have signed your technique with '{bonus.name}'. "
+                    "The resonance of your thread flows through it."
+                ),
+            ),
+            achievement=bonus.discovery_achievement,
+        )
+
     return thread
 
 

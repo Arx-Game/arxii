@@ -93,6 +93,7 @@ class SignatureTelnetE2EJourneyTest(TestCase):
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
             name=self.technique.name,
+            level=3,
         )
         self.character.threads.invalidate()
 

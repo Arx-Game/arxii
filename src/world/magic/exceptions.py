@@ -477,3 +477,15 @@ class SignatureBonusNotAvailable(MagicError):
     """Raised when the requested SignatureMotifBonus does not qualify for the owner's Motif."""
 
     user_message = "This bonus is not available for your motif."
+
+
+class SignatureBelowCrossing(MagicError):
+    """Raised when set_signature_bonus is called on a thread below the first crossing (level 3)."""
+
+    user_message = "A signature can only be set on a technique thread that has crossed level 3."
+
+
+class SignatureBonusLocked(MagicError):
+    """Raised when the bonus requires a higher crossing level than the thread has reached."""
+
+    user_message = "That signature bonus requires a deeper thread. Keep imbuing."
