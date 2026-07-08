@@ -126,6 +126,12 @@ def resolve_episode(
         # durably committed but the status left stale.
         _reconcile_status_after_advance(progress)
 
+    # Stamp GM activity (#2004) — the resolution succeeded.
+    if resolved_by is not None:
+        from world.gm.services import touch_gm_activity  # noqa: PLC0415
+
+        touch_gm_activity(resolved_by)
+
     # Narrative notification — fans out a NarrativeMessage per recipient.
     from world.stories.services.narrative import notify_episode_resolution  # noqa: PLC0415
 

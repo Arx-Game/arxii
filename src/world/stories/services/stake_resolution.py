@@ -551,7 +551,7 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
     activation = _activation_for_gm_pick(stake.beat)
 
     with transaction.atomic():
-        return _fire_branch_and_record(
+        outcome = _fire_branch_and_record(
             stake=stake,
             resolution=resolution,
             column=column,
@@ -563,6 +563,14 @@ def resolve_stake_by_gm_pick(  # noqa: PLR0913 - mirrors record_gm_marked_outcom
             resolved_by=gm_profile,
             gm_notes=gm_notes,
         )
+
+    # Stamp GM activity (#2004) — the pick succeeded.
+    if gm_profile is not None:
+        from world.gm.services import touch_gm_activity  # noqa: PLC0415
+
+        touch_gm_activity(gm_profile)
+
+    return outcome
 
 
 def _activation_for_gm_pick(beat: Beat) -> StakeContractActivation | None:

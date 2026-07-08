@@ -461,3 +461,66 @@ class DemandRansomView(APIView):
             {"project_id": project.pk, "threshold_target": project.threshold_target},
             status=status.HTTP_201_CREATED,
         )
+
+
+class GMDashboardView(APIView):
+    """GET /api/gm/dashboard/ — the GM's story-shaped dashboard (#2004).
+
+    Composes the existing gm-queue (episodes ready, pending AGM claims,
+    assigned sessions, waiting-for-GM) with the GM's tables, pending story
+    offers, and evidence summary. Role-gated via IsGM.
+    """
+
+    permission_classes = [IsGM]
+
+    def get(self, request: Request) -> Response:
+        """Return the GM's dashboard aggregation."""
+        from world.gm.services import gm_evidence_summary  # noqa: PLC0415
+        from world.stories.constants import (  # noqa: PLC0415
+            StoryGMOfferStatus,
+        )
+        from world.stories.models import (  # noqa: PLC0415
+            StoryGMOffer,
+        )
+        from world.stories.views import _collect_gm_queue  # noqa: PLC0415
+
+        gm_profile = request.user.gm_profile
+
+        # Reuse the existing gm-queue aggregation.
+        buckets = _collect_gm_queue(gm_profile)
+
+        # My tables with basic counts.
+        my_tables = list(
+            GMTable.objects.filter(gm=gm_profile, status=GMTableStatus.ACTIVE)
+            .annotate(
+                membership_count=Count("memberships", filter=Q(memberships__left_at__isnull=True)),
+            )
+            .values("id", "name", "membership_count")
+        )
+
+        # Pending story offers addressed to this GM.
+        pending_offers = list(
+            StoryGMOffer.objects.filter(
+                offered_to=gm_profile, status=StoryGMOfferStatus.PENDING
+            ).values("id", "story__title", "created_at")
+        )
+
+        # Evidence summary (self-view of what staff sees).
+        evidence = gm_evidence_summary(gm_profile)
+
+        return Response(
+            {
+                "episodes_ready_to_run": buckets.episodes_ready,
+                "pending_agm_claims": buckets.pending_claims,
+                "assigned_session_requests": buckets.assigned_requests,
+                "waiting_for_gm": buckets.waiting_for_gm,
+                "my_tables": my_tables,
+                "pending_story_offers": pending_offers,
+                "evidence_summary": {
+                    "level": evidence.level,
+                    "stories_running": evidence.stories_running,
+                    "beats_completed_by_risk": evidence.beats_completed_by_risk,
+                    "last_active_at": evidence.last_active_at,
+                },
+            }
+        )

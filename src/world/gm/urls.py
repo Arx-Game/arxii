@@ -8,6 +8,7 @@ from world.gm.views import (
     GMApplicationActionView,
     GMApplicationQueueView,
     GMApplicationViewSet,
+    GMDashboardView,
     GMInviteClaimView,
     GMProfileViewSet,
     GMRosterInviteViewSet,
@@ -39,4 +40,5 @@ urlpatterns = [
         name="gm-application-action",
     ),
     path("demand-ransom/", DemandRansomView.as_view(), name="gm-demand-ransom"),
+    path("dashboard/", GMDashboardView.as_view(), name="gm-dashboard"),
 ]

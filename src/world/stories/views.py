@@ -564,6 +564,33 @@ class StoryViewSet(viewsets.ModelViewSet):
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
+        url_path="surrender",
+        permission_classes=[IsLeadGMOnStoryOrStaff],
+    )
+    def surrender(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/surrender/ — GM surrenders oversight (#2004).
+
+        Lead GM or staff only. Clears ``primary_table`` so the story enters
+        "seeking GM" state; notifies the affected player via a narrative
+        SYSTEM message. Returns 200 with the updated Story.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.gm.services import surrender_character_story  # noqa: PLC0415
+
+        story = self.get_object()
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return Response(
+                {"detail": "You must have a GM profile to surrender a story."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        surrender_character_story(gm_profile, story)
+        return Response(StoryDetailSerializer(story, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
         url_path="assign-to-scope",
         permission_classes=[IsLeadGMOnStoryOrStaff],
     )
@@ -2848,6 +2875,20 @@ class StaffWorkloadView(APIView):
             for review in pending_canon_reviews()
         ]
 
+        # --- idle tables (#2004) ---
+        from world.gm.services import idle_tables  # noqa: PLC0415
+
+        idle_tables_payload = [
+            {
+                "table_id": table.pk,
+                "table_name": table.name,
+                "gm_profile_id": table.gm_id,
+                "gm_name": table.gm.account.username,
+                "last_active_at": table.gm.last_active_at,
+            }
+            for table in idle_tables()
+        ]
+
         return Response(
             {
                 "per_gm_queue_depth": per_gm_queue,
@@ -2858,6 +2899,7 @@ class StaffWorkloadView(APIView):
                 "open_session_requests_count": open_session_req_count,
                 "counts_by_scope": counts_by_scope,
                 "pending_canon_reviews": pending_canon_reviews_payload,
+                "idle_tables": idle_tables_payload,
             }
         )
 

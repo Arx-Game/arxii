@@ -10249,6 +10249,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/GMApplicationDetail'
           description: ''
+  /api/gm/dashboard/:
+    get:
+      operationId: gm_dashboard_retrieve
+      description: Return the GM's dashboard aggregation.
+      tags:
+      - gm
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/gm/demand-ransom/:
     post:
       operationId: gm_demand_ransom_create
@@ -26027,6 +26038,39 @@ paths:
         NarrativeMessageDelivery rows with category=STORY.
 
         Returns 201 with the created NarrativeMessage.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this story.
+        required: true
+      tags:
+      - stories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoryDetailRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoryDetail'
+          description: ''
+  /api/stories/{id}/surrender/:
+    post:
+      operationId: stories_surrender_create
+      description: |-
+        POST /api/stories/{id}/surrender/ — GM surrenders oversight (#2004).
+
+        Lead GM or staff only. Clears ``primary_table`` so the story enters
+        "seeking GM" state; notifies the affected player via a narrative
+        SYSTEM message. Returns 200 with the updated Story.
       parameters:
       - in: path
         name: id

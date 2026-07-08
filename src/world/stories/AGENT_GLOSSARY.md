@@ -154,3 +154,20 @@ nothing pays) via `validate_stakes_readiness`'s canon-review problem. Surfaced
 on the staff `StaffWorkloadView` pending-queue and decided via the
 `canonreview` telnet command or `CanonReviewViewSet` web verbs.
 _Avoid_: sign-off (that's `TreasuredSignoff` / custody), approval gate.
+
+**Surrender** (GM):
+A Lead GM releasing oversight of a story — `surrender_character_story(gm, story)`
+(#2004) clears `primary_table` so the story enters "seeking GM" state,
+mirroring the player-side `detach-from-table`. Stamps GM activity and notifies
+the affected player via a narrative SYSTEM message. Wired via
+`POST /api/stories/{id}/surrender/` and `story surrender <story-id>` telnet.
+_Avoid_: abandon, drop (use surrender for the GM-side release; detach for the player-side).
+
+**Idle Table**:
+An ACTIVE `GMTable` whose GM's `last_active_at` is older than a staff-tunable
+threshold (`IDLE_TABLE_THRESHOLD_DAYS`, default 14) or null — surfaced on
+`StaffWorkloadView`'s `idle_tables` section and a weekly cron summary
+(`_run_idle_table_summary`). Reassignment drives the existing
+`transfer_ownership` service. `last_active_at` is stamped by
+`touch_gm_activity` from every GM-verb service.
+_Avoid_: stale table (staleness is a story-progress concept; idle is a GM-activity concept).

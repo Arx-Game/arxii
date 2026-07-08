@@ -98,9 +98,28 @@ class AccountPlayerSerializerFullPayloadTests(TestCase):
             "email_verified",
             "can_create_characters",
             "is_staff",
+            "is_gm",
             "avatar_url",
         ]:
             assert field in data, f"missing existing field: {field}"
+
+    def test_is_gm_true_for_gm_account(self) -> None:
+        from world.gm.factories import GMProfileFactory
+
+        gm_account = AccountFactory()
+        GMProfileFactory(account=gm_account)
+        data = AccountPlayerSerializer(
+            gm_account,
+            context=build_account_payload_context(gm_account),
+        ).data
+        assert data["is_gm"] is True
+
+    def test_is_gm_false_for_non_gm_account(self) -> None:
+        data = AccountPlayerSerializer(
+            self.account,
+            context=build_account_payload_context(self.account),
+        ).data
+        assert data["is_gm"] is False
 
 
 class AccountPayloadQueryCountTests(TestCase):

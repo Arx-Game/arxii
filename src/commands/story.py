@@ -63,11 +63,13 @@ _USAGE = (
     "                                     — custody clearance lifecycle (#2001)\n"
     "  story impact <story-id>=<table|regional|world>\n"
     "                                     — set impact tier (Lead GM; #2003)\n"
-    "  story review-status <story-id>     — tier + review state (#2003)"
+    "  story review-status <story-id>     — tier + review state (#2003)\n"
+    "  story surrender <story-id>          — GM surrenders oversight (#2004)"
 )
 
 _IMPACT_USAGE = "Usage: story impact <story-id>=<table|regional|world>"
 _REVIEW_STATUS_USAGE = "Usage: story review-status <story-id>"
+_SURRENDER_USAGE = "Usage: story surrender <story-id>"
 
 _COMPLETE_USAGE = "Usage: story complete <story-id>"
 _RESOLVE_USAGE = "Usage: story resolve <episode-id> [transition-id] [notes]"
@@ -178,6 +180,7 @@ _SUBVERB_HANDLERS: dict[str, str] = {
     "crossover": "_handle_crossover",
     "impact": "_handle_impact",
     "review-status": "_handle_review_status",
+    "surrender": "_handle_surrender",
 }
 
 
@@ -1257,6 +1260,35 @@ class CmdStory(ArxNamespaceCommand):
         else:
             lines.append("Canon review: none requested")
         self.msg("\n".join(lines))
+
+    def _handle_surrender(self, rest: str) -> None:
+        """GM surrenders oversight of a story (#2004).
+
+        ``story surrender <story-id>`` — Lead GM only; clears the story's
+        primary_table so it enters "seeking GM" state. Mirrors the web
+        ``POST /api/stories/{id}/surrender/`` endpoint.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.gm.services import surrender_character_story  # noqa: PLC0415
+        from world.stories.permissions import user_owns_or_leads_story  # noqa: PLC0415
+
+        tokens = rest.split()
+        if not tokens:
+            raise CommandError(_SURRENDER_USAGE)
+        story = resolve_story_or_error(tokens[0])
+
+        account = self.caller.account
+        is_staff = bool(account and account.is_staff)
+        if not is_staff and not user_owns_or_leads_story(account, story):
+            msg = "You do not own or lead this story."
+            raise CommandError(msg)
+        try:
+            gm_profile = account.gm_profile
+        except GMProfile.DoesNotExist:
+            msg = "You must have a GM profile to surrender a story."
+            raise CommandError(msg) from None
+        surrender_character_story(gm_profile, story)
+        self.msg(f"Surrendered oversight of {story.title}. It is now seeking a GM.")
 
     def _get_crossover_or_error(self, invite_id: int) -> CrossoverInvite:
         from world.stories.models import CrossoverInvite  # noqa: PLC0415

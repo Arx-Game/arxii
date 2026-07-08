@@ -78,6 +78,7 @@ from commands.fatigue import CmdRest
 from commands.form import CmdForm
 from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
+from commands.gm_ops import CmdGMDashboard, CmdGMIdle
 from commands.gm_tables import CmdGMTable
 from commands.gmtrust import CmdGMTrust
 from commands.goals import CmdGoal  # #1350 — goal authoring namespace.
@@ -267,6 +268,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGemit,
             # #2003 — staff canon-review queue (perm(Admin)).
             CmdCanonReview,
+            # #2004 — GM dashboard + idle-tables listing.
+            CmdGMDashboard,
+            CmdGMIdle,
             # #1505 — basic telnet parity for GM-table admin (web is the primary surface).
             CmdGMTable,
             # #1496 — staff/GM technique authoring workbench (perm(Builder)).

@@ -102,6 +102,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     email_verified = serializers.SerializerMethodField()
     can_create_characters = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(read_only=True)
+    is_gm = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     available_characters = serializers.SerializerMethodField()
     pending_applications = serializers.SerializerMethodField()
@@ -117,6 +118,16 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     def get_can_create_characters(self, obj):
         """Check if user can create new characters."""
         return obj.player_data.can_apply_for_characters()
+
+    def get_is_gm(self, obj) -> bool:
+        """Whether this account has a GMProfile (#2004)."""
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            obj.gm_profile  # noqa: B018 - side effect: triggers reverse OneToOne lookup
+        except GMProfile.DoesNotExist:
+            return False
+        return True
 
     def get_avatar_url(self, obj):
         """Get player's avatar URL if available."""
@@ -153,6 +164,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "email_verified",
             "can_create_characters",
             "is_staff",
+            "is_gm",
             "avatar_url",
             "available_characters",
             "pending_applications",

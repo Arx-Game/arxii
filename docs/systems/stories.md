@@ -746,6 +746,22 @@ be performed by an approved Assistant GM for that beat.
 | `story resolve <episode-id> [transition-id] [notes]` | `resolve_episode` | Advance the story's active progress through a transition. |
 | `story promote <episode-id> <pitch|outline|plot>` | `promote_episode` | Change the episode's authoring maturity. |
 | `story mark <beat-id> <success|failure> [notes]` | `mark_beat` | Record a GM-marked outcome on a beat. |
+| `story surrender <story-id>` | — (service-direct) | GM surrenders oversight; story enters "seeking GM" (#2004). |
+
+## GM surrender lifecycle (#2004)
+
+A Lead GM may surrender oversight of a story, clearing its `primary_table`
+so the story enters "seeking GM" state — mirroring the player-side
+`detach-from-table` flow. The `surrender_character_story(gm, story)` service
+(`world/gm/services.py`) validates oversight, stamps GM activity
+(`touch_gm_activity`), clears `primary_table`, and notifies the affected
+player via a narrative SYSTEM message.
+
+- **Web:** `POST /api/stories/{id}/surrender/` (Lead GM or staff).
+- **Telnet:** `story surrender <story-id>`.
+- **Activity stamping:** `touch_gm_activity(gm_profile)` is called from every
+  GM-verb service (surrender, episode resolve, stake GM-pick) so
+  `GMProfile.last_active_at` tracks recency for idle-table detection.
 
 ## Canon-impact review (#2003)
 
