@@ -1476,6 +1476,17 @@ class MissionDeedRecord(SharedMemoryModel):
         ),
     )
     applied_at = models.DateTimeField(auto_now_add=True)
+    legend_entries = models.ManyToManyField(
+        "societies.LegendEntry",
+        blank=True,
+        related_name="mission_deeds",
+        help_text=(
+            "Legend entries minted from this deed's terminal renown awards (#2047). "
+            "Populated at the emit_terminal_renown_awards call sites from the returned "
+            "RenownAwardResult.legend_entry_id values. Used to seed tale authors' "
+            "LegendDeedStory rows when they tell the tale."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"deed {self.option} by {self.actor}"
