@@ -104,16 +104,18 @@ function MemberRow({
 
   const role = membership.covenant_role;
   const characterSheetId = membership.character_sheet;
+  const isBlocked = membership.display_name === 'a member has blocked you';
   // can_kick is true when: viewer has the capability, target is not own row, target is active,
   // and target has a strictly higher tier number (lower authority) than the viewer.
   const canKick =
     viewerCapabilities.can_kick &&
     !isOwnMembership &&
     membership.is_active &&
-    membership.rank.tier > viewerRankTier;
+    membership.rank.tier > viewerRankTier &&
+    !isBlocked;
   // Rank assignment (promote/demote) is offered to managers on any active member.
   const canAssignRank =
-    viewerCapabilities.can_manage_ranks && membership.is_active && ranks.length > 0;
+    viewerCapabilities.can_manage_ranks && membership.is_active && ranks.length > 0 && !isBlocked;
 
   function handleAssignRank(rankId: number) {
     if (rankId !== membership.rank.id) {
@@ -139,12 +141,14 @@ function MemberRow({
 
   return (
     <div
-      className="flex items-center justify-between gap-4 rounded-md border px-4 py-3"
+      className={`flex items-center justify-between gap-4 rounded-md border px-4 py-3${isBlocked ? 'opacity-50' : ''}`}
       data-testid="member-row"
     >
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">Character #{characterSheetId}</span>
+          <span className="text-sm font-medium">
+            {membership.display_name ?? `Character #${characterSheetId}`}
+          </span>
           <Badge variant="secondary" className="text-xs">
             {membership.rank.name}
           </Badge>

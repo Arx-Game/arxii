@@ -147,6 +147,37 @@ def sheet_blocked_for_viewer(*, viewer_account: Any, sheet: CharacterSheet) -> b
     return _active_blocks().filter(conditions).exists()
 
 
+def member_blocked_viewer(*, viewer_account: Any, member_sheet: CharacterSheet) -> bool:
+    """True if the member's player has an active block against the viewer (#2086).
+
+    The one-directional check for membership-list display: "this member blocked you."
+    Unlike ``sheet_blocked_for_viewer`` (which is symmetric — either direction hides
+    the sheet), this checks only the *member blocked the viewer* direction, because
+    the placeholder should only appear for the blocked player, not for the blocker
+    (who already knows the persona they blocked).
+
+    Staff bypass: returns False for staff (they see real names everywhere).
+    """
+    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return False
+    if getattr(viewer_account, "is_staff", False):  # noqa: GETATTR_LITERAL
+        return False
+
+    roster_entry = member_sheet.roster_entry
+    current = roster_entry.current_tenure if roster_entry is not None else None
+    if current is None:
+        return False
+    member_player = current.player_data
+
+    # The member's player blocked the viewer's account — persona-scoped (the
+    # member's face is the blocker) or account-level (all their faces block).
+    return (
+        _active_blocks()
+        .filter(Q(owner=member_player, blocked_player__account=viewer_account))
+        .exists()
+    )
+
+
 def hidden_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     """Persona ids whose content is hidden from this viewer by an active block (#1278).
 
