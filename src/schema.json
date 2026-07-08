@@ -16587,6 +16587,68 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/missions/boards/{id}/postings/:
+    get:
+      operationId: missions_boards_postings_retrieve
+      description: |-
+        Player-scoped board surface (#2044).
+
+        postings: the viewer's eligible postings on a board (preview-only).
+        take: accept a posting — re-runs eligibility server-side before granting.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBoardPostingList'
+          description: ''
+        '404':
+          description: No board at this location.
+  /api/missions/boards/{id}/take/:
+    post:
+      operationId: missions_boards_take_create
+      description: |-
+        Player-scoped board surface (#2044).
+
+        postings: the viewer's eligible postings on a board (preview-only).
+        take: accept a posting — re-runs eligibility server-side before granting.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BoardTakeRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardTakeResult'
+          description: ''
+        '400':
+          description: Not eligible / not on this board.
+        '404':
+          description: No board here.
   /api/missions/categories/:
     get:
       operationId: missions_categories_list
@@ -17221,6 +17283,21 @@ paths:
           description: Option not live here / run not active.
         '404':
           description: Not a participant / no such mission.
+  /api/missions/journal/opportunities/:
+    get:
+      operationId: missions_journal_opportunities_retrieve
+      description: '#2044 — the three-group discovery view (here/nearby/your-orgs).'
+      tags:
+      - missions
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunities'
+          description: ''
   /api/missions/journal/respond/:
     post:
       operationId: missions_journal_respond_create
@@ -29566,6 +29643,42 @@ components:
       - blocked_persona
       - blocker_persona
       - reason
+    BoardPosting:
+      type: object
+      description: One eligible posting on a board (preview row).
+      properties:
+        template_id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        summary:
+          type: string
+          readOnly: true
+      required:
+      - name
+      - summary
+      - template_id
+    BoardTakeRequestRequest:
+      type: object
+      description: POST body for the board take endpoint.
+      properties:
+        template_id:
+          type: integer
+          minimum: 1
+      required:
+      - template_id
+    BoardTakeResult:
+      type: object
+      properties:
+        instance_id:
+          type: integer
+        template_id:
+          type: integer
+      required:
+      - instance_id
+      - template_id
     BodyRegionEnum:
       enum:
       - head
@@ -37294,10 +37407,12 @@ components:
       enum:
       - environmental_detail
       - room_trigger
+      - board
       type: string
       description: |-
         * `environmental_detail` - Environmental Detail
         * `room_trigger` - Room Trigger
+        * `board` - Notice Board
     GlobalStoryProgress:
       type: object
       description: Serializer for GlobalStoryProgress — singleton metaplot progress
@@ -39812,10 +39927,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/GiverKindEnum'
           description: |-
-            How this giver reaches the player; selects the target's expected typeclass.
+            How this giver reaches the player; selects the target's expected typeclass. ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); BOARD → examinable item that lists many postings (preview-then-take, #2044).
 
             * `environmental_detail` - Environmental Detail
             * `room_trigger` - Room Trigger
+            * `board` - Notice Board
         target:
           type: integer
           nullable: true
@@ -39863,10 +39979,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/GiverKindEnum'
           description: |-
-            How this giver reaches the player; selects the target's expected typeclass.
+            How this giver reaches the player; selects the target's expected typeclass. ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); BOARD → examinable item that lists many postings (preview-then-take, #2044).
 
             * `environmental_detail` - Environmental Detail
             * `room_trigger` - Room Trigger
+            * `board` - Notice Board
         target:
           type: integer
           nullable: true
@@ -42045,6 +42162,50 @@ components:
         * `active` - Active
         * `defeated` - Defeated
         * `fled` - Fled
+    Opportunities:
+      type: object
+      description: The three-group discovery view (here/nearby/your-organizations).
+      properties:
+        here:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpportunityRow'
+          readOnly: true
+        nearby:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpportunityRow'
+          readOnly: true
+        your_organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpportunityRow'
+          readOnly: true
+      required:
+      - here
+      - nearby
+      - your_organizations
+    OpportunityRow:
+      type: object
+      description: One discovery row — name, summary, pointer, source flavor.
+      properties:
+        name:
+          type: string
+          readOnly: true
+        summary:
+          type: string
+          readOnly: true
+        pointer:
+          type: string
+          readOnly: true
+        source_flavor:
+          type: string
+          readOnly: true
+      required:
+      - name
+      - pointer
+      - source_flavor
+      - summary
     OptionKindEnum:
       enum:
       - branch
@@ -42771,6 +42932,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Block'
+    PaginatedBoardPostingList:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardPosting'
+      required:
+      - count
+      - results
     PaginatedBugReportDetailList:
       type: object
       required:
@@ -46725,10 +46898,11 @@ components:
           allOf:
           - $ref: '#/components/schemas/GiverKindEnum'
           description: |-
-            How this giver reaches the player; selects the target's expected typeclass.
+            How this giver reaches the player; selects the target's expected typeclass. ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); BOARD → examinable item that lists many postings (preview-then-take, #2044).
 
             * `environmental_detail` - Environmental Detail
             * `room_trigger` - Room Trigger
+            * `board` - Notice Board
         target:
           type: integer
           nullable: true

@@ -10722,6 +10722,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/boards/{id}/postings/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Player-scoped board surface (#2044).
+     *
+     *     postings: the viewer's eligible postings on a board (preview-only).
+     *     take: accept a posting — re-runs eligibility server-side before granting.
+     */
+    get: operations['missions_boards_postings_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/boards/{id}/take/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Player-scoped board surface (#2044).
+     *
+     *     postings: the viewer's eligible postings on a board (preview-only).
+     *     take: accept a posting — re-runs eligibility server-side before granting.
+     */
+    post: operations['missions_boards_take_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/categories/': {
     parameters: {
       query?: never;
@@ -11117,6 +11161,23 @@ export interface paths {
      *     (never 403 — existence must not leak).
      */
     post: operations['missions_journal_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/missions/journal/opportunities/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description #2044 — the three-group discovery view (here/nearby/your-orgs). */
+    get: operations['missions_journal_opportunities_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -17436,6 +17497,20 @@ export interface components {
       blocked_persona: number;
       reason: string;
     };
+    /** @description One eligible posting on a board (preview row). */
+    BoardPosting: {
+      readonly template_id: number;
+      readonly name: string;
+      readonly summary: string;
+    };
+    /** @description POST body for the board take endpoint. */
+    BoardTakeRequestRequest: {
+      template_id: number;
+    };
+    BoardTakeResult: {
+      instance_id: number;
+      template_id: number;
+    };
     /**
      * @description * `head` - Head
      *     * `face` - Face
@@ -21029,9 +21104,10 @@ export interface components {
     /**
      * @description * `environmental_detail` - Environmental Detail
      *     * `room_trigger` - Room Trigger
+     *     * `board` - Notice Board
      * @enum {string}
      */
-    GiverKindEnum: 'environmental_detail' | 'room_trigger';
+    GiverKindEnum: 'environmental_detail' | 'room_trigger' | 'board';
     /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
     GlobalStoryProgress: {
       readonly id: number;
@@ -22164,10 +22240,11 @@ export interface components {
       readonly id: number;
       name: string;
       /**
-       * @description How this giver reaches the player; selects the target's expected typeclass.
+       * @description How this giver reaches the player; selects the target's expected typeclass. ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); BOARD → examinable item that lists many postings (preview-then-take, #2044).
        *
        *     * `environmental_detail` - Environmental Detail
        *     * `room_trigger` - Room Trigger
+       *     * `board` - Notice Board
        */
       giver_kind?: components['schemas']['GiverKindEnum'];
       /** @description The Evennia object this giver is bound to. Its typeclass must match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable item or room detail). Null = draft (see is_publishable). All FK targets land in ObjectDB; the kind enum + clean() typeclass check enforce semantic shape without the wasted nullable columns of a discriminator. */
@@ -22190,10 +22267,11 @@ export interface components {
     MissionGiverRequest: {
       name: string;
       /**
-       * @description How this giver reaches the player; selects the target's expected typeclass.
+       * @description How this giver reaches the player; selects the target's expected typeclass. ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); BOARD → examinable item that lists many postings (preview-then-take, #2044).
        *
        *     * `environmental_detail` - Environmental Detail
        *     * `room_trigger` - Room Trigger
+       *     * `board` - Notice Board
        */
       giver_kind?: components['schemas']['GiverKindEnum'];
       /** @description The Evennia object this giver is bound to. Its typeclass must match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable item or room detail). Null = draft (see is_publishable). All FK targets land in ObjectDB; the kind enum + clean() typeclass check enforce semantic shape without the wasted nullable columns of a discriminator. */
@@ -23355,6 +23433,19 @@ export interface components {
      * @enum {string}
      */
     OpponentStatusEnum: 'active' | 'defeated' | 'fled';
+    /** @description The three-group discovery view (here/nearby/your-organizations). */
+    Opportunities: {
+      readonly here: components['schemas']['OpportunityRow'][];
+      readonly nearby: components['schemas']['OpportunityRow'][];
+      readonly your_organizations: components['schemas']['OpportunityRow'][];
+    };
+    /** @description One discovery row — name, summary, pointer, source flavor. */
+    OpportunityRow: {
+      readonly name: string;
+      readonly summary: string;
+      readonly pointer: string;
+      readonly source_flavor: string;
+    };
     /**
      * @description * `branch` - Branch
      *     * `check` - Check
@@ -23732,6 +23823,10 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['Block'][];
+    };
+    PaginatedBoardPostingList: {
+      count: number;
+      results: components['schemas']['BoardPosting'][];
     };
     PaginatedBugReportDetailList: {
       /** @example 123 */
@@ -26223,10 +26318,11 @@ export interface components {
     PatchedMissionGiverRequest: {
       name?: string;
       /**
-       * @description How this giver reaches the player; selects the target's expected typeclass.
+       * @description How this giver reaches the player; selects the target's expected typeclass. ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); BOARD → examinable item that lists many postings (preview-then-take, #2044).
        *
        *     * `environmental_detail` - Environmental Detail
        *     * `room_trigger` - Room Trigger
+       *     * `board` - Notice Board
        */
       giver_kind?: components['schemas']['GiverKindEnum'];
       /** @description The Evennia object this giver is bound to. Its typeclass must match giver_kind: NPC → Character-typeclass; ROOM_TRIGGER → Room-typeclass; ENVIRONMENTAL_DETAIL → any non-Character/Room/Exit Object (an examinable item or room detail). Null = draft (see is_publishable). All FK targets land in ObjectDB; the kind enum + clean() typeclass check enforce semantic shape without the wasted nullable columns of a discriminator. */
@@ -46118,6 +46214,73 @@ export interface operations {
       };
     };
   };
+  missions_boards_postings_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBoardPostingList'];
+        };
+      };
+      /** @description No board at this location. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_boards_take_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BoardTakeRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BoardTakeResult'];
+        };
+      };
+      /** @description Not eligible / not on this board. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description No board here. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   missions_categories_list: {
     parameters: {
       query?: {
@@ -46667,6 +46830,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  missions_journal_opportunities_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Opportunities'];
+        };
       };
     };
   };

@@ -1440,7 +1440,9 @@ class MissionGiver(SharedMemoryModel):
         max_length=20,
         choices=GiverKind.choices,
         default=GiverKind.ROOM_TRIGGER,
-        help_text="How this giver reaches the player; selects the target's expected typeclass.",
+        help_text="How this giver reaches the player; selects the target's expected typeclass. "
+        "ROOM_TRIGGER → Room; ENVIRONMENTAL_DETAIL → examinable item (auto-grants one); "
+        "BOARD → examinable item that lists many postings (preview-then-take, #2044).",
     )
     target = models.ForeignKey(
         OBJECT_DB_MODEL,
@@ -1500,10 +1502,13 @@ class MissionGiver(SharedMemoryModel):
                         )
                     }
                 )
-        elif self.giver_kind == GiverKind.ENVIRONMENTAL_DETAIL:
-            # An examinable detail / item — must NOT be a Character, Room,
-            # or Exit. (Any other Object subclass is fair game: weapons,
-            # books, props, room details.)
+        elif self.giver_kind in (GiverKind.ENVIRONMENTAL_DETAIL, GiverKind.BOARD):
+            # An examinable detail / item / notice board — must NOT be a
+            # Character, Room, or Exit. (Any other Object subclass is fair
+            # game: weapons, books, props, room details, notice boards.)
+            # BOARD shares the typeclass rule with ENVIRONMENTAL_DETAIL — a
+            # board IS an examinable object whose examine renders postings
+            # instead of auto-granting one (#2044).
             if (
                 target.is_typeclass(Character, exact=False)
                 or target.is_typeclass(Room, exact=False)
@@ -1512,9 +1517,9 @@ class MissionGiver(SharedMemoryModel):
                 raise ValidationError(
                     {
                         "target": (
-                            f"ENVIRONMENTAL_DETAIL-kind giver's target must be a "
-                            f"non-Character/Room/Exit Object (an examinable item or "
-                            f"detail); got {target.typeclass_path}."
+                            f"{self.giver_kind}-kind giver's target must be a "
+                            f"non-Character/Room/Exit Object (an examinable item, "
+                            f"detail, or notice board); got {target.typeclass_path}."
                         )
                     }
                 )

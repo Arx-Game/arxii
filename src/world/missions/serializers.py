@@ -703,3 +703,40 @@ class MissionInviteResultSerializer(serializers.Serializer):
     invite_id = serializers.IntegerField(read_only=True)
     response = serializers.CharField(read_only=True)
     instance_id = serializers.IntegerField(read_only=True)
+
+
+# ---------------------------------------------------------------------------
+# #2044 board postings + take — player-scoped serializers over the frozen
+# BoardPosting dataclass from services.boards.
+# ---------------------------------------------------------------------------
+
+
+class BoardPostingSerializer(serializers.Serializer):
+    """One eligible posting on a board (preview row)."""
+
+    template_id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    summary = serializers.CharField(allow_blank=True, read_only=True)
+
+
+class BoardTakeRequestSerializer(serializers.Serializer):
+    """POST body for the board take endpoint."""
+
+    template_id = serializers.IntegerField(min_value=1)
+
+
+class OpportunityRowSerializer(serializers.Serializer):
+    """One discovery row — name, summary, pointer, source flavor."""
+
+    name = serializers.CharField(read_only=True)
+    summary = serializers.CharField(allow_blank=True, read_only=True)
+    pointer = serializers.CharField(read_only=True)
+    source_flavor = serializers.CharField(read_only=True)
+
+
+class OpportunitiesSerializer(serializers.Serializer):
+    """The three-group discovery view (here/nearby/your-organizations)."""
+
+    here = OpportunityRowSerializer(many=True, read_only=True)
+    nearby = OpportunityRowSerializer(many=True, read_only=True)
+    your_organizations = OpportunityRowSerializer(many=True, read_only=True)

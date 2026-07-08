@@ -12,6 +12,7 @@ import {
   assignMission,
   getBeat,
   getGroupBeat,
+  getOpportunities,
   inviteToMission,
   listJournal,
   resolveBeat,
@@ -80,6 +81,7 @@ export const missionKeys = {
   categories: () => [...missionKeys.all, 'categories'] as const,
   givers: () => [...missionKeys.all, 'givers'] as const,
   journal: () => [...missionKeys.all, 'journal'] as const,
+  opportunities: () => [...missionKeys.all, 'opportunities'] as const,
   // roomKey threads the player's current room into the key so a move
   // refetches liveness — the server computes "live here" from the puppet.
   beat: (instanceId: number, roomKey: string) =>
@@ -333,6 +335,13 @@ export function useJournal(): UseQueryResult<PaginatedResponse<JournalEntry>> {
   return useQuery({
     queryKey: missionKeys.journal(),
     queryFn: listJournal,
+  });
+}
+
+export function useOpportunities() {
+  return useQuery({
+    queryKey: missionKeys.opportunities(),
+    queryFn: getOpportunities,
   });
 }
 

@@ -517,3 +517,54 @@ export async function searchRoomCharacters(query: string): Promise<EntitySearchR
   if (!res.ok) throw new Error('Failed to search room characters');
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// #2044 mission discovery — board postings + opportunities.
+// ---------------------------------------------------------------------------
+
+export interface OpportunityRow {
+  name: string;
+  summary: string;
+  pointer: string;
+  source_flavor: string;
+}
+
+export interface OpportunitiesResult {
+  here: OpportunityRow[];
+  nearby: OpportunityRow[];
+  your_organizations: OpportunityRow[];
+}
+
+export async function getOpportunities(): Promise<OpportunitiesResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/opportunities/`);
+  if (!res.ok) throw new Error('Failed to load opportunities');
+  return res.json();
+}
+
+export interface BoardPosting {
+  template_id: number;
+  name: string;
+  summary: string;
+}
+
+export async function getBoardPostings(
+  boardObjectId: number
+): Promise<{ count: number; results: BoardPosting[] }> {
+  const res = await apiFetch(`${BASE_URL}/boards/${boardObjectId}/postings/`);
+  if (!res.ok) throw new Error('Failed to load board postings');
+  return res.json();
+}
+
+export async function takeBoardPosting(
+  boardObjectId: number,
+  templateId: number
+): Promise<{ instance_id: number; template_id: number }> {
+  const res = await apiFetch(`${BASE_URL}/boards/${boardObjectId}/take/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ template_id: templateId }),
+  });
+  if (res.status === 400) throw new ApiValidationError(await res.json());
+  if (!res.ok) throw new Error('Failed to accept the posting');
+  return res.json();
+}

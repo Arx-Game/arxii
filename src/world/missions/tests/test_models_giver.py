@@ -156,6 +156,32 @@ class MissionGiverKindTests(TestCase):
         with self.assertRaises(ValidationError):
             MissionGiverFactory(giver_kind=GiverKind.ROOM_TRIGGER, target=npc)
 
+    # ---- BOARD kind (#2044) ------------------------------------------------
+
+    def test_board_kind_with_object_target_round_trips(self) -> None:
+        board = _make_detail()  # a board IS an examinable Object-typeclass
+        giver = MissionGiverFactory(giver_kind=GiverKind.BOARD, target=board)
+        self.assertEqual(giver.giver_kind, GiverKind.BOARD)
+        self.assertEqual(giver.target, board)
+
+    def test_board_kind_rejects_character_target(self) -> None:
+        npc = _make_npc()
+        giver = MissionGiverFactory.build(giver_kind=GiverKind.BOARD, target=npc)
+        with self.assertRaises(ValidationError):
+            giver.full_clean()
+
+    def test_board_kind_rejects_room_target(self) -> None:
+        room = _make_room()
+        giver = MissionGiverFactory.build(giver_kind=GiverKind.BOARD, target=room)
+        with self.assertRaises(ValidationError):
+            giver.full_clean()
+
+    def test_board_kind_rejects_exit_target(self) -> None:
+        exit_obj = _make_exit()
+        giver = MissionGiverFactory.build(giver_kind=GiverKind.BOARD, target=exit_obj)
+        with self.assertRaises(ValidationError):
+            giver.full_clean()
+
 
 class MissionGiverIsPublishableTests(TestCase):
     """is_publishable: True iff ``target`` is set.

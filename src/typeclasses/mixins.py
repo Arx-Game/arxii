@@ -169,6 +169,9 @@ class ObjectParent:
         captivity = _maybe_render_captivity_status(self)
         if captivity is not None:
             sections = [*sections, captivity]
+        board = _maybe_render_board_postings(self, looker)
+        if board is not None:
+            sections = [*sections, board]
         if sections:
             return base + "\n" + "\n".join(sections)
         return base
@@ -238,4 +241,34 @@ def _maybe_render_captivity_status(obj) -> str | None:
             )
         else:
             lines.append(f"|r(OOC) {name} is held captive here.|n")
+    return "\n".join(lines)
+
+
+def _maybe_render_board_postings(obj, looker) -> str | None:
+    """Render a BOARD-kind giver's eligible postings as an examine section (#2044).
+
+    Returns None when ``obj`` is not a BOARD giver or the looker has no
+    eligible postings. Otherwise returns a formatted section listing the
+    postings by number (for ``mission take <n>``).
+    """
+    from world.missions.constants import GiverKind
+    from world.missions.models import MissionGiver
+    from world.missions.services.boards import postings_for_giver
+
+    giver = (
+        MissionGiver.objects.filter(target=obj, giver_kind=GiverKind.BOARD, is_active=True)
+        .prefetch_related("templates")  # noqa: PREFETCH_STRING
+        .first()
+    )
+    if giver is None:
+        return None
+    postings = postings_for_giver(giver, looker)
+    if not postings:
+        return None
+    lines: list[str] = ["", f"|wNotice Board — {giver.name}|n", ""]
+    for i, posting in enumerate(postings, start=1):
+        summary = f" — {posting.summary}" if posting.summary else ""
+        lines.append(f"  |c{i}|n. {posting.name}{summary}")
+    lines.append("")
+    lines.append("|xUse 'mission take <n>' to accept a posting.|n")
     return "\n".join(lines)
