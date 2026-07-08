@@ -293,3 +293,76 @@ class TraitCrossingHandlerTests(TestCase):
             handler = TraitCrossingHandler()
             handler.execute(thread=self.thread, starting_level=3, new_level=5)
             mock_beat.assert_not_called()
+
+
+class ResolveTraitCrossingOfferTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.traits.factories import TraitFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.trait = TraitFactory()
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="TRAIT",
+            target_trait=cls.trait,
+            level=3,
+        )
+        cls.option = TraitCrossingOption.objects.create(
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Burning vigor",
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+
+    def setUp(self) -> None:
+        self.offer = PendingTraitCrossingOffer.objects.create(
+            thread=self.thread,
+            crossing_level=3,
+        )
+
+    def test_resolve_creates_choice(self) -> None:
+        from world.magic.services.trait_crossing import resolve_trait_crossing_offer
+
+        result = resolve_trait_crossing_offer(self.offer, option=self.option)
+        self.assertEqual(result.option_name, "Burning vigor")
+        self.assertTrue(
+            TraitCrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+        self.assertFalse(PendingTraitCrossingOffer.objects.filter(pk=self.offer.pk).exists())
+
+    def test_resolve_wrong_resonance_raises_stale(self) -> None:
+        from world.magic.exceptions import TraitCrossingOfferStaleError
+        from world.magic.factories import ResonanceFactory
+        from world.magic.services.trait_crossing import resolve_trait_crossing_offer
+
+        other_resonance = ResonanceFactory()
+        wrong_option = TraitCrossingOption.objects.create(
+            resonance=other_resonance,
+            crossing_level=3,
+            name="Wrong",
+            effect_kind=EffectKind.NARRATIVE_ONLY,
+            narrative_snippet="x",
+        )
+        with self.assertRaises(TraitCrossingOfferStaleError):
+            resolve_trait_crossing_offer(self.offer, option=wrong_option)
+        self.assertFalse(PendingTraitCrossingOffer.objects.filter(pk=self.offer.pk).exists())
+
+    def test_resolve_wrong_crossing_level_raises_stale(self) -> None:
+        from world.magic.exceptions import TraitCrossingOfferStaleError
+        from world.magic.services.trait_crossing import resolve_trait_crossing_offer
+
+        wrong_level_option = TraitCrossingOption.objects.create(
+            resonance=self.resonance,
+            crossing_level=6,
+            name="Wrong level",
+            effect_kind=EffectKind.NARRATIVE_ONLY,
+            narrative_snippet="x",
+        )
+        with self.assertRaises(TraitCrossingOfferStaleError):
+            resolve_trait_crossing_offer(self.offer, option=wrong_level_option)
