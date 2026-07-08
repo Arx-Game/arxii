@@ -37,7 +37,7 @@ from django.db.models import Count
 
 from world.missions.constants import MissionStatus, NodeLocationMode
 from world.missions.models import MissionDeedRecord, MissionOption, MissionParticipant
-from world.missions.types import JournalDeed, JournalEntry, JournalInvite
+from world.missions.types import JournalDeed, JournalEntry, JournalInvite, JournalSummons
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -74,11 +74,17 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
     deeds_by_instance = _deeds_by_instance(instance_ids, character)
     options_by_node = _options_by_node(participations)
     pending_invites = _pending_invites_for(character)
+    pending_summons = _pending_summons_for(character)
     participant_counts = _participant_counts(instance_ids)
 
     return [
         _journal_entry_for(
-            part, deeds_by_instance, options_by_node, pending_invites, participant_counts
+            part,
+            deeds_by_instance,
+            options_by_node,
+            pending_invites,
+            pending_summons,
+            participant_counts,
         )
         for part in participations
     ]
@@ -106,6 +112,35 @@ def _pending_invites_for(character: ObjectDB) -> tuple[JournalInvite, ...]:
     return tuple(
         JournalInvite(
             invite_id=row.pk, instance_id=row.instance_id, template_name=row.instance.template.name
+        )
+        for row in rows
+    )
+
+
+def _pending_summons_for(character: ObjectDB) -> tuple[JournalSummons, ...]:
+    """PENDING OfferSummons directed at this character's primary persona (#2050).
+
+    One query for the whole journal (not per-entry); threaded into every entry
+    since summonses are persona-scoped, not instance-scoped. Mirrors the telnet
+    ``_append_pending_summonses`` query (commands/missions.py).
+    """
+    from world.npc_services.constants import SummonsStatus  # noqa: PLC0415
+    from world.npc_services.models import OfferSummons  # noqa: PLC0415
+
+    persona = getattr(character.sheet_data, "primary_persona", None)  # noqa: GETATTR_LITERAL
+    if persona is None:
+        return ()
+    rows = (
+        OfferSummons.objects.filter(target_persona=persona, status=SummonsStatus.PENDING)
+        .select_related("offer__role")
+        .order_by("created_at")
+    )
+    return tuple(
+        JournalSummons(
+            summons_id=row.pk,
+            role_name=row.offer.role.name,
+            message=row.message,
+            expires_at=row.expires_at.isoformat() if row.expires_at else None,
         )
         for row in rows
     )
@@ -174,11 +209,12 @@ def _options_by_node(
     return options_by_node
 
 
-def _journal_entry_for(
+def _journal_entry_for(  # noqa: PLR0913
     part: MissionParticipant,
     deeds_by_instance: dict[int, list[JournalDeed]],
     options_by_node: dict[int, list[MissionOption]],
     pending_invites: tuple[JournalInvite, ...],
+    pending_summons: tuple[JournalSummons, ...],
     participant_counts: dict[int, int],
 ) -> JournalEntry:
     """Build a single :class:`JournalEntry` from a participation row."""
@@ -200,6 +236,7 @@ def _journal_entry_for(
         compass_rooms=compass_rooms,
         compass_anywhere=compass_anywhere,
         pending_invites=pending_invites,
+        pending_summons=pending_summons,
         participant_count=participant_counts.get(instance.pk, 1),
     )
 

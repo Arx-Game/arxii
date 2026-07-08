@@ -106,6 +106,20 @@ class JournalInvite:
 
 
 @dataclass(frozen=True)
+class JournalSummons:
+    """A pending summons directed at the viewer's persona (#2050).
+
+    Persona-scoped (not per-instance). Mirrors the telnet
+    ``_append_pending_summonses`` query (commands/missions.py).
+    """
+
+    summons_id: int
+    role_name: str
+    message: str
+    expires_at: str | None
+
+
+@dataclass(frozen=True)
 class JournalEntry:
     """One mission run as seen by one character.
 
@@ -134,6 +148,7 @@ class JournalEntry:
     compass_rooms: tuple[str, ...] = ()
     compass_anywhere: bool = False
     pending_invites: tuple[JournalInvite, ...] = ()
+    pending_summons: tuple[JournalSummons, ...] = ()
     participant_count: int = 1
 
 
