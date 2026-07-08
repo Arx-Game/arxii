@@ -30585,6 +30585,18 @@ components:
       - target_spec
       - target_type
       - tier
+    CategoryC06Enum:
+      enum:
+      - harassment
+      - ooc_abuse
+      - red_flag
+      - other
+      type: string
+      description: |-
+        * `harassment` - Harassment
+        * `ooc_abuse` - OOC Abuse
+        * `red_flag` - FYI / Red Flag
+        * `other` - Other
     CategoryFeedback:
       type: object
       description: One trust category's aggregated feedback ratings for a GM (read-only).
@@ -48107,6 +48119,16 @@ components:
         reported_persona:
           type: integer
           description: The persona of the reported player at the time of the incident.
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          description: |-
+            Report category (#1279) — placeholder set, TBD.
+
+            * `harassment` - Harassment
+            * `ooc_abuse` - OOC Abuse
+            * `red_flag` - FYI / Red Flag
+            * `other` - Other
         behavior_description:
           type: string
           minLength: 1
@@ -50136,18 +50158,26 @@ components:
     PlayerReportCreate:
       type: object
       description: |-
-        Frontend supplies both reporter and reported personas.
+        Frontend supplies reporter persona + reported persona name (#1279).
 
-        The reported_account is derived from the reported persona's current
-        active tenure. If the reported persona has no current player, the
-        submission is rejected.
+        The reporter_persona is a PK (the player's own face). The reported persona is
+        resolved by name — players don't know persona PKs. The reported_account is
+        derived from the reported persona's current active tenure. If the reported
+        persona has no current player, the submission is rejected.
       properties:
         reporter_persona:
           type: integer
           description: The persona the reporter was wearing when submitting.
-        reported_persona:
-          type: integer
-          description: The persona of the reported player at the time of the incident.
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          description: |-
+            Report category (#1279) — placeholder set, TBD.
+
+            * `harassment` - Harassment
+            * `ooc_abuse` - OOC Abuse
+            * `red_flag` - FYI / Red Flag
+            * `other` - Other
         behavior_description:
           type: string
           description: What the reported persona did. Stub — wording needs design
@@ -50168,23 +50198,35 @@ components:
           description: A specific flagged interaction, if applicable.
       required:
       - behavior_description
-      - reported_persona
       - reporter_persona
     PlayerReportCreateRequest:
       type: object
       description: |-
-        Frontend supplies both reporter and reported personas.
+        Frontend supplies reporter persona + reported persona name (#1279).
 
-        The reported_account is derived from the reported persona's current
-        active tenure. If the reported persona has no current player, the
-        submission is rejected.
+        The reporter_persona is a PK (the player's own face). The reported persona is
+        resolved by name — players don't know persona PKs. The reported_account is
+        derived from the reported persona's current active tenure. If the reported
+        persona has no current player, the submission is rejected.
       properties:
         reporter_persona:
           type: integer
           description: The persona the reporter was wearing when submitting.
-        reported_persona:
-          type: integer
-          description: The persona of the reported player at the time of the incident.
+        reported_persona_name:
+          type: string
+          writeOnly: true
+          minLength: 1
+          description: The name of the character/persona being reported.
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          description: |-
+            Report category (#1279) — placeholder set, TBD.
+
+            * `harassment` - Harassment
+            * `ooc_abuse` - OOC Abuse
+            * `red_flag` - FYI / Red Flag
+            * `other` - Other
         behavior_description:
           type: string
           minLength: 1
@@ -50206,7 +50248,7 @@ components:
           description: A specific flagged interaction, if applicable.
       required:
       - behavior_description
-      - reported_persona
+      - reported_persona_name
       - reporter_persona
     PlayerReportDetail:
       type: object
@@ -50243,6 +50285,16 @@ components:
         reported_persona_name:
           type: string
           readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          description: |-
+            Report category (#1279) — placeholder set, TBD.
+
+            * `harassment` - Harassment
+            * `ooc_abuse` - OOC Abuse
+            * `red_flag` - FYI / Red Flag
+            * `other` - Other
         behavior_description:
           type: string
           description: What the reported persona did. Stub — wording needs design
@@ -50293,6 +50345,16 @@ components:
         reported_persona:
           type: integer
           description: The persona of the reported player at the time of the incident.
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryC06Enum'
+          description: |-
+            Report category (#1279) — placeholder set, TBD.
+
+            * `harassment` - Harassment
+            * `ooc_abuse` - OOC Abuse
+            * `red_flag` - FYI / Red Flag
+            * `other` - Other
         behavior_description:
           type: string
           minLength: 1

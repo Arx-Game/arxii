@@ -68,14 +68,32 @@ def _build_revealed_map(
     return revealed
 
 
+def _staff_reveal(persona: Persona) -> tuple[str, bool]:
+    """Staff always see the real identity behind a mask (#1279).
+
+    Staff are treated as universal discoverers: a fake-name persona renders as
+    ``"<mask> (<real>)"`` where ``<real>`` is the character sheet's primary persona
+    — the same reveal format a player gets after discovery, without needing a
+    PersonaDiscovery row.
+    """
+    primary = persona.character_sheet.primary_persona
+    if primary is not None and primary.pk != persona.pk:
+        return f"{persona.name} ({primary.name})", True
+    return persona.name, False
+
+
 def _resolve_single_display(
     persona: Persona,
     viewer_persona_ids: set[int],
     revealed: dict[int, Persona],
+    *,
+    is_staff: bool = False,
 ) -> tuple[str, bool]:
     """Return ``(display_name, is_discovered)`` for one persona given the revealed map."""
     if persona.pk in viewer_persona_ids or not persona.is_fake_name:
         return persona.name, False
+    if is_staff:
+        return _staff_reveal(persona)
     if persona.pk in revealed:
         return f"{persona.name} ({revealed[persona.pk].name})", True
     return compose_sdesc(persona), False
@@ -86,18 +104,23 @@ def build_persona_display_map(
     *,
     viewer_persona_ids: set[int],
     viewer_sheet_ids: set[int],
+    is_staff: bool = False,
 ) -> dict[int, tuple[str, bool]]:
     """Map each persona's pk -> ``(display_name, is_discovered)`` for one viewer (#1109).
 
     One discovery query covers every anonymous, non-owned persona in ``personas``. Owned and
-    named-public personas resolve to their real name with no query.
+    named-public personas resolve to their real name with no query. When ``is_staff`` is True,
+    the discovery query is skipped entirely — staff are universal discoverers (#1279).
     """
     unique = {p.pk: p for p in personas}
     # Owned faces are never restricted — resolved as the real name without a discovery lookup.
     fake_ids = [p.pk for p in unique.values() if p.is_fake_name and p.pk not in viewer_persona_ids]
-    revealed = _build_revealed_map(fake_ids, viewer_sheet_ids)
+    # Staff don't need discovery rows — they see through every mask (#1279).
+    revealed = {} if is_staff else _build_revealed_map(fake_ids, viewer_sheet_ids)
     return {
-        persona.pk: _resolve_single_display(persona, viewer_persona_ids, revealed)
+        persona.pk: _resolve_single_display(
+            persona, viewer_persona_ids, revealed, is_staff=is_staff
+        )
         for persona in unique.values()
     }
 
@@ -107,16 +130,20 @@ def resolve_display_for_viewer(
     *,
     viewer_persona_ids: set[int],
     viewer_sheet_ids: set[int],
+    is_staff: bool = False,
 ) -> tuple[str, bool]:
     """Resolve one persona's ``(display_name, is_discovered)`` for one viewer (#1109).
 
     The single-target form of ``build_persona_display_map`` — for the look / room-contents
     paths, which resolve one character at a time. Own faces and named-public faces render real;
     a discovered anonymous face reveals; otherwise the composed sdesc. One discovery query, and
-    only for an anonymous, non-owned face.
+    only for an anonymous, non-owned face. When ``is_staff`` is True, the discovery query is
+    skipped — staff are universal discoverers (#1279).
     """
     if persona.pk in viewer_persona_ids or not persona.is_fake_name:
         return persona.name, False
+    if is_staff:
+        return _staff_reveal(persona)
     if viewer_sheet_ids:
         discovery = (
             PersonaDiscovery.objects.filter(

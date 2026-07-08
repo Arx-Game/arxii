@@ -161,6 +161,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             [row.persona for row in rows],
             viewer_persona_ids=set(self.context.get("persona_ids", set())),
             viewer_sheet_ids=set(self.context.get("viewer_sheet_ids", set())),
+            is_staff=bool(self.context.get("is_staff", False)),
         )
         self.context["_persona_display_map"] = display_map
         return display_map

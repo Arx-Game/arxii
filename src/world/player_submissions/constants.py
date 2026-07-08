@@ -24,3 +24,17 @@ class SubmissionCategory(models.TextChoices):
     CHARACTER_APPLICATION = "character_application", "Character Application"
     GM_APPLICATION = "gm_application", "GM Application"
     SYSTEM_ERROR = "system_error", "System Error"  # auto-captured runtime errors (#1164)
+
+
+class ReportCategory(models.TextChoices):
+    """Player-facing report categories (#1279).
+
+    Placeholder set per Apostate's design: a low-severity "FYI / red-flag"
+    category alongside the obvious harassment/abuse categories. The final
+    category set is TBD; these are the starting point.
+    """
+
+    HARASSMENT = "harassment", "Harassment"
+    OOC_ABUSE = "ooc_abuse", "OOC Abuse"
+    RED_FLAG = "red_flag", "FYI / Red Flag"
+    OTHER = "other", "Other"

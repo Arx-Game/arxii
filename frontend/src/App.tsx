@@ -39,6 +39,7 @@ import { WardrobePage } from './inventory/pages/WardrobePage';
 import { MarketPage } from './market/MarketPage';
 import { FeedbackPage } from './submissions/pages/FeedbackPage';
 import { BugReportPage } from './submissions/pages/BugReportPage';
+import { PlayerReportPage } from './submissions/pages/PlayerReportPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
 const MissionBrowserPage = lazy(() =>
   import('@/missions/pages/MissionBrowserPage').then((m) => ({
@@ -364,6 +365,14 @@ function App() {
           element={
             <ProtectedRoute>
               <BugReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/report-player"
+          element={
+            <ProtectedRoute>
+              <PlayerReportPage />
             </ProtectedRoute>
           }
         />

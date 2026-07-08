@@ -92,6 +92,9 @@ class InteractionViewSet(
         # The viewer's own character sheets — who their PersonaDiscovery rows belong to,
         # for per-viewer persona-name resolution (#1109).
         context["viewer_sheet_ids"] = {e.character_sheet_id for e in entries} if entries else set()
+        # #1279 — staff are universal discoverers: they see real identities behind masks
+        # everywhere, not just in the report detail serializer.
+        context["is_staff"] = self.request.user.is_staff
         # Per-viewer my_reaction on reaction windows (#904) — context, never
         # Prefetch(to_attr) on the shared instances.
         context["persona_ids"] = set(get_account_personas(self.request))

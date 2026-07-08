@@ -330,7 +330,10 @@ def _resolve_presented_identity(
             RosterEntry.objects.for_account(user).values_list("character_sheet_id", flat=True)
         )
     return resolve_display_for_viewer(
-        active, viewer_persona_ids=set(), viewer_sheet_ids=viewer_sheet_ids
+        active,
+        viewer_persona_ids=set(),
+        viewer_sheet_ids=viewer_sheet_ids,
+        is_staff=bool(user and user.is_staff),
     )
 
 
