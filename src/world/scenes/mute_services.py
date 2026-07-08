@@ -30,6 +30,20 @@ def muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
     )
 
 
+def ooc_muted_persona_ids_for_viewer(*, viewer_account: Any) -> set[int]:
+    """Persona ids the viewer has OOC-muted — their OOC messages are skipped (#2087).
+
+    One query. Empty for an anonymous viewer. One-way: only the muter's own view changes.
+    """
+    if viewer_account is None or not getattr(viewer_account, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return set()
+    return set(
+        Mute.objects.filter(owner__account=viewer_account, mute_ooc=True).values_list(
+            "muted_persona_id", flat=True
+        )
+    )
+
+
 def set_mute(*, owner: Any, muted_persona: Persona, ic: bool = True, ooc: bool = True) -> Mute:
     """Mute ``muted_persona`` for ``owner`` (a PlayerData), or update its IC/OOC scope (#1278)."""
     mute, _ = Mute.objects.update_or_create(

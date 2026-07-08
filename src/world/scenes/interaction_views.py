@@ -55,7 +55,6 @@ from world.scenes.models import (
     Persona,
     Scene,
 )
-from world.scenes.mute_services import muted_persona_ids_for_viewer
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
 from world.scenes.reaction_services import open_reaction_window
@@ -217,11 +216,12 @@ class InteractionViewSet(
         persona_ids = get_account_personas(self.request) if user.is_authenticated else []
         since = self.request.query_params.get("since")  # noqa: USE_FILTERSET
         qs = base_qs.visible_to(user, persona_ids=persona_ids, since=since)
-        # #1278 — hide personas the viewer can't (Block, enforced, staff bypass) or won't (Mute,
-        # the viewer's own cosmetic choice, applies to everyone) see.
-        exclude_persona_ids: set[int] = muted_persona_ids_for_viewer(viewer_account=user)
+        # #1278 — hide personas the viewer can't see (Block, enforced, staff bypass).
+        # Muted personas (#2087) are NOT excluded here — their interactions stay in the
+        # feed with content blanked by the serializer ("actions still show without text").
+        exclude_persona_ids: set[int] = set()
         if not user.is_staff:
-            exclude_persona_ids |= hidden_persona_ids_for_viewer(viewer_account=user)
+            exclude_persona_ids = hidden_persona_ids_for_viewer(viewer_account=user)
         if exclude_persona_ids:
             qs = qs.exclude(persona_id__in=exclude_persona_ids)
         return qs
