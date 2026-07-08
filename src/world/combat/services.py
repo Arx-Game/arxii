@@ -2089,10 +2089,6 @@ def spawn_from_creature_template(
     config and vulnerability fields from BreakBarConfig.
     """
     from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
-    from world.combat.scaling import (  # noqa: PLC0415
-        compute_party_multiplier,
-        compute_party_profile,
-    )
 
     has_authored_phases = CreaturePhaseTemplate.objects.filter(creature_template=template).exists()
 
@@ -2109,59 +2105,82 @@ def spawn_from_creature_template(
     )
 
     if has_authored_phases:
-        # Clone authored phases into BossPhase rows
-        phase_templates = CreaturePhaseTemplate.objects.filter(creature_template=template).order_by(
-            "phase_number"
-        )
-        # Clear auto-generated phases
-        BossPhase.objects.filter(opponent=opp).delete()
-        for pt in phase_templates:
-            phase = BossPhase.objects.create(
-                opponent=opp,
-                phase_number=pt.phase_number,
-                threat_pool=pt.threat_pool,
-                soak_value=pt.soak_value,
-                probing_threshold=pt.probing_threshold,
-                health_trigger_percentage=pt.health_trigger_percentage,
-                description=pt.description,
-                actions_per_round=pt.actions_per_round,
-                damage_multiplier=pt.damage_multiplier,
-                extra_actions=pt.extra_actions,
-                reinforcement_template=pt.reinforcement_template,
-                reinforcement_count=pt.reinforcement_count,
-            )
-            # Stamp break-bar config from BreakBarConfig if present
-            if hasattr(pt, "break_bar"):
-                config = pt.break_bar
-                profile = compute_party_profile(encounter)
-                party_mult = compute_party_multiplier(profile.party_size, profile.avg_level)
-                threshold = round(Decimal(config.max_threshold) * party_mult)
-                phase.break_bar_threshold = threshold
-                phase.vulnerability_rounds = config.vulnerability_rounds
-                phase.vulnerability_intensity_bonus = config.intensity_bonus
-                phase.save(
-                    update_fields=[
-                        "break_bar_threshold",
-                        "vulnerability_rounds",
-                        "vulnerability_intensity_bonus",
-                    ]
-                )
-                # Stamp onto the opponent for phase 1
-                if pt.phase_number == 1:
-                    opp.break_bar_threshold = threshold
-                    opp.break_bar_current = threshold
-                    opp.vulnerability_rounds = config.vulnerability_rounds
-                    opp.vulnerability_intensity_bonus = config.intensity_bonus
-                    opp.save(
-                        update_fields=[
-                            "break_bar_threshold",
-                            "break_bar_current",
-                            "vulnerability_rounds",
-                            "vulnerability_intensity_bonus",
-                        ]
-                    )
+        _clone_authored_phases(encounter, opp, template)
 
     return opp
+
+
+def _clone_authored_phases(
+    encounter: CombatEncounter,
+    opp: CombatOpponent,
+    template: CreatureTemplate,
+) -> None:
+    """Clone CreaturePhaseTemplate rows into BossPhase rows and stamp break-bar config."""
+    from world.combat.models import CreaturePhaseTemplate  # noqa: PLC0415
+    from world.combat.scaling import (  # noqa: PLC0415
+        compute_party_multiplier,
+        compute_party_profile,
+    )
+
+    phase_templates = CreaturePhaseTemplate.objects.filter(creature_template=template).order_by(
+        "phase_number"
+    )
+    BossPhase.objects.filter(opponent=opp).delete()
+
+    profile = compute_party_profile(encounter)
+    party_mult = compute_party_multiplier(profile.party_size, profile.avg_level)
+
+    for pt in phase_templates:
+        phase = BossPhase.objects.create(
+            opponent=opp,
+            phase_number=pt.phase_number,
+            threat_pool=pt.threat_pool,
+            soak_value=pt.soak_value,
+            probing_threshold=pt.probing_threshold,
+            health_trigger_percentage=pt.health_trigger_percentage,
+            description=pt.description,
+            actions_per_round=pt.actions_per_round,
+            damage_multiplier=pt.damage_multiplier,
+            extra_actions=pt.extra_actions,
+            reinforcement_template=pt.reinforcement_template,
+            reinforcement_count=pt.reinforcement_count,
+        )
+        if hasattr(pt, "break_bar"):
+            _stamp_phase_break_bar_config(phase, pt.break_bar, party_mult, opp, pt.phase_number)
+
+
+def _stamp_phase_break_bar_config(
+    phase: BossPhase,
+    config: object,
+    party_mult: Decimal,
+    opp: CombatOpponent,
+    phase_number: int,
+) -> None:
+    """Stamp BreakBarConfig values onto a BossPhase (and onto the opponent for phase 1)."""
+    threshold = round(Decimal(config.max_threshold) * party_mult)
+    phase.break_bar_threshold = threshold
+    phase.vulnerability_rounds = config.vulnerability_rounds
+    phase.vulnerability_intensity_bonus = config.intensity_bonus
+    phase.save(
+        update_fields=[
+            "break_bar_threshold",
+            "vulnerability_rounds",
+            "vulnerability_intensity_bonus",
+        ]
+    )
+    if phase_number == 1:
+        opp.break_bar_threshold = threshold
+        opp.break_bar_current = threshold
+        opp.vulnerability_rounds = config.vulnerability_rounds
+        opp.vulnerability_intensity_bonus = config.intensity_bonus
+        opp.save(
+            update_fields=[
+                "break_bar_threshold",
+                "break_bar_current",
+                "vulnerability_rounds",
+                "vulnerability_intensity_bonus",
+            ]
+        )
 
 
 def _bulk_primary_levels(char_ids: list[int]) -> dict[int, int]:
@@ -4397,64 +4416,78 @@ def check_and_advance_boss_phase(
         if phase.health_trigger_percentage is None:
             continue
         if health_pct <= phase.health_trigger_percentage:
-            opponent.current_phase = phase.phase_number
-            if phase.threat_pool_id:
-                opponent.threat_pool = phase.threat_pool
-            opponent.soak_value = phase.soak_value
-            opponent.probing_current = 0
-            if phase.probing_threshold is not None:
-                opponent.probing_threshold = phase.probing_threshold
-            # Enrage: stamp damage multiplier from phase config.
-            opponent.damage_multiplier = phase.damage_multiplier
-            # Action economy: phase override or keep current + extra_actions.
-            if phase.actions_per_round is not None:
-                opponent.actions_per_round = phase.actions_per_round + phase.extra_actions
-            else:
-                opponent.actions_per_round = opponent.actions_per_round + phase.extra_actions
-            # Break-bar reset: recharge from new phase config (#2016).
-            if phase.break_bar_threshold > 0:
-                opponent.break_bar_threshold = phase.break_bar_threshold
-                opponent.break_bar_current = phase.break_bar_threshold
-                opponent.vulnerability_rounds = phase.vulnerability_rounds
-                opponent.vulnerability_intensity_bonus = phase.vulnerability_intensity_bonus
-                opponent.vulnerability_rounds_remaining = 0
-            else:
-                opponent.break_bar_threshold = 0
-                opponent.break_bar_current = 0
-                opponent.vulnerability_rounds_remaining = 0
-
-            opponent.save(
-                update_fields=[
-                    "current_phase",
-                    "threat_pool_id",
-                    "soak_value",
-                    "probing_current",
-                    "probing_threshold",
-                    "damage_multiplier",
-                    "actions_per_round",
-                    "break_bar_threshold",
-                    "break_bar_current",
-                    "vulnerability_rounds",
-                    "vulnerability_intensity_bonus",
-                    "vulnerability_rounds_remaining",
-                ],
-            )
-
-            # NPC reinforcements: spawn adds on phase entry (#2016).
-            if phase.reinforcement_template_id is not None and phase.reinforcement_count > 0:
-                for _ in range(phase.reinforcement_count):
-                    add_opponent(
-                        opponent.encounter,
-                        name=phase.reinforcement_template.name,
-                        tier=phase.reinforcement_template.tier,
-                        threat_pool=phase.reinforcement_template.threat_pool,
-                        max_health=20,
-                        auto_phases=False,
-                    )
-
+            _apply_phase_transition(opponent, phase)
+            _spawn_reinforcements(opponent.encounter, phase)
             return phase
 
     return None
+
+
+def _apply_phase_transition(opponent: CombatOpponent, phase: BossPhase) -> None:
+    """Stamp all phase-sourced fields onto the opponent and save."""
+    opponent.current_phase = phase.phase_number
+    if phase.threat_pool_id:
+        opponent.threat_pool = phase.threat_pool
+    opponent.soak_value = phase.soak_value
+    opponent.probing_current = 0
+    if phase.probing_threshold is not None:
+        opponent.probing_threshold = phase.probing_threshold
+    _stamp_enrage(opponent, phase)
+    _stamp_break_bar(opponent, phase)
+    opponent.save(
+        update_fields=[
+            "current_phase",
+            "threat_pool_id",
+            "soak_value",
+            "probing_current",
+            "probing_threshold",
+            "damage_multiplier",
+            "actions_per_round",
+            "break_bar_threshold",
+            "break_bar_current",
+            "vulnerability_rounds",
+            "vulnerability_intensity_bonus",
+            "vulnerability_rounds_remaining",
+        ],
+    )
+
+
+def _stamp_enrage(opponent: CombatOpponent, phase: BossPhase) -> None:
+    """Stamp damage multiplier and actions_per_round from phase config."""
+    opponent.damage_multiplier = phase.damage_multiplier
+    if phase.actions_per_round is not None:
+        opponent.actions_per_round = phase.actions_per_round + phase.extra_actions
+    else:
+        opponent.actions_per_round = opponent.actions_per_round + phase.extra_actions
+
+
+def _stamp_break_bar(opponent: CombatOpponent, phase: BossPhase) -> None:
+    """Reset the break bar from the new phase's break-bar config."""
+    if phase.break_bar_threshold > 0:
+        opponent.break_bar_threshold = phase.break_bar_threshold
+        opponent.break_bar_current = phase.break_bar_threshold
+        opponent.vulnerability_rounds = phase.vulnerability_rounds
+        opponent.vulnerability_intensity_bonus = phase.vulnerability_intensity_bonus
+        opponent.vulnerability_rounds_remaining = 0
+    else:
+        opponent.break_bar_threshold = 0
+        opponent.break_bar_current = 0
+        opponent.vulnerability_rounds_remaining = 0
+
+
+def _spawn_reinforcements(encounter: CombatEncounter, phase: BossPhase) -> None:
+    """Spawn reinforcement adds on phase entry."""
+    if phase.reinforcement_template_id is None or phase.reinforcement_count <= 0:
+        return
+    for _ in range(phase.reinforcement_count):
+        add_opponent(
+            encounter,
+            name=phase.reinforcement_template.name,
+            tier=phase.reinforcement_template.tier,
+            threat_pool=phase.reinforcement_template.threat_pool,
+            max_health=20,
+            auto_phases=False,
+        )
 
 
 # ---------------------------------------------------------------------------

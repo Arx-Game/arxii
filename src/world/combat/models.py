@@ -646,28 +646,28 @@ class CombatOpponent(SharedMemoryModel):
         return f"{self.name} ({self.get_tier_display()})"
 
 
-class BossPhase(SharedMemoryModel):
-    """One stage of a boss fight."""
+class AbstractPhaseConfig(SharedMemoryModel):
+    """Shared phase fields used by both BossPhase (runtime) and
+    CreaturePhaseTemplate (authored bestiary).
 
-    opponent = models.ForeignKey(
-        CombatOpponent,
-        on_delete=models.CASCADE,
-        related_name="phases",
-    )
+    Concrete subclasses add their own owner FK (opponent or creature_template)
+    and any runtime-only fields.
+    """
+
+    class Meta:
+        abstract = True
+
     phase_number = models.PositiveIntegerField()
     threat_pool = models.ForeignKey(
         ThreatPool,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="boss_phases",
     )
     soak_value = models.PositiveIntegerField(default=0)
     probing_threshold = models.PositiveIntegerField(null=True, blank=True)
     health_trigger_percentage = models.FloatField(null=True, blank=True)
     description = models.TextField(blank=True)
-
-    # === Boss anatomy fields (#2016) ===
     actions_per_round = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -688,10 +688,20 @@ class BossPhase(SharedMemoryModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="runtime_reinforcement_phases",
         help_text="CreatureTemplate to spawn as adds on phase entry.",
     )
     reinforcement_count = models.PositiveIntegerField(default=0)
+
+
+class BossPhase(AbstractPhaseConfig):
+    """One stage of a boss fight (runtime row on a CombatOpponent)."""
+
+    opponent = models.ForeignKey(
+        CombatOpponent,
+        on_delete=models.CASCADE,
+        related_name="phases",
+    )
+    # Runtime break-bar fields — stamped from BreakBarConfig at spawn time.
     break_bar_threshold = models.PositiveIntegerField(
         default=0,
         help_text="Break-bar threshold; 0 = no bar for this phase.",
@@ -1877,11 +1887,12 @@ class CreatureTemplate(SharedMemoryModel):
         return self.name
 
 
-class CreaturePhaseTemplate(SharedMemoryModel):
+class CreaturePhaseTemplate(AbstractPhaseConfig):
     """Authored phase specification for a CreatureTemplate (#2016).
 
-    Mirrors BossPhase fields but with creature_template FK instead of opponent.
-    Cloned into BossPhase rows at spawn time via spawn_from_creature_template.
+    Inherits shared phase fields from AbstractPhaseConfig. Adds
+    creature_template FK instead of opponent. Cloned into BossPhase rows
+    at spawn time via spawn_from_creature_template.
     """
 
     creature_template = models.ForeignKey(
@@ -1889,42 +1900,6 @@ class CreaturePhaseTemplate(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="phase_templates",
     )
-    phase_number = models.PositiveIntegerField()
-    threat_pool = models.ForeignKey(
-        ThreatPool,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="creature_phase_templates",
-    )
-    soak_value = models.PositiveIntegerField(default=0)
-    probing_threshold = models.PositiveIntegerField(null=True, blank=True)
-    health_trigger_percentage = models.FloatField(null=True, blank=True)
-    description = models.TextField(blank=True)
-    actions_per_round = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Phase override; null = inherit tier template default.",
-    )
-    damage_multiplier = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("1.0"),
-        help_text="Enrage damage multiplier for this phase.",
-    )
-    extra_actions = models.PositiveIntegerField(
-        default=0,
-        help_text="Additional actions beyond actions_per_round.",
-    )
-    reinforcement_template = models.ForeignKey(
-        CreatureTemplate,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="reinforcement_phases",
-        help_text="CreatureTemplate to spawn as adds on phase entry.",
-    )
-    reinforcement_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [
