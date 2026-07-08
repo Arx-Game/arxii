@@ -41,10 +41,26 @@ def compose_sdesc(persona: Persona) -> str:
     (disguises) will let other concealment types supply their own phrasing and conceal traits
     (e.g. ``"a person wearing a feature-concealing robe"``), continuing into the trait-driven
     auto-description; for now an anonymous persona is rendered as a worn mask.
+
+    A full-concealment disguise overlay (#1272) forces ``"person"`` regardless of the
+    character's real gender — a feature-concealing robe hides gender.
     """
+    from world.forms.models import ConcealmentLevel  # noqa: PLC0415
+
     sheet = persona.character_sheet
-    gender_key = sheet.gender.key if sheet.gender_id is not None else None
-    noun = _GENDER_NOUN.get(gender_key, "person")
+    character = sheet.character
+    noun = "person"
+
+    # Full concealment forces "person" regardless of gender (#1272).
+    form_state = getattr(character, "form_state", None)  # noqa: GETATTR_LITERAL
+    is_full_concealment = (
+        form_state is not None
+        and form_state.active_fake_overlay_id is not None
+        and form_state.active_fake_overlay.concealment_level == ConcealmentLevel.FULL
+    )
+    if not is_full_concealment:
+        gender_key = sheet.gender.key if sheet.gender_id is not None else None
+        noun = _GENDER_NOUN.get(gender_key, "person")
     return f"a {noun} wearing a {persona.name}"
 
 

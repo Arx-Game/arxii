@@ -11,10 +11,12 @@ Physical appearance options (height, build, hair/eye colors) with true form, alt
 
 ```python
 from world.forms.models import (
-    TraitType,     # COLOR, STYLE - categorizes form traits
-    FormType,      # TRUE, ALTERNATE, DISGUISE - type of saved character form
-    SourceType,    # EQUIPPED_ITEM, APPLIED_ITEM, SPELL, SYSTEM - source of temporary changes
-    DurationType,  # UNTIL_REMOVED, REAL_TIME, GAME_TIME, SCENE - how temporary changes expire
+    TraitType,        # COLOR, STYLE - categorizes form traits
+    FormType,         # TRUE, ALTERNATE, DISGUISE - type of saved character form
+    DisguiseKind,     # MUNDANE, MAGICAL - how a fake overlay is pierced (#1110)
+    ConcealmentLevel, # NONE, DESCRIPTOR, FULL - what a disguise hides from an unpierced viewer (#1272)
+    SourceType,       # EQUIPPED_ITEM, APPLIED_ITEM, SPELL, SYSTEM - source of temporary changes
+    DurationType,     # UNTIL_REMOVED, REAL_TIME, GAME_TIME, SCENE - how temporary changes expire
 )
 ```
 
@@ -36,9 +38,9 @@ from world.forms.models import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterForm` | A saved set of form trait values | `character` (FK ObjectDB), `name`, `form_type` (FormType), `is_player_created`, `created_at` |
+| `CharacterForm` | A saved set of form trait values | `character` (FK ObjectDB), `name`, `form_type` (FormType), `is_player_created`, `concealment_level` (ConcealmentLevel, #1272), `created_at` |
 | `CharacterFormValue` | Single trait value within a form | `form` (FK), `trait` (FK), `option` (FK) |
-| `CharacterFormState` | Tracks active form (OneToOne per character) | `character` (OneToOne ObjectDB), `active_form` (FK CharacterForm, nullable) |
+| `CharacterFormState` | Tracks active form + disguise overlay (OneToOne per character) | `character` (OneToOne ObjectDB), `active_form` (FK CharacterForm, nullable), `active_fake_overlay` (FK CharacterForm, nullable, #1110), `overlay_kind` (DisguiseKind, #1110) |
 | `TemporaryFormChange` | Temporary override on top of active form | `character` (FK), `trait` (FK), `option` (FK), `source_type`, `source_id`, `duration_type`, `expires_at`, `expires_after_scenes` |
 | `FormCombatProfile` | Battle-form stat-suite (alt-self modifiers) | `form` (FK CharacterForm), `display_name`, `depth` (band-selection axis; crit→highest, mid→middle, fail→lowest) |
 | `FormCombatProfileEffect` | One stat modifier inside a profile | `profile` (FK), `target` (FK mechanics.ModifierTarget), `value` |
@@ -95,6 +97,9 @@ from world.forms.services import (
     get_apparent_build,
     get_cg_height_bands,
     get_cg_builds,
+    apply_disguise,
+    remove_disguise,
+    get_presented_appearance,
 )
 
 # Get apparent form (base + temporary overrides)
@@ -124,6 +129,21 @@ apparent_build = get_apparent_build(character)  # None if band.hide_build
 # CG-selectable queries
 bands = get_cg_height_bands()  # HeightBand.objects.filter(is_cg_selectable=True)
 builds = get_cg_builds()       # Build.objects.filter(is_cg_selectable=True)
+
+# Disguise overlay (#1110, #1272)
+apply_disguise(character, disguise_form, kind=DisguiseKind.MUNDANE,
+               concealment_level=ConcealmentLevel.NONE)
+# Paints a fake overlay over the real form. kind = how it's pierced
+# (MUNDANE → perception, MAGICAL → dispel). concealment_level controls what
+# an unpierced viewer sees (#1272): NONE = full trait + descriptor,
+# DESCRIPTOR = value only, FULL = nothing. Single-slot; replaces any current overlay.
+
+remove_disguise(character)  # Drop the overlay; idempotent
+
+presented = get_presented_appearance(character, pierced=False)
+# Composes what a viewer sees: the presented form's traits overlaid with the
+# active persona's descriptors. pierced=True (owner/staff) ignores overlays.
+# Applies the overlay's concealment_level for unpierced viewers (#1272).
 
 # Alternate-self lifecycle (slice 4)
 active = assume_alternate_self(sheet, alt_self)  # Raises AlternateSelfActiveError if

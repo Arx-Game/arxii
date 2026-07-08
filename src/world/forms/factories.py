@@ -11,6 +11,7 @@ from world.forms.models import (
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
+    ConcealmentLevel,
     DurationType,
     FormCombatProfile,
     FormCombatProfileEffect,
@@ -98,6 +99,7 @@ class CharacterFormFactory(factory.django.DjangoModelFactory):
     name = ""
     form_type = FormType.TRUE
     is_player_created = False
+    concealment_level = ConcealmentLevel.NONE
 
 
 class CharacterFormValueFactory(factory.django.DjangoModelFactory):
