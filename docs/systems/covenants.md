@@ -355,6 +355,23 @@ level 9 did; level ≥ 10 is unchanged (`Decimal(level // 10)`).
 
 See ADR-0085 for why the debt/streak fields live on `NPCStanding` rather than `CourtPact`.
 
+### Directed-offer summonses — the master's wishes (#2050)
+
+A Court master (or any NPC role) can direct a mission offer at a *specific*
+servant via an `OfferSummons` (`world.npc_services.summons`). The servant sees
+the summons in their journal and can accept (delegating to `resolve_offer` →
+`issue_mission`, with court engagement + grant-ceiling credit flowing as today)
+or decline. Declining — or letting the summons lapse — drops affection
+(`SUMMONS_REFUSAL_AFFECTION_DELTA`) and bumps
+`NPCStanding.consecutive_refused_summons`; crossing
+`CourtGrantConfig.summons_refusal_escalation_threshold` fires the master's
+escalation pool via `apply_pool_deterministically` (the no-check precedent).
+Debt is never the price of disobedience — ADR-0102.
+
+Creation is GM/staff-driven (web API + mid-scene "Give mission" dialog). The
+expiry cron (`npc_services.summons_expiry`, 5-minute sweep) treats timeout as a
+refusal. See ADR-0102 for the full design.
+
 ### Fealty ceremony
 
 `induct_member_via_session` (the ritual fire-handler) was extended for COURT covenants: after
