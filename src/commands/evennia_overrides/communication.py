@@ -23,6 +23,30 @@ from commands.frontend_types import UsageEntry
 from world.scenes.place_models import Place
 
 
+def _flag_page_contact(sender_char: object, target_char: object) -> None:
+    """Fire BlockContactFlag for a page from a blocked player to the blocker (#1278/#2088).
+
+    Page is OOC (no scene); ``BlockContactFlag.scene`` is nullable. The service
+    no-ops when no active block exists, and dedupes per (blocker, blocked, scene=None).
+    """
+    if sender_char is None or target_char is None:
+        return
+    try:
+        initiator_persona = sender_char.sheet_data.primary_persona
+        target_persona = target_char.sheet_data.primary_persona
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    if initiator_persona is None or target_persona is None:
+        return
+    from world.scenes.block_services import flag_blocked_contact_attempt  # noqa: PLC0415
+
+    flag_blocked_contact_attempt(
+        initiator_persona=initiator_persona,
+        target_persona=target_persona,
+        scene=None,
+    )
+
+
 class CmdSay(ArxCommand):
     """Speak aloud to the room."""
 
@@ -155,6 +179,11 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
 
         character.msg(f"{self.caller.key} pages: {text}")
         self.caller.msg(f"You page {character.key}: {text}")
+
+        # #1278/#2088 — flag circumvention: a blocked player paging the blocker via
+        # another identity. OOC (no scene); the service no-ops when no active block
+        # exists, and dedupes per (blocker, blocked, scene=None).
+        _flag_page_contact(sender_char, character)
 
 
 class CmdTabletalk(ArxCommand):
