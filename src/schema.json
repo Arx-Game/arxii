@@ -40467,6 +40467,13 @@ components:
             the Beat completes at terminal (on_mission_complete_for_beat). SET_NULL
             on Beat delete. For offer-issued runs, set from MissionOfferDetails.source_beat
             at issue_mission (#1780).'
+        target_project:
+          type: integer
+          nullable: true
+          description: 'Optional: the Project this run advances (#2045). Copied from
+            MissionOfferDetails.target_project at issuance (mirrors source_beat).
+            SET_NULL on Project delete — a cancelled project unbinds the run; report-time
+            payout soft-skips with a notice.'
       required:
       - id
       - started_at
@@ -40746,6 +40753,13 @@ components:
             the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4
             stakes gate + contract activation. Independent of Beat.required_mission
             (ADR-0010). SET_NULL on Beat delete.'
+        target_project:
+          type: integer
+          nullable: true
+          description: 'Optional: the live Project this offer''s missions advance
+            (#2045). When set, accepting the offer copies it onto MissionInstance.target_project
+            at issuance — exactly how source_beat works. SET_NULL on Project delete
+            (a cancelled project unbinds the offer; issuing then refuses).'
         weight:
           type: integer
           maximum: 2147483647
@@ -40797,6 +40811,13 @@ components:
             the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4
             stakes gate + contract activation. Independent of Beat.required_mission
             (ADR-0010). SET_NULL on Beat delete.'
+        target_project:
+          type: integer
+          nullable: true
+          description: 'Optional: the live Project this offer''s missions advance
+            (#2045). When set, accepting the offer copies it onto MissionInstance.target_project
+            at issuance — exactly how source_beat works. SET_NULL on Project delete
+            (a cancelled project unbinds the offer; issuing then refuses).'
         weight:
           type: integer
           maximum: 2147483647
@@ -41132,6 +41153,7 @@ components:
             * `beat` - Beat
             * `item` - Item
             * `summons` - Follow-On Summons
+            * `project` - Project
         amount:
           type: integer
           maximum: 2147483647
@@ -41218,6 +41240,7 @@ components:
             * `beat` - Beat
             * `item` - Item
             * `summons` - Follow-On Summons
+            * `project` - Project
         amount:
           type: integer
           maximum: 2147483647
@@ -41259,6 +41282,7 @@ components:
       - beat
       - item
       - summons
+      - project
       type: string
       description: |-
         * `money` - Money
@@ -41269,6 +41293,7 @@ components:
         * `beat` - Beat
         * `item` - Item
         * `summons` - Follow-On Summons
+        * `project` - Project
     MissionOptionSourceKindEnum:
       enum:
       - authored
@@ -47643,6 +47668,13 @@ components:
             the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4
             stakes gate + contract activation. Independent of Beat.required_mission
             (ADR-0010). SET_NULL on Beat delete.'
+        target_project:
+          type: integer
+          nullable: true
+          description: 'Optional: the live Project this offer''s missions advance
+            (#2045). When set, accepting the offer copies it onto MissionInstance.target_project
+            at issuance — exactly how source_beat works. SET_NULL on Project delete
+            (a cancelled project unbinds the offer; issuing then refuses).'
         weight:
           type: integer
           maximum: 2147483647
@@ -47826,6 +47858,7 @@ components:
             * `beat` - Beat
             * `item` - Item
             * `summons` - Follow-On Summons
+            * `project` - Project
         amount:
           type: integer
           maximum: 2147483647
