@@ -17996,6 +17996,14 @@ export interface components {
         [key: string]: unknown;
       } | null;
     };
+    /**
+     * @description * `harassment` - Harassment
+     *     * `ooc_abuse` - OOC Abuse
+     *     * `red_flag` - FYI / Red Flag
+     *     * `other` - Other
+     * @enum {string}
+     */
+    CategoryC06Enum: 'harassment' | 'ooc_abuse' | 'red_flag' | 'other';
     /** @description One trust category's aggregated feedback ratings for a GM (read-only). */
     CategoryFeedback: {
       category_name: string;
@@ -27039,6 +27047,15 @@ export interface components {
       reporter_persona?: number;
       /** @description The persona of the reported player at the time of the incident. */
       reported_persona?: number;
+      /**
+       * @description Report category (#1279) — placeholder set, TBD.
+       *
+       *     * `harassment` - Harassment
+       *     * `ooc_abuse` - OOC Abuse
+       *     * `red_flag` - FYI / Red Flag
+       *     * `other` - Other
+       */
+      category?: components['schemas']['CategoryC06Enum'];
       /** @description What the reported persona did. Stub — wording needs design pass. */
       behavior_description?: string;
       /** @description Whether the reporter asked the other player to stop the behavior. */
@@ -28142,17 +28159,25 @@ export interface components {
       readonly updated_date: string;
     };
     /**
-     * @description Frontend supplies both reporter and reported personas.
+     * @description Frontend supplies reporter persona + reported persona name (#1279).
      *
-     *     The reported_account is derived from the reported persona's current
-     *     active tenure. If the reported persona has no current player, the
-     *     submission is rejected.
+     *     The reporter_persona is a PK (the player's own face). The reported persona is
+     *     resolved by name — players don't know persona PKs. The reported_account is
+     *     derived from the reported persona's current active tenure. If the reported
+     *     persona has no current player, the submission is rejected.
      */
     PlayerReportCreate: {
       /** @description The persona the reporter was wearing when submitting. */
       reporter_persona: number;
-      /** @description The persona of the reported player at the time of the incident. */
-      reported_persona: number;
+      /**
+       * @description Report category (#1279) — placeholder set, TBD.
+       *
+       *     * `harassment` - Harassment
+       *     * `ooc_abuse` - OOC Abuse
+       *     * `red_flag` - FYI / Red Flag
+       *     * `other` - Other
+       */
+      category?: components['schemas']['CategoryC06Enum'];
       /** @description What the reported persona did. Stub — wording needs design pass. */
       behavior_description: string;
       /** @description Whether the reporter asked the other player to stop the behavior. */
@@ -28165,17 +28190,27 @@ export interface components {
       interaction?: number | null;
     };
     /**
-     * @description Frontend supplies both reporter and reported personas.
+     * @description Frontend supplies reporter persona + reported persona name (#1279).
      *
-     *     The reported_account is derived from the reported persona's current
-     *     active tenure. If the reported persona has no current player, the
-     *     submission is rejected.
+     *     The reporter_persona is a PK (the player's own face). The reported persona is
+     *     resolved by name — players don't know persona PKs. The reported_account is
+     *     derived from the reported persona's current active tenure. If the reported
+     *     persona has no current player, the submission is rejected.
      */
     PlayerReportCreateRequest: {
       /** @description The persona the reporter was wearing when submitting. */
       reporter_persona: number;
-      /** @description The persona of the reported player at the time of the incident. */
-      reported_persona: number;
+      /** @description The name of the character/persona being reported. */
+      reported_persona_name: string;
+      /**
+       * @description Report category (#1279) — placeholder set, TBD.
+       *
+       *     * `harassment` - Harassment
+       *     * `ooc_abuse` - OOC Abuse
+       *     * `red_flag` - FYI / Red Flag
+       *     * `other` - Other
+       */
+      category?: components['schemas']['CategoryC06Enum'];
       /** @description What the reported persona did. Stub — wording needs design pass. */
       behavior_description: string;
       /** @description Whether the reporter asked the other player to stop the behavior. */
@@ -28202,6 +28237,15 @@ export interface components {
       /** @description The persona of the reported player at the time of the incident. */
       reported_persona: number;
       readonly reported_persona_name: string;
+      /**
+       * @description Report category (#1279) — placeholder set, TBD.
+       *
+       *     * `harassment` - Harassment
+       *     * `ooc_abuse` - OOC Abuse
+       *     * `red_flag` - FYI / Red Flag
+       *     * `other` - Other
+       */
+      category?: components['schemas']['CategoryC06Enum'];
       /** @description What the reported persona did. Stub — wording needs design pass. */
       behavior_description: string;
       /** @description Whether the reporter asked the other player to stop the behavior. */
@@ -28224,6 +28268,15 @@ export interface components {
       reporter_persona: number;
       /** @description The persona of the reported player at the time of the incident. */
       reported_persona: number;
+      /**
+       * @description Report category (#1279) — placeholder set, TBD.
+       *
+       *     * `harassment` - Harassment
+       *     * `ooc_abuse` - OOC Abuse
+       *     * `red_flag` - FYI / Red Flag
+       *     * `other` - Other
+       */
+      category?: components['schemas']['CategoryC06Enum'];
       /** @description What the reported persona did. Stub — wording needs design pass. */
       behavior_description: string;
       /** @description Whether the reporter asked the other player to stop the behavior. */
