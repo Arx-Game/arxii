@@ -2534,6 +2534,9 @@ def seed_magic_dev() -> MagicDevSeedResult:
     technique_cast_template = ensure_technique_cast_content()
     ensure_technique_catalog_content()
     soul_tether_content = wire_soul_tether_content()
+    from world.seeds.game_content.combos import seed_combo_palette  # noqa: PLC0415
+
+    seed_combo_palette()
 
     return MagicDevSeedResult(
         config=config,
