@@ -9,7 +9,6 @@ Two surfaces:
    ephemeral interaction state in `request.session`.
 """
 
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
@@ -394,30 +393,15 @@ class OfferSummonsViewSet(viewsets.ModelViewSet):
 
         body = OfferSummonsCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        data = body.validated_data
-
-        offer = NPCServiceOffer.objects.filter(pk=data["offer_id"]).first()
-        if offer is None:
-            msg = "That NPC service offer was not found."
-            raise NotFound(msg)
-        persona = Persona.objects.filter(pk=data["target_persona_id"]).first()
-        if persona is None:
-            msg = "That target persona was not found."
-            raise NotFound(msg)
 
         gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-        try:
-            summons = create_summons(
-                offer,
-                persona,
-                message=data.get("message", ""),
-                expires_at=data.get("expires_at"),
-                created_by=gm_profile,
-            )
-        except DjangoValidationError as exc:
-            raise ValidationError(
-                exc.message_dict if hasattr(exc, "message_dict") else str(exc)
-            ) from exc
+        summons = create_summons(
+            body.offer,
+            body.target_persona,
+            message=body.validated_data.get("message", ""),
+            expires_at=body.validated_data.get("expires_at"),
+            created_by=gm_profile,
+        )
 
         serializer = OfferSummonsSerializer(summons)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

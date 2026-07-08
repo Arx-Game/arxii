@@ -200,12 +200,51 @@ class OfferSummonsSerializer(serializers.ModelSerializer):
 
 
 class OfferSummonsCreateSerializer(serializers.Serializer):
-    """POST body for creating a summons (GM/staff only)."""
+    """POST body for creating a summons (GM/staff only).
+
+    Validates that the offer and target persona exist and that the offer is
+    MISSION-kind. Object-level validation lives here so the view stays thin
+    and the serializer is the single authority on input correctness.
+    """
 
     offer_id = serializers.IntegerField(min_value=1)
     target_persona_id = serializers.IntegerField(min_value=1)
     message = serializers.CharField(required=False, allow_blank=True, default="")
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate_offer_id(self, value: int) -> int:
+        from world.npc_services.constants import OfferKind  # noqa: PLC0415
+        from world.npc_services.models import NPCServiceOffer  # noqa: PLC0415
+
+        offer = NPCServiceOffer.objects.filter(pk=value).first()
+        if offer is None:
+            msg = "That NPC service offer was not found."
+            raise serializers.ValidationError(msg)
+        if offer.kind != OfferKind.MISSION:
+            msg = "Summonses are limited to MISSION-kind offers in v1 (#2050)."
+            raise serializers.ValidationError(msg)
+        self._offer = offer
+        return value
+
+    def validate_target_persona_id(self, value: int) -> int:
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        persona = Persona.objects.filter(pk=value).first()
+        if persona is None:
+            msg = "That target persona was not found."
+            raise serializers.ValidationError(msg)
+        self._target_persona = persona
+        return value
+
+    @property
+    def offer(self):
+        """The resolved NPCServiceOffer (set during validation)."""
+        return self._offer
+
+    @property
+    def target_persona(self):
+        """The resolved Persona (set during validation)."""
+        return self._target_persona
 
 
 class SummonsRespondSerializer(serializers.Serializer):

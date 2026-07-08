@@ -115,8 +115,7 @@ export function PersonaContextMenu({
   const [treatDialogOpen, setTreatDialogOpen] = useState(false);
   const [giveMissionOpen, setGiveMissionOpen] = useState(false);
 
-  // Read scene data from cache for GM check (#2050).
-  const scene = queryClient.getQueryData<SceneDetail>(['scene', sceneId]);
+  // Reuse the already-loaded scene data for the GM check (#2050).
   const canGiveMission = scene?.viewer_can_gm ?? false;
 
   function submitBlock() {
