@@ -433,3 +433,43 @@ class TraitCrossingReadPathTests(TestCase):
         char = Character.objects.get(pk=self.sheet.pk)
         total = char.threads.passive_flat_bonus_for_resonance(self.resonance.pk)
         self.assertEqual(total, 5)
+
+
+class ResolveTraitCrossingOfferActionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.traits.factories import TraitFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.trait = TraitFactory()
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="TRAIT",
+            target_trait=cls.trait,
+            level=3,
+        )
+        cls.option = TraitCrossingOption.objects.create(
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Burning vigor",
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+
+    def setUp(self) -> None:
+        self.offer = PendingTraitCrossingOffer.objects.create(thread=self.thread, crossing_level=3)
+
+    def test_action_resolves_offer(self) -> None:
+        from actions.definitions.trait_crossing import ResolveTraitCrossingOfferAction
+
+        actor = self.sheet.character
+        action = ResolveTraitCrossingOfferAction()
+        result = action.run(actor=actor, offer=self.offer, option=self.option)
+        self.assertTrue(result.success)
+        self.assertTrue(
+            TraitCrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
