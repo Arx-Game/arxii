@@ -30,13 +30,27 @@ if TYPE_CHECKING:
     from world.missions.types import BeatOption
 
 _SUBVERBS = frozenset(
-    {"list", "beat", "resolve", "abandon", "pick", "vote", "report", "invite", "accept", "decline"}
+    {
+        "list",
+        "beat",
+        "resolve",
+        "abandon",
+        "pick",
+        "vote",
+        "report",
+        "invite",
+        "accept",
+        "decline",
+        "take",
+        "opportunities",
+    }
 )
 _USAGE = (
     "Usage: mission | mission beat <id> | mission resolve <id> <n> | "
     "mission abandon <id> | mission pick <id> <n> | mission vote <id> <n> | "
     "mission report <id> <style> | mission invite <id> <name> | "
-    "mission accept <invite-id> | mission decline <invite-id>"
+    "mission accept <invite-id> | mission decline <invite-id> | "
+    "mission take <n> | mission opportunities"
 )
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
@@ -84,6 +98,8 @@ class CmdMission(ArxCommand):
             "invite": lambda: self._handle_invite(rest),
             "accept": lambda: self._handle_respond(rest, accept=True),
             "decline": lambda: self._handle_respond(rest, accept=False),
+            "take": lambda: self._handle_take(rest),
+            "opportunities": lambda: self._handle_opportunities(),
         }
         _DISPATCH[subverb]()
 
@@ -436,4 +452,75 @@ class CmdMission(ArxCommand):
             lines.append(f"  {i}) {opt.label}")
         verb = "vote" if view.phase == PHASE_VOTE else "pick"  # noqa: STRING_LITERAL
         lines.append(f"Use 'mission {verb} {instance.pk} <n>'.")
+        self.msg("\n".join(lines))
+
+    # ------------------------------------------------------------------
+    # Discovery (#2044)
+    # ------------------------------------------------------------------
+
+    def _handle_take(self, rest: str) -> None:
+        """``mission take <n>`` — accept a board posting by ordinal.
+
+        Resolves the BOARD-kind giver in the caller's current room,
+        fetches the postings list (the same preview examine shows),
+        maps the ordinal to a template_id, and calls take_from_board.
+        """
+        from world.missions.constants import GiverKind  # noqa: PLC0415
+        from world.missions.models import MissionGiver  # noqa: PLC0415
+        from world.missions.services.boards import (  # noqa: PLC0415
+            BoardTakeError,
+            postings_for_giver,
+            take_from_board,
+        )
+
+        token = rest.strip()
+        if not token.isdigit():
+            msg = "Usage: mission take <n>"
+            raise CommandError(msg)
+        ordinal = int(token)
+        room = self.caller.location
+        if room is None:
+            msg = "You are not in a room."
+            raise CommandError(msg)
+        giver = (
+            MissionGiver.objects.filter(target=room, giver_kind=GiverKind.BOARD, is_active=True)
+            .prefetch_related("templates")  # noqa: PREFETCH_STRING
+            .first()
+        )
+        if giver is None:
+            self.msg("There is no notice board here.")
+            return
+        postings = postings_for_giver(giver, self.caller)
+        if not postings:
+            self.msg("There are no postings you're eligible for on this board.")
+            return
+        if ordinal < 1 or ordinal > len(postings):
+            self.msg(f"Choose a posting by its number (1-{len(postings)}).")
+            return
+        posting = postings[ordinal - 1]
+        try:
+            instance = take_from_board(giver, self.caller, posting.template_id)
+        except BoardTakeError as exc:
+            raise CommandError(exc.user_message) from exc
+        self.msg(f"You accept the posting: {instance.template.name}.")
+
+    def _handle_opportunities(self) -> None:
+        """``mission opportunities`` — textual rendering of the three groups."""
+        from world.missions.services.opportunities import (  # noqa: PLC0415
+            opportunities_for_character,
+        )
+
+        result = opportunities_for_character(self.caller)
+        lines = ["|wOpportunities|n", ""]
+        if result.here:
+            lines.append("|wHere:|n")
+            lines.extend(f"  {row.name} - {row.pointer}" for row in result.here)
+        if result.nearby:
+            lines.append("|wNearby:|n")
+            lines.extend(f"  {row.name} - {row.pointer}" for row in result.nearby)
+        if result.your_organizations:
+            lines.append("|wYour organizations:|n")
+            lines.extend(f"  {row.name} - {row.pointer}" for row in result.your_organizations)
+        if not (result.here or result.nearby or result.your_organizations):
+            lines.append("  Nothing pulls at you right now.")
         self.msg("\n".join(lines))
