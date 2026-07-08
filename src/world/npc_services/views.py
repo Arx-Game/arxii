@@ -9,6 +9,7 @@ Two surfaces:
    ephemeral interaction state in `request.session`.
 """
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status, viewsets
@@ -24,6 +25,8 @@ from actions.definitions.npc_services import (
     resolve_npc_offer,
     start_npc_interaction,
 )
+from world.gm.models import GMProfile
+from world.gm.permissions import IsGMOrStaff
 from world.npc_services.filters import (
     MissionOfferDetailsFilterSet,
     NPCRoleFilterSet,
@@ -38,6 +41,7 @@ from world.npc_services.models import (
     NPCServiceOffer,
     NPCStanding,
     OfferCooldown,
+    OfferSummons,
     PermitOfferDetails,
 )
 from world.npc_services.serializers import (
@@ -49,7 +53,10 @@ from world.npc_services.serializers import (
     NPCServiceOfferSerializer,
     NPCStandingSerializer,
     OfferCooldownSerializer,
+    OfferSummonsCreateSerializer,
+    OfferSummonsSerializer,
     PermitOfferDetailsSerializer,
+    SummonsRespondSerializer,
 )
 from world.npc_services.services import (
     InteractionSession,
@@ -331,3 +338,132 @@ class InteractionViewSet(viewsets.ViewSet):
 
         request.session.pop(_SESSION_KEY, None)
         return Response(serialize_npc_session_state(result.data["session"]))
+
+
+class OfferSummonsViewSet(viewsets.ModelViewSet):
+    """Directed-offer summonses (#2050).
+
+    - GM/staff: create + list all summonses.
+    - Players: list summonses directed at their active persona; respond via
+      the ``respond`` action.
+    """
+
+    serializer_class = OfferSummonsSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = NPCServicesPagination
+    queryset = OfferSummons.objects.select_related("offer__role", "target_persona").all()
+
+    def get_queryset(self) -> object:
+        """Staff sees all; players see only summonses directed at their persona."""
+        qs = self.queryset
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        # GMs see all (they create and manage summonses).
+        try:
+            user.gm_profile  # noqa: B018
+            return qs
+        except GMProfile.DoesNotExist:
+            pass
+        # Non-staff: scope to the caller's active persona.
+        puppet = getattr(user, "puppet", None)  # noqa: GETATTR_LITERAL
+        if puppet is None:
+            return qs.none()
+        sheet_data = getattr(puppet, "sheet_data", None)  # noqa: GETATTR_LITERAL
+        persona = getattr(sheet_data, "primary_persona", None) if sheet_data is not None else None  # noqa: GETATTR_LITERAL
+        if persona is None:
+            return qs.none()
+        return qs.filter(target_persona=persona)
+
+    def get_permissions(self) -> list:
+        """Create is GM/staff only; list/retrieve/respond are open to authenticated users."""
+        if self.action in ("create", "destroy", "update", "partial_update"):
+            return [IsAuthenticated(), IsGMOrStaff()]
+        return super().get_permissions()
+
+    @extend_schema(
+        request=OfferSummonsCreateSerializer,
+        responses={
+            201: OfferSummonsSerializer,
+            400: OpenApiResponse(description="Validation error."),
+            403: OpenApiResponse(description="Not a GM or staff."),
+        },
+    )
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        from world.npc_services.summons import create_summons  # noqa: PLC0415
+
+        body = OfferSummonsCreateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+
+        offer = NPCServiceOffer.objects.filter(pk=data["offer_id"]).first()
+        if offer is None:
+            msg = "That NPC service offer was not found."
+            raise NotFound(msg)
+        persona = Persona.objects.filter(pk=data["target_persona_id"]).first()
+        if persona is None:
+            msg = "That target persona was not found."
+            raise NotFound(msg)
+
+        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            summons = create_summons(
+                offer,
+                persona,
+                message=data.get("message", ""),
+                expires_at=data.get("expires_at"),
+                created_by=gm_profile,
+            )
+        except DjangoValidationError as exc:
+            raise ValidationError(
+                exc.message_dict if hasattr(exc, "message_dict") else str(exc)
+            ) from exc
+
+        serializer = OfferSummonsSerializer(summons)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        request=SummonsRespondSerializer,
+        responses={
+            200: OpenApiResponse(description="Summons responded to."),
+            400: OpenApiResponse(
+                description="Summons is not pending or risk acknowledgement required."
+            ),
+            404: OpenApiResponse(description="Summons not found."),
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def respond(self, request: Request, pk: int | str | None = None) -> Response:
+        from world.npc_services.summons import respond_to_summons  # noqa: PLC0415
+
+        summons = OfferSummons.objects.filter(pk=pk).first()
+        if summons is None:
+            msg = "That summons was not found."
+            raise NotFound(msg)
+
+        body = SummonsRespondSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+
+        puppet = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        if puppet is None:
+            msg = "No puppeted character — log in and assume a character."
+            raise ValidationError(msg)
+
+        result = respond_to_summons(
+            summons,
+            puppet,
+            accept=body.validated_data["accept"],
+            acknowledge_risk=body.validated_data["acknowledge_risk"],
+        )
+
+        data: dict = {
+            "success": result.success,
+            "message": result.message,
+        }
+        if result.risk_tier is not None:
+            data["risk_tier"] = result.risk_tier
+            data["stake_summaries"] = list(result.stake_summaries)
+            data["requires_risk_acknowledgement"] = True
+        if result.instance_pk is not None:
+            data["instance_pk"] = result.instance_pk
+        return Response(data)

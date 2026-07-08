@@ -8,6 +8,7 @@ from world.npc_services.models import (
     NPCServiceOffer,
     NPCStanding,
     OfferCooldown,
+    OfferSummons,
     PermitOfferDetails,
 )
 
@@ -167,3 +168,48 @@ class InteractionResolveRequestSerializer(serializers.Serializer):
     # #1770 PR4: phase two of the risky-mission opt-in — re-send with True
     # after the gate's informed-consent prompt to accept the danger.
     acknowledge_risk = serializers.BooleanField(default=False)
+
+
+# ---------------------------------------------------------------------------
+# Summons — directed-offer wire shapes (#2050).
+# ---------------------------------------------------------------------------
+
+
+class OfferSummonsSerializer(serializers.ModelSerializer):
+    """Serializer for a directed-offer summons (#2050)."""
+
+    role_name = serializers.CharField(source="offer.role.name", read_only=True)
+    offer_label = serializers.CharField(source="offer.label", read_only=True)
+
+    class Meta:
+        model = OfferSummons
+        fields = [
+            "id",
+            "offer",
+            "offer_label",
+            "role_name",
+            "target_persona",
+            "message",
+            "status",
+            "expires_at",
+            "created_by",
+            "created_at",
+            "resolved_at",
+        ]
+        read_only_fields = ["id", "status", "created_at", "resolved_at", "role_name", "offer_label"]
+
+
+class OfferSummonsCreateSerializer(serializers.Serializer):
+    """POST body for creating a summons (GM/staff only)."""
+
+    offer_id = serializers.IntegerField(min_value=1)
+    target_persona_id = serializers.IntegerField(min_value=1)
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+    expires_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class SummonsRespondSerializer(serializers.Serializer):
+    """POST body for responding to a summons."""
+
+    accept = serializers.BooleanField()
+    acknowledge_risk = serializers.BooleanField(required=False, default=False)

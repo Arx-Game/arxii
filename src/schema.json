@@ -19923,6 +19923,213 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/npc-services/summons/:
+    get:
+      operationId: npc_services_summons_list
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOfferSummonsList'
+          description: ''
+    post:
+      operationId: npc_services_summons_create
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferSummonsCreateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferSummons'
+          description: ''
+        '400':
+          description: Validation error.
+        '403':
+          description: Not a GM or staff.
+  /api/npc-services/summons/{id}/:
+    get:
+      operationId: npc_services_summons_retrieve
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this offer summons.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferSummons'
+          description: ''
+    put:
+      operationId: npc_services_summons_update
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this offer summons.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferSummonsRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferSummons'
+          description: ''
+    patch:
+      operationId: npc_services_summons_partial_update
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this offer summons.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOfferSummonsRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferSummons'
+          description: ''
+    delete:
+      operationId: npc_services_summons_destroy
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this offer summons.
+        required: true
+      tags:
+      - npc-services
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/npc-services/summons/{id}/respond/:
+    post:
+      operationId: npc_services_summons_respond_create
+      description: |-
+        Directed-offer summonses (#2050).
+
+        - GM/staff: create + list all summonses.
+        - Players: list summonses directed at their active persona; respond via
+          the ``respond`` action.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this offer summons.
+        required: true
+      tags:
+      - npc-services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummonsRespondRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Summons responded to.
+        '400':
+          description: Summons is not pending or risk acknowledgement required.
+        '404':
+          description: Summons not found.
   /api/personas/:
     get:
       operationId: personas_list
@@ -42002,6 +42209,125 @@ components:
       - available_at
       - offer
       - persona
+    OfferSummons:
+      type: object
+      description: Serializer for a directed-offer summons (#2050).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        offer:
+          type: integer
+          description: The offer this summons directs at a target.
+        offer_label:
+          type: string
+          readOnly: true
+        role_name:
+          type: string
+          readOnly: true
+        target_persona:
+          type: integer
+          description: The persona this summons is directed at.
+        message:
+          type: string
+          description: IC text — what the servant learns of the master's wish.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/OfferSummonsStatusEnum'
+          readOnly: true
+          default: pending
+          description: |-
+            Lifecycle state of this summons.
+
+            * `pending` - Pending
+            * `accepted` - Accepted
+            * `declined` - Declined
+            * `expired` - Expired
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this summons lapses if unanswered. Null = no expiry.
+        created_by:
+          type: integer
+          nullable: true
+          description: The GM who created this summons. Null for staff-created.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the summons was accepted, declined, or expired.
+      required:
+      - created_at
+      - id
+      - offer
+      - offer_label
+      - resolved_at
+      - role_name
+      - status
+      - target_persona
+    OfferSummonsCreateRequest:
+      type: object
+      description: POST body for creating a summons (GM/staff only).
+      properties:
+        offer_id:
+          type: integer
+          minimum: 1
+        target_persona_id:
+          type: integer
+          minimum: 1
+        message:
+          type: string
+          default: ''
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - offer_id
+      - target_persona_id
+    OfferSummonsRequest:
+      type: object
+      description: Serializer for a directed-offer summons (#2050).
+      properties:
+        offer:
+          type: integer
+          description: The offer this summons directs at a target.
+        target_persona:
+          type: integer
+          description: The persona this summons is directed at.
+        message:
+          type: string
+          description: IC text — what the servant learns of the master's wish.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this summons lapses if unanswered. Null = no expiry.
+        created_by:
+          type: integer
+          nullable: true
+          description: The GM who created this summons. Null for staff-created.
+      required:
+      - offer
+      - target_persona
+    OfferSummonsStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - declined
+      - expired
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `accepted` - Accepted
+        * `declined` - Declined
+        * `expired` - Expired
     Opponent:
       type: object
       description: |-
@@ -44498,6 +44824,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OfferCooldown'
+    PaginatedOfferSummonsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfferSummons'
     PaginatedOrganizationList:
       type: object
       required:
@@ -47508,6 +47857,28 @@ components:
           type: string
           format: date-time
           description: Earliest time `persona` can select this offer again.
+    PatchedOfferSummonsRequest:
+      type: object
+      description: Serializer for a directed-offer summons (#2050).
+      properties:
+        offer:
+          type: integer
+          description: The offer this summons directs at a target.
+        target_persona:
+          type: integer
+          description: The persona this summons is directed at.
+        message:
+          type: string
+          description: IC text — what the servant learns of the master's wish.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When this summons lapses if unanswered. Null = no expiry.
+        created_by:
+          type: integer
+          nullable: true
+          description: The GM who created this summons. Null for staff-created.
     PatchedOutfitRenameRequest:
       type: object
       description: |-
@@ -55614,6 +55985,17 @@ components:
         * `cups` - Cups
         * `wands` - Wands
         * `coins` - Coins
+    SummonsRespondRequest:
+      type: object
+      description: POST body for responding to a summons.
+      properties:
+        accept:
+          type: boolean
+        acknowledge_risk:
+          type: boolean
+          default: false
+      required:
+      - accept
     SystemErrorReportDetail:
       type: object
       description: |-
