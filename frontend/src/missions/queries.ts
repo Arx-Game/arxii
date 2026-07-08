@@ -39,6 +39,7 @@ import {
   patchGiver,
   patchMissionNode,
   patchMissionTemplate,
+  tellTale,
 } from './api';
 import type { PredicateLeaf, PredicateLeafParam, PredicateParamType } from './api';
 export type { PredicateLeaf, PredicateLeafParam, PredicateParamType };
@@ -378,6 +379,15 @@ export function useResolveBeat() {
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
       qc.invalidateQueries({ queryKey: [...missionKeys.all, 'beat'] }).catch(() => {});
     },
+  });
+}
+
+export function useTellTale() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, text }: { instanceId: number; text: string }) =>
+      tellTale(instanceId, text),
+    onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
   });
 }
 

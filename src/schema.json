@@ -17450,6 +17450,33 @@ paths:
           description: Option not live here / run not active.
         '404':
           description: Not a participant / no such mission.
+  /api/missions/journal/{id}/tale/:
+    post:
+      operationId: missions_journal_tale_create
+      description: '#2047 — tell the tale of a completed run.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaleRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: Tale saved.
+        '400':
+          description: Run not terminal / text invalid.
+        '404':
+          description: Not a participant / no such mission.
   /api/missions/journal/opportunities/:
     get:
       operationId: missions_journal_opportunities_retrieve
@@ -39864,7 +39891,13 @@ components:
           readOnly: true
         participant_count:
           type: integer
+        tale:
+          type: string
+          nullable: true
+        can_tell_tale:
+          type: boolean
       required:
+      - can_tell_tale
       - compass_anywhere
       - compass_rooms
       - current_node_flavor
@@ -39877,6 +39910,7 @@ components:
       - pending_invites
       - status
       - summary
+      - tale
       - template_name
     KnownSecret:
       type: object
@@ -56550,6 +56584,16 @@ components:
       - created_at
       - id
       - post
+    TaleRequestRequest:
+      type: object
+      description: POST body for the tale endpoint (#2047).
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+      required:
+      - text
     TargetEffectTypeEnum:
       enum:
       - condition

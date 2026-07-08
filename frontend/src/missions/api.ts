@@ -445,6 +445,26 @@ export async function resolveBeat(
 }
 
 // ---------------------------------------------------------------------------
+// #2047 player tale surface.
+// ---------------------------------------------------------------------------
+
+export async function tellTale(
+  instanceId: number,
+  text: string
+): Promise<{ id: number; tale: string }> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/tale/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (res.status === 400) {
+    throw new ApiValidationError(await res.json());
+  }
+  if (!res.ok) throw new Error('Failed to save your tale');
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // #1036 group beat + #887 invite surface (#2049 frontend).
 // ---------------------------------------------------------------------------
 

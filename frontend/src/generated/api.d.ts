@@ -11292,6 +11292,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/missions/journal/{id}/tale/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description #2047 — tell the tale of a completed run. */
+    post: operations['missions_journal_tale_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/missions/journal/opportunities/': {
     parameters: {
       query?: never;
@@ -22305,6 +22322,8 @@ export interface components {
       compass_anywhere: boolean;
       readonly pending_invites: components['schemas']['PendingMissionInvite'][];
       participant_count: number;
+      tale: string | null;
+      can_tell_tale: boolean;
     };
     /** @description One known secret, from the viewer's side, with locked layers shown as "Unknown". */
     KnownSecret: {
@@ -31313,6 +31332,10 @@ export interface components {
       body: string;
       /** Format: date-time */
       readonly created_at: string;
+    };
+    /** @description POST body for the tale endpoint (#2047). */
+    TaleRequestRequest: {
+      text: string;
     };
     /**
      * @description * `condition` - condition
@@ -47456,6 +47479,44 @@ export interface operations {
         };
       };
       /** @description Option not live here / run not active. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Not a participant / no such mission. */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  missions_journal_tale_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaleRequestRequest'];
+      };
+    };
+    responses: {
+      /** @description Tale saved. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Run not terminal / text invalid. */
       400: {
         headers: {
           [name: string]: unknown;

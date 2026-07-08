@@ -9,11 +9,14 @@
  * IC prose stays qualitative.
  */
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { useState } from 'react';
 
 import { OpportunitiesTab } from '../components/OpportunitiesTab';
 import { PendingInvitesSection } from '../components/PendingInvitesSection';
-import { useJournal } from '../queries';
+import { useJournal, useTellTale } from '../queries';
 import type { JournalEntry } from '../types';
 
 export function JournalPage() {
@@ -102,8 +105,83 @@ function JournalEntryCard({ entry }: { entry: JournalEntry }) {
             </ul>
           </div>
         ) : null}
+        <TaleSection entry={entry} />
       </CardContent>
     </Card>
+  );
+}
+
+function TaleSection({ entry }: { entry: JournalEntry }) {
+  const tellTale = useTellTale();
+  const [text, setText] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  if (entry.tale && !editing) {
+    return (
+      <div data-testid={`tale-${entry.instance_id}`}>
+        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Your tale
+        </div>
+        <p className="mt-1 whitespace-pre-wrap text-sm italic">{entry.tale}</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-1 h-6 text-xs"
+          onClick={() => {
+            setText(entry.tale ?? '');
+            setEditing(true);
+          }}
+        >
+          Edit
+        </Button>
+      </div>
+    );
+  }
+
+  if (!entry.can_tell_tale && !editing) {
+    return null;
+  }
+
+  return (
+    <div data-testid={`tale-editor-${entry.instance_id}`}>
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {entry.tale ? 'Edit your tale' : 'Tell the tale'}
+      </div>
+      <Textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="How did it really happen?"
+        className="mt-1 min-h-24 text-sm"
+        maxLength={5000}
+      />
+      <p className="mt-1 text-xs text-muted-foreground">
+        Your narration is canon by default. Impossible elaborations are braggadocio — handled
+        in-world, never moderated.
+      </p>
+      <Button
+        size="sm"
+        className="mt-2"
+        disabled={!text.trim() || tellTale.isPending}
+        onClick={() => {
+          tellTale.mutate(
+            { instanceId: entry.instance_id, text: text.trim() },
+            {
+              onSuccess: () => {
+                setEditing(false);
+                setText('');
+              },
+            }
+          );
+        }}
+      >
+        {tellTale.isPending ? 'Saving…' : 'Save tale'}
+      </Button>
+      {editing ? (
+        <Button variant="ghost" size="sm" className="mt-2 h-8" onClick={() => setEditing(false)}>
+          Cancel
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
