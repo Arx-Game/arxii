@@ -240,6 +240,34 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     return _assemble_hit_line(head, tail, suffix)
 
 
+def render_combo_finisher_narration(
+    *,
+    combo_name: str,
+    contributor_labels: list[str],
+    target_label: str | None,
+    total_damage: int,
+    signature_clause: str | None = None,
+) -> str:
+    """Render a joint finisher narration for a multi-PC combo.
+
+    Pure function — no DB access, no randomness. Names all contributors and
+    the combo, sums total damage across all contributors' outcomes, and
+    appends an optional signature flourish clause.
+
+    Examples:
+        "Kira and Garruk unleash Firestorm Fusion on the Pyromancer for 85 damage."
+        "Kira, Garruk and Vex unleash Storm Call on the Ogre for 120 damage — their signature move."
+    """
+    actors = _join_labels(contributor_labels)
+    if target_label is None:
+        base = f"{actors} unleash {combo_name}"
+    else:
+        base = f"{actors} unleash {combo_name} on {target_label} for {total_damage} damage"
+    if signature_clause:
+        return f"{base} — {signature_clause}."
+    return f"{base}."
+
+
 def render_flee_outcome_narration(
     *,
     actor_label: str,
