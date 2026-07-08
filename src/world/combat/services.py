@@ -4905,11 +4905,14 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
         return ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+    outcome.participant_id = participant.pk
 
     technique = action.focused_action
     if technique is None:
         # Passives-only round (e.g. flee) — no focused action to resolve.
         return outcome
+
+    outcome.effect_type_id = technique.effect_type_id
 
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL
@@ -6446,6 +6449,79 @@ def _block_if_participant_mid_audere_majora_crossing(encounter: CombatEncounter)
         raise ActionDispatchError(ActionDispatchError.PARTICIPANT_MID_CROSSING)
 
 
+def assess_break_bar(
+    encounter: CombatEncounter,
+    action_outcomes: list[ActionOutcome],
+) -> None:
+    """Assess break-bar damage for all boss opponents with a break bar.
+
+    Called from resolve_round after all actions resolve, before phase
+    transitions. Two damage paths:
+
+    1. Combo path: a landed combo deals break-bar damage equal to
+       ``combo.bonus_damage``. One combo per round counts.
+    2. Distinct-PC distinct-effect-type path: if >=2 distinct PCs dealt
+       damage with >=2 distinct effect_types, deal a flat chip of 1.
+
+    When the bar reaches 0, the vulnerability window opens.
+    """
+    bosses = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+            tier=OpponentTier.BOSS,
+            break_bar_threshold__gt=0,
+            vulnerability_rounds_remaining=0,
+        )
+    )
+    if not bosses:
+        return
+
+    # Minimum distinct PCs and distinct effect types required to chip the bar.
+    _MIN_DISTINCT_FOR_CHIP = 2
+
+    for boss in bosses:
+        bar_damage = 0
+
+        # Combo path: first landed combo this round.
+        for outcome in action_outcomes:
+            if outcome.combo_used is not None and _outcome_damaged_boss(outcome, boss.pk):
+                bar_damage += outcome.combo_used.bonus_damage
+                break
+
+        # Distinct-PC distinct-effect-type path.
+        participant_ids: set[int] = set()
+        effect_type_ids: set[int] = set()
+        for outcome in action_outcomes:
+            if (
+                outcome.entity_type == ENTITY_TYPE_PC
+                and outcome.participant_id is not None
+                and outcome.effect_type_id is not None
+                and _outcome_damaged_boss(outcome, boss.pk)
+            ):
+                participant_ids.add(outcome.participant_id)
+                effect_type_ids.add(outcome.effect_type_id)
+
+        if (
+            len(participant_ids) >= _MIN_DISTINCT_FOR_CHIP
+            and len(effect_type_ids) >= _MIN_DISTINCT_FOR_CHIP
+        ):
+            bar_damage += 1
+
+        if bar_damage > 0:
+            boss.break_bar_current = max(0, boss.break_bar_current - bar_damage)
+            if boss.break_bar_current == 0:
+                boss.vulnerability_rounds_remaining = boss.vulnerability_rounds
+            boss.save(update_fields=["break_bar_current", "vulnerability_rounds_remaining"])
+
+
+def _outcome_damaged_boss(outcome: ActionOutcome, boss_pk: int) -> bool:
+    """Return True if the outcome's damage results include damage to the given boss."""
+    return any(
+        hasattr(r, "opponent_id") and r.opponent_id == boss_pk for r in outcome.damage_results
+    )
+
+
 @transaction.atomic
 def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
     # single-helper-call budget (see _fire_round_start), and the #1899
@@ -6598,6 +6674,9 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_fn,
         offense_check_fn,
     )
+
+    # --- Break-bar assessment (#2016) ---
+    assess_break_bar(encounter, result.action_outcomes)
 
     # --- Post-pass: deferred challenge declarations (in initiative order) ---
     result.challenge_outcomes = _resolve_declared_challenges(
