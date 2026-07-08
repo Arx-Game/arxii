@@ -23511,7 +23511,13 @@ export interface components {
        */
       readonly resolved_at: string | null;
     };
-    /** @description POST body for creating a summons (GM/staff only). */
+    /**
+     * @description POST body for creating a summons (GM/staff only).
+     *
+     *     Validates that the offer and target persona exist and that the offer is
+     *     MISSION-kind. Object-level validation lives here so the view stays thin
+     *     and the serializer is the single authority on input correctness.
+     */
     OfferSummonsCreateRequest: {
       offer_id: number;
       target_persona_id: number;
