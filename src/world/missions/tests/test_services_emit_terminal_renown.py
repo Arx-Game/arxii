@@ -203,3 +203,28 @@ class EmitRenownCriminalTaggingTests(TestCase):
         )
         emit_terminal_renown_awards(instance, route, deed)
         self.assertEqual(DeedCrimeTag.objects.count(), 0)
+
+
+class EmitRenownLegendLinkTests(TestCase):
+    """#2047 — emit_terminal_renown_awards links minted LegendEntry rows to the deed."""
+
+    def test_legend_entries_linked_to_deed(self):
+        instance, route, deed, _ = _make_holder_setup("legend-link-tmpl")
+        MissionRenownAward.objects.create(
+            route=route,
+            magnitude=RenownMagnitude.MODERATE,
+            risk=RenownRisk.LOW,
+            contract_holder_only=True,
+        )
+
+        results = emit_terminal_renown_awards(instance, route, deed)
+
+        self.assertEqual(len(results), 1)
+        self.assertIsNotNone(results[0].legend_entry_id)
+        linked = list(deed.legend_entries.values_list("pk", flat=True))
+        self.assertEqual(linked, [results[0].legend_entry_id])
+
+    def test_no_awards_links_nothing(self):
+        instance, route, deed, _ = _make_holder_setup("legend-link-empty-tmpl")
+        emit_terminal_renown_awards(instance, route, deed)
+        self.assertEqual(deed.legend_entries.count(), 0)

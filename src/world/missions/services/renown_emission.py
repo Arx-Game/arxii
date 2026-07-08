@@ -103,7 +103,20 @@ def emit_terminal_renown_awards(
     # entry born of it BEFORE knowledge grants, so any later spread mints heat.
     _tag_criminal_entries(deed, results)
     _grant_party_witness_knowledge(results, participants)
+    # #2047 — link the minted LegendEntry rows to the deed so tale-time
+    # LegendDeedStory seeding can find them.
+    _link_legend_entries(deed, results)
     return results
+
+
+def _link_legend_entries(deed: MissionDeedRecord, results: list[RenownAwardResult]) -> None:
+    """#2047 — populate ``deed.legend_entries`` from the minted entries."""
+    entry_ids = [r.legend_entry_id for r in results if r.legend_entry_id is not None]
+    if not entry_ids:
+        return
+    from world.societies.models import LegendEntry  # noqa: PLC0415
+
+    deed.legend_entries.set(LegendEntry.objects.filter(pk__in=entry_ids))
 
 
 def _tag_criminal_entries(deed: MissionDeedRecord, results: list[RenownAwardResult]) -> None:
