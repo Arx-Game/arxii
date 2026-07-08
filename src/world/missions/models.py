@@ -928,7 +928,7 @@ class MissionOptionRouteReward(SharedMemoryModel):
             ),
         ]
 
-    def clean(self) -> None:  # noqa: C901 — one branch per sink, grows with the enum
+    def clean(self) -> None:  # noqa: C901, PLR0912 — one branch per sink, grows with the enum
         super().clean()
         set_count = int(self.route_id is not None) + int(self.candidate_id is not None)
         if set_count == 0:
@@ -965,6 +965,18 @@ class MissionOptionRouteReward(SharedMemoryModel):
         if self.sink != DeedRewardSink.FOLLOW_ON_SUMMONS and self.followon_expiry_hours is not None:
             msg = "followon_expiry_hours may only be set when sink=FOLLOW_ON_SUMMONS."
             raise ValidationError(msg)
+        # #2045: PROJECT sink — route-parented only, amount ≥ 1.
+        if self.sink == DeedRewardSink.PROJECT:
+            if self.candidate_id is not None:
+                msg = (
+                    "PROJECT reward lines must be route-parented (candidate-parented "
+                    "lines can be dropped by _terminal_deed's single-deed pick — "
+                    "a pre-existing gap this feature declines to inherit)."
+                )
+                raise ValidationError({"candidate": msg})
+            if self.amount is None or self.amount < 1:
+                msg = "PROJECT reward lines require amount ≥ 1."
+                raise ValidationError({"amount": msg})
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -1195,6 +1207,19 @@ class MissionInstance(SharedMemoryModel):
             "The captive this run aims to free (#931 Phase 4 rescue). Resolves "
             "'where is the captive' through their cell; the success route frees "
             "them. Null for non-rescue runs."
+        ),
+    )
+    target_project = models.ForeignKey(
+        "projects.Project",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Optional: the Project this run advances (#2045). Copied from "
+            "MissionOfferDetails.target_project at issuance (mirrors source_beat). "
+            "SET_NULL on Project delete — a cancelled project unbinds the run; "
+            "report-time payout soft-skips with a notice."
         ),
     )
 
@@ -1706,6 +1731,18 @@ class MissionDeedRewardLine(SharedMemoryModel):
         max_length=200,
         blank=True,
         help_text="Optional reference/discriminator (e.g., a rumor key).",
+    )
+    project_contribution = models.ForeignKey(
+        "projects.Contribution",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Set when sink=PROJECT: the Contribution row this reward line "
+            "created on the bound project (#2045). Provenance FK "
+            "(specific→general per ADR-0010/0085). SET_NULL on Contribution delete."
+        ),
     )
 
     def __str__(self) -> str:

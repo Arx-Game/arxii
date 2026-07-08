@@ -22565,6 +22565,8 @@ export interface components {
       completed_at?: string | null;
       /** @description Optional: the stories Beat this run resolves. When set, the stakes contract locks at acceptance (activate_stakes_for_instance) and the Beat completes at terminal (on_mission_complete_for_beat). SET_NULL on Beat delete. For offer-issued runs, set from MissionOfferDetails.source_beat at issue_mission (#1780). */
       source_beat?: number | null;
+      /** @description Optional: the Project this run advances (#2045). Copied from MissionOfferDetails.target_project at issuance (mirrors source_beat). SET_NULL on Project delete — a cancelled project unbinds the run; report-time payout soft-skips with a notice. */
+      target_project?: number | null;
     };
     /**
      * @description * `active` - Active
@@ -22722,6 +22724,8 @@ export interface components {
       mission_template: number;
       /** @description Optional: the staked Beat this offer resolves. When set, accepting the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4 stakes gate + contract activation. Independent of Beat.required_mission (ADR-0010). SET_NULL on Beat delete. */
       source_beat?: number | null;
+      /** @description Optional: the live Project this offer's missions advance (#2045). When set, accepting the offer copies it onto MissionInstance.target_project at issuance — exactly how source_beat works. SET_NULL on Project delete (a cancelled project unbinds the offer; issuing then refuses). */
+      target_project?: number | null;
       /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
       weight?: number | null;
       /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
@@ -22744,6 +22748,8 @@ export interface components {
       mission_template: number;
       /** @description Optional: the staked Beat this offer resolves. When set, accepting the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4 stakes gate + contract activation. Independent of Beat.required_mission (ADR-0010). SET_NULL on Beat delete. */
       source_beat?: number | null;
+      /** @description Optional: the live Project this offer's missions advance (#2045). When set, accepting the offer copies it onto MissionInstance.target_project at issuance — exactly how source_beat works. SET_NULL on Project delete (a cancelled project unbinds the offer; issuing then refuses). */
+      target_project?: number | null;
       /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
       weight?: number | null;
       /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
@@ -22901,6 +22907,7 @@ export interface components {
        *     * `beat` - Beat
        *     * `item` - Item
        *     * `summons` - Follow-On Summons
+       *     * `project` - Project
        */
       sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
@@ -22953,6 +22960,7 @@ export interface components {
        *     * `beat` - Beat
        *     * `item` - Item
        *     * `summons` - Follow-On Summons
+       *     * `project` - Project
        */
       sink: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */
@@ -22975,6 +22983,7 @@ export interface components {
      *     * `beat` - Beat
      *     * `item` - Item
      *     * `summons` - Follow-On Summons
+     *     * `project` - Project
      * @enum {string}
      */
     MissionOptionRouteRewardSinkEnum:
@@ -22985,7 +22994,8 @@ export interface components {
       | 'crime_watch'
       | 'beat'
       | 'item'
-      | 'summons';
+      | 'summons'
+      | 'project';
     /**
      * @description * `authored` - Authored
      *     * `challenge` - Challenge
@@ -26766,6 +26776,8 @@ export interface components {
       mission_template?: number;
       /** @description Optional: the staked Beat this offer resolves. When set, accepting the offer copies it onto MissionInstance.source_beat, arming the #1770-PR4 stakes gate + contract activation. Independent of Beat.required_mission (ADR-0010). SET_NULL on Beat delete. */
       source_beat?: number | null;
+      /** @description Optional: the live Project this offer's missions advance (#2045). When set, accepting the offer copies it onto MissionInstance.target_project at issuance — exactly how source_beat works. SET_NULL on Project delete (a cancelled project unbinds the offer; issuing then refuses). */
+      target_project?: number | null;
       /** @description Per-offer weight override for POOL draw. Null falls back to MissionTemplate.base_weight. */
       weight?: number | null;
       /** @description Predicate JSON AND-composed with MissionTemplate.availability_rule and NPCServiceOffer.eligibility_rule at evaluation time. Empty dict = no additional gate. */
@@ -26863,6 +26875,7 @@ export interface components {
        *     * `beat` - Beat
        *     * `item` - Item
        *     * `summons` - Follow-On Summons
+       *     * `project` - Project
        */
       sink?: components['schemas']['MissionOptionRouteRewardSinkEnum'];
       /** @description Numeric magnitude of the broadcast reward, when applicable. */

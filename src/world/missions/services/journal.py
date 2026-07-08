@@ -63,6 +63,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
             "instance__template",
             "instance__current_node",
             "instance__anchor_room__objectdb",
+            "instance__target_project",
         )
         .prefetch_related("instance__current_node__locations__objectdb")  # noqa: PREFETCH_STRING
         .order_by("instance_id", "pk")
@@ -76,6 +77,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
     pending_invites = _pending_invites_for(character)
     pending_summons = _pending_summons_for(character)
     participant_counts = _participant_counts(instance_ids)
+    project_grants = _project_grants_by_instance(instance_ids)
 
     return [
         _journal_entry_for(
@@ -85,6 +87,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
             pending_invites,
             pending_summons,
             participant_counts,
+            project_grants,
         )
         for part in participations
     ]
@@ -162,6 +165,27 @@ def _participant_counts(instance_ids: list[int]) -> dict[int, int]:
     return {row["instance_id"]: row["count"] for row in rows}
 
 
+def _project_grants_by_instance(instance_ids: list[int]) -> dict[int, int]:
+    """Total PROJECT progress granted per instance (one query for the whole journal, #2045)."""
+    from django.db.models import Sum  # noqa: PLC0415
+
+    from world.missions.constants import DeedRewardKind, DeedRewardSink  # noqa: PLC0415
+    from world.missions.models import MissionDeedRewardLine  # noqa: PLC0415
+
+    if not instance_ids:
+        return {}
+    rows = (
+        MissionDeedRewardLine.objects.filter(
+            deed__instance_id__in=instance_ids,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+        )
+        .values("deed__instance_id")
+        .annotate(total=Sum("amount"))
+    )
+    return {row["deed__instance_id"]: row["total"] for row in rows}
+
+
 def _deeds_by_instance(
     instance_ids: list[int],
     character: ObjectDB,
@@ -216,6 +240,7 @@ def _journal_entry_for(  # noqa: PLR0913
     pending_invites: tuple[JournalInvite, ...],
     pending_summons: tuple[JournalSummons, ...],
     participant_counts: dict[int, int],
+    project_grants: dict[int, int],
 ) -> JournalEntry:
     """Build a single :class:`JournalEntry` from a participation row."""
     instance = part.instance
@@ -223,6 +248,14 @@ def _journal_entry_for(  # noqa: PLR0913
     compass_rooms, compass_anywhere = _compass_for(
         instance, current, options_by_node.get(current.pk, []) if current else []
     )
+    project = instance.target_project
+    target_project_name = None
+    target_project_progress = None
+    target_project_threshold = None
+    if project is not None:
+        target_project_name = project.description or f"Project #{project.pk}"
+        target_project_progress = project.current_progress
+        target_project_threshold = project.threshold_target
     return JournalEntry(
         instance_id=instance.pk,
         template_name=instance.template.name,
@@ -238,6 +271,10 @@ def _journal_entry_for(  # noqa: PLR0913
         pending_invites=pending_invites,
         pending_summons=pending_summons,
         participant_count=participant_counts.get(instance.pk, 1),
+        target_project_name=target_project_name,
+        target_project_progress=target_project_progress,
+        target_project_threshold=target_project_threshold,
+        target_project_granted=project_grants.get(instance.pk, 0),
     )
 
 

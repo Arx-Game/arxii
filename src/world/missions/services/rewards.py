@@ -33,7 +33,7 @@ from world.currency.services import deliver_mission_money
 from world.missions.constants import DeedRewardKind, DeedRewardSink, RewardGroupRule
 from world.missions.integrations import beat_stub, crime_watch, money_stub, rumor_stub
 from world.missions.models import MissionDeedRewardLine, MissionRewardQueue
-from world.missions.types import ApplyDeedRewardsResult, StubCallRecord
+from world.missions.types import ApplyDeedRewardsResult, ProjectSkipRecord, StubCallRecord
 
 logger = logging.getLogger("world.missions.rewards")
 
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         MissionOptionRouteReward,
         MissionParticipant,
     )
+    from world.scenes.models import Persona
 
 
 class MissionRewardRoutingError(Exception):
@@ -334,6 +335,7 @@ def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind
     line: MissionDeedRewardLine,
     enqueued: list[MissionRewardQueue],
     stub_calls: list[StubCallRecord],
+    project_skips: list[ProjectSkipRecord],
     *,
     skip_unbuilt: bool = False,
     room: ObjectDB | None = None,
@@ -400,9 +402,122 @@ def _route_line(  # noqa: PLR0913, PLR0911 — one early-return branch per (kind
         _route_follow_on_summons(line)
         return
 
+    # #2045: PROJECT sink — advance the bound project or soft-skip with notice.
+    if kind == DeedRewardKind.IMMEDIATE and sink == DeedRewardSink.PROJECT:
+        _route_project_line(deed, line, project_skips)
+        return
+
     # Anything else is an author error — the (kind, sink) pair has no
     # routing target. Raise loudly so authoring tools can surface it.
     raise MissionRewardRoutingError(kind=kind, sink=sink, line_pk=line.pk)
+
+
+def _route_project_line(
+    deed: MissionDeedRecord,
+    line: MissionDeedRewardLine,
+    project_skips: list[ProjectSkipRecord],
+) -> None:
+    """Route a PROJECT reward line: advance the bound project or soft-skip (#2045).
+
+    Follows the CHECK precedent: record ``Contribution(kind=MISSION)`` via
+    ``add_contribution``, then call ``maybe_complete_immediately`` (post-commit).
+    Soft-skips (with notice) when the project is non-ACTIVE or the FK has gone
+    null — the player already did the work; no-silent-drop is satisfied by
+    the explicit notice.
+    """
+    from world.projects.constants import ContributionKind  # noqa: PLC0415
+    from world.projects.services import (  # noqa: PLC0415
+        ProjectNotActiveError,
+        add_contribution,
+        maybe_complete_immediately,
+    )
+
+    instance = deed.instance
+    project = instance.target_project
+
+    if project is None:
+        logger.info(
+            "apply_deed_rewards: PROJECT line pk=%d has no bound project "
+            "(instance.target_project is null) — soft-skipping (#2045).",
+            line.pk,
+        )
+        project_skips.append(
+            ProjectSkipRecord(
+                line_id=line.pk,
+                amount=line.amount or 0,
+                project_name=None,
+                reason="the project has already concluded — your contribution finds no home",
+            )
+        )
+        return
+
+    try:
+        contributor_persona = _resolve_contributor_persona(deed, line)
+        if contributor_persona is None:
+            logger.warning(
+                "apply_deed_rewards: PROJECT line pk=%d could not resolve a "
+                "contributor persona — soft-skipping (#2045).",
+                line.pk,
+            )
+            project_skips.append(
+                ProjectSkipRecord(
+                    line_id=line.pk,
+                    amount=line.amount or 0,
+                    project_name=project.description or f"Project #{project.pk}",
+                    reason="no contributor persona could be resolved for this contribution",
+                )
+            )
+            return
+        contribution = add_contribution(
+            project=project,
+            contributor_persona=contributor_persona,
+            kind=ContributionKind.MISSION,
+            ap_amount=line.amount,
+        )
+    except ProjectNotActiveError:
+        logger.info(
+            "apply_deed_rewards: PROJECT line pk=%d bound to non-ACTIVE "
+            "project #%d — soft-skipping (#2045).",
+            line.pk,
+            project.pk,
+        )
+        project_skips.append(
+            ProjectSkipRecord(
+                line_id=line.pk,
+                amount=line.amount or 0,
+                project_name=project.description or f"Project #{project.pk}",
+                reason="the project has already concluded — your contribution finds no home",
+            )
+        )
+        return
+
+    # Link the provenance FK (specific→general per ADR-0010/0085).
+    line.project_contribution = contribution
+    line.save(update_fields=["project_contribution"])
+
+    # Post-commit: instant-completion kinds resolve the moment their threshold is met.
+    maybe_complete_immediately(project)
+
+
+def _resolve_contributor_persona(
+    deed: MissionDeedRecord, line: MissionDeedRewardLine
+) -> Persona | None:
+    """Resolve the persona to credit for a PROJECT contribution (#2045).
+
+    contract_holder_only → the holder's persona via the established resolver
+    (accepted_as_persona / primary_persona pattern from renown_emission.py).
+    Broadcast → the recipient character's primary persona.
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    instance = deed.instance
+    if instance.accepted_as_persona_id is not None:
+        return instance.accepted_as_persona
+    return Persona.objects.filter(
+        character_sheet__character=line.recipient,
+        persona_type=PersonaType.PRIMARY,
+    ).first()
 
 
 def _route_follow_on_summons(line: MissionDeedRewardLine) -> None:
@@ -549,6 +664,7 @@ def apply_deed_rewards(
 
     enqueued: list[MissionRewardQueue] = []
     stub_calls: list[StubCallRecord] = []
+    project_skips: list[ProjectSkipRecord] = []
 
     with transaction.atomic():
         for line in lines:
@@ -557,6 +673,7 @@ def apply_deed_rewards(
                 line,
                 enqueued,
                 stub_calls,
+                project_skips,
                 skip_unbuilt=skip_unbuilt,
                 room=room,
                 skip_criminal=skip_criminal,
@@ -566,6 +683,7 @@ def apply_deed_rewards(
         enqueued=tuple(enqueued),
         stub_calls=tuple(stub_calls),
         errors=(),
+        project_skips=tuple(project_skips),
     )
 
 

@@ -92,6 +92,10 @@ def add_contribution(  # noqa: PLR0913
     elif kind == ContributionKind.ITEM:
         # Placeholder: 1 progress per item. Per-kind details may override.
         progress_delta = 1
+    elif kind == ContributionKind.MISSION and ap_amount is not None:
+        # MISSION contributions carry the progress amount in ap_amount
+        # (the mission reward line's ``amount`` field, #2045).
+        progress_delta = ap_amount
     # CHECK contributions have their progress applied by the cron scan
     # after the check outcome is resolved.
 

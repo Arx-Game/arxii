@@ -120,6 +120,14 @@ class CmdMission(ArxCommand):
                 lines.append(
                     f"  [#{entry.instance_id}] {entry.template_name} ({entry.status}){node}"
                 )
+                if entry.target_project_name is not None:
+                    progress = entry.target_project_progress or 0
+                    threshold = entry.target_project_threshold or "?"
+                    granted = entry.target_project_granted
+                    lines.append(
+                        f"    Advances: {entry.target_project_name} "
+                        f"({progress}/{threshold}, +{granted} this run)"
+                    )
         self._append_pending_invites(lines)
         self._append_pending_summonses(lines)
         self.msg("\n".join(lines))

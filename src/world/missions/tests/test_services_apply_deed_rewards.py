@@ -405,3 +405,101 @@ class ApplyDeedRewardsFollowOnSummonsTests(TestCase):
         upper = after + timedelta(hours=24, minutes=1)
         self.assertGreaterEqual(summons.expires_at, lower)
         self.assertLessEqual(summons.expires_at, upper)
+
+
+class ProjectSinkTests(TestCase):
+    """PROJECT sink routing in apply_deed_rewards (#2045)."""
+
+    def setUp(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.projects.constants import (
+            CompletionMode,
+            ProjectKind,
+            ProjectStatus,
+        )
+        from world.projects.factories import ProjectFactory
+
+        money_stub.clear_calls()
+        beat_stub.clear_calls()
+        self.sheet = CharacterSheetFactory()
+        self.actor = self.sheet.character
+        self.persona = self.sheet.primary_persona
+        self.deed = MissionDeedRecordFactory(actor=self.actor)
+        # Set accepted_as_persona on the instance so _resolve_contributor_persona resolves.
+        self.deed.instance.accepted_as_persona = self.persona
+        self.deed.instance.save(update_fields=["accepted_as_persona"])
+        self.project = ProjectFactory(
+            status=ProjectStatus.ACTIVE,
+            completion_mode=CompletionMode.SINGLE_THRESHOLD,
+            kind=ProjectKind.RESEARCH,
+            threshold_target=100,
+            current_progress=0,
+            time_limit=timezone.now() + timedelta(days=30),
+            description="Restore the Aqueduct",
+        )
+
+    def test_project_line_advances_project(self) -> None:
+        """An IMMEDIATE/PROJECT line creates a MISSION contribution and advances the project."""
+        from world.projects.constants import ContributionKind
+        from world.projects.models import Contribution
+
+        line = MissionDeedRewardLineFactory(
+            deed=self.deed,
+            recipient=self.actor,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=10,
+        )
+        self.deed.instance.target_project = self.project
+        self.deed.instance.save(update_fields=["target_project"])
+
+        result = apply_deed_rewards(self.deed)
+
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.current_progress, 10)
+        self.assertEqual(len(result.project_skips), 0)
+        contrib = Contribution.objects.get(project=self.project)
+        self.assertEqual(contrib.kind, ContributionKind.MISSION)
+        self.assertEqual(contrib.ap_amount, 10)
+        line.refresh_from_db()
+        self.assertEqual(line.project_contribution, contrib)
+
+    def test_project_line_soft_skips_non_active_project(self) -> None:
+        """A PROJECT line soft-skips when the project is COMPLETED (no raise)."""
+        from world.projects.constants import ProjectStatus
+
+        self.project.status = ProjectStatus.COMPLETED
+        self.project.save(update_fields=["status"])
+        MissionDeedRewardLineFactory(
+            deed=self.deed,
+            recipient=self.actor,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=10,
+        )
+        self.deed.instance.target_project = self.project
+        self.deed.instance.save(update_fields=["target_project"])
+
+        result = apply_deed_rewards(self.deed)
+
+        self.assertEqual(len(result.project_skips), 1)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.current_progress, 0)
+
+    def test_project_line_soft_skips_null_project(self) -> None:
+        """A PROJECT line with no bound project soft-skips (not raise)."""
+        MissionDeedRewardLineFactory(
+            deed=self.deed,
+            recipient=self.actor,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=10,
+        )
+        # instance.target_project is None by default
+        result = apply_deed_rewards(self.deed)
+        self.assertEqual(len(result.project_skips), 1)
+        self.assertIsNone(result.project_skips[0].project_name)

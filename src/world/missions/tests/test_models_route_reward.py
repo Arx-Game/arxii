@@ -373,3 +373,40 @@ class MissionOptionRouteRewardFollowOnSummonsTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             reward.clean()
+
+
+class ProjectSinkValidationTests(TestCase):
+    """PROJECT sink validation: route-parented only, amount ≥ 1 (#2045)."""
+
+    def test_project_sink_rejects_candidate_parent(self) -> None:
+        from world.missions.factories import (
+            MissionOptionRouteCandidateFactory,
+        )
+
+        candidate = MissionOptionRouteCandidateFactory()
+        reward = MissionOptionRouteRewardFactory.build(
+            candidate=candidate,
+            route=None,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=10,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_project_sink_requires_amount(self) -> None:
+        reward = MissionOptionRouteRewardFactory.build(
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=None,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_project_sink_route_parented_with_amount_is_valid(self) -> None:
+        reward = MissionOptionRouteRewardFactory(
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.PROJECT,
+            amount=10,
+        )
+        reward.clean()  # should not raise

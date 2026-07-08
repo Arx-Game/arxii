@@ -459,6 +459,7 @@ class MissionInstanceSerializer(serializers.ModelSerializer):
             "started_at",
             "completed_at",
             "source_beat",
+            "target_project",
         ]
         read_only_fields = ["id", "started_at"]
 

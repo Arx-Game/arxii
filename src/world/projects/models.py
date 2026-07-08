@@ -183,8 +183,8 @@ class Contribution(SharedMemoryModel):
             ContributionKind.ITEM: "item_instance",
             ContributionKind.CHECK: "check_outcome",
         }
-        required = required_field_for_kind[self.kind]
-        if getattr(self, required) is None:
+        required = required_field_for_kind.get(self.kind)
+        if required is not None and getattr(self, required) is None:
             msg = f"Contribution kind={self.kind} requires {required} to be set."
             raise ValidationError({required: msg})
 

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.missions.models import MissionInvite, MissionTemplate
+    from world.projects.models import Project
     from world.scenes.models import Persona
 
 
@@ -40,6 +41,23 @@ def _entry_node(template: MissionTemplate) -> MissionNode:
     and surfaces here as ``MissionNode.DoesNotExist`` — loud, not silent.
     """
     return MissionNode.objects.get(template=template, is_entry=True)
+
+
+def _template_has_project_lines(template: MissionTemplate) -> bool:
+    """True if any route-parented reward template on this template uses sink=PROJECT (#2045).
+
+    Candidate-parented PROJECT lines are rejected by clean(), so only route-parented
+    lines can exist. Used by the issue-time refusal gate: a template carrying PROJECT
+    reward lines must not issue an instance with no bound project.
+    """
+    from world.missions.constants import DeedRewardSink  # noqa: PLC0415
+    from world.missions.models import MissionOptionRouteReward  # noqa: PLC0415
+
+    return MissionOptionRouteReward.objects.filter(
+        sink=DeedRewardSink.PROJECT,
+        route__isnull=False,
+        route__option__node__template=template,
+    ).exists()
 
 
 def anchor_room_for(character: ObjectDB) -> RoomProfile | None:
@@ -61,19 +79,36 @@ def anchor_room_for(character: ObjectDB) -> RoomProfile | None:
 
 
 @transaction.atomic
-def staff_assign_mission(template: MissionTemplate, character: ObjectDB) -> MissionInstance:
+def staff_assign_mission(
+    template: MissionTemplate,
+    character: ObjectDB,
+    *,
+    project: Project | None = None,
+) -> MissionInstance:
     """Staff-power: drop a mission on a character without a giver context.
 
     Bypasses all availability filters (predicate / cooldown / level band /
     access tier). Used by the staff-assign action so operators can hand-
     place missions for testing, narrative reasons, or recovery scenarios.
 
+    ``project`` optionally binds the run to a live Project (#2045) — mirrors
+    how MissionOfferDetails.target_project binds offer-issued runs. The GM
+    assignment path (#2048's ``gm_assign_mission``) will take the same kwarg;
+    coordinated in whichever PR lands second.
+
     Wrapped in ``@transaction.atomic`` so a failure in ``enter_node`` rolls
     back the half-created MissionInstance + MissionParticipant.
     """
+    if project is None and _template_has_project_lines(template):
+        msg = (
+            f"Template '{template.name}' has PROJECT reward lines but no project "
+            "is bound — refusing to issue an unbound instance (#2045)."
+        )
+        raise ValueError(msg)
     instance = MissionInstance.objects.create(
         template=template,
         anchor_room=anchor_room_for(character),
+        target_project=project,
     )
     MissionParticipant.objects.create(
         instance=instance,

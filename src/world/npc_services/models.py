@@ -499,6 +499,20 @@ class MissionOfferDetails(SharedMemoryModel):
             "Beat.required_mission (ADR-0010). SET_NULL on Beat delete."
         ),
     )
+    target_project = models.ForeignKey(
+        "projects.Project",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Optional: the live Project this offer's missions advance (#2045). "
+            "When set, accepting the offer copies it onto MissionInstance."
+            "target_project at issuance — exactly how source_beat works. "
+            "SET_NULL on Project delete (a cancelled project unbinds the offer; "
+            "issuing then refuses)."
+        ),
+    )
     weight = models.PositiveIntegerField(
         null=True,
         blank=True,
