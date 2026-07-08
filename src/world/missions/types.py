@@ -156,6 +156,8 @@ class JournalEntry:
     target_project_granted: int = 0
     source_beat_story_title: str | None = None
     source_beat_hint: str | None = None
+    tale: str | None = None  # the participant's authored epilogue, if any (#2047)
+    can_tell_tale: bool = False  # run is terminal and tale hasn't been written (#2047)
 
 
 @dataclass(frozen=True)

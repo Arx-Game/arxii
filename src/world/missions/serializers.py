@@ -572,6 +572,8 @@ class JournalEntrySerializer(serializers.Serializer):
     compass_anywhere = serializers.BooleanField()
     pending_invites = serializers.SerializerMethodField()
     participant_count = serializers.IntegerField()
+    tale = serializers.CharField(allow_null=True)
+    can_tell_tale = serializers.BooleanField()
 
     @extend_schema_field(PendingMissionInviteSerializer(many=True))
     def get_pending_invites(self, obj: object) -> list[dict]:
