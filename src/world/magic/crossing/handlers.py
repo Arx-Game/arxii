@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from world.classes.services import is_crossing_level
 from world.magic.constants import TargetKind
 from world.magic.crossing.ceremony import CeremonyNarrative, execute_ceremony_beat
 
@@ -189,12 +190,16 @@ def _execute_variant_beat(
 class TechniqueCrossingHandler:
     """TECHNIQUE thread crossing handler.
 
-    Executes a ceremony beat at crossings so the threshold isn't silent. The
-    signature-bonus gating itself is subissue #1988. ADR-0072 establishes that
-    TECHNIQUE signatures are additive flourishes, not discovered variants — so
-    this handler does NOT use ``AbstractSpecializedVariant``.
+    Fires a narrative-only beat at the first crossing (level 3) so the player
+    knows they can now sign their technique. The real ceremony (discovery) fires
+    at selection time, not at the crossing — driven by the bonus's
+    ``discovery_achievement`` FK via ``execute_ceremony_beat``. Higher crossings
+    produce no beat; the player discovers new options by seeing new bonuses appear
+    in ``signature list`` as their thread deepens.
 
-    The narrative body is generic until #1988 refines it.
+    ADR-0072 establishes that TECHNIQUE signatures are additive flourishes, not
+    discovered variants — so this handler does NOT use
+    ``AbstractSpecializedVariant``.
     """
 
     target_kind = TargetKind.TECHNIQUE
@@ -203,14 +208,20 @@ class TechniqueCrossingHandler:
         if new_level <= starting_level:
             return
 
-        # No achievement/codex authored for technique crossings yet — the
-        # signature surface (#1988) will supply them. For now this is a
-        # debug-level log so the crossing is observable without side effects.
-        logger.debug(
-            "TECHNIQUE thread crossing: %s levels %d→%d (signature gating in #1988)",
-            thread,
-            starting_level,
-            new_level,
+        # Only fire at the first crossing (level 3) — the "you may now sign" moment.
+        # Higher crossings don't need a beat; the discovery fires on selection.
+        if not is_crossing_level(new_level) or new_level != 3:  # noqa: PLR2004 — first crossing
+            return
+
+        sheet: CharacterSheet = thread.owner
+        execute_ceremony_beat(
+            sheet=sheet,
+            narrative=CeremonyNarrative(
+                personal_body=(
+                    "Your technique thread has crossed the first threshold. "
+                    "You may now sign it with a signature bonus (use 'signature set')."
+                ),
+            ),
         )
 
 

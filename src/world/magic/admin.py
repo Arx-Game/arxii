@@ -950,10 +950,20 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
     profiles apply in combat casts only; applied conditions are fully wired.
     """
 
-    list_display = ["name", "required_facet", "required_resonance", "flat_intensity_delta"]
-    list_filter = ["required_facet", "required_resonance"]
+    list_display = [
+        "name",
+        "required_facet",
+        "required_resonance",
+        "flat_intensity_delta",
+        "min_crossing_level",
+    ]
+    list_filter = ["required_facet", "required_resonance", "min_crossing_level"]
     search_fields = ["name", "narrative_snippet"]
-    autocomplete_fields = ["required_facet", "required_resonance"]
+    autocomplete_fields = [
+        "required_facet",
+        "required_resonance",
+        "discovery_achievement",
+    ]
     inlines = [
         SignatureMotifBonusCapabilityGrantInline,
         SignatureMotifBonusDamageProfileInline,

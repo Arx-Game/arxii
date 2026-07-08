@@ -85,6 +85,7 @@ class SignatureViewSetTestBase(TestCase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=self.technique,
+            level=3,
         )
         self.sheet.character.threads.invalidate()
 
@@ -180,6 +181,7 @@ class SignatureSetEndpointTests(SignatureViewSetTestBase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=other_technique,
+            level=3,
         )
         try:
             resp = self._post_set(

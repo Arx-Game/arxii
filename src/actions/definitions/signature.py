@@ -25,6 +25,8 @@ from actions.base import Action
 from actions.types import ActionResult, TargetType
 from world.magic.exceptions import (
     NotATechniqueThread,
+    SignatureBelowCrossing,
+    SignatureBonusLocked,
     SignatureBonusNotAvailable,
     TechniqueNotOwned,
 )
@@ -33,7 +35,13 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
-_SIGNATURE_SET_EXCEPTIONS = (NotATechniqueThread, SignatureBonusNotAvailable, TechniqueNotOwned)
+_SIGNATURE_SET_EXCEPTIONS = (
+    NotATechniqueThread,
+    SignatureBelowCrossing,
+    SignatureBonusLocked,
+    SignatureBonusNotAvailable,
+    TechniqueNotOwned,
+)
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
 _MSG_OPERATION_FAILED = "Operation failed."
 

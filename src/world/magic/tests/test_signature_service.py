@@ -39,12 +39,16 @@ from world.traits.factories import TraitFactory
 
 
 def _make_technique_thread(sheet, technique, resonance):
-    """Create a TECHNIQUE-kind thread for ``sheet`` anchored to ``technique``."""
+    """Create a TECHNIQUE-kind thread for ``sheet`` anchored to ``technique``.
+
+    Defaults to level 3 (the first crossing) so signature selection is unlocked.
+    """
     return Thread.objects.create(
         owner=sheet,
         resonance=resonance,
         target_kind=TargetKind.TECHNIQUE,
         target_technique=technique,
+        level=3,
     )
 
 
@@ -65,6 +69,12 @@ class AvailableSignatureBonusesTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            GiftFactory,
+            TechniqueFactory,
+        )
+
         cls.sheet = CharacterSheetFactory()
         cls.motif = MotifFactory(character=cls.sheet)
         cls.resonance = ResonanceFactory()
@@ -72,6 +82,11 @@ class AvailableSignatureBonusesTests(TestCase):
         # Bind resonance + facet to the motif.
         cls.motif_res = MotifResonanceFactory(motif=cls.motif, resonance=cls.resonance)
         MotifResonanceAssociationFactory(motif_resonance=cls.motif_res, facet=cls.facet)
+
+        # A technique + CharacterTechnique for thread-filter tests.
+        cls.gift = GiftFactory()
+        cls.technique = TechniqueFactory(gift=cls.gift, level=1, damage_profile=False)
+        CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
 
         # A bonus the character qualifies for (facet gate).
         cls.qualifying_bonus = SignatureMotifBonus.objects.create(
@@ -112,6 +127,65 @@ class AvailableSignatureBonusesTests(TestCase):
         self.assertIsInstance(result, list)
         for item in result:
             self.assertIsInstance(item, SignatureMotifBonus)
+
+    def test_filters_by_min_crossing_level_when_thread_given(self) -> None:
+        """Bonuses with min_crossing_level > thread.level are excluded."""
+        from world.magic.constants import TargetKind
+        from world.magic.models import Thread
+
+        locked_bonus = SignatureMotifBonus.objects.create(
+            name="Locked Crossing Bonus",
+            required_resonance=self.resonance,
+            min_crossing_level=6,
+        )
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            level=3,
+        )
+        try:
+            result = available_signature_bonuses(self.sheet, thread=thread)
+            self.assertIn(self.qualifying_bonus, result)
+            self.assertIn(self.qualifying_resonance_bonus, result)
+            self.assertNotIn(locked_bonus, result)
+        finally:
+            locked_bonus.delete()
+            thread.delete()
+
+    def test_filters_by_resonance_when_thread_given(self) -> None:
+        """Bonuses with required_resonance not matching thread.resonance are excluded."""
+        from world.magic.constants import TargetKind
+        from world.magic.models import Thread
+
+        other_resonance = ResonanceFactory()
+        mismatched_bonus = SignatureMotifBonus.objects.create(
+            name="Mismatched Resonance Bonus",
+            required_resonance=other_resonance,
+            min_crossing_level=3,
+        )
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            level=3,
+        )
+        try:
+            result = available_signature_bonuses(self.sheet, thread=thread)
+            self.assertIn(self.qualifying_bonus, result)
+            self.assertNotIn(mismatched_bonus, result)
+        finally:
+            mismatched_bonus.delete()
+            thread.delete()
+
+    def test_no_thread_param_returns_all_qualifying_backward_compatible(self) -> None:
+        """available_signature_bonuses(sheet) with no thread returns all Motif-qualifying."""
+        result = available_signature_bonuses(self.sheet)
+        self.assertIn(self.qualifying_bonus, result)
+        self.assertIn(self.qualifying_resonance_bonus, result)
+        self.assertNotIn(self.non_qualifying_bonus, result)
 
 
 class SetSignatureBonusTests(TestCase):
@@ -212,6 +286,7 @@ class SetSignatureBonusTests(TestCase):
             resonance=self.resonance,
             target_kind=TargetKind.TECHNIQUE,
             target_technique=other_technique,
+            level=3,
         )
         try:
             with self.assertRaises(TechniqueNotOwned):
@@ -236,6 +311,73 @@ class SetSignatureBonusTests(TestCase):
         self.assertEqual(result.signature_bonus_id, second_bonus.pk)
         refreshed = Thread.objects.get(pk=self.technique_thread.pk)
         self.assertEqual(refreshed.signature_bonus_id, second_bonus.pk)
+
+    def test_set_raises_signature_below_crossing_for_low_level_thread(self) -> None:
+        """SignatureBelowCrossing raised when thread.level < 3 (first crossing)."""
+        from world.magic.exceptions import SignatureBelowCrossing
+
+        # Explicitly set below the first crossing.
+        self.technique_thread.level = 0
+        self.technique_thread.save(update_fields=["level"])
+        with self.assertRaises(SignatureBelowCrossing):
+            set_signature_bonus(self.technique_thread, self.bonus)
+
+    def test_set_succeeds_when_thread_at_level_3(self) -> None:
+        """set_signature_bonus succeeds when thread.level >= 3."""
+        self.technique_thread.level = 3
+        self.technique_thread.save(update_fields=["level"])
+        result = set_signature_bonus(self.technique_thread, self.bonus)
+        self.assertEqual(result.signature_bonus_id, self.bonus.pk)
+
+    def test_set_raises_signature_bonus_locked_when_bonus_requires_higher_crossing(self) -> None:
+        """SignatureBonusLocked raised when bonus.min_crossing_level > thread.level."""
+        from world.magic.exceptions import SignatureBonusLocked
+
+        self.technique_thread.level = 3
+        self.technique_thread.save(update_fields=["level"])
+        locked_bonus = SignatureMotifBonus.objects.create(
+            name="Locked Bonus",
+            required_facet=self.facet,
+            min_crossing_level=6,
+        )
+        try:
+            with self.assertRaises(SignatureBonusLocked):
+                set_signature_bonus(self.technique_thread, locked_bonus)
+        finally:
+            locked_bonus.delete()
+
+    def test_set_fires_discovery_when_bonus_has_discovery_achievement(self) -> None:
+        """set_signature_bonus fires execute_ceremony_beat when bonus has discovery_achievement."""
+        from unittest.mock import patch
+
+        from world.achievements.models import Achievement
+
+        achievement = Achievement.objects.create(
+            name="First Fire Signature",
+            slug="first-fire-signature",
+            description="First character to select a fire signature.",
+        )
+        discoverable_bonus = SignatureMotifBonus.objects.create(
+            name="Discoverable Bonus",
+            required_facet=self.facet,
+            min_crossing_level=3,
+            discovery_achievement=achievement,
+        )
+        try:
+            with patch("world.magic.crossing.ceremony.execute_ceremony_beat") as mock_beat:
+                set_signature_bonus(self.technique_thread, discoverable_bonus)
+                mock_beat.assert_called_once()
+        finally:
+            discoverable_bonus.delete()
+            achievement.delete()
+
+    def test_set_does_not_fire_discovery_when_bonus_has_no_discovery_achievement(self) -> None:
+        """No discovery fired when bonus.discovery_achievement is None."""
+        from unittest.mock import patch
+
+        with patch("world.magic.crossing.ceremony.execute_ceremony_beat") as mock_beat:
+            set_signature_bonus(self.technique_thread, self.bonus)
+            mock_beat.assert_not_called()
 
 
 class SetSignatureBonusMovePortTests(TestCase):

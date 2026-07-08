@@ -43,7 +43,7 @@ class CrossingRegistryTests(TestCase):
         self.assertIsNotNone(get_crossing_handler(TargetKind.COVENANT_ROLE))
 
     def test_stub_handlers_registered(self) -> None:
-        """The 7 stub kinds have handlers that execute without error."""
+        """The 6 stub kinds have handlers that execute without error."""
         stub_kinds = [
             TargetKind.TRAIT,
             TargetKind.FACET,
@@ -51,7 +51,6 @@ class CrossingRegistryTests(TestCase):
             TargetKind.RELATIONSHIP_CAPSTONE,
             TargetKind.MANTLE,
             TargetKind.SANCTUM,
-            TargetKind.TECHNIQUE,
         ]
         for kind in stub_kinds:
             handler = get_crossing_handler(kind)
@@ -64,6 +63,82 @@ class CrossingRegistryTests(TestCase):
                 starting_level=2,
                 new_level=3,
             )
+
+
+class TechniqueCrossingHandlerTests(TestCase):
+    """TechniqueCrossingHandler fires a narrative-only beat at level 3."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.gift = GiftFactory()
+        cls.technique = TechniqueFactory(gift=cls.gift, level=1, damage_profile=False)
+
+    def test_level_3_crossing_fires_narrative_beat(self) -> None:
+        """Crossing level 3 fires execute_ceremony_beat with narrative, no achievement."""
+        from world.magic.crossing.handlers import TechniqueCrossingHandler
+        from world.magic.models import Thread
+
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            level=3,
+        )
+        try:
+            with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+                handler = TechniqueCrossingHandler()
+                handler.execute(thread=thread, starting_level=2, new_level=3)
+                mock_beat.assert_called_once()
+                call_kwargs = mock_beat.call_args.kwargs
+                self.assertIsNone(call_kwargs.get("achievement"))
+        finally:
+            thread.delete()
+
+    def test_level_6_crossing_does_not_fire_beat(self) -> None:
+        """Crossing level 6 does not fire a beat (discovery is on selection)."""
+        from world.magic.crossing.handlers import TechniqueCrossingHandler
+        from world.magic.models import Thread
+
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            level=6,
+        )
+        try:
+            with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+                handler = TechniqueCrossingHandler()
+                handler.execute(thread=thread, starting_level=5, new_level=6)
+                mock_beat.assert_not_called()
+        finally:
+            thread.delete()
+
+    def test_non_crossing_level_does_not_fire_beat(self) -> None:
+        """A non-crossing level (e.g. 4) does not fire a beat."""
+        from world.magic.crossing.handlers import TechniqueCrossingHandler
+        from world.magic.models import Thread
+
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=self.technique,
+            level=4,
+        )
+        try:
+            with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+                handler = TechniqueCrossingHandler()
+                handler.execute(thread=thread, starting_level=3, new_level=4)
+                mock_beat.assert_not_called()
+        finally:
+            thread.delete()
 
 
 class ExecuteCrossingCeremoniesTests(TestCase):
