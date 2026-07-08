@@ -1023,6 +1023,24 @@ class CourtGrantConfig(SharedMemoryModel):
         default=3,
         help_text="Consecutive failed petitions before the master's wrath fires.",
     )
+    summons_refusal_escalation_threshold = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Consecutive refused summonses before the master's escalation pool "
+            "fires (#2050). Mirrors `petition_failure_escalation_threshold`."
+        ),
+    )
+    summons_refusal_escalation_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Fires when a servant's consecutive-refused-summons streak crosses "
+            "the threshold. Defaults to `escalation_consequence_pool` when null."
+        ),
+    )
     petition_check_type = models.ForeignKey(
         "checks.CheckType",
         null=True,

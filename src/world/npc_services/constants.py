@@ -69,3 +69,17 @@ class RegardTargetType(models.TextChoices):
     PERSONA = "persona", "Persona"
     ORGANIZATION = "organization", "Organization"
     SOCIETY = "society", "Society"
+
+
+class SummonsStatus(models.TextChoices):
+    """Lifecycle states for a directed offer summons (#2050)."""
+
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    DECLINED = "declined", "Declined"
+    EXPIRED = "expired", "Expired"
+
+
+# #2050 — affection drop per refused/expired summons. PLACEHOLDER magnitude;
+# retunable by staff.
+SUMMONS_REFUSAL_AFFECTION_DELTA = -5
