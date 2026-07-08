@@ -38,6 +38,7 @@ _SUBVERBS = frozenset(
         "pick",
         "vote",
         "report",
+        "tale",
         "invite",
         "accept",
         "decline",
@@ -48,9 +49,9 @@ _SUBVERBS = frozenset(
 _USAGE = (
     "Usage: mission | mission beat <id> | mission resolve <id> <n> | "
     "mission abandon <id> | mission pick <id> <n> | mission vote <id> <n> | "
-    "mission report <id> <style> | mission invite <id> <name> | "
-    "mission accept <invite-id> | mission decline <invite-id> | "
-    "mission take <n> | mission opportunities"
+    "mission report <id> <style> | mission tale <id> <text> | "
+    "mission invite <id> <name> | mission accept <invite-id> | "
+    "mission decline <invite-id> | mission take <n> | mission opportunities"
 )
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
 _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id> 1'."
@@ -66,6 +67,7 @@ class CmdMission(ArxCommand):
     **Single-player:**
         ``mission resolve <id> <n>``     — choose option n at the current beat
         ``mission abandon <id>``         — abandon an ACTIVE run (contract holder)
+        ``mission tale <id> <text>``     — write your epilogue for a completed run
 
     **Group decision (two stages):**
         ``mission pick <id> <n>``        — submit your stage-1 pick
@@ -95,6 +97,7 @@ class CmdMission(ArxCommand):
             "pick": lambda: self._handle_pick(rest),
             "vote": lambda: self._handle_vote(rest),
             "report": lambda: self._handle_report(rest),
+            "tale": lambda: self._handle_tale(rest),
             "invite": lambda: self._handle_invite(rest),
             "accept": lambda: self._handle_respond(rest, accept=True),
             "decline": lambda: self._handle_respond(rest, accept=False),
@@ -266,6 +269,24 @@ class CmdMission(ArxCommand):
         if result.embellish_success is False:
             line += " Your embellishment falls flat."
         self.msg(line)
+
+    def _handle_tale(self, rest: str) -> None:
+        """``mission tale <id> <text>`` — write your epilogue for a completed run (#2047)."""
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            save_run_tale,
+        )
+
+        instance, remainder = self._instance_or_raise(rest)
+        text = remainder.strip()
+        if not text:
+            msg = "Tell your tale: mission tale <id> <text>"
+            raise CommandError(msg)
+        try:
+            save_run_tale(instance, self.caller, text)
+        except BeatActionError as exc:
+            raise CommandError(exc.user_message) from exc
+        self.msg(f"You tell your tale of {instance.template.name} (#{instance.pk}).")
 
     # ------------------------------------------------------------------
     # Invite / respond (#887)

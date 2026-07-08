@@ -730,6 +730,12 @@ class MissionInviteResultSerializer(serializers.Serializer):
     instance_id = serializers.IntegerField(read_only=True)
 
 
+class TaleRequestSerializer(serializers.Serializer):
+    """POST body for the tale endpoint (#2047)."""
+
+    text = serializers.CharField(allow_blank=False, max_length=5000)
+
+
 # ---------------------------------------------------------------------------
 # #2044 board postings + take — player-scoped serializers over the frozen
 # BoardPosting dataclass from services.boards.
