@@ -1476,6 +1476,17 @@ class MissionDeedRecord(SharedMemoryModel):
         ),
     )
     applied_at = models.DateTimeField(auto_now_add=True)
+    legend_entries = models.ManyToManyField(
+        "societies.LegendEntry",
+        blank=True,
+        related_name="mission_deeds",
+        help_text=(
+            "Legend entries minted from this deed's terminal renown awards (#2047). "
+            "Populated at the emit_terminal_renown_awards call sites from the returned "
+            "RenownAwardResult.legend_entry_id values. Used to seed tale authors' "
+            "LegendDeedStory rows when they tell the tale."
+        ),
+    )
 
     def __str__(self) -> str:
         return f"deed {self.option} by {self.actor}"
@@ -1858,3 +1869,41 @@ class MissionRiskAcknowledgement(SharedMemoryModel):
             f"persona {self.persona_id} acknowledged risk tier "
             f"{self.acknowledged_risk_tier} on offer {self.offer_id}"
         )
+
+
+class MissionRunTale(SharedMemoryModel):
+    """A player-authored epilogue for a completed mission run (#2047).
+
+    One tale per participant per instance (unique constraint). Permissive by
+    design — no content gate (see the permissive-canonicity policy in
+    ``docs/systems/narrative.md``). On a legend-minting run, saving a tale
+    seeds the author's ``LegendDeedStory`` for any unstoried ``LegendEntry``
+    linked to the run's deeds (see ``services.play.save_run_tale``).
+    """
+
+    instance = models.ForeignKey(
+        MissionInstance,
+        on_delete=models.CASCADE,
+        related_name="tales",
+    )
+    participant = models.ForeignKey(
+        MissionParticipant,
+        on_delete=models.CASCADE,
+        related_name="tales",
+    )
+    text = models.TextField(
+        help_text="The player-authored account of the run.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instance", "participant"],
+                name="unique_tale_per_participant_per_instance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Tale by {self.participant} on {self.instance}"

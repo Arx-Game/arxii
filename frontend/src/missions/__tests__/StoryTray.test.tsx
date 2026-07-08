@@ -28,6 +28,8 @@ const ACTIVE_ENTRY: JournalEntry = {
   compass_anywhere: false,
   pending_invites: [],
   participant_count: 1,
+  tale: null,
+  can_tell_tale: false,
 };
 
 const DONE_ENTRY: JournalEntry = {

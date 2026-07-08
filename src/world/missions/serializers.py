@@ -572,6 +572,8 @@ class JournalEntrySerializer(serializers.Serializer):
     compass_anywhere = serializers.BooleanField()
     pending_invites = serializers.SerializerMethodField()
     participant_count = serializers.IntegerField()
+    tale = serializers.CharField(allow_null=True)
+    can_tell_tale = serializers.BooleanField()
 
     @extend_schema_field(PendingMissionInviteSerializer(many=True))
     def get_pending_invites(self, obj: object) -> list[dict]:
@@ -726,6 +728,12 @@ class MissionInviteResultSerializer(serializers.Serializer):
     invite_id = serializers.IntegerField(read_only=True)
     response = serializers.CharField(read_only=True)
     instance_id = serializers.IntegerField(read_only=True)
+
+
+class TaleRequestSerializer(serializers.Serializer):
+    """POST body for the tale endpoint (#2047)."""
+
+    text = serializers.CharField(allow_blank=False, max_length=5000)
 
 
 # ---------------------------------------------------------------------------

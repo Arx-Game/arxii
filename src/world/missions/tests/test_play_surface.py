@@ -379,6 +379,78 @@ class JournalApiTests(TestCase):
         self.assertEqual(res.status_code, 404)
 
 
+class TaleApiTests(TestCase):
+    """#2047 — POST /api/missions/journal/{id}/tale/ endpoint."""
+
+    def setUp(self) -> None:
+        self.room, self.profile = _room("Tale Hall")
+        self.account = AccountFactory(username="tale-player")
+        self.character = _pc(self.room)
+        (
+            self.template,
+            self.entry,
+            self.entry_option,
+            self.second,
+            self.second_option,
+        ) = _graph(f"tale-api-{self._testMethodName}")
+        self.instance = staff_assign_mission(self.template, self.character)
+        # Advance to terminal so the run is COMPLETE.
+        resolve_beat_option(self.instance, self.character, option_id=self.entry_option.pk)
+        resolve_beat_option(self.instance, self.character, option_id=self.second_option.pk)
+        self.client = APIClient()
+        self.client.force_authenticate(self.account)
+        patcher = mock.patch("world.missions.views._puppet_character", return_value=self.character)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_post_tale_on_complete_run(self) -> None:
+        res = self.client.post(
+            f"/api/missions/journal/{self.instance.pk}/tale/",
+            {"text": "A glorious victory."},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["tale"], "A glorious victory.")
+
+    def test_post_tale_active_run_is_400(self) -> None:
+        instance = staff_assign_mission(self.template, self.character)
+        res = self.client.post(
+            f"/api/missions/journal/{instance.pk}/tale/",
+            {"text": "text"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_non_participant_gets_404(self) -> None:
+        outsider = _pc(self.room)
+        with mock.patch("world.missions.views._puppet_character", return_value=outsider):
+            res = self.client.post(
+                f"/api/missions/journal/{self.instance.pk}/tale/",
+                {"text": "text"},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 404)
+
+    def test_journal_includes_tale_after_save(self) -> None:
+        self.client.post(
+            f"/api/missions/journal/{self.instance.pk}/tale/",
+            {"text": "My epic tale."},
+            format="json",
+        )
+        res = self.client.get("/api/missions/journal/")
+        results = res.json()["results"]
+        entry = next(e for e in results if e["instance_id"] == self.instance.pk)
+        self.assertEqual(entry["tale"], "My epic tale.")
+        self.assertFalse(entry["can_tell_tale"])
+
+    def test_journal_shows_can_tell_tale_on_terminal_run(self) -> None:
+        res = self.client.get("/api/missions/journal/")
+        results = res.json()["results"]
+        entry = next(e for e in results if e["instance_id"] == self.instance.pk)
+        self.assertIsNone(entry["tale"])
+        self.assertTrue(entry["can_tell_tale"])
+
+
 class InstancedPlayTests(TestCase):
     """#886 — option-driven instanced rooms (spawn, gate, reuse, teardown)."""
 

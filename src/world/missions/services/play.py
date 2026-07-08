@@ -53,7 +53,12 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.missions.models import MissionInstance, MissionNode
+    from world.missions.models import (
+        MissionInstance,
+        MissionNode,
+        MissionParticipant,
+        MissionRunTale,
+    )
 
 
 class BeatActionError(ValueError):
@@ -75,12 +80,29 @@ class AbandonMissionError(BeatActionError):
     """An abandon request that can't proceed (not active / not contract holder)."""
 
 
+class SaveRunTaleError(BeatActionError):
+    """A tale request that can't proceed (run not terminal / text invalid)."""
+
+
 _ERR_NOT_PARTICIPANT = "You are not part of that mission."
 _ERR_NOT_ACTIVE = "That mission is no longer in progress."
 _ERR_NOT_CONTRACT_HOLDER = "Only the mission's contract holder can abandon it."
 _ERR_OPTION_NOT_LIVE = (
     "That option isn't available to you here — it may have moved on, or "
     "you may need to be somewhere else."
+)
+_ERR_RUN_NOT_TERMINAL = (
+    "This mission hasn't ended yet — you can only tell the tale of a completed or abandoned run."
+)
+_ERR_TALE_TOO_LONG = "Your tale is too long. Keep it under 5,000 characters."
+_ERR_TALE_EMPTY = "Your tale cannot be empty."
+
+_TERMINAL_STATUSES = frozenset(
+    {
+        MissionStatus.RESOLVED,
+        MissionStatus.COMPLETE,
+        MissionStatus.ABANDONED,
+    }
 )
 
 # PLACEHOLDER fallback when the author wrote no route outcome_text. Greppable
@@ -131,6 +153,88 @@ def abandon_mission(instance: MissionInstance, character: ObjectDB) -> MissionIn
 
             complete_instanced_room(instance.spawned_room.objectdb)
     return instance
+
+
+def save_run_tale(instance: MissionInstance, character: ObjectDB, text: str) -> MissionRunTale:
+    """Upsert a participant's tale on a terminal-status mission run (#2047).
+
+    Guards: participant (404-shaped ``NotParticipantError``), run in a
+    terminal status (``RESOLVED``/``COMPLETE``/``ABANDONED``), length cap.
+    Deliberately no content gate (permissive-by-default IS the policy;
+    ``save_deed_story`` has none either — the reviewer-confirmed precedent).
+
+    On a legend-minting run, seeds ``LegendDeedStory`` rows for unstoried
+    ``LegendEntry`` rows linked to the run's deeds whose persona matches
+    the tale author's PRIMARY persona — or ``instance.accepted_as_persona``
+    when the author is the contract holder (matching the emission-time
+    persona rules). Seed, never overwrite.
+    """
+    from world.missions.constants import TALE_MAX_LENGTH  # noqa: PLC0415
+    from world.missions.models import MissionRunTale  # noqa: PLC0415
+
+    participant = participant_for(instance, character)
+    if instance.status not in _TERMINAL_STATUSES:
+        raise SaveRunTaleError(_ERR_RUN_NOT_TERMINAL)
+    text = text.strip()
+    if not text:
+        raise SaveRunTaleError(_ERR_TALE_EMPTY)
+    if len(text) > TALE_MAX_LENGTH:
+        raise SaveRunTaleError(_ERR_TALE_TOO_LONG)
+
+    with transaction.atomic():
+        tale, _ = MissionRunTale.objects.update_or_create(
+            instance=instance,
+            participant=participant,
+            defaults={"text": text},
+        )
+        _seed_legend_stories(instance, participant, text)
+    return tale
+
+
+def _seed_legend_stories(
+    instance: MissionInstance,
+    participant: MissionParticipant,
+    text: str,
+) -> None:
+    """Seed ``LegendDeedStory`` rows for unstoried entries on this run's deeds.
+
+    For every ``LegendEntry`` linked to the run's ``MissionDeedRecord`` rows
+    that has no existing story by the tale author's persona — where the
+    persona is the tale author's PRIMARY persona, or
+    ``instance.accepted_as_persona`` when the author is the contract holder
+    (matching the emission-time persona rules) — create a
+    ``LegendDeedStory`` with the tale text. Seed, never overwrite.
+    """
+    from world.societies.models import LegendDeedStory, LegendEntry  # noqa: PLC0415
+    from world.societies.spread_services import save_deed_story  # noqa: PLC0415
+
+    sheet = getattr(participant.character, "sheet_data", None)  # noqa: GETATTR_LITERAL
+    if sheet is None:
+        return
+    if participant.is_contract_holder and instance.accepted_as_persona_id is not None:
+        author_persona = instance.accepted_as_persona
+    else:
+        author_persona = sheet.primary_persona
+    if author_persona is None:
+        return
+
+    entry_ids = set(instance.deeds.values_list("legend_entries", flat=True).distinct())
+    if not entry_ids:
+        return
+    entries = list(LegendEntry.objects.filter(pk__in=entry_ids))
+    matching_entries = [e for e in entries if e.persona_id == author_persona.pk]
+    if not matching_entries:
+        return
+
+    storied_ids = set(
+        LegendDeedStory.objects.filter(
+            deed__in=matching_entries, author=author_persona
+        ).values_list("deed_id", flat=True)
+    )
+
+    for entry in matching_entries:
+        if entry.pk not in storied_ids:
+            save_deed_story(author_persona=author_persona, deed=entry, text=text)
 
 
 def beat_for(instance: MissionInstance, character: ObjectDB) -> BeatView | None:

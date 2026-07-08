@@ -39,6 +39,15 @@ from world.missions.constants import MissionStatus, NodeLocationMode
 from world.missions.models import MissionDeedRecord, MissionOption, MissionParticipant
 from world.missions.types import JournalDeed, JournalEntry, JournalInvite, JournalSummons
 
+# #2047 — statuses in which a run is narratable (tale can be written).
+_TERMINAL_STATUSES = frozenset(
+    {
+        MissionStatus.RESOLVED,
+        MissionStatus.COMPLETE,
+        MissionStatus.ABANDONED,
+    }
+)
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
@@ -79,6 +88,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
     pending_summons = _pending_summons_for(character)
     participant_counts = _participant_counts(instance_ids)
     project_grants = _project_grants_by_instance(instance_ids)
+    tales_by_instance = _tales_by_instance(instance_ids, character)
 
     return [
         _journal_entry_for(
@@ -89,6 +99,7 @@ def journal_for(character: ObjectDB) -> list[JournalEntry]:
             pending_summons,
             participant_counts,
             project_grants,
+            tales_by_instance,
         )
         for part in participations
     ]
@@ -187,6 +198,19 @@ def _project_grants_by_instance(instance_ids: list[int]) -> dict[int, int]:
     return {row["deed__instance_id"]: row["total"] for row in rows}
 
 
+def _tales_by_instance(instance_ids: list[int], character: ObjectDB) -> dict[int, str]:
+    """The character's tale text per instance (one query for the whole journal, #2047)."""
+    from world.missions.models import MissionRunTale  # noqa: PLC0415
+
+    if not instance_ids:
+        return {}
+    rows = MissionRunTale.objects.filter(
+        instance_id__in=instance_ids,
+        participant__character=character,
+    ).values_list("instance_id", "text")
+    return dict(rows)
+
+
 def _deeds_by_instance(
     instance_ids: list[int],
     character: ObjectDB,
@@ -259,6 +283,7 @@ def _journal_entry_for(  # noqa: PLR0913
     pending_summons: tuple[JournalSummons, ...],
     participant_counts: dict[int, int],
     project_grants: dict[int, int],
+    tales_by_instance: dict[int, str],
 ) -> JournalEntry:
     """Build a single :class:`JournalEntry` from a participation row."""
     instance = part.instance
@@ -274,6 +299,8 @@ def _journal_entry_for(  # noqa: PLR0913
         target_project_name = project.description or f"Project #{project.pk}"
         target_project_progress = project.current_progress
         target_project_threshold = project.threshold_target
+    tale_text = tales_by_instance.get(instance.pk)
+    is_terminal = instance.status in _TERMINAL_STATUSES
     return JournalEntry(
         instance_id=instance.pk,
         template_name=instance.template.name,
@@ -295,6 +322,8 @@ def _journal_entry_for(  # noqa: PLR0913
         target_project_granted=project_grants.get(instance.pk, 0),
         source_beat_story_title=_source_beat_story_title(instance),
         source_beat_hint=_source_beat_hint(instance),
+        tale=tale_text,
+        can_tell_tale=(is_terminal and tale_text is None),
     )
 
 

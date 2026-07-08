@@ -222,3 +222,7 @@ class DeedRewardSink(models.TextChoices):
     ITEM = "item", "Item"
     FOLLOW_ON_SUMMONS = "summons", "Follow-On Summons"
     PROJECT = "project", "Project"
+
+
+# #2047 — max length for a player-authored mission tale.
+TALE_MAX_LENGTH = 5000

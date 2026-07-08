@@ -81,6 +81,7 @@ from world.missions.serializers import (
     MissionTemplateSerializer,
     OpportunitiesSerializer,
     ResolvedBeatSerializer,
+    TaleRequestSerializer,
 )
 from world.predicates.catalog import leaf_params
 from world.predicates.predicates import LEAF_RESOLVERS
@@ -593,6 +594,33 @@ class MissionJournalViewSet(viewsets.ViewSet):
                 }
             ).data
         )
+
+    @extend_schema(
+        request=TaleRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Tale saved."),
+            400: OpenApiResponse(description="Run not terminal / text invalid."),
+            404: OpenApiResponse(description="Not a participant / no such mission."),
+        },
+    )
+    @action(detail=True, methods=("POST",))
+    def tale(self, request: Request, pk: str | None = None) -> Response:
+        """#2047 — tell the tale of a completed run."""
+        from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+        from world.missions.services.play import (  # noqa: PLC0415
+            BeatActionError,
+            save_run_tale,
+        )
+
+        body = TaleRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        instance, character = self._instance_for(request, pk)
+        try:
+            tale = save_run_tale(instance, character, body.validated_data["text"])
+        except BeatActionError as exc:
+            raise ValidationError(exc.user_message) from exc
+        return Response({"id": instance.pk, "tale": tale.text})
 
     @extend_schema(
         responses={

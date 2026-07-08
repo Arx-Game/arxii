@@ -169,3 +169,30 @@ The React frontend will surface narrative messages in two places:
 - **Messages section of character sheet** — paginated, filterable, searchable; unread counter from `acknowledged_at=null` rows
 
 Both are frontend concerns; the backend exposes `/api/narrative/my-messages/` and `/api/narrative/deliveries/{id}/acknowledge/` as the minimum needed to drive them.
+
+---
+
+## Player Tales (#2047)
+
+A mission run's mechanical outcome is the player's to narrate. Every participant
+of a resolved, completed, or abandoned run can write a **tale** — free-text
+prose describing what their character did — via `mission tale <id> <text>`
+(telnet) or `POST /api/missions/journal/{id}/tale/` (web). The policy is
+**permissive canonicity**:
+
+- **Canon by default.** A player's narration of a mechanical success is
+  canon unless it contradicts what the dice/mechanics established.
+- **Braggadocio rule.** Elaborations exceeding the character's demonstrated
+  capability are *non-canonical fabrications* — in-world braggadocio — not
+  moderation cases. The character told a taller tale than the truth; the
+  world reacts accordingly.
+- **Never parsed for mechanics.** Tales are never read by the engine for
+  mechanical effects. They are narrative flavor only (see the
+  `docs/roadmap/missions.md` invariant).
+- **Staff never pre-approve.** There is no content gate, no review queue.
+  The policy IS the mechanism — the same precedent as `save_deed_story`.
+
+On a legend-minting run, saving a tale seeds the author's `LegendDeedStory`
+for any unstoried `LegendEntry` linked to the run's deeds (seed, never
+overwrite). See ADR-0105 for the rationale and the rejected staff-curation
+alternative.

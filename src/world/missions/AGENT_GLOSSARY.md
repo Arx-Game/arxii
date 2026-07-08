@@ -23,3 +23,11 @@ _Avoid_: spin, brag, framing.
 **Mission Risk Acknowledgement**:
 A `MissionRiskAcknowledgement` row (#1770 PR4) — the accepting persona's on-record "yes, I know this job is dangerous," keyed on (offer, persona) with the template's `risk_tier` snapshotted. Required by `issue_mission` for any template at or above `MISSION_RISK_ACK_TIER` (`world.missions.constants`); missing → the typed `MissionRiskUnacknowledgedError`, which the `npc_resolve` action turns into an informed-consent prompt re-run with `acknowledge_risk=yes`. The mission sibling of combat's `EncounterRiskAcknowledgement` (#777 gate).
 _Avoid_: risk waiver, danger consent (consent is the ADR-0024 app), risk opt-out.
+
+**Tale**:
+A `MissionRunTale` (#2047) — a player-authored epilogue for a mission run. Free text, one per participant per run, written after the run reaches a terminal status (RESOLVED/COMPLETE/ABANDONED). Permissive-canonicity policy (ADR-0105): canon by default, never parsed for mechanics, never content-gated. On legend-minting runs, the tale seeds the author's `LegendDeedStory` for unstoried `LegendEntry` rows linked to the run's deeds.
+_Avoid_: epilogue writeup, story log, mission journal entry (the journal is the ledger; the tale is the narration).
+
+**Non-canonical fabrication**:
+An elaboration in a tale that exceeds the character's demonstrated capability. In-world braggadocio — the character told a taller tale than the truth. Not a moderation case; the world reacts accordingly. The braggadocio rule is the containment mechanism (see ADR-0105).
+_Avoid_: lie, fabrication, moderation case.
