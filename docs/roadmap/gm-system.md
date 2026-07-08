@@ -172,6 +172,15 @@ Building this frontend before Stories exists would mean throwing it
 away. Deferring until after Stories is in place so the dashboard
 reflects real GM workflow.
 
+**Phase 5 is now complete (#2004):** the GM dashboard endpoint
+(`GET /api/gm/dashboard/`) composes the gm-queue, tables, pending story
+offers, and evidence summary; the frontend route (`/gm/dashboard`) renders
+it. `surrender_character_story` is wired (`POST /api/stories/{id}/surrender/`
++ `story surrender` telnet). `touch_gm_activity` stamps `GMProfile.last_active_at`
+from GM-verb services; idle-table detection surfaces on `StaffWorkloadView`
+and a weekly cron summary. GMProfile presence (`is_gm`) added to the account
+payload so the frontend can gate navigation without probing for 403s.
+
 Day-to-day GM ops that the staff inbox + existing APIs cover for now:
 - Application queue (staff / admin can action; GMs will get the
   dedicated view post-Stories)
