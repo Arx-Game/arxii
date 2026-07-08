@@ -128,6 +128,7 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
     can_engage = serializers.SerializerMethodField()
     engage_blocked_reason = serializers.SerializerMethodField()
     viewer_capabilities = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterCovenantRole
@@ -145,6 +146,7 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "can_engage",
             "engage_blocked_reason",
             "viewer_capabilities",
+            "display_name",
         ]
         read_only_fields = fields
 
@@ -218,6 +220,21 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
                     "can_manage_ranks": viewer_membership.rank.can_manage_ranks,
                 }
         return self.context[cache_key]  # type: ignore[return-value]
+
+    def get_display_name(self, obj: CharacterCovenantRole) -> str:
+        """The member's display name, or a generic placeholder if they blocked the viewer (#2086).
+
+        When the viewer is blocked by this member's player, returns "a member has blocked you"
+        — never the member's name or identity. Staff always see the real character name.
+        """
+        from world.scenes.block_services import member_blocked_viewer  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return f"Character #{obj.character_sheet_id}"
+        if member_blocked_viewer(viewer_account=request.user, member_sheet=obj.character_sheet):
+            return "a member has blocked you"
+        return f"Character #{obj.character_sheet_id}"
 
 
 class CovenantSerializer(serializers.ModelSerializer):

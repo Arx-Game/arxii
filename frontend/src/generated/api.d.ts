@@ -18331,6 +18331,13 @@ export interface components {
       readonly can_engage: boolean;
       readonly engage_blocked_reason: string | null;
       readonly viewer_capabilities: components['schemas']['ViewerCapabilities'];
+      /**
+       * @description The member's display name, or a generic placeholder if they blocked the viewer (#2086).
+       *
+       *     When the viewer is blocked by this member's player, returns "a member has blocked you"
+       *     — never the member's name or identity. Staff always see the real character name.
+       */
+      readonly display_name: string;
     };
     /** @description Serializer for character drafts. */
     CharacterDraft: {

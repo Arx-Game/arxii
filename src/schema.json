@@ -31354,12 +31354,21 @@ components:
           allOf:
           - $ref: '#/components/schemas/ViewerCapabilities'
           readOnly: true
+        display_name:
+          type: string
+          description: |-
+            The member's display name, or a generic placeholder if they blocked the viewer (#2086).
+
+            When the viewer is blocked by this member's player, returns "a member has blocked you"
+            — never the member's name or identity. Staff always see the real character name.
+          readOnly: true
       required:
       - anchor_role
       - can_engage
       - character_sheet
       - covenant
       - covenant_role
+      - display_name
       - engage_blocked_reason
       - engaged
       - id

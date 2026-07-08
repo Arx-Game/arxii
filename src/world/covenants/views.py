@@ -106,10 +106,12 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         ).order_by("-joined_at")
         if self.request.user.is_staff:
             return qs
-        # Non-staff: scope to character sheets the user currently plays.
+        # Non-staff: show all members of covenants the user is currently a member of.
+        # The member's display_name field suppresses identity for blocked pairs (#2086).
         return qs.filter(
-            character_sheet__roster_entry__tenures__end_date__isnull=True,
-            character_sheet__roster_entry__tenures__player_data__account=self.request.user,
+            covenant__memberships__left_at__isnull=True,
+            covenant__memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
+            covenant__memberships__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
 
     @action(
