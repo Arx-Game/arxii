@@ -329,6 +329,11 @@ RALLY_BASE_DIFFICULTY: int = 10
 PARLEY_DISPOSITION_FLOOR: int = 20
 MINDLESS_MORALE_RESISTANCE: int = 30
 
+# Success-level thresholds for social-combat verb outcomes (#2015).
+RALLY_GREAT_SUCCESS_LEVEL: int = 3  # great success: restore ally morale
+PARLEY_DECISIVE_SUCCESS_LEVEL: int = 3  # decisive: calm the opponent
+PARLEY_CRITICAL_SUCCESS_LEVEL: int = 5  # critical + broken: NPC yields
+
 # ---------------------------------------------------------------------------
 # Clash enums
 # ---------------------------------------------------------------------------

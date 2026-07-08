@@ -4329,6 +4329,285 @@ def _record_combat_consequence(  # noqa: PLR0913 - mirrors record_consequence_ou
     )
 
 
+# ---------------------------------------------------------------------------
+# Social/mental combat verb resolution (#2015)
+# ---------------------------------------------------------------------------
+
+
+def _social_combat_difficulty(
+    target: CombatOpponent | None,
+    *,
+    effort_level: str = "medium",
+) -> int:
+    """Compute the target_difficulty for a social-combat check (#2015).
+
+    Composure defense: ``compute_resist_increment`` (the same path scenes use,
+    now wired into combat for the first time). Mindless resistance: a mindless
+    target adds ``MINDLESS_MORALE_RESISTANCE`` — a high resistance tier, not a
+    wall. Returns 0 when there is no target (rally targets an ally).
+    """
+    if target is None:
+        return 0
+
+    from world.checks.services import compute_resist_increment  # noqa: PLC0415
+    from world.combat.constants import MINDLESS_MORALE_RESISTANCE  # noqa: PLC0415
+    from world.combat.morale import tier_has_morale  # noqa: PLC0415
+
+    difficulty = 0
+    if target.objectdb is not None:
+        difficulty = compute_resist_increment(target.objectdb, effort_level)
+    if not tier_has_morale(target):
+        difficulty += MINDLESS_MORALE_RESISTANCE
+    return difficulty
+
+
+def _resolve_social_check(
+    participant: CombatParticipant,
+    check_type_name: str,
+    target_difficulty: int,
+) -> int:
+    """Roll a social-combat check and return the success_level (#2015).
+
+    Resolves the CheckType by name (seeded by social_combat_content). Routes
+    modifiers through ``collect_check_modifiers`` (the same seam combat uses),
+    then ``perform_check``. Returns ``check_result.success_level``.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.checks.services import collect_check_modifiers, perform_check  # noqa: PLC0415
+
+    check_type = CheckType.objects.filter(name=check_type_name, is_active=True).first()
+    if check_type is None:
+        return 0
+
+    character = participant.character_sheet.character
+    breakdown = collect_check_modifiers(
+        participant.character_sheet, check_type, scene=participant.encounter.scene
+    )
+    result = perform_check(
+        character,
+        check_type,
+        target_difficulty=target_difficulty,
+        extra_modifiers=breakdown.total,
+    )
+    return result.success_level or 0
+
+
+def _resolve_rally(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared rally — inspire an ally (#2015).
+
+    Rolls the Rally check (presence + Performance + Oratory). On success, applies
+    a short-lived ``Inspired`` condition to the ally. On a great success (SL>=3),
+    also restores morale to ally-side summon opponents.
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        RALLY_BASE_DIFFICULTY,
+        RALLY_GREAT_SUCCESS_LEVEL,
+        RALLY_MORALE_PER_LEVEL,
+    )
+    from world.combat.social_combat_content import INSPIRED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    success_level = _resolve_social_check(participant, "Rally", RALLY_BASE_DIFFICULTY)
+    if success_level < 1:
+        return outcome
+
+    ally = action.focused_ally_target
+    if ally is None:
+        return outcome
+
+    # Apply Inspired condition to the ally.
+    inspired = ConditionTemplate.objects.filter(name=INSPIRED_CONDITION_NAME).first()
+    if inspired is not None:
+        apply_condition(
+            ally.character_sheet.character,
+            inspired,
+            source_character=participant.character_sheet.character,
+            source_description="Rallied in combat.",
+        )
+
+    # Great success: restore morale to ally-side summon opponents.
+    if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
+        restore = success_level * RALLY_MORALE_PER_LEVEL
+        ally_summons = CombatOpponent.objects.filter(
+            encounter=participant.encounter,
+            status=OpponentStatus.ACTIVE,
+            allegiance=CombatAllegiance.ALLY,
+        )
+        for opp in ally_summons:
+            opp.morale = min(opp.max_morale, opp.morale + restore)
+            opp.save(update_fields=["morale"])
+
+    return outcome
+
+
+def _resolve_demoralize(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared demoralize — break an opponent's nerve (#2015).
+
+    Rolls the Demoralize check (presence + Persuasion + Intimidation) against the
+    target's Composure (+ mindless resistance). On success, depletes morale.
+    """
+    from world.combat.constants import DEMORALIZE_MORALE_PER_LEVEL  # noqa: PLC0415
+    from world.combat.morale import apply_morale_damage, tier_has_morale  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_opponent_target
+    if target is None:
+        return outcome
+
+    target_difficulty = _social_combat_difficulty(target)
+    success_level = _resolve_social_check(participant, "Demoralize", target_difficulty)
+
+    if success_level < 1:
+        # Failed: mindless targets narrate "the construct is unmoved."
+        if not tier_has_morale(target):
+            outcome.summary = "The construct is unmoved."
+        return outcome
+
+    apply_morale_damage(target, success_level * DEMORALIZE_MORALE_PER_LEVEL)
+    return outcome
+
+
+def _resolve_taunt(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared taunt — draw an NPC's aggro (#2015).
+
+    Rolls the Taunt check (wits + Persuasion + Intimidation) against the target's
+    Composure. On success, accumulates threat on the existing ThreatRecord seam.
+    """
+    from world.combat.constants import TAUNT_THREAT_PER_LEVEL  # noqa: PLC0415
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_opponent_target
+    if target is None:
+        return outcome
+
+    target_difficulty = _social_combat_difficulty(target)
+    success_level = _resolve_social_check(participant, "Taunt", target_difficulty)
+
+    if success_level < 1:
+        return outcome
+
+    accumulate_threat(
+        participant.encounter,
+        target,
+        participant,
+        success_level * TAUNT_THREAT_PER_LEVEL,
+    )
+    return outcome
+
+
+def _resolve_parley(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a declared parley — talk a foe down mid-fight (#2015).
+
+    Rolls the Parley check (charm + Persuasion + Seduction) against the target's
+    Composure (+ mindless resistance — a breakthrough grants a fleeting mind). On
+    success, routes through ``apply_social_disposition_delta``. On a decisive
+    success (SL>=3), calms the opponent. On a critical success (SL>=5) against a
+    broken opponent, the NPC yields (FLED).
+    """
+    from world.combat.constants import (  # noqa: PLC0415
+        PARLEY_CRITICAL_SUCCESS_LEVEL,
+        PARLEY_DECISIVE_SUCCESS_LEVEL,
+        OpponentStatus,
+    )
+    from world.combat.morale import (  # noqa: PLC0415
+        OpponentMoraleState,
+        morale_state_for,
+        tier_has_morale,
+    )
+    from world.conditions.constants import CALM_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+    from world.npc_services.social_disposition import (  # noqa: PLC0415
+        apply_social_disposition_delta,
+    )
+
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_opponent_target
+    if target is None:
+        return outcome
+
+    target_difficulty = _social_combat_difficulty(target)
+    success_level = _resolve_social_check(participant, "Parley", target_difficulty)
+
+    if success_level < 1:
+        # Failed: mindless targets narrate "it has no mind to reach."
+        if not tier_has_morale(target):
+            outcome.summary = "It has no mind to reach."
+        return outcome
+
+    # Success: apply the disposition delta (the built path, now reachable in combat).
+    actor = participant.character_sheet.character
+    target_persona_id = target.persona_id
+    if target_persona_id is not None:
+        apply_social_disposition_delta(actor, target_persona_id, _ParleyResult(success_level))
+
+    # Decisive success: calm the opponent (Calm condition -> NEUTRAL allegiance).
+    if success_level >= PARLEY_DECISIVE_SUCCESS_LEVEL and target.objectdb is not None:
+        calm = ConditionTemplate.objects.filter(name=CALM_CONDITION_NAME).first()
+        if calm is not None:
+            apply_condition(
+                target.objectdb,
+                calm,
+                source_character=actor,
+                source_description="Parleyed into calm.",
+            )
+
+    # Critical success against a broken opponent: the NPC yields (FLED, alive).
+    if (
+        success_level >= PARLEY_CRITICAL_SUCCESS_LEVEL
+        and morale_state_for(target) == OpponentMoraleState.BREAK
+    ):
+        target.status = OpponentStatus.FLED
+        target.save(update_fields=["status"])
+
+    return outcome
+
+
+@dataclass
+class _ParleyResult:
+    """Minimal result shim so apply_social_disposition_delta can read success_level.
+
+    The disposition service reads ``result.main_result.check_result.success_level``;
+    this shim provides that shape without constructing a full PendingResolution.
+    """
+
+    main_result: _ParleyMainResult
+
+    def __init__(self, success_level: int) -> None:
+        self.main_result = _ParleyMainResult(success_level)
+
+
+@dataclass
+class _ParleyMainResult:
+    check_result: _ParleyCheckResult
+
+    def __init__(self, success_level: int) -> None:
+        self.check_result = _ParleyCheckResult(success_level)
+
+
+@dataclass
+class _ParleyCheckResult:
+    success_level: int
+
+
 def _resolve_flee(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -4528,7 +4807,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
 
-def _resolve_pc_action(
+def _resolve_pc_action(  # noqa: C901, PLR0911
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
@@ -4551,6 +4830,16 @@ def _resolve_pc_action(
     # cover_bonus it contributes to the ally's flee check.
     if action.maneuver == CombatManeuver.FLEE:
         return _resolve_flee(participant, action)
+
+    # Social/mental combat verbs (#2015): resolve as checks at round-tick.
+    if action.maneuver == CombatManeuver.RALLY:
+        return _resolve_rally(participant, action)
+    if action.maneuver == CombatManeuver.DEMORALIZE:
+        return _resolve_demoralize(participant, action)
+    if action.maneuver == CombatManeuver.TAUNT:
+        return _resolve_taunt(participant, action)
+    if action.maneuver == CombatManeuver.PARLEY:
+        return _resolve_parley(participant, action)
 
     # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
     # _resolve_duel_completion is a no-op afterwards because the encounter is now
