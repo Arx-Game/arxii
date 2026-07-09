@@ -139,6 +139,15 @@ def active_crossing_effects(character: Character) -> list[CrossingEffectInfo]:
             if not matching:
                 continue
 
+        if thread.target_kind == TargetKind.SANCTUM:
+            # Location-gate: only active if the character is in the sanctum's room
+            sanctum = thread.target_sanctum_details
+            if sanctum is None:
+                continue
+            sanctum_room = sanctum.feature_instance.room_profile.objectdb
+            if character.location != sanctum_room:
+                continue
+
         result.append(
             CrossingEffectInfo(
                 name=choice.option.name,

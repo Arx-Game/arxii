@@ -1762,6 +1762,8 @@ class PendingCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
                 "thread__target_relationship_track__track",
                 "thread__target_relationship_track__relationship__target__character",
                 "thread__target_capstone__relationship__target__character",
+                "thread__target_sanctum_details",
+                "thread__target_sanctum_details__feature_instance__room_profile__objectdb",
             )
             .order_by("-created_at")
             .distinct()

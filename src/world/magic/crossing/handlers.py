@@ -322,10 +322,10 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
-def _anchor_label_for(thread: Thread) -> str:
+def _anchor_label_for(thread: Thread) -> str:  # noqa: PLR0911
     """Return a human-readable label for the thread's anchor entity.
 
-    Used by ``_compose_crossing_message`` and ``CmdCrossing._list_offers`` so
+    Used by ``_compose_crossing_message`` and ``CmdThreads._list_offers`` so
     the crossing announcement references the right anchor (partner name for
     relationship threads, trait/facet name for those kinds) instead of a
     generic placeholder.
@@ -336,6 +336,8 @@ def _anchor_label_for(thread: Thread) -> str:
         TargetKind.FACET: "facet",  # noqa: STRING_LITERAL
         TargetKind.RELATIONSHIP_TRACK: "relationship",  # noqa: STRING_LITERAL
         TargetKind.RELATIONSHIP_CAPSTONE: "capstone",  # noqa: STRING_LITERAL
+        TargetKind.MANTLE: "mantle",  # noqa: STRING_LITERAL
+        TargetKind.SANCTUM: "sanctum",  # noqa: STRING_LITERAL
     }.get(kind, "thread")  # noqa: STRING_LITERAL
     if kind == TargetKind.TRAIT and thread.target_trait is not None:
         return thread.target_trait.name
@@ -353,6 +355,10 @@ def _anchor_label_for(thread: Thread) -> str:
             return f"capstone '{cap.title}' with {partner_name}"
     if kind == TargetKind.MANTLE and thread.target_mantle is not None:
         return thread.target_mantle.name
+    if kind == TargetKind.SANCTUM and thread.target_sanctum_details is not None:
+        sanctum = thread.target_sanctum_details
+        room = sanctum.feature_instance.room_profile.objectdb
+        return f"sanctum in {room.db_key}"
     return fallback
 
 
@@ -363,7 +369,7 @@ def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:
     return (
         f"Your {resonance_name}-resonant {anchor_label} thread "
         f"has crossed a threshold (level {crossing_level}). "
-        f"Use 'crossing list' to choose how it manifests."
+        f"Use 'threads crossing list' to choose how it manifests."
     )
 
 
@@ -447,8 +453,14 @@ class MantleCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.MANTLE
 
 
-class SanctumCrossingHandler(_StubCrossingHandler):
-    """SANCTUM thread crossing — stub (#1993)."""
+class SanctumCrossingHandler(_CrossingChoiceHandler):
+    """SANCTUM thread crossing — player-chosen sanctum attunement buff.
+
+    At each crossing level (3, 6, 11, 16, 21), creates a PendingCrossingOffer
+    for the player to choose a resonance-matched personal buff. The buff is
+    active while the character is in the sanctum's room (location-gated, like
+    FACET is wear-gated). Skipped lower crossings are auto-resolved with the
+    is_default option.
+    """
 
     target_kind = TargetKind.SANCTUM
-    _subissue = "#1993"
