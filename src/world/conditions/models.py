@@ -1026,6 +1026,13 @@ class ConditionDamageInteraction(NaturalKeyMixin, SharedMemoryModel):
         default=1,
         help_text="Severity of the applied condition",
     )
+    narration_snippet = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Flavor text appended to combat narration when this interaction "
+        "consumes or transforms a condition. Leave blank for a composed fallback.",
+    )
 
     objects = NaturalKeyManager()
 
