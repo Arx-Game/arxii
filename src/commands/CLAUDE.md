@@ -106,6 +106,23 @@ actions, backends, and service functions.
   `get_all_pending`, `find_handler` — pure-Python in-process registry; no DB model.
 - **`offer_response.py`**: `CmdDecline` (`decline`) — registry-offer decline; see also
   extended `CmdAccept` in `consent.py`.
+- **`scene.py`**: `CmdScene` (`scene`) — the scene-lifecycle namespace, thin over the Actions in
+  `actions/definitions/scenes.py`: `scene start [name]` (`StartSceneAction`, also enrolls any
+  present table-owning GM via `enroll_present_table_gms`, #2113), `scene finish`
+  (`FinishSceneAction`), `scene gm <name>` (`GrantSceneGMAction`, #2113 — the fallback GM grant
+  for cases auto-enrollment can't reach: gated on `actor_can_administer_scene` + the target
+  holding a `GMProfile`), `scene round [...]` (`SetRoundModeAction`, `actions/definitions/
+  rounds.py`), `scene succor <ally>` / `scene interpose <ally>` (`SuccorSceneAction`/
+  `InterposeSceneAction`, #1744/#1316), bare `scene`/`scene status` (read-only round status, no
+  action). Web reaches `StartSceneAction`/`FinishSceneAction`/`GrantSceneGMAction` through the
+  same generic available-actions dispatcher. See "Scene Administration" in
+  `docs/systems/scenes.md`. No business logic in the command.
+- **`encounter.py`**: `CmdEncounter` (`encounter`, #1494) — the GM combat-encounter lifecycle
+  namespace, thin over the eight Actions in `actions/definitions/gm_combat.py` (`begin`/
+  `resolve`/`add`/`default`/`addpc`/`removepc`/`pause`/`end`). Every subverb is gated by
+  `_actor_may_gm_encounter` (staff or `encounter.scene.is_gm(account)`) in the Action layer —
+  reads the same `SceneParticipation.is_gm` flag `enroll_present_table_gms`/
+  `GrantSceneGMAction`/`_enroll_lead_gm_on_scene` write (#2113). No business logic in the command.
 - **`consent.py`**: `ConsentRequestCommand` (base), `CmdIntimidate`, `CmdPersuade`, `CmdDeceive`, `CmdFlirt`, `CmdPerform`, `CmdEntrance`, `CmdRestoreSense` — telnet shells for social consent-flow actions (#1337/#1338); `CmdAccept` (extended to check offer registry first; consent
   fall-through unchanged), `CmdDeny` — target responses. All call `create_action_request` / `respond_to_action_request` — the same service the web viewset calls.
 - **`social/grievance.py`**: `CmdGrievance` (`+grievance`, #1429) — the telnet face of the secret-victim grievance prompt; thin over `world.secrets.services.register_secret_grievance` (the same service the web `/api/secrets/grievance/` endpoint calls). A wronged character picks a `GrievanceOption` for a secret they've learned; it applies a one-sided relationship swing toward the perpetrator.

@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from actions.definitions.scenes import FinishSceneAction, StartSceneAction
+from actions.definitions.scenes import FinishSceneAction, GrantSceneGMAction, StartSceneAction
 from evennia_extensions.factories import CharacterFactory, GMCharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
 from world.scenes.models import Scene, SceneParticipation
@@ -195,6 +196,105 @@ class FinishSceneActionTests(TestCase):
         actor.location = None
 
         result = FinishSceneAction().execute(actor)
+
+        assert result.success is False
+        assert "not in a room" in result.message.lower()
+
+
+class GrantSceneGMActionTests(TestCase):
+    """GrantSceneGMAction: fallback ``scene gm <name>`` grant (#2113)."""
+
+    def test_owner_grants_gm_to_present_approved_gm(self):
+        """A scene co-owner may grant is_gm to a present account holding a GMProfile."""
+        room = _make_room("GrantRoom1")
+        owner, owner_account = _create_pc_with_account("GrantOwner", location=room)
+        target, target_account = _create_pc_with_account("GrantTarget", location=room)
+        GMProfileFactory(account=target_account)
+        scene = SceneFactory(location=room, is_active=True)
+        SceneOwnerParticipationFactory(scene=scene, account=owner_account)
+
+        result = GrantSceneGMAction().execute(owner, target_name=target.db_key)
+
+        assert result.success is True
+        assert SceneParticipation.objects.filter(
+            scene=scene, account=target_account, is_gm=True
+        ).exists()
+
+    def test_non_admin_actor_is_denied(self):
+        """A present PC who does not administer the scene cannot grant GM status."""
+        room = _make_room("GrantRoom2")
+        non_admin, _non_admin_account = _create_pc_with_account("NonAdmin", location=room)
+        target, target_account = _create_pc_with_account("GrantTarget2", location=room)
+        GMProfileFactory(account=target_account)
+        scene = SceneFactory(location=room, is_active=True)
+        # non_admin has no SceneParticipation row -> not an owner, not GM, not staff.
+
+        result = GrantSceneGMAction().execute(non_admin, target_name=target.db_key)
+
+        assert result.success is False
+        assert not SceneParticipation.objects.filter(
+            scene=scene, account=target_account, is_gm=True
+        ).exists()
+
+    def test_target_without_gm_profile_is_refused(self):
+        """A present target account with no GMProfile is refused."""
+        room = _make_room("GrantRoom3")
+        owner, owner_account = _create_pc_with_account("GrantOwner3", location=room)
+        target, target_account = _create_pc_with_account("GrantTarget3", location=room)
+        # No GMProfile created for target_account.
+        scene = SceneFactory(location=room, is_active=True)
+        SceneOwnerParticipationFactory(scene=scene, account=owner_account)
+
+        result = GrantSceneGMAction().execute(owner, target_name=target.db_key)
+
+        assert result.success is False
+        assert "not an approved gm" in result.message.lower()
+        assert not SceneParticipation.objects.filter(
+            scene=scene, account=target_account, is_gm=True
+        ).exists()
+
+    def test_staff_character_can_grant(self):
+        """A staff/story-runner character (GMCharacter) can grant regardless of ownership."""
+        room = _make_room("GrantRoom4")
+        gm_runner = GMCharacterFactory(db_key="GrantGMRunner", location=room)
+        target, target_account = _create_pc_with_account("GrantTarget4", location=room)
+        GMProfileFactory(account=target_account)
+        scene = SceneFactory(location=room, is_active=True)
+
+        result = GrantSceneGMAction().execute(gm_runner, target_name=target.db_key)
+
+        assert result.success is True
+        assert SceneParticipation.objects.filter(
+            scene=scene, account=target_account, is_gm=True
+        ).exists()
+
+    def test_unknown_target_name_fails(self):
+        """A target name that matches no present character fails with a clear message."""
+        room = _make_room("GrantRoom5")
+        owner, owner_account = _create_pc_with_account("GrantOwner5", location=room)
+        scene = SceneFactory(location=room, is_active=True)
+        SceneOwnerParticipationFactory(scene=scene, account=owner_account)
+
+        result = GrantSceneGMAction().execute(owner, target_name="NoSuchCharacter")
+
+        assert result.success is False
+
+    def test_no_active_scene_returns_failure(self):
+        """GrantSceneGMAction fails when no active scene exists in the room."""
+        room = _make_room("GrantRoom6")
+        owner, _owner_account = _create_pc_with_account("GrantOwner6", location=room)
+
+        result = GrantSceneGMAction().execute(owner, target_name="Anyone")
+
+        assert result.success is False
+        assert "no active scene" in result.message.lower()
+
+    def test_returns_failure_when_not_in_room(self):
+        """Actor not in a room gets a failure result."""
+        actor = CharacterFactory(db_key="NoRoomGrant")
+        actor.location = None
+
+        result = GrantSceneGMAction().execute(actor, target_name="Anyone")
 
         assert result.success is False
         assert "not in a room" in result.message.lower()

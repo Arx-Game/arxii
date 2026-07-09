@@ -13,6 +13,7 @@ from django.test import TestCase
 from commands.scene import CmdScene
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.factories import GMProfileFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import RoundStatus, SceneRoundMode, SceneRoundStartReason
 from world.scenes.factories import (
@@ -20,7 +21,7 @@ from world.scenes.factories import (
     SceneOwnerParticipationFactory,
     SceneRoundParticipantFactory,
 )
-from world.scenes.models import Scene, SceneRound
+from world.scenes.models import Scene, SceneParticipation, SceneRound
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -128,6 +129,72 @@ class CmdSceneFinishTests(TestCase):
         _run_cmd(non_owner, "finish")
         self.scene.refresh_from_db()
         self.assertTrue(self.scene.is_active)
+
+
+# ---------------------------------------------------------------------------
+# scene gm
+# ---------------------------------------------------------------------------
+
+
+class CmdSceneGmTests(TestCase):
+    """``scene gm <name>`` dispatches GrantSceneGMAction (#2113)."""
+
+    def setUp(self):
+        self.room = _make_room("GmRoom")
+        self.owner, self.owner_account = _create_pc_with_account("GmOwner", location=self.room)
+        self.owner.msg = MagicMock()
+        self.target, self.target_account = _create_pc_with_account("GmTarget", location=self.room)
+        self.scene = SceneFactory(location=self.room, is_active=True)
+        SceneOwnerParticipationFactory(scene=self.scene, account=self.owner_account)
+
+    def test_gm_grants_to_present_approved_gm(self):
+        """A scene owner grants GM status to a present GMProfile holder."""
+        GMProfileFactory(account=self.target_account)
+
+        messages = _run_cmd(self.owner, f"gm {self.target.db_key}")
+
+        self.assertTrue(
+            SceneParticipation.objects.filter(
+                scene=self.scene, account=self.target_account, is_gm=True
+            ).exists()
+        )
+        self.assertTrue(messages, "Expected at least one message after scene gm grant")
+
+    def test_gm_missing_name_shows_usage(self):
+        """``scene gm`` with no name shows the usage message."""
+        messages = _run_cmd(self.owner, "gm")
+        self.assertTrue(
+            any("usage: scene gm" in m.lower() for m in messages),
+            f"Expected usage message; got: {messages}",
+        )
+
+    def test_gm_denied_for_non_admin_actor(self):
+        """A present PC who doesn't administer the scene cannot grant GM status."""
+        GMProfileFactory(account=self.target_account)
+        non_admin, _acc = _create_pc_with_account("GmNonAdmin", location=self.room)
+        non_admin.msg = MagicMock()
+
+        _run_cmd(non_admin, f"gm {self.target.db_key}")
+
+        self.assertFalse(
+            SceneParticipation.objects.filter(
+                scene=self.scene, account=self.target_account, is_gm=True
+            ).exists()
+        )
+
+    def test_gm_denied_for_target_without_gm_profile(self):
+        """A present target with no GMProfile is refused."""
+        messages = _run_cmd(self.owner, f"gm {self.target.db_key}")
+
+        self.assertFalse(
+            SceneParticipation.objects.filter(
+                scene=self.scene, account=self.target_account, is_gm=True
+            ).exists()
+        )
+        self.assertTrue(
+            any("not an approved gm" in m.lower() for m in messages),
+            f"Expected a not-approved-GM message; got: {messages}",
+        )
 
 
 # ---------------------------------------------------------------------------

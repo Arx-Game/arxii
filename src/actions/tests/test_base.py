@@ -256,6 +256,7 @@ class ActionRegistryTests(TestCase):
             "combat_leave",
             "start_scene",
             "finish_scene",
+            "grant_scene_gm",
             "add_encounter_participant",
             "add_opponent",
             "begin_encounter_round",

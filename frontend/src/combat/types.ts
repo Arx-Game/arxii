@@ -134,4 +134,6 @@ export interface DispatchActionRequest {
 export interface DispatchResult {
   backend: string;
   deferred: boolean;
+  /** Short human string from the action's result (DispatchResultSerializer.message). */
+  message?: string | null;
 }
