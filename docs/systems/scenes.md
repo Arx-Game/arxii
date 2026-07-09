@@ -486,13 +486,51 @@ from world.scenes.round_services import maybe_finish_empty_scene
 maybe_finish_empty_scene(room, *, leaving=None) -> None
 ```
 
+### GM enrollment (#2113)
+
+`SceneParticipation.is_gm` is the single predicate every GM-combat surface gates on
+(`Scene.is_gm`, `_actor_may_gm_encounter` in `actions/definitions/gm_combat.py`,
+`IsEncounterGMOrStaff`/`can_view_encounter_effects` in `world/combat/permissions.py`). Before
+#2113 the only production writer was the crossover-event path
+(`_enroll_lead_gm_on_scene`, `world/stories/services/crossover.py`, untouched by this work) — an
+ordinary trust-tier GM (the #1999/#2000 GMLevel ladder) running their own table's session never
+got flagged. Two writers now cover the gap:
+
+```python
+from world.scenes.scene_admin_services import enroll_present_table_gms
+
+# Auto-flag is_gm=True for any present account that owns an ACTIVE GMTable AND has at
+# least one OTHER present character whose active persona holds an active
+# GMTableMembership on that same table. Bare table ownership is not enough — a GM
+# merely passing through a stranger's room must not auto-become that scene's
+# adjudicator. Idempotent (update_or_create); never flips is_gm back to False.
+enroll_present_table_gms(scene, room) -> None
+```
+
+Called from `StartSceneAction.execute()` right after `add_present_as_co_owners` (new scene) and
+again on the mid-scene join branch (existing scene), so a table-owning GM arriving after scene
+start still gets flagged.
+
+**`GrantSceneGMAction`** (`key="grant_scene_gm"`, `src/actions/definitions/scenes.py`) is the
+fallback for cases auto-detection can't reach (pickup games, guest players, an Assistant GM the
+scene owner wants to co-adjudicate). Gated: the actor must already administer the scene
+(`actor_can_administer_scene`) and the named, present target account must hold a `GMProfile`
+(any level — approval is itself the trust gate, no `GMLevel` tier check here).
+`update_or_create`s the target's `SceneParticipation.is_gm=True`. Telnet: `scene gm <name>`
+(`CmdScene`, `src/commands/scene.py`). Web reaches the same Action through the generic
+available-actions dispatcher (mirrors `set_the_stage`); a minimal "Grant GM" control lives next
+to the co-owner list in `SceneHeader.tsx`, visible only when `actor_can_administer_scene` is true
+for the viewer.
+
 ### Lifecycle Actions
 
 **`StartSceneAction`** (`key="start_scene"`, `src/actions/definitions/scenes.py`)
 
 Creates a scene in the actor's current room via `ensure_scene_for_location`, then calls
-`add_present_as_co_owners` so every present PC is a co-owner. If an active scene already
-exists, the actor is recorded as a non-owner participant. Ungated — any character may invoke it.
+`add_present_as_co_owners` and `enroll_present_table_gms` so every present PC is a co-owner and
+any table-owning GM with a present member is auto-flagged `is_gm`. If an active scene already
+exists, the actor is recorded as a non-owner participant and `enroll_present_table_gms` runs
+again for the room. Ungated — any character may invoke it.
 
 **`FinishSceneAction`** (`key="finish_scene"`, `src/actions/definitions/scenes.py`)
 

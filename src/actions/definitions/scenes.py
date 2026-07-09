@@ -7,13 +7,16 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
+from commands.exceptions import CommandError
 
 # Re-use the same NOT_IN_A_ROOM_MESSAGE constant (defined in rounds.py and checked here).
 NOT_IN_A_ROOM_MESSAGE = "You are not in a room."
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.scenes.models import Scene
 
 
@@ -48,6 +51,7 @@ class StartSceneAction(Action):
         from world.scenes.place_services import ensure_scene_for_location  # noqa: PLC0415
         from world.scenes.scene_admin_services import (  # noqa: PLC0415
             add_present_as_co_owners,
+            enroll_present_table_gms,
             resolve_actor_account,
         )
 
@@ -59,6 +63,7 @@ class StartSceneAction(Action):
         if scene is None:
             scene = ensure_scene_for_location(room)
             add_present_as_co_owners(scene, room)
+            enroll_present_table_gms(scene, room)
             return ActionResult(success=True, message="A scene begins.")
 
         # Scene already exists — join the actor as a non-owner participant.
@@ -71,6 +76,8 @@ class StartSceneAction(Action):
                 account=account,
                 defaults={"is_owner": False},
             )
+        # A table-owning GM arriving after scene start still gets flagged (#2113).
+        enroll_present_table_gms(scene, room)
         return ActionResult(success=True, message="A scene is already active here.")
 
 
@@ -116,3 +123,100 @@ class FinishSceneAction(Action):
 
         finish_scene_full(scene, by_account=resolve_actor_account(actor))
         return ActionResult(success=True, message="The scene comes to a close.")
+
+
+def _resolve_gm_grant_target(
+    actor: ObjectDB,
+    room: ObjectDB,
+    target_name: str,
+) -> tuple[CharacterSheet, AccountDB] | ActionResult:
+    """Resolve + validate a ``scene gm <name>`` target.
+
+    Returns ``(target_sheet, target_account)`` on success, or the failure
+    ``ActionResult`` to return immediately. Extracted from ``execute()`` to keep
+    its own return-statement count low (PLR0911), mirroring
+    ``gm_combat.py``'s ``_validate_add_opponent_kwargs`` pattern.
+    """
+    from commands.utils.gm_resolution import resolve_character_sheet_in_room  # noqa: PLC0415
+    from world.gm.models import GMProfile  # noqa: PLC0415
+    from world.scenes.scene_admin_services import resolve_actor_account  # noqa: PLC0415
+
+    target_name = target_name.strip()
+    if not target_name:
+        return ActionResult(success=False, message="Name a present character.")
+
+    try:
+        target_sheet = resolve_character_sheet_in_room(actor, target_name, room=room)
+    except CommandError as err:
+        return ActionResult(success=False, message=str(err))
+
+    target_account = resolve_actor_account(target_sheet.character)
+    if target_account is None:
+        return ActionResult(
+            success=False,
+            message="That character has no controlling account.",
+        )
+
+    try:
+        target_account.gm_profile  # noqa: B018 - side effect: triggers reverse lookup
+    except GMProfile.DoesNotExist:
+        return ActionResult(success=False, message="That account is not an approved GM.")
+
+    return target_sheet, target_account
+
+
+@dataclass
+class GrantSceneGMAction(Action):
+    """Explicitly grant ``is_gm`` to a present, approved GM account (#2113).
+
+    The fallback for cases ``enroll_present_table_gms`` auto-detection can't reach
+    (pickup games, guest players, an Assistant GM the scene owner wants to
+    co-adjudicate). Gated: the actor must already administer the scene
+    (``actor_can_administer_scene`` — is_gm / co-owner / staff / is_story_runner) and
+    the target account must hold a ``GMProfile`` (any level — approval is itself the
+    trust gate; no ``GMLevel`` tier check here).
+    """
+
+    key: str = "grant_scene_gm"
+    name: str = "Grant Scene GM"
+    icon: str = "shield"
+    category: str = "scenes"
+    target_type: TargetType = TargetType.AREA
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.scenes.models import SceneParticipation  # noqa: PLC0415
+        from world.scenes.scene_admin_services import actor_can_administer_scene  # noqa: PLC0415
+
+        room = actor.location
+        if room is None:
+            return ActionResult(success=False, message=NOT_IN_A_ROOM_MESSAGE)
+
+        scene = _active_scene_for_room(room)
+        if scene is None:
+            return ActionResult(success=False, message="There is no active scene here.")
+
+        if not actor_can_administer_scene(actor, scene):
+            return ActionResult(
+                success=False,
+                message="Only the scene's GM or an owner can grant GM status.",
+            )
+
+        resolved = _resolve_gm_grant_target(actor, room, kwargs.get("target_name") or "")
+        if isinstance(resolved, ActionResult):
+            return resolved
+        target_sheet, target_account = resolved
+
+        SceneParticipation.objects.update_or_create(
+            scene=scene,
+            account=target_account,
+            defaults={"is_gm": True},
+        )
+        return ActionResult(
+            success=True,
+            message=f"{target_sheet.character} is now a GM of this scene.",
+        )

@@ -170,6 +170,16 @@ GM and co-owner tooling for scene lifecycle and round-mode adjustment, delivered
 an acute peril ensures an ordinary STRICT `SceneRound(start_reason=DANGER)` that ticks the
 peril at presence-gated resolution and auto-ends when it clears.
 
+**GM enrollment for ordinary GM-run scenes — DONE (#2113):** `SceneParticipation.is_gm` — the
+predicate every GM-combat surface gates on — had only one production writer, the crossover
+Lead-GM path; an ordinary trust-tier GM running their own table's session never got flagged.
+Two writers now cover it: `enroll_present_table_gms(scene, room)` (`scene_admin_services.py`)
+auto-flags a present account that owns an ACTIVE `GMTable` with an *other* present character
+holding an active `GMTableMembership` on it, called from `StartSceneAction.execute()` on both
+the new-scene and mid-scene-join paths; `GrantSceneGMAction` (`scene gm <name>`, key
+`"grant_scene_gm"`) is the explicit fallback for cases auto-detection can't reach, gated on
+`actor_can_administer_scene` plus the target holding a `GMProfile`.
+
 ### Web Round-Mode Control — DONE (#1467, parity for #1445)
 
 Frontend parity for `scene round` (telnet):

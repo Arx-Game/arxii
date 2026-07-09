@@ -12,6 +12,8 @@ from evennia_extensions.factories import (
     ObjectDBFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.constants import GMTableStatus
+from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import (
     SceneFactory,
@@ -22,6 +24,7 @@ from world.scenes.models import SceneParticipation
 from world.scenes.scene_admin_services import (
     actor_can_administer_scene,
     add_present_as_co_owners,
+    enroll_present_table_gms,
     finish_scene_full,
     resolve_actor_account,
 )
@@ -41,6 +44,22 @@ def _create_pc_with_account(db_key: str, location=None):
     tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
     account = tenure.player_data.account
     return char, account
+
+
+def _create_pc_with_sheet(db_key: str, location=None):
+    """Create a PC character with a live roster tenure, returning the sheet too.
+
+    Returns (character, account, character_sheet).
+    """
+    kwargs = {"db_key": db_key}
+    if location is not None:
+        kwargs["location"] = location
+    char = CharacterFactory(**kwargs)
+    sheet = CharacterSheetFactory(character=char)
+    entry = RosterEntryFactory(character_sheet=sheet)
+    tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+    account = tenure.player_data.account
+    return char, account, sheet
 
 
 class ResolveActorAccountTests(TestCase):
@@ -237,3 +256,125 @@ class FinishSceneFullTests(TestCase):
         mock_broadcast.assert_not_called()
         scene.refresh_from_db()
         assert scene.date_finished == first_date_finished
+
+
+class EnrollPresentTableGMsTests(TestCase):
+    """Auto-``is_gm`` grant for a present table-owning GM (#2113)."""
+
+    def _make_room(self, label: str):
+        return ObjectDBFactory(db_key=label, db_typeclass_path="typeclasses.rooms.Room")
+
+    def test_flags_gm_with_present_table_member(self):
+        """A GM with an ACTIVE table and a present member is flagged is_gm=True."""
+        room = self._make_room("GmRoom1")
+        _gm_char, gm_account, _gm_sheet = _create_pc_with_sheet("GM1", location=room)
+        _player_char, _player_account, player_sheet = _create_pc_with_sheet(
+            "Player1", location=room
+        )
+        profile = GMProfileFactory(account=gm_account)
+        table = GMTableFactory(gm=profile, status=GMTableStatus.ACTIVE)
+        GMTableMembershipFactory(table=table, persona=player_sheet.primary_persona)
+        scene = SceneFactory()
+
+        enroll_present_table_gms(scene, room)
+
+        assert SceneParticipation.objects.filter(
+            scene=scene, account=gm_account, is_gm=True
+        ).exists()
+
+    def test_does_not_flag_gm_with_stranger_present(self):
+        """A GM with an ACTIVE table but no present member is left is_gm=False."""
+        room = self._make_room("GmRoom2")
+        _gm_char, gm_account, _gm_sheet = _create_pc_with_sheet("GM2", location=room)
+        _stranger_char, _stranger_account, _stranger_sheet = _create_pc_with_sheet(
+            "Stranger2", location=room
+        )
+        profile = GMProfileFactory(account=gm_account)
+        GMTableFactory(gm=profile, status=GMTableStatus.ACTIVE)
+        scene = SceneFactory()
+
+        enroll_present_table_gms(scene, room)
+
+        assert not SceneParticipation.objects.filter(scene=scene, account=gm_account).exists()
+
+    def test_does_not_flag_gm_alone_in_room(self):
+        """A GM alone in the room (no other present PC at all) is not flagged."""
+        room = self._make_room("GmRoom3")
+        _gm_char, gm_account, _gm_sheet = _create_pc_with_sheet("GM3", location=room)
+        profile = GMProfileFactory(account=gm_account)
+        GMTableFactory(gm=profile, status=GMTableStatus.ACTIVE)
+        scene = SceneFactory()
+
+        enroll_present_table_gms(scene, room)
+
+        assert not SceneParticipation.objects.filter(scene=scene, account=gm_account).exists()
+
+    def test_archived_table_does_not_flag(self):
+        """An ARCHIVED table (even with a present member) does not grant is_gm."""
+        room = self._make_room("GmRoom4")
+        _gm_char, gm_account, _gm_sheet = _create_pc_with_sheet("GM4", location=room)
+        _player_char, _player_account, player_sheet = _create_pc_with_sheet(
+            "Player4", location=room
+        )
+        profile = GMProfileFactory(account=gm_account)
+        table = GMTableFactory(gm=profile, status=GMTableStatus.ARCHIVED)
+        GMTableMembershipFactory(table=table, persona=player_sheet.primary_persona)
+        scene = SceneFactory()
+
+        enroll_present_table_gms(scene, room)
+
+        assert not SceneParticipation.objects.filter(scene=scene, account=gm_account).exists()
+
+    def test_left_membership_does_not_flag(self):
+        """A soft-left membership (left_at set) does not count as present."""
+        from django.utils import timezone
+
+        room = self._make_room("GmRoom5")
+        _gm_char, gm_account, _gm_sheet = _create_pc_with_sheet("GM5", location=room)
+        _player_char, _player_account, player_sheet = _create_pc_with_sheet(
+            "Player5", location=room
+        )
+        profile = GMProfileFactory(account=gm_account)
+        table = GMTableFactory(gm=profile, status=GMTableStatus.ACTIVE)
+        GMTableMembershipFactory(
+            table=table,
+            persona=player_sheet.primary_persona,
+            left_at=timezone.now(),
+        )
+        scene = SceneFactory()
+
+        enroll_present_table_gms(scene, room)
+
+        assert not SceneParticipation.objects.filter(scene=scene, account=gm_account).exists()
+
+    def test_non_gm_accounts_untouched(self):
+        """Present accounts without a GMProfile never get is_gm."""
+        room = self._make_room("GmRoom6")
+        _char_a, account_a = _create_pc_with_account("Alice6", location=room)
+        _char_b, account_b = _create_pc_with_account("Bob6", location=room)
+        scene = SceneFactory()
+
+        enroll_present_table_gms(scene, room)
+
+        assert not SceneParticipation.objects.filter(
+            scene=scene, account__in=[account_a, account_b]
+        ).exists()
+
+    def test_does_not_downgrade_existing_owner_flag(self):
+        """Gaining is_gm never clears a pre-existing is_owner=True on the same row."""
+        room = self._make_room("GmRoom7")
+        _gm_char, gm_account, _gm_sheet = _create_pc_with_sheet("GM7", location=room)
+        _player_char, _player_account, player_sheet = _create_pc_with_sheet(
+            "Player7", location=room
+        )
+        profile = GMProfileFactory(account=gm_account)
+        table = GMTableFactory(gm=profile, status=GMTableStatus.ACTIVE)
+        GMTableMembershipFactory(table=table, persona=player_sheet.primary_persona)
+        scene = SceneFactory()
+        SceneOwnerParticipationFactory(scene=scene, account=gm_account)
+
+        enroll_present_table_gms(scene, room)
+
+        participation = SceneParticipation.objects.get(scene=scene, account=gm_account)
+        assert participation.is_owner is True
+        assert participation.is_gm is True

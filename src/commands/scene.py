@@ -3,6 +3,7 @@
 Thin telnet face of scene-lifecycle Actions:
     ``scene start [name]``               — StartSceneAction
     ``scene finish``                     — FinishSceneAction
+    ``scene gm <name>``                  — GrantSceneGMAction (#2113)
     ``scene round <mode> [knobs]``       — SetRoundModeAction
     ``scene succor <ally>``              — SuccorSceneAction (#1744)
     ``scene interpose <ally>``           — InterposeSceneAction (#1316)
@@ -29,6 +30,7 @@ _USAGE = (
     "Usage: scene <subcommand>\n"
     "  scene start [name]                — start a scene here\n"
     "  scene finish                      — finish the active scene\n"
+    "  scene gm <name>                   — grant GM status to a present approved GM\n"
     "  scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]\n"
     "  scene succor <ally>               — shelter an ally from a hazard this round\n"
     "  scene interpose <ally>            — guard an ally from sudden non-combat harm this round\n"
@@ -66,6 +68,11 @@ class CmdScene(ArxCommand):
     **Finish the active scene:**
         ``scene finish``
 
+    **Grant GM status to a present approved GM:**
+        ``scene gm <name>`` (#2113) — fallback when auto-enrollment misses a table-owning
+        GM's session (pickup games, guest players, an Assistant GM); the actor must already
+        administer the scene and the target must hold a GMProfile.
+
     **Set the round mode:**
         ``scene round [open|pose_order|strict] [quorum=<pct>] [cap=<n>] [lock=on/off]``
         Example: ``scene round strict quorum=70 cap=2 lock=on``
@@ -96,6 +103,8 @@ class CmdScene(ArxCommand):
             self._handle_start(rest)
         elif first == "finish":  # noqa: STRING_LITERAL
             self._handle_finish()
+        elif first == "gm":  # noqa: STRING_LITERAL
+            self._handle_gm(rest)
         elif first == "round":  # noqa: STRING_LITERAL
             self._handle_round(rest)
         elif first == "succor":  # noqa: STRING_LITERAL
@@ -126,6 +135,18 @@ class CmdScene(ArxCommand):
         from actions.definitions.scenes import FinishSceneAction  # noqa: PLC0415
 
         result = FinishSceneAction().run(actor=self.caller)
+        if result.message:
+            self.msg(result.message)
+
+    def _handle_gm(self, rest: str) -> None:
+        """Dispatch GrantSceneGMAction, forwarding the named target."""
+        from actions.definitions.scenes import GrantSceneGMAction  # noqa: PLC0415
+
+        target_name = rest.strip()
+        if not target_name:
+            self.msg("Usage: scene gm <name>.")
+            return
+        result = GrantSceneGMAction().run(actor=self.caller, target_name=target_name)
         if result.message:
             self.msg(result.message)
 

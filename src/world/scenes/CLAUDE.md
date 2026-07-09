@@ -7,7 +7,17 @@ the unified Persona identity system, and non-combat scene rounds.
 
 ### `models.py`
 - **`Scene`**: Primary scene entity with title, status, location, summary, privacy_mode
-- **`SceneParticipation`**: Account participation tracking in scenes
+- **`SceneParticipation`**: Account participation tracking in scenes. `is_gm` is the single
+  predicate every GM-combat surface gates on (`Scene.is_gm`, `_actor_may_gm_encounter`,
+  `IsEncounterGMOrStaff`). Two writers (#2113): `_enroll_lead_gm_on_scene`
+  (`world/stories/services/crossover.py`) for crossover Lead GMs, and
+  `scene_admin_services.enroll_present_table_gms` — auto-flags a present account that owns
+  an ACTIVE `GMTable` with an *other* present character holding an active
+  `GMTableMembership` on it; called from `StartSceneAction.execute()` on both the
+  new-scene and mid-scene-join paths. `GrantSceneGMAction` (`scene gm <name>`,
+  `actions/definitions/scenes.py`) is the fallback explicit grant for cases
+  auto-detection can't reach, gated on `actor_can_administer_scene` + target `GMProfile`.
+  See "Scene Administration" in `docs/systems/scenes.md` for the full design.
 - **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE). FK to CharacterSheet
   (source of truth); partial unique constraint ensures one PRIMARY per sheet
 - **`PersonaDiscovery`**: Records that a character discovered two personas are the same person

@@ -1,9 +1,10 @@
 """Scene administration permission helpers.
 
-Four public surfaces:
+Five public surfaces:
   - ``actor_can_administer_scene`` — permission gate for admin actions.
   - ``resolve_actor_account`` — controlling account for a character actor.
   - ``add_present_as_co_owners`` — co-ownership grant for all present PCs.
+  - ``enroll_present_table_gms`` — auto is_gm grant for a present table-owning GM (#2113).
   - ``finish_scene_full`` — full scene-finish orchestration (finish, rewards, fatigue, broadcast).
 """
 
@@ -75,6 +76,74 @@ def add_present_as_co_owners(scene: Scene, room: ObjectDB) -> None:
             scene=scene,
             account=account,
             defaults={"is_owner": True},
+        )
+
+
+def enroll_present_table_gms(scene: Scene, room: ObjectDB) -> None:
+    """Auto-flag ``is_gm=True`` for a present GM running their own table (#2113).
+
+    Walks ``room.contents`` once (mirrors ``add_present_as_co_owners``'s object/account
+    resolution) to build the present-accounts and present-personas sets, keyed by which
+    account controls which persona. For each present account holding a ``GMProfile``,
+    checks whether any of their ACTIVE ``GMTable`` rows has an active
+    ``GMTableMembership`` (``left_at__isnull=True``) whose persona belongs to a
+    *different* present character — bare table ownership is not enough: a GM merely
+    passing through a stranger's room must not auto-become that scene's adjudicator.
+
+    Called right after ``add_present_as_co_owners`` in ``StartSceneAction.execute`` and
+    again from the mid-scene join branch, so a table-owning GM arriving after scene
+    start still gets flagged. Idempotent (``update_or_create``); never flips ``is_gm``
+    back to False — only ever grants.
+
+    No query-in-loop concern: one combined ``GMTableMembership`` query per present-GM
+    account, bounded by room occupancy (matches ``add_present_as_co_owners``'s cost
+    profile).
+    """
+    from world.gm.constants import GMTableStatus  # noqa: PLC0415
+    from world.gm.models import GMProfile, GMTableMembership  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    accounts_present: dict[int, AccountDB] = {}
+    persona_account_ids: dict[int, int] = {}
+    for obj in room.contents:
+        try:
+            sheet = obj.sheet_data
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+        account = obj.active_account
+        if account is None:
+            continue
+        accounts_present[account.id] = account
+        persona = active_persona_for_sheet(sheet)
+        persona_account_ids[persona.id] = account.id
+
+    for account_id, account in accounts_present.items():
+        try:
+            profile = account.gm_profile
+        except GMProfile.DoesNotExist:
+            continue
+
+        other_present_persona_ids = [
+            persona_id
+            for persona_id, owning_account_id in persona_account_ids.items()
+            if owning_account_id != account_id
+        ]
+        if not other_present_persona_ids:
+            continue
+
+        member_present = GMTableMembership.objects.filter(
+            table__gm=profile,
+            table__status=GMTableStatus.ACTIVE,
+            left_at__isnull=True,
+            persona_id__in=other_present_persona_ids,
+        ).exists()
+        if not member_present:
+            continue
+
+        SceneParticipation.objects.update_or_create(
+            scene=scene,
+            account=account,
+            defaults={"is_gm": True},
         )
 
 

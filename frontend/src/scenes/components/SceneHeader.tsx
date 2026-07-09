@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useDispatchPlayerAction } from '@/combat/queries';
 import { SceneDetail, updateScene, finishScene } from '../queries';
+import { fetchAvailableActions } from '../actionQueries';
+import type { PlayerAction } from '../actionTypes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +16,73 @@ import { RoundSettingsDialog } from './RoundSettingsDialog';
 interface Props {
   scene?: SceneDetail;
   onRefresh?: () => void;
+}
+
+/**
+ * Grant GM control (#2113) — the web face of `scene gm <name>`.
+ *
+ * Dispatches the `grant_scene_gm` registry action through the same generic
+ * available-actions seam `set_the_stage` uses (RoomPositionsPanel). Rendered
+ * only for scene owners on an active scene; the backend Action re-checks
+ * `actor_can_administer_scene` and the target's GMProfile, so this control is
+ * a convenience, never the gate.
+ */
+function GrantSceneGMControl() {
+  const [targetName, setTargetName] = useState('');
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+
+  const { data: actionsData } = useQuery({
+    queryKey: ['available-actions', characterId],
+    queryFn: () => fetchAvailableActions(characterId!),
+    enabled: characterId !== null,
+  });
+  const availableActions: PlayerAction[] = actionsData?.results ?? [];
+  const grantAction =
+    availableActions.find(
+      (a) => a.ref.backend === 'registry' && a.ref.registry_key === 'grant_scene_gm'
+    ) ?? null;
+
+  const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
+
+  if (!grantAction || characterId === null) return null;
+
+  const submit = () => {
+    const name = targetName.trim();
+    if (!name) return;
+    dispatchAction({ ref: grantAction.ref, kwargs: { target_name: name } })
+      .then((result) => {
+        setFeedback(result.message ?? `GM status granted to ${name}.`);
+        setTargetName('');
+      })
+      .catch((err: unknown) =>
+        setFeedback(err instanceof Error ? err.message : 'Could not grant GM status.')
+      );
+  };
+
+  return (
+    <div className="mb-2" data-testid="grant-scene-gm">
+      <div className="flex items-center gap-2">
+        <Input
+          className="h-8 w-48"
+          placeholder="Character name"
+          value={targetName}
+          onChange={(e) => setTargetName(e.target.value)}
+          aria-label="Grant GM target character name"
+        />
+        <Button size="sm" variant="outline" onClick={submit} disabled={isPending}>
+          Grant GM
+        </Button>
+      </div>
+      {feedback && <p className="mt-1 text-xs text-muted-foreground">{feedback}</p>}
+    </div>
+  );
 }
 
 export function SceneHeader({ scene, onRefresh }: Props) {
@@ -99,6 +171,7 @@ export function SceneHeader({ scene, onRefresh }: Props) {
           <RoundSettingsDialog scene={scene} />
         </div>
       )}
+      {scene.is_owner && scene.is_active && <GrantSceneGMControl />}
       {scene.is_active && (
         <p className="mb-4 text-xs text-muted-foreground">
           Auto-refreshes every minute while active
