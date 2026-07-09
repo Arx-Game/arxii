@@ -289,6 +289,27 @@ predicate. `_auto_engage_court` in `services.py` auto-engages newly inducted Cou
 the predicate is satisfied. Battle covenants use `not is_dormant` as their gate; the Court
 mission-gate is new dedicated machinery.
 
+### Continuous vow enforcement (#2051)
+
+`revalidate_engagements(*, character_sheet, room)` in `services.py` re-runs
+`can_engage_membership` for each engaged `CharacterCovenantRole`. On failure,
+`clear_engaged_membership` dims the vow (max health recompute + cache flush) and
+emits a notice: "Your vow dims — the covenant is not with you." COURT vows
+re-validate by their own arm (master's business stays lit); BATTLE re-checks
+dormancy only.
+
+Wired into two departure seams:
+- **`move_object`** (`flows/service_functions/movement.py`): captures the origin
+  room before the move, then revalidates the mover at the destination AND each
+  remaining origin-room occupant with an engaged covenant role (hot-path
+  short-circuit: skips occupants with no engaged role — no DB query).
+- **`finish_scene_full`** (`scenes/scene_admin_services.py`): invalidates the
+  room's active-scene cache (the scene is no longer active) and revalidates
+  remaining occupants — Durance vows dim when the scene they were tied to ends.
+
+Auto-engage on next qualifying arrival already exists, so power relights the
+moment the covenant reunites.
+
 ### Pull-cap enforcement (`world.magic.services.threads`)
 
 `compute_anchor_cap` delegates to `_bound_covenant_role_cap_by_court_grant` for
