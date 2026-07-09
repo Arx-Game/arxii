@@ -59,6 +59,7 @@ def dispatch_capability_reaction(  # noqa: PLR0913
     approach: str | None,
     error_msg: str,  # noqa: ARG001 — reserved for callers that raise on no-match
     outcome_fn: Callable[[ChallengeResolutionResult], None],
+    extra_modifiers: int = 0,
 ) -> ChallengeResolutionResult | None:
     """Resolve *actor*'s capability reaction against *target_object* and apply the outcome.
 
@@ -111,6 +112,7 @@ def dispatch_capability_reaction(  # noqa: PLR0913
         chosen.resolved_challenge_instance,  # type: ignore[arg-type] — filtered non-None above
         chosen.resolved_challenge_approach,  # type: ignore[arg-type] — set whenever instance is
         chosen.capability_source,
+        extra_modifiers=extra_modifiers,
     )
     outcome_fn(result)
     return result
