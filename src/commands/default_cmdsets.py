@@ -90,6 +90,7 @@ from commands.journals import CmdJournal
 from commands.locations import CmdRoom
 from commands.market import CmdMarket
 from commands.missions import CmdMission
+from commands.motif import CmdMotif
 from commands.offer_response import CmdDecline
 from commands.organizations import CmdOrg
 from commands.outfit import CmdOutfit  # #1866
@@ -207,6 +208,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdCompanion,
             # #1582 — signature-bonus selection namespace (set/clear/list).
             CmdSignature,
+            # #2030 — motif style-binding namespace (bindstyle/unbindstyle/list).
+            CmdMotif,
             CmdWeaveThread,
             CmdImbue,
             # #1490 — telnet face of ResolveAlterationAction; list/resolve Mage Scars.
