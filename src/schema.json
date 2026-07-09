@@ -14573,6 +14573,7 @@ paths:
         schema:
           type: string
           enum:
+          - COMBO_DISCOVERY
           - DISTINCTION
           - DRAMATIC_MOMENT
           - ENTRY_FLOURISH
@@ -14608,6 +14609,7 @@ paths:
           * `MISSION_REPORT` - Mission report style
           * `STAKE_REWARD` - Stake reward
           * `DISTINCTION` - Distinction
+          * `COMBO_DISCOVERY` - Combo discovery
       tags:
       - magic
       security:
@@ -51888,6 +51890,7 @@ components:
             * `MISSION_REPORT` - Mission report style
             * `STAKE_REWARD` - Stake reward
             * `DISTINCTION` - Distinction
+            * `COMBO_DISCOVERY` - Combo discovery
         granted_at:
           type: string
           format: date-time
@@ -54513,6 +54516,7 @@ components:
       - MISSION_REPORT
       - STAKE_REWARD
       - DISTINCTION
+      - COMBO_DISCOVERY
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -54531,6 +54535,7 @@ components:
         * `MISSION_REPORT` - Mission report style
         * `STAKE_REWARD` - Stake reward
         * `DISTINCTION` - Distinction
+        * `COMBO_DISCOVERY` - Combo discovery
     Specialization:
       type: object
       description: Serializer for Specialization model.

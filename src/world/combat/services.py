@@ -12,7 +12,7 @@ import random
 from typing import TYPE_CHECKING, TypeVar
 
 from django.db import transaction
-from django.db.models import F, Prefetch, Q
+from django.db.models import F, Prefetch, Q, Sum
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -4257,6 +4257,129 @@ def revert_combo_upgrade(action: CombatRoundAction) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Combo post-resolution: fused narration + discovery + use-count
+# ---------------------------------------------------------------------------
+
+
+def _process_combo_outcomes(
+    action_outcomes: list[ActionOutcome],
+    encounter: CombatEncounter,
+    round_number: int,  # reserved for future round-scoped narration
+) -> list[ActionOutcome]:
+    """Post-resolution pass: group combo outcomes, fire narration + discovery.
+
+    Called from ``resolve_round`` after ``_resolve_actions`` returns and
+    before ``assess_break_bar``. For each distinct combo that fired:
+
+    1. Broadcast a joint finisher narration naming all contributors (if ≥2).
+    2. Fire the discovery ceremony for first-ever triggers.
+    3. Increment each contributor's ``ComboLearning.use_count``.
+    4. Check for signature flourish unlock.
+
+    Single-contributor combos keep the existing per-PC narration (backward
+    compatible — the per-PC ``_record_and_broadcast_pc_action`` already ran).
+    """
+    from collections import defaultdict  # noqa: PLC0415
+
+    from world.combat.interaction_services import (  # noqa: PLC0415
+        broadcast_action_outcome,
+        render_combo_finisher_narration,
+    )
+    from world.combat.models import ComboLearning  # noqa: PLC0415
+
+    # Group outcomes by combo_used.
+    combo_groups: dict[int, list[tuple[ActionOutcome, CombatParticipant]]] = defaultdict(list)
+    for outcome in action_outcomes:
+        if outcome.combo_used is not None and outcome.participant_id is not None:
+            participant = CombatParticipant.objects.filter(pk=outcome.participant_id).first()
+            if participant is not None:
+                combo_groups[outcome.combo_used.pk].append((outcome, participant))
+
+    for group in combo_groups.values():
+        combo = group[0][0].combo_used
+        participant_sheets = [p.character_sheet for _, p in group]
+
+        # 1. Joint finisher narration (only for multi-contributor combos).
+        _MULTI_CONTRIBUTOR_THRESHOLD = 2
+        if len(group) >= _MULTI_CONTRIBUTOR_THRESHOLD:
+            contributor_labels = [str(p) for _, p in group]
+            total_damage = sum(
+                dr.damage_dealt for outcome, _ in group for dr in outcome.damage_results
+            )
+            # Determine target label from the first outcome's action.
+            target_label = None
+            for _outcome, participant in group:
+                action = CombatRoundAction.objects.filter(
+                    participant=participant,
+                    round_number=round_number,
+                ).first()
+                if action and action.focused_opponent_target_id:
+                    target_label = action.focused_opponent_target.name
+                    break
+
+            signature_clause = _signature_clause_for(combo)
+            narration = render_combo_finisher_narration(
+                combo_name=combo.name,
+                contributor_labels=contributor_labels,
+                target_label=target_label,
+                total_damage=total_damage,
+                signature_clause=signature_clause,
+            )
+            broadcast_action_outcome(encounter=encounter, narration=narration)
+
+        # 2. Fire discovery ceremony for first-ever triggers.
+        was_known = ComboLearning.objects.filter(
+            combo=combo,
+            character_sheet__in=participant_sheets,
+        ).exists()
+        if not was_known and combo.discoverable_via_combat:
+            from world.combat.combo_discovery import fire_combo_discovery  # noqa: PLC0415
+
+            fire_combo_discovery(
+                combo=combo,
+                participant_sheets=participant_sheets,
+                scene=encounter.scene,
+            )
+
+        # 3. Increment use_count for each contributor.
+        for sheet in participant_sheets:
+            ComboLearning.objects.filter(
+                combo=combo,
+                character_sheet=sheet,
+            ).update(use_count=F("use_count") + 1)
+
+    return action_outcomes
+
+
+def _signature_clause_for(
+    combo: ComboDefinition,
+) -> str | None:
+    """Return the signature flourish clause if unlocked, else None.
+
+    Checks for a ``ComboSignature`` row matching the combo. If one exists,
+    sums ``use_count`` across covenant members who know the combo and checks
+    against ``unlock_threshold``.
+    """
+    from world.combat.models import ComboSignature  # noqa: PLC0415
+
+    signatures = ComboSignature.objects.filter(combo=combo).select_related("covenant")
+    for sig in signatures:
+        # Sum use_count across all covenant members who know this combo.
+        total_uses = (
+            ComboLearning.objects.filter(
+                combo=combo,
+                character_sheet__combat_participations__covenant_role__covenant=sig.covenant,
+            ).aggregate(total=Sum("use_count"))["total"]
+            or 0
+        )
+
+        if total_uses >= sig.unlock_threshold and sig.flourish_narrative:
+            return sig.flourish_narrative
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Defensive check integration
 # ---------------------------------------------------------------------------
 
@@ -5070,27 +5193,16 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
     target = action.focused_opponent_target
     fatigue_category = action.focused_category or ActionCategory.PHYSICAL
 
-    # combat_result is only set on non-combo magic-pipeline paths; all other
-    # branches (combos, passives-only) produce no CombatTechniqueResult.
+    # combat_result is only set on magic-pipeline paths; the combo rider
+    # path produces no CombatTechniqueResult.
     combat_result: CombatTechniqueResult | None = None
 
-    # Combo upgrades require an active opponent target — bail out early if defeated.
-    if target is not None and action.combo_upgrade:
-        target.refresh_from_db()
-        if target.status != OpponentStatus.DEFEATED:
-            combo = action.combo_upgrade
-            dmg_result = apply_damage_to_opponent(
-                target,
-                combo.bonus_damage,
-                bypass_soak=combo.bypass_soak,
-                source_sheet=participant.character_sheet,
-            )
-            outcome.combo_used = combo
-            outcome.damage_results.append(dmg_result)
-    elif not action.combo_upgrade:
-        # All non-combo techniques (damage AND non-attack) route through the magic
-        # pipeline. The resolver internally handles damage (if base_power) and
-        # conditions (if condition_applications rows exist).
+    # Combo-upgraded actions still run the magic pipeline (the contributor's
+    # own technique resolves normally), AND get the combo rider appended.
+    # Non-combo actions run the pipeline as before. The only case where the
+    # pipeline is skipped: combo-upgraded with no target (defeated opponent).
+    run_pipeline = not action.combo_upgrade or target is not None
+    if run_pipeline:
         template = technique.action_template
         if template is None:
             raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
@@ -5106,6 +5218,21 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
             offense_check_fn=offense_check_fn,
         )
         outcome.damage_results.extend(combat_result.damage_results)
+
+    # Combo rider: appended in addition to the pipeline result when the
+    # action is combo-upgraded and the target is alive.
+    if action.combo_upgrade and target is not None:
+        target.refresh_from_db()
+        if target.status != OpponentStatus.DEFEATED:
+            combo = action.combo_upgrade
+            dmg_result = apply_damage_to_opponent(
+                target,
+                combo.bonus_damage,
+                bypass_soak=combo.bypass_soak,
+                source_sheet=participant.character_sheet,
+            )
+            outcome.combo_used = combo
+            outcome.damage_results.append(dmg_result)
 
     # Apply fatigue after action resolves
     apply_fatigue(
@@ -6826,6 +6953,13 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         defense_check_type,
         defense_check_fn,
         offense_check_fn,
+    )
+
+    # --- Combo post-resolution: joint narration + discovery + use-count (#2017) ---
+    result.action_outcomes = _process_combo_outcomes(
+        result.action_outcomes,
+        enc,
+        round_number,
     )
 
     # --- Break-bar assessment (#2016) ---
