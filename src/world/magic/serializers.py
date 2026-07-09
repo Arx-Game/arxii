@@ -28,6 +28,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterThreadWeavingUnlock,
+    CrossingOption,
     EffectType,
     Facet,
     Gift,
@@ -37,7 +38,7 @@ from world.magic.models import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
     PendingAlteration,
-    PendingTraitCrossingOffer,
+    PendingCrossingOffer,
     PoseEndorsement,
     Resonance,
     ResonanceGrant,
@@ -50,7 +51,6 @@ from world.magic.models import (
     Thread,
     ThreadLevelUnlock,
     ThreadWeavingTeachingOffer,
-    TraitCrossingOption,
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 from world.magic.models.sessions import RitualSession
@@ -3344,50 +3344,51 @@ class EntryFlourishResultSerializer(serializers.Serializer):
 # =============================================================================
 
 
-class TraitCrossingOptionSerializer(serializers.ModelSerializer):
-    """Serializer for an authored TraitCrossingOption."""
+class CrossingOptionSerializer(serializers.ModelSerializer):
+    """Serializer for an authored CrossingOption."""
 
     class Meta:
-        model = TraitCrossingOption
-        fields = ["id", "name", "description", "effect_kind", "narrative_snippet"]
+        model = CrossingOption
+        fields = ["id", "name", "description", "condition_template"]
 
 
-class PendingTraitCrossingOfferSerializer(serializers.ModelSerializer):
-    """Serializer for a pending trait crossing offer + nested options."""
+class PendingCrossingOfferSerializer(serializers.ModelSerializer):
+    """Serializer for a pending crossing offer + nested options."""
 
     options = serializers.SerializerMethodField()
-    trait_name = serializers.CharField(source="thread.target_trait.name", read_only=True)
+    target_kind = serializers.CharField(source="thread.target_kind", read_only=True)
     resonance_name = serializers.CharField(source="thread.resonance.name", read_only=True)
 
     class Meta:
-        model = PendingTraitCrossingOffer
+        model = PendingCrossingOffer
         fields = [
             "id",
             "thread",
             "crossing_level",
             "created_at",
-            "trait_name",
+            "target_kind",
             "resonance_name",
             "options",
         ]
 
     def get_options(self, obj):
-        options = TraitCrossingOption.objects.filter(
+        options = CrossingOption.objects.filter(
+            target_kind=obj.thread.target_kind,
             resonance=obj.thread.resonance,
             crossing_level=obj.crossing_level,
         )
-        return TraitCrossingOptionSerializer(options, many=True).data
+        return CrossingOptionSerializer(options, many=True).data
 
 
-class TraitCrossingRespondSerializer(serializers.Serializer):
-    """Request shape for the player's trait crossing option pick."""
+class CrossingRespondSerializer(serializers.Serializer):
+    """Request shape for the player's crossing option pick."""
 
     offer_id = serializers.IntegerField()
     option_id = serializers.IntegerField()
 
 
-class TraitCrossingResultSerializer(serializers.Serializer):
-    """Read serializer for TraitCrossingResult (trait_crossing.py dataclass)."""
+class CrossingResultSerializer(serializers.Serializer):
+    """Read serializer for CrossingResult (crossing.py dataclass)."""
 
     option_name = serializers.CharField()
     effect_kind = serializers.CharField()

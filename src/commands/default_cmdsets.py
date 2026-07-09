@@ -44,6 +44,7 @@ from commands.consent_preferences import CmdConsent
 from commands.covenant import CmdCovenant
 from commands.crafting import CmdCraft
 from commands.crafting_station import CmdLabStation
+from commands.crossing import CmdCrossing
 from commands.currency import CmdDeposit, CmdSecure, CmdSteal
 from commands.deeds import CmdDeed
 from commands.door import CmdLock, CmdUnlock
@@ -126,7 +127,6 @@ from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.story import CmdStory
 from commands.technique import CmdTechnique
-from commands.trait_crossing import CmdTraitCrossing
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -213,7 +213,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMageScar,
             CmdEnter,
             CmdFlourish,
-            CmdTraitCrossing,
+            CmdCrossing,
             CmdEndorse,
             CmdPoses,
             CmdReact,

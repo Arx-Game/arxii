@@ -377,19 +377,19 @@ class EntryFlourishOfferStaleError(EntryFlourishOfferError):
 # =============================================================================
 
 
-class TraitCrossingOfferError(Exception):
-    """Base error for trait crossing offer resolution."""
+class CrossingOfferError(Exception):
+    """Base error for crossing offer resolution."""
 
-    user_message: str = "An error occurred with your trait crossing offer."
+    user_message: str = "An error occurred with your crossing offer."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
 
 
-class TraitCrossingOfferNotFoundError(TraitCrossingOfferError):
-    user_message = "You have no pending trait crossing offer."
+class CrossingOfferNotFoundError(CrossingOfferError):
+    user_message = "You have no pending crossing offer."
     SAFE_MESSAGES = frozenset({user_message})
 
 
-class TraitCrossingOfferStaleError(TraitCrossingOfferError):
+class CrossingOfferStaleError(CrossingOfferError):
     user_message = "That option is no longer available for this crossing."
     SAFE_MESSAGES = frozenset({user_message})
 

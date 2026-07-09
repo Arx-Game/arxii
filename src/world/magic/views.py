@@ -90,6 +90,8 @@ from world.magic.serializers import (
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
     ConsequencePoolCatalogSerializer,
+    CrossingRespondSerializer,
+    CrossingResultSerializer,
     CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
     DissolveSerializer,
@@ -134,8 +136,6 @@ from world.magic.serializers import (
     ThreadPullPreviewResponseSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
-    TraitCrossingRespondSerializer,
-    TraitCrossingResultSerializer,
 )
 from world.magic.services import (
     get_library_entries,
@@ -1726,11 +1726,11 @@ class EntryFlourishRespondView(APIView):
 # =============================================================================
 
 
-class PendingTraitCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only inbox of pending trait crossing offers (#1989).
+class PendingCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of pending crossing offers (#1989).
 
-    GET /api/magic/trait-crossing/pending/
-    GET /api/magic/trait-crossing/pending/{id}/
+    GET /api/magic/crossing/pending/
+    GET /api/magic/crossing/pending/{id}/
     """
 
     permission_classes = [IsAuthenticated]
@@ -1738,18 +1738,18 @@ class PendingTraitCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_serializer_class(self):
         from world.magic.serializers import (  # noqa: PLC0415
-            PendingTraitCrossingOfferSerializer,
+            PendingCrossingOfferSerializer,
         )
 
-        return PendingTraitCrossingOfferSerializer
+        return PendingCrossingOfferSerializer
 
     def get_queryset(self):
-        from world.magic.models.trait_crossing import (  # noqa: PLC0415
-            PendingTraitCrossingOffer,
+        from world.magic.models.crossing import (  # noqa: PLC0415
+            PendingCrossingOffer,
         )
 
         return _account_scoped_offer_queryset(
-            PendingTraitCrossingOffer,
+            PendingCrossingOffer,
             self.request.user,
             "thread",
             "thread__resonance",
@@ -1757,28 +1757,28 @@ class PendingTraitCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
-class TraitCrossingRespondView(APIView):
-    """Pick an option for a pending trait crossing offer (#1989).
+class CrossingRespondView(APIView):
+    """Pick an option for a pending crossing offer (#1989).
 
-    POST /api/magic/trait-crossing/respond/  {offer_id, option_id}
+    POST /api/magic/crossing/respond/  {offer_id, option_id}
     """
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        request=TraitCrossingRespondSerializer,
-        responses={200: TraitCrossingResultSerializer},
+        request=CrossingRespondSerializer,
+        responses={200: CrossingResultSerializer},
     )
     def post(self, request: Request) -> Response:
-        from actions.definitions.trait_crossing import (  # noqa: PLC0415
-            ResolveTraitCrossingOfferAction,
+        from actions.definitions.crossing import (  # noqa: PLC0415
+            ResolveCrossingOfferAction,
         )
-        from world.magic.models.trait_crossing import (  # noqa: PLC0415
-            PendingTraitCrossingOffer,
-            TraitCrossingOption,
+        from world.magic.models.crossing import (  # noqa: PLC0415
+            CrossingOption,
+            PendingCrossingOffer,
         )
 
-        serializer = TraitCrossingRespondSerializer(data=request.data)
+        serializer = CrossingRespondSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         offer_id = serializer.validated_data["offer_id"]
         option_id = serializer.validated_data["option_id"]
@@ -1787,15 +1787,15 @@ class TraitCrossingRespondView(APIView):
             roster_entry__tenures__player_data__account=request.user,
             roster_entry__tenures__end_date__isnull=True,
         )
-        offer = get_object_or_404(PendingTraitCrossingOffer, pk=offer_id, thread__owner__in=sheets)
-        option = get_object_or_404(TraitCrossingOption, pk=option_id)
+        offer = get_object_or_404(PendingCrossingOffer, pk=offer_id, thread__owner__in=sheets)
+        option = get_object_or_404(CrossingOption, pk=option_id)
 
         actor = offer.thread.owner.character
-        result = ResolveTraitCrossingOfferAction().run(actor=actor, offer=offer, option=option)
+        result = ResolveCrossingOfferAction().run(actor=actor, offer=offer, option=option)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
-        crossing_result = result.data["trait_crossing_result"]
-        return Response(TraitCrossingResultSerializer(crossing_result).data)
+        crossing_result = result.data["crossing_result"]
+        return Response(CrossingResultSerializer(crossing_result).data)
 
 
 # =============================================================================

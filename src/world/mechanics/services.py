@@ -343,6 +343,7 @@ def equipment_walk_total(
         return 0
     return (
         passive_facet_bonuses(character, target)
+        + passive_facet_crossing_bonuses(character, target)
         + covenant_role_bonus(character, target, level_override=level_override)
         + covenant_level_bonus(character, target)
         + passive_mantle_bonuses(character, target)
@@ -396,6 +397,43 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
                     item=item_facet.item_instance,
                     item_facet=item_facet,
                 )
+    return total
+
+
+def passive_facet_crossing_bonuses(sheet: object, target: ModifierTarget) -> int:
+    """Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).
+
+    For each FACET-kind thread with crossing choices, checks if the character
+    is wearing an item with the anchor facet. If so, reads the choice's
+    option.condition_template's ConditionModifierEffect rows for ``target``
+    and sums them.
+
+    Composes with ``passive_facet_bonuses`` in ``equipment_walk_total`` —
+    the crossing buff is a personal layer on top of the global tier-0 passive.
+    """
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
+
+    char = sheet.character
+    if not hasattr(char, "threads") or not hasattr(char, "equipped_items"):  # noqa: GETATTR_LITERAL
+        return 0
+    total = 0
+    for thread in char.threads.threads_of_kind(TargetKind.FACET):
+        matching = char.equipped_items.item_facets_for(thread.target_facet)
+        if not matching:
+            continue
+        choices = CrossingChoice.objects.filter(thread=thread).select_related(
+            "option__condition_template"
+        )
+        for choice in choices:
+            template = choice.option.condition_template
+            effects = ConditionModifierEffect.objects.filter(
+                condition=template,
+                modifier_target=target,
+            )
+            for effect in effects:
+                total += effect.value
     return total
 
 

@@ -231,7 +231,7 @@ class ActionRegistryTests(TestCase):
             "acknowledge_risk",
             "restore_sense",
             "resolve_entry_flourish",
-            "resolve_trait_crossing",
+            "resolve_crossing_offer",
             "perform_ritual",
             "imbue_thread",
             "weave_thread",
