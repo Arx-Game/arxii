@@ -511,3 +511,20 @@ class SignatureBonusLocked(MagicError):
     """Raised when the bonus requires a higher crossing level than the thread has reached."""
 
     user_message = "That signature bonus requires a deeper thread. Keep imbuing."
+
+
+# =============================================================================
+# Player-facing Motif style-binding exceptions (#2030)
+# =============================================================================
+
+
+class StyleResonanceUnclaimed(MagicError):
+    user_message = "You have not claimed that resonance."
+
+
+class StyleBindingCapExceeded(MagicError):
+    user_message = "You cannot bind any more styles to that resonance."
+
+
+class StyleNotBound(MagicError):
+    user_message = "That style is not bound to any of your resonances."
