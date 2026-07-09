@@ -1334,6 +1334,15 @@ def process_damage_interactions(
         if not instance:
             continue
 
+        # Track interactions with a non-trivial effect for narration (#2018).
+        is_non_trivial = (
+            interaction.damage_modifier_percent != 0
+            or interaction.removes_condition
+            or interaction.applies_condition is not None
+        )
+        if is_non_trivial:
+            result.fired_interactions.append(interaction)
+
         # Accumulate damage modifier
         result.damage_modifier_percent += interaction.damage_modifier_percent
 
