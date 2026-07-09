@@ -31,7 +31,7 @@ class MissionOptionRouteTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(name="route-tmpl")
+        cls.template = MissionTemplateFactory(name="route-tmpl", risk_tier=4)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.node_a = MissionNodeFactory(template=cls.template, key="a")
         cls.node_b = MissionNodeFactory(template=cls.template, key="b")
@@ -170,7 +170,7 @@ class MissionOptionRouteRewardParentTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(name="reward-parent-tmpl")
+        cls.template = MissionTemplateFactory(name="reward-parent-tmpl", risk_tier=4)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.option = MissionOptionFactory(
             node=cls.entry,

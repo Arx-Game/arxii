@@ -58,6 +58,7 @@ class EmitTerminalRewardsAllEqualTests(TestCase):
         cls.template = MissionTemplateFactory(
             name="emit-all-equal-tmpl",
             reward_group_rule=RewardGroupRule.ALL_EQUAL,
+            risk_tier=4,
         )
         cls.node = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.option = MissionOptionFactory(
