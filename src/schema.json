@@ -13911,6 +13911,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConsequencePoolCatalog'
           description: ''
+  /api/magic/crossing/pending/:
+    get:
+      operationId: magic_crossing_pending_list
+      description: |-
+        Read-only inbox of pending crossing offers (#1989).
+
+        GET /api/magic/crossing/pending/
+        GET /api/magic/crossing/pending/{id}/
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPendingCrossingOfferList'
+          description: ''
+  /api/magic/crossing/pending/{id}/:
+    get:
+      operationId: magic_crossing_pending_retrieve
+      description: |-
+        Read-only inbox of pending crossing offers (#1989).
+
+        GET /api/magic/crossing/pending/
+        GET /api/magic/crossing/pending/{id}/
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingCrossingOffer'
+          description: ''
+  /api/magic/crossing/respond/:
+    post:
+      operationId: magic_crossing_respond_create
+      description: |-
+        Pick an option for a pending crossing offer (#1989).
+
+        POST /api/magic/crossing/respond/  {offer_id, option_id}
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrossingRespondRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrossingResult'
+          description: ''
   /api/magic/dramatic-moment-tags/:
     get:
       operationId: magic_dramatic_moment_tags_list
@@ -16345,87 +16426,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CrossXPLockResponse'
-          description: ''
-  /api/magic/trait-crossing/pending/:
-    get:
-      operationId: magic_trait_crossing_pending_list
-      description: |-
-        Read-only inbox of pending trait crossing offers (#1989).
-
-        GET /api/magic/trait-crossing/pending/
-        GET /api/magic/trait-crossing/pending/{id}/
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedPendingTraitCrossingOfferList'
-          description: ''
-  /api/magic/trait-crossing/pending/{id}/:
-    get:
-      operationId: magic_trait_crossing_pending_retrieve
-      description: |-
-        Read-only inbox of pending trait crossing offers (#1989).
-
-        GET /api/magic/trait-crossing/pending/
-        GET /api/magic/trait-crossing/pending/{id}/
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PendingTraitCrossingOffer'
-          description: ''
-  /api/magic/trait-crossing/respond/:
-    post:
-      operationId: magic_trait_crossing_respond_create
-      description: |-
-        Pick an option for a pending trait crossing offer (#1989).
-
-        POST /api/magic/trait-crossing/respond/  {offer_id, option_id}
-      tags:
-      - magic
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TraitCrossingRespondRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TraitCrossingResult'
           description: ''
   /api/mechanics/categories/:
     get:
@@ -33920,6 +33920,31 @@ components:
       - thread_id
       - unlocked_level
       - xp_spent
+    CrossingRespondRequest:
+      type: object
+      description: Request shape for the player's crossing option pick.
+      properties:
+        offer_id:
+          type: integer
+        option_id:
+          type: integer
+      required:
+      - offer_id
+      - option_id
+    CrossingResult:
+      type: object
+      description: Read serializer for CrossingResult (crossing.py dataclass).
+      properties:
+        option_name:
+          type: string
+        effect_kind:
+          type: string
+        crossing_level:
+          type: integer
+      required:
+      - crossing_level
+      - effect_kind
+      - option_name
     CrossoverInvite:
       type: object
       description: Read serializer for CrossoverInvite records (#2002).
@@ -45540,6 +45565,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PendingAudereOffer'
+    PaginatedPendingCrossingOfferList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingCrossingOffer'
     PaginatedPendingEntryFlourishOfferList:
       type: object
       required:
@@ -45586,29 +45634,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PendingStageAdvanceOffer'
-    PaginatedPendingTraitCrossingOfferList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PendingTraitCrossingOffer'
     PaginatedPermitOfferDetailsList:
       type: object
       required:
@@ -49711,6 +49736,41 @@ components:
       - id
       - intensity_bonus
       - soulfray_stage_order
+    PendingCrossingOffer:
+      type: object
+      description: Serializer for a pending crossing offer + nested options.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        thread:
+          type: integer
+        crossing_level:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: PathStage crossing level (3, 6, 11, 16, 21).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+        resonance_name:
+          type: string
+          readOnly: true
+        options:
+          type: string
+          readOnly: true
+      required:
+      - created_at
+      - crossing_level
+      - id
+      - options
+      - resonance_name
+      - target_kind
+      - thread
     PendingEntryFlourishOffer:
       type: object
       description: Player-facing view of a pending entry-flourish offer (#1140). Read-only.
@@ -49810,41 +49870,6 @@ components:
       - sinner_persona_name
       - sinner_sheet_id
       - strain_cost_per_unit
-    PendingTraitCrossingOffer:
-      type: object
-      description: Serializer for a pending trait crossing offer + nested options.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        thread:
-          type: integer
-        crossing_level:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          description: PathStage crossing level (3, 6, 11, 16, 21).
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        trait_name:
-          type: string
-          readOnly: true
-        resonance_name:
-          type: string
-          readOnly: true
-        options:
-          type: string
-          readOnly: true
-      required:
-      - created_at
-      - crossing_level
-      - id
-      - options
-      - resonance_name
-      - thread
-      - trait_name
     PendingTreasuredSignoffs:
       type: object
       description: |-
@@ -57874,31 +57899,6 @@ components:
         * `crafting` - Crafting
         * `war` - War
         * `other` - Other
-    TraitCrossingRespondRequest:
-      type: object
-      description: Request shape for the player's trait crossing option pick.
-      properties:
-        offer_id:
-          type: integer
-        option_id:
-          type: integer
-      required:
-      - offer_id
-      - option_id
-    TraitCrossingResult:
-      type: object
-      description: Read serializer for TraitCrossingResult (trait_crossing.py dataclass).
-      properties:
-        option_name:
-          type: string
-        effect_kind:
-          type: string
-        crossing_level:
-          type: integer
-      required:
-      - crossing_level
-      - effect_kind
-      - option_name
     TraitTraitTypeEnum:
       enum:
       - stat

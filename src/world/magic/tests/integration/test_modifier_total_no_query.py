@@ -44,16 +44,19 @@ Query budget analysis (as of Spec D PR1):
              role_base_bonus_for_target (#985) fires once per engaged role's modifier-total
              call; returns None here (no authored row for this target) → contributes 0.
              Parallel to Query 5's CovenantLevelBonus lookup.
+    Query 8: CrossingChoice.filter(thread=...) — passive_facet_crossing_bonuses (#1990)
+             fires once per FACET-kind thread; returns no rows (no crossing choices
+             authored) so it contributes 0 to the result.
 
-  BASELINE = 7 queries.
+  BASELINE = 8 queries.
 
   Note: after the first call, query 3 is cached via @cached_property, so repeated
-  calls to get_modifier_total on the same sheet instance would yield 6 queries.
-  The first-call baseline of 7 is the most conservative (and correct) measurement.
+  calls to get_modifier_total on the same sheet instance would yield 7 queries.
+  The first-call baseline of 8 is the most conservative (and correct) measurement.
 
   Character-side handler walks (equipped_items.iter_item_facets,
   threads.threads_of_kind, covenant_roles.currently_engaged_roles) fire ZERO queries
-  after warming — these are properly handler-cached. The 7 above are genuine
+  after warming — these are properly handler-cached. The 8 above are genuine
   "always-query" sites at the service function level. covenant_level_bonus only
   reaches its config query for ENGAGED members (it early-outs via the warm
   currently_engaged_roles handler otherwise).
@@ -224,6 +227,9 @@ class ModifierTotalQueryBudgetTests(TestCase):
                    modifier-total call; returns None here (no authored row for this
                    target) so it contributes 0. Parallel to Query 5's CovenantLevelBonus
                    lookup.
+          Query 8: CrossingChoice.filter(thread=...) — passive_facet_crossing_bonuses
+                   (#1990) fires once per FACET-kind thread; returns no rows (no crossing
+                   choices authored) so it contributes 0 to the result.
 
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
@@ -247,12 +253,13 @@ class ModifierTotalQueryBudgetTests(TestCase):
         list(self.character_obj.covenant_roles.currently_engaged_roles())
 
         # --- Assert documented query count ---
-        # BASELINE = 7: CharacterModifier.exists + ThreadPullEffect.filter
-        #               + CharacterClassLevel (current_level) + is_gear_compatible
-        #               + CovenantLevelBonus.first() (covenant_level_bonus, #762)
-        #               + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
-        #               + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
-        baseline_queries = 7
+        # BASELINE = 8: CharacterModifier.exists + ThreadPullEffect.filter
+        #              + CharacterClassLevel (current_level) + is_gear_compatible
+        #              + CovenantLevelBonus.first() (covenant_level_bonus, #762)
+        #              + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
+        #              + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
+        #              + CrossingChoice.filter (passive_facet_crossing_bonuses, #1990)
+        baseline_queries = 8
         with self.assertNumQueries(baseline_queries):
             result = get_modifier_total(self.sheet, self.target)
 
@@ -264,10 +271,10 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.assertEqual(result, 5)
 
     def test_no_handler_warm_query_count_is_higher(self) -> None:
-        """Without warming, handler queries fire on top of the baseline 7.
+        """Without warming, handler queries fire on top of the baseline 8.
 
         This is the control test: demonstrate that warmup matters. After
-        invalidating the handler caches, we expect MORE than 7 queries because
+        invalidating the handler caches, we expect MORE than 8 queries because
         the handler walks (equipped_items, threads, covenant_roles) must fetch
         from the DB on first access.
 
@@ -284,7 +291,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.character_obj.threads.invalidate()
         self.character_obj.covenant_roles.invalidate()
 
-        baseline_queries = 7
+        baseline_queries = 8
 
         # Capture actual count by running without constraint
         from django.db import connection
