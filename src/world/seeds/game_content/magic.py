@@ -2207,6 +2207,85 @@ class CantripStarterCatalogResult:
     paths: dict[str, Path]  # path_name → Path (the 5 PROSPECT paths)
 
 
+def ensure_relationship_pull_content() -> None:
+    """Seed RELATIONSHIP_TRACK ThreadPullEffect rows with a survivability skew (#2021).
+
+    Creates one 4-tier chain per canonical resonance (Light, Sanctity, Radiance,
+    Dissolution) = 16 rows total. Tier 0 is passive (always-on); tiers 1-3 are
+    paid pulls. All effects are survivability-oriented: VITAL_BONUS to
+    DAMAGE_TAKEN_REDUCTION / DEATH_SAVE / KNOCKOUT_RESIST, plus RESISTANCE.
+
+    Idempotent via get_or_create. The relationship_bond_modulation saturating
+    curve (#1849) scales these by bond strength when the target IS the threaded
+    person or is hostile to them.
+    """
+    from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
+    from world.magic.models import Resonance, ThreadPullEffect  # noqa: PLC0415
+
+    # The four canonical production resonances (seeded by seed_canonical_resonances)
+    resonance_names = ["Light", "Sanctity", "Radiance", "Dissolution"]
+
+    for resonance_name in resonance_names:
+        resonance = Resonance.objects.filter(name=resonance_name).first()
+        if resonance is None:
+            continue
+
+        # Tier 0 (passive): VITAL_BONUS(DAMAGE_TAKEN_REDUCTION, 3)
+        ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=resonance,
+            tier=0,
+            min_thread_level=0,
+            defaults={
+                "effect_kind": EffectKind.VITAL_BONUS,
+                "vital_bonus_amount": 3,
+                "vital_target": VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
+                "narrative_snippet": "The bond sustains you, reducing harm.",
+            },
+        )
+
+        # Tier 1 (paid): VITAL_BONUS(DEATH_SAVE, 5)
+        ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=resonance,
+            tier=1,
+            min_thread_level=0,
+            defaults={
+                "effect_kind": EffectKind.VITAL_BONUS,
+                "vital_bonus_amount": 5,
+                "vital_target": VitalBonusTarget.DEATH_SAVE,
+                "narrative_snippet": "Fighting for them steadies your hand against death.",
+            },
+        )
+
+        # Tier 2 (paid): RESISTANCE(2, all damage types)
+        ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=resonance,
+            tier=2,
+            min_thread_level=0,
+            defaults={
+                "effect_kind": EffectKind.RESISTANCE,
+                "resistance_amount": 2,
+                "narrative_snippet": "The bond hardens you against all damage.",
+            },
+        )
+
+        # Tier 3 (paid): VITAL_BONUS(KNOCKOUT_RESIST, 5)
+        ThreadPullEffect.objects.get_or_create(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=resonance,
+            tier=3,
+            min_thread_level=0,
+            defaults={
+                "effect_kind": EffectKind.VITAL_BONUS,
+                "vital_bonus_amount": 5,
+                "vital_target": VitalBonusTarget.KNOCKOUT_RESIST,
+                "narrative_snippet": "The deepest bond refuses to fall.",
+            },
+        )
+
+
 def seed_cantrip_starter_catalog() -> CantripStarterCatalogResult:
     """Lazy-create the cantrip starter catalog: 5 styles × 5 archetypes = 25 cantrips.
 
@@ -2549,6 +2628,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     ensure_technique_catalog_content()
     soul_tether_content = wire_soul_tether_content()
     covenant_lifecycle_content = wire_covenant_lifecycle_rituals()
+    ensure_relationship_pull_content()
     from world.seeds.game_content.combos import seed_combo_palette  # noqa: PLC0415
 
     seed_combo_palette()
