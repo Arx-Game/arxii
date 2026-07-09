@@ -58,6 +58,9 @@ _SUBVERB_LIST = "list"
 _SUBVERB_SHOW = "show"
 _SUBVERB_KUDOS = "kudos"
 _SUBVERB_COMPLAIN = "complain"
+_SUBVERB_PLUS = "plus"
+_SUBVERB_NEG = "neg"
+_BUMP_SUBVERBS = frozenset({_SUBVERB_PLUS, _SUBVERB_NEG})
 _WRITE_SUBVERBS = frozenset(
     {_SUBVERB_IMPRESSION, _SUBVERB_DEVELOP, _SUBVERB_CAPSTONE, _SUBVERB_REDISTRIBUTE}
 )
@@ -156,6 +159,8 @@ class CmdRelationship(ArxCommand):
         relationship                         — list your relationships
         relationship list                    — same as bare ``relationship``
         relationship show <name|#>           — detail one relationship (includes writeup refs)
+        relationship plus <name>             — ambient +1 bump (also ``rel/plus <name>``)
+        relationship neg <name>              — ambient -1 bump (also ``rel/neg <name>``)
         relationship impression <name> track=<id|name> points=<n>
             title=<text> writeup=<text> [coloring=positive|neutral|negative]
             [visibility=private|shared|gossip|public]
@@ -176,24 +181,35 @@ class CmdRelationship(ArxCommand):
     """
 
     key = "relationship"
-    aliases = ["relation"]
+    aliases = ["relation", "rel"]
     locks = "cmd:all()"
     action = None  # routed per-subverb in func()
+    # Base Command has no switches attr; a class default keeps direct func() calls safe.
+    switches: list[str] = []
 
     def func(self) -> None:
         """Route the leading subverb; bare ``relationship`` lists relationships."""
         try:
             raw = (self.args or "").strip()
+            # Switch form: ``rel/plus <name>`` / ``rel/neg <name>`` (#1699).
+            switches = {s.lower() for s in (self.switches or [])}
+            bump_switch = switches & _BUMP_SUBVERBS
+            if bump_switch:
+                self._dispatch_bump(bump_switch.pop(), raw)
+                return
             if not raw:
                 self._show_list()
                 return
             parts = raw.split(maxsplit=1)
-            subverb = parts[0].lower()
+            # Accept the slash-form embedded in args too (``/plus <name>``).
+            subverb = parts[0].lower().lstrip("/")
             rest = parts[1].strip() if len(parts) > 1 else ""
             if subverb == _SUBVERB_LIST:
                 self._show_list()
             elif subverb == _SUBVERB_SHOW:
                 self._show_detail(rest)
+            elif subverb in _BUMP_SUBVERBS:
+                self._dispatch_bump(subverb, rest)
             elif subverb in _WRITE_SUBVERBS:
                 self._dispatch_write(subverb, rest)
             elif subverb == _SUBVERB_KUDOS:
@@ -205,6 +221,24 @@ class CmdRelationship(ArxCommand):
         except CommandError as err:
             self.msg(str(err))
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
+
+    # -- ambient bumps (#1699) --------------------------------------------------
+
+    def _dispatch_bump(self, subverb: str, rest: str) -> None:
+        """Run RelationshipBumpAction at the named co-located character."""
+        from actions.definitions.relationships import RelationshipBumpAction  # noqa: PLC0415
+
+        name = rest.strip()
+        if not name:
+            msg = f"Usage: relationship {subverb} <name>"
+            raise CommandError(msg)
+        target_sheet = self._resolve_target_sheet(self.caller, name)
+        valence = 1 if subverb == _SUBVERB_PLUS else -1
+        result = RelationshipBumpAction().run(
+            actor=self.caller, target_sheet=target_sheet, valence=valence
+        )
+        if result.message:
+            self.msg(result.message)
 
     # -- write verbs -----------------------------------------------------------
 
