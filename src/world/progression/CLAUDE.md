@@ -78,6 +78,10 @@ Per inductee (ACCEPTED participants who are not the initiator):
 2. Refuse tier boundaries via `TierBoundaryRequiresCrossing` (those belong to Audere Majora).
 3. Officiant guard — `assert_can_officiate(officiant_sheet, inductee_sheet, target_level)`.
 4. Authored `ClassLevelUnlock` check — `AdvancementRequirementsNotMet` when absent or unmet.
+4b. **Purchased XP unlock check** — `_assert_unlock_purchased` requires a `CharacterUnlock`
+   receipt for this exact (class, target_level), raising `AdvancementUnlockNotPurchasedError`
+   (names the unlock + its XP cost) when missing. This is an *additional* gate stacked
+   alongside step 4, not a replacement for it — see "Multi-gate rule" below.
 5. Post testament oration (+ cited deeds) as a POSE via `_post_testament`.
 6. `apply_class_level_advance`, then the **POTENTIAL semi-crossing** (step 6b), then
    `ClassLevelAdvancement.objects.create(...)`.
@@ -179,6 +183,13 @@ Registered on the `advance_class_level_via_session` service path. Translates:
   `apply_class_level_advance`; receipt creation lives in `advance_class_level_via_session`.
 - **Legend qualifies; it is never spent.** `LegendRequirement` + `ClassLevelUnlock` gate
   advancement; no legend rows are consumed or minted for within-tier advances.
+- **Multi-gate rule — XP unlocks, never grants.** The Durance gate is not a single
+  check: `check_requirements_for_unlock` (authored `Requirement` rows — Legend,
+  Relationships, Traits, …) AND the purchased XP unlock (`CharacterUnlock`, bought via
+  `progression unlock class=<id>`) must **both** pass. XP buys a gate, not the
+  advance itself — removing either gate to "fix" a stuck character is the wrong
+  move; wire the missing purchase instead. See the "XP unlocks, never grants — major
+  acquisitions stack gates" ADR.
 - **No boons, no resonance grants.** A Durance session is just a Scene — normal
   social-scene benefits apply (pose endorsements, entry endorsements, etc.) but the
   advancement service adds no special grants.

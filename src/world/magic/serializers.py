@@ -1223,17 +1223,45 @@ class AcceptTeachingOfferSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data: dict) -> CharacterThreadWeavingUnlock:  # type: ignore[override]
-        """Call accept_thread_weaving_unlock; catch XPInsufficient → ValidationError."""
-        from world.magic.exceptions import ProtagonismLockedError, XPInsufficient  # noqa: PLC0415
-        from world.magic.services.threads import accept_thread_weaving_unlock  # noqa: PLC0415
-        from world.magic.types import AlterationGateError  # noqa: PLC0415
+        """Dispatch through AcceptThreadWeavingOfferAction — one seam, not three shapes (#2116).
+
+        Re-pointed from calling ``accept_thread_weaving_unlock`` directly so telnet
+        (``CmdLearn``) and web converge on the same Action.
+        """
+        from actions.definitions.gift_acquisition import (  # noqa: PLC0415
+            AcceptThreadWeavingOfferAction,
+        )
 
         learner = validated_data["learner"]
         offer = self.context["offer"]
-        try:
-            return accept_thread_weaving_unlock(learner, offer)
-        except (ProtagonismLockedError, AlterationGateError, XPInsufficient) as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
+        result = AcceptThreadWeavingOfferAction().run(actor=learner.character, offer_id=offer.pk)
+        if not result.success:
+            raise serializers.ValidationError(result.message)
+        return CharacterThreadWeavingUnlock.objects.get(pk=result.data["purchase_id"])
+
+
+# ---------------------------------------------------------------------------
+# Gift/technique acquisition (#2116) — request shapes only.
+#
+# Validation-only, mirroring EntryFlourishRespondSerializer's contract: the view
+# resolves the acting CharacterSheet and dispatches through the Actions in
+# actions/definitions/gift_acquisition.py — no service calls here.
+# ---------------------------------------------------------------------------
+
+
+class PurchaseGiftUnlockRequestSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/gift-unlocks/purchase/."""
+
+    gift_unlock_id = serializers.IntegerField()
+    teacher_tenure_id = serializers.IntegerField(required=False, allow_null=True)
+    learner_sheet_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class AcceptTechniqueOfferRequestSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/technique-offers/accept/."""
+
+    offer_id = serializers.IntegerField()
+    learner_sheet_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 # ---------------------------------------------------------------------------

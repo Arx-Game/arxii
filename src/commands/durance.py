@@ -116,7 +116,7 @@ class CmdDurance(ArxCommand):
 
     def _unlock_readiness_lines(self, sheet: object, target: int) -> list[str]:
         """Return lines for the ClassLevelUnlock gate + unmet requirements."""
-        from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
+        from world.progression.models import CharacterUnlock, ClassLevelUnlock  # noqa: PLC0415
         from world.progression.services.advancement import primary_class_level  # noqa: PLC0415
         from world.progression.services.spends import check_requirements_for_unlock  # noqa: PLC0415
 
@@ -132,9 +132,24 @@ class CmdDurance(ArxCommand):
             return [f"No advancement is authored for your next level ({target})."]
 
         met, failed = check_requirements_for_unlock(sheet.character, unlock)
-        if met:
-            return [f"You are ready to advance to level {target}."]
-        return [f"Not yet ready for level {target}:", *[f"  — {r}" for r in failed]]
+        purchased = CharacterUnlock.objects.filter(
+            character=sheet.character,
+            character_class=unlock.character_class,
+            target_level=unlock.target_level,
+        ).exists()
+        if purchased:
+            unlock_line = "XP unlock: purchased."
+        else:
+            cost = unlock.get_xp_cost_for_character(sheet.character)
+            unlock_line = f"XP unlock: not purchased (cost {cost})."
+
+        if met and purchased:
+            return [f"You are ready to advance to level {target}.", unlock_line]
+        lines = [f"Not yet ready for level {target}:"]
+        if not met:
+            lines.extend(f"  — {r}" for r in failed)
+        lines.append(unlock_line)
+        return lines
 
     def _intent_line(self, sheet: object) -> list[str]:
         """Return a line showing the declared PathIntent, or none if unset."""

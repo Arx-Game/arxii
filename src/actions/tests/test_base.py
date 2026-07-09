@@ -371,6 +371,10 @@ class ActionRegistryTests(TestCase):
             "order_companion",
             "lock_exit",
             "unlock_exit",
+            # #2116 — gift/technique/thread-weaving acquisition surface.
+            "purchase_gift_unlock",
+            "accept_technique_offer",
+            "accept_thread_weaving_offer",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

@@ -124,10 +124,12 @@
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
+  - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_units <- battles.BattleUnit
   - battle_unit_values <- battles.BattleUnitCapability
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
+  - assist_patterns <- missions.MissionAssistPattern
 
 ### DamageType
 **Foreign Keys:**
@@ -174,6 +176,7 @@
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
+  - crossing_options <- magic.CrossingOption
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
@@ -259,6 +262,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - damage_type -> conditions.DamageType [FK]
   - applies_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Fields:** damage_modifier_percent, removes_condition, applied_condition_severity, narration_snippet (#2018 — flavor text for combat narration on condition transitions)
 
 ### ConditionConditionInteraction
 **Foreign Keys:**
@@ -1271,6 +1275,7 @@
   - item_check_modifiers <- items.ItemCheckModifier
   - threat_pool_entries <- combat.ThreatPoolEntry
   - escalation_curves <- combat.EscalationCurve
+  - assist_patterns <- missions.MissionAssistPattern
   - project_contribution_methods <- projects.ContributionMethod
   - detect_traps <- room_features.Trap
   - disarm_traps <- room_features.Trap
@@ -1465,6 +1470,7 @@
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
   - prerequisites -> codex.CodexEntry [M2M]
 **Pointed to by:**
+  - crossing_options <- magic.CrossingOption
   - ritual_grants <- magic.CodexEntryRitualGrant
   - progression_milestones <- magic.MagicProgressionMilestone
   - unlocks <- codex.CodexEntry
@@ -1591,10 +1597,12 @@
   - applications <- mechanics.Application
   - trait_derivations <- mechanics.TraitCapabilityDerivation
   - blocking_challenges <- mechanics.ChallengeTemplate
+  - granted_by_roles <- covenants.CovenantRole
   - combat_pull_grants <- combat.CombatPullResolvedEffect
   - battle_units <- battles.BattleUnit
   - battle_unit_values <- battles.BattleUnitCapability
   - battle_weather_challenges <- battles.WeatherTypeCapabilityChallenge
+  - assist_patterns <- missions.MissionAssistPattern
 
 ### DamageType
 **Foreign Keys:**
@@ -1641,6 +1649,7 @@
   - techniqueappliedcondition_applied <- magic.TechniqueAppliedCondition
   - techniqueremovedcondition_applied <- magic.TechniqueRemovedCondition
   - magical_alteration <- magic.MagicalAlterationTemplate
+  - crossing_options <- magic.CrossingOption
   - resonance_alignment_tiers <- magic.ResonanceAlignmentBoonTier
   - techniquevariantappliedcondition_applied <- magic.TechniqueVariantAppliedCondition
   - signaturemotifbonusappliedcondition_applied <- magic.SignatureMotifBonusAppliedCondition
@@ -1904,6 +1913,7 @@
   - rite_instances <- covenants.CovenantRiteInstance
   - mentor_bonds <- covenants.MentorBond
   - court_pacts <- covenants.CourtPact
+  - combo_signatures <- combat.ComboSignature
   - battle_sides <- battles.BattleSide
   - court_grant_offer_details <- npc_services.CourtGrantOfferDetails
   - constructed_ships <- ships.ShipConstructionDetails
@@ -1914,15 +1924,17 @@
   - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - parent_role -> covenants.CovenantRole [FK] (nullable)
+  - granted_gifts -> magic.Gift [M2M]
+  - granted_capabilities -> conditions.CapabilityType [M2M]
 **Pointed to by:**
   - ritualsessionreference_set <- magic.RitualSessionReference
   - anchored_threads <- magic.Thread
   - sub_roles <- covenants.CovenantRole
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
-  - role_bonuses <- covenants.CovenantRoleBonus
   - vow_stat_scalings <- covenants.VowStatScaling
   - gift_grants <- covenants.CovenantRoleGiftGrant
+  - role_bonuses <- covenants.CovenantRoleBonus
   - combat_participations <- combat.CombatParticipant
 
 ### GearArchetypeCompatibility
@@ -1941,16 +1953,13 @@
   - covenant_role -> covenants.CovenantRole [FK]
   - covenant -> covenants.Covenant [FK]
   - rank -> covenants.CovenantRank [FK]
+**Pointed to by:**
+  - granted_techniques <- magic.CharacterTechnique
 
 ### CovenantLevelThreshold
 
 ### CovenantLevelBonus
 **Foreign Keys:**
-  - modifier_target -> mechanics.ModifierTarget [FK]
-
-### CovenantRoleBonus
-**Foreign Keys:**
-  - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
 
 ### VowStatScaling
@@ -1959,15 +1968,18 @@
   - modifier_target -> mechanics.ModifierTarget [FK]
 
 ### VowGearScaling
-*(no foreign keys — keyed by CharField gear_archetype + role_archetype)*
 
 ### ArchetypeActionScaling
-*(no foreign keys — keyed by CharField action_key + role_archetype)*
 
 ### CovenantRoleGiftGrant
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
   - gift -> magic.Gift [FK]
+
+### CovenantRoleBonus
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+  - modifier_target -> mechanics.ModifierTarget [FK]
 
 ### CovenantRite
 **Foreign Keys:**
@@ -2023,6 +2035,7 @@
 ### Service Functions
 - `active_court_pact_for(*, covenant: 'Covenant', servant_sheet: 'CharacterSheet') -> 'CourtPact | None' — Return the single active CourtPact for (covenant, servant_sheet), or None.`
 - `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
+- `archetype_action_scaling_bonus(character: 'object', action_key: 'str') -> 'float' — Return the archetype-driven scaling bonus for a combat action (#2022).`
 - `assert_initiator_can_induct(*, session: 'RitualSession') -> 'None' — Draft-time gate for INDUCTION rituals: the initiator must hold a can_invite`
 - `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole', rank: 'CovenantRank | None' = None) -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
 - `assign_rank(*, membership: 'CharacterCovenantRole', actor: 'CharacterCovenantRole', rank: 'CovenantRank') -> 'CharacterCovenantRole' — Assign a new rank to a member. Requires can_manage_ranks.`
@@ -2054,6 +2067,7 @@
 - `rename_rank(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', name: 'str') -> 'CovenantRank' — Rename a rank. Requires can_manage_ranks.`
 - `reorder_ranks(*, covenant: 'Covenant', actor: 'CharacterCovenantRole', ordered_rank_ids: 'list[int]') -> 'list[CovenantRank]' — Rewrite tiers for the given ranks atomically and uniquely.`
 - `resolve_effective_role(*, character: 'Character', role: 'CovenantRole') -> 'CovenantRole' — Return the resonance-specialized sub-role for ``role`` (one-line shim over`
+- `revalidate_engagements(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Re-check co-presence for all engaged covenant roles; dim vows that no longer hold.`
 - `rise_battle_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on a 'call the banners' rise ritual fire.`
 - `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
 - `set_rank_capabilities(*, rank: 'CovenantRank', actor: 'CharacterCovenantRole', can_invite: 'bool | None' = None, can_kick: 'bool | None' = None, can_manage_ranks: 'bool | None' = None, can_lead_rituals: 'bool | None' = None) -> 'CovenantRank' — Update capability flags on a rank. Requires can_manage_ranks.`
@@ -2299,7 +2313,7 @@
   - actor_persona -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
-- `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
+- `apply_disguise(character, disguise_form: 'CharacterForm', *, kind: 'DisguiseKind' = DisguiseKind.MUNDANE, concealment_level: 'ConcealmentLevel' = ConcealmentLevel.NONE) -> 'CharacterFormState' — Paint a fake overlay over the character's real form (#1110).`
 - `assume_alternate_self(sheet: 'CharacterSheet', alt: 'AlternateSelf', instance_value: 'float' = 1.0) -> 'ActiveAlternateSelf' — Assume an alternate self — swap in form/persona facets, create the`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' — Calculate weight in pounds from height and build.`
 - `change_appearance(character, trait: 'FormTrait', new_option: 'FormTraitOption', *, persona: 'Persona', descriptor: 'str | None' = None, note: 'str' = '', actor_persona: 'Persona | None' = None) -> 'CharacterFormValue' — Cosmetically edit one trait of the character's real form (hair dye, restyle).`
@@ -2390,12 +2404,14 @@
 - `get_notification_target_for_gm(gm_profile: 'GMProfile') -> 'CharacterSheet | None' — Resolve the CharacterSheet to use as the notification recipient for a GM.`
 - `gm_application_queue(gm: 'GMProfile') -> 'QuerySet[RosterApplication]' — Pending applications for characters at tables this GM owns.`
 - `gm_evidence_summary(profile: 'GMProfile') -> 'GMEvidenceSummary' — Aggregate a GM's track record for staff reviewing a level change.`
+- `idle_tables(threshold_days: 'int' = 14) -> 'QuerySet[GMTable]' — ACTIVE tables whose GM's ``last_active_at`` is older than the threshold (#2004).`
 - `join_table(table: 'GMTable', persona: 'Persona') -> 'GMTableMembership' — Add a persona to a table. Idempotent — returns existing active`
 - `leave_table(membership: 'GMTableMembership') -> 'None' — Soft-leave a membership. No-op if already left.`
 - `promote_gm(profile: 'GMProfile', new_level: 'str', *, changed_by: 'AccountDB', reason: 'str') -> 'GMLevelChange' — Set profile.level (promotion OR demotion), writing the audit row.`
 - `revoke_invite(invite: 'GMRosterInvite') -> 'None' — Revoke an invite by setting expires_at to now.`
 - `soft_leave_memberships_for_retired_persona(persona: 'Persona') -> 'int' — Future integration hook: called when a persona is retired.`
 - `surrender_character_story(gm: 'GMProfile', story: 'Story') -> 'None' — GM surrenders oversight of a story.`
+- `touch_gm_activity(gm_profile: 'GMProfile') -> 'None' — Stamp ``GMProfile.last_active_at`` to now (#2004).`
 - `transfer_ownership(table: 'GMTable', new_gm: 'GMProfile') -> 'None' — Reassign a table to a different GM. Staff-only action.`
 
 
@@ -2852,6 +2868,7 @@
   - corruption_twist_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
   - character_resonances <- magic.CharacterResonance
+  - crossing_options <- magic.CrossingOption
   - dramatic_moment_types <- magic.DramaticMomentType
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
@@ -2903,6 +2920,8 @@
   - organization_grants <- societies.OrganizationGiftGrant
   - capability_project_details <- societies.OrganizationCapabilityProjectDetails
   - granted_companions <- companions.Companion
+  - granted_by_roles <- covenants.CovenantRole
+  - role_grants <- covenants.CovenantRoleGiftGrant
 
 ### CharacterGift
 **Foreign Keys:**
@@ -2928,6 +2947,7 @@
 **Pointed to by:**
   - available_restrictions <- magic.Restriction
   - techniques <- magic.Technique
+  - enhanced_by_techniques <- magic.Technique
   - cantrips <- magic.Cantrip
   - technique_drafts <- magic.TechniqueDraft
   - combo_slots <- combat.ComboSlot
@@ -2957,6 +2977,7 @@
   - gift -> magic.Gift [FK]
   - style -> magic.TechniqueStyle [FK]
   - effect_type -> magic.EffectType [FK]
+  - enhances_effect_type -> magic.EffectType [FK] (nullable)
   - clash_resolution_pool -> actions.ConsequencePool [FK] (nullable)
   - clash_per_round_pool -> actions.ConsequencePool [FK] (nullable)
   - source_cantrip -> magic.Cantrip [FK] (nullable)
@@ -3005,6 +3026,7 @@
   - character -> character_sheets.CharacterSheet [FK]
   - technique -> magic.Technique [FK]
   - source -> mechanics.ModifierSource [FK] (nullable)
+  - role_source -> covenants.CharacterCovenantRole [FK] (nullable)
 
 ### TechniqueOutcomeModifier
 **Foreign Keys:**
@@ -3097,6 +3119,24 @@
 ### CorruptionConfig
 **Foreign Keys:**
   - updated_by -> accounts.AccountDB [FK] (nullable)
+
+### CrossingOption
+**Foreign Keys:**
+  - resonance -> magic.Resonance [FK]
+  - condition_template -> conditions.ConditionTemplate [FK]
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
+**Pointed to by:**
+  - choices <- magic.CrossingChoice
+
+### CrossingChoice
+**Foreign Keys:**
+  - thread -> magic.Thread [FK]
+  - option -> magic.CrossingOption [FK]
+
+### PendingCrossingOffer
+**Foreign Keys:**
+  - thread -> magic.Thread [FK]
 
 ### ThreadCrossingThreshold
 **Pointed to by:**
@@ -3458,6 +3498,7 @@
 
 ### SignatureMotifBonus
 **Foreign Keys:**
+  - discovery_achievement -> achievements.Achievement [FK] (nullable)
   - required_facet -> magic.Facet [FK] (nullable)
   - required_resonance -> magic.Resonance [FK] (nullable)
 **Pointed to by:**
@@ -3603,6 +3644,8 @@
   - target_organization -> societies.Organization [FK] (nullable)
   - signature_bonus -> magic.SignatureMotifBonus [FK] (nullable)
 **Pointed to by:**
+  - crossing_choices <- magic.CrossingChoice
+  - pending_crossing_offers <- magic.PendingCrossingOffer
   - level_unlocks <- magic.ThreadLevelUnlock
   - treatment_action_requests <- scenes.SceneActionRequest
   - action_pull_declarations <- scenes.SceneActionPullDeclaration
@@ -3614,6 +3657,8 @@
 ### ThreadLevelUnlock
 **Foreign Keys:**
   - thread -> magic.Thread [FK]
+
+### TouchstoneCastConfig
 
 ### ThreadWeavingUnlock
 **Foreign Keys:**
@@ -3655,7 +3700,7 @@
 - `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' — Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_pull_cost(tier: 'int', target_kind: 'str | None') -> 'ThreadPullCost' — Resolve the pull cost row for (tier, target_kind).`
-- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
+- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None', *, apply_variant: 'bool' = True, character_technique=None) -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" — Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' — Total damage-type-specific resistance from gift threads (#1580).`
@@ -3712,6 +3757,7 @@
   - reward_definitions <- achievements.RewardDefinition
   - fashion_style_bonuses <- items.FashionStyleBonus
   - covenant_level_bonuses <- covenants.CovenantLevelBonus
+  - vow_stat_scalings <- covenants.VowStatScaling
   - covenant_role_bonuses <- covenants.CovenantRoleBonus
 
 ### ModifierSource
@@ -3804,6 +3850,7 @@
 **Pointed to by:**
   - challenge_templates <- mechanics.ChallengeTemplate
   - situation_templates <- mechanics.SituationTemplate
+  - assist_patterns <- missions.MissionAssistPattern
 
 ### ChallengeTemplate
 **Foreign Keys:**
@@ -3933,6 +3980,7 @@
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' — Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
+- `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`
 - `passive_mantle_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from attuned mantle threads (Spec D §5.2).`
 - `passive_motif_style_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Coherence bonus for ``target``'s resonance (Spec D §5.3). Thin wrapper over`
 - `power_flat_bonus_for_resonance(sheet: 'object', resonance_id: 'int') -> 'int' — Sum POWER-category flat modifiers (distinctions) applicable to ``resonance_id``.`
@@ -3941,6 +3989,8 @@
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' — Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — Authored covenant-role bonus for ``target``, scaled by character level (#985).`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+- `vow_gear_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven equipment effectiveness bonus (#2022).`
+- `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum the vow-driven stat scaling across engaged roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' — Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
 
 
@@ -3969,6 +4019,7 @@
   - locations -> evennia_extensions.RoomProfile [M2M]
 **Pointed to by:**
   - options <- missions.MissionOption
+  - support_options <- missions.MissionNodeSupportOption
 
 ### MissionOption
 **Foreign Keys:**
@@ -4005,6 +4056,7 @@
   - candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
   - resonance -> magic.Resonance [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
+  - followon_offer -> npc_services.NPCServiceOffer [FK] (nullable)
 
 ### MissionRenownAward
 **Foreign Keys:**
@@ -4021,12 +4073,15 @@
   - source_offer -> npc_services.NPCServiceOffer [FK] (nullable)
   - accepted_as_persona -> scenes.Persona [FK] (nullable)
   - rescue_target -> character_sheets.CharacterSheet [FK] (nullable)
+  - target_project -> projects.Project [FK] (nullable)
 **Pointed to by:**
   - participants <- missions.MissionParticipant
   - invites <- missions.MissionInvite
   - snapshots <- missions.MissionNodeSnapshot
   - group_ballots <- missions.MissionGroupBallot
   - deeds <- missions.MissionDeedRecord
+  - support_declarations <- missions.MissionSupportDeclaration
+  - tales <- missions.MissionRunTale
 
 ### MissionParticipant
 **Foreign Keys:**
@@ -4034,6 +4089,8 @@
   - character -> objects.ObjectDB [FK]
 **Pointed to by:**
   - group_ballots <- missions.MissionGroupBallot
+  - support_declarations <- missions.MissionSupportDeclaration
+  - tales <- missions.MissionRunTale
 
 ### MissionInvite
 **Foreign Keys:**
@@ -4046,6 +4103,8 @@
   - instance -> missions.MissionInstance [FK]
   - node -> missions.MissionNode [FK]
   - participant -> missions.MissionParticipant [FK]
+**Pointed to by:**
+  - support_declaration <- missions.MissionSupportDeclaration
 
 ### MissionGroupBallot
 **Foreign Keys:**
@@ -4064,10 +4123,35 @@
   - option -> missions.MissionOption [FK]
   - outcome -> traits.CheckOutcome [FK] (nullable)
   - route_candidate -> missions.MissionOptionRouteCandidate [FK] (nullable)
+  - legend_entries -> societies.LegendEntry [M2M]
 **Pointed to by:**
   - explaining_secrets <- secrets.Secret
   - reward_lines <- missions.MissionDeedRewardLine
   - queued_rewards <- missions.MissionRewardQueue
+
+### MissionAssistPattern
+**Foreign Keys:**
+  - capability -> conditions.CapabilityType [FK] (nullable)
+  - support_check_type -> checks.CheckType [FK]
+  - complication_consequence -> checks.Consequence [FK] (nullable)
+  - check_types -> checks.CheckType [M2M]
+  - challenge_categories -> mechanics.ChallengeCategory [M2M]
+
+### MissionNodeSupportOption
+**Foreign Keys:**
+  - node -> missions.MissionNode [FK]
+  - capability -> conditions.CapabilityType [FK] (nullable)
+  - support_check_type -> checks.CheckType [FK]
+  - complication_consequence -> checks.Consequence [FK] (nullable)
+
+### MissionSupportDeclaration
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - snapshot -> missions.MissionNodeSnapshot [FK]
+  - participant -> missions.MissionParticipant [FK]
+  - pattern -> missions.MissionAssistPattern [FK] (nullable)
+  - support_option -> missions.MissionNodeSupportOption [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK] (nullable)
 
 ### MissionGiver
 **Foreign Keys:**
@@ -4088,6 +4172,8 @@
   - recipient -> objects.ObjectDB [FK]
   - resonance -> magic.Resonance [FK] (nullable)
   - item_template -> items.ItemTemplate [FK] (nullable)
+  - followon_offer -> npc_services.NPCServiceOffer [FK] (nullable)
+  - project_contribution -> projects.Contribution [FK] (nullable)
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
 
@@ -4100,6 +4186,11 @@
 **Foreign Keys:**
   - offer -> npc_services.NPCServiceOffer [FK]
   - persona -> scenes.Persona [FK]
+
+### MissionRunTale
+**Foreign Keys:**
+  - instance -> missions.MissionInstance [FK]
+  - participant -> missions.MissionParticipant [FK]
 
 ### Service Functions
 - `apply_deed_rewards(deed: 'MissionDeedRecord', *, skip_unbuilt: 'bool' = False, room: 'ObjectDB | None' = None, skip_criminal: 'bool' = False) -> 'ApplyDeedRewardsResult' — Route every emitted :class:`MissionDeedRewardLine` on ``deed`` downstream.`
@@ -4116,10 +4207,10 @@
 - `on_mission_complete_for_beat(instance: 'MissionInstance', *, route: 'MissionOptionRoute | None' = None) -> 'MissionBeatTriggerRecord | None' — Record a Mission → Beat terminal trigger and complete the linked Beat.`
 - `resolve_beat_option(instance: 'MissionInstance', character: 'ObjectDB', *, option_id: 'int', approach_id: 'int | None' = None) -> 'ResolvedBeat' — Resolve the chosen option for ``character``; deliver both narratives.`
 - `resolve_group_node(instance: 'MissionInstance', node: 'MissionNode') -> 'list[MissionDeedRecord]' — Resolve a group ``node`` from its collected ``MissionGroupBallot`` rows (#1036).`
-- `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
+- `resolve_option(instance: 'MissionInstance', node: 'MissionNode', option: 'MissionOption', actor: 'MissionParticipant', *, chosen_approach: 'ChallengeApproach | None' = None, advance: 'bool' = True, extra_modifiers: 'int' = 0) -> 'MissionDeedRecord' — Resolve ``actor`` taking ``option`` at ``node``; return its deed.`
 - `respond_to_mission_invite(invite: 'MissionInvite', decision: 'MissionInvite.Response') -> 'MissionParticipant | None' — Resolve a PENDING invite. On ACCEPT, calls ``share_mission``.`
 - `share_mission(instance: 'MissionInstance', other_character: 'ObjectDB') -> 'MissionParticipant' — Add ``other_character`` as a non-holder participant to ``instance``.`
-- `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB') -> 'MissionInstance' — Staff-power: drop a mission on a character without a giver context.`
+- `staff_assign_mission(template: 'MissionTemplate', character: 'ObjectDB', *, project: 'Project | None' = None) -> 'MissionInstance' — Staff-power: drop a mission on a character without a giver context.`
 - `validate_mission_option(option: 'MissionOption') -> 'None' — Validate post-save invariants for ``option``.`
 
 
@@ -4223,6 +4314,7 @@
   - role -> npc_services.NPCRole [FK]
   - mission_template -> missions.MissionTemplate [FK]
   - source_beat -> stories.Beat [FK] (nullable)
+  - target_project -> projects.Project [FK] (nullable)
 
 ### PermitOfferDetails
 **Foreign Keys:**
@@ -4459,6 +4551,7 @@
 **Foreign Keys:**
   - class_level_unlock -> progression.ClassLevelUnlock [FK] (nullable)
   - thread_crossing_threshold -> magic.ThreadCrossingThreshold [FK] (nullable)
+  - required_track_kind -> relationships.RelationshipTrack [FK] (nullable)
 
 ### LegendRequirement
 **Foreign Keys:**
@@ -5609,6 +5702,7 @@
   - explaining_secrets <- secrets.Secret
   - crime_tags <- justice.DeedCrimeTag
   - heat_sources <- justice.HeatSource
+  - mission_deeds <- missions.MissionDeedRecord
 
 ### LegendSpread
 **Foreign Keys:**

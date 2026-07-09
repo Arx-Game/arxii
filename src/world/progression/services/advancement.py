@@ -12,6 +12,7 @@ from evennia.objects.models import ObjectDB
 
 from world.progression.exceptions import (
     AdvancementRequirementsNotMet,
+    AdvancementUnlockNotPurchasedError,
     NoDuranceSiteError,
     OfficiantIneligibleError,
     TierBoundaryRequiresCrossing,
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
     from world.classes.models import CharacterClassLevel, Path
     from world.magic.models.sessions import RitualSession, RitualSessionParticipant
     from world.magic.types.path_magic import PathMagicGrantResult
-    from world.progression.models import ClassLevelAdvancement
+    from world.progression.models import ClassLevelAdvancement, ClassLevelUnlock
     from world.scenes.models import Interaction, Scene
 
 
@@ -267,6 +268,30 @@ def _maybe_semi_cross_into_potential_path(
         cross_into_path(inductee, new_path)
 
 
+def _assert_unlock_purchased(character: ObjectDB, unlock: ClassLevelUnlock) -> None:  # noqa: OBJECTDB_PARAM
+    """Raise AdvancementUnlockNotPurchasedError unless the XP unlock is purchased.
+
+    Additional, independently-required gate stacked alongside
+    ``check_requirements_for_unlock`` (see the "XP unlocks, never grants" ADR) —
+    passing the authored requirements is necessary but not sufficient; the
+    character must also hold a ``CharacterUnlock`` receipt for this exact
+    (class, target_level) pair, purchased via ``progression unlock class=<id>``.
+    """
+    from world.progression.models import CharacterUnlock
+
+    purchased = CharacterUnlock.objects.filter(
+        character=character,
+        character_class=unlock.character_class,
+        target_level=unlock.target_level,
+    ).exists()
+    if not purchased:
+        raise AdvancementUnlockNotPurchasedError(
+            class_name=unlock.character_class.name,
+            target_level=unlock.target_level,
+            xp_cost=unlock.get_xp_cost_for_character(character),
+        )
+
+
 def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -> RitualSession:
     """Open a Durance session at a training site, with its trainer-of-record as officiant.
 
@@ -303,6 +328,7 @@ def convene_durance_at_site(*, inductee_sheet: CharacterSheet, room: ObjectDB) -
     met, failed = check_requirements_for_unlock(inductee_sheet.character, unlock)
     if not met:
         raise AdvancementRequirementsNotMet(failed)
+    _assert_unlock_purchased(inductee_sheet.character, unlock)
 
     profile = get_room_profile(room)
     for site in DuranceTrainingSite.objects.filter(room_profile=profile, is_active=True):
@@ -347,6 +373,10 @@ def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLeve
     3. Officiant guard (``assert_can_officiate``).
     4. Resolve the authored ``ClassLevelUnlock`` and check its requirements; an
        absent unlock or unmet requirements raise ``AdvancementRequirementsNotMet``.
+    4b. Require the purchased XP unlock (``CharacterUnlock``) for this exact
+        (class, target_level) — an *additional*, independently-required gate
+        stacked alongside step 4's requirements (see the "XP unlocks, never
+        grants" ADR); missing it raises ``AdvancementUnlockNotPurchasedError``.
     5. Post the testament oration (with cited deeds) as a POSE in the active scene.
     6. Apply the level write and create the ``ClassLevelAdvancement`` receipt.
 
@@ -397,6 +427,7 @@ def advance_class_level_via_session(*, session: RitualSession) -> list[ClassLeve
         met, failed = check_requirements_for_unlock(inductee.character, unlock)
         if not met:
             raise AdvancementRequirementsNotMet(failed)
+        _assert_unlock_purchased(inductee.character, unlock)
 
         testament = participant.participant_kwargs.get("testament", "")
         scene, interaction = _post_testament(inductee, testament=testament)

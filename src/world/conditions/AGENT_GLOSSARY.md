@@ -50,3 +50,7 @@ _Avoid_: armor, immunity, soak
 **TreatmentTemplate**:
 The authored definition of a treatment — its name, applicable target condition or pending alteration kind, check type, costs (resonance, anima), whether it requires a bond thread, and optional backlash. The reusable blueprint used by `get_treatment_candidates` and `perform_treatment` when a PC treats another PC's condition or pending magical alteration.
 _Avoid_: cure template, heal type
+
+**Damage interaction**:
+An authored `ConditionDamageInteraction` row that fires when a conditioned target takes a specific damage type — amplifying (`damage_modifier_percent` > 0), dampening (< 0), consuming (`removes_condition=True`), or transforming (`applies_condition` set) the condition. Wired into the combat damage path after all soak/resistance/armor (#2018). Narration fires only on transitions (removal/transform), not on every-hit modifiers — a pure damage modifier is silent math.
+_Avoid_: elemental reaction, status effect combo (for the damage-axis interaction)

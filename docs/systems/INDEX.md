@@ -487,7 +487,7 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   wired into all `world/conditions/services.py` mutation sites.
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`,
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
-  `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
+  `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
   `perform_treatment()`
 - **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
   per-observer concealment detection (`is_concealed()`, `active_concealments()`,
@@ -1013,7 +1013,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `MultiClassRequirement` — multiple class levels
   - `TierRequirement` — tier 1 vs tier 2
   - `AchievementRequirement` — checks `CharacterAchievement` for a granted `Achievement`
-  - `RelationshipRequirement` — **stub**, always returns False
+  - `RelationshipRequirement` — counts the character's own qualifying `RelationshipTrackProgress`
+    rows (tier >= `minimum_tier`, optionally narrowed to `required_track_kind`) against
+    `minimum_count` (#2116)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
@@ -1051,7 +1053,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `assert_can_officiate(*, officiant_sheet, inductee_sheet, target_level) -> None` — raises `OfficiantIneligibleError` when level gate or Path-lineage gate fails.
   - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, records witnesses, writes receipts.
   - `convene_durance_at_site(*, inductee_sheet, room) -> RitualSession` (#1700) — drafts a Durance session using the room's `DuranceTrainingSite` trainer as initiator; raises `NoDuranceSiteError` when no eligible site is present.
-- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError`, `NoDuranceSiteError` (#1700) — all carry `user_message`.
+- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `AdvancementUnlockNotPurchasedError` (#2116 — missing `CharacterUnlock` purchase, an additional gate stacked alongside `AdvancementRequirementsNotMet`), `OfficiantIneligibleError`, `NoDuranceSiteError` (#1700) — all carry `user_message`.
 - **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
 - **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`; `advance_class_level_via_session` dispatched from `fire_session` on the Ritual of the Durance; `AudereMajoraCrossing` inherits `AbstractClassLevelAdvancement`), scenes (good-sport kudos accrued at consent; weekly grant via game-clock rollover)
 - **Source:** `src/world/progression/`
@@ -2853,6 +2855,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant(..., bypass_pre_apply=False)` — optional kwarg that skips
     `DAMAGE_PRE_APPLY` emit + `_try_interpose`; used by `reflect_damage` to bounce a hit
     without triggering another reactive cycle (loop-safety via `bypass_pre_apply=True`).
+    Both paths now also call `process_damage_interactions` after soak/resistance/armor
+    (#2018) — condition-damage interactions amplify, dampen, consume, or transform
+    conditions. Narration fires only on transitions (removal/transform), not every hit.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
     immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.

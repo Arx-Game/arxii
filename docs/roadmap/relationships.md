@@ -123,7 +123,9 @@ Relationships are the heart of the game. A track-based system lets characters de
 - **Relationship condition definitions** — RelationshipCondition model exists with M2M to ModifierTarget, but no service to apply conditions during checks
 
 ### Cross-System Integration
-- **Progression requirements** — RelationshipRequirement stub in progression app always returns False. Needs implementation to query CharacterRelationship
+- **Progression requirements** — `RelationshipRequirement` (progression app) implemented (#2116):
+  counts the character's own `RelationshipTrackProgress` rows at/above an authored
+  `minimum_tier`, optionally narrowed to one `required_track_kind`, gated on `minimum_count`.
 - **Gossip system** — Gossip-visible updates should be discoverable by other players. No gossip system exists yet
 - **Scene linking** — linked_scene FK exists on updates/developments/capstones but no UI to link scenes during creation
 - **Adventuring party model** — Group formation, shared legend, coordination bonuses. No models exist

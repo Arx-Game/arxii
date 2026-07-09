@@ -78,6 +78,7 @@ from commands.fatigue import CmdRest
 from commands.form import CmdForm
 from commands.functionary import CmdFunctionary
 from commands.gemit import CmdGemit
+from commands.gift_learning import CmdLearn
 from commands.gm_ops import CmdGMDashboard, CmdGMIdle
 from commands.gm_tables import CmdGMTable
 from commands.gmtrust import CmdGMTrust
@@ -324,6 +325,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # Training allocation and unlock purchase telnet surfaces.
             CmdTraining,
             CmdProgressionUnlock,
+            # #2116 — gift/technique/thread-weaving acquisition namespace.
+            CmdLearn,
             # #1350 — journal authoring namespace: write/respond/edit subverbs + list hub.
             CmdJournal,
             # #1350 — goal authoring namespace.

@@ -135,6 +135,7 @@ class _RoundActionEffects:
         self._add_combo_row(result)
         self._add_target_status_row(result)
         self._add_condition_rows(result)
+        self._add_synergy_rows(result)
         return result
 
     def _add_combo_row(self, result: list[EffectRow]) -> None:
@@ -218,6 +219,39 @@ class _RoundActionEffects:
                     kind="condition",
                     label=f"Applied {ci.condition.name} to {target_name}",
                     deep_link=DeepLinkRef(modal="condition", id=ci.pk),
+                )
+            )
+
+    def _add_synergy_rows(self, result: list[EffectRow]) -> None:
+        """Synergy beats from condition-damage interactions (#2018).
+
+        Derived from ``ConditionInstance`` rows applied by
+        ``process_damage_interactions`` (source_description starts with
+        "Triggered by"). Only transition interactions (condition consumed or
+        transformed) produce a row — pure modifiers are silent.
+        """
+        if self.action.focused_action_id is None:
+            return
+        upper = self.action.interaction_timestamp
+        lower = self.action.participant.encounter.round_started_at
+        if upper is None or lower is None:
+            return
+
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        interaction_conditions = ConditionInstance.objects.filter(
+            applied_at__gte=lower,
+            applied_at__lte=upper,
+            source_description__startswith="Triggered by",
+        ).select_related("condition")
+
+        for ci in interaction_conditions:
+            target_name = ci.target.db_key if ci.target_id else "target"
+            result.append(
+                EffectRow(
+                    kind="synergy",
+                    label=f"Synergy: {ci.condition.name} on {target_name}",
+                    deep_link=None,
                 )
             )
 

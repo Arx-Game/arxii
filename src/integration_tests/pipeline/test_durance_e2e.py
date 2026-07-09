@@ -39,7 +39,7 @@ from world.magic.factories import RitualOfTheDuranceFactory
 from world.magic.models.sessions import RitualSession
 from world.magic.services.sessions import accept_session, draft_session, fire_session
 from world.progression.models import CharacterPathHistory, ClassLevelAdvancement
-from world.progression.models.unlocks import ClassLevelUnlock
+from world.progression.models.unlocks import CharacterUnlock, ClassLevelUnlock
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
 
@@ -87,6 +87,11 @@ class DuranceE2ESingleInducteeTests(TestCase):
 
         # ClassLevelUnlock for (inductee class, target level 3).
         self.unlock = ClassLevelUnlock.objects.create(
+            character_class=self.inductee_class,
+            target_level=3,
+        )
+        CharacterUnlock.objects.create(
+            character=self.inductee_sheet.character,
             character_class=self.inductee_class,
             target_level=3,
         )
@@ -204,6 +209,12 @@ class DuranceE2EMultiInducteeTests(TestCase):
         _wire_path(self.inductee_b, self.path)
 
         ClassLevelUnlock.objects.create(character_class=self.shared_class, target_level=3)
+        for inductee in (self.inductee_a, self.inductee_b):
+            CharacterUnlock.objects.create(
+                character=inductee.character,
+                character_class=self.shared_class,
+                target_level=3,
+            )
 
         # Scene at the officiant's location (advance_class_level_via_session uses
         # the inductee's location via _post_declaration → _post_testament; locate
