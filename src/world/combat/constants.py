@@ -14,6 +14,11 @@ from actions.constants import (
 )
 from world.gm.constants import GMLevel
 
+# #2051 — the combo invariant: combos are never solo. A combo definition must
+# have at least this many slots, each filled by a distinct PC-controlled action.
+COMBO_MIN_SLOTS: int = 2
+
+
 # ---------------------------------------------------------------------------
 # Encounter enums
 # ---------------------------------------------------------------------------

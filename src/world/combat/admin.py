@@ -2,6 +2,7 @@
 
 from django.contrib import admin
 
+from world.combat.constants import COMBO_MIN_SLOTS
 from world.combat.models import (
     BossPhase,
     BreakBarConfig,
@@ -159,6 +160,8 @@ class CombatOpponentActionAdmin(admin.ModelAdmin):
 class ComboSlotInline(admin.TabularInline):
     model = ComboSlot
     extra = 0
+    min_num = COMBO_MIN_SLOTS
+    validate_min = True
     fields = ["slot_number", "required_action_type", "resonance_requirement"]
 
 

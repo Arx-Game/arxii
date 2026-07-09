@@ -1,5 +1,6 @@
 """Tests for the combo system: models, detection, upgrade/revert."""
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -53,6 +54,30 @@ class ComboDefinitionModelTests(TestCase):
         ComboDefinition.objects.create(name="A", slug="unique-slug")
         with self.assertRaises(IntegrityError):
             ComboDefinition.objects.create(name="B", slug="unique-slug")
+
+    def test_clean_rejects_one_slot_combo(self) -> None:
+        """A combo with fewer than 2 slots fails validation (invariant: combos are never solo)."""
+        from world.magic.factories import EffectTypeFactory
+
+        combo = ComboDefinitionFactory()
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=EffectTypeFactory())
+        with self.assertRaises(ValidationError):
+            combo.clean()
+
+    def test_clean_rejects_zero_slot_combo(self) -> None:
+        """A combo with no slots fails validation once it has a pk."""
+        combo = ComboDefinitionFactory()
+        with self.assertRaises(ValidationError):
+            combo.clean()
+
+    def test_clean_accepts_two_slot_combo(self) -> None:
+        """A combo with 2+ slots passes validation."""
+        from world.magic.factories import EffectTypeFactory
+
+        combo = ComboDefinitionFactory()
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=EffectTypeFactory())
+        ComboSlotFactory(combo=combo, slot_number=2, required_action_type=EffectTypeFactory())
+        combo.clean()  # should not raise
 
 
 class ComboSlotModelTests(TestCase):

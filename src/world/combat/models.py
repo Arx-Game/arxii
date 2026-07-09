@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from world.combat.handlers import EncounterCombatHandler
 
 from world.combat.constants import (
+    COMBO_MIN_SLOTS,
     DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
     FLEE_BASE_DIFFICULTY,
@@ -792,6 +793,30 @@ class ComboDefinition(DiscoverableContent, SharedMemoryModel):
             "for the combo to be available. Null means no window condition is required."
         ),
     )
+
+    def clean(self) -> None:
+        """Validate the combo invariant: minimum 2 slots (#2051).
+
+        Combos are structurally multi-PC — a solo player cannot fill 2+ distinct
+        action slots. This check catches programmatic edits and raw ORM saves
+        once slots exist. Admin creation is guarded separately by
+        ``ComboSlotInline.min_num``.
+
+        At creation time (before slots are saved), this is a no-op: Django's
+        admin ``save_model`` → ``save_related`` ordering means slots are written
+        after the definition, so ``self.pk`` may be set but ``slots`` is empty.
+        The admin inline's ``min_num=2, validate_min=True`` is the creation-time
+        guard; this ``clean()`` is the post-creation belt.
+        """
+        super().clean()
+        if self.pk is not None:
+            slot_count = self.slots.count()
+            if slot_count < COMBO_MIN_SLOTS:
+                msg = (
+                    f"Combo '{self.name}' has {slot_count} slot(s); combos require "
+                    "at least 2 slots (they are never solo — #2051)."
+                )
+                raise ValidationError({"slots": msg})
 
     def __str__(self) -> str:
         return self.name
