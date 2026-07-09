@@ -1,1 +1,1 @@
-0041_wall_breaker_combo
+0042_comboslot_required_archetype

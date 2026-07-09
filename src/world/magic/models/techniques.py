@@ -263,6 +263,20 @@ class Technique(DiscoverableContent, SharedMemoryModel):
         related_name="techniques",
         help_text="The type of effect this technique produces.",
     )
+    enhances_effect_type = models.ForeignKey(
+        EffectType,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="enhanced_by_techniques",
+        help_text=(
+            "#2022: If set, this is an enhancement technique — it boosts "
+            "techniques whose effect_type matches this field rather than "
+            "being a standalone cast. Role-granted gifts primarily carry "
+            "enhancement techniques so a well-matched vow amplifies existing "
+            "kit instead of competing with it. Null = standalone technique."
+        ),
+    )
     restrictions = models.ManyToManyField(
         Restriction,
         blank=True,
@@ -819,6 +833,18 @@ class CharacterTechnique(SharedMemoryModel):
             "If set, this technique is GRANTED by a modifier source (e.g. an active "
             "alternate self's ability-suite) and is deleted when that source's rows are "
             "cleaned up. Null = permanently learned."
+        ),
+    )
+    role_source = models.ForeignKey(
+        "covenants.CharacterCovenantRole",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="granted_techniques",
+        help_text=(
+            "#2022: If set, this technique was auto-granted by an engaged covenant "
+            "role's granted_gifts. Auto-revoked when the role disengages (the #2051 "
+            "vow-dim path). Null = permanently learned or granted by another source."
         ),
     )
 
