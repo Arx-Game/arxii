@@ -11659,7 +11659,14 @@ paths:
   /api/interaction-reactions/{id}/:
     delete:
       operationId: interaction_reactions_destroy
-      description: Toggle emoji reactions on interactions.
+      description: |-
+        Toggle emoji reactions on interactions.
+
+        A cataloged emoji with nonzero valence additionally fires an ambient
+        relationship bump at the pose's author (#1699). The chip toggle is the
+        primary behavior — a failed/deduped bump never blocks the reaction, and
+        un-reacting never reverts a bump (the per-interaction unique constraint
+        prevents re-farming).
       parameters:
       - in: path
         name: id
@@ -13897,8 +13904,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this Consequence Pool.
+          type: string
         required: true
       tags:
       - magic
@@ -22415,6 +22421,64 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/reaction-emoji/:
+    get:
+      operationId: reaction_emoji_list
+      description: The active reaction-emoji catalog the scene footer renders (#1699).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: valence
+        schema:
+          type: integer
+          enum:
+          - -1
+          - 0
+          - 1
+        description: |-
+          +1 fires a positive relationship bump, -1 negative, 0 cosmetic only
+
+          * `1` - Positive
+          * `0` - Neutral
+          * `-1` - Negative
+      tags:
+      - reaction-emoji
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReactionEmojiList'
+          description: ''
+  /api/reaction-emoji/{id}/:
+    get:
+      operationId: reaction_emoji_retrieve
+      description: The active reaction-emoji catalog the scene footer renders (#1699).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this reaction emoji.
+        required: true
+      tags:
+      - reaction-emoji
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReactionEmoji'
+          description: ''
   /api/reaction-windows/{id}/react/:
     post:
       operationId: reaction_windows_react_create
@@ -45910,6 +45974,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PublicFeedItem'
+    PaginatedReactionEmojiList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReactionEmoji'
     PaginatedRelationshipCapstoneList:
       type: object
       required:
@@ -51519,6 +51606,30 @@ components:
       description: |-
         * `game_wide` - Game-wide
         * `specified` - Specified
+    ReactionEmoji:
+      type: object
+      description: Read serializer for the active reaction-emoji catalog (#1699).
+      properties:
+        emoji:
+          type: string
+          maxLength: 32
+        valence:
+          allOf:
+          - $ref: '#/components/schemas/ValenceEnum'
+          description: |-
+            +1 fires a positive relationship bump, -1 negative, 0 cosmetic only
+
+            * `1` - Positive
+            * `0` - Neutral
+            * `-1` - Negative
+          minimum: -32768
+          maximum: 32767
+        sort_order:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - emoji
     RedistributeWrite:
       type: object
       description: Serializer for redistributing relationship points between tracks.
@@ -58768,6 +58879,16 @@ components:
           type: integer
       required:
       - story
+    ValenceEnum:
+      enum:
+      - 1
+      - 0
+      - -1
+      type: integer
+      description: |-
+        * `1` - Positive
+        * `0` - Neutral
+        * `-1` - Negative
     ViewerCapabilities:
       type: object
       description: Inline serializer for the viewer's capabilities in a covenant.

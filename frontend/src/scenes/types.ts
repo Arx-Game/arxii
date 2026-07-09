@@ -118,6 +118,13 @@ export interface InteractionReaction {
   reacted: boolean;
 }
 
+/** A reaction-emoji catalog entry (#1699). Nonzero valence also nudges the author's regard. */
+export interface ReactionEmojiEntry {
+  emoji: string;
+  valence: number;
+  sort_order: number;
+}
+
 /** Minimal ACTION Interaction embedded inside an action-link chip. */
 export interface InlineActionInteraction {
   id: number;
