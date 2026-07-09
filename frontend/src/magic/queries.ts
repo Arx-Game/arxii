@@ -18,6 +18,7 @@ import type {
   ApplicablePullsRequest,
   AudereRespondRequest,
   AudereMajoraRespondRequest,
+  BindMotifStyleRequest,
   CrossXPLockRequest,
   DissolveRequest,
   EntryFlourishRespondRequest,
@@ -27,6 +28,7 @@ import type {
   SineatingRespondRequest,
   StageAdvanceRespondRequest,
   TechniqueDesignRequest,
+  UnbindMotifStyleRequest,
   WeaveThreadRequest,
 } from './types';
 
@@ -81,6 +83,9 @@ export const magicKeys = {
   pathIntent: (characterId: number) => [...magicKeys.all, 'path-intent', characterId] as const,
 
   pathOptions: (characterId: number) => [...magicKeys.all, 'path-options', characterId] as const,
+
+  motifStyleBindings: () => [...magicKeys.all, 'motif-styles', 'bindings'] as const,
+  styleCatalog: () => [...magicKeys.all, 'motif-styles', 'catalog'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -750,5 +755,56 @@ export function useNextPathOptions(characterId: number) {
     queryKey: magicKeys.pathOptions(characterId),
     queryFn: () => api.getNextPathOptions(characterId),
     enabled: characterId > 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Motif style bindings, #2030
+// ---------------------------------------------------------------------------
+
+/** The acting character's current Motif style bindings. */
+export function useMotifStyleBindings() {
+  return useQuery({
+    queryKey: magicKeys.motifStyleBindings(),
+    queryFn: () => api.getMotifStyleBindings(),
+  });
+}
+
+/** The player-facing Style catalog, for the bind form's style picker. */
+export function useStyleCatalog() {
+  return useQuery({
+    queryKey: magicKeys.styleCatalog(),
+    queryFn: () => api.getStyleCatalog(),
+  });
+}
+
+/**
+ * Bind a Style to one of the acting character's claimed resonances.
+ *
+ * On success invalidates the bindings list and the character sheet query
+ * (`['character-sheets', characterSheetId]`, per character_sheets/queries.ts'
+ * useCharacterSheetQuery) — the sheet's magic.motif.resonances[*].styles
+ * mirrors the same bindings.
+ */
+export function useBindMotifStyle(characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BindMotifStyleRequest) => api.bindMotifStyle(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.motifStyleBindings() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
+    },
+  });
+}
+
+/** Remove a Style binding. Same invalidation as useBindMotifStyle. */
+export function useUnbindMotifStyle(characterSheetId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UnbindMotifStyleRequest) => api.unbindMotifStyle(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: magicKeys.motifStyleBindings() }).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
+    },
   });
 }

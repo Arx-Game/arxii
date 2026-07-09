@@ -26,6 +26,7 @@ import type {
   AudereRespondRequest,
   AudereMajoraCrossingResult,
   AudereMajoraRespondRequest,
+  BindMotifStyleRequest,
   CharacterResonance,
   CrossXPLockRequest,
   CrossXPLockResponse,
@@ -34,12 +35,14 @@ import type {
   EntryFlourishResult,
   ImbueRequest,
   ImbueResponse,
+  MotifStyleBindingsResponse,
   PaginatedPendingAlterationList,
   PaginatedPendingAudereOfferList,
   PaginatedPendingAudereMajoraOfferList,
   PaginatedPendingEntryFlourishOfferList,
   PaginatedPendingStageAdvanceOfferList,
   PaginatedSineatingPendingOfferList,
+  PaginatedStyleList,
   PaginatedTeachingOfferList,
   PaginatedThreadList,
   PathIntentResponse,
@@ -64,6 +67,7 @@ import type {
   Thread,
   ThreadApplicability,
   ThreadHubSummary,
+  UnbindMotifStyleRequest,
   WeaveThreadRequest,
 } from './types';
 
@@ -95,6 +99,8 @@ const AUDERE_MAJORA_URL = '/api/magic/audere-majora';
 const ENTRY_FLOURISH_URL = '/api/magic/entry-flourish';
 const PATH_INTENT_URL = '/api/progression/path-intent/';
 const PATH_OPTIONS_URL = '/api/progression/path-options/';
+const MOTIF_STYLES_URL = '/api/magic/motif-styles';
+const ITEMS_STYLES_URL = '/api/items/styles';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -1012,4 +1018,69 @@ export async function getCharacterAnima(characterId: number): Promise<CharacterA
     ? data
     : ((data as { results?: CharacterAnimaRecord[] }).results ?? []);
   return list[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Motif style bindings, #2030
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/motif-styles/
+ *
+ * The acting character's current Motif style bindings (wire contract:
+ * ListMotifStylesAction — src/actions/definitions/motif_style.py).
+ */
+export async function getMotifStyleBindings(): Promise<MotifStyleBindingsResponse> {
+  const res = await apiFetch(`${MOTIF_STYLES_URL}/`);
+  if (!res.ok) throw new Error('Failed to load style bindings');
+  return res.json() as Promise<MotifStyleBindingsResponse>;
+}
+
+/**
+ * POST /api/magic/motif-styles/bind/
+ *
+ * Bind a Style to one of the acting character's claimed resonances. 400s
+ * (audacity cap exceeded, unclaimed resonance, unknown style) carry a
+ * `{detail}` string — surfaced via readErrorDetail for the caller to render.
+ */
+export async function bindMotifStyle(body: BindMotifStyleRequest): Promise<unknown> {
+  const res = await apiFetch(`${MOTIF_STYLES_URL}/bind/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to bind style');
+  }
+  return res.json();
+}
+
+/**
+ * POST /api/magic/motif-styles/unbind/
+ *
+ * Remove a Style binding. 400 (style not bound) carries a `{detail}` string.
+ */
+export async function unbindMotifStyle(body: UnbindMotifStyleRequest): Promise<unknown> {
+  const res = await apiFetch(`${MOTIF_STYLES_URL}/unbind/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await readErrorDetail(res, 'Failed to unbind style');
+  }
+  return res.json();
+}
+
+/**
+ * GET /api/items/styles/
+ *
+ * Player-facing Style catalog for the Motif style-binding picker. Read-only
+ * ViewSet, paginated (page_size=50 — ItemTemplatePagination); the bind form
+ * only needs the first page for the current catalog size.
+ */
+export async function getStyleCatalog(): Promise<PaginatedStyleList> {
+  const res = await apiFetch(`${ITEMS_STYLES_URL}/`);
+  if (!res.ok) throw new Error('Failed to load style catalog');
+  return res.json() as Promise<PaginatedStyleList>;
 }

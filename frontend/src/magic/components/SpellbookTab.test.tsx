@@ -17,7 +17,46 @@ vi.mock('@/character_sheets/queries', () => ({
   useCharacterSheetQuery: vi.fn(),
 }));
 
+// MotifStylePanel (#2030) is mounted below the Motif card for the own view —
+// mock its hooks so this suite stays focused on SpellbookTab's own rendering
+// and never issues a real fetch.
+vi.mock('@/magic/queries', () => ({
+  useMotifStyleBindings: vi.fn(),
+  useStyleCatalog: vi.fn(),
+  useCharacterResonances: vi.fn(),
+  useBindMotifStyle: vi.fn(),
+  useUnbindMotifStyle: vi.fn(),
+}));
+
 import * as queries from '@/character_sheets/queries';
+import * as magicQueries from '@/magic/queries';
+
+function mockMotifStyleQueries() {
+  vi.mocked(magicQueries.useMotifStyleBindings).mockReturnValue({
+    data: { bindings: [] },
+    isLoading: false,
+  } as unknown as ReturnType<typeof magicQueries.useMotifStyleBindings>);
+  vi.mocked(magicQueries.useStyleCatalog).mockReturnValue({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+  } as unknown as ReturnType<typeof magicQueries.useStyleCatalog>);
+  vi.mocked(magicQueries.useCharacterResonances).mockReturnValue({
+    data: [],
+    isLoading: false,
+  } as unknown as ReturnType<typeof magicQueries.useCharacterResonances>);
+  vi.mocked(magicQueries.useBindMotifStyle).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof magicQueries.useBindMotifStyle>);
+  vi.mocked(magicQueries.useUnbindMotifStyle).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof magicQueries.useUnbindMotifStyle>);
+}
 
 function mockPayload(magic: CharacterSheetMagic | null | undefined, isLoading = false) {
   vi.mocked(queries.useCharacterSheetQuery).mockReturnValue({
@@ -45,7 +84,7 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
     ],
     motif: {
       description: 'Smoke and cinders.',
-      resonances: [{ name: 'Ember', facets: ['Fire', 'Ash'] }],
+      resonances: [{ name: 'Ember', facets: ['Fire', 'Ash'], styles: ['Sardonic'] }],
     },
     anima_ritual: null,
     aura: {
@@ -61,6 +100,7 @@ function makeMagic(overrides: Partial<CharacterSheetMagic> = {}): CharacterSheet
 describe('SpellbookTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMotifStyleQueries();
   });
 
   it('shows a spinner while loading', () => {
@@ -85,6 +125,7 @@ describe('SpellbookTab', () => {
     expect(screen.getByText('Flare')).toBeInTheDocument();
     expect(screen.getByText('Smoke and cinders.')).toBeInTheDocument();
     expect(screen.getByText('A candle guttered and did not go out.')).toBeInTheDocument();
+    expect(screen.getByText('Sardonic')).toBeInTheDocument();
     // Aura is qualitative — no raw decimal percentages anywhere in the DOM.
     expect(screen.queryByText(/70/)).not.toBeInTheDocument();
   });
@@ -98,6 +139,12 @@ describe('SpellbookTab', () => {
     expect(screen.queryByRole('link', { name: /rituals/i })).not.toBeInTheDocument();
   });
 
+  it('does not mount the style-binding panel for a foreign viewer', () => {
+    mockPayload(makeMagic());
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByTestId('motif-style-panel')).not.toBeInTheDocument();
+  });
+
   it('renders workbench links for the own view', () => {
     mockPayload(makeMagic());
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={true} />);
@@ -109,5 +156,11 @@ describe('SpellbookTab', () => {
     expect(screen.getByRole('link', { name: /threads/i })).toHaveAttribute('href', '/threads');
     expect(screen.getByRole('link', { name: /sanctums/i })).toHaveAttribute('href', '/sanctums');
     expect(screen.getByRole('link', { name: /rituals/i })).toHaveAttribute('href', '/rituals');
+  });
+
+  it('mounts the style-binding panel for the own view', () => {
+    mockPayload(makeMagic());
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={true} />);
+    expect(screen.getByTestId('motif-style-panel')).toBeInTheDocument();
   });
 });
