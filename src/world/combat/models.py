@@ -529,6 +529,19 @@ class CombatOpponent(SharedMemoryModel):
             "this opponent is DEFEATED (#876). Author non-character-targeted effects."
         ),
     )
+    wall_breaker_combo = models.ForeignKey(
+        "combat.ComboDefinition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wall_breaker_for_opponents",
+        help_text=(
+            "#2051: the authored declaration of the combo intended to break this "
+            "BOSS-tier opponent's wall. Required when aftermath_pool pays legend at "
+            "risk ≥ LEGEND_RISK_FLOOR_TIER. Null for non-BOSS tiers or non-legend "
+            "aftermath."
+        ),
+    )
 
     # === Morale fields (#2015) ===
     morale = models.PositiveSmallIntegerField(
@@ -589,6 +602,7 @@ class CombatOpponent(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        self._validate_wall_breaker_combo()
         if not self.objectdb_is_ephemeral:
             return
         from world.combat.services import (  # noqa: PLC0415
@@ -618,6 +632,44 @@ class CombatOpponent(SharedMemoryModel):
                     )
                 }
             )
+
+    def _aftermath_pays_legend(self) -> bool:
+        """Return True if this opponent's aftermath_pool contains a LEGEND_AWARD effect (#2051)."""
+        if self.aftermath_pool_id is None:
+            return False
+        from world.checks.constants import EffectType  # noqa: PLC0415
+        from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+
+        return ConsequenceEffect.objects.filter(
+            consequence__pool_entries__pool=self.aftermath_pool,
+            effect_type=EffectType.LEGEND_AWARD,
+        ).exists()
+
+    def _validate_wall_breaker_combo(self) -> None:
+        """Boss wall-breaker guard (#2051).
+
+        A BOSS-tier opponent whose aftermath_pool pays legend requires a
+        ``wall_breaker_combo`` that is set, active (not hidden or has at least
+        one learning), and has ≥ COMBO_MIN_SLOTS slots. HERO_KILLER is
+        unbeatable by design and not combo-gated.
+        """
+        if self.tier != OpponentTier.BOSS:
+            return
+        if not self._aftermath_pays_legend():
+            return
+        if self.wall_breaker_combo_id is None:
+            msg = (
+                "A BOSS-tier opponent with a legend-paying aftermath_pool requires "
+                "a wall_breaker_combo (#2051)."
+            )
+            raise ValidationError({"wall_breaker_combo": msg})
+        combo = self.wall_breaker_combo
+        if combo is not None and combo.slots.count() < COMBO_MIN_SLOTS:
+            msg = (
+                f"wall_breaker_combo '{combo.name}' has fewer than {COMBO_MIN_SLOTS} "
+                "slots — a wall-breaker must be a real multi-PC combo (#2051)."
+            )
+            raise ValidationError({"wall_breaker_combo": msg})
 
     @property
     def is_duel_mirror(self) -> bool:
