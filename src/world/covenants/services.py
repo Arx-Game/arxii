@@ -1215,6 +1215,46 @@ def evaluate_scene_engagement(
     fold_arrival_into_active_rites(character_sheet=character_sheet, room=room)
 
 
+def revalidate_engagements(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,  # noqa: ARG001  # documents the revalidation context; can_engage_membership reads location from the character
+) -> None:
+    """Re-check co-presence for all engaged covenant roles; dim vows that no longer hold.
+
+    For each engaged CharacterCovenantRole, re-runs the matching
+    ``can_engage_membership`` arm. On failure, clears the engagement (which
+    recomputes max health with clamp-not-injure semantics and flushes cached
+    handlers) and emits a notice to the affected character (#2051).
+
+    COURT vows re-validate by their own arm (mission/regard predicates), so
+    the master's business keeps them lit anywhere. BATTLE re-checks dormancy
+    only. Auto-engage on next qualifying arrival already exists, so power
+    relights the moment the covenant reunites — dark/light tracks presence,
+    no new state, thrash is self-limiting (engage and dim both track the same
+    co-presence fact).
+    """
+    from world.covenants.handlers import can_engage_membership  # noqa: PLC0415
+
+    roles = character_sheet.character.covenant_roles
+    for membership in roles.active_memberships:
+        if not membership.engaged:
+            continue
+        if can_engage_membership(membership):
+            continue
+        clear_engaged_membership(membership=membership)
+        _emit_vow_dim_notice(membership)
+
+
+def _emit_vow_dim_notice(membership: CharacterCovenantRole) -> None:
+    """Emit a notice to a character that their vow has dimmed (#2051).
+
+    Goes to the affected character only; the room sees at most ambient flavor.
+    """
+    character = membership.character_sheet.character
+    character.msg("Your vow dims — the covenant is not with you.")
+
+
 def _auto_engage_durance(
     *,
     character_sheet: CharacterSheet,
