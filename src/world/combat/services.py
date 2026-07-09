@@ -29,7 +29,11 @@ if TYPE_CHECKING:
     from world.combat.models import ClashConfig, StrainConfig
     from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
-    from world.conditions.types import AppliedConditionResult, RemovedConditionResult
+    from world.conditions.types import (
+        AppliedConditionResult,
+        DamageInteractionResult,
+        RemovedConditionResult,
+    )
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.magic.models import FuryTier, Technique
@@ -3396,6 +3400,28 @@ def _effective_resistance_for_opponent(
     return opponent.objectdb.conditions.resistance_modifier(damage_type)
 
 
+def _apply_condition_damage_interactions(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM
+    damage_type: DamageType | None,
+    damage_amount: int,
+) -> tuple[int, DamageInteractionResult | None]:
+    """Run condition-damage interactions on a target, returning modified damage + result.
+
+    Called from both combat damage paths after soak/resistance/armor (#2018).
+    The interaction modifier is a final percentage multiplier on net damage.
+    Returns ``(modified_damage, interaction_result)`` — ``interaction_result``
+    is None when damage_type is None or damage_amount is zero.
+    """
+    if damage_type is None or damage_amount <= 0:
+        return damage_amount, None
+    from world.conditions.services import process_damage_interactions  # noqa: PLC0415
+
+    result = process_damage_interactions(target, damage_type)
+    if result.damage_modifier_percent != 0:
+        damage_amount = max(0, int(damage_amount * (1 + result.damage_modifier_percent / 100)))
+    return damage_amount, result
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -3435,6 +3461,15 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     resistance = _effective_resistance_for_opponent(opponent, damage_type)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
+
+    # Condition-damage interactions (#2018). Final percentage multiplier on
+    # net damage, after soak + resistance. May consume/transform conditions.
+    interaction_result = None
+    if damage_through > 0 and opponent.objectdb is not None:
+        damage_through, interaction_result = _apply_condition_damage_interactions(
+            opponent.objectdb, damage_type, damage_through
+        )
+
     # Combo damage that bypasses soak should not also probe — the combo
     # itself is the reward for probing.
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
@@ -3488,6 +3523,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         defeated=defeated,
         kills=0,
         opponent_id=opponent.pk,
+        damage_interaction=interaction_result,
     )
 
 
