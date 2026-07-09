@@ -315,7 +315,7 @@ class RewardViewSetCRUDTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(username="staff-rew-crud", is_staff=True)
-        cls.template = MissionTemplateFactory(name="rew-tmpl")
+        cls.template = MissionTemplateFactory(name="rew-tmpl", risk_tier=4)
         cls.node = MissionNodeFactory(template=cls.template, key="rw-n")
         cls.check_type = CheckTypeFactory()
         cls.option = MissionOptionFactory(
