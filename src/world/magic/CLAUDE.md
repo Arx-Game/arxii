@@ -499,7 +499,15 @@ admin all converge on the same service layer.
   payload column: `FLAT_BONUS` / `INTENSITY_BUMP` / `VITAL_BONUS` (+ `vital_target`) /
   `CAPABILITY_GRANT` (FK to `CapabilityType`) / `NARRATIVE_ONLY`. Tier 0 is
   always-on passive; tiers 1–3 are paid pulls. `clean()` + CheckConstraints
-  enforce payload/effect_kind shape.
+  enforce payload/effect_kind shape. **Relationship pull content (#2021):**
+  `ensure_relationship_pull_content()` seeds survivability-skewed rows for
+  `RELATIONSHIP_TRACK` (one 4-tier chain per canonical resonance: Light/Sanctity/
+  Radiance/Dissolution). Tier 0: VITAL_BONUS(DAMAGE_TAKEN_REDUCTION). Tier 1:
+  VITAL_BONUS(DEATH_SAVE). Tier 2: RESISTANCE (all damage types). Tier 3:
+  VITAL_BONUS(KNOCKOUT_RESIST). `apply_target_modulation` now handles
+  `RELATIONSHIP_CAPSTONE` in addition to `RELATIONSHIP_TRACK` —
+  `relationship_bond_modulation` generalized via `_thread_relationship_target`
+  to resolve the threaded person from either FK.
 - `ThreadSurvivabilityTuning` - Per-`VitalBonusTarget` tuning row for the
   universal thread survivability baseline (#1175). One row per target — five
   at launch: `MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`, and the three threshold-save
