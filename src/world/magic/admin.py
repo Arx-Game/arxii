@@ -17,6 +17,8 @@ from world.magic.models import (
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
+    CrossingChoice,
+    CrossingOption,
     EffectType,
     Facet,
     Gift,
@@ -68,8 +70,6 @@ from world.magic.models import (
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
-    TraitCrossingChoice,
-    TraitCrossingOption,
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 
@@ -978,24 +978,29 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
 # =============================================================================
 
 
-@admin.register(TraitCrossingOption)
-class TraitCrossingOptionAdmin(admin.ModelAdmin):
-    """Admin for the authored trait crossing option catalog."""
+@admin.register(CrossingOption)
+class CrossingOptionAdmin(admin.ModelAdmin):
+    """Admin for the authored crossing option catalog."""
 
     list_display = (
         "name",
+        "target_kind",
         "resonance",
         "crossing_level",
-        "effect_kind",
         "is_default",
     )
-    list_filter = ("effect_kind", "is_default", "crossing_level")
+    list_filter = ("target_kind", "is_default", "crossing_level")
     search_fields = ("name", "description")
-    autocomplete_fields = ("resonance", "capability_grant", "discovery_achievement", "codex_entry")
+    autocomplete_fields = (
+        "resonance",
+        "condition_template",
+        "discovery_achievement",
+        "codex_entry",
+    )
 
 
-@admin.register(TraitCrossingChoice)
-class TraitCrossingChoiceAdmin(admin.ModelAdmin):
+@admin.register(CrossingChoice)
+class CrossingChoiceAdmin(admin.ModelAdmin):
     """Read-only admin for trait crossing choice receipts (provenance audit)."""
 
     list_display = ("thread", "crossing_level", "option", "chosen_at")

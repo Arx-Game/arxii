@@ -67,6 +67,7 @@ from actions.definitions.crafting import (
     AttachStyleAction,
     DetachFacetAction,
 )
+from actions.definitions.crossing import resolve_crossing_offer
 from actions.definitions.currency import DepositCoinsAction, GiveCoinsAction, WithdrawCoinsAction
 from actions.definitions.deeds import SaveDeedStoryAction, SpreadTaleAction
 from actions.definitions.doors import LockAction, UnlockAction
@@ -276,7 +277,6 @@ from actions.definitions.social import (
 )
 from actions.definitions.technique_authoring import AuthorTechniqueAction
 from actions.definitions.threads import WeaveThreadAction
-from actions.definitions.trait_crossing import resolve_trait_crossing
 from actions.definitions.traps import DisarmTrapAction
 from actions.types import TargetType
 
@@ -477,7 +477,7 @@ _ALL_ACTIONS: list[Action] = [
     entrance,
     restore_sense,
     resolve_entry_flourish,
-    resolve_trait_crossing,
+    resolve_crossing_offer,
     treat_condition,
     SanctumInstallAction(),
     SanctumHomecomingAction(),

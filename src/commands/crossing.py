@@ -1,20 +1,20 @@
-"""Telnet command for TRAIT thread crossing choices (#1989)."""
+"""Telnet command for thread crossing choices (generalized, #1990)."""
 
 from __future__ import annotations
 
 from commands.command import ArxCommand
 
 
-class CmdTraitCrossing(ArxCommand):
-    """Choose how your TRAIT thread's resonance manifests at a crossing.
+class CmdCrossing(ArxCommand):
+    """Choose how your thread's resonance manifests at a crossing.
 
     Usage:
-      traitcross list          - show pending offers + available options
-      traitcross choose <id>  - resolve a pending offer by picking an option
+      crossing list          - show pending offers + available options
+      crossing choose <id>  - resolve a pending offer by picking an option
     """
 
-    key = "traitcross"
-    aliases = ["traitcrossing"]
+    key = "crossing"
+    aliases = ["traitcross", "crossingchoice"]
     locks = "cmd:all()"
     help_category = "Magic"
 
@@ -29,42 +29,43 @@ class CmdTraitCrossing(ArxCommand):
             self._list_offers(sheet)
         elif args[0] == "choose":  # noqa: STRING_LITERAL
             if len(args) < 2:  # noqa: PLR2004
-                self.msg("Usage: traitcross choose <option_id>")
+                self.msg("Usage: crossing choose <option_id>")
                 return
             self._choose(sheet, args[1])
         else:
-            self.msg("Usage: traitcross list | traitcross choose <option_id>")
+            self.msg("Usage: crossing list | crossing choose <option_id>")
 
     def _list_offers(self, sheet: object) -> None:
-        from world.magic.models.trait_crossing import (  # noqa: PLC0415
-            PendingTraitCrossingOffer,
-            TraitCrossingOption,
+        from world.magic.models.crossing import (  # noqa: PLC0415
+            CrossingOption,
+            PendingCrossingOffer,
         )
 
-        offers = PendingTraitCrossingOffer.objects.filter(thread__owner=sheet).select_related(
+        offers = PendingCrossingOffer.objects.filter(thread__owner=sheet).select_related(
             "thread__resonance", "thread__target_trait"
         )
         if not offers:
-            self.msg("You have no pending trait crossing offers.")
+            self.msg("You have no pending crossing offers.")
             return
         for offer in offers:
             trait_name = offer.thread.target_trait.name if offer.thread.target_trait else "???"
             res_name = offer.thread.resonance.name if offer.thread.resonance else "???"
             self.msg(f"|wCrossing level {offer.crossing_level}|n - {res_name} {trait_name}")
-            options = TraitCrossingOption.objects.filter(
+            options = CrossingOption.objects.filter(
+                target_kind=offer.thread.target_kind,
                 resonance=offer.thread.resonance,
                 crossing_level=offer.crossing_level,
             )
             for opt in options:
-                self.msg(f"  [{opt.id}] {opt.name}: {opt.description or opt.narrative_snippet}")
+                self.msg(f"  [{opt.id}] {opt.name}: {opt.description}")
 
     def _choose(self, sheet: object, option_id_str: str) -> None:
-        from actions.definitions.trait_crossing import (  # noqa: PLC0415
-            ResolveTraitCrossingOfferAction,
+        from actions.definitions.crossing import (  # noqa: PLC0415
+            ResolveCrossingOfferAction,
         )
-        from world.magic.models.trait_crossing import (  # noqa: PLC0415
-            PendingTraitCrossingOffer,
-            TraitCrossingOption,
+        from world.magic.models.crossing import (  # noqa: PLC0415
+            CrossingOption,
+            PendingCrossingOffer,
         )
 
         try:
@@ -73,17 +74,17 @@ class CmdTraitCrossing(ArxCommand):
             self.msg("Option ID must be a number.")
             return
 
-        offer = PendingTraitCrossingOffer.objects.filter(thread__owner=sheet).first()
+        offer = PendingCrossingOffer.objects.filter(thread__owner=sheet).first()
         if offer is None:
-            self.msg("You have no pending trait crossing offer.")
+            self.msg("You have no pending crossing offer.")
             return
 
-        option = TraitCrossingOption.objects.filter(pk=option_id).first()
+        option = CrossingOption.objects.filter(pk=option_id).first()
         if option is None:
             self.msg(f"No option with ID {option_id}.")
             return
 
         actor = self.caller
-        action = ResolveTraitCrossingOfferAction()
+        action = ResolveCrossingOfferAction()
         result = action.run(actor=actor, offer=offer, option=option)
         self.msg(result.message)

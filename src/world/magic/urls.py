@@ -19,6 +19,7 @@ from world.magic.views import (
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
     ConsequencePoolCatalogViewSet,
+    CrossingRespondView,
     DramaticMomentTagViewSet,
     DramaticMomentTypeViewSet,
     EffectTypeViewSet,
@@ -29,9 +30,9 @@ from world.magic.views import (
     PendingAlterationViewSet,
     PendingAudereMajoraOfferViewSet,
     PendingAudereOfferViewSet,
+    PendingCrossingOfferViewSet,
     PendingEntryFlourishOfferViewSet,
     PendingStageAdvanceOfferViewSet,
-    PendingTraitCrossingOfferViewSet,
     PoseEndorsementViewSet,
     ResonanceGrantViewSet,
     RestrictionViewSet,
@@ -54,7 +55,6 @@ from world.magic.views import (
     ThreadPullPreviewView,
     ThreadViewSet,
     ThreadWeavingTeachingOfferViewSet,
-    TraitCrossingRespondView,
 )
 
 app_name = "magic"
@@ -303,19 +303,19 @@ urlpatterns = [
     ),
     # #1989 — Trait crossing offer inbox + respond
     path(
-        "trait-crossing/pending/",
-        PendingTraitCrossingOfferViewSet.as_view({"get": "list"}),
-        name="trait-crossing-pending-list",
+        "crossing/pending/",
+        PendingCrossingOfferViewSet.as_view({"get": "list"}),
+        name="crossing-pending-list",
     ),
     path(
-        "trait-crossing/pending/<int:pk>/",
-        PendingTraitCrossingOfferViewSet.as_view({"get": "retrieve"}),
-        name="trait-crossing-pending-detail",
+        "crossing/pending/<int:pk>/",
+        PendingCrossingOfferViewSet.as_view({"get": "retrieve"}),
+        name="crossing-pending-detail",
     ),
     path(
-        "trait-crossing/respond/",
-        TraitCrossingRespondView.as_view(),
-        name="trait-crossing-respond",
+        "crossing/respond/",
+        CrossingRespondView.as_view(),
+        name="crossing-respond",
     ),
     *router.urls,
 ]

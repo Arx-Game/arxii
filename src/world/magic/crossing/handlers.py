@@ -254,17 +254,15 @@ class _StubCrossingHandler:
         )
 
 
-class TraitCrossingHandler:
-    """TRAIT thread crossing handler — player-chosen resonance expression.
+class _CrossingChoiceHandler:
+    """Shared base for handlers that create player-choice crossing offers.
 
-    At each crossing level (3, 6, 11, 16, 21), creates a PendingTraitCrossingOffer
-    for the player to choose a resonance-flavored expression of their stat.
-    Skipped lower crossings (multi-crossing imbue) are auto-resolved with the
-    is_default option. Fires ceremony beat #1 (narrative-only) at crossing time;
-    beat #2 (achievement/codex) fires at resolution time.
+    Both TRAIT and FACET (and future kinds) use the same flow: auto-resolve
+    skipped lower crossings, create a pending offer for the highest crossing,
+    fire ceremony beat #1. Differ only in target_kind.
     """
 
-    target_kind = TargetKind.TRAIT
+    target_kind: str = ""
 
     def execute(self, *, thread: Thread, starting_level: int, new_level: int) -> None:
         if new_level <= starting_level:
@@ -286,13 +284,13 @@ class TraitCrossingHandler:
             _auto_resolve_crossing(thread, level)
 
         # Create pending offer for the highest crossing (if not already chosen)
-        from world.magic.models.trait_crossing import (  # noqa: PLC0415
-            PendingTraitCrossingOffer,
-            TraitCrossingChoice,
+        from world.magic.models.crossing import (  # noqa: PLC0415
+            CrossingChoice,
+            PendingCrossingOffer,
         )
 
-        if not TraitCrossingChoice.objects.filter(thread=thread, crossing_level=highest).exists():
-            PendingTraitCrossingOffer.objects.update_or_create(
+        if not CrossingChoice.objects.filter(thread=thread, crossing_level=highest).exists():
+            PendingCrossingOffer.objects.update_or_create(
                 thread=thread,
                 defaults={"crossing_level": highest},
             )
@@ -306,6 +304,19 @@ class TraitCrossingHandler:
         )
 
 
+class TraitCrossingHandler(_CrossingChoiceHandler):
+    """TRAIT thread crossing handler — player-chosen resonance expression.
+
+    At each crossing level (3, 6, 11, 16, 21), creates a PendingCrossingOffer
+    for the player to choose a resonance-flavored expression of their stat.
+    Skipped lower crossings (multi-crossing imbue) are auto-resolved with the
+    is_default option. Fires ceremony beat #1 (narrative-only) at crossing time;
+    beat #2 (achievement/codex) fires at resolution time.
+    """
+
+    target_kind = TargetKind.TRAIT
+
+
 def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:
     """Build a resonance-flavored crossing announcement."""
     resonance_name = thread.resonance.name if thread.resonance else "your resonance"
@@ -315,25 +326,27 @@ def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:
     return (
         f"Your {resonance_name}-resonant {trait_name or 'trait'} thread "
         f"has crossed a threshold (level {crossing_level}). "
-        f"Use 'traitcross list' to choose how it manifests."
+        f"Use 'crossing list' to choose how it manifests."
     )
 
 
 def _auto_resolve_crossing(thread: Thread, crossing_level: int) -> None:
     """Auto-resolve a skipped crossing with the is_default option.
 
-    Fail-open: if no is_default option exists for (resonance, level), the
-    crossing is silently skipped (staff haven't authored content yet).
+    Fail-open: if no is_default option exists for (target_kind, resonance,
+    level), the crossing is silently skipped (staff haven't authored content
+    yet).
     """
-    from world.magic.models.trait_crossing import (  # noqa: PLC0415
-        TraitCrossingChoice,
-        TraitCrossingOption,
+    from world.magic.models.crossing import (  # noqa: PLC0415
+        CrossingChoice,
+        CrossingOption,
     )
 
-    if TraitCrossingChoice.objects.filter(thread=thread, crossing_level=crossing_level).exists():
+    if CrossingChoice.objects.filter(thread=thread, crossing_level=crossing_level).exists():
         return  # already chosen
 
-    default_option = TraitCrossingOption.objects.filter(
+    default_option = CrossingOption.objects.filter(
+        target_kind=thread.target_kind,
         resonance=thread.resonance,
         crossing_level=crossing_level,
         is_default=True,
@@ -342,18 +355,23 @@ def _auto_resolve_crossing(thread: Thread, crossing_level: int) -> None:
     if default_option is None:
         return  # fail-open: no content authored
 
-    TraitCrossingChoice.objects.create(
+    CrossingChoice.objects.create(
         thread=thread,
         crossing_level=crossing_level,
         option=default_option,
     )
 
 
-class FacetCrossingHandler(_StubCrossingHandler):
-    """FACET thread crossing — stub (#1990)."""
+class FacetCrossingHandler(_CrossingChoiceHandler):
+    """FACET thread crossing handler — player-chosen aura enhancement.
+
+    At each crossing level, creates a PendingCrossingOffer for the player
+    to choose a resonance-matched aura enhancement. The chosen buff is
+    active while wearing an item with the anchor facet (enforced by the
+    read path, not the handler).
+    """
 
     target_kind = TargetKind.FACET
-    _subissue = "#1990"
 
 
 class RelationshipTrackCrossingHandler(_StubCrossingHandler):

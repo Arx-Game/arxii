@@ -1,4 +1,4 @@
-"""Action for resolving a pending TRAIT thread crossing offer (#1989)."""
+"""Action for resolving a pending thread crossing offer (generalized, #1990)."""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from actions.types import ActionResult, TargetType
 
 
 @dataclass
-class ResolveTraitCrossingOfferAction(Action):
-    """Resolve a pending trait crossing offer by picking an option.
+class ResolveCrossingOfferAction(Action):
+    """Resolve a pending crossing offer by picking an option.
 
-    Shared action.run() seam — telnet (CmdTraitCrossing) and web
-    (TraitCrossingRespondView) converge here.
+    Shared action.run() seam — telnet (CmdCrossing) and web
+    (CrossingRespondView) converge here.
     """
 
-    key: str = "resolve_trait_crossing"
-    name: str = "Choose Trait Crossing"
+    key: str = "resolve_crossing_offer"
+    name: str = "Choose Crossing"
     icon: str = "sparkles"
     category: str = "magic"
     target_type: TargetType = TargetType.SELF
@@ -33,21 +33,21 @@ class ResolveTraitCrossingOfferAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         from world.magic.exceptions import (  # noqa: PLC0415
-            TraitCrossingOfferNotFoundError,
-            TraitCrossingOfferStaleError,
+            CrossingOfferNotFoundError,
+            CrossingOfferStaleError,
         )
-        from world.magic.services.trait_crossing import (  # noqa: PLC0415
-            resolve_trait_crossing_offer,
+        from world.magic.services.crossing import (  # noqa: PLC0415
+            resolve_crossing_offer,
         )
 
         try:
-            result = resolve_trait_crossing_offer(offer, option=option)
-        except TraitCrossingOfferNotFoundError:
+            result = resolve_crossing_offer(offer, option=option)
+        except CrossingOfferNotFoundError:
             return ActionResult(
                 success=False,
-                message="You have no pending trait crossing offer.",
+                message="You have no pending crossing offer.",
             )
-        except TraitCrossingOfferStaleError:
+        except CrossingOfferStaleError:
             return ActionResult(
                 success=False,
                 message="That option is no longer available for this crossing.",
@@ -55,9 +55,9 @@ class ResolveTraitCrossingOfferAction(Action):
         return ActionResult(
             success=True,
             message=f"Your {result.option_name} takes hold.",
-            data={"trait_crossing_result": result},
+            data={"crossing_result": result},
         )
 
 
 # Module-level singleton
-resolve_trait_crossing = ResolveTraitCrossingOfferAction()
+resolve_crossing_offer = ResolveCrossingOfferAction()
