@@ -3,9 +3,9 @@
 Covers the integration points between the build items:
 1. Touchstone provably raises matching-resonance cast power via the power-term provider
 2. USE_ITEM maneuver dispatches correctly (unit-tested in test_use_item_maneuver)
-3. Weapon facet participates in passive_facet_bonuses (fighter style parity)
+3. Weapon facet participates in passive_facet_bonuses (fighter style parity, tested separately)
 
-No auto-narration tests — flourish fields are inert, touchstone bonus is passive.
+No auto-narration tests. Touchstone bonus is passive only.
 """
 
 from __future__ import annotations
@@ -71,23 +71,3 @@ class TouchstonePowerTermIntegrationTests(TestCase):
 
         assert bonus3 > bonus1
         assert bonus3 == 3 * bonus1  # tier 3 vs tier 1
-
-
-class EquipmentFlourishFieldTests(TestCase):
-    """Flourish fields are inert model fields — resolve_item_flourish works but is unwired."""
-
-    def test_flourish_resolved_from_real_item(self):
-        """resolve_item_flourish reads from real ItemTemplate/ItemInstance."""
-        from world.items.services.flourish import resolve_item_flourish
-
-        template = ItemTemplateFactory(flourish_text="gleaming crimson in the torchlight")
-        instance = ItemInstanceFactory(template=template, custom_flourish_text="")
-        assert resolve_item_flourish(instance) == "gleaming crimson in the torchlight"
-
-    def test_flourish_overridden_on_real_item(self):
-        """Player override takes precedence on a real ItemInstance."""
-        from world.items.services.flourish import resolve_item_flourish
-
-        template = ItemTemplateFactory(flourish_text="template flourish")
-        instance = ItemInstanceFactory(template=template, custom_flourish_text="my custom flourish")
-        assert resolve_item_flourish(instance) == "my custom flourish"

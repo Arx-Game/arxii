@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("combat", "0042_comboslot_required_archetype"),
-        ("items", "0029_itemtemplate_flourish_text_iteminstance_custom_flourish_text"),
+        ("items", "0028_iteminstance_designer_character_sheet_and_more"),
     ]
 
     operations = [

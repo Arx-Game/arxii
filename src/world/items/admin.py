@@ -79,7 +79,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     list_select_related = ["minimum_quality_tier", "image"]
     raw_id_fields = ["image", "weapon_damage_type"]
     fieldsets = [
-        (None, {"fields": ["name", "description", "flourish_text", "is_active"]}),
+        (None, {"fields": ["name", "description", "is_active"]}),
         (
             "Physical properties",
             {
@@ -181,7 +181,6 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "template",
         "custom_name",
         "custom_description",
-        "custom_flourish_text",
         "quality_tier",
         "quantity",
         "charges",
