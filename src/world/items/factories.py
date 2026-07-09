@@ -76,6 +76,7 @@ class ItemTemplateFactory(factory.django.DjangoModelFactory):
     is_active = True
     tied_resonance = None
     resonance_tier = None
+    flourish_text = ""
 
     class Params:
         weapon = factory.Trait(
@@ -99,6 +100,7 @@ class ItemInstanceFactory(factory.django.DjangoModelFactory):
     template = factory.SubFactory(ItemTemplateFactory)
     custom_name = ""
     custom_description = ""
+    custom_flourish_text = ""
     quantity = 1
     durability = None
 

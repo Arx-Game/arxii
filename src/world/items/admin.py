@@ -78,6 +78,67 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     search_fields = ["name"]
     list_select_related = ["minimum_quality_tier", "image"]
     raw_id_fields = ["image", "weapon_damage_type"]
+    fieldsets = [
+        (None, {"fields": ["name", "description", "flourish_text", "is_active"]}),
+        (
+            "Physical properties",
+            {
+                "fields": [
+                    "weight",
+                    "size",
+                    "value",
+                    "gear_archetype",
+                    "base_weapon_damage",
+                    "weapon_damage_type",
+                    "base_armor_soak",
+                    "max_durability",
+                    "minimum_quality_tier",
+                ]
+            },
+        ),
+        (
+            "Container & stack",
+            {
+                "fields": [
+                    "is_container",
+                    "container_capacity",
+                    "container_max_item_size",
+                    "is_stackable",
+                    "max_stack_size",
+                    "is_wardrobe",
+                ],
+                "classes": ["collapse"],
+            },
+        ),
+        (
+            "Consumable & on-use",
+            {
+                "fields": [
+                    "is_consumable",
+                    "max_charges",
+                    "on_use_pool",
+                    "on_use_check_type",
+                    "on_use_difficulty",
+                    "on_use_target_kind",
+                ],
+                "classes": ["collapse"],
+            },
+        ),
+        (
+            "Resonance tie",
+            {
+                "fields": ["tied_resonance", "resonance_tier"],
+                "classes": ["collapse"],
+            },
+        ),
+        (
+            "Cosmetics",
+            {
+                "fields": ["supports_open_close", "image"],
+                "classes": ["collapse"],
+            },
+        ),
+    ]
     inlines = [TemplateSlotInline, TemplateInteractionInline, GarmentMitigationInline]
 
 
@@ -111,6 +172,22 @@ class ItemInstanceAdmin(admin.ModelAdmin):
     search_fields = ["custom_name", "template__name"]
     raw_id_fields = [
         "game_object",
+        "holder_character_sheet",
+        "crafter_character_sheet",
+        "crafter_persona_display",
+        "image",
+    ]
+    fields = [
+        "template",
+        "custom_name",
+        "custom_description",
+        "custom_flourish_text",
+        "quality_tier",
+        "quantity",
+        "charges",
+        "durability",
+        "is_open",
+        "access_policy",
         "holder_character_sheet",
         "crafter_character_sheet",
         "crafter_persona_display",

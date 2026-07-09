@@ -143,6 +143,14 @@ class ItemTemplate(SharedMemoryModel):
         blank=True,
         help_text="Default full description when examined. Instances can override.",
     )
+    flourish_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Staff-authored combat flourish prose. Appended as an em-dash clause "
+            "to combat outcome narration when this item is equipped."
+        ),
+    )
     weight = models.DecimalField(
         max_digits=8,
         decimal_places=2,
@@ -534,6 +542,14 @@ class ItemInstance(SharedMemoryModel):
     custom_description = models.TextField(
         blank=True,
         help_text="Custom examination text, overrides template description.",
+    )
+    custom_flourish_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-customizable combat flourish prose. Overrides template "
+            "flourish_text when non-empty."
+        ),
     )
     quality_tier = models.ForeignKey(
         QualityTier,
