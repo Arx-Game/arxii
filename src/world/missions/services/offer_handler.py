@@ -26,7 +26,12 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from world.missions.constants import MISSION_RISK_ACK_TIER, MissionStatus
+from world.missions.constants import (
+    LEGEND_RISK_FLOOR_TIER,
+    MISSION_RISK_ACK_TIER,
+    SOLO_DARKNESS_WARNING,
+    MissionStatus,
+)
 from world.missions.models import MissionInstance, MissionParticipant, MissionRiskAcknowledgement
 from world.missions.services.resolution import enter_node
 from world.missions.services.run import _template_has_project_lines, anchor_room_for
@@ -110,17 +115,42 @@ def _require_risk_acknowledgement(
         return
     if MissionRiskAcknowledgement.objects.filter(offer=offer, persona=persona).exists():
         return
-    summaries = (
-        tuple(beat.stakes.values_list("player_summary", flat=True)) if beat_is_staked else ()
-    )
+    summaries = list(beat.stakes.values_list("player_summary", flat=True) if beat_is_staked else [])
+    # #2051: append the solo darkness warning when the risk is at legend floor,
+    # the party is solo (no other participants), and the character has no
+    # engaged covenant vow.
+    if template.risk_tier >= LEGEND_RISK_FLOOR_TIER and _is_solo_without_vow(persona):
+        summaries.append(SOLO_DARKNESS_WARNING)
     msg = (
         f"Offer {offer.pk} (template {template.pk!r}, risk_tier {template.risk_tier}, "
         f"staked_beat={beat.pk if beat_is_staked else None}) requires a "
         f"MissionRiskAcknowledgement from persona {persona.pk}."
     )
     raise MissionRiskUnacknowledgedError(
-        msg, risk_tier=template.risk_tier, stake_summaries=summaries
+        msg, risk_tier=template.risk_tier, stake_summaries=tuple(summaries)
     )
+
+
+def _is_solo_without_vow(persona: Persona) -> bool:
+    """Return True if the character is solo (no co-located party) and has no engaged vow (#2051).
+
+    A character with an engaged covenant role (Durance or Court) has "threads"
+    — the darkness warning is only for those truly alone.
+    """
+    character = persona.character_sheet.character
+    # Check for an engaged covenant role — if any exist, the vow is lit.
+    roles = character.covenant_roles
+    if any(m.engaged for m in roles.active_memberships):
+        return False
+    # Check for co-located PCs — if another PC is present, it's not solo.
+    location = character.location
+    if location is not None:
+        for obj in location.contents:
+            if obj == character:
+                continue
+            if getattr(obj, "sheet_data", None) is not None:  # noqa: GETATTR_LITERAL
+                return False
+    return True
 
 
 def _entry_node(template: MissionTemplate) -> MissionNode:

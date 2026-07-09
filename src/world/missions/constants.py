@@ -20,6 +20,11 @@ MAX_PERCENT_REPLACE = 100
 MISSION_RISK_ACK_TIER = 3
 
 
+# #2051 — the solo darkness warning. Appended to the risk-ack wager text when
+# a solo player accepts a legend-risk mission with no engaged covenant vow.
+SOLO_DARKNESS_WARNING = "You are alone. Your threads are quiet. This will very likely kill you."
+
+
 # #2051 — the minimum risk_tier a MissionTemplate must carry before any reward
 # line may pay into the LEGEND_POINTS sink. Legend is earned in the company of
 # others; a mission below this floor cannot pay legend. Tier 4 maps to

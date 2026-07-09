@@ -311,3 +311,41 @@ class RiskPromptMessageTests(TestCase):
         msg = _risk_prompt_message(exc)
 
         self.assertIn(f"risk tier {MISSION_RISK_ACK_TIER}", msg)
+
+    def test_solo_darkness_warning_appended_at_legend_floor(self):
+        """A solo PC at legend floor with no engaged vow sees the darkness warning (#2051)."""
+        # Create a solo character (no co-located PCs, no engaged vow).
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.missions.constants import SOLO_DARKNESS_WARNING
+        from world.missions.services.offer_handler import _is_solo_without_vow
+
+        sheet = CharacterSheetFactory()
+        persona = sheet.primary_persona
+
+        # The character is solo and has no engaged covenant role.
+        self.assertTrue(_is_solo_without_vow(persona))
+
+        # Build a high-risk offer and verify the darkness warning is in summaries.
+        from world.missions.constants import LEGEND_RISK_FLOOR_TIER
+        from world.missions.factories import (
+            MissionNodeFactory,
+            MissionTemplateFactory,
+        )
+        from world.npc_services.factories import (
+            MissionOfferDetailsFactory,
+            NPCServiceOfferFactory,
+        )
+
+        template = MissionTemplateFactory(risk_tier=LEGEND_RISK_FLOOR_TIER)
+        MissionNodeFactory(template=template, is_entry=True)
+        offer = NPCServiceOfferFactory()
+        MissionOfferDetailsFactory(offer=offer, mission_template=template)
+
+        from world.missions.services.offer_handler import (
+            _require_risk_acknowledgement,
+        )
+
+        details = offer.mission_offer_details
+        with self.assertRaises(MissionRiskUnacknowledgedError) as ctx:
+            _require_risk_acknowledgement(offer, persona, details)
+        self.assertIn(SOLO_DARKNESS_WARNING, ctx.exception.stake_summaries)
