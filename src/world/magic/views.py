@@ -1748,12 +1748,23 @@ class PendingCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
             PendingCrossingOffer,
         )
 
-        return _account_scoped_offer_queryset(
-            PendingCrossingOffer,
-            self.request.user,
-            "thread",
-            "thread__resonance",
-            "thread__target_trait",
+        sheets = CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=self.request.user,
+            roster_entry__tenures__end_date__isnull=True,
+        )
+        return (
+            PendingCrossingOffer.objects.filter(thread__owner__in=sheets)
+            .select_related(
+                "thread",
+                "thread__resonance",
+                "thread__target_trait",
+                "thread__target_facet",
+                "thread__target_relationship_track__track",
+                "thread__target_relationship_track__relationship__target__character",
+                "thread__target_capstone__relationship__target__character",
+            )
+            .order_by("-created_at")
+            .distinct()
         )
 
 
