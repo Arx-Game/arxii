@@ -5,12 +5,14 @@ from django.db.models import Count, Exists, OuterRef, Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.mixins import ListModelMixin
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from world.mechanics.models import ModifierTarget
+from world.relationships.constants import UpdateVisibility
 from world.relationships.filters import RelationshipCapstoneFilter
 from world.relationships.models import (
     CharacterRelationship,
@@ -35,6 +37,7 @@ from world.relationships.serializers import (
     RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
     RelationshipTrackSerializer,
+    RelationshipUpdateSerializer,
     WriteupComplaintWriteSerializer,
     WriteupKudosWriteSerializer,
 )
@@ -167,19 +170,29 @@ class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
         )
 
 
-class RelationshipUpdateViewSet(GenericViewSet):
-    """Write-only endpoints for relationship-building verbs.
+class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
+    """Mutation actions for relationship-building verbs, plus a narrow list route.
 
-    List/detail relationship state remains on CharacterRelationshipViewSet;
-    this ViewSet only exposes the four mutation actions.
+    Detail/browsing of relationship state in general remains on
+    CharacterRelationshipViewSet; the ``list`` action here exists only to feed
+    the commend button on the requesting user's own writeups-about-them (the
+    subject side of ``give_writeup_kudos``'s rule) — it is not a general
+    writeup browser. Scoped to writeups where the caller's character is the
+    parent relationship's ``target`` (the writeup's commendable subject) and
+    visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
+    here regardless of subject.
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = FirstImpressionWriteSerializer
+    pagination_class = PageNumberPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["relationship", "track"]
 
     def get_serializer_class(self):  # type: ignore[override]
         """Return the write serializer matching the current action."""
         mapping = {
+            "list": RelationshipUpdateSerializer,
             "first_impression": FirstImpressionWriteSerializer,
             "develop": DevelopmentWriteSerializer,
             "capstone": CapstoneWriteSerializer,
@@ -188,6 +201,28 @@ class RelationshipUpdateViewSet(GenericViewSet):
             "complaint": WriteupComplaintWriteSerializer,
         }
         return mapping.get(self.action, FirstImpressionWriteSerializer)
+
+    def get_queryset(self):  # type: ignore[override]
+        """Return SHARED/PUBLIC writeups about the caller's character (subject side).
+
+        Annotates ``kudos_count``/``viewer_has_kudosed`` the same way
+        ``RelationshipCapstoneViewSet`` does, to avoid N+1 queries when serializing.
+        """
+        user = self.request.user
+        return (
+            RelationshipUpdate.objects.filter(
+                relationship__target__character__db_account=user,
+                visibility__in=[UpdateVisibility.SHARED, UpdateVisibility.PUBLIC],
+            )
+            .select_related("author", "author__character", "track", "relationship")
+            .annotate(
+                kudos_count=Count("writeupkudos_set"),
+                viewer_has_kudosed=Exists(
+                    WriteupKudos.objects.filter(account_id=user.pk, update=OuterRef("pk"))
+                ),
+            )
+            .order_by("-created_at")
+        )
 
     def _resolve_target_sheet(self, target_persona_id: int):
         """Resolve a target persona ID to its CharacterSheet."""

@@ -13950,6 +13950,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-updates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Mutation actions for relationship-building verbs, plus a narrow list route.
+     *
+     *     Detail/browsing of relationship state in general remains on
+     *     CharacterRelationshipViewSet; the ``list`` action here exists only to feed
+     *     the commend button on the requesting user's own writeups-about-them (the
+     *     subject side of ``give_writeup_kudos``'s rule) — it is not a general
+     *     writeup browser. Scoped to writeups where the caller's character is the
+     *     parent relationship's ``target`` (the writeup's commendable subject) and
+     *     visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
+     *     here regardless of subject.
+     */
+    get: operations['relationships_relationship_updates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationship-updates/capstone/': {
     parameters: {
       query?: never;
@@ -25943,6 +25971,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['RelationshipCapstone'][];
     };
+    PaginatedRelationshipUpdateList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RelationshipUpdate'][];
+    };
     PaginatedRiskCalibrationList: {
       /** @example 123 */
       count: number;
@@ -29288,6 +29331,52 @@ export interface components {
       readonly total_points: number;
       /** @description Return the name of the current tier, or None if no tier reached. */
       readonly current_tier_name: string | null;
+    };
+    /** @description Serializer for relationship updates. */
+    RelationshipUpdate: {
+      readonly id: number;
+      /** @description The character who wrote this update */
+      readonly author: number;
+      readonly author_name: string;
+      /** @description Brief title summarizing the update */
+      readonly title: string;
+      /** @description Narrative writeup describing how the relationship developed */
+      readonly writeup: string;
+      /** @description The track that gains points from this update */
+      readonly track: number;
+      readonly track_name: string;
+      /** @description Points earned: increases capacity and sets temporary value base */
+      readonly points_earned: number;
+      /**
+       * @description Emotional coloring for first impressions (blank for normal updates)
+       *
+       *     * `positive` - Positive
+       *     * `neutral` - Neutral
+       *     * `negative` - Negative
+       */
+      readonly coloring: components['schemas']['ColoringEnum'];
+      /**
+       * @description Who can see this update
+       *
+       *     * `private` - Private
+       *     * `shared` - Shared
+       *     * `gossip` - Gossip
+       *     * `public` - Public
+       */
+      readonly visibility: components['schemas']['VisibilityFdaEnum'];
+      /** @description Whether this is a first impression update */
+      readonly is_first_impression: boolean;
+      /** @description Optional scene this update is based on */
+      readonly linked_scene: number | null;
+      /**
+       * Format: date-time
+       * @description When this update was created
+       */
+      readonly created_at: string;
+      /** @description Return pre-annotated kudos count, or fall back to a query. */
+      readonly kudos_count: number;
+      /** @description Return True if the request user has kudosed this update. */
+      readonly viewer_has_kudosed: boolean;
     };
     /**
      * @description Full renown payload for a single persona.
@@ -52600,6 +52689,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RelationshipCapstone'];
+        };
+      };
+    };
+  };
+  relationships_relationship_updates_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipUpdateList'];
         };
       };
     };

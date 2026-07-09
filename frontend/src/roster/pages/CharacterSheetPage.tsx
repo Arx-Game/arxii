@@ -149,6 +149,7 @@ export function CharacterSheetPage() {
           <RelationshipsSection
             relationships={entry.character.relationships}
             characterSheetId={entry.character.id}
+            isMyCharacter={isMyCharacter}
           />
         </TabsContent>
 

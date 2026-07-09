@@ -22862,6 +22862,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipCapstone'
           description: ''
+  /api/relationships/relationship-updates/:
+    get:
+      operationId: relationships_relationship_updates_list
+      description: |-
+        Mutation actions for relationship-building verbs, plus a narrow list route.
+
+        Detail/browsing of relationship state in general remains on
+        CharacterRelationshipViewSet; the ``list`` action here exists only to feed
+        the commend button on the requesting user's own writeups-about-them (the
+        subject side of ``give_writeup_kudos``'s rule) — it is not a general
+        writeup browser. Scoped to writeups where the caller's character is the
+        parent relationship's ``target`` (the writeup's commendable subject) and
+        visibility is SHARED or PUBLIC; PRIVATE and GOSSIP writeups never appear
+        here regardless of subject.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - relationships
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRelationshipUpdateList'
+          description: ''
   /api/relationships/relationship-updates/capstone/:
     post:
       operationId: relationships_relationship_updates_capstone_create
@@ -46223,6 +46255,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RelationshipCapstone'
+    PaginatedRelationshipUpdateList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationshipUpdate'
     PaginatedRiskCalibrationList:
       type: object
       required:
@@ -52160,6 +52215,99 @@ components:
       - track
       - track_name
       - track_sign
+    RelationshipUpdate:
+      type: object
+      description: Serializer for relationship updates.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        author:
+          type: integer
+          description: The character who wrote this update
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+          description: Brief title summarizing the update
+        writeup:
+          type: string
+          readOnly: true
+          description: Narrative writeup describing how the relationship developed
+        track:
+          type: integer
+          readOnly: true
+          description: The track that gains points from this update
+        track_name:
+          type: string
+          readOnly: true
+        points_earned:
+          type: integer
+          readOnly: true
+          description: 'Points earned: increases capacity and sets temporary value
+            base'
+        coloring:
+          allOf:
+          - $ref: '#/components/schemas/ColoringEnum'
+          readOnly: true
+          description: |-
+            Emotional coloring for first impressions (blank for normal updates)
+
+            * `positive` - Positive
+            * `neutral` - Neutral
+            * `negative` - Negative
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityFdaEnum'
+          readOnly: true
+          description: |-
+            Who can see this update
+
+            * `private` - Private
+            * `shared` - Shared
+            * `gossip` - Gossip
+            * `public` - Public
+        is_first_impression:
+          type: boolean
+          readOnly: true
+          description: Whether this is a first impression update
+        linked_scene:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Optional scene this update is based on
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When this update was created
+        kudos_count:
+          type: integer
+          description: Return pre-annotated kudos count, or fall back to a query.
+          readOnly: true
+        viewer_has_kudosed:
+          type: boolean
+          description: Return True if the request user has kudosed this update.
+          readOnly: true
+      required:
+      - author
+      - author_name
+      - coloring
+      - created_at
+      - id
+      - is_first_impression
+      - kudos_count
+      - linked_scene
+      - points_earned
+      - title
+      - track
+      - track_name
+      - viewer_has_kudosed
+      - visibility
+      - writeup
     Renown:
       type: object
       description: |-

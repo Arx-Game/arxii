@@ -123,10 +123,17 @@ ADR-0015 (no polymorphism).
 The positive relationship-building loop is reachable from both web and telnet:
 
 - **Web** — `RelationshipUpdateViewSet` exposes four POST endpoints (`first_impression` /
-  `develop` / `capstone` / `redistribute`) that dispatch the Actions via `action.run()`. List/
-  detail reads live on `CharacterRelationshipViewSet` (read-only). Read serializers expose
-  `kudos_count` and `viewer_has_kudosed` on every writeup row (annotated via `Count`/`Exists`
-  to avoid N+1). Complaints never appear in any player-facing serializer.
+  `develop` / `capstone` / `redistribute`) that dispatch the Actions via `action.run()`.
+  Relationship state list/detail reads live on `CharacterRelationshipViewSet` (read-only).
+  The same `RelationshipUpdateViewSet` also mixes in `ListModelMixin` for a narrow `GET`
+  list route (#2031) — **not** a general writeup browser: scoped to `RelationshipUpdate`
+  rows where the requesting user's character is the parent relationship's `target` (the
+  writeup's commendable subject, matching `give_writeup_kudos`'s subject rule) and
+  visibility is SHARED or PUBLIC (PRIVATE/GOSSIP never appear here regardless of subject).
+  Supports `?relationship=`/`?track=` filters. Feeds the commend button on the frontend's
+  own-sheet Relationships tab. Read serializers expose `kudos_count` and
+  `viewer_has_kudosed` on every writeup row (annotated via `Count`/`Exists` to avoid N+1).
+  Complaints never appear in any player-facing serializer.
 - **Telnet** — `CmdRelationship` (`relationship <subverb>`) runs the same Actions; it adds
   telnet-only `relationship list` and `relationship show <name|#>` read surfaces (the web provides
   these implicitly).
