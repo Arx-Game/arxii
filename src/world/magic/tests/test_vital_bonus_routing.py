@@ -426,11 +426,11 @@ class AnchorInScopeVacuousTests(TestCase):
 
         # level=10 → multiplier max(1,10//10)=1; 5×1×3 threads = 15.
         self.assertEqual(total, 15)
-        # Exactly one query for all ThreadPullEffect rows.
+        # Two queries: one for ThreadPullEffect rows, one for TraitCrossingChoice (#1989).
         self.assertEqual(
             len(ctx.captured_queries),
-            1,
-            msg=f"Expected 1 query, got {len(ctx.captured_queries)}: "
+            2,
+            msg=f"Expected 2 queries, got {len(ctx.captured_queries)}: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )
 
