@@ -58,6 +58,7 @@ from world.checks.constants import ModifierSourceKind
 from world.checks.services import collect_check_modifiers, perform_check
 from world.checks.types import ModifierContribution
 from world.combat.constants import (
+    COMBO_MIN_SLOTS,
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
     DEFENSE_NO_DAMAGE_THRESHOLD,
@@ -3943,6 +3944,14 @@ def _try_match_all_slots(
     Returns a list of ``ComboSlotMatch`` if all slots match, or ``None``.
     Backtracking ensures order-independent matching for combos with 2-5 slots.
     """
+    # #2051 invariant: combos are never solo — each slot must be filled by a
+    # distinct PC-controlled action. CombatRoundAction requires a
+    # CombatParticipant (PC) FK; companions materialize as CombatOpponent and
+    # cannot produce one. This filter is defense-in-depth against future
+    # companion-action surfaces.
+    pc_actions = [a for a in actions if a.participant_id is not None]
+    actions = pc_actions
+
     assignment: dict[int, CombatRoundAction] = {}
     used_action_ids: set[int] = set()
 
@@ -4072,7 +4081,10 @@ def _build_available_combo(  # noqa: PLR0913 - prefetched availability inputs
     known-or-discoverable, clash-state prerequisites, and slot matching.
     """
     slots: list[ComboSlot] = combo.cached_slots
-    if not slots:
+    # #2051 runtime belt: combos are never solo — skip any definition with fewer
+    # than COMBO_MIN_SLOTS slots. Defense-in-depth against legacy/raw-SQL rows
+    # that bypassed the admin inline and model clean() guards.
+    if not slots or len(slots) < COMBO_MIN_SLOTS:
         return None
 
     # Check minimum probing requirement
