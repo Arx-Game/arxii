@@ -9250,11 +9250,21 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description List, bind, and unbind the actor's Motif style bindings.
+     * @description List, bind, and unbind the acting character's Motif style bindings.
      *
      *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
      *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
      *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+     *
+     *     Character scoping (#2030 review fix): a request carrying an
+     *     ``X-Character-ID`` header is scoped to *that* character — validated as
+     *     owned by the requesting account via ``CharacterContextMixin`` (the same
+     *     header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+     *     use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+     *     bindings instead of silently acting as the currently puppeted character.
+     *     A header naming a character the account doesn't own is rejected outright
+     *     (404) rather than falling back to the puppet. No header at all preserves
+     *     the original behavior: resolve the caller's active puppet.
      */
     get: operations['magic_motif_styles_retrieve'];
     put?: never;
@@ -9275,11 +9285,21 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description List, bind, and unbind the actor's Motif style bindings.
+     * @description List, bind, and unbind the acting character's Motif style bindings.
      *
      *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
      *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
      *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+     *
+     *     Character scoping (#2030 review fix): a request carrying an
+     *     ``X-Character-ID`` header is scoped to *that* character — validated as
+     *     owned by the requesting account via ``CharacterContextMixin`` (the same
+     *     header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+     *     use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+     *     bindings instead of silently acting as the currently puppeted character.
+     *     A header naming a character the account doesn't own is rejected outright
+     *     (404) rather than falling back to the puppet. No header at all preserves
+     *     the original behavior: resolve the caller's active puppet.
      */
     post: operations['magic_motif_styles_bind_create'];
     delete?: never;
@@ -9298,11 +9318,21 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description List, bind, and unbind the actor's Motif style bindings.
+     * @description List, bind, and unbind the acting character's Motif style bindings.
      *
      *     ``list`` runs :class:`ListMotifStylesAction`. ``bind``/``unbind`` resolve
      *     the ``Style`` (and, for ``bind``, the ``Resonance``) catalog rows, then
      *     dispatch :class:`BindMotifStyleAction` / :class:`UnbindMotifStyleAction`.
+     *
+     *     Character scoping (#2030 review fix): a request carrying an
+     *     ``X-Character-ID`` header is scoped to *that* character — validated as
+     *     owned by the requesting account via ``CharacterContextMixin`` (the same
+     *     header/ownership contract ``PathIntentViewSet``/``CharacterGoalViewSet``
+     *     use) — so viewing a non-puppeted alt's sheet reads/writes that alt's
+     *     bindings instead of silently acting as the currently puppeted character.
+     *     A header naming a character the account doesn't own is rejected outright
+     *     (404) rather than falling back to the puppet. No header at all preserves
+     *     the original behavior: resolve the caller's active puppet.
      */
     post: operations['magic_motif_styles_unbind_create'];
     delete?: never;
