@@ -924,6 +924,40 @@ evaluated in `accrue_corruption` on the Sineater's own casting path. Value deriv
 - `StageAdvanceBonusResult` — outcome of the Sineater's stage-advance response.
 - `RescueOutcome` — frozen dataclass; severity_reduced, stage_before/after, strain_taken.
 
+### Covenant Lifecycle Content (#2114)
+
+The full covenant lifecycle — formation, induction, banner-call rise, mentor bonding,
+the mid-battle oath rite, and generic-org induction — is built session machinery
+(`world.covenants.services` / `world.societies.membership_services`), but every
+`Ritual` row a player would `ritual draft "<name>"` to trigger it previously existed
+only in test factories. `wire_covenant_lifecycle_rituals()` in `factories.py`, which
+`seed_magic_dev()` calls (#2114) right after `wire_soul_tether_content()`, seeds:
+
+- **"Covenant Formation"** — `create_covenant_via_session` (DURANCE + BATTLE only;
+  COURT formation is intentionally out of scope, per ADR-0057)
+- **"Covenant Induction"** — `induct_member_via_session`
+- **"Call the Banners"** — `rise_battle_covenant_via_session`
+- **"Mentor's Vow"** — `establish_mentor_bond_via_session`
+- **"Renew the Oath"** — `perform_covenant_rite`, seeded via the existing
+  `wire_covenant_rite_content()` (`world.covenants.factories`) rather than the bare
+  `RenewTheOathRitualFactory()` — `perform_covenant_rite` reads
+  `session.ritual.covenant_rite`, a required `CovenantRite` sidecar the bare Ritual
+  factory does not create, so the bare factory alone would seed a Ritual that crashes
+  on fire. `wire_covenant_rite_content()` creates the Ritual + `CovenantRite` sidecar +
+  role/level-band stat packages together.
+- **"Organization Induction"** — `induct_organization_member_via_session`
+  (`world.societies.membership_services`)
+
+Also resets the `MentorBondConfig` singleton (pk=1) to its authored defaults via
+`seed_mentor_bond_defaults()` — unlike the Ritual rows above (which preserve staff
+edits via `django_get_or_create`), this is a pre-launch tuning-knob reset by design
+(`update_or_create`), same treatment as other authored-defaults singletons.
+
+Like Soul Tether, this content previously existed only under test setup — without it,
+no player could ever found/join/grow a covenant, revive a dormant war covenant, form a
+mentor bond, fire the mid-battle oath rite, or join an ordinary organization through
+play; `covenant`/`org` (telnet)/REST could only manage state staff planted by hand.
+
 ### Dramatic Moment Tagging (#545 / #1139)
 
 `models/dramatic_moment.py` — Staff-initiated scene moments that grant both resonance

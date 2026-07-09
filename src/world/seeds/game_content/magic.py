@@ -2355,6 +2355,11 @@ class MagicDevSeedResult:
     ``soul_tether_content`` holds the Soul Tether authored content (Rituals,
     ConditionTemplates, TriggerDefinitions) seeded by wire_soul_tether_content()
     (#2027) — without this, Soul Tether formation is unreachable in a live game.
+    ``covenant_lifecycle_content`` holds the covenant/org lifecycle Rituals
+    (Covenant Formation, Covenant Induction, Call the Banners, Mentor's Vow,
+    Renew the Oath, Organization Induction) + the MentorBondConfig singleton
+    seeded by wire_covenant_lifecycle_rituals() (#2114) — without this, the
+    fully-built covenant session machinery is unreachable in a live game.
     """
 
     config: MagicConfigResult
@@ -2369,6 +2374,7 @@ class MagicDevSeedResult:
     technique_cast_template: ActionTemplate
     relationship_track_thread_unlock: RelationshipTrackThreadUnlockResult
     soul_tether_content: object
+    covenant_lifecycle_content: object
 
 
 def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
@@ -2496,15 +2502,23 @@ def seed_magic_dev() -> MagicDevSeedResult:
         soul_tether_rescue), Tether Strain / Soul Tether Active ConditionTemplates,
         and the two reactive TriggerDefinitions (#2027). Previously created only
         in tests/factories — Soul Tether was unreachable in a live game.
+    13. ``wire_covenant_lifecycle_rituals()`` — Covenant/org lifecycle Rituals
+        (Covenant Formation, Covenant Induction, Call the Banners, Mentor's Vow,
+        Renew the Oath, Organization Induction) + the MentorBondConfig singleton
+        (#2114). Previously created only in tests/factories — the fully-built
+        covenant session machinery was unreachable in a live game.
 
     All writes are idempotent (get_or_create throughout). Re-running on a
-    populated database is a no-op; staff edits to existing rows are preserved.
+    populated database is a no-op; staff edits to existing rows are preserved
+    (the MentorBondConfig singleton is the one exception — it is reset to its
+    authored defaults on every run, same as other pre-launch tuning knobs).
 
     Returns:
         MagicDevSeedResult composing all sub-results.
     """
     from world.magic.factories import (  # noqa: PLC0415
         author_reference_corruption_content,
+        wire_covenant_lifecycle_rituals,
         wire_soul_tether_content,
     )
     from world.magic.services import seed_thread_survivability_tuning  # noqa: PLC0415
@@ -2534,6 +2548,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     technique_cast_template = ensure_technique_cast_content()
     ensure_technique_catalog_content()
     soul_tether_content = wire_soul_tether_content()
+    covenant_lifecycle_content = wire_covenant_lifecycle_rituals()
     from world.seeds.game_content.combos import seed_combo_palette  # noqa: PLC0415
 
     seed_combo_palette()
@@ -2551,4 +2566,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         technique_cast_template=technique_cast_template,
         relationship_track_thread_unlock=relationship_track_thread_unlock,
         soul_tether_content=soul_tether_content,
+        covenant_lifecycle_content=covenant_lifecycle_content,
     )

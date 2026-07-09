@@ -2358,6 +2358,72 @@ def wire_soul_tether_content() -> object:
     )
 
 
+def wire_covenant_lifecycle_rituals() -> object:
+    """Idempotent seed for the covenant/org lifecycle Ritual rows (#2114).
+
+    Without this, the fully-built formation/induction/banner-call/mentor-bond
+    session machinery is unreachable — the Ritual rows that ``ritual draft``
+    resolves by name exist only in test factories.
+
+    Creates (get_or_create on name):
+    - "Covenant Formation" Ritual — create_covenant_via_session (DURANCE/BATTLE)
+    - "Covenant Induction" Ritual — induct_member_via_session
+    - "Call the Banners" Ritual — rise_battle_covenant_via_session
+    - "Mentor's Vow" Ritual — establish_mentor_bond_via_session
+    - "Renew the Oath" Ritual — perform_covenant_rite (via ``wire_covenant_rite_content()``,
+      NOT the bare ``RenewTheOathRitualFactory()`` — ``perform_covenant_rite`` reads
+      ``session.ritual.covenant_rite``, a required OneToOne sidecar the bare Ritual
+      factory does not create; ``wire_covenant_rite_content()`` is the existing,
+      already-idempotent helper that creates the Ritual + CovenantRite sidecar +
+      role/level-band stat packages together, and was — like every ritual here —
+      previously called only from tests. Using the bare factory would seed a
+      Ritual that crashes on fire.)
+    - "Organization Induction" Ritual — induct_organization_member_via_session
+
+    Also resets the ``MentorBondConfig`` singleton (pk=1) to its authored
+    defaults via ``seed_mentor_bond_defaults()`` — that helper intentionally
+    uses ``update_or_create`` (pre-launch authored tuning knobs, not
+    player-editable content), unlike the Ritual rows above which preserve
+    staff edits across re-runs.
+
+    Returns a ``CovenantLifecycleContent`` dataclass with references to all
+    created rows. Safe to call multiple times — does not create duplicates.
+    """
+    from dataclasses import dataclass
+
+    from world.covenants.factories import seed_mentor_bond_defaults, wire_covenant_rite_content
+
+    @dataclass(frozen=True)
+    class CovenantLifecycleContent:
+        formation_ritual: object
+        induction_ritual: object
+        banner_call_ritual: object
+        mentors_vow_ritual: object
+        renew_the_oath_ritual: object
+        covenant_rite: object
+        org_induction_ritual: object
+        mentor_bond_config: object
+
+    formation = CovenantFormationRitualFactory()
+    induction = CovenantInductionRitualFactory()
+    banner_call = BattleCovenantRiseRitualFactory()
+    mentors_vow = MentorsVowRitualFactory()
+    covenant_rite = wire_covenant_rite_content()
+    org_induction = OrganizationInductionRitualFactory()
+    mentor_bond_config = seed_mentor_bond_defaults()
+
+    return CovenantLifecycleContent(
+        formation_ritual=formation,
+        induction_ritual=induction,
+        banner_call_ritual=banner_call,
+        mentors_vow_ritual=mentors_vow,
+        renew_the_oath_ritual=covenant_rite.ritual,
+        covenant_rite=covenant_rite,
+        org_induction_ritual=org_induction,
+        mentor_bond_config=mentor_bond_config,
+    )
+
+
 def author_reference_corruption_content() -> None:
     """Seed 1 Primal + 1 Abyssal reference Corruption content set.
 

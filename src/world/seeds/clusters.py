@@ -312,7 +312,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.items.market.models import MarketSquare  # noqa: PLC0415
     from world.items.models import ItemTemplate, Style  # noqa: PLC0415
     from world.justice.models import CrimeKind  # noqa: PLC0415
-    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.magic.models import Affinity, Resonance, Ritual  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory  # noqa: PLC0415
     from world.projects.models import ContributionMethod  # noqa: PLC0415
@@ -344,7 +344,11 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social combat: 4 CheckTypes + Inspired condition + Charming Word
         # technique (#2015). Represented by Technique (the charm technique).
         "social_combat": [Technique],
-        "magic": [Affinity, Resonance],
+        # Ritual counts the covenant/org lifecycle rituals seeded by
+        # wire_covenant_lifecycle_rituals() (#2114) alongside Rite of Imbuing/
+        # Atonement and the Soul Tether rituals — so operators can see the
+        # covenant-lifecycle content landed after the Big Button run.
+        "magic": [Affinity, Resonance, Ritual],
         # Style also carries the seeded aesthetic vocabulary spread across the four
         # audacity tiers (#2029).
         "items": [ItemTemplate, Style],
