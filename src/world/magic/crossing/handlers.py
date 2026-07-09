@@ -12,8 +12,10 @@ Each handler is registered against a ``TargetKind`` in ``MagicConfig.ready()``.
   ``RelationshipCapstoneCrossingHandler`` (RELATIONSHIP_CAPSTONE) use the
   ``_CrossingChoiceHandler`` base — the same player-choice pattern as TRAIT
   and FACET (#1991).
-- The remaining three kinds (MANTLE, SANCTUM) are stubs that log a debug
-  no-op. Each is replaced with real logic in its subissue (#1992–#1993).
+- ``MantleCrossingHandler`` (MANTLE) uses the ``_CrossingChoiceHandler`` base
+  — the same player-choice pattern as TRAIT and FACET (#1992).
+- The remaining kind (SANCTUM) is a stub that logs a debug no-op. It is
+  replaced with real logic in its subissue (#1993).
 """
 
 from __future__ import annotations
@@ -349,6 +351,8 @@ def _anchor_label_for(thread: Thread) -> str:
         if cap is not None:
             partner_name = cap.relationship.target.character.db_key
             return f"capstone '{cap.title}' with {partner_name}"
+    if kind == TargetKind.MANTLE and thread.target_mantle is not None:
+        return thread.target_mantle.name
     return fallback
 
 
@@ -430,11 +434,17 @@ class RelationshipCapstoneCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.RELATIONSHIP_CAPSTONE
 
 
-class MantleCrossingHandler(_StubCrossingHandler):
-    """MANTLE thread crossing — stub (#1992)."""
+class MantleCrossingHandler(_CrossingChoiceHandler):
+    """MANTLE thread crossing — player-chosen mantle personalization.
+
+    At each crossing level (3, 6, 11, 16, 21), creates a PendingCrossingOffer
+    for the player to choose how the mantle's power reshapes to match their
+    resonance. The chosen buff is always-on (the thread IS the attunement bond
+    — not wear-gated like FACET). Skipped lower crossings are auto-resolved
+    with the is_default option.
+    """
 
     target_kind = TargetKind.MANTLE
-    _subissue = "#1992"
 
 
 class SanctumCrossingHandler(_StubCrossingHandler):

@@ -778,3 +778,189 @@ class AnchorLabelTests(TestCase):
         self.assertIn("capstone", label)
         cap = self.capstone_thread.target_capstone
         self.assertIn(cap.title, label)
+
+
+# ---------------------------------------------------------------------------
+# MANTLE crossing tests (#1992)
+# ---------------------------------------------------------------------------
+
+
+class MantleAnchorLabelTests(TestCase):
+    """_anchor_label_for returns the mantle name for MANTLE threads."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+
+        cls.character_obj = CharacterFactory(db_key="MantleAnchorChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+        cls.resonance = ResonanceFactory()
+        cls.mantle = MantleFactory(name="Dawnbringer")
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            level=3,
+            target_kind=TargetKind.MANTLE,
+            target_mantle=cls.mantle,
+            target_trait=None,
+        )
+
+    def test_mantle_anchor_label_returns_mantle_name(self) -> None:
+        from world.magic.crossing.handlers import _anchor_label_for
+
+        label = _anchor_label_for(self.thread)
+        self.assertEqual(label, "Dawnbringer")
+
+
+class MantleCrossingHandlerTests(TestCase):
+    """MANTLE thread crossing creates offers + auto-resolves skipped levels."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+
+        cls.character_obj = CharacterFactory(db_key="MantleCrossingChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+        cls.resonance = ResonanceFactory()
+        cls.mantle = MantleFactory(name="MantleCrossingMantle")
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            level=2,
+            target_kind=TargetKind.MANTLE,
+            target_mantle=cls.mantle,
+            target_trait=None,
+        )
+
+    def test_single_crossing_creates_offer(self) -> None:
+        """Imbue 2->3 creates a PendingCrossingOffer for level 3."""
+        from unittest.mock import patch
+
+        from world.magic.crossing.handlers import MantleCrossingHandler
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        self.thread.level = 3
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
+            handler = MantleCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+        self.assertTrue(
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+
+    def test_multi_crossing_auto_resolves_and_creates_offer(self) -> None:
+        """Imbue 2->11 auto-resolves levels 3+6, creates offer for 11."""
+        from unittest.mock import patch
+
+        from world.magic.crossing.handlers import MantleCrossingHandler
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        self.thread.level = 11
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
+            handler = MantleCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+        self.assertTrue(
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+        )
+
+    def test_no_op_when_no_level_gain(self) -> None:
+        """If new_level <= starting_level, nothing happens."""
+        from world.magic.crossing.handlers import MantleCrossingHandler
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        handler = MantleCrossingHandler()
+        handler.execute(thread=self.thread, starting_level=3, new_level=3)
+        self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
+
+
+class MantleCrossingResolveTests(TestCase):
+    """Resolve a MANTLE crossing offer via the service + action seam."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.models.crossing import CrossingOption
+
+        cls.character_obj = CharacterFactory(db_key="MantleResolveChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+        cls.resonance = ResonanceFactory()
+        cls.mantle = MantleFactory(name="MantleResolveMantle")
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            level=3,
+            target_kind=TargetKind.MANTLE,
+            target_mantle=cls.mantle,
+            target_trait=None,
+        )
+        cls.condition_template = ConditionTemplateFactory()
+        cls.option = CrossingOption.objects.create(
+            target_kind=TargetKind.MANTLE,
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Flame-forged edge",
+            description="The mantle's blade ignites with your resonance.",
+            condition_template=cls.condition_template,
+        )
+
+    def setUp(self) -> None:
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        self.offer = PendingCrossingOffer.objects.create(
+            thread=self.thread,
+            crossing_level=3,
+        )
+
+    def test_resolve_mantle_offer(self) -> None:
+        """resolve_crossing_offer creates a CrossingChoice and deletes the offer."""
+        from world.magic.models.crossing import CrossingChoice, PendingCrossingOffer
+        from world.magic.services.crossing import resolve_crossing_offer
+
+        result = resolve_crossing_offer(self.offer, option=self.option)
+        self.assertEqual(result.option_name, "Flame-forged edge")
+        self.assertTrue(
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+        self.assertFalse(PendingCrossingOffer.objects.filter(pk=self.offer.pk).exists())
+
+    def test_resolve_wrong_kind_raises_stale(self) -> None:
+        """Resolving a MANTLE offer with a TRAIT option raises StaleError."""
+        from world.magic.constants import TargetKind
+        from world.magic.exceptions import CrossingOfferStaleError
+        from world.magic.models.crossing import CrossingOption
+        from world.magic.services.crossing import resolve_crossing_offer
+
+        trait_option = CrossingOption.objects.create(
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            crossing_level=3,
+            name="Wrong kind option",
+            condition_template=self.condition_template,
+        )
+        with self.assertRaises(CrossingOfferStaleError):
+            resolve_crossing_offer(self.offer, option=trait_option)
+
+    def test_action_seam_resolves_mantle_offer(self) -> None:
+        """ResolveCrossingOfferAction.run succeeds for a MANTLE offer."""
+        from actions.definitions.crossing import ResolveCrossingOfferAction
+        from world.magic.models.crossing import CrossingChoice
+
+        actor = self.sheet.character
+        action = ResolveCrossingOfferAction()
+        result = action.run(actor=actor, offer=self.offer, option=self.option)
+        self.assertTrue(result.success)
+        self.assertTrue(
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )

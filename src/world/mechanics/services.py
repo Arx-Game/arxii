@@ -349,6 +349,7 @@ def equipment_walk_total(
         + vow_stat_scaling_bonus(character, target)
         + vow_gear_scaling_bonus(character, target)
         + passive_mantle_bonuses(character, target)
+        + passive_mantle_crossing_bonuses(character, target)
         + passive_motif_style_bonuses(character, target)
     )
 
@@ -472,6 +473,40 @@ def passive_mantle_bonuses(sheet: object, target: ModifierTarget) -> int:
         for effect in effects:
             base = effect.flat_bonus_amount or 0
             total += base * max(1, thread.level)
+    return total
+
+
+def passive_mantle_crossing_bonuses(sheet: object, target: ModifierTarget) -> int:
+    """Sum ConditionModifierEffect from MANTLE thread crossing choices (always-on).
+
+    For each MANTLE-kind thread with crossing choices, reads the choice's
+    option.condition_template's ConditionModifierEffect rows for ``target``
+    and sums them. Always-on -- the thread IS the attunement bond, so the
+    crossing buff is active regardless of whether the mantle item is equipped.
+
+    Composes with ``passive_mantle_bonuses`` in ``equipment_walk_total`` --
+    the crossing buff is a personal layer on top of the global tier-0 passive.
+    """
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
+
+    char = sheet.character
+    if not hasattr(char, "threads"):  # noqa: GETATTR_LITERAL
+        return 0
+    total = 0
+    for thread in char.threads.threads_of_kind(TargetKind.MANTLE):
+        choices = CrossingChoice.objects.filter(thread=thread).select_related(
+            "option__condition_template"
+        )
+        for choice in choices:
+            template = choice.option.condition_template
+            effects = ConditionModifierEffect.objects.filter(
+                condition=template,
+                modifier_target=target,
+            )
+            for effect in effects:
+                total += effect.value
     return total
 
 
@@ -826,6 +861,7 @@ def equipment_walk_total_unblended(sheet: object, target: ModifierTarget) -> int
         + vow_stat_scaling_bonus(sheet, target)
         + vow_gear_scaling_bonus(sheet, target)
         + passive_mantle_bonuses(sheet, target)
+        + passive_mantle_crossing_bonuses(sheet, target)
         + passive_motif_style_bonuses(sheet, target)
     )
 
