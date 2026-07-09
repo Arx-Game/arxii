@@ -87,3 +87,41 @@ class OpponentDamageInteractionTests(TestCase):
             ConditionInstance.objects.filter(target=opponent.objectdb, condition=self.wet).count(),
             1,
         )
+
+
+class ParticipantDamageInteractionTests(TestCase):
+    """Tests that apply_damage_to_participant fires condition-damage interactions."""
+
+    def setUp(self):
+        self.lightning = DamageTypeFactory(name="Lightning-test-part")
+        self.wet = ConditionTemplateFactory(name="Wet-test-part")
+
+    def test_interaction_amplifies_participant_damage(self):
+        """Wet + Lightning = +50% damage on a PC participant."""
+        from world.combat.factories import CombatParticipantFactory
+        from world.combat.services import apply_damage_to_participant
+        from world.vitals.factories import CharacterVitalsFactory
+
+        participant = CombatParticipantFactory()
+        character = participant.character_sheet.character
+        CharacterVitalsFactory(
+            character_sheet=participant.character_sheet,
+            health=10000,
+            max_health=10000,
+            base_max_health=10000,
+        )
+
+        ConditionInstanceFactory(target=character, condition=self.wet)
+        ConditionDamageInteractionFactory(
+            condition=self.wet,
+            damage_type=self.lightning,
+            damage_modifier_percent=50,
+            removes_condition=True,
+        )
+
+        result = apply_damage_to_participant(participant, 100, damage_type=self.lightning)
+
+        # 100 base, +50% = 150
+        self.assertEqual(result.damage_dealt, 150)
+        self.assertIsNotNone(result.damage_interaction)
+        self.assertEqual(result.damage_interaction.damage_modifier_percent, 50)

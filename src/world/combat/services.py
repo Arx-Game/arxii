@@ -3862,6 +3862,14 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # armor is their only soak source, and absorbing pieces take durability wear.
     effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
+    # Condition-damage interactions (#2018). Final percentage multiplier on
+    # net damage, after resistance + armor soak. May consume/transform conditions.
+    interaction_result = None
+    if effective_damage > 0:
+        effective_damage, interaction_result = _apply_condition_damage_interactions(
+            character, damage_type, effective_damage
+        )
+
     health_before = vitals.health
     vitals.health -= effective_damage
     health_after = vitals.health
@@ -3915,6 +3923,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
         knockout_eligible=knockout_eligible,
         death_eligible=death_eligible,
         permanent_wound_eligible=permanent_wound_eligible,
+        damage_interaction=interaction_result,
     )
 
 
