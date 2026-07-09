@@ -54,6 +54,7 @@ from world.magic.factories import (
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
+    MotifResonanceStyleFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
@@ -1076,6 +1077,10 @@ class TestMagicSectionFull(TestCase):
             motif_resonance=cls.motif_resonance,
             facet=cls.facet_silk,
         )
+        cls.motif_style = MotifResonanceStyleFactory(
+            motif_resonance=cls.motif_resonance,
+            style__name="Enduring",
+        )
 
         # --- Anima Ritual ---
         # Link character to its player account so author_account lookup works.
@@ -1188,6 +1193,12 @@ class TestMagicSectionFull(TestCase):
         magic = self._get_magic()
         facets = magic["motif"]["resonances"][0]["facets"]
         assert set(facets) == {"Spider", "Silk"}
+
+    def test_motif_resonance_styles(self) -> None:
+        """Motif resonance entry contains bound style names (#2030)."""
+        magic = self._get_magic()
+        styles = magic["motif"]["resonances"][0]["styles"]
+        assert styles == ["Enduring"]
 
     # --- Anima Ritual tests ---
 
@@ -1983,23 +1994,24 @@ class TestCharacterSheetQueryCount(TestCase):
         17.    character_techniques (via CharacterSheet)
         18.    motif resonances (nested Prefetch via CharacterSheet)
         19.    motif resonance facet_assignments (nested Prefetch)
-        20.    goals
-        21.    personas + thumbnails (via Prefetch select_related)
-        22.    persona trait_descriptors (nested Prefetch — appearance overlay)
-        23.    HeightBand range lookup for the coarse band label (#1325; one constant
+        20.    motif resonance style_assignments (nested Prefetch, #2030)
+        21.    goals
+        22.    personas + thumbnails (via Prefetch select_related)
+        23.    persona trait_descriptors (nested Prefetch — appearance overlay)
+        24.    HeightBand range lookup for the coarse band label (#1325; one constant
                query — the band is derived from inches, not stored on the sheet)
-        24-26. Session management (savepoint, update, release)
-        27.    block gate — one indexed exists() check (#1278, get_object)
-        28.    character resonances (CharacterResonanceHandler._by_resonance —
+        25-27. Session management (savepoint, update, release)
+        28.    block gate — one indexed exists() check (#1278, get_object)
+        29.    character resonances (CharacterResonanceHandler._by_resonance —
                _build_magic_resonances reads character.resonances for the sheet's
                new resonance-balance sub-section, #2032; the handler's one cached
                query, not a fresh SELECT per resonance)
-         29.    form_state + active_fake_overlay (#1272 — the disguise concealment
+         30.   form_state + active_fake_overlay (#1272 — the disguise concealment
                 prefetch; one select_related join, no extra round-trip when no
                 overlay is set)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(29):
+        with self.assertNumQueries(30):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

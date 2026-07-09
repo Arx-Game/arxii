@@ -14,7 +14,7 @@ from drf_spectacular.utils import (
 )
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
-from rest_framework import mixins, serializers, status, viewsets
+from rest_framework import filters, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import PageNumberPagination
@@ -47,6 +47,7 @@ from world.items.models import (
     Outfit,
     OutfitSlot,
     QualityTier,
+    Style,
     TemplateInteraction,
     TemplateSlot,
 )
@@ -71,6 +72,7 @@ from world.items.serializers import (
     PresentationEndorsementSerializer,
     QualityTierSerializer,
     StyleCraftResultSerializer,
+    StyleSerializer,
     UseItemResultSerializer,
     UseItemSerializer,
     VisibleWornItemSerializer,
@@ -199,6 +201,20 @@ class QualityTierViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
     filter_backends = [DjangoFilterBackend]
     filterset_class = QualityTierFilter
+
+
+class StyleViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for the Style catalog (#2030).
+
+    Player-facing lookup for the Motif style-binding picker.
+    """
+
+    queryset = Style.objects.all()
+    serializer_class = StyleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = ItemTemplatePagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ["name"]
 
 
 class InteractionTypeViewSet(viewsets.ReadOnlyModelViewSet):

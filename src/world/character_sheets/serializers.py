@@ -64,6 +64,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    MotifResonanceStyle,
     Ritual,
 )
 from world.progression.models import CharacterPathHistory
@@ -595,7 +596,12 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
                 "facet_assignments",
                 queryset=MotifResonanceAssociation.objects.select_related("facet"),
                 to_attr="cached_facet_assignments",
-            )
+            ),
+            Prefetch(
+                "style_assignments",
+                queryset=MotifResonanceStyle.objects.select_related("style"),
+                to_attr="cached_style_assignments",
+            ),
         ),
         to_attr="cached_resonances",
     ),
@@ -648,7 +654,10 @@ def _build_magic_motif(sheet: CharacterSheet) -> MotifSection | None:
     resonances: list[MotifResonanceEntry] = []
     for mr in motif.cached_resonances:
         facet_names = [fa.facet.name for fa in mr.cached_facet_assignments]
-        resonances.append(MotifResonanceEntry(name=mr.resonance.name, facets=facet_names))
+        style_names = [sa.style.name for sa in mr.cached_style_assignments]
+        resonances.append(
+            MotifResonanceEntry(name=mr.resonance.name, facets=facet_names, styles=style_names)
+        )
 
     return MotifSection(description=motif.description, resonances=resonances)
 

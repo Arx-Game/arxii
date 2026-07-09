@@ -4,13 +4,14 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.constants import BodyRegion, EquipmentLayer, StyleAudacity
 from world.items.factories import (
     InteractionTypeFactory,
     ItemFacetFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+    StyleFactory,
     wire_enchanting_crafting,
 )
 from world.items.models import ItemFacet, TemplateInteraction, TemplateSlot
@@ -63,6 +64,45 @@ class QualityTierViewTests(ItemViewTestCase):
         """Unauthenticated requests are denied."""
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/items/quality-tiers/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class StyleViewTests(ItemViewTestCase):
+    """Tests for GET /api/items/styles/ (#2030 — Motif style-binding catalog)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.style = StyleFactory(name="Seductive", audacity=StyleAudacity.BOLD)
+
+    def test_list_includes_audacity_display_string(self) -> None:
+        """Style catalog lists styles with the human-readable audacity string."""
+        response = self.client.get("/api/items/styles/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"]
+        row = next(r for r in results if r["name"] == "Seductive")
+        self.assertEqual(row["audacity"], StyleAudacity.BOLD.label)
+
+    def test_detail(self) -> None:
+        """Returns a single style with id/name/description/audacity."""
+        response = self.client.get(f"/api/items/styles/{self.style.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Seductive")
+        self.assertIn("description", response.data)
+        self.assertEqual(response.data["audacity"], StyleAudacity.BOLD.label)
+
+    def test_search_by_name(self) -> None:
+        """SearchFilter on name narrows the catalog."""
+        StyleFactory(name="Stoic")
+        response = self.client.get("/api/items/styles/", {"search": "Seduct"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [r["name"] for r in response.data["results"]]
+        self.assertEqual(names, ["Seductive"])
+
+    def test_unauthenticated_denied(self) -> None:
+        """Unauthenticated requests are denied."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/api/items/styles/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
