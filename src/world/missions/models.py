@@ -26,6 +26,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.missions.constants import (
+    LEGEND_RISK_FLOOR_TIER,
     MAX_PERCENT_REPLACE,
     ArcScope,
     ConflictMode,
@@ -984,6 +985,19 @@ class MissionOptionRouteReward(SharedMemoryModel):
             if self.amount is None or self.amount < 1:
                 msg = "PROJECT reward lines require amount ≥ 1."
                 raise ValidationError({"amount": msg})
+        # #2051: legend guard — a LEGEND_POINTS reward requires the parent
+        # template's risk_tier to be at or above LEGEND_RISK_FLOOR_TIER (HIGH).
+        # Legend is earned in the company of others; a low-risk mission cannot
+        # pay legend.
+        if self.sink == DeedRewardSink.LEGEND_POINTS:
+            template = self._parent_template()
+            if template is not None and template.risk_tier < LEGEND_RISK_FLOOR_TIER:
+                msg = (
+                    f"LEGEND_POINTS reward requires risk_tier ≥ "
+                    f"{LEGEND_RISK_FLOOR_TIER} (HIGH), got {template.risk_tier}. "
+                    "Legend is earned in the company of others (#2051)."
+                )
+                raise ValidationError({"sink": msg})
 
     def save(self, *args: object, **kwargs: object) -> None:
         self.clean()
@@ -992,6 +1006,22 @@ class MissionOptionRouteReward(SharedMemoryModel):
     def __str__(self) -> str:
         scope = "holder" if self.contract_holder_only else "broadcast"
         return f"{self.get_kind_display()}/{self.get_sink_display()} ({scope})"
+
+    def _parent_template(self) -> "MissionTemplate | None":
+        """Walk the FK chain to the owning MissionTemplate.
+
+        Returns None if the route/option/node chain is incomplete (e.g. the
+        reward was created before its parent route was fully wired).
+        """
+        route = self.route
+        if route is None and self.candidate_id is not None:
+            route = self.candidate.route if self.candidate_id else None
+        if route is None or route.option_id is None:
+            return None
+        option = route.option
+        if option is None or option.node_id is None:
+            return None
+        return option.node.template
 
 
 class MissionRenownAward(SharedMemoryModel):
@@ -1068,6 +1098,33 @@ class MissionRenownAward(SharedMemoryModel):
         mag = self.get_magnitude_display() if self.magnitude else "—"
         risk = self.get_risk_display() if self.risk else "—"
         return f"Renown(mag={mag}, risk={risk})"
+
+    def clean(self) -> None:
+        """Validate the legend risk floor (#2051).
+
+        A MissionRenownAward whose ``risk`` pays legend (i.e. risk is HIGH or
+        EXTREME — RISK_LEGEND_AWARDS > 0 and at the floor) requires the parent
+        template's risk_tier ≥ LEGEND_RISK_FLOOR_TIER. Legend is earned in the
+        company of others; a low-risk mission cannot pay legend.
+        """
+        super().clean()
+        from world.societies.constants import RenownRisk  # noqa: PLC0415
+
+        legend_paying = {RenownRisk.HIGH.value, RenownRisk.EXTREME.value}
+        if self.risk not in legend_paying:
+            return
+        template = None
+        if self.route_id is not None and self.route.option_id is not None:
+            option = self.route.option
+            if option is not None and option.node_id is not None:
+                template = option.node.template
+        if template is not None and template.risk_tier < LEGEND_RISK_FLOOR_TIER:
+            msg = (
+                f"RenownAward with legend-paying risk requires risk_tier ≥ "
+                f"{LEGEND_RISK_FLOOR_TIER} (HIGH), got {template.risk_tier}. "
+                "Legend is earned in the company of others (#2051)."
+            )
+            raise ValidationError({"risk": msg})
 
 
 class MissionInstance(SharedMemoryModel):
