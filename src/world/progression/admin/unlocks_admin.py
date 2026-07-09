@@ -230,14 +230,20 @@ class RelationshipRequirementAdmin(admin.ModelAdmin):
     """Admin interface for RelationshipRequirement."""
 
     list_display = [
-        "relationship_target",
-        "minimum_level",
+        "required_track_kind",
+        "minimum_tier",
+        "minimum_count",
         "class_level_unlock",
         "is_active",
     ]
-    list_filter = ["minimum_level", "is_active", "class_level_unlock__character_class"]
+    list_filter = [
+        "required_track_kind",
+        "minimum_tier",
+        "is_active",
+        "class_level_unlock__character_class",
+    ]
     search_fields = [
-        "relationship_target",
+        "required_track_kind__name",
         "description",
         "class_level_unlock__character_class__name",
     ]

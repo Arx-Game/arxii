@@ -766,6 +766,27 @@ damage_type) -> int` (services/threads.py) returns the aggregate resistance (pas
 active paid-pull snapshots). See ADR-0050, ADR-0071. E2E:
 `world/magic/tests/integration/test_species_gift_e2e.py`.
 
+### Player-facing gift/technique/thread-weaving acquisition surface (#1587, #2116) [BUILT & WIRED]
+
+`spend_xp_on_gift_unlock` + `accept_technique_offer` (`services/gift_acquisition.py`) were
+complete and tested but had zero non-test callers until #2116 wired a player-facing surface —
+one telnet namespace + matching web endpoints, both thin `Action`s over the existing services
+(mirrors the `sanctum.py` shape).
+
+| Surface | Role | Notes |
+|---|---|---|
+| `PurchaseGiftUnlockAction` (`actions/definitions/gift_acquisition.py`, key `purchase_gift_unlock`) | XP gate — buy a `CharacterGiftUnlock` receipt | Wraps `spend_xp_on_gift_unlock`. Does not acquire the gift; kwargs `gift_unlock_id`, optional `teacher_tenure_id`. |
+| `AcceptTechniqueOfferAction` (key `accept_technique_offer`) | Acquisition step — accept a `TechniqueTeachingOffer` | Wraps `accept_technique_offer`. Implicitly acquires the gift on the first technique learned from it (requires the `CharacterGiftUnlock` receipt above). Kwarg `offer_id`. |
+| `AcceptThreadWeavingOfferAction` (key `accept_thread_weaving_offer`) | Telnet parity for thread-weaving teaching offers | Wraps `accept_thread_weaving_unlock` (`services/threads.py`). The web `ThreadWeavingTeachingOfferViewSet.accept` (`AcceptTeachingOfferSerializer.create()`) now dispatches through this same Action — one seam, not three shapes. Kwarg `offer_id`. |
+| `CmdLearn` (`commands/gift_learning.py`, key `learn`) | Telnet namespace | Bare `learn`/`learn status` — hub listing open `GiftUnlock` rows (XP cost + purchased/missing) and open teaching offers (pitch/cost/teacher) for both techniques and thread-weaving. `learn gift <id>` / `learn technique <id>` / `learn thread <id>` dispatch the three Actions above via `dispatch_player_action`. |
+| Web endpoints | `POST /api/magic/gift-unlocks/purchase/`, `POST /api/magic/technique-offers/accept/` | New; both `APIView`s resolving the acting `CharacterSheet` via the alt-guard helper (`_resolve_actor_sheet`) then dispatching the matching Action. `POST /api/magic/teaching-offers/{id}/accept/` (thread-weaving) is pre-existing, now re-pointed through `AcceptThreadWeavingOfferAction`. |
+
+Both `GiftUnlock`/`TechniqueTeachingOffer` rows are broadcast/open (no `learner` FK) — anyone can
+purchase/accept; teaching offers are not consumed on acceptance (multiple learners may accept the
+same offer). Proven end-to-end by
+`world/magic/tests/integration/test_gift_acquisition_action_e2e.py` (purchase → accept →
+`CharacterTechnique` minted; thread-weaving parity).
+
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one

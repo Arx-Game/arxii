@@ -14,10 +14,11 @@ from world.classes.models import PathStage
 from world.magic.factories import RitualFactory
 from world.progression.exceptions import (
     AdvancementRequirementsNotMet,
+    AdvancementUnlockNotPurchasedError,
     OfficiantIneligibleError,
     TierBoundaryRequiresCrossing,
 )
-from world.progression.models import ClassLevelAdvancement
+from world.progression.models import CharacterUnlock, ClassLevelAdvancement
 from world.progression.services.advancement import (
     advance_class_level_via_session,
     apply_class_level_advance,
@@ -138,6 +139,15 @@ def _wire_path(sheet, path) -> None:
     from world.progression.models import CharacterPathHistory
 
     CharacterPathHistory.objects.create(character=sheet.character, path=path)
+
+
+def _purchase_unlock(sheet, unlock) -> None:
+    """Record the XP-unlock purchase gate as satisfied for ``sheet`` (#2116)."""
+    CharacterUnlock.objects.create(
+        character=sheet.character,
+        character_class=unlock.character_class,
+        target_level=unlock.target_level,
+    )
 
 
 def _build_durance_session(  # noqa: PLR0913
@@ -279,6 +289,7 @@ class AdvanceViaSessionTests(TestCase):
         self.unlock = ClassLevelUnlock.objects.create(
             character_class=self.character_class, target_level=3
         )
+        _purchase_unlock(self.inductee, self.unlock)
 
     def test_happy_path_bumps_level_and_writes_receipt(self) -> None:
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
@@ -304,7 +315,8 @@ class AdvanceViaSessionTests(TestCase):
         )
         from world.progression.models import ClassLevelUnlock
 
-        ClassLevelUnlock.objects.create(character_class=character_class, target_level=3)
+        unlock = ClassLevelUnlock.objects.create(character_class=character_class, target_level=3)
+        _purchase_unlock(inductee, unlock)
         SceneFactory(location=inductee.character.location, is_active=True)
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
             advance_class_level_via_session(session=session)
@@ -352,6 +364,52 @@ class AdvanceViaSessionTests(TestCase):
         with mock.patch(_CHECK_PATH, return_value=(True, [])):
             with self.assertRaises(OfficiantIneligibleError):
                 advance_class_level_via_session(session=session)
+
+
+class AdvanceViaSessionUnlockNotPurchasedTests(TestCase):
+    """The XP-unlock purchase gate (#2116) — requirements met is not sufficient.
+
+    Both gates (check_requirements_for_unlock + the CharacterUnlock purchase)
+    must independently pass; "XP unlocks, never grants" — see the ADR.
+    """
+
+    def setUp(self) -> None:
+        from world.progression.models import ClassLevelUnlock
+
+        self.session, self.officiant, self.inductee, self.character_class = _build_durance_session(
+            officiant_level=10, inductee_level=2
+        )
+        self.unlock = ClassLevelUnlock.objects.create(
+            character_class=self.character_class, target_level=3
+        )
+        # Deliberately NOT purchased — no CharacterUnlock row created.
+
+    def test_requirements_met_but_unpurchased_raises_specific_error(self) -> None:
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            with self.assertRaises(AdvancementUnlockNotPurchasedError) as ctx:
+                advance_class_level_via_session(session=self.session)
+        # Names the unlock's class + XP cost — fail loud, never silent.
+        assert self.character_class.name in ctx.exception.user_message
+        # No level bump on this failed gate.
+        self.inductee.invalidate_class_level_cache()
+        assert self.inductee.current_level == 2
+        assert not ClassLevelAdvancement.objects.filter(character_sheet=self.inductee).exists()
+
+    def test_purchase_then_advance_succeeds(self) -> None:
+        _purchase_unlock(self.inductee, self.unlock)
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            receipts = advance_class_level_via_session(session=self.session)
+        assert len(receipts) == 1
+        self.inductee.invalidate_class_level_cache()
+        assert self.inductee.current_level == 3
+
+    def test_unpurchased_error_does_not_fire_when_requirements_unmet(self) -> None:
+        """Requirements gate fails first — the specific unlock error only fires once
+        requirements are already satisfied (gates are stacked, not short-circuited
+        past each other in the wrong order)."""
+        with mock.patch(_CHECK_PATH, return_value=(False, ["Requires 50 Legend"])):
+            with self.assertRaises(AdvancementRequirementsNotMet):
+                advance_class_level_via_session(session=self.session)
 
 
 class AdvanceViaSessionBoundaryTests(TestCase):
@@ -428,7 +486,11 @@ class AdvanceViaSessionMultiInducteeTests(TestCase):
                 state=ParticipantState.ACCEPTED,
             )
             self.inductees.append(inductee)
-        ClassLevelUnlock.objects.create(character_class=self.character_class, target_level=3)
+        unlock = ClassLevelUnlock.objects.create(
+            character_class=self.character_class, target_level=3
+        )
+        for inductee in self.inductees:
+            _purchase_unlock(inductee, unlock)
 
     def test_two_inductees_two_receipts_same_scene(self) -> None:
         from world.scenes.factories import SceneFactory
@@ -466,6 +528,7 @@ class AdvanceViaSessionLegendGatePGTests(TestCase):
             officiant_level=10, inductee_level=2
         )
         unlock = ClassLevelUnlock.objects.create(character_class=character_class, target_level=3)
+        _purchase_unlock(inductee, unlock)
         LegendRequirement.objects.create(
             class_level_unlock=unlock, minimum_legend=50, is_active=True
         )
@@ -547,7 +610,10 @@ class DuranceSemiCrossingTests(TestCase):
         self.session, self.officiant, self.inductee, self.character_class = _build_durance_session(
             officiant_level=10, inductee_level=2
         )
-        ClassLevelUnlock.objects.create(character_class=self.character_class, target_level=3)
+        unlock = ClassLevelUnlock.objects.create(
+            character_class=self.character_class, target_level=3
+        )
+        _purchase_unlock(self.inductee, unlock)
 
         prospect = current_path_for_character(self.inductee.character)
         self.potential = PathFactory(stage=PathStage.POTENTIAL)

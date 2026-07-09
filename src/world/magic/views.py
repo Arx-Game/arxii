@@ -77,6 +77,7 @@ from world.magic.serializers import (
     AcceptSoulTetherSerializer,
     AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
+    AcceptTechniqueOfferRequestSerializer,
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
     ApplicablePullsRequestSerializer,
@@ -109,6 +110,7 @@ from world.magic.serializers import (
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
     ProgressionStageSerializer,
+    PurchaseGiftUnlockRequestSerializer,
     RescueOutcomeSerializer,
     ResonanceGrantSerializer,
     RestrictionSerializer,
@@ -1719,6 +1721,89 @@ class EntryFlourishRespondView(APIView):
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         entry_result = result.data["entry_flourish_result"]
         return Response(EntryFlourishResultSerializer(entry_result).data)
+
+
+# =============================================================================
+# Gift/technique acquisition surface (#2116)
+# =============================================================================
+
+
+class PurchaseGiftUnlockView(APIView):
+    """Spend XP to purchase a GiftUnlock — the web face of `purchase_gift_unlock` (#2116).
+
+    POST /api/magic/gift-unlocks/purchase/
+    Body: {gift_unlock_id, teacher_tenure_id?, learner_sheet_id?}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=PurchaseGiftUnlockRequestSerializer,
+        responses={
+            201: inline_serializer(
+                name="PurchaseGiftUnlockResponse",
+                fields={
+                    "gift_unlock_id": serializers.IntegerField(),
+                    "receipt_id": serializers.IntegerField(),
+                },
+            )
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Validate and dispatch PurchaseGiftUnlockAction; return the receipt ids."""
+        from actions.definitions.gift_acquisition import PurchaseGiftUnlockAction  # noqa: PLC0415
+
+        serializer = PurchaseGiftUnlockRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sheet = _resolve_actor_sheet(request, body_key="learner_sheet_id")
+
+        result = PurchaseGiftUnlockAction().run(
+            actor=sheet.character,
+            gift_unlock_id=serializer.validated_data["gift_unlock_id"],
+            teacher_tenure_id=serializer.validated_data.get("teacher_tenure_id"),
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data, status=status.HTTP_201_CREATED)
+
+
+class AcceptTechniqueOfferView(APIView):
+    """Accept a TechniqueTeachingOffer — the web face of `accept_technique_offer` (#2116).
+
+    POST /api/magic/technique-offers/accept/
+    Body: {offer_id, learner_sheet_id?}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=AcceptTechniqueOfferRequestSerializer,
+        responses={
+            201: inline_serializer(
+                name="AcceptTechniqueOfferResponse",
+                fields={
+                    "offer_id": serializers.IntegerField(),
+                    "character_technique_id": serializers.IntegerField(),
+                    "technique_id": serializers.IntegerField(),
+                },
+            )
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """Validate and dispatch AcceptTechniqueOfferAction; return the minted ids."""
+        from actions.definitions.gift_acquisition import AcceptTechniqueOfferAction  # noqa: PLC0415
+
+        serializer = AcceptTechniqueOfferRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sheet = _resolve_actor_sheet(request, body_key="learner_sheet_id")
+
+        result = AcceptTechniqueOfferAction().run(
+            actor=sheet.character,
+            offer_id=serializer.validated_data["offer_id"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result.data, status=status.HTTP_201_CREATED)
 
 
 # =============================================================================

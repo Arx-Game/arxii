@@ -33,7 +33,7 @@ from world.magic.models.sessions import RitualSession
 from world.magic.services.sessions import accept_session, draft_session
 from world.progression.factories import DuranceTrainingSiteFactory
 from world.progression.models import CharacterPathHistory, ClassLevelAdvancement
-from world.progression.models.unlocks import ClassLevelUnlock
+from world.progression.models.unlocks import CharacterUnlock, ClassLevelUnlock
 from world.scenes.factories import SceneFactory
 
 # Patch target: the legend-gate function called inside advance_class_level_via_session.
@@ -103,6 +103,11 @@ class DuranceAutoFireOnJoinTests(TestCase):
 
         # Authored level unlock for the inductee's class at target level 3.
         ClassLevelUnlock.objects.create(
+            character_class=self.inductee_class,
+            target_level=3,
+        )
+        CharacterUnlock.objects.create(
+            character=self.inductee_char,
             character_class=self.inductee_class,
             target_level=3,
         )

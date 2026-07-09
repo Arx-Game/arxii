@@ -14279,6 +14279,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/FacetTree'
           description: ''
+  /api/magic/gift-unlocks/purchase/:
+    post:
+      operationId: magic_gift_unlocks_purchase_create
+      description: Validate and dispatch PurchaseGiftUnlockAction; return the receipt
+        ids.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseGiftUnlockRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseGiftUnlockResponse'
+          description: ''
   /api/magic/gifts/:
     get:
       operationId: magic_gifts_list
@@ -15926,6 +15948,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AcceptTeachingOfferResponse'
+          description: ''
+  /api/magic/technique-offers/accept/:
+    post:
+      operationId: magic_technique_offers_accept_create
+      description: Validate and dispatch AcceptTechniqueOfferAction; return the minted
+        ids.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptTechniqueOfferRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptTechniqueOfferResponse'
           description: ''
   /api/magic/techniques/:
     get:
@@ -28554,6 +28598,30 @@ components:
       - id
       - unlock_id
       - xp_spent
+    AcceptTechniqueOfferRequestRequest:
+      type: object
+      description: Request shape for POST /api/magic/technique-offers/accept/.
+      properties:
+        offer_id:
+          type: integer
+        learner_sheet_id:
+          type: integer
+          nullable: true
+      required:
+      - offer_id
+    AcceptTechniqueOfferResponse:
+      type: object
+      properties:
+        offer_id:
+          type: integer
+        character_technique_id:
+          type: integer
+        technique_id:
+          type: integer
+      required:
+      - character_technique_id
+      - offer_id
+      - technique_id
     Achievement:
       type: object
       description: Full serializer for achievement detail view.
@@ -51307,6 +51375,30 @@ components:
         target_persona_id:
           type: integer
           nullable: true
+    PurchaseGiftUnlockRequestRequest:
+      type: object
+      description: Request shape for POST /api/magic/gift-unlocks/purchase/.
+      properties:
+        gift_unlock_id:
+          type: integer
+        teacher_tenure_id:
+          type: integer
+          nullable: true
+        learner_sheet_id:
+          type: integer
+          nullable: true
+      required:
+      - gift_unlock_id
+    PurchaseGiftUnlockResponse:
+      type: object
+      properties:
+        gift_unlock_id:
+          type: integer
+        receipt_id:
+          type: integer
+      required:
+      - gift_unlock_id
+      - receipt_id
     PurchaseUnlockRequest:
       type: object
       description: Input serializer for purchasing a progression unlock.

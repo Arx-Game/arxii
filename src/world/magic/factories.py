@@ -41,6 +41,7 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAura,
     CharacterGift,
+    CharacterGiftUnlock,
     CharacterResonance,
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
@@ -48,6 +49,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    GiftUnlock,
     ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
@@ -76,6 +78,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueRemovedCondition,
     TechniqueStyle,
+    TechniqueTeachingOffer,
     TechniqueTierBudget,
     Thread,
     ThreadLevelUnlock,
@@ -329,6 +332,45 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
                 technique=self,
                 base_damage=self.effect_type.base_power,
             )
+
+
+class GiftUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for GiftUnlock — authored XP-purchasable Minor Gift catalog (#1587, #2116).
+
+    Defaults ``gift`` to a MINOR-kind Gift (GiftUnlock.clean() requires it).
+    """
+
+    class Meta:
+        model = GiftUnlock
+
+    gift = factory.SubFactory(GiftFactory, kind=GiftKind.MINOR)
+    xp_cost = 10
+
+
+class CharacterGiftUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterGiftUnlock — per-character XP-purchase receipt (#2116)."""
+
+    class Meta:
+        model = CharacterGiftUnlock
+
+    character = factory.SubFactory(CharacterSheetFactory)
+    unlock = factory.SubFactory(GiftUnlockFactory)
+    xp_spent = 10
+    teacher = None
+
+
+class TechniqueTeachingOfferFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueTeachingOffer — teacher-side technique offer (#1587, #2116)."""
+
+    class Meta:
+        model = TechniqueTeachingOffer
+
+    teacher = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    technique = factory.SubFactory(TechniqueFactory)
+    pitch = factory.Faker("paragraph")
+    learn_ap_cost = 5
+    gold_cost = 0
+    banked_ap = 5
 
 
 class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):

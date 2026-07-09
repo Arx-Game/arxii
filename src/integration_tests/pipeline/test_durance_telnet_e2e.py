@@ -44,7 +44,7 @@ from world.magic.models.sessions import RitualSession
 from world.progression.exceptions import NoDuranceSiteError
 from world.progression.factories import DuranceTrainingSiteFactory
 from world.progression.models import CharacterPathHistory, ClassLevelAdvancement
-from world.progression.models.unlocks import ClassLevelUnlock
+from world.progression.models.unlocks import CharacterUnlock, ClassLevelUnlock
 from world.progression.selectors import current_path_for_character
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Interaction
@@ -139,6 +139,11 @@ class WitnessedDuranceTelnetTests(TestCase):
 
         # ClassLevelUnlock gate for level 3.
         ClassLevelUnlock.objects.create(
+            character_class=self.inductee_class,
+            target_level=3,
+        )
+        CharacterUnlock.objects.create(
+            character=self.inductee,
             character_class=self.inductee_class,
             target_level=3,
         )
@@ -264,6 +269,11 @@ class SiteDuranceTelnetTests(TestCase):
             character_class=self.inductee_class,
             target_level=3,
         )
+        CharacterUnlock.objects.create(
+            character=self.inductee,
+            character_class=self.inductee_class,
+            target_level=3,
+        )
 
         # Durance training site in the inductee's room, bound to the trainer.
         from world.areas.services import get_room_profile
@@ -375,6 +385,11 @@ class DuranceErrorTelnetTests(TestCase):
 
         # Unlock needed for requirements check path.
         ClassLevelUnlock.objects.create(
+            character_class=self.inductee_class,
+            target_level=3,
+        )
+        CharacterUnlock.objects.create(
+            character=self.inductee,
             character_class=self.inductee_class,
             target_level=3,
         )

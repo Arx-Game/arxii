@@ -24,11 +24,12 @@ from world.magic.factories import RitualOfTheDuranceFactory
 from world.magic.models.sessions import RitualSession
 from world.progression.exceptions import (
     AdvancementRequirementsNotMet,
+    AdvancementUnlockNotPurchasedError,
     NoDuranceSiteError,
     TierBoundaryRequiresCrossing,
 )
 from world.progression.factories import DuranceTrainingSiteFactory
-from world.progression.models import CharacterPathHistory, ClassLevelUnlock
+from world.progression.models import CharacterPathHistory, CharacterUnlock, ClassLevelUnlock
 from world.progression.services.advancement import convene_durance_at_site
 
 # Patch target: the legend-gate function (called lazily inside convene_durance_at_site).
@@ -56,6 +57,15 @@ def _place_in_room(sheet, room) -> None:
     sheet.character.save()
 
 
+def _purchase_unlock(sheet, unlock) -> None:
+    """Record the XP-unlock purchase gate as satisfied for ``sheet`` (#2116)."""
+    CharacterUnlock.objects.create(
+        character=sheet.character,
+        character_class=unlock.character_class,
+        target_level=unlock.target_level,
+    )
+
+
 class ConveneDuranceSiteEligibleTests(TestCase):
     """Happy path: eligible site → drafted session with trainer as initiator."""
 
@@ -76,10 +86,11 @@ class ConveneDuranceSiteEligibleTests(TestCase):
         _wire_path(self.inductee_sheet, self.path)
 
         # ClassLevelUnlock for (inductee class, target level 3).
-        ClassLevelUnlock.objects.create(
+        self.unlock = ClassLevelUnlock.objects.create(
             character_class=self.inductee_class,
             target_level=3,
         )
+        _purchase_unlock(self.inductee_sheet, self.unlock)
 
         # Durance Ritual row (get_or_create so safe to call multiple times).
         self.ritual = RitualOfTheDuranceFactory()
@@ -148,10 +159,11 @@ class ConveneDuranceSiteNoSiteTests(TestCase):
         _set_primary_level(self.inductee_sheet, character_class=self.inductee_class, level=2)
         _wire_path(self.inductee_sheet, self.path)
 
-        ClassLevelUnlock.objects.create(
+        unlock = ClassLevelUnlock.objects.create(
             character_class=self.inductee_class,
             target_level=3,
         )
+        _purchase_unlock(self.inductee_sheet, unlock)
         RitualOfTheDuranceFactory()
 
         # An explicit room with no DuranceTrainingSite.
@@ -262,3 +274,61 @@ class ConveneDuranceSiteTierBoundaryTests(TestCase):
                 inductee_sheet=self.inductee_sheet,
                 room=self.room,
             )
+
+
+class ConveneDuranceSiteUnlockNotPurchasedTests(TestCase):
+    """Requirements met + a real site present, but the XP unlock is unpurchased (#2116).
+
+    convene_durance_at_site pre-checks the purchase gate up front — a doomed session
+    (one that would fail the same gate at fire time) is never drafted.
+    """
+
+    def setUp(self) -> None:
+        self.path = PathFactory(stage=PathStage.PROSPECT)
+
+        self.trainer_sheet = CharacterSheetFactory()
+        trainer_class = CharacterClassFactory()
+        _set_primary_level(self.trainer_sheet, character_class=trainer_class, level=10)
+        _wire_path(self.trainer_sheet, self.path)
+
+        self.inductee_sheet = CharacterSheetFactory()
+        self.inductee_class = CharacterClassFactory()
+        _set_primary_level(self.inductee_sheet, character_class=self.inductee_class, level=2)
+        _wire_path(self.inductee_sheet, self.path)
+
+        self.unlock = ClassLevelUnlock.objects.create(
+            character_class=self.inductee_class,
+            target_level=3,
+        )
+        # Deliberately NOT purchased.
+        RitualOfTheDuranceFactory()
+
+        self.room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        _place_in_room(self.inductee_sheet, self.room)
+        DuranceTrainingSiteFactory(
+            room_profile=get_room_profile(self.room),
+            officiant=self.trainer_sheet,
+            is_active=True,
+        )
+
+    def test_unpurchased_unlock_raises_before_drafting_a_session(self) -> None:
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            with self.assertRaises(AdvancementUnlockNotPurchasedError) as ctx:
+                convene_durance_at_site(
+                    inductee_sheet=self.inductee_sheet,
+                    room=self.room,
+                )
+        self.assertIn(self.inductee_class.name, ctx.exception.user_message)
+
+    def test_purchase_then_convene_succeeds(self) -> None:
+        CharacterUnlock.objects.create(
+            character=self.inductee_sheet.character,
+            character_class=self.inductee_class,
+            target_level=3,
+        )
+        with mock.patch(_CHECK_PATH, return_value=(True, [])):
+            session = convene_durance_at_site(
+                inductee_sheet=self.inductee_sheet,
+                room=self.room,
+            )
+        self.assertIsInstance(session, RitualSession)

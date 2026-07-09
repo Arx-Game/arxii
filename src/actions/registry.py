@@ -96,6 +96,11 @@ from actions.definitions.events import (
 from actions.definitions.fashion import JudgePresentationAction, PresentOutfitAction
 from actions.definitions.fatigue import RestAction
 from actions.definitions.forms import RevertFormAction, ShiftFormAction
+from actions.definitions.gift_acquisition import (
+    AcceptTechniqueOfferAction,
+    AcceptThreadWeavingOfferAction,
+    PurchaseGiftUnlockAction,
+)
 from actions.definitions.gm_combat import (
     AddEncounterParticipantAction,
     AddOpponentAction,
@@ -516,6 +521,10 @@ _ALL_ACTIONS: list[Action] = [
     # #1866 — door lock/unlock telnet coverage.
     LockAction(),
     UnlockAction(),
+    # #2116 — gift/technique/thread-weaving acquisition surface.
+    PurchaseGiftUnlockAction(),
+    AcceptTechniqueOfferAction(),
+    AcceptThreadWeavingOfferAction(),
 ]
 
 # Lookup by key
