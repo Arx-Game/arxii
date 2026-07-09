@@ -338,6 +338,15 @@ class CombatTechniqueResolver:
                     value=self.pull_flat_bonus,
                 )
             )
+        # Bond combat bonus (#2021): relationship co-combatant passive.
+        from world.relationships.services import bond_combat_bonus  # noqa: PLC0415
+
+        extra_contributions.extend(
+            bond_combat_bonus(
+                self.participant.character_sheet,
+                self.participant.encounter,
+            )
+        )
         breakdown = collect_check_modifiers(
             self.participant.character_sheet,
             self.offense_check_type,
@@ -4573,10 +4582,18 @@ def resolve_npc_attack(
     # society is derived from the encounter's scene; ``collect_check_modifiers``
     # self-limits (a fashion bonus only lands when ``check_type`` has a scoped
     # modifier_target and the scene's society has a matching in-vogue style).
+    # Bond combat bonus (#2021): relationship co-combatant passive.
+    from world.relationships.services import bond_combat_bonus  # noqa: PLC0415
+
+    bond_contributions = bond_combat_bonus(
+        participant.character_sheet,
+        participant.encounter,
+    )
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         check_type,
         scene=participant.encounter.scene,
+        extra_contributions=bond_contributions,
     )
     result: CheckResult = perform_check_fn(
         character,
@@ -5135,6 +5152,10 @@ def _resolve_flee(
                 value=config.cover_bonus * cover_count,
             )
         )
+    # Bond combat bonus (#2021): relationship co-combatant passive.
+    from world.relationships.services import bond_combat_bonus  # noqa: PLC0415
+
+    extra_contributions.extend(bond_combat_bonus(participant.character_sheet, encounter))
     breakdown = collect_check_modifiers(
         participant.character_sheet,
         config.check_type,
