@@ -11,6 +11,7 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionReaction,
     Persona,
+    ReactionEmoji,
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver
@@ -427,6 +428,14 @@ class InteractionReactionSerializer(serializers.ModelSerializer):
         model = InteractionReaction
         fields = ["id", "interaction", "emoji", "created_at"]
         read_only_fields = ["created_at"]
+
+
+class ReactionEmojiSerializer(serializers.ModelSerializer):
+    """Read serializer for the active reaction-emoji catalog (#1699)."""
+
+    class Meta:
+        model = ReactionEmoji
+        fields = ["emoji", "valence", "sort_order"]
 
 
 class PoseSubmitSerializer(serializers.Serializer):

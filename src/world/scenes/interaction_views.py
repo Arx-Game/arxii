@@ -40,6 +40,7 @@ from world.scenes.interaction_serializers import (
     InteractionListSerializer,
     InteractionReactionSerializer,
     PoseSubmitSerializer,
+    ReactionEmojiSerializer,
 )
 from world.scenes.interaction_services import (
     create_interaction,
@@ -53,6 +54,7 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionReaction,
     Persona,
+    ReactionEmoji,
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver
@@ -403,7 +405,14 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
 
 
 class InteractionReactionViewSet(viewsets.ModelViewSet):
-    """Toggle emoji reactions on interactions."""
+    """Toggle emoji reactions on interactions.
+
+    A cataloged emoji with nonzero valence additionally fires an ambient
+    relationship bump at the pose's author (#1699). The chip toggle is the
+    primary behavior — a failed/deduped bump never blocks the reaction, and
+    un-reacting never reverts a bump (the per-interaction unique constraint
+    prevents re-farming).
+    """
 
     serializer_class = InteractionReactionSerializer
     permission_classes = [IsAuthenticated]
@@ -428,7 +437,44 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         )
         if not created:
             return Response(status=status.HTTP_204_NO_CONTENT)
+        bump_applied = self._maybe_apply_bump(request, interaction, emoji)
         return Response(
-            InteractionReactionSerializer(reaction).data,
+            {**InteractionReactionSerializer(reaction).data, "bump_applied": bump_applied},
             status=status.HTTP_201_CREATED,
         )
+
+    def _maybe_apply_bump(self, request: Request, interaction: Any, emoji: str) -> bool:
+        """Fire the relationship bump for a valenced catalog emoji; never raise."""
+        from actions.definitions.relationships import RelationshipBumpAction  # noqa: PLC0415
+
+        catalog_entry = ReactionEmoji.objects.filter(emoji=emoji, is_active=True).first()
+        if catalog_entry is None or catalog_entry.valence == 0:
+            return False
+        actor = getattr(request.user, "puppet", None)  # noqa: GETATTR_LITERAL
+        if actor is None:
+            return False
+        author_persona = interaction.persona
+        if author_persona is None or author_persona.character_sheet is None:
+            return False
+        result = RelationshipBumpAction().run(
+            actor=actor,
+            target_sheet=author_persona.character_sheet,
+            valence=catalog_entry.valence,
+            interaction=interaction,
+            source_emoji=catalog_entry,
+        )
+        return result.success
+
+
+class ReactionEmojiViewSet(viewsets.ReadOnlyModelViewSet):
+    """The active reaction-emoji catalog the scene footer renders (#1699)."""
+
+    serializer_class = ReactionEmojiSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = InteractionFavoritePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["valence"]
+    http_method_names = ["get"]
+
+    def get_queryset(self) -> QuerySet[ReactionEmoji]:
+        return ReactionEmoji.objects.filter(is_active=True)
