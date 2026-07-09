@@ -473,3 +473,107 @@ class FileWriteupComplaintAction(BaseRelationshipAction):
             message="Your complaint has been filed for staff review.",
             data={"complaint_id": complaint.pk},
         )
+
+
+@dataclass
+class RelationshipBumpAction(BaseRelationshipAction):
+    """Ambient one-keystroke regard nudge, anchored to a specific pose (#1699).
+
+    Telnet passes no ``interaction`` — the action backfill-anchors to the
+    target's most recent visible pose in the active scene lacking a bump from
+    this relationship. The web door passes the reacted-to ``interaction``
+    explicitly. Not consent-gated: a bump is a private write to the actor's
+    own relationship data (ADR-0024).
+    """
+
+    key: str = "relationship_bump"
+    name: str = "Relationship Bump"
+    icon: str = "thumbs-up"
+    category: str = "relationships"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.relationships.exceptions import RelationshipBumpError  # noqa: PLC0415
+        from world.relationships.services import apply_relationship_bump  # noqa: PLC0415
+
+        sheet = self._sheet(actor)
+        target_sheet = kwargs.get("target_sheet")
+        err = self._preflight_error(sheet, target_sheet, target=target_sheet)
+        if not err:
+            err = self._self_target_error(sheet, target_sheet)
+        if err:
+            return ActionResult(success=False, message=err)
+
+        try:
+            valence = 1 if int(kwargs.get("valence", 0)) > 0 else -1
+        except (TypeError, ValueError):
+            return ActionResult(success=False, message="Invalid valence value.")
+
+        interaction = kwargs.get("interaction")
+        if interaction is None:
+            interaction = self._backfill_anchor(actor, sheet, target_sheet)
+            if interaction is None:
+                return ActionResult(
+                    success=False,
+                    message="You've already acknowledged everything they've done this scene.",
+                )
+
+        try:
+            apply_relationship_bump(
+                source=sheet,
+                target=target_sheet,
+                interaction=interaction,
+                valence=valence,
+                source_emoji=kwargs.get("source_emoji"),
+            )
+        except RelationshipBumpError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        except ValidationError as exc:
+            return ActionResult(success=False, message=str(exc))
+
+        target_name = self._target_name(target_sheet)
+        direction = "warms" if valence > 0 else "cools"
+        return ActionResult(
+            success=True,
+            message=(
+                f"Your regard for {target_name} {direction}."
+                if target_name
+                else f"Your regard {direction}."
+            ),
+        )
+
+    def _backfill_anchor(self, actor: ObjectDB, sheet: Any, target_sheet: Any) -> Any:
+        """The target's most recent visible pose in the active scene without a bump from us."""
+        from world.magic.services.gain import get_endorseable_poses_in_scene  # noqa: PLC0415
+        from world.relationships.models import (  # noqa: PLC0415
+            CharacterRelationship,
+            RelationshipBump,
+        )
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+        location = getattr(actor, "location", None)  # noqa: GETATTR_LITERAL
+        scene = get_active_scene(location) if location is not None else None
+        if scene is None:
+            return None
+        poses = get_endorseable_poses_in_scene(sheet, target_sheet, scene)
+        if not poses:
+            return None
+        relationship = CharacterRelationship.objects.filter(
+            source=sheet, target=target_sheet
+        ).first()
+        bumped_ids: set[int] = set()
+        if relationship is not None:
+            bumped_ids = set(
+                RelationshipBump.objects.filter(
+                    relationship=relationship,
+                    interaction_id__in=[interaction.pk for _, interaction in poses],
+                ).values_list("interaction_id", flat=True)
+            )
+        for _, interaction in reversed(poses):
+            if interaction.pk not in bumped_ids:
+                return interaction
+        return None

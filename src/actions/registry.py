@@ -223,6 +223,7 @@ from actions.definitions.relationships import (
     FileWriteupComplaintAction,
     GiveWriteupKudosAction,
     RedistributePointsAction,
+    RelationshipBumpAction,
 )
 from actions.definitions.ritual import PerformRitualAction
 from actions.definitions.room_features import RepairLabStationAction, StartRoomFeatureProjectAction
@@ -429,6 +430,7 @@ _ALL_ACTIONS: list[Action] = [
     CreateDevelopmentAction(),
     CreateCapstoneAction(),
     RedistributePointsAction(),
+    RelationshipBumpAction(),
     CreateJournalEntryAction(),
     RespondToJournalAction(),
     EditJournalEntryAction(),

@@ -305,6 +305,7 @@ class ActionRegistryTests(TestCase):
             "create_development",
             "create_capstone",
             "redistribute_points",
+            "relationship_bump",
             "create_journal_entry",
             "respond_to_journal",
             "edit_journal_entry",
