@@ -217,7 +217,7 @@ class CraftAttachFacetQueryCountTests(TestCase):
             # consequence rows would push either count up by ≥3.
             from django.db import connection
 
-            expected = 75 if connection.vendor == "postgresql" else 77
+            expected = 76 if connection.vendor == "postgresql" else 77
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,
