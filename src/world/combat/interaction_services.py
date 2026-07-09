@@ -28,6 +28,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
     )
     from world.combat.types import ActionOutcome
+    from world.conditions.types import DamageInteractionResult
     from world.magic.models import FuryTier
     from world.magic.types.power_ledger import PowerLedger
 
@@ -177,6 +178,55 @@ def _assemble_hit_line(head: str, tail_clauses: list[str], power_clause: str) ->
     return f"{body} {power_clause}." if power_clause else f"{body}."
 
 
+def synergy_clause(interaction_result: DamageInteractionResult | None) -> str | None:
+    """Compose a suffix clause for condition-damage interactions that fired.
+
+    Returns None (no clause) when:
+    - No interaction result (None).
+    - Only a silent modifier applied (no condition removed or applied).
+
+    Returns a clause when an interaction caused a condition transition
+    (removal or application). If the interaction has an authored
+    ``narration_snippet``, it is used; otherwise a deterministic fallback is
+    composed from the condition name + interaction kind.
+
+    When the modifier is non-zero and a transition occurred, the modifier
+    percentage is appended (e.g. " (+50%)").
+    """
+    if interaction_result is None:
+        return None
+
+    # Only narrate transitions — a pure modifier with no removal/apply is
+    # silent math (anti-spam rule, spec decision #1).
+    transition_interactions = [
+        i
+        for i in interaction_result.fired_interactions
+        if i.removes_condition or i.applies_condition is not None
+    ]
+    if not transition_interactions:
+        return None
+
+    parts: list[str] = []
+    for interaction in transition_interactions:
+        if interaction.narration_snippet:
+            parts.append(interaction.narration_snippet)
+        elif interaction.removes_condition:
+            parts.append(f"{interaction.condition.name} shatters")
+        elif interaction.applies_condition is not None:
+            parts.append(
+                f"{interaction.condition.name} transforms into {interaction.applies_condition.name}"
+            )
+
+    clause = " — ".join(parts)
+
+    # Append the modifier if non-zero.
+    if interaction_result.damage_modifier_percent != 0:
+        sign = "+" if interaction_result.damage_modifier_percent > 0 else ""
+        clause += f" ({sign}{interaction_result.damage_modifier_percent}%)"
+
+    return f"— {clause}" if clause else None
+
+
 def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one narration; cohesive
     *,
     actor_label: str,
@@ -185,6 +235,7 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     outcome: ActionOutcome,
     power_ledger: PowerLedger | None = None,
     signature_snippet: str | None = None,
+    interaction_result: DamageInteractionResult | None = None,
 ) -> str:
     """Render a one-line, deterministic outcome narration from resolved data.
 
@@ -225,7 +276,8 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
 
     power_clause = power_outcome_clause(power_ledger)
     sig_clause = signature_clause(signature_snippet)
-    suffix_parts = [c for c in (power_clause, sig_clause) if c]
+    synergy = synergy_clause(interaction_result)
+    suffix_parts = [c for c in (power_clause, sig_clause, synergy) if c]
     suffix = " ".join(suffix_parts)
 
     # Targeted action with no damage and no wounds → miss (or warded bounce).
