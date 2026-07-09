@@ -69,6 +69,7 @@ from world.magic.models import (
     ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
+    TouchstoneCastConfig,
     Tradition,
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
@@ -834,6 +835,19 @@ class SoulTetherConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not SoulTetherConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(TouchstoneCastConfig)
+class TouchstoneCastConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for touchstone combat resonance (#2023)."""
+
+    list_display = ("pk", "config_scale")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not TouchstoneCastConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False

@@ -24,6 +24,9 @@ class FoilDuelConstantsTests(SimpleTestCase):
     def test_combat_maneuver_disengage(self):
         self.assertEqual(CombatManeuver.DISENGAGE, "disengage")
 
+    def test_combat_maneuver_use_item(self):
+        self.assertEqual(CombatManeuver.USE_ITEM, "use_item")
+
     def test_engagement_lock_status_choices(self):
         self.assertEqual(
             {c[0] for c in EngagementLockStatus.choices},

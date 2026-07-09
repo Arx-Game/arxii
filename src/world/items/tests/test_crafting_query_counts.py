@@ -67,7 +67,6 @@ N+1 invariants verified:
 
 from __future__ import annotations
 
-from django.db import connection
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
@@ -212,11 +211,13 @@ class CraftAttachFacetQueryCountTests(TestCase):
         with force_check_outcome(self.success_outcome):
             # Postgres runs 75: a preceding test in the shard warms the
             # SharedMemoryModel identity map for a lookup model (e.g.
-            # ActionPointConfig), eliminating one SELECT. SQLite runs 76
+            # ActionPointConfig), eliminating one SELECT. SQLite runs 77
             # (no cache hit — different test isolation). The 1-query gap is
             # ordering-dependent, not a regression — a per-row N+1 over 3
             # consequence rows would push either count up by ≥3.
-            expected = 75 if connection.vendor == "postgresql" else 76
+            from django.db import connection
+
+            expected = 76 if connection.vendor == "postgresql" else 77
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,

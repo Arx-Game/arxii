@@ -4989,6 +4989,36 @@ class _ParleyCheckResult:
     success_level: int
 
 
+def _resolve_use_item(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a USE_ITEM combat maneuver by dispatching UseItemAction (#2023).
+
+    Reuses the built UseItemAction machinery (prerequisites, effect application)
+    rather than duplicating it. The item is resolved from the action's
+    ``item_instance`` FK; the actor is the participant's character. Using an
+    item costs the round's focused action — it is a primary maneuver, mutually
+    exclusive with ``focused_action``, like FLEE/COVER/INTERPOSE.
+    """
+    from actions.definitions.items import UseItemAction  # noqa: PLC0415
+
+    outcome = ActionOutcome(
+        entity_type=ENTITY_TYPE_PC,
+        entity_label=str(participant),
+    )
+    outcome.participant_id = participant.pk
+
+    if action.item_instance is None:
+        return outcome
+
+    character = participant.character_sheet.character
+    UseItemAction().run(actor=character, item=action.item_instance)
+    # UseItemAction's effects (healing, conditions) are applied by the action
+    # itself; the combat round just needs to know the maneuver resolved.
+    return outcome
+
+
 def _resolve_flee(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -5221,6 +5251,13 @@ def _resolve_pc_action(  # noqa: C901, PLR0911
         return _resolve_taunt(participant, action)
     if action.maneuver == CombatManeuver.PARLEY:
         return _resolve_parley(participant, action)
+
+    # On-use items as a combat maneuver (#2023): dispatches the existing
+    # UseItemAction as a primary maneuver (mutually exclusive with the
+    # focused technique, like FLEE/COVER). Using an item costs the
+    # round's focused action.
+    if action.maneuver == CombatManeuver.USE_ITEM:
+        return _resolve_use_item(participant, action)
 
     # YIELD ends a duel immediately: the yielding PC loses. Passives-only outcome;
     # _resolve_duel_completion is a no-op afterwards because the encounter is now
