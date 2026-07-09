@@ -97,6 +97,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `TechniqueBudgetConfig` - Singleton (pk=1) of power-cost-per-unit knobs (intensity, control, payload, restriction refund multiplier). Lazy-created via `get_technique_budget_config()` in `services/technique_builder.py`.
 - `TechniqueTierBudget` - Per-tier reference power budget + representative level stamped on techniques authored at that tier. Lazy-created via `get_technique_tier_budget(tier)`.
 - `SoulTetherConfig` - Singleton (pk=1) of Soul Tether tuning knobs: sineating anima/fatigue costs per unit, per-scene caps, hollow-max multiplier, rescue strain thresholds, rescue resonance costs, rescue budget bases and multipliers. All fields are integers; multipliers encoded as integer-tenths or integer-hundredths. Lazy-created via `get_soul_tether_config()` in `services/soul_tether.py`.
+- `TouchstoneCastConfig` - Singleton (pk=1) of touchstone combat resonance tuning (#2023). `config_scale` (integer-tenths, default 10 = ×1.0) scales the per-tier cast bonus: `resonance_tier.tier_level × config_scale / 10`. Lazy-created via `get_touchstone_cast_config()` in `services/touchstone.py`. The touchstone power-term provider (`touchstone_power_term` in `services/power_terms.py`) scans equipped items for `template.tied_resonance` matches and folds the bonus into `_derive_power`'s TERM stage.
 
 ### Technique authoring (budget builder)
 
