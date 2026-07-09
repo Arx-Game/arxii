@@ -134,6 +134,8 @@ from world.magic.serializers import (
     ThreadPullPreviewResponseSerializer,
     ThreadSerializer,
     ThreadWeavingTeachingOfferSerializer,
+    TraitCrossingRespondSerializer,
+    TraitCrossingResultSerializer,
 )
 from world.magic.services import (
     get_library_entries,
@@ -1717,6 +1719,83 @@ class EntryFlourishRespondView(APIView):
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         entry_result = result.data["entry_flourish_result"]
         return Response(EntryFlourishResultSerializer(entry_result).data)
+
+
+# =============================================================================
+# Trait crossing REST surface (#1989)
+# =============================================================================
+
+
+class PendingTraitCrossingOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only inbox of pending trait crossing offers (#1989).
+
+    GET /api/magic/trait-crossing/pending/
+    GET /api/magic/trait-crossing/pending/{id}/
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self):
+        from world.magic.serializers import (  # noqa: PLC0415
+            PendingTraitCrossingOfferSerializer,
+        )
+
+        return PendingTraitCrossingOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.models.trait_crossing import (  # noqa: PLC0415
+            PendingTraitCrossingOffer,
+        )
+
+        return _account_scoped_offer_queryset(
+            PendingTraitCrossingOffer,
+            self.request.user,
+            "thread",
+            "thread__resonance",
+            "thread__target_trait",
+        )
+
+
+class TraitCrossingRespondView(APIView):
+    """Pick an option for a pending trait crossing offer (#1989).
+
+    POST /api/magic/trait-crossing/respond/  {offer_id, option_id}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=TraitCrossingRespondSerializer,
+        responses={200: TraitCrossingResultSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        from actions.definitions.trait_crossing import (  # noqa: PLC0415
+            ResolveTraitCrossingOfferAction,
+        )
+        from world.magic.models.trait_crossing import (  # noqa: PLC0415
+            PendingTraitCrossingOffer,
+            TraitCrossingOption,
+        )
+
+        serializer = TraitCrossingRespondSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        offer_id = serializer.validated_data["offer_id"]
+        option_id = serializer.validated_data["option_id"]
+
+        sheets = CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=request.user,
+            roster_entry__tenures__end_date__isnull=True,
+        )
+        offer = get_object_or_404(PendingTraitCrossingOffer, pk=offer_id, thread__owner__in=sheets)
+        option = get_object_or_404(TraitCrossingOption, pk=option_id)
+
+        actor = offer.thread.owner.character
+        result = ResolveTraitCrossingOfferAction().run(actor=actor, offer=offer, option=option)
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        crossing_result = result.data["trait_crossing_result"]
+        return Response(TraitCrossingResultSerializer(crossing_result).data)
 
 
 # =============================================================================

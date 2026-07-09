@@ -68,6 +68,8 @@ from world.magic.models import (
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
+    TraitCrossingChoice,
+    TraitCrossingOption,
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag, DramaticMomentType
 
@@ -969,3 +971,39 @@ class SignatureMotifBonusAdmin(admin.ModelAdmin):
         SignatureMotifBonusDamageProfileInline,
         SignatureMotifBonusAppliedConditionInline,
     ]
+
+
+# =============================================================================
+# Trait crossing admin (#1989)
+# =============================================================================
+
+
+@admin.register(TraitCrossingOption)
+class TraitCrossingOptionAdmin(admin.ModelAdmin):
+    """Admin for the authored trait crossing option catalog."""
+
+    list_display = (
+        "name",
+        "resonance",
+        "crossing_level",
+        "effect_kind",
+        "is_default",
+    )
+    list_filter = ("effect_kind", "is_default", "crossing_level")
+    search_fields = ("name", "description")
+    autocomplete_fields = ("resonance", "capability_grant", "discovery_achievement", "codex_entry")
+
+
+@admin.register(TraitCrossingChoice)
+class TraitCrossingChoiceAdmin(admin.ModelAdmin):
+    """Read-only admin for trait crossing choice receipts (provenance audit)."""
+
+    list_display = ("thread", "crossing_level", "option", "chosen_at")
+    list_filter = ("crossing_level",)
+    readonly_fields = ("thread", "crossing_level", "option", "chosen_at")
+
+    def has_add_permission(self, request):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False

@@ -126,6 +126,7 @@ from commands.social.soul_tether import CmdSineater, CmdTether
 from commands.social.tidings import CmdTidings
 from commands.story import CmdStory
 from commands.technique import CmdTechnique
+from commands.trait_crossing import CmdTraitCrossing
 from commands.weather import CmdTime
 from commands.weave import CmdWeaveThread
 from commands.where import CmdWhere
@@ -212,6 +213,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdMageScar,
             CmdEnter,
             CmdFlourish,
+            CmdTraitCrossing,
             CmdEndorse,
             CmdPoses,
             CmdReact,
