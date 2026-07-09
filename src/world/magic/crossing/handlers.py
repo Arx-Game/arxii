@@ -432,11 +432,17 @@ class RelationshipCapstoneCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.RELATIONSHIP_CAPSTONE
 
 
-class MantleCrossingHandler(_StubCrossingHandler):
-    """MANTLE thread crossing — stub (#1992)."""
+class MantleCrossingHandler(_CrossingChoiceHandler):
+    """MANTLE thread crossing — player-chosen mantle personalization.
+
+    At each crossing level (3, 6, 11, 16, 21), creates a PendingCrossingOffer
+    for the player to choose how the mantle's power reshapes to match their
+    resonance. The chosen buff is always-on (the thread IS the attunement bond
+    — not wear-gated like FACET). Skipped lower crossings are auto-resolved
+    with the is_default option.
+    """
 
     target_kind = TargetKind.MANTLE
-    _subissue = "#1992"
 
 
 class SanctumCrossingHandler(_StubCrossingHandler):

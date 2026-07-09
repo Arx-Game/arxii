@@ -814,3 +814,67 @@ class MantleAnchorLabelTests(TestCase):
 
         label = _anchor_label_for(self.thread)
         self.assertEqual(label, "Dawnbringer")
+
+
+class MantleCrossingHandlerTests(TestCase):
+    """MANTLE thread crossing creates offers + auto-resolves skipped levels."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+
+        cls.character_obj = CharacterFactory(db_key="MantleCrossingChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+        cls.resonance = ResonanceFactory()
+        cls.mantle = MantleFactory(name="MantleCrossingMantle")
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            level=2,
+            target_kind=TargetKind.MANTLE,
+            target_mantle=cls.mantle,
+            target_trait=None,
+        )
+
+    def test_single_crossing_creates_offer(self) -> None:
+        """Imbue 2->3 creates a PendingCrossingOffer for level 3."""
+        from unittest.mock import patch
+
+        from world.magic.crossing.handlers import MantleCrossingHandler
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        self.thread.level = 3
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
+            handler = MantleCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+        self.assertTrue(
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+
+    def test_multi_crossing_auto_resolves_and_creates_offer(self) -> None:
+        """Imbue 2->11 auto-resolves levels 3+6, creates offer for 11."""
+        from unittest.mock import patch
+
+        from world.magic.crossing.handlers import MantleCrossingHandler
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        self.thread.level = 11
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
+            handler = MantleCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+        self.assertTrue(
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+        )
+
+    def test_no_op_when_no_level_gain(self) -> None:
+        """If new_level <= starting_level, nothing happens."""
+        from world.magic.crossing.handlers import MantleCrossingHandler
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        handler = MantleCrossingHandler()
+        handler.execute(thread=self.thread, starting_level=3, new_level=3)
+        self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
