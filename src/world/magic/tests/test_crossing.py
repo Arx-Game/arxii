@@ -778,3 +778,39 @@ class AnchorLabelTests(TestCase):
         self.assertIn("capstone", label)
         cap = self.capstone_thread.target_capstone
         self.assertIn(cap.title, label)
+
+
+# ---------------------------------------------------------------------------
+# MANTLE crossing tests (#1992)
+# ---------------------------------------------------------------------------
+
+
+class MantleAnchorLabelTests(TestCase):
+    """_anchor_label_for returns the mantle name for MANTLE threads."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+
+        cls.character_obj = CharacterFactory(db_key="MantleAnchorChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+        cls.resonance = ResonanceFactory()
+        cls.mantle = MantleFactory(name="Dawnbringer")
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            level=3,
+            target_kind=TargetKind.MANTLE,
+            target_mantle=cls.mantle,
+            target_trait=None,
+        )
+
+    def test_mantle_anchor_label_returns_mantle_name(self) -> None:
+        from world.magic.crossing.handlers import _anchor_label_for
+
+        label = _anchor_label_for(self.thread)
+        self.assertEqual(label, "Dawnbringer")

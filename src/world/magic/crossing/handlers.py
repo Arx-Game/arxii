@@ -349,6 +349,8 @@ def _anchor_label_for(thread: Thread) -> str:
         if cap is not None:
             partner_name = cap.relationship.target.character.db_key
             return f"capstone '{cap.title}' with {partner_name}"
+    if kind == TargetKind.MANTLE and thread.target_mantle is not None:
+        return thread.target_mantle.name
     return fallback
 
 
