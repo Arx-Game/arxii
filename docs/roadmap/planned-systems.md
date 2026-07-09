@@ -112,8 +112,10 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 
 - **Spell system** — learnable, path-independent magic usable by quiescent characters. No `Spell`
   model. `intent` (character-progression.md, magic glossary).
-- **Post-CG Gift acquisition** — gain a new Gift in play; today `CharacterGift` is created only at CG
-  finalize, so magic freezes after creation. `intent`.
+- ✅ **Post-CG Gift acquisition** — LANDED via two paths: path-crossing grant (`grant_path_magic`,
+  #1579) and the player-facing XP-buy/teaching-offer surface (`PurchaseGiftUnlockAction` +
+  `AcceptTechniqueOfferAction`, telnet `learn`, web `/api/magic/gift-unlocks/purchase/` +
+  `/api/magic/technique-offers/accept/`, #2116). See `player-capability-ledger.md`.
 - **Trainer system** — find trainers, costs, tiers. `intent`.
 - **Path discovery / research / switching** — beyond listing next options. `intent`.
 - **Resonance→aspect mapping** so path investment rewards magic checks (placeholder `Arcana` today). #1363, `partial`.

@@ -144,6 +144,7 @@ treat those names as hints to confirm, not gospel.
 - [0051 — Gift strength comes from the thread woven into it (the costliest thread kind)](0051-gift-strength-comes-from-the-woven-thread.md)
 - [0052 — A gift's resonance is the resonance of its woven thread](0052-gift-resonance-is-the-woven-threads-resonance.md)
 - [0053 — XP buys unlocks that gate acquisition, never grant it](0053-xp-buys-unlocks-that-gate-never-grant.md)
+- [0109 — XP unlocks, never grants — major acquisitions stack gates, all required](0109-xp-unlocks-never-grants-gates-stack.md)
 - [0054 — Falling gains power; redemption is lossy (asymmetric resonance conversion)](0054-falling-gains-power-redemption-is-lossy.md)
 - [0055 — One specialization engine: resonance × entity → customized techniques (Gift, Path, Covenant Role)](0055-one-specialization-engine-resonance-times-entity.md)
 - [0056 — Technique-threads are an optional "signature" axis, distinct from the gift-thread](0056-technique-threads-are-an-optional-signature-axis.md)

@@ -19,7 +19,7 @@ from world.classes.models import PathStage
 from world.magic.factories import RitualOfTheDuranceFactory
 from world.magic.services.sessions import accept_session, draft_session, fire_session
 from world.progression.models import CharacterPathHistory
-from world.progression.models.unlocks import ClassLevelUnlock
+from world.progression.models.unlocks import CharacterUnlock, ClassLevelUnlock
 from world.scenes.factories import SceneFactory
 
 _CHECK = "world.progression.services.spends.check_requirements_for_unlock"
@@ -46,6 +46,11 @@ class DuranceWitnessTests(TestCase):
         )
         CharacterPathHistory.objects.create(character=self.inductee.character, path=self.path)
         ClassLevelUnlock.objects.create(character_class=self.cls, target_level=3)
+        CharacterUnlock.objects.create(
+            character=self.inductee.character,
+            character_class=self.cls,
+            target_level=3,
+        )
         # Witness friend, co-located, posing into the active scene.
         self.friend = CharacterSheetFactory()
         self.friend.character.location = self.inductee.character.location

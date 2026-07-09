@@ -25,7 +25,7 @@ from world.classes.models import PathStage
 from world.progression.exceptions import NoDuranceSiteError
 from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import PathIntent
-from world.progression.models.unlocks import ClassLevelUnlock
+from world.progression.models.unlocks import CharacterUnlock, ClassLevelUnlock
 
 _CHECK_PATH = "world.progression.services.spends.check_requirements_for_unlock"
 
@@ -114,6 +114,63 @@ class DuranceStatusHubTests(TestCase):
             msgs = _run(CmdDurance, self.char)
         combined = "\n".join(msgs)
         self.assertIn("No path intent", combined)
+
+
+class DuranceXPUnlockReadinessLineTests(TestCase):
+    """The XP-unlock readiness line (#2116) — purchased vs. not-purchased."""
+
+    def setUp(self) -> None:
+        self.path = PathFactory(stage=PathStage.PROSPECT)
+        self.char = CharacterFactory(db_key="UnlockLineChar")
+        self.sheet = CharacterSheetFactory(character=self.char)
+        self.char_class = CharacterClassFactory()
+        CharacterClassLevelFactory(
+            character=self.char,
+            character_class=self.char_class,
+            level=2,
+            is_primary=True,
+        )
+        CharacterPathHistoryFactory(character=self.char, path=self.path)
+        self.unlock = ClassLevelUnlock.objects.create(
+            character_class=self.char_class,
+            target_level=3,
+        )
+
+    def test_shows_not_purchased_with_cost(self) -> None:
+        with patch(_CHECK_PATH, return_value=(True, [])):
+            msgs = _run(CmdDurance, self.char)
+        combined = "\n".join(msgs)
+        self.assertIn("XP unlock: not purchased (cost 0).", combined)
+
+    def test_shows_purchased_when_receipt_exists(self) -> None:
+        CharacterUnlock.objects.create(
+            character=self.char,
+            character_class=self.char_class,
+            target_level=3,
+        )
+        with patch(_CHECK_PATH, return_value=(True, [])):
+            msgs = _run(CmdDurance, self.char)
+        combined = "\n".join(msgs)
+        self.assertIn("XP unlock: purchased.", combined)
+        self.assertNotIn("not purchased", combined)
+
+    def test_ready_message_requires_both_gates(self) -> None:
+        """met=True alone is not enough — purchase is also required for 'ready to advance'."""
+        with patch(_CHECK_PATH, return_value=(True, [])):
+            msgs_unpurchased = _run(CmdDurance, self.char)
+        combined_unpurchased = "\n".join(msgs_unpurchased)
+        self.assertNotIn("You are ready to advance", combined_unpurchased)
+
+        CharacterUnlock.objects.create(
+            character=self.char,
+            character_class=self.char_class,
+            target_level=3,
+        )
+        self.char.msg = None  # reset caller.msg mock via a fresh _run
+        with patch(_CHECK_PATH, return_value=(True, [])):
+            msgs_purchased = _run(CmdDurance, self.char)
+        combined_purchased = "\n".join(msgs_purchased)
+        self.assertIn("You are ready to advance to level 3.", combined_purchased)
 
 
 class DuranceTierBoundaryTests(TestCase):

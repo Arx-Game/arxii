@@ -605,7 +605,20 @@ actions, backends, and service functions.
   class-level and thread XP-lock unlocks from the same read services the web unlock shop uses;
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare
-  one-word key collisions.
+  one-word key collisions. **Note (#2116):** `progression unlock class=<id>` is now a real
+  precondition of the Durance advance — `advance_class_level_via_session`/
+  `convene_durance_at_site` additionally require the purchased `CharacterUnlock` receipt
+  alongside `check_requirements_for_unlock`; see `world/progression/CLAUDE.md`'s multi-gate rule.
+- **`gift_learning.py`**: `CmdLearn` (`learn`, #2116) — the gift/technique/thread-weaving
+  acquisition namespace. One `DispatchCommand` routes a leading subverb (`gift <id>` /
+  `technique <id>` / `thread <id>`) through `dispatch_player_action` — the same seam the web
+  endpoints use — reaching the three Actions in `actions/definitions/gift_acquisition.py`.
+  Bare `learn`/`learn status` shows a hub: open `GiftUnlock` rows (XP cost + purchased/missing)
+  and open teaching offers (pitch/cost/teacher) for both techniques and thread-weaving. Wires
+  the previously-unreachable `spend_xp_on_gift_unlock`/`accept_technique_offer` services
+  (`world.magic.services.gift_acquisition`) to a player-facing surface, and gives
+  `accept_thread_weaving_unlock` telnet parity with its pre-existing web endpoint. No business
+  logic in the command.
 - **`journals.py`**: `CmdJournal` (`journal`, #1350) — the journal authoring namespace. One
   `ArxCommand` routes a leading subverb (`journal write title=<text> body=<text> [public]
   [tags=a,b,c]` / `respond <id|#> type=praise|retort ...` / `edit <id|#> ...`) to the same

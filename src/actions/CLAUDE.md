@@ -165,6 +165,19 @@ They do not use the command system, dispatchers, or handlers.
   (resolves `RoomProfile` from an Evennia location). Shared by telnet `CmdSanctum` and the
   web `SanctumViewSet` (`world/magic/views_sanctum.py`), which now dispatches all 7 ops
   through `Action().run(actor=request.user.puppet, ...)` (#1497).
+  `gift_acquisition.py` (#2116) — 3 REGISTRY actions, all `target_type=SELF`,
+  `category="magic"`, thin wrappers over previously-uncalled acquisition services:
+  `PurchaseGiftUnlockAction` (key `"purchase_gift_unlock"`, kwargs `gift_unlock_id` +
+  optional `teacher_tenure_id`; wraps `spend_xp_on_gift_unlock` — the XP gate, does not
+  acquire the gift), `AcceptTechniqueOfferAction` (`"accept_technique_offer"`, kwarg
+  `offer_id`; wraps `accept_technique_offer` — the acquisition step, implicitly acquires
+  the gift on the first technique learned from it), `AcceptThreadWeavingOfferAction`
+  (`"accept_thread_weaving_offer"`, kwarg `offer_id`; wraps the pre-existing
+  `accept_thread_weaving_unlock`, giving it telnet parity — the web
+  `ThreadWeavingTeachingOfferViewSet.accept` now dispatches through this same Action
+  instead of calling the service directly). Shared by telnet `CmdLearn`
+  (`commands/gift_learning.py`) and two new web endpoints (`POST
+  /api/magic/gift-unlocks/purchase/`, `POST /api/magic/technique-offers/accept/`).
   `battles.py` (#1592/#1710/#1712/#1713) — four REGISTRY actions, all `category="battle"`:
   `BeginBattleRoundAction` (key `"begin_battle_round"`, `target_type=AREA`, GM/staff),
   `ResolveBattleRoundAction` (`"resolve_battle_round"`, `target_type=AREA`, GM/staff;

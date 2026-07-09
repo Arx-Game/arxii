@@ -9132,6 +9132,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/gift-unlocks/purchase/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch PurchaseGiftUnlockAction; return the receipt ids. */
+    post: operations['magic_gift_unlocks_purchase_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/gifts/': {
     parameters: {
       query?: never;
@@ -10376,6 +10393,23 @@ export interface paths {
      *     ``learner_sheet_id`` to identify which character is learning.
      */
     post: operations['magic_teaching_offers_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/technique-offers/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch AcceptTechniqueOfferAction; return the minted ids. */
+    post: operations['magic_technique_offers_accept_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -17068,6 +17102,16 @@ export interface components {
       id: number;
       unlock_id: number;
       xp_spent: number;
+    };
+    /** @description Request shape for POST /api/magic/technique-offers/accept/. */
+    AcceptTechniqueOfferRequestRequest: {
+      offer_id: number;
+      learner_sheet_id?: number | null;
+    };
+    AcceptTechniqueOfferResponse: {
+      offer_id: number;
+      character_technique_id: number;
+      technique_id: number;
     };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
@@ -28790,6 +28834,16 @@ export interface components {
       anchors_in_play?: number[];
       combat_encounter_id?: number | null;
       target_persona_id?: number | null;
+    };
+    /** @description Request shape for POST /api/magic/gift-unlocks/purchase/. */
+    PurchaseGiftUnlockRequestRequest: {
+      gift_unlock_id: number;
+      teacher_tenure_id?: number | null;
+      learner_sheet_id?: number | null;
+    };
+    PurchaseGiftUnlockResponse: {
+      gift_unlock_id: number;
+      receipt_id: number;
     };
     /** @description Input serializer for purchasing a progression unlock. */
     PurchaseUnlockRequest: {
@@ -44976,6 +45030,29 @@ export interface operations {
       };
     };
   };
+  magic_gift_unlocks_purchase_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PurchaseGiftUnlockRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PurchaseGiftUnlockResponse'];
+        };
+      };
+    };
+  };
   magic_gifts_list: {
     parameters: {
       query?: {
@@ -46331,6 +46408,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AcceptTeachingOfferResponse'];
+        };
+      };
+    };
+  };
+  magic_technique_offers_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AcceptTechniqueOfferRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptTechniqueOfferResponse'];
         };
       };
     };

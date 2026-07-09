@@ -1003,7 +1003,9 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `MultiClassRequirement` — multiple class levels
   - `TierRequirement` — tier 1 vs tier 2
   - `AchievementRequirement` — checks `CharacterAchievement` for a granted `Achievement`
-  - `RelationshipRequirement` — **stub**, always returns False
+  - `RelationshipRequirement` — counts the character's own qualifying `RelationshipTrackProgress`
+    rows (tier >= `minimum_tier`, optionally narrowed to `required_track_kind`) against
+    `minimum_count` (#2116)
   - `ItemRequirement` — possession-only check of a physical touchstone/trophy item, template or touchstone mode (#1859)
 - **Key Functions:**
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
@@ -1041,7 +1043,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `assert_can_officiate(*, officiant_sheet, inductee_sheet, target_level) -> None` — raises `OfficiantIneligibleError` when level gate or Path-lineage gate fails.
   - `advance_class_level_via_session(*, session) -> list[ClassLevelAdvancement]` — `fire_session` dispatch target for the Ritual of the Durance; advances each ACCEPTED inductee, posts their testament pose, records witnesses, writes receipts.
   - `convene_durance_at_site(*, inductee_sheet, room) -> RitualSession` (#1700) — drafts a Durance session using the room's `DuranceTrainingSite` trainer as initiator; raises `NoDuranceSiteError` when no eligible site is present.
-- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `OfficiantIneligibleError`, `NoDuranceSiteError` (#1700) — all carry `user_message`.
+- **Advancement exceptions (`exceptions.py`):** `ClassLevelAdvancementError` (base), `TierBoundaryRequiresCrossing`, `AdvancementRequirementsNotMet`, `AdvancementUnlockNotPurchasedError` (#2116 — missing `CharacterUnlock` purchase, an additional gate stacked alongside `AdvancementRequirementsNotMet`), `OfficiantIneligibleError`, `NoDuranceSiteError` (#1700) — all carry `user_message`.
 - **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
 - **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards), magic (Audere Majora offer pre-selects from `PathIntent.intended_path_id` via `get_intended_path_id` on `PendingAudereMajoraOfferSerializer`; `advance_class_level_via_session` dispatched from `fire_session` on the Ritual of the Durance; `AudereMajoraCrossing` inherits `AbstractClassLevelAdvancement`), scenes (good-sport kudos accrued at consent; weekly grant via game-clock rollover)
 - **Source:** `src/world/progression/`

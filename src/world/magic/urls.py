@@ -11,6 +11,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
+    AcceptTechniqueOfferView,
     ApplicablePullsView,
     AudereMajoraRespondView,
     AudereRespondView,
@@ -34,6 +35,7 @@ from world.magic.views import (
     PendingEntryFlourishOfferViewSet,
     PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
+    PurchaseGiftUnlockView,
     ResonanceGrantViewSet,
     RestrictionViewSet,
     RitualPerformView,
@@ -316,6 +318,17 @@ urlpatterns = [
         "crossing/respond/",
         CrossingRespondView.as_view(),
         name="crossing-respond",
+    ),
+    # #2116 — Gift/technique acquisition surface.
+    path(
+        "gift-unlocks/purchase/",
+        PurchaseGiftUnlockView.as_view(),
+        name="gift-unlock-purchase",
+    ),
+    path(
+        "technique-offers/accept/",
+        AcceptTechniqueOfferView.as_view(),
+        name="technique-offer-accept",
     ),
     *router.urls,
 ]

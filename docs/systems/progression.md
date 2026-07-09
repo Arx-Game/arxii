@@ -86,7 +86,7 @@ All requirements inherit from `AbstractClassLevelRequirement` which provides `de
 | `MultiClassRequirement` | Multiple classes at specific levels (via `MultiClassLevel` through model) | `required_classes`, `description_override` |
 | `TierRequirement` | Character has reached a specific tier | `minimum_tier` (1 for levels 1-5, 2 for 6-10) |
 | `AchievementRequirement` | Character has been granted a specific Achievement | `achievement` (FK `achievements.Achievement`) |
-| `RelationshipRequirement` | Character relationship level | `relationship_target`, `minimum_level` |
+| `RelationshipRequirement` | Character's own relationship-track tier count (#2116) | `required_track_kind` (nullable FK `relationships.RelationshipTrack`, null = any track), `minimum_tier`, `minimum_count` (default 1) |
 | `ItemRequirement` | Possesses a physical touchstone/trophy item (#1859) | `item_template` XOR `min_touchstone_tier` (FK `magic.ResonanceTier`), `quantity`, `min_quality_tier` — possession-only, not consumed |
 
 ### Class-Level Advancement Receipts (#1352)
@@ -135,6 +135,7 @@ All carry a `user_message` attribute for safe API responses (no `str(exc)` in vi
 | `ClassLevelAdvancementError` | Base class for all advancement failures |
 | `TierBoundaryRequiresCrossing` | The step would cross a tier boundary; must use Audere Majora instead |
 | `AdvancementRequirementsNotMet` | Authored `ClassLevelUnlock` requirements not met; `.failed: list[str]` carries the failed requirement descriptions |
+| `AdvancementUnlockNotPurchasedError` | The `CharacterUnlock` XP purchase for this class/target_level is missing (#2116) — an additional gate stacked alongside `AdvancementRequirementsNotMet`, never a substitute |
 | `OfficiantIneligibleError` | Officiant level ≤ target level or wrong Path lineage |
 | `NoDuranceSiteError` | `convene_durance_at_site` — no active `DuranceTrainingSite` with an eligible trainer in the room |
 
@@ -327,10 +328,19 @@ receipts = advance_class_level_via_session(session=locked_ritual_session)
 2. Refuse a tier boundary (`TierBoundaryRequiresCrossing`) if an `AudereMajoraThreshold` row exists at `level_before`.
 3. Officiant guard (`assert_can_officiate`).
 4. Resolve authored `ClassLevelUnlock`; check requirements (`AdvancementRequirementsNotMet` when absent or unmet).
+4b. **Multi-gate rule (#2116):** require the purchased XP unlock (a `CharacterUnlock` receipt
+    for this exact class/target_level, bought via `progression unlock class=<id>`) —
+    `AdvancementUnlockNotPurchasedError` (names the unlock + its XP cost) when missing. This is
+    an *additional*, independently-required gate stacked alongside step 4's requirements, never
+    a substitute — see ADR "XP unlocks, never grants — major acquisitions stack gates."
 5. Post the testament oration (+ cited deeds) as a POSE in the active scene.
 6. Apply the level write and create the `ClassLevelAdvancement` receipt.
 7. Record scene witnesses (`_record_witnesses`) into `receipt.witnesses` via `scene_witness_personas`,
    excluding inductee + officiant.
+
+`convene_durance_at_site` pre-checks the same two gates (requirements + purchase) up front so a
+doomed session is never drafted. `durance status` (telnet) surfaces both: the requirements-met
+line and an "XP unlock: purchased / not purchased (cost N)" line.
 
 ### Site-Convened Sessions (#1700)
 
