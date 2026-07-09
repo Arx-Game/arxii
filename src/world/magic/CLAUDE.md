@@ -449,6 +449,19 @@ Two composition invariants are tested in `mechanics/tests/test_aesthetic_composi
 **Admin authoring surface:** Standalone `MotifResonanceAdmin` (in `world/magic/admin.py`)
 with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on `ItemInstance`.
 
+**Player-facing style-binding REST surface (#2030):** `MotifStyleViewSet`
+(`views_motif_style.py`) — `list`/`bind`/`unbind` dispatch `ListMotifStylesAction` /
+`BindMotifStyleAction` / `UnbindMotifStyleAction` (`actions/definitions/motif_style.py`),
+which call through to `bind_motif_style`/`unbind_motif_style`/`motif_style_bindings`
+(`services/motif_style.py`). **Character scoping:** an `X-Character-ID` header is
+resolved via `web.api.mixins.CharacterContextMixin` (validated as owned by the
+requesting account) ahead of the caller's active puppet — the same header/ownership
+contract `PathIntentViewSet`/`CharacterGoalViewSet` use. This lets a player view/act
+on a specific owned character's bindings rather than always defaulting to whichever
+character they currently puppet; a header naming an unowned character 404s rather
+than silently falling back to the puppet. No header at all preserves the original
+puppet-only resolution.
+
 ### Thread System (Resonance Pivot Spec A)
 
 **Authored catalogs (lookup, SharedMemoryModel):**

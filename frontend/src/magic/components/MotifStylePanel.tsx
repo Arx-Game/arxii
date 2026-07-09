@@ -59,7 +59,8 @@ function groupByResonance(
 }
 
 export function MotifStylePanel({ characterSheetId }: Props) {
-  const { data: bindingsData, isLoading: bindingsLoading } = useMotifStyleBindings();
+  const { data: bindingsData, isLoading: bindingsLoading } =
+    useMotifStyleBindings(characterSheetId);
   const { data: catalogData, isLoading: catalogLoading } = useStyleCatalog();
   const { data: resonances = [], isLoading: resonancesLoading } =
     useCharacterResonances(characterSheetId);

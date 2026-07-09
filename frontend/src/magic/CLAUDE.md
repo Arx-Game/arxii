@@ -168,13 +168,24 @@ response body" for them — `MotifStyleBindingsResponse` / `BindMotifStyleReques
 dicts instead. `GET /api/items/styles/` IS a generated `ReadOnlyModelViewSet`
 (`items` app), so `PaginatedStyleList`/`StyleCatalogEntry` are re-exported cleanly.
 
-- `getMotifStyleBindings()` — GET `/api/magic/motif-styles/` → `MotifStyleBindingsResponse`
-  (`{ bindings: MotifStyleBinding[] }`)
-- `bindMotifStyle(body)` — POST `/api/magic/motif-styles/bind/`, body
-  `{ style_id, resonance_id }`. 400s (audacity cap exceeded, unclaimed resonance,
-  unknown style) carry a `{detail}` string via `readErrorDetail`.
-- `unbindMotifStyle(body)` — POST `/api/magic/motif-styles/unbind/`, body
-  `{ style_id }`. 400 (style not bound) carries a `{detail}` string.
+**Cross-character scoping (#2030 review fix):** all three functions take a
+`characterId` and send it as the `X-Character-ID` header — same mechanism as
+`getPathIntent`/`putPathIntent` below. The backend (`MotifStyleViewSet`) resolves
+that header (validated as owned via `CharacterContextMixin`) ahead of the caller's
+active puppet, so viewing a non-puppeted alt's sheet reads/writes THAT alt's
+bindings, not the puppet's. Falls back to the active puppet when the header is
+omitted; a header naming an unowned character 404s rather than silently acting
+as the puppet.
+
+- `getMotifStyleBindings(characterId)` — GET `/api/magic/motif-styles/`
+  (`X-Character-ID` header) → `MotifStyleBindingsResponse` (`{ bindings: MotifStyleBinding[] }`)
+- `bindMotifStyle(characterId, body)` — POST `/api/magic/motif-styles/bind/`
+  (`X-Character-ID` header), body `{ style_id, resonance_id }`. 400s (audacity cap
+  exceeded, unclaimed resonance, unknown style) carry a `{detail}` string via
+  `readErrorDetail`.
+- `unbindMotifStyle(characterId, body)` — POST `/api/magic/motif-styles/unbind/`
+  (`X-Character-ID` header), body `{ style_id }`. 400 (style not bound) carries a
+  `{detail}` string.
 - `getStyleCatalog()` — GET `/api/items/styles/` → `PaginatedStyleList`. Paginated
   (page_size=50, `ItemTemplatePagination`); the bind form only fetches the first
   page for the current catalog size — revisit if the catalog grows past 50 rows.
@@ -199,7 +210,7 @@ React Query hooks with a `magicKeys` query key factory.
 - `magicKeys.teachingOffers()` → `['magic', 'teaching-offers', 'list']`
 - `magicKeys.pathOptions(characterId)` → `['magic', 'path-options', characterId]`
 - `magicKeys.pathIntent(characterId)` → `['magic', 'path-intent', characterId]`
-- `magicKeys.motifStyleBindings()` → `['magic', 'motif-styles', 'bindings']`
+- `magicKeys.motifStyleBindings(characterId)` → `['magic', 'motif-styles', 'bindings', characterId]`
 - `magicKeys.styleCatalog()` → `['magic', 'motif-styles', 'catalog']`
 
 **Alteration read hooks:**
@@ -224,8 +235,9 @@ React Query hooks with a `magicKeys` query key factory.
 - `usePathIntent(characterId)` — GET `/api/progression/path-intent/`; disabled when `characterId ≤ 0`
 - `useNextPathOptions(characterId)` — GET `/api/progression/path-options/`; returns `PathOptions`
   (current path + active next-stage children); disabled when `characterId ≤ 0`
-- `useMotifStyleBindings()` — GET `/api/magic/motif-styles/`; the acting character's
-  current Style bindings
+- `useMotifStyleBindings(characterId)` — GET `/api/magic/motif-styles/`
+  (`X-Character-ID` header); the given character's current Style bindings; disabled
+  when `characterId ≤ 0`
 - `useStyleCatalog()` — GET `/api/items/styles/`; the Style catalog for the bind form's picker
 
 **Mutation hooks:**
@@ -248,8 +260,10 @@ React Query hooks with a `magicKeys` query key factory.
   invalidates `pathIntent(characterId)` on success
 - `useClearPathIntent()` — takes `characterId`; calls `api.deletePathIntent`;
   invalidates `pathIntent(characterId)` on success
-- `useBindMotifStyle(characterSheetId)` / `useUnbindMotifStyle(characterSheetId)` — both
-  invalidate `motifStyleBindings()` plus the character-sheet query
+- `useBindMotifStyle(characterSheetId)` / `useUnbindMotifStyle(characterSheetId)` — call
+  `api.bindMotifStyle`/`api.unbindMotifStyle` with `characterSheetId` (backs the
+  `X-Character-ID` header, scoping the mutation to that character); both invalidate
+  `motifStyleBindings(characterSheetId)` plus the character-sheet query
   (`['character-sheets', characterSheetId]`, per `character_sheets/queries.ts`'
   `useCharacterSheetQuery`) — the sheet's `magic.motif.resonances[*].styles` mirrors
   the same bindings
@@ -265,7 +279,9 @@ Covers: `useSoulTetherDetail`, `usePendingSineatingOffers`, `usePendingStageAdva
 `useThreads`, `useCharacterResonances`, `useDissolveSoulTether`, `useRespondToSineating`,
 `useThreadHubSummary`, `useThread`, `useTeachingOffers`, `useWeaveThread`,
 `usePatchThreadNarrative`, `useRetireThread`, `useImbueThread`, `useCrossXPLock`,
-`useAcceptTeachingOffer`, and `magicKeys` shape assertions.
+`useAcceptTeachingOffer`, `useNextPathOptions`, `useMotifStyleBindings`/
+`useBindMotifStyle`/`useUnbindMotifStyle` (character-id threading into the api call +
+query key, #2030 review fix), and `magicKeys` shape assertions.
 
 The imbue tests call `__resetImbuingRitualIdCacheForTests()` in `beforeEach`.
 
@@ -406,10 +422,14 @@ Clear calls `deletePathIntent(characterId)` and shows "declared" badge.
 ### `components/MotifStylePanel.tsx` (#2030)
 
 Card rendered in `SpellbookTab.tsx` (#1446, this module), own-view only,
-below the read-only Motif card. Lists the character's current `MotifStyleBinding`s
-grouped by resonance (`data-testid="motif-style-group-{resonance_id}"`), each with an
-"Unbind" button (`useUnbindMotifStyle`). A bind form (native `<select>`s — a style
-from `useStyleCatalog`, a resonance from `useCharacterResonances`) submits via
+below the read-only Motif card. Lists the current `MotifStyleBinding`s of the
+character named by `characterSheetId` (passed to `useMotifStyleBindings`, plus
+`useBindMotifStyle`/`useUnbindMotifStyle` — all three thread it into the
+`X-Character-ID` header so the panel reads/writes THAT character's bindings even
+when it isn't the account's active puppet, #2030 review fix) grouped by resonance
+(`data-testid="motif-style-group-{resonance_id}"`), each with an "Unbind" button
+(`useUnbindMotifStyle`). A bind form (native `<select>`s — a style from
+`useStyleCatalog`, a resonance from `useCharacterResonances`) submits via
 `useBindMotifStyle`; the Bind button stays disabled until both are chosen. Always
 renders (never gated to a "nothing to see" empty div) — when the character has no
 claimed resonances the form area explains "Claim a resonance first…"
@@ -420,11 +440,13 @@ bound) surface via each mutation's `.error.message`
 
 ### `components/MotifStylePanel.test.tsx` (#2030)
 
-8 unit tests (mocks `../queries`, no msw — mirrors `SineatingRequestDialog.test.tsx`'s
+9 unit tests (mocks `../queries`, no msw — mirrors `SineatingRequestDialog.test.tsx`'s
 idiom). Covers: bindings grouped by resonance; empty-bindings message; unbind fires
 `{ style_id }`; bind form submits `{ style_id, resonance_id }`; Bind stays disabled
 until both selects have a value; "claim a resonance first" empty state (and no
-selects rendered); the bind and unbind mutations' 400 `detail` messages both render.
+selects rendered); the bind and unbind mutations' 400 `detail` messages both render;
+`useMotifStyleBindings`/`useBindMotifStyle`/`useUnbindMotifStyle` are all called with
+`characterSheetId` (cross-character scoping, #2030 review fix).
 
 ## Data Flow
 

@@ -7,6 +7,8 @@ Exercises the endpoints the way the web frontend hits them:
   • no puppet → 400 "No active character."
   • bad style_id / bad resonance_id → 400 with detail
   • bind to an unclaimed resonance → 400 with the service ``user_message``
+  • X-Character-ID header scopes to that (owned, non-puppeted) character
+  • X-Character-ID naming an unowned character → 404, no puppet fallback
 
 Mirrors ``world/magic/tests/test_signature_viewset.py`` — real Actions run
 against real service-layer state (nothing mocked).
@@ -27,19 +29,33 @@ from world.magic.models import MotifResonanceStyle
 from world.magic.views_motif_style import MotifStyleViewSet
 
 
-def _actor_user(character):
-    """Fake authenticated user whose ``puppet`` is ``character``."""
+def _actor_user(character, *, available_characters=None):
+    """Fake authenticated user whose ``puppet`` is ``character``.
+
+    ``available_characters`` backs ``get_available_characters()`` — the
+    ownership check ``CharacterContextMixin._get_character`` runs against an
+    ``X-Character-ID`` header. Defaults to ``[character]`` (the puppet owns
+    itself) when not given.
+    """
+    owned = available_characters if available_characters is not None else [character]
     return SimpleNamespace(
         is_authenticated=True,
         is_staff=False,
         pk=character.db_account_id,
         puppet=character,
+        get_available_characters=lambda: owned,
     )
 
 
-def _no_puppet_user():
+def _no_puppet_user(*, available_characters=None):
     """Fake authenticated user with no puppet — actor cannot be resolved."""
-    return SimpleNamespace(is_authenticated=True, is_staff=False, pk=None, puppet=None)
+    return SimpleNamespace(
+        is_authenticated=True,
+        is_staff=False,
+        pk=None,
+        puppet=None,
+        get_available_characters=lambda: available_characters or [],
+    )
 
 
 class MotifStyleViewSetTestBase(TestCase):
@@ -61,20 +77,27 @@ class MotifStyleViewSetTestBase(TestCase):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _get_list(self, puppet):
-        request = self.factory.get("/api/magic/motif-styles/")
+    def _get_list(self, puppet, *, character_id=None):
+        extra = {"HTTP_X_CHARACTER_ID": str(character_id)} if character_id is not None else {}
+        request = self.factory.get("/api/magic/motif-styles/", **extra)
         force_authenticate(request, user=puppet)
         view = MotifStyleViewSet.as_view({"get": "list"})
         return view(request)
 
-    def _post_bind(self, puppet, payload):
-        request = self.factory.post("/api/magic/motif-styles/bind/", payload, format="json")
+    def _post_bind(self, puppet, payload, *, character_id=None):
+        extra = {"HTTP_X_CHARACTER_ID": str(character_id)} if character_id is not None else {}
+        request = self.factory.post(
+            "/api/magic/motif-styles/bind/", payload, format="json", **extra
+        )
         force_authenticate(request, user=puppet)
         view = MotifStyleViewSet.as_view({"post": "bind"})
         return view(request)
 
-    def _post_unbind(self, puppet, payload):
-        request = self.factory.post("/api/magic/motif-styles/unbind/", payload, format="json")
+    def _post_unbind(self, puppet, payload, *, character_id=None):
+        extra = {"HTTP_X_CHARACTER_ID": str(character_id)} if character_id is not None else {}
+        request = self.factory.post(
+            "/api/magic/motif-styles/unbind/", payload, format="json", **extra
+        )
         force_authenticate(request, user=puppet)
         view = MotifStyleViewSet.as_view({"post": "unbind"})
         return view(request)
@@ -212,3 +235,128 @@ class MotifStyleUnbindEndpointTests(MotifStyleViewSetTestBase):
         resp = self._post_unbind(_actor_user(self.character), {"style_id": other_style.pk})
 
         self.assertEqual(resp.status_code, 400)
+
+
+# ===========================================================================
+# X-Character-ID scoping (#2030 review fix)
+# ===========================================================================
+
+
+class MotifStyleCharacterHeaderScopingTests(MotifStyleViewSetTestBase):
+    """A puppeted account viewing/mutating a *different*, owned character's sheet
+    must act on THAT character's bindings, not the puppet's — and a header
+    naming a character the account doesn't own must be rejected outright
+    rather than silently falling back to the puppet.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # A second, non-puppeted character owned by the same account, with its
+        # own claimed resonance and an existing binding — distinct from the
+        # puppet's own binding created in some tests.
+        self.alt_character = CharacterFactory()
+        self.alt_sheet = CharacterSheetFactory(character=self.alt_character)
+        self.alt_resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=self.alt_sheet, resonance=self.alt_resonance)
+
+        # A wholly unrelated account's character — never owned by our caller.
+        self.unowned_character = CharacterFactory()
+
+    def test_list_scopes_to_header_character_not_puppet(self) -> None:
+        # Bind a style on the PUPPET (self.character) — should NOT show up when
+        # scoped to the alt via the header.
+        self._post_bind(
+            _actor_user(self.character),
+            {"style_id": self.style.pk, "resonance_id": self.resonance.pk},
+        )
+        # Bind a different style on the alt character directly via the header.
+        alt_style = StyleFactory(name="Stoic")
+        user = _actor_user(
+            self.character, available_characters=[self.character, self.alt_character]
+        )
+        self._post_bind(
+            user,
+            {"style_id": alt_style.pk, "resonance_id": self.alt_resonance.pk},
+            character_id=self.alt_character.pk,
+        )
+
+        resp = self._get_list(user, character_id=self.alt_character.pk)
+
+        self.assertEqual(resp.status_code, 200)
+        bindings = resp.data["bindings"]
+        self.assertEqual(len(bindings), 1)
+        self.assertEqual(bindings[0]["style_id"], alt_style.pk)
+        self.assertEqual(bindings[0]["resonance_id"], self.alt_resonance.pk)
+
+    def test_bind_writes_to_header_character_not_puppet(self) -> None:
+        user = _actor_user(
+            self.character, available_characters=[self.character, self.alt_character]
+        )
+
+        resp = self._post_bind(
+            user,
+            {"style_id": self.style.pk, "resonance_id": self.alt_resonance.pk},
+            character_id=self.alt_character.pk,
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(
+            MotifResonanceStyle.objects.filter(
+                motif_resonance__motif__character=self.alt_sheet, style=self.style
+            ).exists()
+        )
+        self.assertFalse(
+            MotifResonanceStyle.objects.filter(
+                motif_resonance__motif__character=self.sheet, style=self.style
+            ).exists()
+        )
+
+    def test_unbind_writes_to_header_character_not_puppet(self) -> None:
+        user = _actor_user(
+            self.character, available_characters=[self.character, self.alt_character]
+        )
+        self._post_bind(
+            user,
+            {"style_id": self.style.pk, "resonance_id": self.alt_resonance.pk},
+            character_id=self.alt_character.pk,
+        )
+
+        resp = self._post_unbind(
+            user, {"style_id": self.style.pk}, character_id=self.alt_character.pk
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(
+            MotifResonanceStyle.objects.filter(
+                motif_resonance__motif__character=self.alt_sheet, style=self.style
+            ).exists()
+        )
+
+    def test_list_header_naming_unowned_character_returns_404_not_puppet_fallback(self) -> None:
+        user = _actor_user(self.character, available_characters=[self.character])
+
+        resp = self._get_list(user, character_id=self.unowned_character.pk)
+
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("character", resp.data["detail"].lower())
+
+    def test_bind_header_naming_unowned_character_returns_404(self) -> None:
+        user = _actor_user(self.character, available_characters=[self.character])
+
+        resp = self._post_bind(
+            user,
+            {"style_id": self.style.pk, "resonance_id": self.resonance.pk},
+            character_id=self.unowned_character.pk,
+        )
+
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(MotifResonanceStyle.objects.filter(style=self.style).exists())
+
+    def test_unbind_header_naming_unowned_character_returns_404(self) -> None:
+        user = _actor_user(self.character, available_characters=[self.character])
+
+        resp = self._post_unbind(
+            user, {"style_id": self.style.pk}, character_id=self.unowned_character.pk
+        )
+
+        self.assertEqual(resp.status_code, 404)

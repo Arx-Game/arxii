@@ -1027,11 +1027,17 @@ export async function getCharacterAnima(characterId: number): Promise<CharacterA
 /**
  * GET /api/magic/motif-styles/
  *
- * The acting character's current Motif style bindings (wire contract:
- * ListMotifStylesAction — src/actions/definitions/motif_style.py).
+ * The current Motif style bindings for the character named by the
+ * `X-Character-ID` header (falls back server-side to the active puppet when
+ * omitted). Wire contract: ListMotifStylesAction —
+ * src/actions/definitions/motif_style.py.
  */
-export async function getMotifStyleBindings(): Promise<MotifStyleBindingsResponse> {
-  const res = await apiFetch(`${MOTIF_STYLES_URL}/`);
+export async function getMotifStyleBindings(
+  characterId: number
+): Promise<MotifStyleBindingsResponse> {
+  const res = await apiFetch(`${MOTIF_STYLES_URL}/`, {
+    headers: { 'X-Character-ID': String(characterId) },
+  });
   if (!res.ok) throw new Error('Failed to load style bindings');
   return res.json() as Promise<MotifStyleBindingsResponse>;
 }
@@ -1039,14 +1045,18 @@ export async function getMotifStyleBindings(): Promise<MotifStyleBindingsRespons
 /**
  * POST /api/magic/motif-styles/bind/
  *
- * Bind a Style to one of the acting character's claimed resonances. 400s
- * (audacity cap exceeded, unclaimed resonance, unknown style) carry a
- * `{detail}` string — surfaced via readErrorDetail for the caller to render.
+ * Bind a Style to one of the claimed resonances of the character named by
+ * the `X-Character-ID` header. 400s (audacity cap exceeded, unclaimed
+ * resonance, unknown style) carry a `{detail}` string — surfaced via
+ * readErrorDetail for the caller to render.
  */
-export async function bindMotifStyle(body: BindMotifStyleRequest): Promise<unknown> {
+export async function bindMotifStyle(
+  characterId: number,
+  body: BindMotifStyleRequest
+): Promise<unknown> {
   const res = await apiFetch(`${MOTIF_STYLES_URL}/bind/`, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), 'X-Character-ID': String(characterId) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -1058,12 +1068,16 @@ export async function bindMotifStyle(body: BindMotifStyleRequest): Promise<unkno
 /**
  * POST /api/magic/motif-styles/unbind/
  *
- * Remove a Style binding. 400 (style not bound) carries a `{detail}` string.
+ * Remove a Style binding for the character named by the `X-Character-ID`
+ * header. 400 (style not bound) carries a `{detail}` string.
  */
-export async function unbindMotifStyle(body: UnbindMotifStyleRequest): Promise<unknown> {
+export async function unbindMotifStyle(
+  characterId: number,
+  body: UnbindMotifStyleRequest
+): Promise<unknown> {
   const res = await apiFetch(`${MOTIF_STYLES_URL}/unbind/`, {
     method: 'POST',
-    headers: jsonHeaders(),
+    headers: { ...jsonHeaders(), 'X-Character-ID': String(characterId) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

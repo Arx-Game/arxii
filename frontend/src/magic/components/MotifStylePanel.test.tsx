@@ -153,6 +153,19 @@ describe('MotifStylePanel', () => {
     expect(moonveilGroup).toHaveTextContent('Grandiloquent');
   });
 
+  it('scopes bindings + mutations to the viewed character, not any active puppet', () => {
+    setupMocks({});
+    renderWithProviders(<MotifStylePanel characterSheetId={10} />);
+
+    // The cross-character-scoping fix (#2030 review): the bindings query and
+    // both mutation hooks must be given THIS character's id (which backs the
+    // X-Character-ID header server-side) rather than defaulting to whatever
+    // character the account currently puppets.
+    expect(magicQueries.useMotifStyleBindings).toHaveBeenCalledWith(10);
+    expect(magicQueries.useBindMotifStyle).toHaveBeenCalledWith(10);
+    expect(magicQueries.useUnbindMotifStyle).toHaveBeenCalledWith(10);
+  });
+
   it('shows an empty-bindings message when there are none', () => {
     setupMocks({ bindings: [] });
     renderWithProviders(<MotifStylePanel characterSheetId={10} />);
