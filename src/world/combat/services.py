@@ -3410,9 +3410,16 @@ def _apply_condition_damage_interactions(
     Called from both combat damage paths after soak/resistance/armor (#2018).
     The interaction modifier is a final percentage multiplier on net damage.
     Returns ``(modified_damage, interaction_result)`` — ``interaction_result``
-    is None when damage_type is None or damage_amount is zero.
+    is None when damage_type is None, a non-model value, or damage_amount is zero.
     """
     if damage_type is None or damage_amount <= 0:
+        return damage_amount, None
+    # Some callers pass a string damage_type (e.g. "physical") rather than a
+    # DamageType model instance. Condition-damage interactions require a real
+    # model to query the interaction table — skip for non-model values.
+    from world.conditions.models import DamageType  # noqa: PLC0415
+
+    if not isinstance(damage_type, DamageType):
         return damage_amount, None
     from world.conditions.services import process_damage_interactions  # noqa: PLC0415
 
