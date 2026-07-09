@@ -69,6 +69,12 @@ def _seed_social_relationships() -> None:
     seed_social_relationship_content()
 
 
+def _seed_relationship_scale() -> None:
+    from world.seeds.relationship_scale import seed_relationship_scale_content  # noqa: PLC0415
+
+    seed_relationship_scale_content()
+
+
 def _seed_social_actions() -> None:
     from world.seeds.social_actions import seed_social_action_content  # noqa: PLC0415
 
@@ -211,6 +217,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Social relationships: the allure ModifierTarget + Attracted To / Very Attracted conditions
     # the directed-allure engine reads + Flirt/Seduce effects set (#1697).
     "social_relationships": _seed_social_relationships,
+    # Relationship scale: the Regard/Friction system tracks ambient bumps write to,
+    # their 25/100/500/2000 tier bands, and the ReactionEmoji catalog (#1699).
+    "relationship_scale": _seed_relationship_scale,
     # Social actions: authoritative social ActionTemplates + pools + Flirt/Seduce attraction
     # effects. After social_relationships (its conditions) + checks (its CheckTypes) (#1697).
     "social_actions": _seed_social_actions,
@@ -331,9 +340,10 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.magic.models.techniques import Technique  # noqa: PLC0415
     from world.progression.models import KudosSourceCategory, TraitRatingUnlock  # noqa: PLC0415
     from world.projects.models import ContributionMethod  # noqa: PLC0415
-    from world.relationships.models import RelationshipCondition  # noqa: PLC0415
+    from world.relationships.models import RelationshipCondition, RelationshipTier  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
     from world.roster.models import Kinsperson  # noqa: PLC0415
+    from world.scenes.models import ReactionEmoji  # noqa: PLC0415
     from world.skills.models import Specialization  # noqa: PLC0415
     from world.societies.houses.models import Title  # noqa: PLC0415
     from world.species.models import Species  # noqa: PLC0415
@@ -354,6 +364,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Social relationships: the allure target + Attracted/Very-Attracted RelationshipConditions
         # (a shared lookup); represented by RelationshipCondition (#1697).
         "social_relationships": [RelationshipCondition],
+        # Relationship scale: Regard/Friction system tracks + tier bands + emoji
+        # catalog; represented by RelationshipTier and ReactionEmoji (#1699).
+        "relationship_scale": [RelationshipTier, ReactionEmoji],
         # Social actions seed ActionTemplate rows (#1697).
         "social_actions": [ActionTemplate],
         # Social combat: 4 CheckTypes + Inspired condition + Charming Word

@@ -145,3 +145,39 @@ class ApplyRelationshipBumpTests(TestCase):
             apply_relationship_bump(
                 source=self.source, target=self.target, interaction=self.interaction, valence=1
             )
+
+
+class RelationshipScaleSeedTests(TestCase):
+    """The relationship_scale seed cluster is idempotent and re-applies edits."""
+
+    def test_seed_idempotent_and_upserting(self) -> None:
+        from world.relationships.models import RelationshipTier
+        from world.scenes.models import ReactionEmoji
+        from world.seeds.relationship_scale import seed_relationship_scale_content
+
+        seed_relationship_scale_content()
+        seed_relationship_scale_content()
+
+        system_tracks = RelationshipTrack.objects.filter(system_key__isnull=False)
+        self.assertEqual(system_tracks.count(), 2)
+        regard = RelationshipTrack.objects.get(system_key=TrackSystemKey.REGARD)
+        friction = RelationshipTrack.objects.get(system_key=TrackSystemKey.FRICTION)
+        self.assertEqual(regard.sign, TrackSign.POSITIVE)
+        self.assertEqual(friction.sign, TrackSign.NEGATIVE)
+
+        tiers = RelationshipTier.objects.filter(track__in=[regard, friction])
+        self.assertEqual(tiers.count(), 8)
+        self.assertEqual(
+            sorted(tiers.filter(track=regard).values_list("point_threshold", flat=True)),
+            [25, 100, 500, 2000],
+        )
+
+        self.assertEqual(ReactionEmoji.objects.count(), 3)
+        self.assertEqual(ReactionEmoji.objects.filter(valence=0).count(), 1)
+
+        # Upsert re-applies an edited value on re-seed (loaddata can't — #946).
+        regard.name = "Renamed"
+        regard.save(update_fields=["name"])
+        seed_relationship_scale_content()
+        regard.refresh_from_db()
+        self.assertEqual(regard.name, "Regard")
