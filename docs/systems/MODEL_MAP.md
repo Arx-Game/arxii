@@ -259,6 +259,7 @@
   - condition -> conditions.ConditionTemplate [FK]
   - damage_type -> conditions.DamageType [FK]
   - applies_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Fields:** damage_modifier_percent, removes_condition, applied_condition_severity, narration_snippet (#2018 — flavor text for combat narration on condition transitions)
 
 ### ConditionConditionInteraction
 **Foreign Keys:**
