@@ -386,6 +386,7 @@ def get_runtime_technique_stats(
     character: ObjectDB | None,
     *,
     apply_variant: bool = True,
+    character_technique=None,
 ) -> RuntimeTechniqueStats:
     """Calculate runtime intensity and control for a technique.
 
@@ -396,6 +397,10 @@ def get_runtime_technique_stats(
     ``apply_variant`` (default ``True``) controls whether the gift-technique
     variant is resolved.  Pass ``apply_variant=False`` to obtain the raw
     base-form stats, e.g. for cost-clamping in ``use_technique`` (#1581 Task 7).
+
+    ``character_technique`` (#2022): when the technique was role-granted
+    (``CharacterTechnique.role_source`` is set), the variant resolver uses the
+    COVENANT_ROLE thread level instead of the GIFT thread level.
     """
     if character is None:
         return RuntimeTechniqueStats(
@@ -415,7 +420,12 @@ def get_runtime_technique_stats(
     if apply_variant:
         from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
 
-        technique = resolve_specialized_variant(entity=technique, character=character, _sheet=sheet)
+        technique = resolve_specialized_variant(
+            entity=technique,
+            character=character,
+            character_technique=character_technique,
+            _sheet=sheet,
+        )
 
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
     from world.mechanics.services import get_modifier_total  # noqa: PLC0415

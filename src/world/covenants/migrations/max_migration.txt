@@ -1,1 +1,1 @@
-0024_covenantrole_granted_capabilities_and_more
+0025_vow_scaling_models

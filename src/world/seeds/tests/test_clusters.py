@@ -35,6 +35,7 @@ class TestClusterRegistry(TestCase):
                 "gm",
                 "kinship",
                 "houses",
+                "covenant_roles",
             },
         )
 

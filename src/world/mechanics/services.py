@@ -346,6 +346,8 @@ def equipment_walk_total(
         + passive_facet_crossing_bonuses(character, target)
         + covenant_role_bonus(character, target, level_override=level_override)
         + covenant_level_bonus(character, target)
+        + vow_stat_scaling_bonus(character, target)
+        + vow_gear_scaling_bonus(character, target)
         + passive_mantle_bonuses(character, target)
         + passive_motif_style_bonuses(character, target)
     )
@@ -821,6 +823,8 @@ def equipment_walk_total_unblended(sheet: object, target: ModifierTarget) -> int
         passive_facet_bonuses(sheet, target)
         + covenant_role_base_total(sheet, target)
         + covenant_level_bonus(sheet, target)
+        + vow_stat_scaling_bonus(sheet, target)
+        + vow_gear_scaling_bonus(sheet, target)
         + passive_mantle_bonuses(sheet, target)
         + passive_motif_style_bonuses(sheet, target)
     )
@@ -890,6 +894,118 @@ def role_base_bonus_for_target(
     if config is None:
         return 0
     return character_level * config.bonus_per_level
+
+
+def vow_stat_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
+    """Sum the vow-driven stat scaling across engaged roles (#2022).
+
+    Unlike ``covenant_role_bonus`` (which scales by ``character_level``), this
+    scales by the character's **COVENANT_ROLE thread level** — so a deepened
+    vow is a substantially stronger character. For each engaged role, reads
+    the ``VowStatScaling`` row for ``(role, target)`` and returns
+    ``thread_level * bonus_per_level``. No row → 0 (most targets).
+
+    Gated on engagement (the #2051 continuous enforcement ensures the engaged
+    flag tracks co-presence). When the vow dims, the stat scaling drops — the
+    character's stats collapse toward their base.
+    """
+    from world.covenants.models import (  # noqa: PLC0415
+        VowStatScaling,
+    )
+    from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
+
+    char = sheet.character
+    if not hasattr(char, "covenant_roles"):
+        return 0
+    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return 0
+
+    configs = VowStatScaling.objects.filter(
+        covenant_role__in=engaged_roles,
+        modifier_target=target,
+    )
+    if not configs:
+        return 0
+    total = 0
+    for config in configs:
+        thread_level = _covenant_role_thread_level(sheet, config.covenant_role)
+        total += thread_level * config.bonus_per_level
+    return total
+
+
+def vow_gear_scaling_bonus(sheet: object, target: ModifierTarget) -> int:
+    """Sum the vow-driven equipment effectiveness bonus (#2022).
+
+    For each equipped item, looks up the ``VowGearScaling`` row matching the
+    item's ``gear_archetype`` and the engaged role's ``role_archetype``. If
+    found, adds ``int(gear_stat * thread_level * multiplier)`` — the vow
+    amplifies how much the gear contributes. When the vow dims, the
+    equipment's contribution reverts to base.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.covenants.models import VowGearScaling  # noqa: PLC0415
+    from world.covenants.services import _covenant_role_thread_level  # noqa: PLC0415
+
+    char = sheet.character
+    if not hasattr(char, "covenant_roles") or not hasattr(char, "equipped_items"):
+        return 0
+    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
+        return 0
+
+    # Batch-fetch all relevant VowGearScaling rows for the engaged roles' archetypes
+    role_archetypes = {role.archetype for role in engaged_roles if role.archetype}
+    if not role_archetypes:
+        return 0
+
+    scaling_map: dict[tuple[str, str], VowGearScaling] = {}
+    for row in VowGearScaling.objects.filter(role_archetype__in=role_archetypes):
+        scaling_map[(row.gear_archetype, row.role_archetype)] = row
+    if not scaling_map:
+        return 0
+
+    # Map role archetype → thread level (max across engaged roles of that archetype)
+    archetype_thread_levels: dict[str, int] = {}
+    for role in engaged_roles:
+        if not role.archetype:
+            continue
+        level = _covenant_role_thread_level(sheet, role)
+        archetype_thread_levels[role.archetype] = max(
+            archetype_thread_levels.get(role.archetype, 0), level
+        )
+
+    total = 0
+    for equipped in char.equipped_items:
+        item = equipped.item_instance
+        gear_stat = item_mundane_stat_for_target(item, target)
+        if gear_stat == 0:
+            continue
+        archetype = item.template.gear_archetype
+        total += _gear_scaling_for_item(
+            archetype, gear_stat, archetype_thread_levels, scaling_map, Decimal
+        )
+    return total
+
+
+def _gear_scaling_for_item(
+    archetype: str,
+    gear_stat: int,
+    archetype_thread_levels: dict[str, int],
+    scaling_map: dict[tuple[str, str], object],
+    decimal_cls,
+) -> int:
+    """Compute the vow gear scaling bonus for one equipped item."""
+    item_total = 0
+    for role_archetype, thread_level in archetype_thread_levels.items():
+        scaling = scaling_map.get((archetype, role_archetype))
+        if scaling is None or scaling.thread_level_multiplier == 0:
+            continue
+        item_total += int(
+            decimal_cls(gear_stat) * decimal_cls(thread_level) * scaling.thread_level_multiplier
+        )
+    return item_total
 
 
 def item_mundane_stat_for_target(item: ItemInstance, target: ModifierTarget) -> int:

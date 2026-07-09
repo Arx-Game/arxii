@@ -200,7 +200,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
     def test_query_budget_after_handler_warm(self) -> None:
         """Pin get_modifier_total to BASELINE_QUERIES after character-side handlers are warm.
 
-        Documented query budget (7 total on first call):
+        Documented query budget (10 total on first call):
           Query 1: CharacterModifier.exists() — always fires in get_modifier_breakdown,
                    returns early because no CharacterModifier rows exist for this sheet.
           Query 2: ThreadPullEffect.filter(target_kind=FACET, resonance=..., tier=0, ...) —
@@ -230,6 +230,14 @@ class ModifierTotalQueryBudgetTests(TestCase):
           Query 8: CrossingChoice.filter(thread=...) — passive_facet_crossing_bonuses
                    (#1990) fires once per FACET-kind thread; returns no rows (no crossing
                    choices authored) so it contributes 0 to the result.
+          Query 9: VowStatScaling.filter(covenant_role__in=..., modifier_target=...) —
+                   vow_stat_scaling_bonus (#2022) fires once per engaged role's
+                   modifier-total call; returns no rows (no authored scaling) so it
+                   contributes 0.
+          Query 10: VowGearScaling.filter(role_archetype__in=...) —
+                   vow_gear_scaling_bonus (#2022) fires once per engaged role's
+                   modifier-total call; returns no rows (no authored scaling) so it
+                   contributes 0.
 
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
@@ -253,13 +261,15 @@ class ModifierTotalQueryBudgetTests(TestCase):
         list(self.character_obj.covenant_roles.currently_engaged_roles())
 
         # --- Assert documented query count ---
-        # BASELINE = 8: CharacterModifier.exists + ThreadPullEffect.filter
-        #              + CharacterClassLevel (current_level) + is_gear_compatible
-        #              + CovenantLevelBonus.first() (covenant_level_bonus, #762)
-        #              + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
-        #              + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
-        #              + CrossingChoice.filter (passive_facet_crossing_bonuses, #1990)
-        baseline_queries = 8
+        # BASELINE = 10: CharacterModifier.exists + ThreadPullEffect.filter
+        #               + CharacterClassLevel (current_level) + is_gear_compatible
+        #               + CovenantLevelBonus.first() (covenant_level_bonus, #762)
+        #               + CharacterSheet.motif fetch (passive_motif_style_bonuses, #1150)
+        #               + CovenantRoleBonus.first() (role_base_bonus_for_target, #985)
+        #               + CrossingChoice.filter (passive_facet_crossing_bonuses, #1990)
+        #               + VowStatScaling.filter (vow_stat_scaling_bonus, #2022)
+        #               + VowGearScaling.filter (vow_gear_scaling_bonus, #2022)
+        baseline_queries = 10
         with self.assertNumQueries(baseline_queries):
             result = get_modifier_total(self.sheet, self.target)
 
@@ -291,7 +301,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.character_obj.threads.invalidate()
         self.character_obj.covenant_roles.invalidate()
 
-        baseline_queries = 8
+        baseline_queries = 10
 
         # Capture actual count by running without constraint
         from django.db import connection

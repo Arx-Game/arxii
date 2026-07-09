@@ -734,6 +734,156 @@ class CovenantLevelBonus(SharedMemoryModel):
         return f"{self.modifier_target.name}: +{self.bonus_per_level}/level"
 
 
+class VowStatScaling(SharedMemoryModel):
+    """Authored vow-driven stat scaling keyed by (covenant_role, modifier_target) (#2022).
+
+    Unlike ``CovenantRoleBonus`` (which scales by character level), this model
+    scales by the character's **COVENANT_ROLE thread level** — so a deepened
+    vow is a substantially stronger character. The scaling is authored data
+    (coefficients per stat per role), not hardcoded.
+
+    An engaged member holding the role receives a derive-on-read modifier of
+    ``thread_level * bonus_per_level`` for the target. When the vow dims
+    (#2051), the stat scaling drops — the character's stats collapse toward
+    their base. No CharacterModifier rows are persisted.
+
+    The mechanical heart of "solo darkness": without the vow, a character is
+    a shadow of their roled self.
+    """
+
+    covenant_role = models.ForeignKey(
+        COVENANT_ROLE_MODEL,
+        on_delete=models.CASCADE,
+        related_name="vow_stat_scalings",
+    )
+    modifier_target = models.ForeignKey(
+        "mechanics.ModifierTarget",
+        on_delete=models.CASCADE,
+        related_name="vow_stat_scalings",
+    )
+    bonus_per_level = models.SmallIntegerField(
+        help_text=(
+            "Per-thread-level coefficient. Bonus for an engaged role holder = "
+            "covenant_role_thread_level * bonus_per_level."
+        ),
+    )
+
+    class Meta:
+        ordering = ["covenant_role", "modifier_target"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["covenant_role", "modifier_target"],
+                name="vow_stat_scaling_unique_role_target",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.covenant_role.name} / {self.modifier_target.name}: "
+            f"+{self.bonus_per_level}/thread-level"
+        )
+
+
+class VowGearScaling(SharedMemoryModel):
+    """Authored vow-driven equipment effectiveness multiplier (#2022).
+
+    Extends ``GearArchetypeCompatibility`` from a gate (which equipment you can
+    use) to a multiplier (how much your equipped gear contributes). Keyed by
+    ``(gear_archetype, role_archetype)`` — the scaling applies to any engaged
+    role whose archetype matches, regardless of the specific role.
+
+    A SHIELD-role character wearing heavy armor gets ``base + thread_level *
+    multiplier`` from the armor; an unroled character gets only ``base``. When
+    the vow dims, the equipment's contribution reverts to base — the character
+    is still wearing the gear, but it's not empowered by the vow.
+    """
+
+    gear_archetype = models.CharField(
+        max_length=20,
+        choices=GearArchetype.choices,
+    )
+    role_archetype = models.CharField(
+        max_length=20,
+        choices=RoleArchetype.choices,
+    )
+    thread_level_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=3,
+        default=0,
+        help_text=(
+            "How much each COVENANT_ROLE thread level adds to the equipment's "
+            "effective contribution. 0 = no scaling (gear works at base). "
+            "The bonus is additive: effective = base * (1 + thread_level * multiplier)."
+        ),
+    )
+
+    class Meta:
+        ordering = ["role_archetype", "gear_archetype"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gear_archetype", "role_archetype"],
+                name="vow_gear_scaling_unique_archetypes",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.get_role_archetype_display()} + "
+            f"{self.get_gear_archetype_display()}: "
+            f"×{self.thread_level_multiplier}/level"
+        )
+
+
+class ArchetypeActionScaling(SharedMemoryModel):
+    """Authored archetype-driven scaling for universal combat actions (#2022).
+
+    Keyed by ``(action_key, role_archetype)``. A SHIELD role's interpose
+    scales by the COVENANT_ROLE thread level; a CROWN role's rally scales;
+    a SWORD role's strikes gain a rider. Null = no scaling (the action works
+    as today for unroled characters).
+
+    The scaling is a ``thread_level_multiplier`` — the bonus applied per
+    COVENANT_ROLE thread level when the actor's engaged ``CovenantRole`` has
+    the matching archetype.
+    """
+
+    action_key = models.CharField(
+        max_length=50,
+        help_text=(
+            "The Action.key this scaling applies to (e.g. 'combat_interpose', "
+            "'cast_technique', 'combat_rally')."
+        ),
+    )
+    role_archetype = models.CharField(
+        max_length=20,
+        choices=RoleArchetype.choices,
+    )
+    thread_level_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=3,
+        default=0,
+        help_text=(
+            "How much each COVENANT_ROLE thread level adds to the action's "
+            "effect. 0 = no scaling (action works at base)."
+        ),
+    )
+
+    class Meta:
+        ordering = ["action_key", "role_archetype"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["action_key", "role_archetype"],
+                name="archetype_action_scaling_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.action_key} + {self.get_role_archetype_display()}: "
+            f"×{self.thread_level_multiplier}/level"
+        )
+
+
 class CovenantRoleGiftGrant(SharedMemoryModel):
     """Through model for CovenantRole.granted_gifts (#2022).
 

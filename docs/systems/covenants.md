@@ -28,6 +28,35 @@ axes are orthogonal — never re-merge them.
 - **`CovenantRoleBonus`** — authored config: one row per `(CovenantRole, ModifierTarget)`
   with `bonus_per_level` SmallInt. `role_base_bonus_for_target(role, target,
   char_level)` returns `char_level × bonus_per_level`; no row → 0. Admin-registered.
+- **`VowStatScaling`** (#2022) — authored config: one row per
+  `(CovenantRole, ModifierTarget)` with `bonus_per_level` scaling by the
+  **COVENANT_ROLE thread level** (not character level, which `CovenantRoleBonus`
+  already handles). `vow_stat_scaling_bonus(sheet, target)` returns
+  `thread_level × bonus_per_level`; no row → 0. The mechanical heart of "solo
+  darkness" — a deepened vow is a substantially stronger character. When the vow
+  dims (#2051), the scaling drops to 0.
+- **`VowGearScaling`** (#2022) — authored config: one row per
+  `(gear_archetype, role_archetype)` with a `thread_level_multiplier` (Decimal).
+  Amplifies how much equipped gear contributes: the bonus is
+  `int(gear_stat × thread_level × multiplier)`. Extends
+  `GearArchetypeCompatibility` from a gate (which gear you can use) to a
+  multiplier (how much it contributes). When the vow dims, the equipment's
+  contribution reverts to base.
+- **`ArchetypeActionScaling`** (#2022) — authored config: one row per
+  `(action_key, role_archetype)` with a `thread_level_multiplier` (Decimal).
+  Read by `archetype_action_scaling_bonus(character, action_key)` at the combat
+  action resolution seam. SHIELD roles scale the interpose partial-block damage
+  reduction; SWORD roles add a flat power bonus to `cast_technique` via a power
+  term provider; CROWN roles scale rally actions.
+- **`CovenantRoleGiftGrant`** (#2022) — through model for
+  `CovenantRole.granted_gifts` M2M to `magic.Gift`. Carries
+  `unlock_thread_level` — the COVENANT_ROLE thread level at which the gift's
+  techniques become available while engaged (0 = always while engaged).
+- **`CovenantRole.granted_capabilities`** (#2022) — M2M to
+  `conditions.CapabilityType`. Read directly by `passive_capability_grants()`
+  in `handlers.py` alongside the existing `ThreadPullEffect`-based capability
+  grants. Capabilities apply while the role is engaged; drop automatically when
+  the vow dims.
 - **`CovenantRank`** — per-covenant administrative authority tier. Fields: `covenant`
   FK (CASCADE, `related_name="ranks"`), `name` (max 60, player-chosen), `tier`
   (PositiveInt; 1 = top authority), `description`, `can_invite` bool, `can_kick` bool,

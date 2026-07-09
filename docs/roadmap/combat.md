@@ -89,6 +89,12 @@ opposing-affinity / environmental rejection use "backfire" / "rejection" / "diss
   health pool damaged only by team play (combos + distinct-PC distinct-effect-type hits).
   The combo invariant (#2051, ADR-0107) hard-blocks <2-slot combos at save time and runtime;
   BOSS-tier opponents with legend-paying aftermath require an authored `wall_breaker_combo` FK.
+  **Vows as combat roles** (#2022, ADR-0108): a character's engaged `CovenantRole` drives three
+  pillars of combat power — (1) **stat power** scaling with the COVENANT_ROLE thread level
+  (`VowStatScaling`), (2) **equipment effectiveness** scaling (`VowGearScaling`), and (3)
+  **specialized techniques** granted by the role that resolve variants by the vow's depth
+  (`CharacterTechnique.role_source`). When the vow dims (#2051), all three pillars collapse —
+  which is why soloing legend content is lethal.
 - Magic is predominant; relationship bonuses matter; **difficulty scales on party size + average level
   only** (ADR-0037); combat merits Legend, never XP (ADR-0036).
 
