@@ -84,9 +84,11 @@ class JournalDeed:
     """
 
     node_key: str
+    node_id: int
     option_id: int
     outcome_name: str | None
     applied_at: datetime
+    unseen_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,7 @@ class JournalEntry:
     source_beat_hint: str | None = None
     tale: str | None = None  # the participant's authored epilogue, if any (#2047)
     can_tell_tale: bool = False  # run is terminal and tale hasn't been written (#2047)
+    last_unseen_count: int = 0  # unseen approaches at the last resolved node (#2046)
 
 
 @dataclass(frozen=True)
@@ -239,6 +242,8 @@ class GroupBeatView:
     options: tuple[BeatOption, ...]
     ballots: tuple[GroupBallotState, ...]
     expires_at: str | None
+    support_moves: tuple[SupportMove, ...] = ()
+    declared_supports: tuple[SupportDeclarationView, ...] = ()
 
 
 @dataclass(frozen=True)

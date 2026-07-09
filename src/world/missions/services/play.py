@@ -45,6 +45,8 @@ from world.missions.types import (
     GroupBeatView,
     PresentedOption,
     ResolvedBeat,
+    SupportDeclarationView,
+    SupportMove,
 )
 from world.narrative.constants import NarrativeCategory
 from world.narrative.services import emit_ambient_room_stir, send_narrative_message
@@ -496,13 +498,16 @@ def _group_beat_view(
     node: MissionNode,
     *,
     presented: list[PresentedOption] | None = None,
+    character: ObjectDB | None = None,
 ) -> GroupBeatView:
-    """Compose the group beat: union option list + every ballot's pick/vote.
+    """Compose the group beat: union option list + every ballot's pick/vote + support moves.
 
     Pass ``presented`` when the caller already built the group option list (e.g.
     ``submit_group_pick`` after locating the picked entry) to avoid a second
     per-participant fan-out. The ballots are fetched once and the deadline / phase
     derived from them in Python (no extra ``Min``/``count`` queries).
+
+    Pass ``character`` to populate ``support_moves`` for that viewer (#2046).
     """
     if presented is None:
         presented = build_group_option_list(instance, node)
@@ -526,6 +531,15 @@ def _group_beat_view(
         earliest + timedelta(seconds=GROUP_VOTE_TIMEOUT_SECONDS) if earliest is not None else None
     )
     phase = PHASE_VOTE if (n_active > 0 and len(ballots) >= n_active) else PHASE_PICK
+
+    # #2046: support moves for the viewing character + declared supports
+    support_moves: tuple[SupportMove, ...] = ()
+    if character is not None:
+        from world.missions.services.support import support_moves_for  # noqa: PLC0415
+
+        support_moves = tuple(support_moves_for(instance, node, character))
+    declared_supports = _declared_supports_for(instance, node)
+
     return GroupBeatView(
         instance_id=instance.pk,
         node_key=node.key,
@@ -535,6 +549,8 @@ def _group_beat_view(
         options=tuple(_beat_option(presented_option) for presented_option in presented),
         ballots=ballot_states,
         expires_at=deadline.isoformat() if deadline is not None else None,
+        support_moves=support_moves,
+        declared_supports=declared_supports,
     )
 
 
@@ -592,7 +608,9 @@ def group_beat(instance: MissionInstance, character: ObjectDB) -> GroupBeatResul
     node = _group_node(instance)
     if _resolve_if_expired(instance, node) is not None:
         return _resolved_group_result(instance, character)
-    return GroupBeatResult(group_beat=_group_beat_view(instance, node), resolved=None)
+    return GroupBeatResult(
+        group_beat=_group_beat_view(instance, node, character=character), resolved=None
+    )
 
 
 def submit_group_pick(
@@ -671,6 +689,58 @@ def cast_group_vote(
     if _resolve_group_if_ready(instance, node) is not None:
         return _resolved_group_result(instance, character)
     return GroupBeatResult(group_beat=_group_beat_view(instance, node), resolved=None)
+
+
+def _declared_supports_for(
+    instance: MissionInstance, node: MissionNode
+) -> tuple[SupportDeclarationView, ...]:
+    """All declared supports at this node, visible to the party (#2046)."""
+    from world.missions.models import MissionSupportDeclaration  # noqa: PLC0415
+
+    decls = MissionSupportDeclaration.objects.filter(
+        instance=instance, snapshot__node=node
+    ).select_related("participant__character", "outcome")
+    return tuple(
+        SupportDeclarationView(
+            character_id=decl.participant.character_id,
+            character_name=decl.participant.character.db_key,
+            label=(
+                decl.pattern.name
+                if decl.pattern_id
+                else (decl.support_option.flavor_template or "Support")
+            ),
+            outcome_name=decl.outcome.name if decl.outcome_id else None,
+            easing_banked=decl.easing_banked,
+        )
+        for decl in decls
+    )
+
+
+def declare_support_play(
+    instance: MissionInstance,
+    character: ObjectDB,
+    *,
+    source_kind: str,
+    source_id: int,
+) -> GroupBeatResult:
+    """Declare a support move in place of a pick/vote (#2046).
+
+    Thin player-facing wrapper: validates group-beat context, delegates to
+    ``support.declare_support``, then returns the updated group beat (or the
+    resolved beat if the declaration completed the party).
+    """
+    from world.missions.services.support import declare_support  # noqa: PLC0415
+
+    participant_for(instance, character)
+    node = _group_node(instance)
+    if _resolve_if_expired(instance, node) is not None:
+        return _resolved_group_result(instance, character)
+    declare_support(instance, character, source_kind=source_kind, source_id=source_id)
+    if _resolve_group_if_ready(instance, node) is not None:
+        return _resolved_group_result(instance, character)
+    return GroupBeatResult(
+        group_beat=_group_beat_view(instance, node, character=character), resolved=None
+    )
 
 
 def maybe_pause_mission_for_disconnect(character_sheet: CharacterSheet) -> None:
