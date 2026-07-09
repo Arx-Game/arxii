@@ -17452,6 +17452,37 @@ paths:
           description: Option not live here / run not active.
         '404':
           description: Not a participant / no such mission.
+  /api/missions/journal/{id}/support/:
+    post:
+      operationId: missions_journal_support_create
+      description: '#2046 — declare a support move in place of a pick/vote.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - missions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportDeclareRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupBeatResult'
+          description: ''
+        '400':
+          description: Not a group beat / already declared / cap reached.
+        '404':
+          description: Not a participant / no such mission.
   /api/missions/journal/{id}/tale/:
     post:
       operationId: missions_journal_tale_create
@@ -39898,6 +39929,9 @@ components:
           nullable: true
         can_tell_tale:
           type: boolean
+        last_unseen_count:
+          type: integer
+          readOnly: true
       required:
       - can_tell_tale
       - compass_anywhere
@@ -39908,6 +39942,7 @@ components:
       - epilogue
       - instance_id
       - is_contract_holder
+      - last_unseen_count
       - participant_count
       - pending_invites
       - status
@@ -56411,6 +56446,26 @@ components:
           default: false
       required:
       - accept
+    SupportDeclareRequestRequest:
+      type: object
+      description: 'POST body for the #2046 support-declare endpoint.'
+      properties:
+        source_kind:
+          $ref: '#/components/schemas/SupportDeclareRequestSourceKindEnum'
+        source_id:
+          type: integer
+          minimum: 1
+      required:
+      - source_id
+      - source_kind
+    SupportDeclareRequestSourceKindEnum:
+      enum:
+      - pattern
+      - gem
+      type: string
+      description: |-
+        * `pattern` - pattern
+        * `gem` - gem
     SystemErrorReportDetail:
       type: object
       description: |-
