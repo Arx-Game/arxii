@@ -50,3 +50,7 @@ applies immediately — this only exists for the significant, witnessed case. Na
 "any ally" path), mirroring Succor's #1744 narrowing. See `world/combat/AGENT_GLOSSARY.md`'s
 Interpose entry for the shared mechanism.
 _Avoid_: reactive block, ambush guard, trap interpose (the model name is `PendingSuddenHarm`)
+
+**ReactionEmoji** (reaction-emoji catalog, #1699):
+The staff-editable catalog of emoji the scene footer offers on poses, each carrying a relationship valence (+1 / 0 / −1). Valence-0 entries are cosmetic — the pre-#1699 behavior, exactly. Nonzero-valence entries additionally fire an ambient relationship Bump (see `world/relationships/AGENT_GLOSSARY.md`) at the pose's author. Whether emoji survive playtesting is a data edit here (deactivate the row), never a deploy.
+_Avoid_: emoji whitelist, emote catalog, sticker set.

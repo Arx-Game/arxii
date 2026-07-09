@@ -35,3 +35,11 @@ _Avoid_: like, upvote, endorsement, approval.
 **WriteupComplaint**:
 A bad-faith-RP flag that any viewer of a SHARED/PUBLIC writeup files for staff triage. The model carries a free-text reason and a `resolved` staff flag. Zero player-facing signal — complainants do not learn the outcome and the flag is never shown to the writeup author.
 _Avoid_: report, abuse report, flag (when used without qualification — "WriteupComplaint" is the canonical term).
+
+**Bump** (`RelationshipBump`, #1699):
+An ambient, permanent, ungated ±1 nudge to the actor's own regard for another character, anchored to the specific Interaction (pose) that prompted it. Telnet `relationship plus|neg <name>` backfill-anchors to the target's most recent unacknowledged visible pose; web valenced reaction emoji bump the pose's author. One bump per (relationship, interaction) — the unique constraint is the entire anti-spam mechanism; no counters, no decay, no consent gate (a bump is a private write to the actor's own relationship data, ADR-0024). Positive bumps land on the Regard system track, negative on Friction.
+_Avoid_: like, rep, karma, rating, upvote (reactions are the *door*; the bump is the relationship write).
+
+**System track** (`RelationshipTrack.system_key`, #1699):
+One of the two seeded generic tracks — **Regard** (positive) and **Friction** (negative), names PLACEHOLDER — that ambient bumps write to, looked up by `TrackSystemKey` rather than name-string. Authored tracks (Friendship, Rivalry, …) have a null `system_key` and remain the deliberate layer players choose on the relationship screen.
+_Avoid_: default track, generic track (in code — "system track" is canonical), builtin track.
