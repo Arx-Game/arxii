@@ -2553,6 +2553,12 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     seed_combo_palette()
 
+    from world.seeds.game_content.elemental_interactions import (  # noqa: PLC0415
+        seed_elemental_interactions,
+    )
+
+    seed_elemental_interactions()
+
     return MagicDevSeedResult(
         config=config,
         rituals=rituals,
