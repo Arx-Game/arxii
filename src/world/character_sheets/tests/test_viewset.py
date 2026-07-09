@@ -673,10 +673,10 @@ class TestSkillsSection(TestCase):
         assert len(skills) == 1
 
     def test_skill_entry_structure(self) -> None:
-        """Each skill entry has {skill: {id, name, category}, value, specializations}."""
+        """Each skill entry has {skill, value, at_boundary, specializations} (#2115)."""
         skills = self._get_skills()
         entry = skills[0]
-        assert set(entry.keys()) == {"skill", "value", "specializations"}
+        assert set(entry.keys()) == {"skill", "value", "at_boundary", "specializations"}
         assert set(entry["skill"].keys()) == {"id", "name", "category"}
 
     def test_skill_entry_values(self) -> None:
@@ -687,6 +687,16 @@ class TestSkillsSection(TestCase):
         assert entry["skill"]["name"] == "Melee"
         assert entry["skill"]["category"] == TraitCategory.COMBAT
         assert entry["value"] == 30
+        assert entry["at_boundary"] is False
+
+    def test_skill_entry_at_boundary_true_when_gated(self) -> None:
+        """A skill parked at an XP boundary (19/29/39/49) reports at_boundary=True (#2115)."""
+        gated_skill = SkillFactory(trait__name="Gated Skill", trait__category=TraitCategory.COMBAT)
+        CharacterSkillValueFactory(character=self.character, skill=gated_skill, value=29)
+
+        skills = self._get_skills()
+        entry = next(e for e in skills if e["skill"]["id"] == gated_skill.pk)
+        assert entry["at_boundary"] is True
 
     def test_skill_specializations(self) -> None:
         """Skill entry contains nested specializations with id, name, value."""

@@ -28699,10 +28699,11 @@ export interface components {
     /**
      * @description Discriminated list item for purchasable progression unlocks.
      *
-     *     Two ``unlock_type`` variants are supported:
+     *     Three ``unlock_type`` variants are supported:
      *
      *     - ``class_level`` — purchase a class/level unlock with XP.
      *     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+     *     - ``skill_breakthrough`` — purchase a skill's XP-boundary breakthrough (#2115).
      */
     ProgressionUnlockItem: {
       unlock_type: string;
@@ -28721,6 +28722,7 @@ export interface components {
       thread_resonance_name: string | null;
       thread_target_kind: string | null;
       dev_points_to_boundary: number | null;
+      skill_id: number | null;
     };
     /**
      * @description Validate a staff-driven promotion/demotion before it reaches ``promote_gm`` (#2000).
@@ -28795,14 +28797,16 @@ export interface components {
       class_level_unlock_id?: number | null;
       thread_id?: number | null;
       boundary_level?: number | null;
+      skill_id?: number | null;
     };
     /** @description Response serializer for a completed unlock purchase. */
     PurchaseUnlockResponse: {
       unlock_type: string;
-      unlock_id: number | null;
+      unlock_id?: number | null;
       thread_level_unlock_id?: number | null;
       thread_id?: number | null;
       boundary_level?: number | null;
+      skill_id?: number | null;
     };
     /**
      * @description * `militia` - Militia
@@ -32488,9 +32492,10 @@ export interface components {
     /**
      * @description * `class_level` - Class Level
      *     * `thread_xp_lock` - Thread XP Lock
+     *     * `skill_breakthrough` - Skill Breakthrough
      * @enum {string}
      */
-    UnlockTypeEnum: 'class_level' | 'thread_xp_lock';
+    UnlockTypeEnum: 'class_level' | 'thread_xp_lock' | 'skill_breakthrough';
     /**
      * @description Input for PATCH /api/table-bulletin-posts/{id}/.
      *

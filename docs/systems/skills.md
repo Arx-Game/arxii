@@ -48,6 +48,37 @@ Character skills and specializations with development tracking, linked to the Tr
 - Only affects parent skills; specializations are immune
 - Encourages specialization over jack-of-all-trades builds
 
+### XP Boundaries (19, 29, 39, 49) — plateau, not a stop (#2115)
+
+A skill value ending in 9 (`_is_at_xp_boundary`, `services.py`) is a **breakthrough
+plateau**: training keeps paying off rust (a boundary-parked skill can still "blow the
+rust off"), but any surplus dev points beyond the rust payoff **dissipate** — they are
+deliberately ephemeral, never banked and never silently discarded. Every dissipation is
+reported: `_apply_development_to_skill` returns a plateau message
+("`<skill>` is at threshold `<N>.0` — training maintains, does not advance until the
+breakthrough is unlocked.") which `process_weekly_training` folds into the
+`DevelopmentTransaction.description` audit row. The same rule applies when a level-up's
+overflow lands exactly on a boundary — the overflow dissipates with the same message
+rather than banking or silently zeroing.
+
+The gate clears via `purchase_skill_breakthrough(character, skill)` — an XP spend against
+an authored `progression.TraitRatingUnlock` (`trait=skill.trait,
+target_rating=skill_value.value + 1`), mirroring `spend_xp_on_unlock`'s XP-debit pattern.
+The purchase does not itself grant a level (ADR-0053: XP buys the unlock that gates, never
+the grant) — it clears `skill_value.value` to the target rating and resets
+`development_points` to 0, so training resumes accruing from zero (no retroactive credit
+for points that dissipated while gated). `skills_at_boundary(character)` is the selector
+that surfaces every gated skill (with its authored XP cost, or `authored=False` when staff
+hasn't authored a breakthrough for that boundary yet) — feeds the `training` listing's
+plateau annotation, the `progression unlocks` listing's `[skill]` section, and the
+character-sheet `SkillEntry.at_boundary` flag. Reachable via
+`progression unlock skill=<id>` (telnet) or the `PurchaseUnlockAction`
+`unlock_type="skill_breakthrough"` branch (web/telnet convergence point) — see
+`docs/systems/progression.md`'s Unlock Shop section. A default breakthrough catalog (flat
+placeholder costs at each skill's 20/30/40/50 boundaries) is seeded by
+`world.seeds.game_content.skills.seed_skill_breakthrough_catalog()` (the `"skills"`
+cluster), so no skill is a landmine with no purchasable unlock out of the box.
+
 ### CG Point Budget
 - Path points (default 50): Suggested by path template, freely redistributable
 - Free points (default 60): Player's choice

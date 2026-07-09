@@ -51120,10 +51120,11 @@ components:
       description: |-
         Discriminated list item for purchasable progression unlocks.
 
-        Two ``unlock_type`` variants are supported:
+        Three ``unlock_type`` variants are supported:
 
         - ``class_level`` — purchase a class/level unlock with XP.
         - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+        - ``skill_breakthrough`` — purchase a skill's XP-boundary breakthrough (#2115).
       properties:
         unlock_type:
           type: string
@@ -51169,6 +51170,9 @@ components:
         dev_points_to_boundary:
           type: integer
           nullable: true
+        skill_id:
+          type: integer
+          nullable: true
       required:
       - boundary_level
       - class_level_unlock_id
@@ -51177,6 +51181,7 @@ components:
       - display_name
       - locked_reason
       - requirements_met
+      - skill_id
       - target_level
       - thread_id
       - thread_level
@@ -51317,6 +51322,9 @@ components:
         boundary_level:
           type: integer
           nullable: true
+        skill_id:
+          type: integer
+          nullable: true
       required:
       - unlock_type
     PurchaseUnlockResponse:
@@ -51337,8 +51345,10 @@ components:
         boundary_level:
           type: integer
           nullable: true
+        skill_id:
+          type: integer
+          nullable: true
       required:
-      - unlock_id
       - unlock_type
     QualityEnum:
       enum:
@@ -58614,10 +58624,12 @@ components:
       enum:
       - class_level
       - thread_xp_lock
+      - skill_breakthrough
       type: string
       description: |-
         * `class_level` - Class Level
         * `thread_xp_lock` - Thread XP Lock
+        * `skill_breakthrough` - Skill Breakthrough
     UpdateBulletinPostInput:
       type: object
       description: |-

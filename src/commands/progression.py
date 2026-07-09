@@ -45,6 +45,7 @@ _OPERATION_REMOVE = "remove"
 # PurchaseUnlockAction unlock types.
 _UNLOCK_TYPE_CLASS_LEVEL = "class_level"
 _UNLOCK_TYPE_THREAD_XP_LOCK = "thread_xp_lock"
+_UNLOCK_TYPE_SKILL_BREAKTHROUGH = "skill_breakthrough"
 
 # Keys returned by get_available_unlocks_for_character.
 _AVAILABLE_KEY = "available"
@@ -199,12 +200,14 @@ class CmdTraining(DispatchCommand):
         """Render the caller's training allocations and weekly AP budget."""
         from world.action_points.models import ActionPointConfig  # noqa: PLC0415
         from world.skills.models import TrainingAllocation  # noqa: PLC0415
+        from world.skills.services import skills_at_boundary  # noqa: PLC0415
 
         allocations = TrainingAllocation.objects.filter(character=self.caller).select_related(
             "skill",
             "specialization",
             "mentor",
         )
+        gated_skill_ids = {prospect.skill.pk for prospect in skills_at_boundary(self.caller)}
 
         total_ap = sum(allocation.ap_amount for allocation in allocations)
         weekly_budget = ActionPointConfig.get_weekly_regen()
@@ -215,12 +218,17 @@ class CmdTraining(DispatchCommand):
             lines.append("No training allocations set.")
         else:
             for allocation in allocations:
+                plateau = ""
                 if allocation.skill is not None:
                     target = allocation.skill.name
+                    if allocation.skill.pk in gated_skill_ids:
+                        plateau = " [at threshold — breakthrough required]"
                 else:
                     target = allocation.specialization.name
                 mentor = f" (mentor: {allocation.mentor.name})" if allocation.mentor else ""
-                lines.append(f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}")
+                lines.append(
+                    f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}{plateau}"
+                )
 
         self.msg("\n".join(lines))
 
@@ -238,10 +246,13 @@ class CmdProgressionUnlock(DispatchCommand):
     """Browse and purchase progression unlocks with XP.
 
     Usage:
-        progression unlocks             — list available class-level and thread XP-lock unlocks
+        progression unlocks             — list available class-level, thread XP-lock, and
+                                           skill-breakthrough unlocks
         progression unlock class=<id>   — purchase a class-level unlock
         progression unlock thread=<id> level=<n>
                                         — purchase a thread XP-lock boundary
+        progression unlock skill=<id>   — purchase a skill breakthrough (clears an XP-boundary
+                                           plateau so training resumes; #2115)
     """
 
     key = "progression"
@@ -281,26 +292,31 @@ class CmdProgressionUnlock(DispatchCommand):
         parsed = _parse_assignment_args(self._rest)
         class_id = parsed.get(_KEY_CLASS)
         thread_id = parsed.get(_KEY_THREAD)
+        skill_id = parsed.get(_KEY_SKILL)
         level = parsed.get(_KEY_LEVEL)
 
-        has_class = class_id is not None
-        has_thread = thread_id is not None
-
-        if has_class and has_thread:
-            msg = "Provide either class=<id> or thread=<id>, not both."
+        provided_count = sum(x is not None for x in (class_id, thread_id, skill_id))
+        if provided_count > 1:
+            msg = "Provide exactly one of class=<id>, thread=<id>, or skill=<id>."
             raise CommandError(msg)
-        if has_class:
+
+        if class_id is not None:
             return {
                 "unlock_type": _UNLOCK_TYPE_CLASS_LEVEL,
                 "class_level_unlock_id": _require_positive_int(class_id, _KEY_CLASS),
             }
-        if has_thread:
+        if thread_id is not None:
             return {
                 "unlock_type": _UNLOCK_TYPE_THREAD_XP_LOCK,
                 "thread_id": _require_positive_int(thread_id, _KEY_THREAD),
                 "boundary_level": _require_positive_int(level, _KEY_LEVEL),
             }
-        msg = "Provide class=<id> or thread=<id> level=<n>."
+        if skill_id is not None:
+            return {
+                "unlock_type": _UNLOCK_TYPE_SKILL_BREAKTHROUGH,
+                "skill_id": _require_positive_int(skill_id, _KEY_SKILL),
+            }
+        msg = "Provide class=<id>, thread=<id> level=<n>, or skill=<id>."
         raise CommandError(msg)
 
     def _show_listing(self) -> None:
@@ -322,6 +338,7 @@ class CmdProgressionUnlock(DispatchCommand):
         lines.extend(self._render_class_unlock_entries(entries))
         if sheet is not None:
             lines.extend(self._render_thread_unlocks(sheet, has_entries=bool(entries)))
+        lines.extend(self._render_skill_breakthroughs(character, has_entries=bool(entries)))
 
         self.msg("\n".join(lines))
 
@@ -364,4 +381,32 @@ class CmdProgressionUnlock(DispatchCommand):
             lines.append(
                 f"[thread] {thread_name} level {prospect.boundary_level}: {prospect.xp_cost} XP"
             )
+        return lines
+
+    def _render_skill_breakthroughs(
+        self,
+        character: Any,
+        *,
+        has_entries: bool,
+    ) -> list[str]:
+        """Return rendered lines for skill XP-boundary breakthroughs (#2115)."""
+        from world.skills.services import skills_at_boundary  # noqa: PLC0415
+
+        prospects = skills_at_boundary(character)
+        if not prospects:
+            if has_entries:
+                return []
+            return ["No skill breakthroughs available."]
+        lines = ["", "Skill breakthroughs:"]
+        for prospect in prospects:
+            rating = prospect.next_rating / 10
+            if prospect.authored:
+                lines.append(
+                    f"[skill] {prospect.skill.name} breakthrough to {rating:.1f}: "
+                    f"{prospect.xp_cost} XP"
+                )
+            else:
+                lines.append(
+                    f"[skill] {prospect.skill.name} at threshold {rating:.1f}: not yet authored"
+                )
         return lines

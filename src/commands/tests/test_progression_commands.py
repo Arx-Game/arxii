@@ -309,6 +309,16 @@ class CmdProgressionUnlockDispatchTests(TestCase):
         self.assertEqual(kwargs["boundary_level"], 10)
 
     @patch("commands.command.dispatch_player_action")
+    def test_unlock_skill_dispatches_skill_breakthrough_kwargs(self, mock_dispatch):
+        """``progression unlock skill=<id>`` dispatches skill_breakthrough kwargs (#2115)."""
+        mock_dispatch.return_value = self.success_result
+        _make_progression_cmd(self.character, "unlock skill=9").func()
+        _, ref, kwargs = mock_dispatch.call_args.args
+        self.assertEqual(ref.registry_key, "purchase_unlock")
+        self.assertEqual(kwargs["unlock_type"], "skill_breakthrough")
+        self.assertEqual(kwargs["skill_id"], 9)
+
+    @patch("commands.command.dispatch_player_action")
     def test_failure_message_surfaces_to_caller(self, mock_dispatch):
         mock_dispatch.return_value = DispatchResult(
             backend=ActionBackend.REGISTRY,
@@ -345,7 +355,7 @@ class CmdProgressionUnlockErrorTests(TestCase):
 
     def test_unlock_both_class_and_thread_raises(self):
         _make_progression_cmd(self.character, "unlock class=1 thread=2 level=10").func()
-        self.assertIn("not both", self._all_msg_text())
+        self.assertIn("exactly one", self._all_msg_text())
 
     def test_unlock_thread_missing_level_raises(self):
         _make_progression_cmd(self.character, "unlock thread=2").func()

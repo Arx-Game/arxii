@@ -70,6 +70,15 @@ Parent skills and specializations for character abilities. Skills are linked to 
 - `apply_weekly_rust(trained_skills)` — adds rust to untrained skills
 - `run_weekly_skill_cron()` — orchestrator: training then rust
 
+**XP-Boundary Breakthrough (#2115):**
+- `purchase_skill_breakthrough(character, skill) -> tuple[bool, str]` — spends XP against
+  an authored `TraitRatingUnlock` to clear a boundary-parked skill's gate; resets
+  `development_points` to 0 (no retroactive credit)
+- `skills_at_boundary(character) -> list[SkillBreakthroughProspect]` — selector listing every
+  gated skill with its authored XP cost (or `authored=False` if unauthored)
+- `is_skill_at_xp_boundary(value) -> bool` — public wrapper for boundary-check, used by
+  `character_sheets` serialization for the `SkillEntry.at_boundary` flag
+
 ### Training Formula
 ```
 base_gain = 5 × AP × path_level
@@ -80,7 +89,17 @@ dev_points = base_gain + mentor_bonus
 ### Development Costs
 - Level N to N+1 costs `(N - 9) × 100` dev points
 - Overflow carries across levels
-- XP boundaries at 19, 29, 39, 49 block advancement until XP purchase
+- XP boundaries at 19, 29, 39, 49 are a **plateau, not banking** (#2115): a boundary-parked
+  skill still pays off rust from incoming dev points, but any surplus beyond that payoff
+  **dissipates** — never banked, never silently discarded. `_apply_development_to_skill`
+  returns a plateau message on dissipation (also folded into the weekly
+  `DevelopmentTransaction.description`); `purchase_skill_breakthrough(character, skill)`
+  spends XP against an authored `progression.TraitRatingUnlock` to clear the gate, resetting
+  `development_points` to 0 (training resumes from zero — no retroactive credit for
+  dissipated points). `skills_at_boundary(character)` surfaces every gated skill (with its
+  authored XP cost, if any) for display. Reachable via `progression unlock skill=<id>`
+  (`PurchaseUnlockAction` `unlock_type="skill_breakthrough"`); default breakthroughs are
+  seeded by the `"skills"` cluster (`world.seeds.game_content.skills`).
 - Specializations have no XP boundaries
 
 ### Rust System

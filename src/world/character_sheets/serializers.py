@@ -71,6 +71,7 @@ from world.roster.models import RosterTenure
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+from world.skills.services import is_skill_at_xp_boundary
 from world.traits.models import CharacterTraitValue, TraitType
 
 # --- Tiny helpers for nested {id, name} representations ---
@@ -484,6 +485,7 @@ def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
             SkillEntry(
                 skill=SkillRef(id=skill.pk, name=skill.name, category=skill.category),
                 value=csv.value,
+                at_boundary=is_skill_at_xp_boundary(csv.value),
                 specializations=spec_by_skill.get(skill.pk, []),
             )
         )

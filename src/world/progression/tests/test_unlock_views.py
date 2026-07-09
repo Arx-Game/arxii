@@ -19,9 +19,12 @@ from world.progression.models import (
     CharacterUnlock,
     ClassLevelUnlock,
     ClassXPCost,
+    TraitRatingUnlock,
+    TraitXPCost,
     XPCostChart,
     XPCostEntry,
 )
+from world.skills.factories import CharacterSkillValueFactory, SkillFactory
 
 
 class UnlockShopViewTests(TestCase):
@@ -80,6 +83,17 @@ class UnlockShopViewTests(TestCase):
             _trait_value=30,
             _path_stage=2,
         )
+
+    def _create_gated_skill(self, *, xp_cost: int | None = None):
+        """Create a skill parked at an XP boundary (#2115), optionally with an authored cost."""
+        skill = SkillFactory()
+        CharacterSkillValueFactory(character=self.character, skill=skill, value=19)
+        if xp_cost is not None:
+            chart = XPCostChart.objects.create(name=f"Breakthrough Chart {skill.pk}")
+            XPCostEntry.objects.create(chart=chart, level=20, xp_cost=xp_cost)
+            TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
+            TraitRatingUnlock.objects.create(trait=skill.trait, target_rating=20)
+        return skill
 
     def test_list_includes_class_level_and_thread_xp_lock_items(self):
         """GET returns both class-level and thread XP-lock unlock items."""
@@ -238,3 +252,57 @@ class UnlockShopViewTests(TestCase):
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/progression/unlocks/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_includes_skill_breakthrough_item(self):
+        """GET includes an authored skill_breakthrough item for a gated skill (#2115)."""
+        skill = self._create_gated_skill(xp_cost=75)
+
+        response = self.client.get("/api/progression/unlocks/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"]
+        item = next(i for i in results if i["unlock_type"] == "skill_breakthrough")
+        self.assertEqual(item["skill_id"], skill.pk)
+        self.assertEqual(item["xp_cost"], 75)
+        self.assertTrue(item["requirements_met"])
+        self.assertIsNone(item["locked_reason"])
+
+    def test_list_marks_unauthored_skill_breakthrough_as_locked(self):
+        """An unauthored breakthrough surfaces as not-yet-purchasable, not silently absent."""
+        skill = self._create_gated_skill(xp_cost=None)
+
+        response = self.client.get("/api/progression/unlocks/")
+
+        results = response.data["results"]
+        item = next(i for i in results if i["unlock_type"] == "skill_breakthrough")
+        self.assertEqual(item["skill_id"], skill.pk)
+        self.assertFalse(item["requirements_met"])
+        self.assertEqual(item["locked_reason"], "Not yet authored")
+
+    def test_purchase_skill_breakthrough_success(self):
+        """POST purchase can buy a skill breakthrough when XP is available (#2115)."""
+        skill = self._create_gated_skill(xp_cost=100)
+        self._set_xp(150)
+
+        response = self.client.post(
+            "/api/progression/unlocks/purchase/",
+            {"unlock_type": "skill_breakthrough", "skill_id": skill.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["unlock_type"], "skill_breakthrough")
+        self.assertEqual(response.data["skill_id"], skill.pk)
+
+    def test_purchase_skill_breakthrough_insufficient_xp(self):
+        """POST purchase fails with 400 when XP is insufficient for a skill breakthrough."""
+        skill = self._create_gated_skill(xp_cost=100)
+        self._set_xp(50)
+
+        response = self.client.post(
+            "/api/progression/unlocks/purchase/",
+            {"unlock_type": "skill_breakthrough", "skill_id": skill.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

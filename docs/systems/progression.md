@@ -71,7 +71,7 @@ from world.progression.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ClassLevelUnlock` | Unlocking a new level in a character class | `character_class`, `target_level` |
-| `TraitRatingUnlock` | Unlocking a major trait rating threshold | `trait`, `target_rating` (divisible by 10) |
+| `TraitRatingUnlock` | Unlocking a major trait rating threshold. Wired for skill XP boundaries via `purchase_skill_breakthrough` (`world.skills.services`, #2115) — `trait` resolves to `Skill.trait`, `target_rating` to the skill's next rating (20/30/40/50) | `trait`, `target_rating` (divisible by 10) |
 | `CharacterUnlock` | Records what class levels a character has unlocked | `character`, `character_class`, `target_level`, `unlocked_date`, `xp_spent` |
 
 ### Requirements (Abstract Hierarchy)
@@ -394,10 +394,10 @@ transactions = award_scene_development_points(scene, participants, awards)
 ### Unlock Shop
 
 - `GET /api/progression/unlocks/` — List purchasable unlocks for the played character; returns a paginated wrapper (`{ count, next, previous, page_size, num_pages, current_page, results: [...] }`)
-  - Items are discriminated by `unlock_type`: `class_level` (authored `ClassLevelUnlock`) or `thread_xp_lock` (next `ThreadXPLockedLevel` boundary)
+  - Items are discriminated by `unlock_type`: `class_level` (authored `ClassLevelUnlock`), `thread_xp_lock` (next `ThreadXPLockedLevel` boundary), or `skill_breakthrough` (a skill parked at an XP boundary, via `world.skills.services.skills_at_boundary`, #2115) — the `skill_id` field is populated for that variant; `requirements_met=False`/`locked_reason="Not yet authored"` when no `TraitRatingUnlock` exists yet for that boundary
   - Query parameter `unlock_type` filters the list to a single variant
   - Requires a played character (set by the Evennia session / test client)
-- `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }` or `{ unlock_type, thread_id, boundary_level }`; dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success
+- `POST /api/progression/unlocks/purchase/` — Purchase an unlock with XP; body `{ unlock_type, class_level_unlock_id }`, `{ unlock_type, thread_id, boundary_level }`, or `{ unlock_type: "skill_breakthrough", skill_id }`; dispatches `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) and returns the action result on success
 
 ### Account Progression Dashboard
 - `GET /api/progression/account/` - Current user's XP balance, kudos balance, recent transactions, and claim options
@@ -474,15 +474,19 @@ Dispatches `ManageTrainingAction` (`registry_key="manage_training"`) through the
 ### `progression` — Browse/purchase XP unlocks
 
 ```
-progression unlocks              — list class-level and thread XP-lock unlocks
+progression unlocks              — list class-level, thread XP-lock, and skill-breakthrough
+                                    unlocks
 progression unlock class=<id>    — purchase a class-level unlock
 progression unlock thread=<id> level=<n>
                                  — purchase a thread XP-lock boundary
+progression unlock skill=<id>    — purchase a skill's XP-boundary breakthrough (#2115)
 ```
 
 `progression unlocks` reads the same service functions as `GET /api/progression/unlocks/`.
 `progression unlock` dispatches `PurchaseUnlockAction`
-(`registry_key="purchase_unlock"`).
+(`registry_key="purchase_unlock"`). See `docs/systems/skills.md`'s "XP Boundaries" section
+for the skill-breakthrough purchase's mechanics (rust payoff, ephemeral dev points,
+`purchase_skill_breakthrough`).
 
 ### `kudos` — Claim kudos for XP (#1348)
 
