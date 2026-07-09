@@ -141,7 +141,7 @@ from world.conditions.services import (
     process_action_tick,           # On-action DoT
 
     # Damage interactions
-    process_damage_interactions,   # Handle condition reactions to damage
+    process_damage_interactions,   # Handle condition reactions to damage (wired into combat #2018)
 
     # Suppression
     suppress_condition,            # Temporarily disable effects
@@ -186,6 +186,20 @@ seam: a permanent condition (e.g. a species benefit condition, see
 `ConditionCheckModifier` for the resist check type raises the target's roll —
 "math, not a boolean," per ADR-0073's tenet extended to the condition-application
 axis.
+
+### Damage Interactions (#2018)
+
+`process_damage_interactions(target, damage_type)` is called from
+`apply_damage_to_opponent` and `apply_damage_to_participant` after all
+soak, resistance, and armor reductions. It applies the `damage_modifier_percent`
+as a final multiplier on net damage, and may consume (`removes_condition=True`)
+or transform (`applies_condition` set) the condition.
+
+**Narration rule:** The synergy beat fires only on condition transitions
+(removal or application). A pure damage-modifier interaction with no
+transition is silent math — this prevents spam while keeping dramatic
+moments visible. Authored `narration_snippet` text is used when present;
+otherwise a deterministic fallback is composed.
 
 ### Querying Modifiers
 

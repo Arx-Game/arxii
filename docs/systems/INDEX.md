@@ -477,7 +477,7 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   wired into all `world/conditions/services.py` mutation sites.
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`,
   `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`,
-  `process_round_end()`, `process_damage_interactions()`, `get_treatment_candidates()`,
+  `process_round_end()`, `process_damage_interactions()` (wired into combat #2018), `get_treatment_candidates()`,
   `perform_treatment()`
 - **Perception gate (#1225):** `can_perceive(actor, target)` composes co-location with
   per-observer concealment detection (`is_concealed()`, `active_concealments()`,
@@ -2843,6 +2843,9 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     `apply_damage_to_participant(..., bypass_pre_apply=False)` — optional kwarg that skips
     `DAMAGE_PRE_APPLY` emit + `_try_interpose`; used by `reflect_damage` to bounce a hit
     without triggering another reactive cycle (loop-safety via `bypass_pre_apply=True`).
+    Both paths now also call `process_damage_interactions` after soak/resistance/armor
+    (#2018) — condition-damage interactions amplify, dampen, consume, or transform
+    conditions. Narration fires only on transitions (removal/transform), not every hit.
   - `drain_reactive_upkeep(encounter)` — debits `ConditionTemplate.upkeep_anima_per_round`
     from each active participant holding a reactive condition; called by `begin_round_of_combat`
     immediately after emitting `COMBAT_ROUND_STARTING`. See ADR-0060.

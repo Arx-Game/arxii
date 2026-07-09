@@ -29,7 +29,11 @@ if TYPE_CHECKING:
     from world.combat.models import ClashConfig, StrainConfig
     from world.combat.types import WeaponContribution
     from world.conditions.models import ConditionTemplate, DamageType
-    from world.conditions.types import AppliedConditionResult, RemovedConditionResult
+    from world.conditions.types import (
+        AppliedConditionResult,
+        DamageInteractionResult,
+        RemovedConditionResult,
+    )
     from world.covenants.models import CovenantRole
     from world.items.models import ItemInstance
     from world.magic.models import FuryTier, Technique
@@ -3396,6 +3400,35 @@ def _effective_resistance_for_opponent(
     return opponent.objectdb.conditions.resistance_modifier(damage_type)
 
 
+def _apply_condition_damage_interactions(
+    target: ObjectDB,  # noqa: OBJECTDB_PARAM
+    damage_type: DamageType | None,
+    damage_amount: int,
+) -> tuple[int, DamageInteractionResult | None]:
+    """Run condition-damage interactions on a target, returning modified damage + result.
+
+    Called from both combat damage paths after soak/resistance/armor (#2018).
+    The interaction modifier is a final percentage multiplier on net damage.
+    Returns ``(modified_damage, interaction_result)`` — ``interaction_result``
+    is None when damage_type is None, a non-model value, or damage_amount is zero.
+    """
+    if damage_type is None or damage_amount <= 0:
+        return damage_amount, None
+    # Some callers pass a string damage_type (e.g. "physical") rather than a
+    # DamageType model instance. Condition-damage interactions require a real
+    # model to query the interaction table — skip for non-model values.
+    from world.conditions.models import DamageType  # noqa: PLC0415
+
+    if not isinstance(damage_type, DamageType):
+        return damage_amount, None
+    from world.conditions.services import process_damage_interactions  # noqa: PLC0415
+
+    result = process_damage_interactions(target, damage_type)
+    if result.damage_modifier_percent != 0:
+        damage_amount = max(0, int(damage_amount * (1 + result.damage_modifier_percent / 100)))
+    return damage_amount, result
+
+
 def apply_damage_to_opponent(  # noqa: PLR0913
     opponent: CombatOpponent,
     raw_damage: int,
@@ -3435,6 +3468,15 @@ def apply_damage_to_opponent(  # noqa: PLR0913
     resistance = _effective_resistance_for_opponent(opponent, damage_type)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
+
+    # Condition-damage interactions (#2018). Final percentage multiplier on
+    # net damage, after soak + resistance. May consume/transform conditions.
+    interaction_result = None
+    if damage_through > 0 and opponent.objectdb is not None:
+        damage_through, interaction_result = _apply_condition_damage_interactions(
+            opponent.objectdb, damage_type, damage_through
+        )
+
     # Combo damage that bypasses soak should not also probe — the combo
     # itself is the reward for probing.
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
@@ -3488,6 +3530,7 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         defeated=defeated,
         kills=0,
         opponent_id=opponent.pk,
+        damage_interaction=interaction_result,
     )
 
 
@@ -3826,6 +3869,14 @@ def apply_damage_to_participant(  # noqa: PLR0913
     # armor is their only soak source, and absorbing pieces take durability wear.
     effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
+    # Condition-damage interactions (#2018). Final percentage multiplier on
+    # net damage, after resistance + armor soak. May consume/transform conditions.
+    interaction_result = None
+    if effective_damage > 0:
+        effective_damage, interaction_result = _apply_condition_damage_interactions(
+            character, damage_type, effective_damage
+        )
+
     health_before = vitals.health
     vitals.health -= effective_damage
     health_after = vitals.health
@@ -3879,6 +3930,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
         knockout_eligible=knockout_eligible,
         death_eligible=death_eligible,
         permanent_wound_eligible=permanent_wound_eligible,
+        damage_interaction=interaction_result,
     )
 
 
@@ -5207,6 +5259,10 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
 
     target_label = target.name if target is not None else None
     signature_snippet = resolve_signature_snippet(participant.character_sheet.character, technique)
+    interaction_result = next(
+        (dr.damage_interaction for dr in outcome.damage_results if dr.damage_interaction),
+        None,
+    )
     narration = render_action_outcome_narration(
         actor_label=str(participant),
         technique_name=technique.name,
@@ -5214,6 +5270,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         outcome=outcome,
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
+        interaction_result=interaction_result,
     )
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 

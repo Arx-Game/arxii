@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.conditions.models import (
+        ConditionDamageInteraction,
         ConditionInstance,
         ConditionStage,
         ConditionTemplate,
@@ -99,6 +100,7 @@ class DamageInteractionResult:
     damage_modifier_percent: int = 0
     removed_conditions: list["ConditionInstance"] = field(default_factory=list)
     applied_conditions: list["ConditionInstance"] = field(default_factory=list)
+    fired_interactions: list["ConditionDamageInteraction"] = field(default_factory=list)
 
 
 @dataclass

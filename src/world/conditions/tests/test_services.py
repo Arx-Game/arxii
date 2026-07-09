@@ -528,6 +528,33 @@ class ProcessDamageInteractionsTest(TestCase):
 
         assert result.damage_modifier_percent == 70  # -30 + 100
 
+    def test_fired_interactions_populated_for_non_trivial(self):
+        """fired_interactions lists interactions with modifier != 0 or a transition."""
+        ConditionInstanceFactory(target=self.target, condition=self.frozen)
+
+        result = process_damage_interactions(self.target, self.force)
+
+        assert len(result.fired_interactions) == 1
+        assert result.fired_interactions[0].damage_modifier_percent == 50
+
+    def test_fired_interactions_empty_for_zero_modifier_no_transition(self):
+        """An interaction with 0 modifier and no removal/apply is not 'fired'."""
+        # The burning+cold interaction has 0 modifier but removes_condition=True,
+        # so it IS non-trivial. Create a truly trivial one.
+        trivial = ConditionTemplateFactory(name="trivial-cond")
+        ConditionDamageInteractionFactory(
+            condition=trivial,
+            damage_type=self.fire,
+            damage_modifier_percent=0,
+            removes_condition=False,
+            applies_condition=None,
+        )
+        ConditionInstanceFactory(target=self.target, condition=trivial)
+
+        result = process_damage_interactions(self.target, self.fire)
+
+        assert len(result.fired_interactions) == 0
+
 
 class GetCapabilityStatusTest(TestCase):
     """Tests for get_capability_status and related functions."""
