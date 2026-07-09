@@ -45,6 +45,7 @@ class CmdCrossing(ArxCommand):
             "thread__resonance",
             "thread__target_trait",
             "thread__target_facet",
+            "thread__target_mantle",
             "thread__target_relationship_track__track",
             "thread__target_relationship_track__relationship__target__character",
             "thread__target_capstone__relationship__target__character",
