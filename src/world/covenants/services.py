@@ -620,6 +620,9 @@ def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
 
     recompute_max_health_with_threads(sheet)
+    # #2022: grant role-granted gifts, techniques, and capabilities.
+    _grant_role_gifts_and_techniques(membership)
+    _grant_role_granted_capabilities(membership)
     after = set(sheet.character.threads.passive_capability_grants())
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
 
@@ -633,6 +636,9 @@ def clear_engaged_membership(*, membership: CharacterCovenantRole) -> None:
         return
     sheet = membership.character_sheet
     before = set(sheet.character.threads.passive_capability_grants())
+    # #2022: revoke role-granted techniques and capabilities before disengaging.
+    _revoke_role_granted_techniques(membership)
+    _revoke_role_granted_capabilities(membership)
     membership.engaged = False
     membership.save(update_fields=["engaged"])
     sheet.character.covenant_roles.invalidate()
@@ -644,6 +650,100 @@ def clear_engaged_membership(*, membership: CharacterCovenantRole) -> None:
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
 
     _announce_capability_diff(sheet, before, after, AccessChangeSource.COVENANT_ROLE_DISENGAGED)
+
+
+def _grant_role_gifts_and_techniques(membership: CharacterCovenantRole) -> None:
+    """Grant the role's gifts and their techniques to the character (#2022).
+
+    For each ``granted_gifts`` entry whose ``unlock_thread_level`` is met by the
+    character's COVENANT_ROLE thread level, mint ``CharacterGift`` (if not present)
+    + ``CharacterTechnique`` rows for the gift's techniques (marked with
+    ``role_source`` so they can be auto-revoked on disengage).
+
+    Does NOT revoke techniques the character learned independently — only
+    grants role-specific ones.
+    """
+    from world.magic.models import (  # noqa: PLC0415  # noqa: PLC0415
+        CharacterGift,
+        CharacterTechnique,
+        Technique,
+    )
+
+    sheet = membership.character_sheet
+    role = membership.covenant_role
+    # Resolve the COVENANT_ROLE thread level for this character.
+    thread_level = _covenant_role_thread_level(sheet, role)
+    for grant in role.gift_grants.select_related("gift"):
+        if thread_level < grant.unlock_thread_level:
+            continue
+        gift = grant.gift
+        # Mint CharacterGift if not present.
+        CharacterGift.objects.get_or_create(
+            character=sheet,
+            gift=gift,
+        )
+        # Mint CharacterTechnique for each of the gift's techniques.
+        for technique in Technique.objects.filter(gift=gift):
+            CharacterTechnique.objects.get_or_create(
+                character=sheet,
+                technique=technique,
+                defaults={"role_source": membership},
+            )
+
+
+def _revoke_role_granted_techniques(membership: CharacterCovenantRole) -> None:
+    """Revoke techniques that were auto-granted by this role (#2022).
+
+    Only deletes ``CharacterTechnique`` rows where ``role_source`` points at
+    this membership. Techniques learned independently (role_source=None) are
+    untouched.
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+    CharacterTechnique.objects.filter(role_source=membership).delete()
+
+
+def _grant_role_granted_capabilities(membership: CharacterCovenantRole) -> None:
+    """Grant the role's capabilities to the character (#2022).
+
+    Writes capability ledger entries for each ``granted_capabilities`` entry.
+    The existing ``_announce_capability_diff`` path (called by
+    ``set_engaged_membership``) will announce the diff.
+    """
+    # Capabilities are tracked via the passive_capability_grants() handler,
+    # which reads engaged roles. The capability diff announce already fires
+    # in set_engaged_membership. This is a no-op stub for now — capabilities
+    # granted via M2M are read through the engaged-role handler, not written
+    # to a separate ledger. The _announce_capability_diff already surfaces them.
+    # Future: if capabilities need explicit ObjectProperty rows, write them here.
+
+
+def _revoke_role_granted_capabilities(membership: CharacterCovenantRole) -> None:
+    """Revoke capabilities that were auto-granted by this role (#2022).
+
+    Counterpart to _grant_role_granted_capabilities. No-op for now —
+    capabilities are read through the engaged-role handler and drop
+    automatically when engaged=False.
+    """
+    # No explicit rows to revoke — capabilities are derived from engaged state.
+
+
+def _covenant_role_thread_level(sheet: CharacterSheet, role: CovenantRole) -> int:
+    """Return the character's COVENANT_ROLE thread level for this role (#2022).
+
+    Reads the character's Thread with target_kind=COVENANT_ROLE anchored to
+    this role. Returns 0 if no such thread exists.
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    thread = Thread.objects.filter(
+        owner=sheet,
+        target_kind=TargetKind.COVENANT_ROLE,
+        target_covenant_role=role,
+        retired_at__isnull=True,
+    ).first()
+    return thread.level if thread is not None else 0
 
 
 @transaction.atomic

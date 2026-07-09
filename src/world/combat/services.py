@@ -3945,6 +3945,8 @@ def _action_matches_slot(
     1. The technique's effect_type matches the slot's required_action_type.
     2. If the slot has a resonance_requirement, the technique's gift must
        have a matching resonance (via the gift's M2M resonances).
+    3. If the slot has a required_archetype (#2022), the action's participant's
+       engaged CovenantRole must have that archetype.
 
     Args:
         action: The PC's declared round action.
@@ -3960,7 +3962,20 @@ def _action_matches_slot(
         resonance_ids = gift_resonance_ids.get(technique.gift_id, set())
         if slot.resonance_requirement_id not in resonance_ids:
             return False
+    # #2022: check required_archetype if set.
+    if slot.required_archetype:
+        if not _participant_has_archetype(action.participant, slot.required_archetype):
+            return False
     return True
+
+
+def _participant_has_archetype(participant: CombatParticipant, archetype: str) -> bool:
+    """Return True if the participant's engaged CovenantRole has the given archetype (#2022)."""
+
+    for role in participant.character_sheet.character.covenant_roles.currently_engaged_roles():
+        if role.archetype == archetype:
+            return True
+    return False
 
 
 def _try_match_all_slots(
