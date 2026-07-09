@@ -206,11 +206,62 @@ def touchstone_power_term(ctx: PowerTermContext) -> int:
 # Registry
 # ---------------------------------------------------------------------------
 
+
+def enhancement_overlap_term(ctx: PowerTermContext) -> int:
+    """Flat bonus when an enhancement technique overlaps the character's existing kit (#2022).
+
+    Role-granted enhancement techniques (``Technique.enhances_effect_type`` is set)
+    are primarily passive boosts to the character's existing techniques that serve
+    the same role function. When the character also has a technique whose
+    ``effect_type`` matches this technique's ``enhances_effect_type``, the cast
+    gains a flat intensity bonus — the vow amplifies what the character already
+    does.
+
+    Returns 0 when the technique has no ``enhances_effect_type`` or when the
+    character has no matching technique. The bonus amount is a fixed constant
+    (the enhancement is a rider, not a replacement).
+    """
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+
+    if ctx.technique is None or ctx.technique.enhances_effect_type_id is None:
+        return 0
+    has_overlap = CharacterTechnique.objects.filter(
+        character_id=ctx.sheet.pk,
+        technique__effect_type_id=ctx.technique.enhances_effect_type_id,
+    ).exists()
+    if not has_overlap:
+        return 0
+    return _ENHANCEMENT_OVERLAP_BONUS
+
+
+# Flat intensity bonus when an enhancement technique overlaps existing kit.
+# Tunable — a small rider that makes a well-matched vow feel rewarding without
+# being a replacement for a standalone technique.
+_ENHANCEMENT_OVERLAP_BONUS: int = 2
+
+
+def archetype_cast_scaling_term(ctx: PowerTermContext) -> int:
+    """Flat power bonus from archetype action scaling on cast_technique (#2022).
+
+    A SWORD-role character's declared techniques gain a small flat damage bonus
+    scaling with their COVENANT_ROLE thread level. This reads the
+    ``ArchetypeActionScaling`` row for ``("cast_technique", role_archetype)``
+    and returns ``int(thread_level * multiplier)``.
+    """
+    from world.covenants.services import archetype_action_scaling_bonus  # noqa: PLC0415
+
+    character = ctx.sheet.character
+    bonus = archetype_action_scaling_bonus(character, "cast_technique")
+    return int(bonus)
+
+
 _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
     thread_power_term,
     touchstone_power_term,
+    enhancement_overlap_term,
+    archetype_cast_scaling_term,
 ]
 
 

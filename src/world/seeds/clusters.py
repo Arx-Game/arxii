@@ -175,6 +175,14 @@ def _seed_gm() -> None:
     seed_default_gm_level_caps()
 
 
+def _seed_covenant_roles() -> None:
+    from world.seeds.game_content.covenant_roles import (  # noqa: PLC0415
+        seed_role_catalog_content,
+    )
+
+    seed_role_catalog_content()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -254,6 +262,10 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # allow_custom_stakes, allow_global_scope_authoring per GMLevel), so a fresh
     # deploy's staff-review gates aren't silently maximally-restrictive (#2000).
     "gm": _seed_gm,
+    # Covenant role catalog: granted gifts + techniques + capabilities +
+    # archetype action scaling for the 3 canonical roles (#2022). After "items"
+    # (creates the role rows + gear compat) and "magic" (EffectType/Style/Gift).
+    "covenant_roles": _seed_covenant_roles,
 }
 
 

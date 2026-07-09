@@ -278,13 +278,24 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - all params describe one cast reso
 
     # #1581: pose and cost reflect the gift-technique's unlocked variant by default.
     # When use_base_form=True, bypass variant resolution and use the raw technique.
+    # #2022: when the technique was role-granted, resolve the variant by the
+    # COVENANT_ROLE thread level, not the GIFT thread level.
     if use_base_form:
         resolved_name = technique.name
         resolved_intensity = technique.intensity
     else:
         from world.magic.specialization.services import resolve_specialized_variant  # noqa: PLC0415
 
-        resolved = resolve_specialized_variant(entity=technique, character=character)
+        # Look up the CharacterTechnique to check for role_source provenance.
+        char_technique = CharacterTechnique.objects.filter(
+            character_id=caster_persona.character_sheet_id,
+            technique=technique,
+        ).first()
+        resolved = resolve_specialized_variant(
+            entity=technique,
+            character=character,
+            character_technique=char_technique,
+        )
         resolved_name = resolved.name
         resolved_intensity = resolved.intensity
 

@@ -6567,6 +6567,8 @@ def _ensure_interpose_challenges(
 def apply_interpose_outcome(
     pre_payload: DamagePreApplyPayload,
     result: ChallengeResolutionResult,
+    *,
+    interposer: object | None = None,
 ) -> None:
     """Map a graded interpose resolution onto *pre_payload*.
 
@@ -6576,7 +6578,9 @@ def apply_interpose_outcome(
     - **clean block** (``resolution_type == DESTROY`` or ``success_level > 0``):
       the blow is fully turned aside — ``pre_payload.amount = 0``.
     - **partial** (``success_level == 0``, not DESTROY): the interposer softens
-      but does not stop the blow — ``pre_payload.amount //= 2``.
+      but does not stop the blow — ``pre_payload.amount //= 2``. A SHIELD-role
+      interposer scales this reduction by their COVENANT_ROLE thread level (#2022):
+      the deeper the vow, the more damage the partial block absorbs.
     - **failure** (``success_level < 0``): the interpose fails — no change.
     """
     from world.mechanics.constants import ResolutionType  # noqa: PLC0415
@@ -6590,7 +6594,21 @@ def apply_interpose_outcome(
         return
 
     if success_level == 0:
-        pre_payload.amount //= 2
+        # #2022: SHIELD archetype scaling — a deeper vow blocks more damage
+        # on a partial block. The bonus reduces the remaining damage further.
+        divisor = 2
+        if interposer is not None:
+            from world.covenants.services import (  # noqa: PLC0415
+                archetype_action_scaling_bonus,
+            )
+
+            bonus = archetype_action_scaling_bonus(interposer, "combat_interpose")
+            if bonus > 0:
+                # Scale: partial block reduces to amount / (2 + bonus).
+                # A bonus of 1.0 (a deep SHIELD vow) makes the divisor 3,
+                # blocking 67% instead of 50%.
+                divisor = int(2 + bonus)
+        pre_payload.amount //= divisor
         return
 
     # Failure (success_level < 0) — the blow continues at full damage.
@@ -6628,7 +6646,7 @@ def dispatch_interpose(
             f"No interpose approach is available to {interposer!r} "
             f"for protected target {protected!r}."
         ),
-        outcome_fn=functools.partial(apply_interpose_outcome, pre_payload),
+        outcome_fn=functools.partial(apply_interpose_outcome, pre_payload, interposer=interposer),
     )
 
 

@@ -1921,6 +1921,8 @@
   - gear_compatibilities <- covenants.GearArchetypeCompatibility
   - character_assignments <- covenants.CharacterCovenantRole
   - role_bonuses <- covenants.CovenantRoleBonus
+  - vow_stat_scalings <- covenants.VowStatScaling
+  - gift_grants <- covenants.CovenantRoleGiftGrant
   - combat_participations <- combat.CombatParticipant
 
 ### GearArchetypeCompatibility
@@ -1950,6 +1952,22 @@
 **Foreign Keys:**
   - covenant_role -> covenants.CovenantRole [FK]
   - modifier_target -> mechanics.ModifierTarget [FK]
+
+### VowStatScaling
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+  - modifier_target -> mechanics.ModifierTarget [FK]
+
+### VowGearScaling
+*(no foreign keys — keyed by CharField gear_archetype + role_archetype)*
+
+### ArchetypeActionScaling
+*(no foreign keys — keyed by CharField action_key + role_archetype)*
+
+### CovenantRoleGiftGrant
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+  - gift -> magic.Gift [FK]
 
 ### CovenantRite
 **Foreign Keys:**

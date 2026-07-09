@@ -337,6 +337,21 @@ class CharacterThreadHandler:
 
         # GIFT threads: prefer gift-specific, fall back to null (per-thread)
         granted.update(self._gift_capability_grant_ids(gift_threads))
+
+        # #2022: Role-granted capabilities from the CovenantRole.granted_capabilities
+        # M2M — these are capabilities directly listed on the role (not via
+        # ThreadPullEffect). They apply while the role is engaged.
+        if engaged_role_ids:
+            from world.covenants.models import CovenantRole  # noqa: PLC0415
+
+            role_capability_ids = set(
+                CovenantRole.objects.filter(
+                    pk__in=engaged_role_ids,
+                ).values_list("granted_capabilities", flat=True)
+            )
+            role_capability_ids.discard(None)
+            granted.update(role_capability_ids)
+
         return granted
 
     def _gift_capability_grant_ids(self, gift_threads: list[Thread]) -> set[int]:

@@ -139,7 +139,13 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     return gift.cached_resonances
 
 
-def resolve_specialized_variant(*, entity, character, _sheet: object = _SHEET_UNSET):
+def resolve_specialized_variant(
+    *,
+    entity,
+    character,
+    character_technique=None,
+    _sheet: object = _SHEET_UNSET,
+):
     """Return the resonance-specialized variant of ``entity`` for ``character``,
     else ``entity`` unchanged. Derive-on-read (ADR-0014).
 
@@ -148,6 +154,12 @@ def resolve_specialized_variant(*, entity, character, _sheet: object = _SHEET_UN
     the parent + matching variant (or just the parent). For a CovenantRole:
     reads the active COVENANT_ROLE thread via the cached ``character.threads``
     handler and returns the matching sub-role variant (proven path, #1578).
+
+    ``character_technique`` (#2022): when the technique being resolved was
+    role-granted (``CharacterTechnique.role_source`` is set), the resolver reads
+    the COVENANT_ROLE thread level instead of the GIFT thread level — so a
+    role-granted technique specializes by the vow's depth, not the personal
+    gift's depth.
 
     ``_sheet`` is an internal optimisation parameter: callers that have already
     fetched the ``CharacterSheet`` for ``character`` may pass it here to avoid a
@@ -158,7 +170,9 @@ def resolve_specialized_variant(*, entity, character, _sheet: object = _SHEET_UN
     from world.magic.models import Technique  # noqa: PLC0415
 
     if isinstance(entity, Technique):
-        return _resolve_technique_variant(entity, character, _sheet=_sheet)
+        return _resolve_technique_variant(
+            entity, character, character_technique=character_technique, _sheet=_sheet
+        )
     if isinstance(entity, CovenantRole):
         return _resolve_covenant_role_variant(entity, character)
     return entity
@@ -168,9 +182,18 @@ def _resolve_technique_variant(
     technique: Technique,
     character,
     *,
+    character_technique=None,
     _sheet: object = _SHEET_UNSET,
 ) -> Technique | _ResolvedTechnique:
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
+
+    # #2022: When the technique was role-granted (CharacterTechnique.role_source
+    # is set), resolve the variant using the COVENANT_ROLE thread level instead
+    # of the GIFT thread level. The role-granted technique specializes by the
+    # vow's depth, not the personal gift's depth.
+    use_role_thread = (
+        character_technique is not None and character_technique.role_source_id is not None
+    )
 
     # Read the active GIFT thread through the cached ``character.threads``
     # handler (the same cached queryset the covenant path reads), not a fresh
@@ -191,14 +214,28 @@ def _resolve_technique_variant(
     if sheet is None:
         return technique
 
-    thread = next(
-        (
-            t
-            for t in character.threads.all()
-            if t.target_kind == TargetKind.GIFT and t.target_gift_id == technique.gift_id
-        ),
-        None,
-    )
+    if use_role_thread:
+        # Read the COVENANT_ROLE thread for the role that granted this technique.
+        role_source = character_technique.role_source
+        thread = next(
+            (
+                t
+                for t in character.threads.all()
+                if t.target_kind == TargetKind.COVENANT_ROLE
+                and t.target_covenant_role_id == role_source.covenant_role_id
+                and t.retired_at is None
+            ),
+            None,
+        )
+    else:
+        thread = next(
+            (
+                t
+                for t in character.threads.all()
+                if t.target_kind == TargetKind.GIFT and t.target_gift_id == technique.gift_id
+            ),
+            None,
+        )
     if thread is None:
         return technique
 
