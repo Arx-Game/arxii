@@ -24,7 +24,11 @@ if TYPE_CHECKING:
         ComboDefinition,
     )
     from world.conditions.models import DamageType
-    from world.conditions.types import AppliedConditionResult, RemovedConditionResult
+    from world.conditions.types import (
+        AppliedConditionResult,
+        DamageInteractionResult,
+        RemovedConditionResult,
+    )
     from world.magic.models import Affinity, FuryTier
     from world.magic.models.techniques import Technique
     from world.magic.types import TechniqueUseResult
@@ -46,6 +50,9 @@ class OpponentDamageResult:
     defeated: bool
     kills: int = 0  # swarm bodies cleared this hit (#875); 0 for non-swarm
     opponent_id: int | None = None  # FK to CombatOpponent; set by apply_damage_to_opponent (#1321)
+    damage_interaction: DamageInteractionResult | None = (
+        None  # condition-damage interaction result (#2018)
+    )
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,9 @@ class ParticipantDamageResult:
     knockout_eligible: bool
     death_eligible: bool
     permanent_wound_eligible: bool
+    damage_interaction: DamageInteractionResult | None = (
+        None  # condition-damage interaction result (#2018)
+    )
 
 
 @dataclass(frozen=True)
