@@ -109,6 +109,7 @@ class CombatManeuver(models.TextChoices):
     DEMORALIZE = "demoralize", "Demoralize"
     TAUNT = "taunt", "Taunt"
     PARLEY = "parley", "Parley"
+    USE_ITEM = "use_item", "Use Item"
 
 
 class EngagementLockStatus(models.TextChoices):

@@ -1120,8 +1120,16 @@ class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
         blank=True,
         help_text=(
             "Special maneuver this declaration is "
-            "(flee/cover/yield/interpose); null = normal action."
+            "(flee/cover/yield/interpose/use_item); null = normal action."
         ),
+    )
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Item to use when maneuver == USE_ITEM.",
     )
     succor_resolution = models.FloatField(
         null=True,

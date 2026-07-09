@@ -185,6 +185,8 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
     outcome: ActionOutcome,
     power_ledger: PowerLedger | None = None,
     signature_snippet: str | None = None,
+    weapon_flourish: str | None = None,
+    armor_flourish: str | None = None,
 ) -> str:
     """Render a one-line, deterministic outcome narration from resolved data.
 
@@ -225,7 +227,9 @@ def render_action_outcome_narration(  # noqa: PLR0913 - all params describe one 
 
     power_clause = power_outcome_clause(power_ledger)
     sig_clause = signature_clause(signature_snippet)
-    suffix_parts = [c for c in (power_clause, sig_clause) if c]
+    weapon_clause = signature_clause(weapon_flourish)
+    armor_clause = signature_clause(armor_flourish)
+    suffix_parts = [c for c in (power_clause, sig_clause, weapon_clause, armor_clause) if c]
     suffix = " ".join(suffix_parts)
 
     # Targeted action with no damage and no wounds → miss (or warded bounce).

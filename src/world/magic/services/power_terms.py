@@ -184,6 +184,24 @@ def thread_power_term(ctx: PowerTermContext) -> int:
     return total
 
 
+def touchstone_power_term(ctx: PowerTermContext) -> int:
+    """Flat bonus from attuned touchstones matching the technique's gift resonance (#2023).
+
+    Scans the character's equipped items for touchstones whose ``tied_resonance``
+    matches any of the technique's gift resonances. The bonus is modest and
+    tier-scaled via ``TouchstoneCastConfig``.
+    """
+    if ctx.technique is None:
+        return 0
+    from world.magic.services.touchstone import touchstone_cast_bonus  # noqa: PLC0415
+    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+
+    resonances = gift_resonances_for(ctx.sheet.character, ctx.technique.gift)
+    if not resonances:
+        return 0
+    return sum(touchstone_cast_bonus(ctx.sheet, resonance) for resonance in resonances)
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -192,6 +210,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
     thread_power_term,
+    touchstone_power_term,
 ]
 
 

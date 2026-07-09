@@ -204,6 +204,12 @@ from world.magic.models.threads import (
     ThreadSurvivabilityTuning,
     ThreadXPLockedLevel,
 )
+from world.magic.models.trait_crossing import (
+    PendingTraitCrossingOffer,
+    TraitCrossingChoice,
+    TraitCrossingOption,
+)
+from world.magic.models.touchstone_config import TouchstoneCastConfig
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
     ThreadWeavingTeachingOffer,
@@ -400,6 +406,8 @@ __all__ = [
     "ThreadWeavingTeachingOffer",
     "ThreadWeavingUnlock",
     "ThreadXPLockedLevel",
+    # touchstone combat resonance config (#2023)
+    "TouchstoneCastConfig",
     "Tradition",
     "TraditionManager",
     "TraditionRitualGrant",

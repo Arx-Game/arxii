@@ -368,3 +368,15 @@ class WeaponContribution:
 
     damage: int
     damage_type: DamageType | None
+
+
+@dataclass(frozen=True)
+class ArmorSoakResult:
+    """Result of armor soak calculation (#2023).
+
+    ``contributors`` is the list of armor ItemInstances whose physical soak
+    contributed to the result, for narration flourish resolution.
+    """
+
+    damage: int
+    contributors: list  # list[ItemInstance] — left untyped to avoid circular import

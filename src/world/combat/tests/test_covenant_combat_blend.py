@@ -160,7 +160,7 @@ class CovenantArmorSoakSeamTests(TestCase):
         self._equip_armor(char, base_soak=3)
 
         raw_damage = 20
-        result = apply_equipped_armor_soak(char, raw_damage)
+        result = apply_equipped_armor_soak(char, raw_damage).damage
 
         # compat_physical = 3 (LIGHT_ARMOR is compatible), incompat_physical = 0.
         # resonant = equipment_walk_total_unblended = covenant_role_base_total = 4 (level=2, bpl=2).
@@ -175,7 +175,7 @@ class CovenantArmorSoakSeamTests(TestCase):
         char_nc = CharacterFactory(db_key="NoCovSoakChar")
         sheet_nc = CharacterSheetFactory(character=char_nc, primary_persona=False)  # noqa: F841
         self._equip_armor(char_nc, base_soak=3, name="NoCovArmor")
-        no_cov_result = apply_equipped_armor_soak(char_nc, 20)
+        no_cov_result = apply_equipped_armor_soak(char_nc, 20).damage
         # No role → resonant pool = 0; incompat_physical = 3 (no engaged role, armor is
         # incompatible); compat_physical = 0. soak = 0 + max(3, 0) = 3; damage = 17.
         self.assertEqual(no_cov_result, 17)
@@ -201,7 +201,7 @@ class CovenantArmorSoakSeamTests(TestCase):
         )
         self._equip_armor(char_c, base_soak=3, name="CovArmor")
 
-        cov_result = apply_equipped_armor_soak(char_c, 20)
+        cov_result = apply_equipped_armor_soak(char_c, 20).damage
         # covenant bonus = 4 → total soak = 7 → damage = 13. Less than non-cov (17).
         self.assertLess(cov_result, no_cov_result)
         self.assertEqual(cov_result, 13)
@@ -246,7 +246,7 @@ class NonCovenantRegressionGuardTests(TestCase):
         )
         char.equipped_items.invalidate()
 
-        result = apply_equipped_armor_soak(char, 20)
+        result = apply_equipped_armor_soak(char, 20).damage
         # No covenant role → resonant pool = 0; armor falls in incompat bucket.
         # soak = 0 + max(incompat_physical=4, resonant=0) = 4. Damage = max(0, 20 - 4) = 16.
         self.assertEqual(result, 16)
