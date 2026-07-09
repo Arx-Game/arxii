@@ -43,9 +43,8 @@ class CrossingRegistryTests(TestCase):
         self.assertIsNotNone(get_crossing_handler(TargetKind.COVENANT_ROLE))
 
     def test_stub_handlers_registered(self) -> None:
-        """The 2 remaining stub kinds have handlers that execute without error."""
+        """The 1 remaining stub kind has a handler that executes without error."""
         stub_kinds = [
-            TargetKind.MANTLE,
             TargetKind.SANCTUM,
         ]
         for kind in stub_kinds:
