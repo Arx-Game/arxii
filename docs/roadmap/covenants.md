@@ -436,8 +436,12 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   to the fired service.
 - **Covenant ritual wrappers** — `create_covenant_via_session` and
   `induct_member_via_session` thin shims around Slice A services;
-  `CovenantFormationRitualFactory` and `CovenantInductionRitualFactory` that seed
-  the Ritual rows on startup.
+  `CovenantFormationRitualFactory` and `CovenantInductionRitualFactory` build the
+  backing Ritual rows. **Reachability fixed in #2114** — until then these factories
+  were called only from tests, so `ritual draft "Covenant Formation"` failed on a
+  real server; `wire_covenant_lifecycle_rituals()` (`world.magic.factories`) now
+  seeds Formation/Induction plus Call the Banners/Mentor's Vow/Renew the
+  Oath/Organization Induction from `seed_magic_dev()`, reachable via the Big Button.
 - **Soul Tether BILATERAL retrofit** — Soul Tether ritual factory now `BILATERAL`
   with sineater + sinner role choices; `accept_soul_tether_via_session` wrapper.
   `soul_tether_rescue` stays `SINGLE_ACTOR` (rescue inherently can't require
@@ -754,7 +758,11 @@ ritual; the session coordinates) + the conditions system (`apply_condition`,
   participant's OWN recorded condition rather than a single shared template.
 
 `wire_covenant_rite_content()` seeds the "Renew the Oath" reference rite plus the
-following role/level-banded stat packages (all effects `scales_with_severity=True`):
+following role/level-banded stat packages (all effects `scales_with_severity=True`).
+**Reachability fixed in #2114** — until then this helper was called only from tests;
+`wire_covenant_lifecycle_rituals()` (`world.magic.factories`) now calls it from
+`seed_magic_dev()` so the rite (Ritual + `CovenantRite` sidecar + packages together)
+exists in a real deploy, not only under test setup:
 
 | Role | Level band | Condition | Stats buffed |
 |---|---|---|---|

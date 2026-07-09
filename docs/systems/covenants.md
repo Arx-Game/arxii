@@ -75,7 +75,10 @@ axes are orthogonal — never re-merge them.
   - `max_sidekicks_per_mentor` (PositiveSmallInt, nullable; null = unlimited) — cap on
     active bonds per mentor per covenant.
   - `updated_at` / `updated_by` — audit timestamps. Seeded via
-    `seed_mentor_bond_defaults()` in factories.py; staff-tunable in Django admin.
+    `seed_mentor_bond_defaults()` in factories.py, called from
+    `wire_covenant_lifecycle_rituals()` (`world.magic.factories`, #2114) as part of
+    `seed_magic_dev()` — reachable in a real deploy, not only under test setup.
+    Staff-tunable in Django admin (re-running the seed resets to authored defaults).
 
 - **`MentorBond`** — one active bond record per (covenant, sidekick_sheet) pair (via
   partial unique constraint `unique_active_sidekick_bond`). Dissolved bonds are retained
@@ -177,7 +180,8 @@ axes are orthogonal — never re-merge them.
   **Vow gate**. Raises `VowGateError` if the character's raw primary level is outside
   the covenant band AND they have no active bond (as mentor or sidekick) in this
   covenant. Called by `add_member`; `create_covenant` (formation) is ungated. Gate is
-  inactive when `MentorBondConfig` has not been seeded.
+  inactive only if `MentorBondConfig` has never been seeded at all (e.g. a DB that
+  predates #2114 and hasn't re-run `seed_magic_dev()`) — a fresh deploy always seeds it.
 
 ### Mentor's Vow ritual service
 
