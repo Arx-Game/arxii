@@ -1522,6 +1522,17 @@ Cross-references:
   **Important design intent:** flamboyant fashion (battle lingerie on a Sword
   warrior, paladin getup, evil-sorceress robes) should be a *strong* mechanical
   axis — this is intentional, not flavor garnish.
+  **Phase D shipped** (`#2030`): player-facing style-binding surface — binding a
+  `Style` to a claimed resonance no longer requires admin access. Service
+  (`services/motif_style.py`: `bind_motif_style`/`unbind_motif_style`/
+  `motif_style_bindings`), 3 REGISTRY actions (`actions/definitions/motif_style.py`),
+  telnet `CmdMotif` (`motif bindstyle <style>=<resonance>` / `motif unbindstyle
+  <style>`), and web `MotifStyleViewSet` (`/api/magic/motif-styles/`) + a new
+  read-only Style catalog endpoint (`/api/items/styles/`) for the bind picker. The
+  admin inline surface is unchanged, just no longer the only path. Rounds out the
+  fashion→resonance loop end-to-end: bind a style → wear an `ItemStyle`-tagged item
+  → coherence bonus (already wired, Phase A) → peers `endorse style` (already wired,
+  Phase C).
 - Magical discovery through gameplay — unpredictable moments during RP where magic manifests
 - Thread strengthening through relationship development
 - Tradition gameplay (beyond CG templates — what traditions do during play)

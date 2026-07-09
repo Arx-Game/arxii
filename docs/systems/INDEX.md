@@ -24,6 +24,16 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `related_name="technique_draft"`; no JSON; all proper columns),
     `TechniqueDraftCapabilityGrant` / `TechniqueDraftDamageProfile` /
     `TechniqueDraftAppliedCondition` (draft payload children — inherit abstract bases)
+  - **Motif style binding (#2030):** `MotifResonanceStyle` (`motif_resonance` FK,
+    `style` FK to `items.Style`; cap 3/resonance) is now player-authorable, not
+    admin-only. Service (`services/motif_style.py`): `bind_motif_style` /
+    `unbind_motif_style` / `motif_style_bindings`; exceptions `StyleResonanceUnclaimed`
+    / `StyleBindingCapExceeded` / `StyleNotBound`. Actions (`actions/definitions/
+    motif_style.py`, REGISTRY): `BindMotifStyleAction` / `UnbindMotifStyleAction` /
+    `ListMotifStylesAction`. Telnet: `CmdMotif` (`commands/motif.py`, key `"motif"`).
+    Web: `MotifStyleViewSet` (`/api/magic/motif-styles/`) + the Style catalog
+    `StyleViewSet` (`/api/items/styles/`). Consumer-side wiring (coherence walker,
+    style-presentation endorsement) predates this issue — see `docs/systems/magic.md`.
   - **Signature Motif Bonus (ADR-0072 — #1582):** `SignatureMotifBonus` (staff-authored
     catalog; `required_facet` FK, `required_resonance` FK, `flat_intensity_delta`,
     `narrative_snippet`; `qualifies_for(character_sheet)` gate predicate),

@@ -293,7 +293,31 @@ magic checks at all is an open design question (#1363).
 | `Motif` | Character-level magical aesthetic | `character`, `name`, `description` |
 | `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierTarget) |
 | `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
+| `MotifResonanceStyle` | Player binding of a `Style` to one of the character's motif resonances (cap 3 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `style` (FK to `items.Style`) |
 | `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
+
+**Player-facing style binding (#2030) [BUILT & WIRED]:** binding a `Style` to a
+claimed resonance is a normal player action, not admin-only. Service
+(`services/motif_style.py`): `bind_motif_style(sheet, style, resonance)` (lazily
+creates `Motif`/`MotifResonance` if absent; replace semantics on rebind; cap
+enforcement delegates to `MotifResonanceLink.clean()`), `unbind_motif_style`,
+`motif_style_bindings`. Exceptions (`exceptions.py`): `StyleResonanceUnclaimed`,
+`StyleBindingCapExceeded`, `StyleNotBound`. Actions (`actions/definitions/
+motif_style.py`, REGISTRY, `category="magic"`): `BindMotifStyleAction` /
+`UnbindMotifStyleAction` / `ListMotifStylesAction`. Telnet: `CmdMotif`
+(`commands/motif.py`, key `"motif"`, `motif bindstyle <style>=<resonance>` /
+`motif unbindstyle <style>` / bare `motif`). Web: `MotifStyleViewSet`
+(`views_motif_style.py`, `/api/magic/motif-styles/`), scoped to a specific owned
+character via an optional `X-Character-ID` header (`CharacterContextMixin`); falls
+back to the caller's active puppet when absent. The Style catalog itself is a
+separate read-only endpoint, `StyleViewSet` at `/api/items/styles/`
+(`world/items/views.py`). This binding is what the coherence walker
+(`passive_motif_style_bonuses` in `world/mechanics/services.py`, wired into
+`equipment_walk_total`) and the peer style-presentation endorsement
+(`create_style_presentation_endorsement` in `services/gain.py`) already read —
+#2030 only added the authoring surface; the consumer-side wiring predates it. See
+`src/world/magic/CLAUDE.md`'s "Motif System" section for the full coherence-walker
+detail.
 
 ### Signature Motif Bonus (#1582 — ADR-0072) [BUILT & WIRED]
 

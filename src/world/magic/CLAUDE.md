@@ -446,21 +446,45 @@ Two composition invariants are tested in `mechanics/tests/test_aesthetic_composi
   in those bindings is invisible to the walker — it adds no coverage and applies no penalty.
   Characters may wear items tagged with arbitrary styles without degrading their coherence bonus.
 
-**Admin authoring surface:** Standalone `MotifResonanceAdmin` (in `world/magic/admin.py`)
-with a `MotifResonanceStyleInline` for the style bindings; `ItemStyle` inline on `ItemInstance`.
+**Admin authoring surface (still present, no longer the only path):** Standalone
+`MotifResonanceAdmin` (in `world/magic/admin.py`) with a `MotifResonanceStyleInline`
+for the style bindings; `ItemStyle` inline on `ItemInstance`.
 
-**Player-facing style-binding REST surface (#2030):** `MotifStyleViewSet`
-(`views_motif_style.py`) — `list`/`bind`/`unbind` dispatch `ListMotifStylesAction` /
-`BindMotifStyleAction` / `UnbindMotifStyleAction` (`actions/definitions/motif_style.py`),
-which call through to `bind_motif_style`/`unbind_motif_style`/`motif_style_bindings`
-(`services/motif_style.py`). **Character scoping:** an `X-Character-ID` header is
-resolved via `web.api.mixins.CharacterContextMixin` (validated as owned by the
-requesting account) ahead of the caller's active puppet — the same header/ownership
-contract `PathIntentViewSet`/`CharacterGoalViewSet` use. This lets a player view/act
-on a specific owned character's bindings rather than always defaulting to whichever
-character they currently puppet; a header naming an unowned character 404s rather
-than silently falling back to the puppet. No header at all preserves the original
-puppet-only resolution.
+**Player-facing style-binding surface (#2030):** binding a `Style` to a claimed
+resonance is now a normal player action, not an admin-only edit — telnet, web, and
+admin all converge on the same service layer.
+
+- **Service** (`services/motif_style.py`): `bind_motif_style(sheet, style, resonance)`
+  (lazy-creates `Motif`/`MotifResonance` if absent, replace semantics — rebinding a
+  style already bound elsewhere moves it; cap enforcement delegates to
+  `MotifResonanceLink.clean()`, not reinvented), `unbind_motif_style(sheet, style)`,
+  `motif_style_bindings(sheet)`. Exceptions: `StyleResonanceUnclaimed`,
+  `StyleBindingCapExceeded`, `StyleNotBound` (`exceptions.py`).
+- **Actions** (`actions/definitions/motif_style.py`, all REGISTRY, `category="magic"`,
+  `target_type=SELF`): `BindMotifStyleAction` (key `"bind_motif_style"`),
+  `UnbindMotifStyleAction` (`"unbind_motif_style"`), `ListMotifStylesAction`
+  (`"list_motif_styles"`).
+- **Telnet** (`commands/motif.py`, `CmdMotif`, key `"motif"`): namespaced subverbs —
+  bare `motif` / `motif list` shows bindings, `motif bindstyle <style>=<resonance>`,
+  `motif unbindstyle <style>` — mirroring `CmdSignature`/`CmdSanctum`'s namespacing to
+  avoid bare-key collisions.
+- **Web:** `MotifStyleViewSet` (`views_motif_style.py`, routes under
+  `/api/magic/motif-styles/`) — `list`/`bind`/`unbind` dispatch the three Actions above.
+  **Character scoping:** an `X-Character-ID` header is resolved via
+  `web.api.mixins.CharacterContextMixin` (validated as owned by the requesting account)
+  ahead of the caller's active puppet — the same header/ownership contract
+  `PathIntentViewSet`/`CharacterGoalViewSet` use. This lets a player view/act on a
+  specific owned character's bindings rather than always defaulting to whichever
+  character they currently puppet; a header naming an unowned character 404s rather
+  than silently falling back to the puppet. No header at all preserves the original
+  puppet-only resolution. The Style catalog itself (for the bind picker) is a separate
+  read-only endpoint, `StyleViewSet` at `/api/items/styles/` (`world/items/views.py`).
+- **Frontend:** `MotifStylePanel` (`frontend/src/magic/components/`), mounted in the
+  Spellbook tab below the read-only Motif card — see `frontend/src/magic/CLAUDE.md`
+  for the wire contract.
+- **Not built here:** the character-creation-time facet-binding flow floated in the
+  original spec was ruled out against code (no CG magic-stage hook exists for it) —
+  binding happens post-CG only, same as before.
 
 ### Thread System (Resonance Pivot Spec A)
 

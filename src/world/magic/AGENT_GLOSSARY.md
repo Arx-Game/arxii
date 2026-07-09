@@ -99,6 +99,16 @@ An authored magical procedure dispatched in one of four ways: SERVICE (invokes a
 **Sanctum**:
 A leveled room that serves as a Thread anchor via `target_sanctum_details`, capped at the sanctum feature's level × 10. A Sanctum-anchored Thread is pull-applicable (an in-sanctum boost) while the character is in the Sanctum's room.
 
+**Style Binding**:
+A player-authored link (`MotifResonanceStyle`) between a staff-curated `Style` word
+(`world.items.Style`) and one of the character's own claimed motif resonances —
+individualized, so two characters binding the same `Style` name attach it to
+different resonances. Capped at 3 bindings per resonance. Authored via
+`bind_motif_style`/`unbind_motif_style` (`services/motif_style.py`), telnet
+`CmdMotif`, or the web `MotifStyleViewSet`; consumed by the coherence walker and the
+peer style-presentation endorsement. (#2030.)
+_Avoid_: facet binding (a Facet is a different, hierarchical imagery axis).
+
 **Mantle**:
 A specific, storied, attunable ItemInstance in the world (a particular sword, amulet, banner) with authored progression levels. A character attunes by weaving a MANTLE-kind Thread anchored on the Mantle, gated on having cleared at least its first level; the Thread's level cannot exceed the character's max-cleared mantle level.
 
