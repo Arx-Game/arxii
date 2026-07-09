@@ -100,7 +100,7 @@ def _ensure_role_gift_and_techniques(role: CovenantRole) -> None:
                 "level": 1,
                 "intensity": 3,
                 "control": 5,
-                "base_anima_cost": 2,
+                "anima_cost": 2,
             },
         )
 
