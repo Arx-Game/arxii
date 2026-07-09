@@ -91,3 +91,36 @@ class SynergyClauseTests(TestCase):
         )
         clause = synergy_clause(result)
         self.assertIn("+50%", clause)
+
+    def test_silent_modifier_produces_no_clause_in_narration(self):
+        """A modifier-only interaction (no transition) produces no clause — anti-spam."""
+        interaction = ConditionDamageInteractionFactory(
+            condition=self.wet,
+            damage_type=self.fire,
+            damage_modifier_percent=-30,
+            removes_condition=False,
+            applies_condition=None,
+        )
+        result = DamageInteractionResult(
+            damage_modifier_percent=-30,
+            fired_interactions=[interaction],
+        )
+        # synergy_clause returns None — the narration line is unchanged from baseline
+        self.assertIsNone(synergy_clause(result))
+
+    def test_transition_produces_clause_in_narration(self):
+        """A transition interaction produces a clause visible in narration."""
+        interaction = ConditionDamageInteractionFactory(
+            condition=self.frozen,
+            damage_type=self.force,
+            damage_modifier_percent=50,
+            removes_condition=True,
+            narration_snippet="the frozen shell shatters",
+        )
+        result = DamageInteractionResult(
+            damage_modifier_percent=50,
+            fired_interactions=[interaction],
+        )
+        clause = synergy_clause(result)
+        self.assertIsNotNone(clause)
+        self.assertIn("shatters", clause)
