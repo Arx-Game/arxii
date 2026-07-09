@@ -183,6 +183,14 @@ def _seed_covenant_roles() -> None:
     seed_role_catalog_content()
 
 
+def _seed_skills() -> None:
+    from world.seeds.game_content.skills import (  # noqa: PLC0415
+        seed_skill_breakthrough_catalog,
+    )
+
+    seed_skill_breakthrough_catalog()
+
+
 CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # The checks spine owns the global resolution charts/outcomes; seed it first
     # so the canonical rows exist before the other clusters run. (Idempotency
@@ -266,6 +274,13 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # archetype action scaling for the 3 canonical roles (#2022). After "items"
     # (creates the role rows + gear compat) and "magic" (EffectType/Style/Gift).
     "covenant_roles": _seed_covenant_roles,
+    # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's four
+    # XP boundaries (20/30/40/50), so the #2115 breakthrough purchase is always
+    # reachable instead of a landmine. Registered LAST — it iterates every
+    # currently-seeded Skill row, so it must run after every cluster that seeds
+    # new skills (combat_checks/social/investigation/governance/stealth); safe to
+    # re-run (idempotent) after authoring a skill outside those clusters.
+    "skills": _seed_skills,
 }
 
 
@@ -314,7 +329,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     from world.justice.models import CrimeKind  # noqa: PLC0415
     from world.magic.models import Affinity, Resonance  # noqa: PLC0415
     from world.magic.models.techniques import Technique  # noqa: PLC0415
-    from world.progression.models import KudosSourceCategory  # noqa: PLC0415
+    from world.progression.models import KudosSourceCategory, TraitRatingUnlock  # noqa: PLC0415
     from world.projects.models import ContributionMethod  # noqa: PLC0415
     from world.relationships.models import RelationshipCondition  # noqa: PLC0415
     from world.room_features.models import RoomFeatureKind  # noqa: PLC0415
@@ -389,4 +404,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Covenant role catalog: granted gifts + techniques + capabilities +
         # archetype scaling for the 3 canonical roles (#2022).
         "covenant_roles": [],
+        # Skill breakthroughs: default TraitRatingUnlock catalog at every skill's
+        # four XP boundaries (#2115).
+        "skills": [TraitRatingUnlock],
     }

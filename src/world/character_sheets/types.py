@@ -90,6 +90,7 @@ class SkillEntry(TypedDict):
 
     skill: SkillRef
     value: int
+    at_boundary: bool
     specializations: list[SpecializationEntry]
 
 

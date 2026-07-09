@@ -537,7 +537,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         self.assertEqual(self.student_skill.development_points, 200)
 
     def test_stops_at_x9_boundary(self) -> None:
-        """Dev points are wasted at X9 boundaries (19, 29, etc.)."""
+        """Dev points dissipate at X9 boundaries (19, 29, etc.) — never banked (#2115)."""
         self.student_skill.value = 19
         self.student_skill.save()
         TrainingAllocation.objects.create(
@@ -547,7 +547,37 @@ class ProcessWeeklyTrainingTests(TestCase):
         )
         process_weekly_training()
         self.student_skill.refresh_from_db()
-        # At boundary, points wasted
+        # At boundary, surplus dissipates rather than banking.
+        self.assertEqual(self.student_skill.value, 19)
+        self.assertEqual(self.student_skill.development_points, 0)
+
+    def test_boundary_dissipation_is_reported_in_audit_trail(self) -> None:
+        """The plateau message from a boundary dissipation lands in the audit description."""
+        self.student_skill.value = 19
+        self.student_skill.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        process_weekly_training()
+        txn = DevelopmentTransaction.objects.get(character_sheet_id=self.student.pk)
+        self.assertIn("threshold", txn.description.lower())
+
+    def test_boundary_still_pays_off_rust(self) -> None:
+        """A boundary-parked skill still pays down rust from incoming dev points (#2115)."""
+        self.student_skill.value = 19
+        self.student_skill.rust_points = 30
+        self.student_skill.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        process_weekly_training()
+        self.student_skill.refresh_from_db()
+        # base = 5 * 10 * 1 = 50. 30 pays off rust; the remaining 20 dissipates.
+        self.assertEqual(self.student_skill.rust_points, 0)
         self.assertEqual(self.student_skill.value, 19)
         self.assertEqual(self.student_skill.development_points, 0)
 

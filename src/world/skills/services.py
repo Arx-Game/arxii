@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
@@ -383,21 +384,44 @@ def _is_at_xp_boundary(value: int) -> bool:
     return value % 10 == _XP_BOUNDARY_DIGIT and _XP_BOUNDARY_MIN <= value <= _XP_BOUNDARY_MAX
 
 
-def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: int) -> None:
-    """Apply development points to a skill, handling rust payoff, level-ups, and overflow.
+def is_skill_at_xp_boundary(value: int) -> bool:
+    """Public wrapper for :func:`_is_at_xp_boundary` (#2115).
 
-    Dev points pay off rust first, then count toward advancement. Mutates the
-    ``skill_value`` instance in place and saves it. If the skill is at an XP
-    boundary (19, 29, 39, 49), all points are wasted.
+    Lets other apps (e.g. character-sheet serialization) check boundary state
+    without reaching into a private helper.
+    """
+    return _is_at_xp_boundary(value)
+
+
+def _boundary_message(skill: Skill, next_rating: int) -> str:
+    """Plateau message shown when dev points dissipate at an XP boundary (#2115)."""
+    return (
+        f"{skill.name} is at threshold {next_rating / 10:.1f} — training maintains, "
+        "does not advance until the breakthrough is unlocked."
+    )
+
+
+def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: int) -> str | None:
+    """Apply development points to a skill, handling rust payoff, level-ups, and plateau.
+
+    Dev points pay off rust first, always — even while the skill is parked at an
+    XP boundary (19, 29, 39, 49), so training/use can still "blow the rust off" a
+    gated skill (#2115). Any surplus beyond the rust payoff dissipates at a
+    boundary: development points are deliberately ephemeral (the 2026-07-09
+    ephemerality ruling) — never banked, never silently discarded. The same
+    dissipation (with the same visible message) applies to overflow from a
+    level-up that lands exactly on a boundary. Mutates ``skill_value`` in place
+    and saves it.
 
     Args:
         skill_value: The CharacterSkillValue to develop.
         dev_points: Development points to apply.
-    """
-    if _is_at_xp_boundary(skill_value.value):
-        return
 
-    # Pay off rust first
+    Returns:
+        A plateau message when points dissipated at a boundary this call,
+        else ``None``.
+    """
+    # Pay off rust first — always, even when parked at a boundary.
     remaining = dev_points
     if skill_value.rust_points > 0:
         if remaining >= skill_value.rust_points:
@@ -407,20 +431,158 @@ def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: in
             skill_value.rust_points -= remaining
             remaining = 0
 
+    if _is_at_xp_boundary(skill_value.value):
+        message = _boundary_message(skill_value.skill, skill_value.value + 1) if remaining else None
+        skill_value.development_points = 0
+        skill_value.save()
+        return message
+
     # Apply remaining to development
     remaining += skill_value.development_points
 
+    message = None
     cost = _development_cost(skill_value.value)
     while remaining >= cost:
         remaining -= cost
         skill_value.value += 1
         if _is_at_xp_boundary(skill_value.value):
+            if remaining > 0:
+                message = _boundary_message(skill_value.skill, skill_value.value + 1)
             remaining = 0
             break
         cost = _development_cost(skill_value.value)
 
     skill_value.development_points = remaining
     skill_value.save()
+    return message
+
+
+def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool, str]:
+    """Spend XP to break through a skill's XP-boundary plateau (#2115).
+
+    Wires the pre-existing but never-called ``TraitRatingUnlock`` model through
+    the same ``purchase_unlock`` seam as class-level/thread unlocks
+    (``spend_xp_on_unlock``'s pattern). The purchase does not itself grant a
+    level (ADR-0053: XP buys the unlock that gates, never the grant) — it just
+    clears the gate. Because dev points earned while gated dissipate rather than
+    bank (the 2026-07-09 ephemerality ruling), there is nothing to retroactively
+    apply: training simply resumes accruing from zero once the gate is clear.
+
+    Args:
+        character: The character purchasing the breakthrough.
+        skill: The gated skill.
+
+    Returns:
+        ``(success, message)`` — mirrors ``spend_xp_on_unlock``'s contract.
+    """
+    from world.progression.models import TraitRatingUnlock, XPTransaction  # noqa: PLC0415
+    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
+
+    try:
+        skill_value = CharacterSkillValue.objects.get(character=character, skill=skill)
+    except CharacterSkillValue.DoesNotExist:
+        return False, f"{skill.name} has no recorded value for this character."
+
+    if not _is_at_xp_boundary(skill_value.value):
+        return False, f"{skill.name} is not at a breakthrough boundary."
+
+    target_rating = skill_value.value + 1
+    try:
+        unlock = TraitRatingUnlock.objects.get(trait=skill.trait, target_rating=target_rating)
+    except TraitRatingUnlock.DoesNotExist:
+        return (
+            False,
+            f"No breakthrough authored for {skill.name} at this level — contact staff.",
+        )
+
+    xp_cost = unlock.get_xp_cost_for_character(character)
+    account = character.account
+
+    with transaction.atomic():
+        if xp_cost > 0:
+            xp_tracker = get_or_create_xp_tracker(account)
+            if not xp_tracker.spend_xp(xp_cost):
+                return (
+                    False,
+                    f"Insufficient XP (need {xp_cost}, have {xp_tracker.current_available}).",
+                )
+            XPTransaction.objects.create(
+                account=account,
+                amount=-xp_cost,
+                reason=ProgressionReason.XP_PURCHASE,
+                description=f"Breakthrough: {skill.name} to {target_rating / 10:.1f}",
+                character=character,
+            )
+
+        skill_value.value = target_rating
+        skill_value.development_points = 0
+        skill_value.save()
+
+    return (
+        True,
+        f"Breakthrough! {skill.name} rises to {target_rating / 10:.1f} — training resumes.",
+    )
+
+
+@dataclass(frozen=True)
+class SkillBreakthroughProspect:
+    """A skill parked at an XP boundary, with its breakthrough cost if authored (#2115)."""
+
+    skill: Skill
+    next_rating: int
+    xp_cost: int | None
+    authored: bool
+
+
+def skills_at_boundary(character: ObjectDB) -> list[SkillBreakthroughProspect]:
+    """Return the character's skills currently parked at an XP boundary (#2115).
+
+    Feeds the ``progression unlock`` listing and the sheet skills section's
+    ``at_boundary`` flag — so a player sees why a skill stalled, and what the
+    breakthrough costs, before burning a session wondering.
+
+    Args:
+        character: The character whose skills to check.
+
+    Returns:
+        One :class:`SkillBreakthroughProspect` per gated skill; ``authored`` is
+        False (and ``xp_cost`` is None) when staff hasn't authored a
+        ``TraitRatingUnlock`` for that boundary yet.
+    """
+    from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
+
+    gated = [
+        sv
+        for sv in CharacterSkillValue.objects.filter(character=character).select_related(
+            "skill__trait"
+        )
+        if _is_at_xp_boundary(sv.value)
+    ]
+    if not gated:
+        return []
+
+    trait_ids = [sv.skill.trait_id for sv in gated]
+    target_ratings = [sv.value + 1 for sv in gated]
+    unlocks = {
+        (u.trait_id, u.target_rating): u
+        for u in TraitRatingUnlock.objects.filter(
+            trait_id__in=trait_ids, target_rating__in=target_ratings
+        )
+    }
+
+    prospects: list[SkillBreakthroughProspect] = []
+    for sv in gated:
+        next_rating = sv.value + 1
+        unlock = unlocks.get((sv.skill.trait_id, next_rating))
+        prospects.append(
+            SkillBreakthroughProspect(
+                skill=sv.skill,
+                next_rating=next_rating,
+                xp_cost=unlock.get_xp_cost_for_character(character) if unlock else None,
+                authored=unlock is not None,
+            )
+        )
+    return prospects
 
 
 def _apply_development_to_specialization(
@@ -493,6 +655,7 @@ def process_weekly_training() -> dict[int, set[int]]:
             allocation, _teaching_skill=teaching_skill, _path_levels=path_levels
         )
 
+        plateau_message: str | None = None
         if allocation.skill:
             trait = allocation.skill.trait
             skill_value, _created = CharacterSkillValue.objects.get_or_create(
@@ -500,7 +663,7 @@ def process_weekly_training() -> dict[int, set[int]]:
                 skill=allocation.skill,
                 defaults={"value": 10, "development_points": 0, "rust_points": 0},
             )
-            _apply_development_to_skill(skill_value, dev_points)
+            plateau_message = _apply_development_to_skill(skill_value, dev_points)
             trained_skills[character.pk].add(allocation.skill.pk)
         elif allocation.specialization:
             trait = allocation.specialization.parent_skill.trait
@@ -518,13 +681,16 @@ def process_weekly_training() -> dict[int, set[int]]:
         from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
 
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)
+        description = f"Weekly training: {allocation}"
+        if plateau_message:
+            description = f"{description} — {plateau_message}"
         DevelopmentTransaction.objects.create(
             character_sheet=sheet,
             trait=trait,
             source=DevelopmentSource.TRAINING,
             amount=dev_points,
             reason=ProgressionReason.SYSTEM_AWARD,
-            description=f"Weekly training: {allocation}",
+            description=description,
         )
 
         # Consume AP. Training still processes if pool is missing or has

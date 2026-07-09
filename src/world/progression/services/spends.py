@@ -274,8 +274,13 @@ def get_available_unlocks_for_character(
         else:
             locked.append(unlock_info)
 
-    # Note: Trait rating unlocks are handled differently now
-    # They auto-apply through development points, so no need to track here
+    # Note: Trait rating unlocks (skill XP-boundary breakthroughs, #2115) are handled
+    # by world.skills.services.skills_at_boundary + purchase_skill_breakthrough — a
+    # separate seam from this ClassLevelUnlock-only listing/purchase pair, since a
+    # skill breakthrough's precondition ("parked at a boundary") isn't expressed as
+    # an AbstractUnlockRequirement. ProgressionUnlockViewSet.list() calls
+    # skills_at_boundary() directly to fold skill_breakthrough items into the same
+    # paginated response.
 
     return AvailableUnlocks(
         available=available,

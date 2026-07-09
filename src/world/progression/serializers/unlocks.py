@@ -8,10 +8,11 @@ from rest_framework import serializers
 class ProgressionUnlockItemSerializer(serializers.Serializer):
     """Discriminated list item for purchasable progression unlocks.
 
-    Two ``unlock_type`` variants are supported:
+    Three ``unlock_type`` variants are supported:
 
     - ``class_level`` — purchase a class/level unlock with XP.
     - ``thread_xp_lock`` — purchase the next XP-locked boundary on a thread.
+    - ``skill_breakthrough`` — purchase a skill's XP-boundary breakthrough (#2115).
     """
 
     unlock_type = serializers.CharField()
@@ -35,16 +36,21 @@ class ProgressionUnlockItemSerializer(serializers.Serializer):
     thread_target_kind = serializers.CharField(allow_null=True)
     dev_points_to_boundary = serializers.IntegerField(allow_null=True)
 
+    # Skill-breakthrough fields (#2115)
+    skill_id = serializers.IntegerField(allow_null=True)
+
 
 class PurchaseUnlockSerializer(serializers.Serializer):
     """Input serializer for purchasing a progression unlock."""
 
     UNLOCK_TYPE_CLASS_LEVEL = "class_level"
     UNLOCK_TYPE_THREAD_XP_LOCK = "thread_xp_lock"
+    UNLOCK_TYPE_SKILL_BREAKTHROUGH = "skill_breakthrough"
 
     UNLOCK_TYPE_CHOICES = [
         (UNLOCK_TYPE_CLASS_LEVEL, "Class Level"),
         (UNLOCK_TYPE_THREAD_XP_LOCK, "Thread XP Lock"),
+        (UNLOCK_TYPE_SKILL_BREAKTHROUGH, "Skill Breakthrough"),
     ]
 
     unlock_type = serializers.ChoiceField(choices=UNLOCK_TYPE_CHOICES)
@@ -54,6 +60,7 @@ class PurchaseUnlockSerializer(serializers.Serializer):
     )
     thread_id = serializers.IntegerField(required=False, allow_null=True)
     boundary_level = serializers.IntegerField(required=False, allow_null=True)
+    skill_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         """Ensure the right IDs are supplied for the chosen unlock type."""
@@ -75,6 +82,12 @@ class PurchaseUnlockSerializer(serializers.Serializer):
                 )
             return attrs
 
+        if unlock_type == self.UNLOCK_TYPE_SKILL_BREAKTHROUGH:
+            if attrs.get("skill_id") is None:
+                msg = "skill_id is required for skill_breakthrough unlocks."
+                raise serializers.ValidationError({"skill_id": msg})
+            return attrs
+
         msg = f"Invalid unlock_type: {unlock_type}."
         raise serializers.ValidationError({"unlock_type": msg})
 
@@ -83,7 +96,8 @@ class PurchaseUnlockResponseSerializer(serializers.Serializer):
     """Response serializer for a completed unlock purchase."""
 
     unlock_type = serializers.CharField()
-    unlock_id = serializers.IntegerField(allow_null=True)
+    unlock_id = serializers.IntegerField(allow_null=True, required=False)
     thread_level_unlock_id = serializers.IntegerField(required=False, allow_null=True)
     thread_id = serializers.IntegerField(required=False, allow_null=True)
     boundary_level = serializers.IntegerField(required=False, allow_null=True)
+    skill_id = serializers.IntegerField(required=False, allow_null=True)

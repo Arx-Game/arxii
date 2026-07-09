@@ -21,6 +21,8 @@ from world.progression.services.skill_development import (
     process_weekly_skill_development,
 )
 from world.progression.types import DevelopmentSource
+from world.skills.factories import CharacterSkillValueFactory, SkillFactory
+from world.skills.models import CharacterSkillValue
 from world.traits.factories import TraitFactory
 from world.traits.models import CharacterTraitValue
 
@@ -331,6 +333,66 @@ class AwardCheckDevelopmentTest(TestCase):
         assert usage2 is not None
         assert usage2["check_count"] == 2
         assert usage2["points_earned"] == 15
+
+
+class AwardCheckDevelopmentSkillIndependenceTest(TestCase):
+    """#2115 regression: check-driven dev never touches ``CharacterSkillValue``.
+
+    Weekly training (``world.skills.services._apply_development_to_skill``) and
+    check-driven dev (``award_check_development``) are two independently-tracked
+    "skill value" write paths (see the #2115 spec's "Verified interaction with
+    check-driven dev" finding). This PR only fixes the training path's
+    XP-boundary discard bug; it must not change check-driven dev's behavior —
+    including that it stays oblivious to XP boundaries on ``CharacterSkillValue``.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="SkillIndependenceChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
+        cls.skill = SkillFactory()
+        cls.category = CheckCategory.objects.create(name="test_skill_independence_category")
+        cls.check_type = CheckType.objects.create(
+            name="skill_independence_check",
+            category=cls.category,
+        )
+        CheckTypeTrait.objects.create(check_type=cls.check_type, trait=cls.skill.trait, weight=1.0)
+
+    def setUp(self) -> None:
+        DevelopmentPoints.flush_instance_cache()
+        WeeklySkillUsage.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
+        WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
+        CharacterTraitValue.objects.filter(character=self.character).delete()
+        CharacterSkillValue.objects.filter(character=self.character).delete()
+        # Parked at an XP boundary — proves award_check_development ignores it.
+        self.skill_value = CharacterSkillValueFactory(
+            character=self.character,
+            skill=self.skill,
+            value=19,
+            development_points=0,
+            rust_points=0,
+        )
+
+    def test_award_check_development_leaves_character_skill_value_untouched(self) -> None:
+        """award_check_development writes DevelopmentPoints/CharacterTraitValue only."""
+        award_check_development(
+            character_sheet=self.sheet,
+            check_type=self.check_type,
+            effort_level=EffortLevel.MEDIUM,
+            path_level=1,
+        )
+
+        dp = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.skill.trait)
+        assert dp.total_earned == 10
+
+        self.skill_value.refresh_from_db()
+        # A boundary-parked skill value is completely untouched by check-driven dev —
+        # no dev points added, no rust payoff, no level change.
+        assert self.skill_value.value == 19
+        assert self.skill_value.development_points == 0
+        assert self.skill_value.rust_points == 0
 
 
 class RustDebtPayoffTest(TestCase):

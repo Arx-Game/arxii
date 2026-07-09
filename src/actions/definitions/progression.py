@@ -220,9 +220,9 @@ class ManageTrainingAction(Action):
 
 @dataclass
 class PurchaseUnlockAction(Action):
-    """Purchase a class-level or thread XP-lock unlock with XP.
+    """Purchase a class-level, thread XP-lock, or skill-breakthrough unlock with XP.
 
-    Both unlock types spend account XP through their respective service
+    All three unlock types spend account XP through their respective service
     functions; this action is a thin action.run() wrapper around them.
     """
 
@@ -235,6 +235,7 @@ class PurchaseUnlockAction(Action):
 
     _UNLOCK_TYPE_CLASS_LEVEL = "class_level"
     _UNLOCK_TYPE_THREAD_XP_LOCK = "thread_xp_lock"
+    _UNLOCK_TYPE_SKILL_BREAKTHROUGH = "skill_breakthrough"
 
     def execute(
         self,
@@ -251,6 +252,7 @@ class PurchaseUnlockAction(Action):
         from world.magic.models import Thread  # noqa: PLC0415
         from world.magic.types.alterations import AlterationGateError  # noqa: PLC0415
         from world.progression.models import ClassLevelUnlock  # noqa: PLC0415
+        from world.skills.models import Skill  # noqa: PLC0415
 
         unlock_type = kwargs.get("unlock_type")
 
@@ -259,9 +261,12 @@ class PurchaseUnlockAction(Action):
                 return self._purchase_class_level(actor, kwargs)
             if unlock_type == self._UNLOCK_TYPE_THREAD_XP_LOCK:
                 return self._purchase_thread_xp_lock(actor, kwargs)
+            if unlock_type == self._UNLOCK_TYPE_SKILL_BREAKTHROUGH:
+                return self._purchase_skill_breakthrough(actor, kwargs)
         except (
             ClassLevelUnlock.DoesNotExist,
             Thread.DoesNotExist,
+            Skill.DoesNotExist,
             CharacterSheet.DoesNotExist,
             AlterationGateError,
             InvalidImbueAmount,
@@ -280,8 +285,9 @@ class PurchaseUnlockAction(Action):
             success=False,
             message=(
                 "Invalid or missing unlock_type. "
-                f"Expected '{self._UNLOCK_TYPE_CLASS_LEVEL}' or "
-                f"'{self._UNLOCK_TYPE_THREAD_XP_LOCK}'."
+                f"Expected '{self._UNLOCK_TYPE_CLASS_LEVEL}', "
+                f"'{self._UNLOCK_TYPE_THREAD_XP_LOCK}', or "
+                f"'{self._UNLOCK_TYPE_SKILL_BREAKTHROUGH}'."
             ),
         )
 
@@ -340,5 +346,30 @@ class PurchaseUnlockAction(Action):
                 "thread_level_unlock_id": thread_level_unlock.pk,
                 "thread_id": thread.pk,
                 "boundary_level": boundary_level,
+            },
+        )
+
+    def _purchase_skill_breakthrough(
+        self,
+        actor: ObjectDB,
+        kwargs: dict[str, Any],
+    ) -> ActionResult:
+        """Purchase a skill's XP-boundary breakthrough for the actor (#2115)."""
+        from world.skills.models import Skill  # noqa: PLC0415
+        from world.skills.services import purchase_skill_breakthrough  # noqa: PLC0415
+
+        skill_id = kwargs.get("skill_id")
+        if skill_id is None:
+            return ActionResult(success=False, message="skill_id is required.")
+        skill = Skill.objects.get(pk=skill_id)
+        success, message = purchase_skill_breakthrough(actor, skill)
+        if not success:
+            return ActionResult(success=False, message=message)
+        return ActionResult(
+            success=True,
+            message=message,
+            data={
+                "unlock_type": self._UNLOCK_TYPE_SKILL_BREAKTHROUGH,
+                "skill_id": skill.pk,
             },
         )

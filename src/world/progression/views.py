@@ -73,6 +73,7 @@ from world.progression.services.voting import (
     get_votes_by_voter,
 )
 from world.roster.models import RosterEntry
+from world.skills.services import skills_at_boundary
 from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
@@ -554,6 +555,7 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
                     "thread_resonance_name": None,
                     "thread_target_kind": None,
                     "dev_points_to_boundary": None,
+                    "skill_id": None,
                 },
             )
 
@@ -580,6 +582,32 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
                     "thread_resonance_name": resonance.name if resonance is not None else None,
                     "thread_target_kind": thread.target_kind,
                     "dev_points_to_boundary": prospect.dev_points_to_boundary,
+                    "skill_id": None,
+                },
+            )
+
+        for skill_prospect in skills_at_boundary(character):
+            skill = skill_prospect.skill
+            rating = skill_prospect.next_rating / 10
+            items.append(
+                {
+                    "unlock_type": "skill_breakthrough",
+                    "display_name": f"{skill.name} Breakthrough to {rating:.1f}",
+                    "xp_cost": skill_prospect.xp_cost or 0,
+                    "requirements_met": skill_prospect.authored,
+                    "locked_reason": None if skill_prospect.authored else "Not yet authored",
+                    "class_level_unlock_id": None,
+                    "class_name": None,
+                    "target_level": None,
+                    "thread_id": None,
+                    "boundary_level": None,
+                    "thread_name": None,
+                    "thread_level": None,
+                    "thread_resonance_id": None,
+                    "thread_resonance_name": None,
+                    "thread_target_kind": None,
+                    "dev_points_to_boundary": None,
+                    "skill_id": skill.pk,
                 },
             )
 
@@ -604,6 +632,8 @@ class ProgressionUnlockViewSet(viewsets.GenericViewSet):
         action_kwargs: dict[str, Any] = {"unlock_type": data["unlock_type"]}
         if data["unlock_type"] == PurchaseUnlockSerializer.UNLOCK_TYPE_CLASS_LEVEL:
             action_kwargs["class_level_unlock_id"] = data["class_level_unlock_id"]
+        elif data["unlock_type"] == PurchaseUnlockSerializer.UNLOCK_TYPE_SKILL_BREAKTHROUGH:
+            action_kwargs["skill_id"] = data["skill_id"]
         else:
             action_kwargs["thread_id"] = data["thread_id"]
             action_kwargs["boundary_level"] = data["boundary_level"]

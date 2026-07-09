@@ -14,11 +14,14 @@ from world.progression.models import (
     CharacterUnlock,
     ClassLevelUnlock,
     ClassXPCost,
+    TraitRatingUnlock,
+    TraitXPCost,
     XPCostChart,
     XPCostEntry,
 )
 from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
+    CharacterSkillValueFactory,
     SkillFactory,
     SpecializationFactory,
     TrainingAllocationFactory,
@@ -404,3 +407,92 @@ class PurchaseUnlockActionTests(TestCase):
 
         self.assertFalse(result.success)
         self.assertIn("class_level_unlock_id is required", result.message.lower())
+
+    def _authored_skill_breakthrough(self, skill, *, target_rating: int, xp_cost: int):
+        """Author a TraitRatingUnlock + its XP cost for ``skill`` (#2115)."""
+        chart = XPCostChart.objects.create(name=f"Breakthrough Chart {skill.pk}")
+        XPCostEntry.objects.create(chart=chart, level=target_rating, xp_cost=xp_cost)
+        TraitXPCost.objects.create(trait=skill.trait, cost_chart=chart)
+        return TraitRatingUnlock.objects.create(trait=skill.trait, target_rating=target_rating)
+
+    def test_purchase_skill_breakthrough_success(self):
+        """Can purchase a skill breakthrough when the actor has enough XP (#2115)."""
+        character, _sheet, account = self._create_character_with_account()
+        skill = SkillFactory()
+        skill_value = CharacterSkillValueFactory(character=character, skill=skill, value=19)
+        self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="skill_breakthrough",
+            skill_id=skill.pk,
+        )
+
+        self.assertTrue(result.success)
+        self.assertIn("breakthrough", result.message.lower())
+        self.assertEqual(result.data["unlock_type"], "skill_breakthrough")
+        self.assertEqual(result.data["skill_id"], skill.pk)
+        skill_value.refresh_from_db()
+        self.assertEqual(skill_value.value, 20)
+
+    def test_purchase_skill_breakthrough_insufficient_xp(self):
+        """Purchasing a skill breakthrough fails without enough XP (#2115)."""
+        character, _sheet, account = self._create_character_with_account()
+        skill = SkillFactory()
+        CharacterSkillValueFactory(character=character, skill=skill, value=19)
+        self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
+        self._set_xp(account, total_earned=50)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="skill_breakthrough",
+            skill_id=skill.pk,
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("insufficient xp", result.message.lower())
+
+    def test_purchase_skill_breakthrough_duplicate_fails(self):
+        """A second purchase attempt fails once the gate is already cleared (#2115)."""
+        character, _sheet, account = self._create_character_with_account()
+        skill = SkillFactory()
+        CharacterSkillValueFactory(character=character, skill=skill, value=19)
+        self._authored_skill_breakthrough(skill, target_rating=20, xp_cost=100)
+        self._set_xp(account, total_earned=300)
+
+        first = PurchaseUnlockAction().run(
+            actor=character, unlock_type="skill_breakthrough", skill_id=skill.pk
+        )
+        self.assertTrue(first.success)
+
+        second = PurchaseUnlockAction().run(
+            actor=character, unlock_type="skill_breakthrough", skill_id=skill.pk
+        )
+        self.assertFalse(second.success)
+        self.assertIn("not at a breakthrough boundary", second.message.lower())
+
+    def test_purchase_skill_breakthrough_missing_skill_id(self):
+        """A missing skill_id returns a clean failure, not a TypeError (#2115)."""
+        character, _sheet, _account = self._create_character_with_account()
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="skill_breakthrough",
+        )
+
+        self.assertFalse(result.success)
+        self.assertIn("skill_id is required", result.message.lower())
+
+    def test_purchase_skill_breakthrough_unknown_skill_id(self):
+        """An unknown skill_id returns a clean failure, not a raw DoesNotExist (#2115)."""
+        character, _sheet, account = self._create_character_with_account()
+        self._set_xp(account, total_earned=150)
+
+        result = PurchaseUnlockAction().run(
+            actor=character,
+            unlock_type="skill_breakthrough",
+            skill_id=999999,
+        )
+
+        self.assertFalse(result.success)
