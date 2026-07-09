@@ -76,6 +76,43 @@ class MoveObjectAutoEngageTests(TestCase):
         mem_a.refresh_from_db()
         self.assertTrue(mem_a.engaged)
 
+    def test_moving_out_dims_remaining_member_vow(self) -> None:
+        """move_object revalidates origin occupants when char_b leaves (#2051)."""
+        from flows.scene_data_manager import SceneDataManager
+        from flows.service_functions.movement import move_object
+
+        cov = CovenantFactory(name="DepartCov", covenant_type=CovenantType.DURANCE)
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        mem_a = CharacterCovenantRoleFactory(covenant=cov, covenant_role=role)
+        mem_b = CharacterCovenantRoleFactory(covenant=cov, covenant_role=role)
+
+        room = _make_room("SharedRoom")
+        char_a = mem_a.character_sheet.character
+        char_b = mem_b.character_sheet.character
+
+        # Both members in the room with an active scene → both engaged.
+        _place_character_in_room(char_a, room)
+        _place_character_in_room(char_b, room)
+        SceneFactory(location=room, is_active=True)
+
+        from world.covenants.services import evaluate_scene_engagement
+
+        evaluate_scene_engagement(character_sheet=mem_a.character_sheet, room=room)
+        evaluate_scene_engagement(character_sheet=mem_b.character_sheet, room=room)
+        mem_a.refresh_from_db()
+        self.assertTrue(mem_a.engaged)
+
+        # char_b moves to a different room.
+        dest_room = _make_room("DestRoom")
+        sdm = SceneDataManager()
+        obj_state = sdm.initialize_state_for_object(char_b)
+        dest_state = sdm.initialize_state_for_object(dest_room)
+        move_object(obj_state, dest_state, quiet=True)
+
+        # char_a's vow should have dimmed — char_b (covenant-mate) is gone.
+        mem_a.refresh_from_db()
+        self.assertFalse(mem_a.engaged)
+
 
 class StartSceneAutoEngageTests(TestCase):
     """Task 7.3: starting a scene at a room engages co-present members."""

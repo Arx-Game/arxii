@@ -195,3 +195,27 @@ class GateQueryTests(_RiskAckTestBase):
             existing_objectdb=sheet.character,
         )
         self.assertIsNone(self._gate(scene, sheet))
+
+    def test_solo_boss_entry_sends_darkness_warning(self):
+        """A solo PC entering a BOSS encounter receives the darkness warning (#2051)."""
+        from world.combat.constants import OpponentTier, RiskLevel
+        from world.combat.factories import CombatOpponentFactory
+        from world.combat.services import acknowledge_encounter_risk
+
+        sheet = self._make_sheet()
+        scene, room = self._make_scene_with_room()
+        encounter = self._make_encounter(scene, room, RiskLevel.HIGH)
+        CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.BOSS,
+        )
+
+        # Mock msg to capture the warning.
+        from unittest.mock import patch
+
+        with patch.object(type(sheet.character), "msg") as mock_msg:
+            acknowledge_encounter_risk(encounter, sheet)
+
+        mock_msg.assert_called_once()
+        args = mock_msg.call_args.args
+        self.assertIn("alone", args[0].lower())

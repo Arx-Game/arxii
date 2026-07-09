@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from world.combat.handlers import EncounterCombatHandler
 
 from world.combat.constants import (
+    COMBO_MIN_SLOTS,
     DEFAULT_OPPONENT_MORALE,
     DEFAULT_PACE_TIMER_MINUTES,
     FLEE_BASE_DIFFICULTY,
@@ -528,6 +529,19 @@ class CombatOpponent(SharedMemoryModel):
             "this opponent is DEFEATED (#876). Author non-character-targeted effects."
         ),
     )
+    wall_breaker_combo = models.ForeignKey(
+        "combat.ComboDefinition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wall_breaker_for_opponents",
+        help_text=(
+            "#2051: the authored declaration of the combo intended to break this "
+            "BOSS-tier opponent's wall. Required when aftermath_pool pays legend at "
+            "risk ≥ LEGEND_RISK_FLOOR_TIER. Null for non-BOSS tiers or non-legend "
+            "aftermath."
+        ),
+    )
 
     # === Morale fields (#2015) ===
     morale = models.PositiveSmallIntegerField(
@@ -588,6 +602,7 @@ class CombatOpponent(SharedMemoryModel):
 
     def clean(self) -> None:
         super().clean()
+        self._validate_wall_breaker_combo()
         if not self.objectdb_is_ephemeral:
             return
         from world.combat.services import (  # noqa: PLC0415
@@ -617,6 +632,44 @@ class CombatOpponent(SharedMemoryModel):
                     )
                 }
             )
+
+    def _aftermath_pays_legend(self) -> bool:
+        """Return True if this opponent's aftermath_pool contains a LEGEND_AWARD effect (#2051)."""
+        if self.aftermath_pool_id is None:
+            return False
+        from world.checks.constants import EffectType  # noqa: PLC0415
+        from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+
+        return ConsequenceEffect.objects.filter(
+            consequence__pool_entries__pool=self.aftermath_pool,
+            effect_type=EffectType.LEGEND_AWARD,
+        ).exists()
+
+    def _validate_wall_breaker_combo(self) -> None:
+        """Boss wall-breaker guard (#2051).
+
+        A BOSS-tier opponent whose aftermath_pool pays legend requires a
+        ``wall_breaker_combo`` that is set, active (not hidden or has at least
+        one learning), and has ≥ COMBO_MIN_SLOTS slots. HERO_KILLER is
+        unbeatable by design and not combo-gated.
+        """
+        if self.tier != OpponentTier.BOSS:
+            return
+        if not self._aftermath_pays_legend():
+            return
+        if self.wall_breaker_combo_id is None:
+            msg = (
+                "A BOSS-tier opponent with a legend-paying aftermath_pool requires "
+                "a wall_breaker_combo (#2051)."
+            )
+            raise ValidationError({"wall_breaker_combo": msg})
+        combo = self.wall_breaker_combo
+        if combo is not None and combo.slots.count() < COMBO_MIN_SLOTS:
+            msg = (
+                f"wall_breaker_combo '{combo.name}' has fewer than {COMBO_MIN_SLOTS} "
+                "slots — a wall-breaker must be a real multi-PC combo (#2051)."
+            )
+            raise ValidationError({"wall_breaker_combo": msg})
 
     @property
     def is_duel_mirror(self) -> bool:
@@ -792,6 +845,30 @@ class ComboDefinition(DiscoverableContent, SharedMemoryModel):
             "for the combo to be available. Null means no window condition is required."
         ),
     )
+
+    def clean(self) -> None:
+        """Validate the combo invariant: minimum 2 slots (#2051).
+
+        Combos are structurally multi-PC — a solo player cannot fill 2+ distinct
+        action slots. This check catches programmatic edits and raw ORM saves
+        once slots exist. Admin creation is guarded separately by
+        ``ComboSlotInline.min_num``.
+
+        At creation time (before slots are saved), this is a no-op: Django's
+        admin ``save_model`` → ``save_related`` ordering means slots are written
+        after the definition, so ``self.pk`` may be set but ``slots`` is empty.
+        The admin inline's ``min_num=2, validate_min=True`` is the creation-time
+        guard; this ``clean()`` is the post-creation belt.
+        """
+        super().clean()
+        if self.pk is not None:
+            slot_count = self.slots.count()
+            if slot_count < COMBO_MIN_SLOTS:
+                msg = (
+                    f"Combo '{self.name}' has {slot_count} slot(s); combos require "
+                    "at least 2 slots (they are never solo — #2051)."
+                )
+                raise ValidationError({"slots": msg})
 
     def __str__(self) -> str:
         return self.name

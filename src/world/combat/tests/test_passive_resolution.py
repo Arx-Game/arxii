@@ -336,10 +336,12 @@ class ComboOpeningPassiveUnlocksGatedComboTest(TestCase):
         self.opponent.refresh_from_db()
         self.assertEqual(self.opponent.probing_current, 3)
 
-        # 2) A probing-gated combo is now available. Build a single-slot combo the
-        #    PC knows, gated at minimum_probing == 3, and declare a next-round
-        #    focused action whose effect type fills the slot.
+        # 2) A probing-gated combo is now available. Build a 2-slot combo the
+        #    PC knows, gated at minimum_probing == 3, and declare next-round
+        #    focused actions whose effect types fill both slots (combos require
+        #    >=2 distinct PC actions — #2051).
         effect_type = EffectTypeFactory(name="Combo Opener Attack")
+        effect_type_2 = EffectTypeFactory(name="Combo Opener Defense")
         combo = ComboDefinitionFactory(
             discoverable_via_combat=False,
             minimum_probing=3,
@@ -349,21 +351,45 @@ class ComboOpeningPassiveUnlocksGatedComboTest(TestCase):
             slot_number=1,
             required_action_type=effect_type,
         )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=effect_type_2,
+        )
         ComboLearningFactory(
             combo=combo,
             character_sheet=self.participant.character_sheet,
         )
 
+        # Add a second participant whose action fills the second slot.
+        from world.vitals.models import CharacterVitals
+
+        participant_2 = CombatParticipantFactory(encounter=self.encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant_2.character_sheet,
+            health=100,
+            max_health=100,
+        )
         next_round = self.encounter.round_number + 1
         focused = TechniqueFactory(
             gift=GiftFactory(),
             effect_type=effect_type,
+        )
+        focused_2 = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=effect_type_2,
         )
         CombatRoundAction.objects.create(
             participant=self.participant,
             round_number=next_round,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=focused,
+        )
+        CombatRoundAction.objects.create(
+            participant=participant_2,
+            round_number=next_round,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=focused_2,
         )
 
         available = detect_available_combos(self.encounter, next_round)

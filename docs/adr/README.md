@@ -73,6 +73,7 @@ treat those names as hints to confirm, not gospel.
 - [0097 — Kinship is a person-node graph with typed edges and a truth-vs-public-record split; reincarnation is a Soul entity](0097-kinship-is-a-person-node-graph-with-truth-vs-public-record.md)
 - [0098 — Houses are Organizations with kinship recognition](0098-houses-are-organizations-with-kinship-recognition.md)
 - [0101 — House aspects are catalog-only](0101-house-aspects-are-catalog-only.md)
+- [0107 — Solo darkness, not locked doors](0107-solo-darkness-not-locked-doors.md)
 
 ### Resolution
 - [0019 — Unified resolution: one roll path, data-sourced difficulty, graded outcomes](0019-unified-resolution-one-roll-path.md)

@@ -20,6 +20,45 @@ MAX_PERCENT_REPLACE = 100
 MISSION_RISK_ACK_TIER = 3
 
 
+# #2051 — the solo darkness warning. Appended to the risk-ack wager text when
+# a solo player accepts a legend-risk mission with no engaged covenant vow.
+SOLO_DARKNESS_WARNING = "You are alone. Your threads are quiet. This will very likely kill you."
+
+
+# #2051 — the minimum risk_tier a MissionTemplate must carry before any reward
+# line may pay into the LEGEND_POINTS sink. Legend is earned in the company of
+# others; a mission below this floor cannot pay legend. Tier 4 maps to
+# RenownRisk.HIGH (see risk_tier_to_renown_risk). Designer-tunable by code
+# change only, like MISSION_RISK_ACK_TIER.
+LEGEND_RISK_FLOOR_TIER = 4
+
+
+def risk_tier_to_renown_risk(risk_tier: int) -> str:
+    """Map a MissionTemplate's integer risk_tier (1-5) to a RenownRisk string.
+
+    Mirrors the five-tier RenownRisk ladder (societies.constants). Tier 1 is
+    routine (NONE); tier 5 is extreme (EXTREME). Shared between the mission
+    legend guard (#2051) and the stakes risk bridge (#2048).
+
+    Args:
+        risk_tier: The MissionTemplate.risk_tier integer (1-5).
+
+    Returns:
+        The corresponding RenownRisk string value. Unknown tiers default to
+        NONE (safest — pays no legend).
+    """
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+
+    mapping: dict[int, str] = {
+        1: str(RenownRisk.NONE.value),
+        2: str(RenownRisk.LOW.value),
+        3: str(RenownRisk.MODERATE.value),
+        4: str(RenownRisk.HIGH.value),
+        5: str(RenownRisk.EXTREME.value),
+    }
+    return mapping.get(risk_tier, str(RenownRisk.NONE.value))
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 — mission graph data model choices
 # ---------------------------------------------------------------------------

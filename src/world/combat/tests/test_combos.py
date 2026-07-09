@@ -1,5 +1,6 @@
 """Tests for the combo system: models, detection, upgrade/revert."""
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -53,6 +54,30 @@ class ComboDefinitionModelTests(TestCase):
         ComboDefinition.objects.create(name="A", slug="unique-slug")
         with self.assertRaises(IntegrityError):
             ComboDefinition.objects.create(name="B", slug="unique-slug")
+
+    def test_clean_rejects_one_slot_combo(self) -> None:
+        """A combo with fewer than 2 slots fails validation (invariant: combos are never solo)."""
+        from world.magic.factories import EffectTypeFactory
+
+        combo = ComboDefinitionFactory()
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=EffectTypeFactory())
+        with self.assertRaises(ValidationError):
+            combo.clean()
+
+    def test_clean_rejects_zero_slot_combo(self) -> None:
+        """A combo with no slots fails validation once it has a pk."""
+        combo = ComboDefinitionFactory()
+        with self.assertRaises(ValidationError):
+            combo.clean()
+
+    def test_clean_accepts_two_slot_combo(self) -> None:
+        """A combo with 2+ slots passes validation."""
+        from world.magic.factories import EffectTypeFactory
+
+        combo = ComboDefinitionFactory()
+        ComboSlotFactory(combo=combo, slot_number=1, required_action_type=EffectTypeFactory())
+        ComboSlotFactory(combo=combo, slot_number=2, required_action_type=EffectTypeFactory())
+        combo.clean()  # should not raise
 
 
 class ComboSlotModelTests(TestCase):
@@ -246,6 +271,20 @@ class DetectAvailableCombosTests(TestCase):
         available = detect_available_combos(encounter, 1)
         self.assertEqual(len(available), 0)
 
+    def test_single_slot_combo_never_detected(self) -> None:
+        """A legacy 1-slot combo is inert at runtime even if it exists in the DB (#2051)."""
+        encounter, _participants, _actions = self._setup_encounter_with_actions(num_pcs=1)
+
+        combo = ComboDefinitionFactory(discoverable_via_combat=True)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=self.effect_attack,
+        )
+
+        available = detect_available_combos(encounter, 1)
+        self.assertEqual(len(available), 0)
+
     def test_action_type_mismatch(self) -> None:
         """Combo where no action matches one of the slots."""
         encounter, _participants, _actions = self._setup_encounter_with_actions(num_pcs=2)
@@ -423,7 +462,11 @@ class ResonanceMatchingTests(TestCase):
         *,
         gift_resonance: object,
     ) -> tuple[object, list[object]]:
-        """Create an encounter with a single PC whose gift has the given resonance."""
+        """Create an encounter with two PCs; the first PC's gift has the given resonance.
+
+        Two PCs are used because combos require >=2 slots (#2051 invariant).
+        The second PC uses a plain attack-type action with no resonance slot.
+        """
         encounter = CombatEncounterFactory(
             status=RoundStatus.DECLARING,
             round_number=1,
@@ -445,7 +488,23 @@ class ResonanceMatchingTests(TestCase):
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
         )
-        return encounter, [action]
+        # Second PC with a plain attack action (no resonance requirement)
+        sheet2 = CharacterSheetFactory()
+        participant2 = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet2,
+        )
+        technique2 = TechniqueFactory(
+            gift=GiftFactory(name=f"Gift-plain-{gift_resonance}"),
+            effect_type=self.effect_attack,
+        )
+        action2 = CombatRoundAction.objects.create(
+            participant=participant2,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique2,
+        )
+        return encounter, [action, action2]
 
     def test_combo_with_resonance_requirement_matches(self) -> None:
         """Slot with resonance requirement matches when gift has that resonance."""
@@ -458,6 +517,11 @@ class ResonanceMatchingTests(TestCase):
             slot_number=1,
             required_action_type=self.effect_attack,
             resonance_requirement=self.fire_resonance,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=self.effect_attack,
         )
 
         available = detect_available_combos(encounter, 1)
@@ -475,6 +539,11 @@ class ResonanceMatchingTests(TestCase):
             slot_number=1,
             required_action_type=self.effect_attack,
             resonance_requirement=self.fire_resonance,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=self.effect_attack,
         )
 
         available = detect_available_combos(encounter, 1)

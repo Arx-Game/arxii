@@ -47,7 +47,7 @@ class MissionOptionRouteRewardTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.template = MissionTemplateFactory(name="route-reward-tmpl")
+        cls.template = MissionTemplateFactory(name="route-reward-tmpl", risk_tier=4)
         cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
         cls.success = CheckOutcomeFactory(name="RewardSuccess", success_level=3)
         cls.sneak = CheckTypeFactory(name="RewardSneak")
@@ -410,3 +410,69 @@ class ProjectSinkValidationTests(TestCase):
             amount=10,
         )
         reward.clean()  # should not raise
+
+
+class LegendRiskFloorGuardTests(TestCase):
+    """Save-time legend guard: legend rewards require the risk floor (#2051)."""
+
+    def test_legend_reward_below_floor_rejected(self) -> None:
+        """A LEGEND_POINTS reward on a low-risk template fails validation."""
+        template = MissionTemplateFactory(risk_tier=2)  # LOW — below floor
+        node = MissionNodeFactory(template=template)
+        option = MissionOptionFactory(node=node)
+        route = MissionOptionRouteFactory(option=option)
+        reward = MissionOptionRouteRewardFactory.build(
+            route=route,
+            sink=DeedRewardSink.LEGEND_POINTS,
+        )
+        with self.assertRaises(ValidationError):
+            reward.clean()
+
+    def test_legend_reward_at_floor_accepted(self) -> None:
+        """A LEGEND_POINTS reward on a HIGH-risk template passes validation."""
+        template = MissionTemplateFactory(risk_tier=4)  # HIGH — at floor
+        node = MissionNodeFactory(template=template)
+        option = MissionOptionFactory(node=node)
+        route = MissionOptionRouteFactory(option=option)
+        reward = MissionOptionRouteRewardFactory(
+            route=route,
+            sink=DeedRewardSink.LEGEND_POINTS,
+        )
+        reward.clean()  # should not raise
+
+    def test_non_legend_reward_below_floor_accepted(self) -> None:
+        """A non-LEGEND reward (e.g. MONEY) on a low-risk template passes."""
+        template = MissionTemplateFactory(risk_tier=1)  # NONE — below floor
+        node = MissionNodeFactory(template=template)
+        option = MissionOptionFactory(node=node)
+        route = MissionOptionRouteFactory(option=option)
+        reward = MissionOptionRouteRewardFactory(
+            route=route,
+            sink=DeedRewardSink.MONEY,
+        )
+        reward.clean()  # should not raise
+
+    def test_renown_award_legend_paying_below_floor_rejected(self) -> None:
+        """A legend-paying RenownAward (risk=HIGH) on a low-risk template fails."""
+        from world.missions.models import MissionRenownAward
+        from world.societies.constants import RenownRisk
+
+        template = MissionTemplateFactory(risk_tier=2)  # below floor
+        node = MissionNodeFactory(template=template)
+        option = MissionOptionFactory(node=node)
+        route = MissionOptionRouteFactory(option=option)
+        award = MissionRenownAward(route=route, risk=RenownRisk.HIGH.value)
+        with self.assertRaises(ValidationError):
+            award.clean()
+
+    def test_renown_award_non_legend_below_floor_accepted(self) -> None:
+        """A non-legend RenownAward (risk=LOW) on a low-risk template passes."""
+        from world.missions.models import MissionRenownAward
+        from world.societies.constants import RenownRisk
+
+        template = MissionTemplateFactory(risk_tier=1)
+        node = MissionNodeFactory(template=template)
+        option = MissionOptionFactory(node=node)
+        route = MissionOptionRouteFactory(option=option)
+        award = MissionRenownAward(route=route, risk=RenownRisk.LOW.value)
+        award.clean()  # should not raise

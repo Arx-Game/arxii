@@ -32,6 +32,12 @@ def move_object(
 
     clear_place_presence_for_character(obj.obj)
 
+    # #2051: capture origin before the move — move_to relocates obj.obj.location,
+    # so the origin room is lost after the move. Needed to revalidate the
+    # remaining origin-room occupants whose covenant vows may have dimmed
+    # because the mover (a covenant-mate) just left.
+    origin = obj.obj.location
+
     success = obj.obj.move_to(destination.obj, quiet=quiet, **kwargs)
 
     if not success:
@@ -41,9 +47,31 @@ def move_object(
     # Auto-engage Durance covenant if co-present with members (Slice B §4.10)
     sheet = getattr(obj.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
     if sheet is not None and obj.obj.location is not None:
-        from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
+        from world.covenants.services import (  # noqa: PLC0415
+            evaluate_scene_engagement,
+            revalidate_engagements,
+        )
 
         evaluate_scene_engagement(character_sheet=sheet, room=obj.obj.location)
+        # #2051: revalidate the mover's own vows at the new location —
+        # co-presence may have changed for them too (e.g. left their covenant).
+        revalidate_engagements(character_sheet=sheet, room=obj.obj.location)
+
+    # #2051: revalidate remaining origin-room occupants whose vows may have
+    # dimmed because the mover (a covenant-mate) just left. Hot path:
+    # short-circuit via cached handlers — only touch occupants with an engaged
+    # covenant role (the common case of no covenant membership touches no DB).
+    if origin is not None:
+        from world.covenants.services import revalidate_engagements  # noqa: PLC0415
+
+        for remaining in origin.contents:
+            remaining_sheet = getattr(remaining, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            if remaining_sheet is None:
+                continue
+            roles = remaining_sheet.character.covenant_roles
+            if not any(m.engaged for m in roles.active_memberships):
+                continue
+            revalidate_engagements(character_sheet=remaining_sheet, room=origin)
 
 
 def check_exit_traversal(
