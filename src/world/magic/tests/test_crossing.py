@@ -878,3 +878,89 @@ class MantleCrossingHandlerTests(TestCase):
         handler = MantleCrossingHandler()
         handler.execute(thread=self.thread, starting_level=3, new_level=3)
         self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
+
+
+class MantleCrossingResolveTests(TestCase):
+    """Resolve a MANTLE crossing offer via the service + action seam."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.items.factories import MantleFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.models.crossing import CrossingOption
+
+        cls.character_obj = CharacterFactory(db_key="MantleResolveChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+        cls.resonance = ResonanceFactory()
+        cls.mantle = MantleFactory(name="MantleResolveMantle")
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            level=3,
+            target_kind=TargetKind.MANTLE,
+            target_mantle=cls.mantle,
+            target_trait=None,
+        )
+        cls.condition_template = ConditionTemplateFactory()
+        cls.option = CrossingOption.objects.create(
+            target_kind=TargetKind.MANTLE,
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Flame-forged edge",
+            description="The mantle's blade ignites with your resonance.",
+            condition_template=cls.condition_template,
+        )
+
+    def setUp(self) -> None:
+        from world.magic.models.crossing import PendingCrossingOffer
+
+        self.offer = PendingCrossingOffer.objects.create(
+            thread=self.thread,
+            crossing_level=3,
+        )
+
+    def test_resolve_mantle_offer(self) -> None:
+        """resolve_crossing_offer creates a CrossingChoice and deletes the offer."""
+        from world.magic.models.crossing import CrossingChoice, PendingCrossingOffer
+        from world.magic.services.crossing import resolve_crossing_offer
+
+        result = resolve_crossing_offer(self.offer, option=self.option)
+        self.assertEqual(result.option_name, "Flame-forged edge")
+        self.assertTrue(
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+        self.assertFalse(PendingCrossingOffer.objects.filter(pk=self.offer.pk).exists())
+
+    def test_resolve_wrong_kind_raises_stale(self) -> None:
+        """Resolving a MANTLE offer with a TRAIT option raises StaleError."""
+        from world.magic.constants import TargetKind
+        from world.magic.exceptions import CrossingOfferStaleError
+        from world.magic.models.crossing import CrossingOption
+        from world.magic.services.crossing import resolve_crossing_offer
+
+        trait_option = CrossingOption.objects.create(
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            crossing_level=3,
+            name="Wrong kind option",
+            condition_template=self.condition_template,
+        )
+        with self.assertRaises(CrossingOfferStaleError):
+            resolve_crossing_offer(self.offer, option=trait_option)
+
+    def test_action_seam_resolves_mantle_offer(self) -> None:
+        """ResolveCrossingOfferAction.run succeeds for a MANTLE offer."""
+        from actions.definitions.crossing import ResolveCrossingOfferAction
+        from world.magic.models.crossing import CrossingChoice
+
+        actor = self.sheet.character
+        action = ResolveCrossingOfferAction()
+        result = action.run(actor=actor, offer=self.offer, option=self.option)
+        self.assertTrue(result.success)
+        self.assertTrue(
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
