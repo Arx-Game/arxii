@@ -42,21 +42,17 @@ class CrossingRegistryTests(TestCase):
     def test_covenant_role_handler_registered(self) -> None:
         self.assertIsNotNone(get_crossing_handler(TargetKind.COVENANT_ROLE))
 
-    def test_stub_handlers_registered(self) -> None:
-        """The 1 remaining stub kind has a handler that executes without error."""
-        stub_kinds = [
-            TargetKind.SANCTUM,
-        ]
-        for kind in stub_kinds:
+    def test_no_stub_handlers_remain(self) -> None:
+        """All TargetKinds now have real crossing handlers (no stubs)."""
+        from world.magic.crossing.handlers import _StubCrossingHandler
+
+        for kind in TargetKind.values:
             handler = get_crossing_handler(kind)
             self.assertIsNotNone(handler, f"No handler for {kind}")
-            # Stub handlers should not raise on execute.
-            thread = MagicMock()
-            thread.target_kind = kind
-            handler.execute(  # type: ignore[union-attr]
-                thread=thread,
-                starting_level=2,
-                new_level=3,
+            self.assertNotIsInstance(
+                handler,
+                _StubCrossingHandler,
+                f"Handler for {kind} is still a stub",
             )
 
 

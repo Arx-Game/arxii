@@ -13,7 +13,7 @@ from actions.types import ActionResult, TargetType
 class ResolveCrossingOfferAction(Action):
     """Resolve a pending crossing offer by picking an option.
 
-    Shared action.run() seam — telnet (CmdCrossing) and web
+    Shared action.run() seam — telnet (CmdThreads) and web
     (CrossingRespondView) converge here.
     """
 

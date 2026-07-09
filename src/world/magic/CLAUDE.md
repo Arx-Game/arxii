@@ -654,7 +654,8 @@ resolver; no parallel specialization systems (ADR-0016).
 registry so every `TargetKind` gets a ceremony at PathStage crossings (3, 6, 11, 16, 21).
 GIFT/COVENANT_ROLE handlers wrap the existing variant-discovery logic
 (`AbstractSpecializedVariant.newly_crossed_variants` → achievement + codex + narrative). The
-other seven kinds have stub handlers (debug no-op, replaced in #1988–#1993). A shared
+other kinds use the `_CrossingChoiceHandler` base (player-choice buffs from the
+`CrossingOption` catalog) or the `TechniqueCrossingHandler` (narrative-only beat). A shared
 `execute_ceremony_beat` helper lets non-variant kinds fire the same beat without an
 `AbstractSpecializedVariant`. Called from `spend_resonance_for_imbuing` on every thread advance;
 also standalone-callable. (`world/covenants/discovery.py` re-exports it as

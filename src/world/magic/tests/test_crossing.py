@@ -964,3 +964,194 @@ class MantleCrossingResolveTests(TestCase):
         self.assertTrue(
             CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
         )
+
+
+class SanctumCrossingHandlerTests(TestCase):
+    """SANCTUM thread crossing — player-chosen sanctum attunement buff (#1993)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.models import SanctumDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.feature_instance = RoomFeatureInstanceFactory()
+        cls.sanctum = SanctumDetails.objects.create(
+            feature_instance=cls.feature_instance,
+            resonance_type=cls.resonance,
+            owner_mode="PERSONAL",
+        )
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="SANCTUM",
+            target_sanctum_details=cls.sanctum,
+            target_trait=None,
+            slot_kind="PERSONAL_OWN",
+            level=2,
+        )
+        cls.condition_template = _make_condition_template()
+        cls.option = CrossingOption.objects.create(
+            target_kind=TargetKind.SANCTUM,
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Sanctum Attunement",
+            condition_template=cls.condition_template,
+            is_default=True,
+        )
+
+    def test_crossing_creates_pending_offer(self) -> None:
+        from world.magic.crossing.handlers import SanctumCrossingHandler
+
+        self.thread.level = 3
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+            handler = SanctumCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=3)
+            mock_beat.assert_called_once()
+        self.assertTrue(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
+
+    def test_non_crossing_level_no_offer(self) -> None:
+        from world.magic.crossing.handlers import SanctumCrossingHandler
+
+        self.thread.level = 4
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat") as mock_beat:
+            handler = SanctumCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=3, new_level=4)
+            mock_beat.assert_not_called()
+        self.assertFalse(PendingCrossingOffer.objects.filter(thread=self.thread).exists())
+
+    def test_multi_crossing_auto_resolves_lower(self) -> None:
+        """Crossing from 2->11 auto-resolves 3 and 6, offers 11."""
+        from world.magic.crossing.handlers import SanctumCrossingHandler
+
+        CrossingOption.objects.create(
+            target_kind=TargetKind.SANCTUM,
+            resonance=self.resonance,
+            crossing_level=6,
+            name="Greater attunement",
+            condition_template=self.condition_template,
+            is_default=True,
+        )
+        CrossingOption.objects.create(
+            target_kind=TargetKind.SANCTUM,
+            resonance=self.resonance,
+            crossing_level=11,
+            name="Master attunement",
+            condition_template=self.condition_template,
+            is_default=True,
+        )
+        self.thread.level = 11
+        with patch("world.magic.crossing.handlers.execute_ceremony_beat"):
+            handler = SanctumCrossingHandler()
+            handler.execute(thread=self.thread, starting_level=2, new_level=11)
+        self.assertTrue(
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=3).exists()
+        )
+        self.assertTrue(
+            CrossingChoice.objects.filter(thread=self.thread, crossing_level=6).exists()
+        )
+        self.assertTrue(
+            PendingCrossingOffer.objects.filter(thread=self.thread, crossing_level=11).exists()
+        )
+
+
+class AnchorLabelSanctumTests(TestCase):
+    """_anchor_label_for returns a sanctum label for SANCTUM threads (#1993)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.models import SanctumDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.feature_instance = RoomFeatureInstanceFactory()
+        cls.sanctum = SanctumDetails.objects.create(
+            feature_instance=cls.feature_instance,
+            resonance_type=cls.resonance,
+            owner_mode="PERSONAL",
+        )
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="SANCTUM",
+            target_sanctum_details=cls.sanctum,
+            target_trait=None,
+            slot_kind="PERSONAL_OWN",
+        )
+
+    def test_sanctum_anchor_label(self) -> None:
+        from world.magic.crossing.handlers import _anchor_label_for
+
+        label = _anchor_label_for(self.thread)
+        self.assertIn("sanctum", label.lower())
+
+
+class ActiveCrossingEffectsSanctumTests(TestCase):
+    """active_crossing_effects location-gates SANCTUM crossing buffs (#1993)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.magic.models import SanctumDetails
+        from world.room_features.factories import RoomFeatureInstanceFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceFactory()
+        cls.feature_instance = RoomFeatureInstanceFactory()
+        cls.sanctum = SanctumDetails.objects.create(
+            feature_instance=cls.feature_instance,
+            resonance_type=cls.resonance,
+            owner_mode="PERSONAL",
+        )
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind="SANCTUM",
+            target_sanctum_details=cls.sanctum,
+            target_trait=None,
+            slot_kind="PERSONAL_OWN",
+            level=3,
+        )
+        cls.condition_template = _make_condition_template()
+        cls.option = CrossingOption.objects.create(
+            target_kind=TargetKind.SANCTUM,
+            resonance=cls.resonance,
+            crossing_level=3,
+            name="Sanctum Attunement",
+            condition_template=cls.condition_template,
+        )
+        CrossingChoice.objects.create(
+            thread=cls.thread,
+            crossing_level=3,
+            option=cls.option,
+        )
+
+    def test_sanctum_buff_active_when_in_sanctum_room(self) -> None:
+        from world.magic.services.crossing import active_crossing_effects
+
+        sanctum_room = self.sanctum.feature_instance.room_profile.objectdb
+        character = self.sheet.character
+        character.location = sanctum_room
+        effects = active_crossing_effects(character)
+        self.assertTrue(
+            any(e.name == "Sanctum Attunement" for e in effects),
+            "SANCTUM crossing buff should be active when in the sanctum's room",
+        )
+
+    def test_sanctum_buff_inactive_when_elsewhere(self) -> None:
+        from world.magic.services.crossing import active_crossing_effects
+
+        character = self.sheet.character
+        character.location = None
+        effects = active_crossing_effects(character)
+        self.assertFalse(
+            any(e.name == "Sanctum Attunement" for e in effects),
+            "SANCTUM crossing buff should NOT be active when not in the sanctum's room",
+        )
