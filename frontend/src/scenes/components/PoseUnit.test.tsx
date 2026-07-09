@@ -433,7 +433,7 @@ describe('PoseUnit endorsement control mounting', () => {
     vi.clearAllMocks();
   });
 
-  it('ENTRY pose renders TWO endorsement controls (pose + entry)', () => {
+  it('ENTRY pose renders THREE endorsement controls (pose + entry + style)', () => {
     const interaction = makeInteraction({
       mode: 'pose',
       pose_kind: 'entry',
@@ -447,9 +447,10 @@ describe('PoseUnit endorsement control mounting', () => {
 
     expect(screen.getByTestId('endorsement-control-pose')).toBeInTheDocument();
     expect(screen.getByTestId('endorsement-control-entry')).toBeInTheDocument();
+    expect(screen.getByTestId('endorsement-control-style')).toBeInTheDocument();
   });
 
-  it('STANDARD pose renders ONE endorsement control (pose only)', () => {
+  it('STANDARD pose renders pose + style controls, no entry', () => {
     const interaction = makeInteraction({
       mode: 'pose',
       pose_kind: 'standard',
@@ -462,6 +463,7 @@ describe('PoseUnit endorsement control mounting', () => {
     );
 
     expect(screen.getByTestId('endorsement-control-pose')).toBeInTheDocument();
+    expect(screen.getByTestId('endorsement-control-style')).toBeInTheDocument();
     expect(screen.queryByTestId('endorsement-control-entry')).toBeNull();
   });
 
@@ -479,9 +481,10 @@ describe('PoseUnit endorsement control mounting', () => {
 
     expect(screen.queryByTestId('endorsement-control-pose')).toBeNull();
     expect(screen.queryByTestId('endorsement-control-entry')).toBeNull();
+    expect(screen.queryByTestId('endorsement-control-style')).toBeNull();
   });
 
-  it('standalone ACTION branch also renders an endorsement control', () => {
+  it('standalone ACTION branch also renders pose + style endorsement controls', () => {
     const interaction = makeInteraction({
       mode: 'action',
       pose_kind: 'standard',
@@ -494,6 +497,7 @@ describe('PoseUnit endorsement control mounting', () => {
     );
 
     expect(screen.getByTestId('endorsement-control-pose')).toBeInTheDocument();
+    expect(screen.getByTestId('endorsement-control-style')).toBeInTheDocument();
   });
 
   // WHISPER and VERY_PRIVATE suppression is tested at the correct layer:

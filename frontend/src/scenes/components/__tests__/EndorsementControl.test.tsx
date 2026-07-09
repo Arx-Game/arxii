@@ -17,6 +17,24 @@ import type { Interaction } from '../../types';
 const mockCreatePoseEndorsement = vi.fn();
 const mockDeletePoseEndorsement = vi.fn();
 const mockCreateSceneEntryEndorsement = vi.fn();
+const mockCreateStyleEndorsement = vi.fn();
+
+// Mutable mutation-state stand-in for useCreateStyleEndorsement — style
+// endorsements carry no persisted "endorsed by me" flag on the Interaction
+// payload (verified: the backend serializer only exposes entry_endorsed_by_me),
+// so the component derives its endorsed-indicator + error display from the
+// mutation object's isSuccess/isError/error, same as react-query would return.
+let styleMutationState: {
+  isPending: boolean;
+  isSuccess: boolean;
+  isError: boolean;
+  error: Error | null;
+} = {
+  isPending: false,
+  isSuccess: false,
+  isError: false,
+  error: null,
+};
 
 vi.mock('../../queries', () => ({
   useCreatePoseEndorsement: (_sceneId: string) => ({
@@ -30,6 +48,10 @@ vi.mock('../../queries', () => ({
   useCreateSceneEntryEndorsement: (_sceneId: string) => ({
     mutate: mockCreateSceneEntryEndorsement,
     isPending: false,
+  }),
+  useCreateStyleEndorsement: (_sceneId: string) => ({
+    mutate: mockCreateStyleEndorsement,
+    ...styleMutationState,
   }),
 }));
 
@@ -353,5 +375,129 @@ describe('EndorsementControl — kind="entry"', () => {
     expect(mockCreateSceneEntryEndorsement).not.toHaveBeenCalled();
     // Suppress unused variable warning — user is needed for async setup but no interaction fires.
     void user;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: kind="style" (#2031)
+// ---------------------------------------------------------------------------
+
+describe('EndorsementControl — kind="style"', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    styleMutationState = { isPending: false, isSuccess: false, isError: false, error: null };
+  });
+
+  it('shows an Endorse style button', () => {
+    render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="style" />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByRole('button', { name: /endorse style/i })).toBeInTheDocument();
+  });
+
+  it('clicking Endorse style opens a picker listing endorsable_resonances', async () => {
+    const user = userEvent.setup();
+    render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="style" />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole('button', { name: /endorse style/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Courage')).toBeInTheDocument();
+      expect(screen.getByText('Wisdom')).toBeInTheDocument();
+    });
+  });
+
+  it('selecting a resonance calls style mutation with { endorsee_sheet, scene, resonance }', async () => {
+    const user = userEvent.setup();
+    render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="style" />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByRole('button', { name: /endorse style/i }));
+    await waitFor(() => screen.getByText('Courage'));
+    await user.click(screen.getByText('Courage'));
+    expect(mockCreateStyleEndorsement).toHaveBeenCalledWith({
+      endorsee_sheet: 20,
+      scene: 1,
+      resonance: 5,
+    });
+  });
+
+  it('does NOT show a retract button for style endorsements', () => {
+    render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="style" />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.queryByRole('button', { name: /retract/i })).toBeNull();
+  });
+
+  it('hides entirely when endorsable_resonances is empty', () => {
+    const { container } = render(
+      <EndorsementControl
+        interaction={makeInteraction({ endorsable_resonances: [] })}
+        sceneId="1"
+        kind="style"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('hides for whisper mode', () => {
+    const { container } = render(
+      <EndorsementControl
+        interaction={makeInteraction({ mode: 'whisper' })}
+        sceneId="1"
+        kind="style"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('hides for very_private visibility', () => {
+    const { container } = render(
+      <EndorsementControl
+        interaction={makeInteraction({ visibility: 'very_private' })}
+        sceneId="1"
+        kind="style"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('hides and fires no mutation when endorsee_sheet_id is null (safe null guard)', async () => {
+    const { container } = render(
+      <EndorsementControl
+        interaction={makeInteraction({ endorsee_sheet_id: null })}
+        sceneId="1"
+        kind="style"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container.firstChild).toBeNull();
+    expect(mockCreateStyleEndorsement).not.toHaveBeenCalled();
+  });
+
+  it('shows an endorsed indicator (not the picker) once the style mutation succeeds', () => {
+    styleMutationState = { isPending: false, isSuccess: true, isError: false, error: null };
+    render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="style" />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByTestId('style-endorsed-indicator')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /endorse style/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /retract/i })).toBeNull();
+  });
+
+  it('surfaces the backend error message verbatim when the style mutation fails', () => {
+    styleMutationState = {
+      isPending: false,
+      isSuccess: false,
+      isError: true,
+      error: new Error('You are not wearing a bound style.'),
+    };
+    render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="style" />, {
+      wrapper: createWrapper(),
+    });
+    expect(screen.getByText('You are not wearing a bound style.')).toBeInTheDocument();
   });
 });

@@ -274,6 +274,36 @@ export function useCreateSceneEntryEndorsement(sceneId: string) {
   });
 }
 
+/**
+ * Style-presentation endorsement (#2031). Mirrors createSceneEntryEndorsement's
+ * shape — endorser is resolved server-side; immutable (no retract). Backend
+ * error messages are meaningful ("not wearing a bound style", etc.) and must
+ * surface verbatim, so the `detail` string is extracted like setRoundMode's idiom.
+ */
+export async function createStyleEndorsement(body: {
+  endorsee_sheet: number;
+  scene: number;
+  resonance: number;
+}) {
+  const res = await apiFetch('/api/magic/style-presentation-endorsements/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(data?.detail || 'Failed to endorse style');
+  }
+  return res.json();
+}
+
+export function useCreateStyleEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createStyleEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scene-interactions', sceneId] }),
+  });
+}
+
 export function useSetRoundMode(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({

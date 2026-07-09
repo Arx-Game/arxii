@@ -191,6 +191,7 @@ export function PoseUnit({
         {interaction.pose_kind === 'entry' && (
           <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
         )}
+        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
       </div>
     );
   }
@@ -306,6 +307,7 @@ export function PoseUnit({
       {interaction.pose_kind === 'entry' && (
         <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
       )}
+      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
     </div>
   );
 }
