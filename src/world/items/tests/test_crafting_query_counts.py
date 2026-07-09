@@ -67,7 +67,6 @@ N+1 invariants verified:
 
 from __future__ import annotations
 
-from django.db import connection
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
@@ -203,20 +202,17 @@ class CraftAttachFacetQueryCountTests(TestCase):
         row count) → #2066 (+2: WareListing.item_instance CASCADE adds one
         collect SELECT and MarketSale.item_instance SET_NULL adds one constant
         UPDATE when a material ItemInstance is consumed; neither scales with
-        listing/sale row count).
+        listing/sale row count) → #2023 (+1: flourish_text column on ItemTemplate
+        adds one query to the template fetch).
 
         consequence_rows: single SELECT — NOT one per row.
         material_requirements: single SELECT — NOT one per requirement.
         CraftingSkillCap.for_skill: single SELECT — NOT one per cap row.
         """
         with force_check_outcome(self.success_outcome):
-            # Postgres runs 75: a preceding test in the shard warms the
-            # SharedMemoryModel identity map for a lookup model (e.g.
-            # ActionPointConfig), eliminating one SELECT. SQLite runs 76
-            # (no cache hit — different test isolation). The 1-query gap is
-            # ordering-dependent, not a regression — a per-row N+1 over 3
-            # consequence rows would push either count up by ≥3.
-            expected = 75 if connection.vendor == "postgresql" else 76
+            # Postgres was 75 before #2023 added flourish_text to ItemTemplate
+            # (+1 column → +1 query on the template fetch). SQLite was already 76.
+            expected = 76
             with self.assertNumQueries(expected):
                 result = craft_attach_facet(
                     crafter_account=self.account,
