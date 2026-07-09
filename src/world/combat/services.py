@@ -110,7 +110,6 @@ from world.combat.models import (
 )
 from world.combat.types import (
     ActionOutcome,
-    ArmorSoakResult,
     AvailableCombo,
     ClashRoundResult,
     CombatTechniqueResolution,
@@ -3825,8 +3824,7 @@ def apply_damage_to_participant(  # noqa: PLR0913
 
     # Equipped-armor soak (issue #508). PCs have no authored soak field; worn
     # armor is their only soak source, and absorbing pieces take durability wear.
-    soak_result = apply_equipped_armor_soak(character, effective_damage)
-    effective_damage = soak_result.damage
+    effective_damage = apply_equipped_armor_soak(character, effective_damage)
 
     health_before = vitals.health
     vitals.health -= effective_damage
@@ -5205,13 +5203,10 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
 
             persist_power_ledger(interaction=interaction, ledger=combat_result.power_ledger)
 
-    from world.items.services.flourish import resolve_item_flourish  # noqa: PLC0415
     from world.magic.services.signature_effects import resolve_signature_snippet  # noqa: PLC0415
 
     target_label = target.name if target is not None else None
     signature_snippet = resolve_signature_snippet(participant.character_sheet.character, technique)
-    weapon_inst = _select_equipped_weapon(participant.character_sheet.character)
-    weapon_flourish = resolve_item_flourish(weapon_inst) if weapon_inst else None
     narration = render_action_outcome_narration(
         actor_label=str(participant),
         technique_name=technique.name,
@@ -5219,7 +5214,6 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         outcome=outcome,
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
-        weapon_flourish=weapon_flourish,
     )
     broadcast_action_outcome(encounter=participant.encounter, narration=narration)
 
@@ -7351,7 +7345,7 @@ def _split_armor_soak_by_compatibility(
     return compat_soak, incompat_soak, compat_pieces, incompat_pieces
 
 
-def apply_equipped_armor_soak(character: Character, damage: int) -> ArmorSoakResult:
+def apply_equipped_armor_soak(character: Character, damage: int) -> int:
     """Reduce ``damage`` by role-gated equipped-armor soak (#1174).
 
     Worn armor is split by covenant-role compatibility. The resonant soak pool
@@ -7364,11 +7358,10 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> ArmorSoakRes
     incompatible with heavy armor sees its resonant protection overtake platemail past
     low levels. Durability wears only on armor whose physical soak contributes to the
     result (all compatible pieces; incompatible pieces only when they win the ``max``).
-    Returns an ``ArmorSoakResult`` with post-soak damage (floored at 0) and the list of
-    contributing armor ItemInstances (for narration flourish, #2023).
+    Returns post-soak damage, floored at 0.
     """
     if damage <= 0:
-        return ArmorSoakResult(damage=damage, contributors=[])
+        return damage
 
     from world.items.services.durability import decrement_item_durability  # noqa: PLC0415
 
@@ -7380,7 +7373,7 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> ArmorSoakRes
     incompatible_wins = incompat_soak >= resonant
     soak = compat_soak + (incompat_soak if incompatible_wins else resonant)
     if soak <= 0:
-        return ArmorSoakResult(damage=damage, contributors=[])
+        return damage
 
     # Wear only armor whose physical soak actually contributed.
     contributors = list(compat_pieces)
@@ -7389,7 +7382,7 @@ def apply_equipped_armor_soak(character: Character, damage: int) -> ArmorSoakRes
     for inst in contributors:
         decrement_item_durability(item_instance=inst)
 
-    return ArmorSoakResult(damage=max(0, damage - soak), contributors=contributors)
+    return max(0, damage - soak)
 
 
 def _select_equipped_weapon(character: Character) -> ItemInstance | None:

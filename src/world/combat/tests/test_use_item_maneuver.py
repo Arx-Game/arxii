@@ -1,4 +1,9 @@
-"""Tests for CombatManeuver.USE_ITEM dispatch (#2023)."""
+"""Tests for CombatManeuver.USE_ITEM dispatch (#2023).
+
+USE_ITEM admits on-use items (smoke bombs, thrown alchemicals, signal flares)
+into the combat round as a primary maneuver. Using an item costs the round's
+focused action — a tactical choice, not an anti-attrition effect.
+"""
 
 from __future__ import annotations
 

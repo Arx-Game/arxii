@@ -64,7 +64,7 @@ class ArmorSoakRoleGateTests(TestCase):
         """
         char, _, _ = self._covenant_char(level=1, bonus_per_level=4, db_key="LowLvlIncompat")
         self._equip(char, GearArchetype.HEAVY_ARMOR, 10, "LowPlate")  # no compat row → incompatible
-        self.assertEqual(apply_equipped_armor_soak(char, 20).damage, 10)
+        self.assertEqual(apply_equipped_armor_soak(char, 20), 10)
 
     def test_incompatible_high_level_resonant_wins(self) -> None:
         """Level 3 incompatible heavy armor: resonant battle-lingerie beats platemail.
@@ -74,7 +74,7 @@ class ArmorSoakRoleGateTests(TestCase):
         """
         char, _, _ = self._covenant_char(level=3, bonus_per_level=4, db_key="HighLvlIncompat")
         self._equip(char, GearArchetype.HEAVY_ARMOR, 10, "HighPlate")
-        self.assertEqual(apply_equipped_armor_soak(char, 20).damage, 8)
+        self.assertEqual(apply_equipped_armor_soak(char, 20), 8)
 
     def test_compatible_is_additive(self) -> None:
         """Compatible role: armor AND resonant both apply.
@@ -87,7 +87,7 @@ class ArmorSoakRoleGateTests(TestCase):
             covenant_role=membership.covenant_role, gear_archetype=GearArchetype.LIGHT_ARMOR
         )
         self._equip(char, GearArchetype.LIGHT_ARMOR, 3, "CompatArmor")
-        self.assertEqual(apply_equipped_armor_soak(char, 20).damage, 13)
+        self.assertEqual(apply_equipped_armor_soak(char, 20), 13)
 
     def test_non_covenant_armor_only(self) -> None:
         """No engaged role: resonant = 0; soak = max(physical, 0) = physical."""
@@ -95,7 +95,7 @@ class ArmorSoakRoleGateTests(TestCase):
         CharacterSheetFactory(character=char, primary_persona=False)
         wire_armor_soak_modifier_target()
         self._equip(char, GearArchetype.LIGHT_ARMOR, 4, "NonCovArmor")
-        self.assertEqual(apply_equipped_armor_soak(char, 20).damage, 16)
+        self.assertEqual(apply_equipped_armor_soak(char, 20), 16)
 
     def test_incompatible_armor_not_worn_when_resonant_dominates(self) -> None:
         """When resonant beats incompatible armor, that armor does not lose durability."""
