@@ -55,7 +55,7 @@ def _ensure_role_gift_and_techniques(role: CovenantRole) -> None:
     """Create or update the role's granted gift + starter techniques."""
     from world.magic.constants import GiftKind  # noqa: PLC0415
     from world.magic.models import EffectType, Gift, Technique  # noqa: PLC0415
-    from world.magic.models.technique_styles import TechniqueStyle  # noqa: PLC0415
+    from world.magic.models.techniques import TechniqueStyle  # noqa: PLC0415
 
     gift_name = f"{role.name} Vow"
     gift, _ = Gift.objects.get_or_create(

@@ -386,4 +386,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "kinship": [Kinsperson],
         # Houses: the landed demo house; represented by Title (#1884).
         "houses": [Title],
+        # Covenant role catalog: granted gifts + techniques + capabilities +
+        # archetype scaling for the 3 canonical roles (#2022).
+        "covenant_roles": [],
     }
