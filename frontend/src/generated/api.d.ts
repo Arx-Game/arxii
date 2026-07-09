@@ -10592,6 +10592,71 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/trait-crossing/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending trait crossing offers (#1989).
+     *
+     *     GET /api/magic/trait-crossing/pending/
+     *     GET /api/magic/trait-crossing/pending/{id}/
+     */
+    get: operations['magic_trait_crossing_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/trait-crossing/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only inbox of pending trait crossing offers (#1989).
+     *
+     *     GET /api/magic/trait-crossing/pending/
+     *     GET /api/magic/trait-crossing/pending/{id}/
+     */
+    get: operations['magic_trait_crossing_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/trait-crossing/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Pick an option for a pending trait crossing offer (#1989).
+     *
+     *     POST /api/magic/trait-crossing/respond/  {offer_id, option_id}
+     */
+    post: operations['magic_trait_crossing_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/mechanics/categories/': {
     parameters: {
       query?: never;
@@ -25415,6 +25480,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PendingStageAdvanceOffer'][];
     };
+    PaginatedPendingTraitCrossingOfferList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['PendingTraitCrossingOffer'][];
+    };
     PaginatedPermitOfferDetailsList: {
       /** @example 123 */
       count: number;
@@ -27967,6 +28047,18 @@ export interface components {
        * @description Prompt expires after this time. Stale rows are deleted on next access.
        */
       readonly expires_at: string;
+    };
+    /** @description Serializer for a pending trait crossing offer + nested options. */
+    PendingTraitCrossingOffer: {
+      readonly id: number;
+      thread: number;
+      /** @description PathStage crossing level (3, 6, 11, 16, 21). */
+      crossing_level: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly trait_name: string;
+      readonly resonance_name: string;
+      readonly options: string;
     };
     /**
      * @description Player-safe wire shape for one world.stories.types.PendingTreasuredSignoffs entry (#1853).
@@ -31954,6 +32046,17 @@ export interface components {
       | 'crafting'
       | 'war'
       | 'other';
+    /** @description Request shape for the player's trait crossing option pick. */
+    TraitCrossingRespondRequest: {
+      offer_id: number;
+      option_id: number;
+    };
+    /** @description Read serializer for TraitCrossingResult (trait_crossing.py dataclass). */
+    TraitCrossingResult: {
+      option_name: string;
+      effect_kind: string;
+      crossing_level: number;
+    };
     /**
      * @description * `stat` - Stat
      *     * `skill` - Skill
@@ -46553,6 +46656,74 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CrossXPLockResponse'];
+        };
+      };
+    };
+  };
+  magic_trait_crossing_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingTraitCrossingOfferList'];
+        };
+      };
+    };
+  };
+  magic_trait_crossing_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingTraitCrossingOffer'];
+        };
+      };
+    };
+  };
+  magic_trait_crossing_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TraitCrossingRespondRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TraitCrossingResult'];
         };
       };
     };

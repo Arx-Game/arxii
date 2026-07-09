@@ -31,6 +31,7 @@ from world.magic.views import (
     PendingAudereOfferViewSet,
     PendingEntryFlourishOfferViewSet,
     PendingStageAdvanceOfferViewSet,
+    PendingTraitCrossingOfferViewSet,
     PoseEndorsementViewSet,
     ResonanceGrantViewSet,
     RestrictionViewSet,
@@ -53,6 +54,7 @@ from world.magic.views import (
     ThreadPullPreviewView,
     ThreadViewSet,
     ThreadWeavingTeachingOfferViewSet,
+    TraitCrossingRespondView,
 )
 
 app_name = "magic"
@@ -298,6 +300,22 @@ urlpatterns = [
         "entry-flourish/respond/",
         EntryFlourishRespondView.as_view(),
         name="entry-flourish-respond",
+    ),
+    # #1989 — Trait crossing offer inbox + respond
+    path(
+        "trait-crossing/pending/",
+        PendingTraitCrossingOfferViewSet.as_view({"get": "list"}),
+        name="trait-crossing-pending-list",
+    ),
+    path(
+        "trait-crossing/pending/<int:pk>/",
+        PendingTraitCrossingOfferViewSet.as_view({"get": "retrieve"}),
+        name="trait-crossing-pending-detail",
+    ),
+    path(
+        "trait-crossing/respond/",
+        TraitCrossingRespondView.as_view(),
+        name="trait-crossing-respond",
     ),
     *router.urls,
 ]
