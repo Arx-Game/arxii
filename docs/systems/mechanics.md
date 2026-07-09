@@ -83,8 +83,10 @@ Traps, instantiated at a location by a staff-triggered Action.
     `instantiate_challenge()`). All wrapped in one `transaction.atomic()` block.
 - **Trigger:** `SetSituationAction` (`actions/definitions/situations.py`) +
   `CmdSetSituation` (`commands/setsituation.py`, telnet key `setsituation`) —
-  staff-only, in-scene verb mirroring `SetTheStageAction`/`CmdSetStage`. No
-  duplicate-instantiation guard (intentional — see ADR-0091).
+  gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)` (staff bypass
+  preserved, #2117), in-scene verb mirroring `SetTheStageAction`/`CmdSetStage`
+  (STARTING tier). No duplicate-instantiation guard (intentional — see
+  ADR-0091).
 - **Admin:** `SituationTemplateAdmin` has `SituationChallengeLinkInline` and
   `SituationTrapLinkInline` for authoring.
 - **Integrates with:** room_features (`Trap` model, `check_room_traps_on_entry`),

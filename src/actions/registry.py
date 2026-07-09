@@ -124,6 +124,7 @@ from actions.definitions.investigation import SearchAction
 from actions.definitions.items import (
     ActivatePermitAction,
     EquipAction,
+    GrantItemAction,
     PutInAction,
     SetContainerPolicyAction,
     StealAction,
@@ -349,6 +350,7 @@ _ALL_ACTIONS: list[Action] = [
     GiveCoinsAction(),
     ActivatePermitAction(),
     UseItemAction(),
+    GrantItemAction(),
     # #1866 — crafting telnet coverage.
     AttachFacetAction(),
     DetachFacetAction(),

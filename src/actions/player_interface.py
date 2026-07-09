@@ -998,21 +998,26 @@ def _positioning_actions(character: ObjectDB) -> list[PlayerAction]:
 
 
 def _set_the_stage_actions(character: ObjectDB) -> list[PlayerAction]:
-    """Surface a ``set_the_stage`` ``PlayerAction`` for staff when the room has a default blueprint.
+    """Surface a ``set_the_stage`` ``PlayerAction`` when the room has a default blueprint.
 
     Only emits an action when ALL of the following are true:
-    - The actor passes ``is_staff_observer`` (avoids the model query for non-staff).
+    - The actor passes ``MinimumGMLevelPrerequisite(GMLevel.STARTING)`` -- STARTING-tier
+      GM trust or higher, staff bypass preserved (#2117; mirrors the gate
+      ``SetTheStageAction.get_prerequisites()`` itself enforces, so a caller who can see
+      this quick action can always execute it).
     - The actor has a current location.
     - The location has a ``RoomProfile`` with ``default_blueprint`` set.
 
     A single ``PlayerAction`` is offered using the room's ``default_blueprint``.
-    Staff who want to apply a different blueprint can pass an arbitrary
+    A GM who wants to apply a different blueprint can pass an arbitrary
     ``blueprint_id`` in the kwargs via the API; this surface only provides the
     one-click default-blueprint quick action.
     """
-    from core_management.permissions import is_staff_observer  # noqa: PLC0415
+    from actions.prerequisites import MinimumGMLevelPrerequisite  # noqa: PLC0415
+    from world.gm.constants import GMLevel  # noqa: PLC0415
 
-    if not is_staff_observer(character):
+    available, _reason = MinimumGMLevelPrerequisite(GMLevel.STARTING).is_met(character)
+    if not available:
         return []
 
     location = character.location

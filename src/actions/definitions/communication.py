@@ -9,10 +9,11 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from actions.base import Action
 from actions.constants import ActionCategory, TargetKind
-from actions.prerequisites import Prerequisite, StaffOnlyPrerequisite
+from actions.prerequisites import MinimumGMLevelPrerequisite, Prerequisite
 from actions.types import ActionContext, ActionResult, TargetFilters, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_message
+from world.gm.constants import GMLevel
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import record_interaction, record_whisper_interaction
 
@@ -308,7 +309,7 @@ class MutterAction(Action):
 
 @dataclass
 class PemitAction(Action):
-    """Staff-only private narrative emit to an explicit receiver list (#906).
+    """STARTING-tier GM private narrative emit to an explicit receiver list (#906).
 
     The Arx 1 "pemit": GM narration delivered only to the listed characters.
     Rides the receiver-scoped EMIT path — the persisted interaction carries
@@ -316,6 +317,10 @@ class PemitAction(Action):
     scene log never shows more than the room heard). Works inside scenes
     (record_interaction resolves the active scene from the room) and at
     room level outside scenes (persists scene-less), per the #906 ruling.
+
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.STARTING)`` (#2117; staff
+    bypass preserved) -- pure private narration, no state change beyond a
+    receiver-scoped Interaction row, same risk class as staging.
     """
 
     key: str = "pemit"
@@ -329,7 +334,7 @@ class PemitAction(Action):
     result_event: str | None = "pemit"
 
     def get_prerequisites(self) -> list[Prerequisite]:
-        return [StaffOnlyPrerequisite()]
+        return [MinimumGMLevelPrerequisite(GMLevel.STARTING)]
 
     def execute(
         self,

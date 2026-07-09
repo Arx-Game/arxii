@@ -1,11 +1,12 @@
-"""Tests for SetTheStageAction — staff-gated blueprint instantiation.
+"""Tests for SetTheStageAction — GM-trust-gated blueprint instantiation (#2117).
 
 Covers:
-- (a) Non-staff actor → check_availability().available is False.
+- (a) Non-staff, non-GM actor → check_availability().available is False.
 - (b) Staff actor with a blueprint → execute creates live Positions in the room.
 - (c) Missing blueprint_id → ActionResult(success=False).
 - (d) _set_the_stage_actions: staff character with default_blueprint surfaces one PlayerAction.
 - (e) _set_the_stage_actions: non-staff character surfaces nothing.
+- (f) STARTING-tier GM (no staff flag) → check_availability().available is True (#2117).
 """
 
 from __future__ import annotations
@@ -14,9 +15,13 @@ import django.test
 
 from actions.constants import ActionBackend
 from actions.definitions.positioning import SetTheStageAction
-from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from world.areas.positioning.factories import PositionBlueprintFactory
 from world.areas.positioning.models import Position
+from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 def _make_staff_character(key: str, room) -> object:
@@ -53,8 +58,22 @@ def _make_player_character(key: str, room) -> object:
     return char
 
 
+def _make_gm_character(key: str, room, level: str) -> object:
+    """Return a Character with a live roster tenure + GMProfile at ``level``.
+
+    ``MinimumGMLevelPrerequisite`` reads ``active_account``, which requires a
+    real ``RosterTenure`` -- not just ``char.db_account``.
+    """
+    char = CharacterFactory(db_key=key, location=room)
+    CharacterSheetFactory(character=char)
+    entry = RosterEntryFactory(character_sheet__character=char)
+    tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+    GMProfileFactory(account=tenure.player_data.account, level=level)
+    return char
+
+
 class TestSetTheStageActionAvailability(django.test.TestCase):
-    """check_availability gates on StaffOnlyPrerequisite."""
+    """check_availability gates on MinimumGMLevelPrerequisite(GMLevel.STARTING) (#2117)."""
 
     def setUp(self) -> None:
         from evennia import create_object
@@ -64,12 +83,12 @@ class TestSetTheStageActionAvailability(django.test.TestCase):
         self.player_char = _make_player_character("PlayerActor", self.room)
 
     def test_non_staff_actor_is_unavailable(self) -> None:
-        """Non-staff actor → available is False."""
+        """Non-staff, non-GM actor → available is False."""
         action = SetTheStageAction()
         availability = action.check_availability(self.player_char, target=None)
         self.assertFalse(
             availability.available,
-            "Non-staff should not be able to SetTheStage",
+            "Non-staff, non-GM should not be able to SetTheStage",
         )
 
     def test_staff_actor_is_available(self) -> None:
@@ -79,6 +98,16 @@ class TestSetTheStageActionAvailability(django.test.TestCase):
         self.assertTrue(
             availability.available,
             f"Staff should be able to SetTheStage; reasons: {availability.reasons}",
+        )
+
+    def test_starting_gm_actor_is_available(self) -> None:
+        """STARTING-tier GM (no staff flag) → available is True (#2117)."""
+        gm_char = _make_gm_character("StartingGM", self.room, GMLevel.STARTING)
+        action = SetTheStageAction()
+        availability = action.check_availability(gm_char, target=None)
+        self.assertTrue(
+            availability.available,
+            f"STARTING-tier GM should be able to SetTheStage; reasons: {availability.reasons}",
         )
 
 
@@ -181,4 +210,27 @@ class TestSetTheStageActionsPlayerInterface(django.test.TestCase):
             len(set_stage_actions),
             0,
             "Non-staff should not see set_the_stage actions",
+        )
+
+    def test_starting_gm_character_gets_set_the_stage_action(self) -> None:
+        """STARTING-tier GM (no staff flag) sees the quick-action too (#2117).
+
+        ``_set_the_stage_actions`` used to hardcode an ``is_staff_observer``
+        surfacing gate separate from the Action's own prerequisite -- fixing
+        only ``SetTheStageAction.get_prerequisites()`` would have left a
+        trust-tier GM unable to even discover the one-click quick action.
+        """
+        from actions.player_interface import get_player_actions
+
+        gm_char = _make_gm_character("StartingGMInterface", self.room, GMLevel.STARTING)
+        actions = get_player_actions(gm_char)
+        set_stage_actions = [
+            a
+            for a in actions
+            if a.backend == ActionBackend.REGISTRY and a.ref.registry_key == "set_the_stage"
+        ]
+        self.assertEqual(
+            len(set_stage_actions),
+            1,
+            f"Expected exactly 1 set_the_stage action, got: {set_stage_actions}",
         )

@@ -4,9 +4,13 @@ from django.test import TestCase
 
 from commands.exceptions import CommandError
 from commands.setstage import CmdSetStage
-from evennia_extensions.factories import AccountFactory, RoomProfileFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory, RoomProfileFactory
 from world.areas.positioning.factories import PositionBlueprintFactory
 from world.areas.positioning.models import Position
+from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
 class SetStageParseTests(TestCase):
@@ -63,6 +67,23 @@ def _make_staff_character(key: str, room) -> object:
 def _make_nonstaff_character(key: str, room) -> object:
     """Return an Evennia character connected to a non-staff account."""
     return _make_character(key, room, is_staff=False)
+
+
+def _make_gm_character(key: str, room, level: str) -> object:
+    """Return a Character with a live roster tenure + GMProfile at ``level``.
+
+    ``MinimumGMLevelPrerequisite`` reads ``active_account``, which requires a
+    real ``RosterTenure`` -- not just ``char.db_account`` (mirrors
+    ``world/scenes/tests/test_scene_admin_services.py``'s
+    ``_create_pc_with_account`` helper).
+    """
+    char = CharacterFactory(db_key=key, location=room)
+    CharacterSheetFactory(character=char)
+    entry = RosterEntryFactory(character_sheet__character=char)
+    tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+    account = tenure.player_data.account
+    GMProfileFactory(account=account, level=level)
+    return char
 
 
 def _make_room(key: str = "The Solar") -> object:
@@ -129,7 +150,8 @@ class SetStageRunTests(TestCase):
 
         assert Position.objects.filter(room=room).count() == 1
 
-    def test_nonstaff_caller_is_blocked_by_staff_only_prerequisite(self) -> None:
+    def test_nonstaff_non_gm_caller_is_blocked(self) -> None:
+        """A caller with no GMProfile at all is refused (#2117)."""
         room = _make_room()
         caller = _make_nonstaff_character("poser", room)
         bp = PositionBlueprintFactory(name="Lone Dais")
@@ -139,8 +161,21 @@ class SetStageRunTests(TestCase):
 
         msgs = self._run("Lone Dais", caller)
 
-        assert any("Staff only." in m for m in msgs)
+        assert any("GM trust required." in m for m in msgs)
         assert Position.objects.filter(room=room).count() == 0
+
+    def test_starting_gm_caller_succeeds(self) -> None:
+        """A STARTING-tier GM (no staff flag) can setstage (#2117)."""
+        room = _make_room()
+        caller = _make_gm_character("starter", room, GMLevel.STARTING)
+        bp = PositionBlueprintFactory(name="Lone Dais")
+        from world.areas.positioning.services import add_blueprint_position
+
+        add_blueprint_position(bp, "Center", description="The centre")
+
+        self._run("Lone Dais", caller)
+
+        assert Position.objects.filter(room=room).count() == 1
 
     def test_setstage_replace_replaces_existing_position_grid(self) -> None:
         room = _make_room()

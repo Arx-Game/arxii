@@ -1,4 +1,4 @@
-"""Staff-only Action: instantiate a SituationTemplate into the actor's room (#1895)."""
+"""JUNIOR-GM-tier Action: instantiate a SituationTemplate into the actor's room (#1895)."""
 
 from __future__ import annotations
 
@@ -10,20 +10,25 @@ from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.constants import ActionCategory
-from actions.prerequisites import StaffOnlyPrerequisite
+from actions.prerequisites import MinimumGMLevelPrerequisite
 from actions.types import ActionContext, ActionResult, TargetType
+from world.gm.constants import GMLevel
 from world.mechanics.models import SituationTemplate
 from world.mechanics.situation_services import instantiate_situation
 
 
 @dataclass
 class SetSituationAction(Action):
-    """Staff-only action: instantiate a SituationTemplate into the actor's current room.
+    """JUNIOR-tier GM action: instantiate a SituationTemplate into the actor's current room.
 
     Dispatch convention
     -------------------
     REGISTRY ActionRef: ``registry_key="set_situation"``,
     ``situation_template_id=<SituationTemplate.pk>``.
+
+    Gated on ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`` (#2117; staff
+    bypass preserved) -- this mints live ``Challenge``/``ChallengeInstance``
+    rows (ADR-0091), one tier above bare approval.
     """
 
     key: str = "set_situation"
@@ -34,7 +39,7 @@ class SetSituationAction(Action):
     target_type: TargetType = TargetType.SELF
 
     def get_prerequisites(self) -> list:
-        return [StaffOnlyPrerequisite()]
+        return [MinimumGMLevelPrerequisite(GMLevel.JUNIOR)]
 
     def execute(
         self,

@@ -664,8 +664,8 @@ effects for graph mutation and flight).
 - **Actions:** `MoveToPositionAction` (`registry_key="move_to_position"`), `TakePositionAction`
   (`registry_key="take_position"` — voluntary PRIMARY/FEATURE entry for an UNPLACED actor,
   #2005), `GMPlaceInPositionAction` (`registry_key="gm_place_in_position"` — staff/scene-GM
-  unchecked placement, #2005) + staff-only `SetTheStageAction`
-  (`registry_key="set_the_stage"`, `StaffOnlyPrerequisite`)
+  unchecked placement, #2005) + `SetTheStageAction` (`registry_key="set_the_stage"`, gated on
+  `MinimumGMLevelPrerequisite(GMLevel.STARTING)`, staff bypass preserved, #2117)
 - **Telnet:** `CmdPosition` (`position` / `position <name>`, #2005) — list/take/move face over
   `TakePositionAction`/`MoveToPositionAction`, room-scoped name resolution; see
   [areas.md](areas.md) "Telnet" section
@@ -2481,10 +2481,11 @@ crafting framework and check-driven facet/style attachment.
     - `grant_touchstone_item_to_character(*, character_sheet, template, granted_by=None)
       -> ItemInstance` — creates one `ItemInstance` of `template`, held by
       `character_sheet`. `granted_by` is audit-only, never surfaced to the recipient
-      (mirrors `award_kudos`). Called by `CmdGrantItem` (staff telnet, `perm(Admin)`,
-      `grant_item <character>=<item template name>`, `src/commands/grant_item.py`) and by
-      the Mission `DeedRewardSink.ITEM` reward sink (`world.missions.services.rewards
-      ._route_line`, `IMMEDIATE`-dispatched, not queued)
+      (mirrors `award_kudos`). Called by `GrantItemAction` (`registry_key="grant_item"`,
+      gated on `MinimumGMLevelPrerequisite(GMLevel.JUNIOR)`, staff bypass preserved, #2117)
+      via telnet `CmdGrantItem` (`grant_item <character>=<item template name>`,
+      `src/commands/grant_item.py`) and by the Mission `DeedRewardSink.ITEM` reward sink
+      (`world.missions.services.rewards._route_line`, `IMMEDIATE`-dispatched, not queued)
 - **Predicates on `ItemInstance`:**
   - `differs_from_template` — True if instance has any per-instance data (custom name/desc,
     lore_value, quality_tier, facets, or non-CREATED provenance); gates soft- vs. hard-delete
@@ -3307,9 +3308,9 @@ Self-contained game actions that own prerequisites, execution, and events.
 - **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
 - **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
 - **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
-- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`, `EquipAction`, `UnequipAction`, `PutInAction`, `TakeOutAction`, `UseItemAction`, `ActivatePermitAction`, `GrantItemAction` (JUNIOR-tier GM narrative item grant, #707/#2117), `MoveToPositionAction`, `SetTheStageAction`, `PerformRitualAction` (ritual dispatch — SERVICE/FLOW runs immediately; CEREMONY creates `PendingRitualEffect`), `WeaveThreadAction` (CEREMONY finisher — consumes pending Rite of Weaving effect, calls `weave_thread`), `ImbueThreadAction` (CEREMONY finisher — consumes pending Rite of Imbuing effect, calls `spend_resonance_for_imbuing`), `RestAction` (fatigue rest — spend AP to gain `well_rested`; gated by own home + outside combat, #1491/#1524), `CreateFirstImpressionAction` / `CreateDevelopmentAction` / `CreateCapstoneAction` / `RedistributePointsAction` (relationship-building verbs — record first impressions, develop permanent points, mark capstones, redistribute between tracks; shared by telnet `CmdRelationship` and web `RelationshipUpdateViewSet`, #1485), `GiveWriteupKudosAction` / `FileWriteupComplaintAction` (writeup feedback — subject commends a writeup; any viewer files a bad-faith complaint for staff triage; shared by `CmdRelationship` and `RelationshipUpdateViewSet`, #1537)
 - **Pattern:** `action.run(actor, **kwargs)` → applies enhancements → **enforces prerequisites (hard gate)** → charges AP/fatigue → executes → returns `ActionResult`
-- **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
+- **Prerequisites:** `get_prerequisites()` is load-bearing; `run()` calls `check_availability()` against post-enhancement kwargs. Prerequisites read action-specific kwargs via `context["kwargs"]`. Shipped: `StaffOnlyPrerequisite`, `MinimumGMLevelPrerequisite` (#2117 — staff bypass + `GMProfile.level` >= a configured `GMLevel` tier, generalizing `world.combat.scaling.validate_stakes_requirement`'s pattern; gates `SetTheStageAction`/`PemitAction` at STARTING and `SetSituationAction`/`GrantItemAction` at JUNIOR), `HoldsItemPrerequisite`, `ItemUsablePrerequisite`, `OnUseTargetPrerequisite`.
 - **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
 - **Not Yet Built:** `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
 - **Telnet convergence convention (ratified #1337):** the three player-action dispatch

@@ -302,17 +302,21 @@ class CmdMutter(ArxCommand):
 
 
 class CmdPemit(ArxCommand):
-    """Staff-only private narrative emit to specific characters (#906).
+    """GM private narrative emit to specific characters (#906).
 
     Usage: pemit <name>[,<name>...]=<text>
 
     Delivers GM narration only to the listed characters; the persisted
     interaction is receiver-scoped, so nobody else (or the log) sees more
     than the receivers heard. Works in and out of scenes.
+
+    Requires STARTING-tier GM trust or higher (or staff) -- gated by
+    ``PemitAction``'s ``MinimumGMLevelPrerequisite`` (#2117). The command
+    lock is ``cmd:all()``; real authorization lives entirely in the Action.
     """
 
     key = "pemit"
-    locks = "cmd:perm(Builder)"
+    locks = "cmd:all()"
     action = PemitAction()
 
     def resolve_action_args(self) -> dict[str, Any]:

@@ -112,6 +112,55 @@ class StaffOnlyPrerequisite(Prerequisite):
 
 
 @dataclass
+class MinimumGMLevelPrerequisite(Prerequisite):
+    """Actor must hold at least ``minimum_level`` GM trust, with a staff bypass (#2117).
+
+    Generalizes the staff-bypass + ``gm_level_index`` compare proven in
+    ``world.combat.scaling.validate_stakes_requirement`` into a reusable
+    Prerequisite for table-running GM tools (setstage/setsituation/pemit/grant_item).
+
+    A missing ``GMProfile`` always fails -- even against a ``STARTING``
+    requirement -- since ``STARTING`` still means "approved GM," not "any
+    account." This deliberately differs from ``validate_stakes_requirement``,
+    which treats a missing profile as ``STARTING`` (that function only ever
+    runs against an account already GMing a live encounter; this Prerequisite
+    also has to exclude accounts with no GM standing at all).
+    """
+
+    minimum_level: str
+
+    def is_met(
+        self,
+        actor: ObjectDB,
+        target: ObjectDB | None = None,
+        context: dict | None = None,
+    ) -> tuple[bool, str]:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from world.gm.constants import GMLevel, gm_level_index  # noqa: PLC0415
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        if is_staff_observer(actor):
+            return True, ""
+
+        try:
+            account = actor.active_account
+        except AttributeError:
+            account = None
+        if account is None:
+            return False, "GM trust required."
+
+        try:
+            level = account.gm_profile.level
+        except GMProfile.DoesNotExist:
+            return False, "GM trust required."
+
+        if gm_level_index(level) < gm_level_index(self.minimum_level):
+            required_display = GMLevel(self.minimum_level).label
+            return False, f"Requires {required_display} or higher."
+        return True, ""
+
+
+@dataclass
 class IsRoomTenantPrerequisite(Prerequisite):
     """The actor's active persona must actively tenant the room they're standing in (#670)."""
 
