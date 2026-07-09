@@ -42,15 +42,22 @@ class CmdCrossing(ArxCommand):
         )
 
         offers = PendingCrossingOffer.objects.filter(thread__owner=sheet).select_related(
-            "thread__resonance", "thread__target_trait"
+            "thread__resonance",
+            "thread__target_trait",
+            "thread__target_facet",
+            "thread__target_relationship_track__track",
+            "thread__target_relationship_track__relationship__target__character",
+            "thread__target_capstone__relationship__target__character",
         )
         if not offers:
             self.msg("You have no pending crossing offers.")
             return
         for offer in offers:
-            trait_name = offer.thread.target_trait.name if offer.thread.target_trait else "???"
+            from world.magic.crossing.handlers import _anchor_label_for  # noqa: PLC0415
+
+            anchor_label = _anchor_label_for(offer.thread)
             res_name = offer.thread.resonance.name if offer.thread.resonance else "???"
-            self.msg(f"|wCrossing level {offer.crossing_level}|n - {res_name} {trait_name}")
+            self.msg(f"|wCrossing level {offer.crossing_level}|n - {res_name} {anchor_label}")
             options = CrossingOption.objects.filter(
                 target_kind=offer.thread.target_kind,
                 resonance=offer.thread.resonance,

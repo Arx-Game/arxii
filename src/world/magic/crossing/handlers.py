@@ -8,9 +8,12 @@ Each handler is registered against a ``TargetKind`` in ``MagicConfig.ready()``.
 - ``TechniqueCrossingHandler`` (TECHNIQUE) executes a ceremony beat at
   crossings. The signature-bonus gating itself is subissue #1988; this
   handler just ensures the crossing isn't silent.
-- The remaining five kinds (FACET, RELATIONSHIP_TRACK,
-  RELATIONSHIP_CAPSTONE, MANTLE, SANCTUM) are stubs that log a debug no-op.
-  Each is replaced with real logic in its subissue (#1990–#1993).
+- ``RelationshipTrackCrossingHandler`` (RELATIONSHIP_TRACK) and
+  ``RelationshipCapstoneCrossingHandler`` (RELATIONSHIP_CAPSTONE) use the
+  ``_CrossingChoiceHandler`` base — the same player-choice pattern as TRAIT
+  and FACET (#1991).
+- The remaining three kinds (MANTLE, SANCTUM) are stubs that log a debug
+  no-op. Each is replaced with real logic in its subissue (#1992–#1993).
 """
 
 from __future__ import annotations
@@ -317,14 +320,44 @@ class TraitCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.TRAIT
 
 
+def _anchor_label_for(thread: Thread) -> str:
+    """Return a human-readable label for the thread's anchor entity.
+
+    Used by ``_compose_crossing_message`` and ``CmdCrossing._list_offers`` so
+    the crossing announcement references the right anchor (partner name for
+    relationship threads, trait/facet name for those kinds) instead of a
+    generic placeholder.
+    """
+    kind = thread.target_kind
+    fallback = {
+        TargetKind.TRAIT: "trait",  # noqa: STRING_LITERAL
+        TargetKind.FACET: "facet",  # noqa: STRING_LITERAL
+        TargetKind.RELATIONSHIP_TRACK: "relationship",  # noqa: STRING_LITERAL
+        TargetKind.RELATIONSHIP_CAPSTONE: "capstone",  # noqa: STRING_LITERAL
+    }.get(kind, "thread")  # noqa: STRING_LITERAL
+    if kind == TargetKind.TRAIT and thread.target_trait is not None:
+        return thread.target_trait.name
+    if kind == TargetKind.FACET and thread.target_facet is not None:
+        return thread.target_facet.name
+    if kind == TargetKind.RELATIONSHIP_TRACK:
+        track = thread.target_relationship_track
+        if track is not None:
+            partner_name = track.relationship.target.character.db_key
+            return f"bond with {partner_name} ({track.track.name})"
+    if kind == TargetKind.RELATIONSHIP_CAPSTONE:
+        cap = thread.target_capstone
+        if cap is not None:
+            partner_name = cap.relationship.target.character.db_key
+            return f"capstone '{cap.title}' with {partner_name}"
+    return fallback
+
+
 def _compose_crossing_message(thread: Thread, crossing_level: int) -> str:
     """Build a resonance-flavored crossing announcement."""
     resonance_name = thread.resonance.name if thread.resonance else "your resonance"
-    trait_name = ""
-    if thread.target_trait is not None:
-        trait_name = thread.target_trait.name
+    anchor_label = _anchor_label_for(thread)
     return (
-        f"Your {resonance_name}-resonant {trait_name or 'trait'} thread "
+        f"Your {resonance_name}-resonant {anchor_label} thread "
         f"has crossed a threshold (level {crossing_level}). "
         f"Use 'crossing list' to choose how it manifests."
     )
@@ -374,18 +407,27 @@ class FacetCrossingHandler(_CrossingChoiceHandler):
     target_kind = TargetKind.FACET
 
 
-class RelationshipTrackCrossingHandler(_StubCrossingHandler):
-    """RELATIONSHIP_TRACK thread crossing — stub (#1991)."""
+class RelationshipTrackCrossingHandler(_CrossingChoiceHandler):
+    """RELATIONSHIP_TRACK thread crossing — player-chosen bond expression (#1991).
+
+    At each crossing level, creates a PendingCrossingOffer for the player to
+    choose a resonance-matched bond expression. The buff is always-on (a
+    relationship bond is intrinsic — not wear-gated like FACET).
+    """
 
     target_kind = TargetKind.RELATIONSHIP_TRACK
-    _subissue = "#1991"
 
 
-class RelationshipCapstoneCrossingHandler(_StubCrossingHandler):
-    """RELATIONSHIP_CAPSTONE thread crossing — stub (#1991)."""
+class RelationshipCapstoneCrossingHandler(_CrossingChoiceHandler):
+    """RELATIONSHIP_CAPSTONE thread crossing — player-chosen bond expression (#1991).
+
+    Coordinates with Soul Tether (Spec B): the ceremony is a personalization
+    layer only. It does not touch ``hollow_current``, ``hollow_max``, or any
+    Soul Tether service. The Hollow continues to function normally — deepening
+    the Hollow at crossings is a separate Spec B follow-up.
+    """
 
     target_kind = TargetKind.RELATIONSHIP_CAPSTONE
-    _subissue = "#1991"
 
 
 class MantleCrossingHandler(_StubCrossingHandler):
