@@ -107,3 +107,44 @@ class VowRevalidationTests(TestCase):
 
         self.mem_a.refresh_from_db()
         self.assertFalse(self.mem_a.engaged)
+
+
+class SceneFinishVowDimTests(TestCase):
+    """finish_scene_full dims Durance vows when the scene ends (#2051)."""
+
+    def test_finishing_scene_dims_remaining_member_vow(self) -> None:
+        from world.scenes.scene_admin_services import finish_scene_full
+
+        cov = CovenantFactory(name="FinishCov", covenant_type=CovenantType.DURANCE)
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        mem_a = CharacterCovenantRoleFactory(covenant=cov, covenant_role=role)
+        mem_b = CharacterCovenantRoleFactory(covenant=cov, covenant_role=role)
+
+        room = _make_room("FinishRoom")
+        char_a = mem_a.character_sheet.character
+        char_b = mem_b.character_sheet.character
+
+        # Both members in the room with an active scene → both engaged.
+        _place_character_in_room(char_a, room)
+        _place_character_in_room(char_b, room)
+        scene = SceneFactory(location=room, is_active=True)
+
+        from world.covenants.services import evaluate_scene_engagement
+
+        evaluate_scene_engagement(character_sheet=mem_a.character_sheet, room=room)
+        evaluate_scene_engagement(character_sheet=mem_b.character_sheet, room=room)
+        mem_a.refresh_from_db()
+        self.assertTrue(mem_a.engaged)
+
+        # Finish the scene — the active scene is gone, so Durance vows dim.
+        from unittest.mock import patch
+
+        with (
+            patch("world.scenes.scene_admin_services.on_scene_finished"),
+            patch("world.scenes.scene_admin_services.process_deferred_fatigue_resets"),
+            patch("world.scenes.scene_admin_services.broadcast_scene_message"),
+        ):
+            finish_scene_full(scene)
+
+        mem_a.refresh_from_db()
+        self.assertFalse(mem_a.engaged)

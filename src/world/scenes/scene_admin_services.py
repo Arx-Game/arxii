@@ -104,4 +104,31 @@ def finish_scene_full(scene: Scene, by_account: AccountDB | None = None) -> None
     on_scene_finished(scene)
     participant_account_ids = set(scene.participations.values_list("account_id", flat=True))
     process_deferred_fatigue_resets(participant_account_ids)
+
+    # #2051: when a scene ends, Durance vows tied to co-presence in that
+    # scene's room may dim — can_engage_membership checks for an active scene,
+    # which is now gone. Revalidate remaining occupants' engaged covenant roles.
+    # COURT vows re-validate by their own arm (master's business), so only
+    # Durance vows are affected. Hot-path short-circuit: skip occupants with no
+    # engaged covenant role (cached handler — no DB query for the common case).
+    if scene.location is not None:
+        from world.covenants.services import revalidate_engagements  # noqa: PLC0415
+        from world.scenes.interaction_services import (  # noqa: PLC0415
+            invalidate_active_scene_cache,
+        )
+
+        # finish_scene() set is_active=False but the room's in-memory
+        # _active_scene_cache still holds this scene — bust it so
+        # can_engage_membership sees no active scene.
+        invalidate_active_scene_cache(scene.location)
+
+        for obj in scene.location.contents:
+            sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL
+            if sheet is None:
+                continue
+            roles = sheet.character.covenant_roles
+            if not any(m.engaged for m in roles.active_memberships):
+                continue
+            revalidate_engagements(character_sheet=sheet, room=scene.location)
+
     broadcast_scene_message(scene, SceneAction.END)
