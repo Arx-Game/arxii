@@ -12,8 +12,10 @@ Each handler is registered against a ``TargetKind`` in ``MagicConfig.ready()``.
   ``RelationshipCapstoneCrossingHandler`` (RELATIONSHIP_CAPSTONE) use the
   ``_CrossingChoiceHandler`` base — the same player-choice pattern as TRAIT
   and FACET (#1991).
-- The remaining three kinds (MANTLE, SANCTUM) are stubs that log a debug
-  no-op. Each is replaced with real logic in its subissue (#1992–#1993).
+- ``MantleCrossingHandler`` (MANTLE) uses the ``_CrossingChoiceHandler`` base
+  — the same player-choice pattern as TRAIT and FACET (#1992).
+- The remaining kind (SANCTUM) is a stub that logs a debug no-op. It is
+  replaced with real logic in its subissue (#1993).
 """
 
 from __future__ import annotations
