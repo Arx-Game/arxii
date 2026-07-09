@@ -134,3 +134,15 @@ class SceneRoundMode(models.TextChoices):
     OPEN = "open", "Open (immediate, unbounded)"
     POSE_ORDER = "pose_order", "Pose order (immediate, quota-gated)"
     STRICT = "strict", "Strict (declare, batch-resolved)"
+
+
+class ReactionValence(models.IntegerChoices):
+    """Relationship effect of a catalog reaction emoji (#1699).
+
+    NEUTRAL emoji are cosmetic only (today's behavior); nonzero valence
+    additionally fires an ambient relationship bump at the pose's author.
+    """
+
+    POSITIVE = 1, "Positive"
+    NEUTRAL = 0, "Neutral"
+    NEGATIVE = -1, "Negative"

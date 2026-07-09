@@ -16,9 +16,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.magic.constants import SoulTetherRole
 from world.relationships.constants import (
     DECAY_DAYS,
+    BumpValence,
     FirstImpressionColoring,
     ReferenceMode,
     TrackSign,
+    TrackSystemKey,
     UpdateVisibility,
 )
 
@@ -114,6 +116,14 @@ class RelationshipTrack(SharedMemoryModel):
             "spikes — when the bonded character falls, enters mortal peril, or "
             "(for negative-sign tracks) is fought as a hated foe (#872, #2013)."
         ),
+    )
+    system_key = models.CharField(
+        max_length=20,
+        choices=TrackSystemKey.choices,
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="Set only on the generic system tracks ambient bumps write to (#1699).",
     )
 
     class Meta:
@@ -801,6 +811,61 @@ class RelationshipCapstone(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Capstone: {self.title} ({self.relationship})"
+
+
+class RelationshipBump(SharedMemoryModel):
+    """An ambient ±1 relationship nudge anchored to the interaction that prompted it (#1699).
+
+    Bumps are permanent, tiny, and ungated: rel plus/neg on telnet (backfill-
+    anchored to the target's most recent unacknowledged pose) and valenced
+    emoji reactions on the web both land here. The unique constraint per
+    (relationship, interaction) IS the anti-spam mechanism: a pose can only be
+    acknowledged once, so the per-scene budget (no more bumps than the target
+    has posed) emerges without counters.
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="bumps",
+        help_text="The directed (source→target) relationship this bump nudges",
+    )
+    interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.CASCADE,
+        related_name="relationship_bumps",
+        db_constraint=False,
+        help_text="The pose/emit this bump acknowledges (anchor + dedup key)",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction for composite FK with partitioned table",
+    )
+    valence = models.SmallIntegerField(
+        choices=BumpValence.choices,
+        help_text="+1 warms (Regard system track), -1 cools (Friction system track)",
+    )
+    source_emoji = models.ForeignKey(
+        "scenes.ReactionEmoji",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The catalog emoji that carried this bump (null = telnet rel plus/neg)",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relationship", "interaction"],
+                name="unique_bump_per_interaction",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        sign = "+" if self.valence > 0 else "-"
+        return f"Bump {sign}1 on {self.relationship} @ interaction {self.interaction_id}"
 
 
 class RelationshipChange(SharedMemoryModel):

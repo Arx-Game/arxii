@@ -7,6 +7,7 @@ from world.scenes.models import (
     InteractionReaction,
     Persona,
     PersonaDiscovery,
+    ReactionEmoji,
     Scene,
     SceneParticipation,
     SceneSummaryRevision,
@@ -100,6 +101,13 @@ class InteractionFavoriteAdmin(admin.ModelAdmin):
 class InteractionReactionAdmin(admin.ModelAdmin):
     list_display = ["interaction", "account", "emoji", "created_at"]
     list_filter = ["emoji"]
+
+
+@admin.register(ReactionEmoji)
+class ReactionEmojiAdmin(admin.ModelAdmin):
+    list_display = ["emoji", "valence", "is_active", "sort_order"]
+    list_filter = ["valence", "is_active"]
+    list_editable = ["valence", "is_active", "sort_order"]
 
 
 @admin.register(PersonaDiscovery)
